@@ -192,12 +192,10 @@ servizio, E elevazione dei privilegi.
 | API Garmin non ufficiale: può rompersi, può violare i termini d'uso, può portare al blocco dell'account | Non esiste un accesso ufficiale per i privati (ADR 002). Compensazioni: adattatore isolato, poche richieste, import FIT sempre disponibile. |
 | Eseguibili non firmati | Progetto personale senza certificato di firma. Compensazione: `SHA256SUMS`, README con verifica dell'hash e avviso di SmartScreen. |
 | Token leggibili da ogni processo dell'utente | Limite del Credential Manager e del Secret Service; la macchina è assunta non compromessa. |
-| Dati di salute in chiaro nella cartella del profilo, protetti solo dai permessi del sistema | Semplicità e apertura con altri strumenti; cifrare richiede gestione di una password e di una chiave di recupero. **Punto aperto: da confermare con l'utente.** |
+| Dati di salute in chiaro nella cartella del profilo, protetti solo dai permessi del sistema | Semplicità e apertura con altri strumenti; cifrare richiede gestione di una password e di una chiave di recupero. Accettato dall'utente il 2026-11-05. Compensazione: permessi della cartella solo per l'utente (T-SEC-09); il README consiglia la cifratura del disco (BitLocker su Windows, LUKS su Ubuntu). |
 | Nessuna cancellazione sicura dei dati | Fuori dalla portata di un'app su file system comuni. |
 
 ## Punti aperti
 
-- Conferma con l'utente del rischio "dati di salute in chiaro nella cartella
-  del profilo" (alternativa: cifratura con password, da decidere con un ADR).
 - Il backup contiene dati di salute: formato e protezione da decidere in
   fase 8.

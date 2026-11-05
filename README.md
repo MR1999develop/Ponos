@@ -45,6 +45,14 @@ Il comportamento previsto è descritto in `docs/specifica.md`, le decisioni in
 - Python 3.13.
 - [uv](https://docs.astral.sh/uv/).
 
+## Dati e privacy
+
+I dati di ogni profilo (attività, frequenza cardiaca, posizioni GPS,
+infortuni) restano sul computer, nella cartella scelta per il profilo, non
+cifrati e leggibili solo dall'utente del sistema. Per proteggerli anche dal
+furto del disco attiva la cifratura del disco (BitLocker su Windows, LUKS su
+Ubuntu). Evita cartelle di rete o sincronizzate (OneDrive, NAS).
+
 ## Avvio da sorgente
 
 ```
