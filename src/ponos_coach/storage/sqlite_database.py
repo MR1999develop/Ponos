@@ -1,0 +1,229 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 MR
+"""Connessione SQLite di un profilo: creazione, apertura, migrazioni e transazioni.
+
+Scelte di durabilità: `foreign_keys = ON` e `trusted_schema = OFF` a ogni connessione;
+`journal_mode = WAL` con `synchronous = FULL` (la scrittura nel WAL si svuota su disco a ogni
+commit, quindi un'attività confermata sopravvive a un'interruzione di corrente); attesa dei
+lock al più `BUSY_TIMEOUT_MS`. La connessione è in modalità autocommit (`isolation_level =
+None`): le transazioni si aprono solo con `BEGIN IMMEDIATE`. Va usata da un solo thread.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import os
+import sqlite3
+import stat
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Final
+
+from ponos_coach.activities.ports import TransactionStateError
+from ponos_coach.profiles.ports import (
+    ProfileAlreadyExistsError,
+    ProfileCorruptError,
+    ProfileFormatTooNewError,
+    ProfileNotFoundError,
+    ProfileStorageError,
+)
+from ponos_coach.storage.sqlite_schema import MIGRATIONS, SCHEMA_VERSION
+
+BUSY_TIMEOUT_MS: Final = 5000
+_REPARSE_POINT: Final = 0x400  # FILE_ATTRIBUTE_REPARSE_POINT
+_FILE_MODE: Final = 0o600
+_CORRUPTION_CODES: Final = (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB)
+_PRIMARY_CODE_MASK: Final = 0xFF
+_SIDE_FILE_SUFFIXES: Final = ("-wal", "-shm", "-journal")
+
+
+def is_corruption(exc: sqlite3.Error) -> bool:
+    """Vero se l'errore di SQLite dice che il file non è un database integro."""
+    code = getattr(exc, "sqlite_errorcode", None)
+    return isinstance(code, int) and (code & _PRIMARY_CODE_MASK) in _CORRUPTION_CODES
+
+
+class SqliteDatabase:
+    """Una connessione aperta e configurata; la condividono tutti gli store di un profilo."""
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+        self._in_transaction = False
+
+    @property
+    def connection(self) -> sqlite3.Connection:
+        """La connessione sottostante (solo per gli store dello stesso profilo)."""
+        return self._connection
+
+    def user_version(self) -> int:
+        """Versione dello schema salvata nel file."""
+        row = self._connection.execute("PRAGMA user_version").fetchone()
+        return int(row[0])
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        """`BEGIN IMMEDIATE`, conferma all'uscita normale, annulla con un'eccezione.
+
+        Raises:
+            TransactionStateError: una transazione è già aperta su questa connessione.
+        """
+        if self._in_transaction:
+            raise TransactionStateError("transazione già aperta")
+        self._connection.execute("BEGIN IMMEDIATE")
+        self._in_transaction = True
+        try:
+            yield
+            self._connection.execute("COMMIT")
+        except BaseException:
+            if self._connection.in_transaction:
+                self._connection.execute("ROLLBACK")
+            raise
+        finally:
+            self._in_transaction = False
+
+    def close(self) -> None:
+        """Checkpoint del WAL e chiusura; la connessione si chiude anche se il checkpoint fallisce.
+
+        Raises:
+            sqlite3.Error: il checkpoint non è riuscito (i dati restano nel WAL, integri).
+        """
+        try:
+            self._connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        finally:
+            self._connection.close()
+
+
+def _connect(path: Path) -> sqlite3.Connection:
+    connection = sqlite3.connect(str(path), timeout=BUSY_TIMEOUT_MS / 1000, isolation_level=None)
+    connection.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+    connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("PRAGMA trusted_schema = OFF")
+    return connection
+
+
+def _configure_durability(connection: sqlite3.Connection) -> None:
+    mode = connection.execute("PRAGMA journal_mode = WAL").fetchone()[0]
+    if str(mode).lower() != "wal":
+        raise ProfileStorageError("il file system non permette la modalità WAL")
+    connection.execute("PRAGMA synchronous = FULL")
+
+
+def _migrate(db: SqliteDatabase, from_version: int, initial_meta: Mapping[str, str]) -> None:
+    """Porta lo schema da `from_version` all'ultimo in una sola transazione."""
+    connection = db.connection
+    with db.transaction():
+        for statements in MIGRATIONS[from_version:]:
+            for statement in statements:
+                connection.execute(statement)
+        connection.executemany(
+            "INSERT INTO meta (key, value) VALUES (?, ?)", sorted(initial_meta.items())
+        )
+        connection.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
+
+
+def _remove_files(path: Path) -> None:
+    for candidate in (path, *(path.with_name(path.name + s) for s in _SIDE_FILE_SUFFIXES)):
+        with contextlib.suppress(OSError):
+            candidate.unlink(missing_ok=True)
+
+
+def create_database(path: Path, initial_meta: Mapping[str, str]) -> SqliteDatabase:
+    """Crea `path` (in modo esclusivo, permessi solo per l'utente) con lo schema più recente.
+
+    La riga di `meta` per ogni voce di `initial_meta` si scrive nella stessa transazione dello
+    schema. Se qualcosa fallisce, il file creato si toglie.
+
+    Raises:
+        ProfileAlreadyExistsError: il file esiste già (anche un collegamento); non si tocca.
+        ProfileStorageError: creazione non riuscita.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        os.close(os.open(path, flags, _FILE_MODE))
+    except FileExistsError as exc:
+        raise ProfileAlreadyExistsError("il profilo ha già un database") from exc
+    except OSError as exc:
+        raise ProfileStorageError("creazione del database non riuscita") from exc
+    try:
+        connection = _connect(path)
+        db = SqliteDatabase(connection)
+        try:
+            _configure_durability(connection)
+            _migrate(db, 0, initial_meta)
+        except BaseException:
+            connection.close()
+            raise
+    except sqlite3.Error as exc:
+        _remove_files(path)
+        raise ProfileStorageError("creazione del database non riuscita") from exc
+    except BaseException:
+        _remove_files(path)
+        raise
+    return db
+
+
+def _require_regular_file(path: Path) -> None:
+    try:
+        status = path.lstat()
+    except FileNotFoundError as exc:
+        raise ProfileNotFoundError("manca il database del profilo") from exc
+    except OSError as exc:
+        raise ProfileStorageError("database non raggiungibile") from exc
+    attributes = getattr(status, "st_file_attributes", 0)
+    if not stat.S_ISREG(status.st_mode) or attributes & _REPARSE_POINT:
+        raise ProfileCorruptError("il database non è un file regolare")
+
+
+def _check_integrity(connection: sqlite3.Connection) -> None:
+    rows = connection.execute("PRAGMA quick_check").fetchall()
+    if [row[0] for row in rows] != ["ok"]:
+        raise ProfileCorruptError("il controllo di integrità del database è fallito")
+    if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+        raise ProfileCorruptError("il database viola le chiavi esterne")
+
+
+def _prepare_existing(db: SqliteDatabase) -> None:
+    version = db.user_version()
+    if version > SCHEMA_VERSION:
+        raise ProfileFormatTooNewError(f"formato {version} più nuovo del {SCHEMA_VERSION} noto")
+    if version < 1:
+        raise ProfileCorruptError("il file non contiene lo schema di un profilo")
+    _check_integrity(db.connection)
+    _configure_durability(db.connection)
+    if version < SCHEMA_VERSION:
+        _migrate(db, version, {})
+
+
+def open_database(path: Path) -> SqliteDatabase:
+    """Apre il database di un profilo, portandolo alla versione più recente se è più vecchio.
+
+    Raises:
+        ProfileNotFoundError: il file manca.
+        ProfileFormatTooNewError: versione più nuova di quella nota; il file non si tocca.
+        ProfileCorruptError: non è un database SQLite, o il controllo di integrità fallisce.
+        ProfileStorageError: altro guasto (lock, I/O).
+    """
+    _require_regular_file(path)
+    try:
+        connection = _connect(path)
+        db = SqliteDatabase(connection)
+        try:
+            _prepare_existing(db)
+        except BaseException:
+            connection.close()
+            raise
+    except sqlite3.Error as exc:
+        if is_corruption(exc):
+            raise ProfileCorruptError("il file non è un database integro") from exc
+        raise ProfileStorageError("apertura del database non riuscita") from exc
+    return db
+
+
+def read_meta(db: SqliteDatabase) -> dict[str, str]:
+    """Tutte le coppie chiave-valore di `meta`, comprese quelle che l'app non conosce."""
+    rows: Sequence[tuple[str, str]] = db.connection.execute(
+        "SELECT key, value FROM meta ORDER BY key"
+    ).fetchall()
+    return dict(rows)

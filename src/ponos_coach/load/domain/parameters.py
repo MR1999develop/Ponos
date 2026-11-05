@@ -7,7 +7,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Mapping
+from bisect import bisect_right
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 
@@ -58,3 +59,24 @@ def load_fingerprint(
     }
     text = json.dumps(document, sort_keys=True, separators=(",", ":"))
     return LoadFingerprint(hashlib.sha256(text.encode("utf-8")).hexdigest())
+
+
+class MissingPhysiologyError(ValueError):
+    """Non c'è nessun parametro fisiologico: senza, il carico non si può calcolare."""
+
+
+def physiology_for_day(entries: Sequence[PhysiologyEntry], day: date) -> Physiology:
+    """Parametri validi in un giorno: quelli con la data di validità più recente non successiva.
+
+    `entries` è ordinato per data di validità crescente, una voce per data (come lo dà
+    `PhysiologyStore.list_entries`). Default del progetto: per i giorni precedenti al primo
+    parametro vale il primo, così uno storico anteriore alla prima impostazione si calcola con
+    i parametri più vecchi noti invece di restare senza carico.
+
+    Raises:
+        MissingPhysiologyError: se `entries` è vuoto.
+    """
+    if not entries:
+        raise MissingPhysiologyError("nessun parametro fisiologico impostato")
+    index = bisect_right([entry.valid_from for entry in entries], day) - 1
+    return entries[max(index, 0)].physiology

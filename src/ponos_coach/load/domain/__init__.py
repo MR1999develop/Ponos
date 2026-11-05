@@ -17,8 +17,10 @@ from ponos_coach.load.domain.heart_rate import (
 from ponos_coach.load.domain.parameters import (
     LOAD_MODEL_VERSION,
     LoadFingerprint,
+    MissingPhysiologyError,
     PhysiologyEntry,
     load_fingerprint,
+    physiology_for_day,
 )
 from ponos_coach.load.domain.pmc import PmcSeries, compute_pmc
 from ponos_coach.load.domain.sport import SportWeight, default_weight, typical_intensity
@@ -29,6 +31,7 @@ __all__ = [
     "HeartRateLimits",
     "LoadFingerprint",
     "LoadSource",
+    "MissingPhysiologyError",
     "Physiology",
     "PhysiologyEntry",
     "PmcSeries",
@@ -39,6 +42,7 @@ __all__ = [
     "compute_pmc",
     "default_weight",
     "load_fingerprint",
+    "physiology_for_day",
     "threshold_for_sport",
     "typical_intensity",
 ]

@@ -1,0 +1,148 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 MR
+"""T-DATI-04: un solo processo per profilo; il lock di un processo morto non blocca nessuno."""
+
+from __future__ import annotations
+
+import contextlib
+import os
+import signal
+import subprocess
+import sys
+import threading
+from collections.abc import Iterator
+from dataclasses import dataclass
+from pathlib import Path
+
+import pytest
+
+from ponos_coach.platform.profile_folders import LocalProfileFolders
+from ponos_coach.profiles.domain import PROFILE_LOCK_NAME, FolderKind
+from ponos_coach.profiles.ports import FolderUnavailableError, ProfileInUseError
+
+_HOLDER_TIMEOUT_S = 60
+_HOLDER_SCRIPT = """
+import os
+import sys
+from pathlib import Path
+from ponos_coach.platform.profile_folders import LocalProfileFolders
+from ponos_coach.profiles.domain import FolderKind
+
+lock = LocalProfileFolders(lambda _folder: FolderKind.LOCAL).acquire_lock(Path(sys.argv[1]))
+print("locked", os.getpid(), flush=True)
+sys.stdin.read()  # resta in vita (e col lock) finche' il test non lo uccide
+"""
+# Sempre senza pulizia: su Windows `SIGTERM` di `os.kill` è `TerminateProcess`.
+_KILL_SIGNAL = getattr(signal, "SIGKILL", signal.SIGTERM)
+
+
+@dataclass(frozen=True)
+class _Holder:
+    """Il processo che tiene il lock.
+
+    Su Windows `sys.executable` di un ambiente virtuale è un lanciatore che avvia l'interprete
+    vero come figlio: il lock sta nell'interprete (`pid`), non nel lanciatore (`launcher`).
+    """
+
+    launcher: subprocess.Popen[str]
+    pid: int
+
+    def crash(self) -> None:
+        """Termina l'interprete senza nessuna pulizia, come un crash, e attende la fine."""
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(self.pid, _KILL_SIGNAL)
+        self.launcher.wait(timeout=_HOLDER_TIMEOUT_S)
+
+
+@pytest.fixture
+def folders() -> LocalProfileFolders:
+    return LocalProfileFolders(lambda _folder: FolderKind.LOCAL)
+
+
+@pytest.fixture
+def profile_folder(tmp_path: Path, folders: LocalProfileFolders) -> Path:
+    folder = tmp_path / "profilo"
+    folders.create_private_folder(folder)
+    return folder
+
+
+def _read_first_line(process: subprocess.Popen[str]) -> str:
+    """Prima riga dell'output del sottoprocesso, con un tempo massimo."""
+    assert process.stdout is not None
+    stdout = process.stdout
+    lines: list[str] = []
+    reader = threading.Thread(target=lambda: lines.append(stdout.readline()), daemon=True)
+    reader.start()
+    reader.join(_HOLDER_TIMEOUT_S)
+    return lines[0] if lines else ""
+
+
+@pytest.fixture
+def lock_holder(profile_folder: Path) -> Iterator[_Holder]:
+    """Un sottoprocesso che tiene il lock del profilo; sempre ucciso alla fine."""
+    process = subprocess.Popen(  # noqa: S603 - eseguibile e script fissi, percorso come argomento
+        [sys.executable, "-I", "-c", _HOLDER_SCRIPT, str(profile_folder)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    holder: _Holder | None = None
+    try:
+        fields = _read_first_line(process).split()
+        assert fields[:1] == ["locked"], "il sottoprocesso non ha preso il lock"
+        holder = _Holder(process, int(fields[1]))
+        yield holder
+    finally:
+        if holder is not None:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.kill(holder.pid, _KILL_SIGNAL)
+        process.kill()
+        process.wait(timeout=_HOLDER_TIMEOUT_S)
+        for stream in (process.stdin, process.stdout):
+            if stream is not None:
+                stream.close()
+
+
+def test_second_instance_on_the_same_profile_is_refused_while_a_process_holds_it(
+    folders: LocalProfileFolders, profile_folder: Path, lock_holder: _Holder
+) -> None:
+    with pytest.raises(ProfileInUseError):
+        folders.acquire_lock(profile_folder)
+
+
+def test_lock_left_by_a_killed_process_is_released_by_the_system(
+    folders: LocalProfileFolders, profile_folder: Path, lock_holder: _Holder
+) -> None:
+    lock_holder.crash()  # nessuna pulizia, nessun release()
+
+    lock = folders.acquire_lock(profile_folder)
+
+    lock.release()
+    assert (profile_folder / PROFILE_LOCK_NAME).exists()  # il file resta: non è lui il lock
+
+
+def test_lock_is_refused_inside_the_same_process_too(
+    folders: LocalProfileFolders, profile_folder: Path
+) -> None:
+    first = folders.acquire_lock(profile_folder)
+    try:
+        with pytest.raises(ProfileInUseError):
+            folders.acquire_lock(profile_folder)
+    finally:
+        first.release()
+
+
+def test_lock_file_that_is_a_symbolic_link_is_not_followed(
+    folders: LocalProfileFolders, profile_folder: Path, tmp_path: Path
+) -> None:
+    target = tmp_path / "altrove"
+    target.write_bytes(b"dati")
+    try:
+        (profile_folder / PROFILE_LOCK_NAME).symlink_to(target)
+    except OSError:
+        pytest.skip("link simbolici non creabili qui (privilegi)")
+
+    with pytest.raises(FolderUnavailableError):
+        folders.acquire_lock(profile_folder)
+
+    assert target.read_bytes() == b"dati"
