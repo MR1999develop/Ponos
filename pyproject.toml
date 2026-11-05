@@ -84,7 +84,7 @@ enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 
 # Moduli di terzi senza tipi: aggiungere qui solo quelli verificati senza stub.
 [[tool.mypy.overrides]]
-module = ["garminconnect.*", "fitdecode.*", "desktop_notifier.*"]
+module = ["garminconnect.*", "fitdecode.*", "desktop_notifier.*", "plotly.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -142,6 +142,16 @@ name = "La ui parla con i casi d'uso, non con gli adattatori"
 type = "forbidden"
 source_modules = ["ponos_coach.ui"]
 forbidden_modules = ["ponos_coach.garmin", "ponos_coach.storage", "ponos_coach.platform"]
+
+[[tool.importlinter.contracts]]
+name = "Le funzionalita dipendono solo verso il basso (nessun ciclo)"
+type = "layers"
+layers = [
+    "ponos_coach.planning",
+    "ponos_coach.goals | ponos_coach.injury | ponos_coach.assessment",
+    "ponos_coach.load",
+    "ponos_coach.activities",
+]
 
 [[tool.importlinter.contracts]]
 name = "Gli adattatori sono indipendenti tra loro"

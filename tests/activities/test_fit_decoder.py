@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import struct
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -13,6 +14,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from ponos_coach.activities.domain import Sport
 from ponos_coach.activities.fit_decoder import (
     FitDecodeError,
     FitDecodeReason,
@@ -20,7 +22,6 @@ from ponos_coach.activities.fit_decoder import (
     decode_activity,
     map_sport,
 )
-from ponos_coach.load.domain import Sport
 from tests.fixtures.generators import fit_writer as fw
 
 DATA = Path(__file__).resolve().parents[1] / "fixtures" / "data"
@@ -52,7 +53,7 @@ def test_valid_run_becomes_an_activity() -> None:
 
     assert activity.sport is Sport.RUNNING
     assert activity.start == RUN_START
-    assert activity.duration_s == 3600.0
+    assert activity.elapsed_s == 3600.0
     assert activity.file_id.serial_number == 5000001
     assert activity.file_id.manufacturer == fw.MANUFACTURER_DEVELOPMENT
     assert activity.file_id.time_created == RUN_START
@@ -81,7 +82,7 @@ def test_invalid_heart_rate_samples_are_omitted_not_repaired() -> None:
 
     assert activity.heart_rate is not None
     assert len(activity.heart_rate) == 1800 - 12 - 15
-    assert activity.duration_s == 1800.0
+    assert activity.elapsed_s == 1800.0
 
 
 def test_out_of_range_values_are_kept_in_the_series() -> None:
@@ -93,8 +94,71 @@ def test_out_of_range_values_are_kept_in_the_series() -> None:
 
 
 def test_one_second_and_twenty_four_hours_are_accepted() -> None:
-    assert decode_activity(valid_bytes("run_one_second.fit")).duration_s == 1.0
-    assert decode_activity(valid_bytes("hike_24h.fit")).duration_s == 86_400.0
+    assert decode_activity(valid_bytes("run_one_second.fit")).elapsed_s == 1.0
+    assert decode_activity(valid_bytes("hike_24h.fit")).elapsed_s == 86_400.0
+
+
+def test_timer_time_is_the_moving_time_and_elapsed_includes_the_pauses() -> None:
+    spec = replace(small_activity(), total_elapsed_ms=3_600_000, total_timer_ms=2_400_000)
+
+    activity = decode_activity(fw.build_activity(spec))
+
+    assert (activity.elapsed_s, activity.timer_s) == (3600.0, 2400.0)
+
+
+def test_missing_timer_time_falls_back_to_elapsed_time() -> None:
+    spec = replace(small_activity(), total_elapsed_ms=90_000, total_timer_ms=0xFFFFFFFF)
+
+    activity = decode_activity(fw.build_activity(spec))
+
+    assert (activity.elapsed_s, activity.timer_s) == (90.0, 90.0)
+
+
+def test_non_positive_timer_time_is_a_corrupt_file() -> None:
+    spec = replace(small_activity(), total_timer_ms=0)
+
+    assert reason_of(fw.build_activity(spec)) is FitDecodeReason.CORRUPT
+
+
+def hr_samples(offsets: list[int]) -> fw.ActivitySpec:
+    spec = small_activity()
+    first = fw.datetime_to_fit(spec.start)
+    return replace(spec, samples=[fw.Sample(first + o, 100 + o) for o in offsets])
+
+
+def test_repeated_heart_rate_timestamps_are_discarded_keeping_the_first() -> None:
+    spec = replace(hr_samples([0, 1, 1, 2, 2, 2, 3]), total_elapsed_ms=4000, total_timer_ms=4000)
+
+    activity = decode_activity(fw.build_activity(spec))
+
+    assert activity.heart_rate is not None
+    assert list(activity.heart_rate.seconds) == [0.0, 1.0, 2.0, 3.0]
+    assert activity.discarded_hr_samples == 3
+
+
+def test_backwards_heart_rate_timestamps_are_discarded_not_corrupt() -> None:
+    spec = replace(hr_samples([0, 1, 5, 3, 4, 6, 2]), total_elapsed_ms=7000, total_timer_ms=7000)
+
+    activity = decode_activity(fw.build_activity(spec))
+
+    assert activity.heart_rate is not None
+    assert list(activity.heart_rate.seconds) == [0.0, 1.0, 5.0, 6.0]
+    assert list(activity.heart_rate.bpm) == [100.0, 101.0, 105.0, 106.0]
+    assert activity.discarded_hr_samples == 3
+
+
+def test_clean_heart_rate_has_no_discarded_samples() -> None:
+    assert decode_activity(valid_bytes()).discarded_hr_samples == 0
+
+
+def test_a_programming_error_is_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    def broken(*_args: object) -> None:
+        raise RuntimeError("bug nostro")
+
+    monkeypatch.setattr("ponos_coach.activities.fit_decoder._build", broken)
+
+    with pytest.raises(RuntimeError, match="bug nostro"):
+        decode_activity(valid_bytes())
 
 
 # --- File ostili -------------------------------------------------------------
@@ -132,14 +196,6 @@ def test_file_with_only_file_id_is_not_an_activity() -> None:
     assert reason_of(fw.wrap_body(body)) is FitDecodeReason.NOT_AN_ACTIVITY
 
 
-def test_records_with_repeated_timestamps_are_corrupt() -> None:
-    spec = small_activity()
-    samples = [spec.samples[0], spec.samples[0], *spec.samples[1:]]
-    broken = fw.ActivitySpec(spec.start, spec.sport, spec.sub_sport, samples)
-
-    assert reason_of(fw.build_activity(broken)) is FitDecodeReason.CORRUPT
-
-
 @given(st.data())
 def test_mutated_valid_file_gives_an_activity_or_the_single_error(data: st.DataObject) -> None:
     original = fw.build_activity(small_activity())
@@ -172,7 +228,7 @@ def test_size_is_checked_before_decoding() -> None:
 def test_size_at_the_limit_is_accepted() -> None:
     data = valid_bytes("run_one_second.fit")
 
-    assert decode_activity(data, FitLimits(max_bytes=len(data))).duration_s == 1.0
+    assert decode_activity(data, FitLimits(max_bytes=len(data))).elapsed_s == 1.0
     assert reason_of(data, FitLimits(max_bytes=len(data) - 1)) is FitDecodeReason.TOO_LARGE
 
 
@@ -186,7 +242,7 @@ def test_default_limits_are_the_project_defaults() -> None:
 
 def test_too_many_records() -> None:
     assert reason_of(valid_bytes(), FitLimits(max_records=3599)) is FitDecodeReason.TOO_MANY_RECORDS
-    assert decode_activity(valid_bytes(), FitLimits(max_records=3600)).duration_s == 3600.0
+    assert decode_activity(valid_bytes(), FitLimits(max_records=3600)).elapsed_s == 3600.0
 
 
 def test_too_long() -> None:
@@ -194,7 +250,7 @@ def test_too_long() -> None:
 
     assert reason_of(valid_bytes("hike_24h.fit"), limits) is FitDecodeReason.TOO_LONG
     at_limit = decode_activity(valid_bytes("hike_24h.fit"), FitLimits(max_duration_s=86_400.0))
-    assert at_limit.duration_s == 86_400.0
+    assert at_limit.elapsed_s == 86_400.0
 
 
 def test_total_messages_are_capped_even_when_they_are_not_records() -> None:
@@ -205,7 +261,7 @@ def test_total_messages_are_capped_even_when_they_are_not_records() -> None:
     extra_laps = (b"\x02" + struct.pack("<IIII", 0, 0, 1000, 1000)) * 10  # lap con definizione 2
     data = fw.wrap_body(fw.build_body(one_record) + extra_laps)
 
-    assert decode_activity(data).duration_s == 1.0
+    assert decode_activity(data).elapsed_s == 1.0
     assert reason_of(data, FitLimits(max_records=2)) is FitDecodeReason.TOO_MANY_RECORDS
 
 
@@ -244,5 +300,5 @@ def test_sport_mapping(sport: int | None, sub_sport: int | None, expected: Sport
 def test_header_with_correct_sizes_is_what_the_hostile_files_break() -> None:
     # Sanità del generatore: il file valido da cui derivano gli ostili si decodifica.
     valid = fw.build_activity(small_activity())
-    assert decode_activity(valid).duration_s == 5.0
+    assert decode_activity(valid).elapsed_s == 5.0
     assert struct.unpack_from("<I", valid, 4)[0] == len(valid) - fw.HEADER_SIZE - 2

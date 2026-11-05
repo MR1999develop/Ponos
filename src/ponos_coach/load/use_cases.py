@@ -15,7 +15,7 @@ from enum import Enum
 from types import MappingProxyType
 from zoneinfo import ZoneInfo
 
-from ponos_coach.activities.domain import Activity, FileId
+from ponos_coach.activities.domain import Activity, FileId, Sport
 from ponos_coach.activities.fit_decoder import (
     FitDecodeError,
     FitDecodeReason,
@@ -32,7 +32,6 @@ from ponos_coach.load.domain import (
     ActivityLoad,
     Physiology,
     PmcSeries,
-    Sport,
     SportWeight,
     compute_activity_load,
     compute_pmc,
@@ -90,6 +89,8 @@ class ActivityEntry:
     """Un'attività con il suo carico (la serie di FC non si conserva).
 
     `local_day` è la data locale dell'inizio nel fuso dei parametri; `start` è in UTC.
+    `elapsed_s` è il tempo trascorso e `timer_s` quello in movimento (su cui è calcolato il
+    carico).
     """
 
     file_name: str
@@ -97,7 +98,8 @@ class ActivityEntry:
     sport: Sport
     start: datetime
     local_day: date
-    duration_s: float
+    elapsed_s: float
+    timer_s: float
     load: ActivityLoad
 
 
@@ -122,7 +124,7 @@ class FitnessOverview:
 def _load_entry(ref: FitFileRef, activity: Activity, params: FitnessParameters) -> ActivityEntry:
     load = compute_activity_load(
         activity.sport,
-        activity.duration_s,
+        activity.timer_s,
         activity.heart_rate,
         params.physiology,
         params.weight_of(activity.sport),
@@ -130,7 +132,7 @@ def _load_entry(ref: FitFileRef, activity: Activity, params: FitnessParameters) 
     local_day = activity.start.astimezone(params.timezone).date()
     return ActivityEntry(
         ref.name, activity.file_id, activity.sport, activity.start, local_day,
-        activity.duration_s, load,
+        activity.elapsed_s, activity.timer_s, load,
     )  # fmt: skip
 
 

@@ -1,24 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Sport riconosciuti, pesi di default e intensita tipiche per la stima senza FC."""
+"""Pesi di default degli sport e intensita tipiche per la stima senza FC."""
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from enum import Enum
 
-
-class Sport(Enum):
-    """Sport di un'attivita. Il valore e un identificatore stabile (usato nei dati salvati)."""
-
-    RUNNING = "running"
-    TRAIL = "trail"
-    CYCLING = "cycling"
-    STRENGTH = "strength"
-    HIKING = "hiking"
-    WALKING = "walking"
-    OTHER = "other"
+from ponos_coach.activities.domain import Sport
 
 
 @dataclass(frozen=True, slots=True)

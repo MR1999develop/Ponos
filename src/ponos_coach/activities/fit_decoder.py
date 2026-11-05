@@ -4,14 +4,17 @@
 
 Nessun I/O: il chiamante legge i byte (con un massimo) e li passa qui. Dimensione, numero di
 record e durata si controllano con i limiti di `FitLimits`; i CRC si verificano; un file non
-valido non si ripara mai, si rifiuta con un motivo enumerato. Qualunque guasto interno della
-libreria `fitdecode` su dati ostili diventa `FitDecodeReason.CORRUPT`.
+valido non si ripara mai, si rifiuta con un motivo enumerato. Gli errori di `fitdecode` e le
+sole eccezioni del parser osservate su file ostili e byte casuali diventano
+`FitDecodeReason.CORRUPT`; un errore di programmazione si propaga.
 """
 
 from __future__ import annotations
 
 import io
 import math
+import struct
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
@@ -19,8 +22,7 @@ from enum import Enum
 import fitdecode
 import numpy as np
 
-from ponos_coach.activities.domain import Activity, FileId
-from ponos_coach.load.domain import HeartRateSeries, Sport
+from ponos_coach.activities.domain import Activity, FileId, HeartRateSeries, Sport
 
 # Numeri del profilo FIT (campo `sport` e `sub_sport` del messaggio `session`).
 _FIT_SPORT_RUNNING = 1
@@ -32,6 +34,13 @@ _FIT_SUB_SPORT_TRAIL = 3
 _FIT_SUB_SPORT_STRENGTH = 20
 _FIT_TYPE_ACTIVITY = 4
 _MESSAGES_PER_RECORD = 5  # tetto ai messaggi di dati totali: 5 volte i record ammessi
+
+# Errori di `fitdecode` e sole eccezioni di Python osservate dentro il suo parser su `fit-ostili/`
+# e su byte casuali o mutati (le fa scattare, su dati ostili, un controllo mancante della
+# libreria): TypeError (processore di date), struct.error (header troncato), AssertionError
+# (lunghezza di chunk) e ValueError (lettura oltre la fine). Valgono solo attorno alla lettura
+# dei frame: un errore del nostro codice non passa di qui e si propaga.
+_PARSER_ERRORS = (fitdecode.FitError, TypeError, struct.error, AssertionError, ValueError)
 
 
 class FitDecodeReason(Enum):
@@ -86,6 +95,7 @@ def map_sport(sport: int | None, sub_sport: int | None) -> Sport:
 class _Session:
     start: datetime | None
     elapsed_s: float | None
+    timer_s: float | None
     sport: int | None
     sub_sport: int | None
 
@@ -154,22 +164,37 @@ def _take_message(frame: fitdecode.FitDataMessage, parsed: _Parsed, limits: FitL
             _Session(
                 _as_datetime(_value(frame, "start_time")),
                 _as_float(_value(frame, "total_elapsed_time")),
+                _as_float(_value(frame, "total_timer_time")),
                 _as_int(_value(frame, "sport", raw=True)),
                 _as_int(_value(frame, "sub_sport", raw=True)),
             )
         )
 
 
+def _frames(data: bytes) -> Iterator[fitdecode.FitDataMessage]:
+    """Messaggi di dati del file; un guasto del parser diventa `FitDecodeError(CORRUPT)`."""
+    try:
+        with fitdecode.FitReader(
+            io.BytesIO(data),
+            check_crc=fitdecode.CrcCheck.RAISE,
+            error_handling=fitdecode.ErrorHandling.RAISE,
+        ) as reader:
+            frames = iter(reader)
+            while True:
+                try:
+                    frame = next(frames)
+                except StopIteration:
+                    return
+                if isinstance(frame, fitdecode.FitDataMessage):
+                    yield frame
+    except _PARSER_ERRORS as exc:
+        raise FitDecodeError(FitDecodeReason.CORRUPT) from exc
+
+
 def _parse(data: bytes, limits: FitLimits) -> _Parsed:
     parsed = _Parsed()
-    with fitdecode.FitReader(
-        io.BytesIO(data),
-        check_crc=fitdecode.CrcCheck.RAISE,
-        error_handling=fitdecode.ErrorHandling.RAISE,
-    ) as reader:
-        for frame in reader:
-            if isinstance(frame, fitdecode.FitDataMessage):
-                _take_message(frame, parsed, limits)
+    for frame in _frames(data):
+        _take_message(frame, parsed, limits)
     return parsed
 
 
@@ -189,37 +214,56 @@ def _file_id(parsed: _Parsed) -> FileId:
     return FileId(manufacturer, product, serial, created)
 
 
-def _timing(parsed: _Parsed) -> tuple[datetime, float]:
-    """Inizio UTC e durata (secondi) dalle sessioni; se mancano, dai record."""
+def _timing(parsed: _Parsed) -> tuple[datetime, float, float]:
+    """Inizio UTC, tempo trascorso e tempo in movimento (secondi).
+
+    Dalle sessioni; se mancano, dai record. Il tempo in movimento è `total_timer_time` e, per
+    una sessione che non lo dichiara, il suo tempo trascorso (default del progetto).
+    """
     times = parsed.record_times
     if not parsed.sessions and not times:
         raise FitDecodeError(FitDecodeReason.NOT_AN_ACTIVITY)
     first = parsed.sessions[0].start if parsed.sessions else None
     start = first or times[0]
-    elapsed = [s.elapsed_s for s in parsed.sessions if s.elapsed_s is not None]
-    if elapsed:
-        return start, sum(elapsed)
+    declared = [s for s in parsed.sessions if s.elapsed_s is not None]
+    if declared:
+        elapsed = sum(s.elapsed_s for s in declared if s.elapsed_s is not None)
+        timer = sum(s.timer_s if s.timer_s is not None else s.elapsed_s or 0.0 for s in declared)
+        return start, elapsed, timer
     if len(times) < 2:
         raise FitDecodeError(FitDecodeReason.CORRUPT)
-    return start, (times[-1] - times[0]).total_seconds()
+    span = (times[-1] - times[0]).total_seconds()
+    return start, span, span
 
 
-def _series(parsed: _Parsed) -> HeartRateSeries | None:
+def _series(parsed: _Parsed) -> tuple[HeartRateSeries | None, int]:
+    """Serie di FC e numero di campioni scartati.
+
+    Un campione con timestamp non maggiore di tutti i precedenti (ripetuto o all'indietro) si
+    scarta: vale il primo di una ripetizione e un ritorno indietro non entra mai (default del
+    progetto, deterministico).
+    """
     if not parsed.hr_values:
-        return None
+        return None, 0
     origin = parsed.record_times[0]
     seconds = np.array([(t - origin).total_seconds() for t in parsed.hr_times])
-    return HeartRateSeries(seconds, np.array(parsed.hr_values, dtype=np.float64))
+    bpm = np.array(parsed.hr_values, dtype=np.float64)
+    keep = np.ones(seconds.size, dtype=bool)
+    keep[1:] = seconds[1:] > np.maximum.accumulate(seconds)[:-1]
+    return HeartRateSeries(seconds[keep], bpm[keep]), int(seconds.size - np.count_nonzero(keep))
 
 
 def _build(parsed: _Parsed, limits: FitLimits) -> Activity:
     file_id = _file_id(parsed)
-    start, duration_s = _timing(parsed)
-    if duration_s > limits.max_duration_s:
+    start, elapsed_s, timer_s = _timing(parsed)
+    if not (math.isfinite(elapsed_s) and math.isfinite(timer_s) and elapsed_s > 0 and timer_s > 0):
+        raise FitDecodeError(FitDecodeReason.CORRUPT)
+    if elapsed_s > limits.max_duration_s:
         raise FitDecodeError(FitDecodeReason.TOO_LONG)
     session = parsed.sessions[0] if parsed.sessions else None
     sport = map_sport(session.sport, session.sub_sport) if session else Sport.OTHER
-    return Activity(file_id, sport, start, duration_s, _series(parsed))
+    series, discarded = _series(parsed)
+    return Activity(file_id, sport, start, elapsed_s, timer_s, series, discarded)
 
 
 def decode_activity(data: bytes, limits: FitLimits | None = None) -> Activity:
@@ -238,10 +282,4 @@ def decode_activity(data: bytes, limits: FitLimits | None = None) -> Activity:
         raise FitDecodeError(FitDecodeReason.EMPTY)
     if len(data) > limits.max_bytes:
         raise FitDecodeError(FitDecodeReason.TOO_LARGE)
-    try:
-        parsed = _parse(data, limits)
-        return _build(parsed, limits)
-    except FitDecodeError:
-        raise
-    except Exception as exc:  # confine: ogni guasto su dati ostili è un file corrotto
-        raise FitDecodeError(FitDecodeReason.CORRUPT) from exc
+    return _build(_parse(data, limits), limits)

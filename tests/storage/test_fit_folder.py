@@ -4,7 +4,12 @@
 
 from __future__ import annotations
 
+import os
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -14,6 +19,12 @@ from ponos_coach.activities.ports import (
     FitFileSource,
     FitFileTooLargeError,
     FitFileUnreadableError,
+)
+from ponos_coach.load.domain import HeartRateLimits, Physiology, Sex, ThresholdHeartRate
+from ponos_coach.load.use_cases import (
+    FitnessParameters,
+    RejectionReason,
+    compute_fitness_overview,
 )
 from ponos_coach.storage.fit_folder import FitFolder
 
@@ -51,7 +62,7 @@ def test_read_returns_the_bytes_and_they_decode(tmp_path: Path) -> None:
     data = folder.read(ref, 1024 * 1024)
 
     assert data == original
-    assert decode_activity(data).duration_s == 1.0
+    assert decode_activity(data).elapsed_s == 1.0
 
 
 def test_read_refuses_a_file_over_the_maximum_without_reading_it(tmp_path: Path) -> None:
@@ -95,3 +106,105 @@ def test_folder_adapter_satisfies_the_port(tmp_path: Path) -> None:
     source: FitFileSource = FitFolder(tmp_path)
 
     assert list(source.list_files()) == []
+
+
+# --- Voci che non sono file regolari, o che spariscono ---------------------------
+
+
+def make_symlink(link: Path, target: Path) -> None:
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("il sistema non permette di creare collegamenti simbolici")
+
+
+def test_symlink_named_fit_is_neither_listed_nor_readable(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.fit").write_bytes(b"secret")
+    folder = tmp_path / "folder"
+    folder.mkdir()
+    make_symlink(folder / "link.fit", outside / "secret.fit")
+
+    source = FitFolder(folder)
+
+    assert source.list_files() == []
+    with pytest.raises(FitFileUnreadableError):
+        source.read(FitFileRef("link.fit", 6), 100)
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="i FIFO esistono solo su POSIX")
+def test_fifo_named_fit_does_not_block_and_is_unreadable(tmp_path: Path) -> None:
+    os.mkfifo(tmp_path / "x.fit")  # type: ignore[attr-defined,unused-ignore]
+    source = FitFolder(tmp_path)
+
+    assert source.list_files() == []  # non è un file regolare
+    with pytest.raises(FitFileUnreadableError):  # e se qualcuno lo chiede lo stesso, non blocca
+        source.read(FitFileRef("x.fit", 0), 100)
+
+
+def test_non_regular_file_opened_is_refused_on_the_handle(tmp_path: Path) -> None:
+    (tmp_path / "dir.fit").mkdir()
+
+    with pytest.raises(FitFileUnreadableError):
+        FitFolder(tmp_path).read(FitFileRef("dir.fit", 0), 100)
+
+
+def test_entry_that_vanishes_during_listing_is_listed_and_rejected_as_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "ok.fit").write_bytes(b"12")
+
+    class VanishingEntry:
+        name = "gone.fit"
+
+        def is_file(self, **_options: bool) -> bool:
+            return True
+
+        def stat(self, **_options: bool) -> os.stat_result:
+            raise FileNotFoundError(self.name)
+
+    real_scandir = os.scandir
+
+    @contextmanager
+    def scandir(path: Path) -> Iterator[Iterator[object]]:
+        with real_scandir(path) as entries:
+            yield iter([*entries, VanishingEntry()])
+
+    monkeypatch.setattr(os, "scandir", scandir)
+    source = FitFolder(tmp_path)
+
+    refs = source.list_files()
+
+    assert [ref.name for ref in refs] == ["gone.fit", "ok.fit"]
+    with pytest.raises(FitFileUnreadableError):
+        source.read(refs[0], 100)
+
+
+def test_file_deleted_between_listing_and_reading_is_rejected_by_the_use_case(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "gone.fit").write_bytes((FIXTURE_RUN / "run_one_second.fit").read_bytes())
+    (tmp_path / "kept.fit").write_bytes((FIXTURE_RUN / "run_constant_160.fit").read_bytes())
+    folder = FitFolder(tmp_path)
+
+    class Vanishing:
+        def list_files(self) -> list[FitFileRef]:
+            refs = folder.list_files()
+            (tmp_path / "gone.fit").unlink()
+            return refs
+
+        def read(self, ref: FitFileRef, max_bytes: int) -> bytes:
+            return folder.read(ref, max_bytes)
+
+    params = FitnessParameters(
+        Physiology(HeartRateLimits(50, 190), ThresholdHeartRate(170), Sex.MALE),
+        ZoneInfo("UTC"),
+    )
+
+    overview = compute_fitness_overview(Vanishing(), params, date(2026, 3, 10))
+
+    assert [e.file_name for e in overview.activities] == ["kept.fit"]
+    assert [(r.file_name, r.reason) for r in overview.rejected] == [
+        ("gone.fit", RejectionReason.UNREADABLE)
+    ]

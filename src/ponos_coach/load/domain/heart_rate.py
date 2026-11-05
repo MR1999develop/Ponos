@@ -1,16 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Tipi della frequenza cardiaca: limiti, soglia, sesso, serie di campioni."""
+"""Tipi della frequenza cardiaca: limiti, soglia, sesso."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
 
-import numpy as np
-from numpy.typing import NDArray
-
-from ponos_coach.load.domain.sport import Sport
+from ponos_coach.activities.domain import Sport
 
 # Intervalli ammessi (default del progetto): scartano valori palesemente errati.
 _MIN_BPM_LOW = 20
@@ -58,18 +55,24 @@ class ThresholdHeartRate:
             raise ValueError("FC di soglia fuori da [40, 250] bpm")
 
 
-def threshold_for_sport(threshold: ThresholdHeartRate, sport: Sport) -> int:
-    """Soglia usata per lo sport: in bici quella della corsa meno 4 bpm, altrimenti uguale."""
+def threshold_for_sport(physiology: Physiology, sport: Sport) -> int:
+    """Soglia usata per lo sport.
+
+    In bici è `max(soglia_corsa - 4, FC_minima + 1)`: il valore si porta al limite invece di
+    rifiutare i parametri (default del progetto); negli altri sport è la soglia della corsa.
+    """
+    threshold = physiology.threshold.bpm
     if sport is Sport.CYCLING:
-        return threshold.bpm - BIKE_THRESHOLD_OFFSET_BPM
-    return threshold.bpm
+        return max(threshold - BIKE_THRESHOLD_OFFSET_BPM, physiology.limits.min_bpm + 1)
+    return threshold
 
 
 @dataclass(frozen=True, slots=True)
 class Physiology:
     """Parametri fisiologici dell'utente, coerenti tra loro per costruzione.
 
-    La soglia (anche quella in bici) sta strettamente tra FC minima e massima.
+    La soglia della corsa sta tra FC minima (esclusa) e FC massima (inclusa); quella della
+    bici si deriva con `threshold_for_sport` e non vincola il costruttore.
     """
 
     limits: HeartRateLimits
@@ -77,36 +80,5 @@ class Physiology:
     sex: Sex
 
     def __post_init__(self) -> None:
-        lowest = self.threshold.bpm - BIKE_THRESHOLD_OFFSET_BPM
-        if not self.limits.min_bpm < lowest or not self.threshold.bpm <= self.limits.max_bpm:
+        if not self.limits.min_bpm < self.threshold.bpm <= self.limits.max_bpm:
             raise ValueError("la soglia deve stare tra FC minima e FC massima")
-
-
-@dataclass(frozen=True, slots=True, eq=False)
-class HeartRateSeries:
-    """Campioni di FC: secondi crescenti da un istante di riferimento e bpm, in colonne.
-
-    Invarianti: almeno un campione, stessa lunghezza, valori finiti, secondi strettamente
-    crescenti. Gli array sono copiati e di sola lettura. I bpm possono essere fuori limiti:
-    li scarta il calcolo del carico, non la serie.
-    """
-
-    seconds: NDArray[np.float64]
-    bpm: NDArray[np.float64]
-
-    def __post_init__(self) -> None:
-        seconds = np.array(self.seconds, dtype=np.float64)
-        bpm = np.array(self.bpm, dtype=np.float64)
-        if seconds.ndim != 1 or seconds.shape != bpm.shape or seconds.size == 0:
-            raise ValueError("serie vuota o con colonne di lunghezza diversa")
-        if not (np.isfinite(seconds).all() and np.isfinite(bpm).all()):
-            raise ValueError("la serie contiene valori non finiti")
-        if seconds.size > 1 and not (np.diff(seconds) > 0).all():
-            raise ValueError("i secondi devono essere strettamente crescenti")
-        seconds.setflags(write=False)
-        bpm.setflags(write=False)
-        object.__setattr__(self, "seconds", seconds)
-        object.__setattr__(self, "bpm", bpm)
-
-    def __len__(self) -> int:
-        return int(self.seconds.size)

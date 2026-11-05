@@ -50,6 +50,15 @@ Scelta dall'utente alla creazione; autosufficiente.
   durata massima: **punti aperti** (valori da fissare in fase 1, costanti in
   un solo modulo).
 
+- Campioni di FC con timestamp ripetuto o non crescente: non rendono il file
+  corrotto; si scartano in modo deterministico (vale il primo di una
+  ripetizione, un ritorno indietro non entra) e si contano come scartati
+  (default del progetto). Un file è corrotto per CRC, struttura o record senza
+  timestamp, mai per questo.
+- L'attività porta il tempo trascorso (`total_elapsed_time`) e il tempo in
+  movimento (`total_timer_time`, ripiego sul trascorso se manca); i limiti di
+  durata si applicano al trascorso.
+
 ## 4. Identità dell'attività
 
 - `file_id` del FIT: produttore, numero di serie, ora di creazione. È uguale

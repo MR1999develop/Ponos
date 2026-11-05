@@ -7,12 +7,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from ponos_coach.activities.domain import HeartRateSeries, Sport
 from ponos_coach.load.domain import (
     HeartRateLimits,
-    HeartRateSeries,
     Physiology,
     Sex,
-    Sport,
     SportWeight,
     ThresholdHeartRate,
     default_weight,
@@ -38,14 +37,17 @@ def test_threshold_rejects_out_of_range(bpm: int) -> None:
         ThresholdHeartRate(bpm)
 
 
-def test_physiology_requires_threshold_inside_limits() -> None:
-    limits = HeartRateLimits(50, 190)
+@pytest.mark.parametrize("threshold", [191, 50, 49])
+def test_physiology_rejects_threshold_outside_limits(threshold: int) -> None:
     with pytest.raises(ValueError, match="soglia"):
-        Physiology(limits, ThresholdHeartRate(190 + 1), Sex.MALE)
-    # La soglia in bici (soglia - 4) deve restare sopra la FC minima.
-    with pytest.raises(ValueError, match="soglia"):
-        Physiology(limits, ThresholdHeartRate(54), Sex.FEMALE)
-    assert Physiology(limits, ThresholdHeartRate(55), Sex.FEMALE).sex is Sex.FEMALE
+        Physiology(HeartRateLimits(50, 190), ThresholdHeartRate(threshold), Sex.MALE)
+
+
+@pytest.mark.parametrize("threshold", [51, 52, 54, 55, 190])
+def test_physiology_accepts_every_threshold_above_minimum_up_to_maximum(threshold: int) -> None:
+    physiology = Physiology(HeartRateLimits(50, 190), ThresholdHeartRate(threshold), Sex.FEMALE)
+
+    assert physiology.threshold.bpm == threshold
 
 
 def test_banister_coefficients() -> None:
@@ -54,11 +56,22 @@ def test_banister_coefficients() -> None:
 
 
 def test_threshold_for_sport_only_cycling_is_lower() -> None:
-    threshold = ThresholdHeartRate(170)
-    assert threshold_for_sport(threshold, Sport.CYCLING) == 166
-    assert [threshold_for_sport(threshold, s) for s in Sport if s is not Sport.CYCLING] == [170] * (
-        len(Sport) - 1
-    )
+    physiology = Physiology(HeartRateLimits(50, 190), ThresholdHeartRate(170), Sex.MALE)
+    assert threshold_for_sport(physiology, Sport.CYCLING) == 166
+    others = [threshold_for_sport(physiology, s) for s in Sport if s is not Sport.CYCLING]
+    assert others == [170] * (len(Sport) - 1)
+
+
+@pytest.mark.parametrize(
+    ("threshold", "bike"),
+    [(51, 51), (52, 51), (54, 51), (55, 51), (56, 52), (170, 166)],
+)
+def test_bike_threshold_is_clamped_just_above_the_minimum_instead_of_rejected(
+    threshold: int, bike: int
+) -> None:
+    physiology = Physiology(HeartRateLimits(50, 190), ThresholdHeartRate(threshold), Sex.MALE)
+
+    assert threshold_for_sport(physiology, Sport.CYCLING) == bike
 
 
 def test_default_weights_match_plan() -> None:

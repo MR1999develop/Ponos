@@ -1,19 +1,11 @@
-# /// script
-# requires-python = ">=3.13"
-# dependencies = [
-#     "garminconnect>=0.3.20",
-#     "fitdecode",
-#     "keyring",
-# ]
-# ///
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
 """Spike Garmin: verifica dal vivo dell'accesso a Garmin Connect (fase 0).
 
 Si lancia a mano dall'utente nel proprio terminale:
 
-    uv run experiments/garmin_spike.py            # esegue lo spike
-    uv run experiments/garmin_spike.py --logout   # cancella ogni traccia
+    uv run --locked python experiments/garmin_spike.py            # esegue lo spike
+    uv run --locked python experiments/garmin_spike.py --logout   # cancella ogni traccia
 
 Non e' codice di produzione: serve a misurare (login con MFA, dimensione dei
 token e portachiavi, tempi dello storico, download FIT, differenza d'orario,

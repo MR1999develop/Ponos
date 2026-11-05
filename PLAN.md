@@ -52,8 +52,8 @@ completata e verificata.
    superano la massima, l'app propone di rivederla. FC minima, FC massima e
    soglia hanno una data di validità: ogni attività usa i valori del suo
    periodo, e il cambio di un valore ricalcola i carichi derivati.
-4. **Attività senza FC** (o con più del 30% dei campioni scartati o
-   mancanti): carico stimato da durata × intensità tipica dello sport,
+4. **Attività senza FC** (o con più del 30% del tempo in movimento senza
+   FC valida): carico stimato da durata × intensità tipica dello sport,
    marcato "stimato" in tabella e nei grafici.
 5. **Tipologie di seduta:** elenco per sport (es. corsa facile, lungo,
    soglia, ripetute, bici facile, forza, escursionismo) con caselle da
@@ -214,7 +214,11 @@ src/ponos_coach/
 - `hrTSS = 100 · TRIMP / TRIMP_1h_soglia`, dove `TRIMP_1h_soglia` è il TRIMP
   di un'ora alla FC di soglia (in bici: soglia della corsa − 4 bpm finché
   non c'è un test in bici).
-- `carico = hrTSS · peso_sport`. Buchi oltre 10 s non contati.
+- `carico = hrTSS · peso_sport`. Buchi oltre 10 s non contati; campioni
+  di FC con orario ripetuto o all'indietro scartati e contati.
+- La regola del 30% e la stima senza FC usano il tempo in movimento (timer
+  del FIT, con ripiego sul tempo trascorso), confrontato in millisecondi
+  interi. In bici la soglia è `max(soglia_corsa − 4, FCmin + 1)`.
 - `ATL` e `CTL` sono medie esponenziali giornaliere nella forma del PMC:
   `X(g) = X(g − 1) + (L(g) − X(g − 1)) / τ`, con τ = 7 giorni (ATL) e 42
   giorni (CTL), partendo da 0 il giorno prima della prima attività; `TSB(giorno) = CTL(giorno − 1) − ATL(giorno − 1)` (forma del

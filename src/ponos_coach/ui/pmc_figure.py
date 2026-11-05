@@ -16,9 +16,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
-import plotly.graph_objects as go  # type: ignore[import-untyped]
-import plotly.io as pio  # type: ignore[import-untyped]
-from plotly.subplots import make_subplots  # type: ignore[import-untyped]
+import plotly.graph_objects as go
+import plotly.io as pio
+from plotly.subplots import make_subplots
 
 from ponos_coach.load.domain import PmcSeries
 from ponos_coach.load.use_cases import ActivityEntry

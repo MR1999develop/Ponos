@@ -4,8 +4,11 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
+from ponos_coach.activities.domain import Sport
 from ponos_coach.activities.fit_decoder import decode_activity
 from ponos_coach.load.domain import (
     ActivityLoad,
@@ -13,11 +16,11 @@ from ponos_coach.load.domain import (
     LoadSource,
     Physiology,
     Sex,
-    Sport,
     ThresholdHeartRate,
     compute_activity_load,
     default_weight,
 )
+from tests.fixtures.generators import fit_writer as fw
 from tests.load.helpers import FIXTURES, PHYSIOLOGY
 
 
@@ -25,7 +28,7 @@ def load_of(name: str, physiology: Physiology = PHYSIOLOGY) -> ActivityLoad:
     activity = decode_activity((FIXTURES / "fit" / name).read_bytes())
     return compute_activity_load(
         activity.sport,
-        activity.duration_s,
+        activity.timer_s,
         activity.heart_rate,
         physiology,
         default_weight(activity.sport),
@@ -57,6 +60,30 @@ def test_t_calc_07_twenty_four_hours_hike_is_measured_not_estimated() -> None:
     assert result.used_samples == 17280
     assert result.excluded_seconds == 0.0
     assert result.hr_tss > 0
+
+
+def test_t_calc_07_long_pauses_with_good_heart_rate_are_measured_not_estimated() -> None:
+    # 30 minuti di corsa a 150 bpm (timer 1800 s) in un'uscita di 2 ore (pause: 7200 s).
+    start = datetime(2026, 3, 2, 7, 0, tzinfo=UTC)
+    first = fw.datetime_to_fit(start)
+    samples = [fw.Sample(first + i, 150) for i in range(1800)]
+    spec = fw.ActivitySpec(
+        start, fw.Sport.RUNNING, fw.SubSport.GENERIC, samples,
+        total_elapsed_ms=7_200_000, total_timer_ms=1_800_000,
+    )  # fmt: skip
+    activity = decode_activity(fw.build_activity(spec))
+
+    result = compute_activity_load(
+        activity.sport,
+        activity.timer_s,
+        activity.heart_rate,
+        PHYSIOLOGY,
+        default_weight(activity.sport),
+    )
+
+    assert (activity.elapsed_s, activity.timer_s) == (7200.0, 1800.0)
+    assert result.source is LoadSource.HEART_RATE
+    assert result.used_samples == 1800
 
 
 def test_t_calc_07_hr_gaps_over_ten_seconds_are_not_counted() -> None:

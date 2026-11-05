@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 
-from ponos_coach.activities.domain import FileId
-from ponos_coach.load.domain import ActivityLoad, LoadSource, PmcSeries, Sport, compute_pmc
+from ponos_coach.activities.domain import FileId, Sport
+from ponos_coach.load.domain import ActivityLoad, LoadSource, PmcSeries, compute_pmc
 from ponos_coach.load.use_cases import ActivityEntry
 from ponos_coach.ui.pmc_figure import PmcChartLabels
 
@@ -31,7 +31,7 @@ def entry(day: date, load: float, name: str = "a.fit") -> ActivityEntry:
     start = datetime(day.year, day.month, day.day, 7, 0, tzinfo=UTC)
     activity_load = ActivityLoad(load, load, load, 100, 0, 0.0, LoadSource.HEART_RATE)
     return ActivityEntry(
-        name, FileId(1, 1, 1, start), Sport.RUNNING, start, day, 3600.0, activity_load
+        name, FileId(1, 1, 1, start), Sport.RUNNING, start, day, 3600.0, 3600.0, activity_load
     )
 
 

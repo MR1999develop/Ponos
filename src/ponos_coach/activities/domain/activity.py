@@ -8,7 +8,8 @@ import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from ponos_coach.load.domain import HeartRateSeries, Sport
+from ponos_coach.activities.domain.heart_rate_series import HeartRateSeries
+from ponos_coach.activities.domain.sport import Sport
 
 _UINT16_MAX = 0xFFFF
 _UINT32_MAX = 0xFFFFFFFF
@@ -38,20 +39,27 @@ class FileId:
 
 @dataclass(frozen=True, slots=True)
 class Activity:
-    """Un'attività: identità, sport, inizio UTC, durata e serie di FC (se c'è).
+    """Un'attività: identità, sport, inizio UTC, durate e serie di FC (se c'è).
 
-    `duration_s` è il tempo trascorso, finito e positivo. La serie ha i secondi dal suo
-    primo campione.
+    `elapsed_s` è il tempo trascorso (pause comprese) e `timer_s` il tempo in movimento
+    (il timer dell'orologio, senza pause); entrambi finiti e positivi. La serie ha i
+    secondi dal primo record; `discarded_hr_samples` conta i campioni di FC scartati perché
+    con timestamp ripetuto o non crescente.
     """
 
     file_id: FileId
     sport: Sport
     start: datetime
-    duration_s: float
+    elapsed_s: float
+    timer_s: float
     heart_rate: HeartRateSeries | None
+    discarded_hr_samples: int = 0
 
     def __post_init__(self) -> None:
         if self.start.utcoffset() != timedelta(0):
             raise ValueError("l'inizio deve essere un istante UTC con fuso")
-        if not math.isfinite(self.duration_s) or self.duration_s <= 0:
-            raise ValueError("la durata deve essere finita e positiva")
+        for duration in (self.elapsed_s, self.timer_s):
+            if not math.isfinite(duration) or duration <= 0:
+                raise ValueError("le durate devono essere finite e positive")
+        if self.discarded_hr_samples < 0:
+            raise ValueError("i campioni scartati non possono essere negativi")

@@ -2,7 +2,7 @@
 # Copyright (C) 2026 MR
 """Carico di una attività: esempi a mano, confronto con l'implementazione ingenua, invarianti.
 
-T-CALC-01, T-CALC-02, T-CALC-03, T-CALC-06 (parte del dominio).
+T-CALC-01, T-CALC-02, T-CALC-03, T-CALC-06 e T-CALC-07 (parte del dominio).
 """
 
 from __future__ import annotations
@@ -15,12 +15,11 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from ponos_coach.activities.domain import HeartRateSeries, Sport
 from ponos_coach.load.domain import (
     ActivityLoad,
-    HeartRateSeries,
     LoadSource,
     Physiology,
-    Sport,
     SportWeight,
     compute_activity_load,
     default_weight,
@@ -79,7 +78,7 @@ def test_t_calc_01_heart_rate_equal_to_minimum_gives_zero() -> None:
 
 def naive_load(
     sport: Sport,
-    duration_s: float,
+    moving_time_s: float,
     series: HeartRateSeries,
     physiology: Physiology,
     weight: SportWeight,
@@ -92,7 +91,9 @@ def naive_load(
     validity = [*gaps, statistics.median(gaps) if gaps else 1.0]
     low, high = physiology.limits.min_bpm, physiology.limits.max_bpm
     k = physiology.sex.banister_k
-    threshold = physiology.threshold.bpm - (4 if sport is Sport.CYCLING else 0)
+    threshold = physiology.threshold.bpm
+    if sport is Sport.CYCLING:
+        threshold = max(threshold - 4, low + 1)
     hrr_t = (threshold - low) / (high - low)
     one_hour = 60 * hrr_t * 0.64 * math.exp(k * hrr_t)
 
@@ -108,8 +109,8 @@ def naive_load(
             trimp += validity[i] / 60 * hrr * 0.64 * math.exp(k * hrr)
             counted_s += validity[i]
             used += 1
-    if counted_s < 0.7 * duration_s:
-        hr_tss = duration_s / 3600 * 100 * typical_intensity(sport) ** 2
+    if round(counted_s * 1000) * 100 < 70 * round(moving_time_s * 1000):  # millisecondi interi
+        hr_tss = moving_time_s / 3600 * 100 * typical_intensity(sport) ** 2
         return ActivityLoad(
             hr_tss / 100 * one_hour, hr_tss, hr_tss * weight.value, 0, discarded, excluded,
             LoadSource.ESTIMATE,
@@ -302,6 +303,37 @@ def test_more_than_thirty_percent_discarded_is_an_estimate() -> None:
 
     assert result.source is LoadSource.ESTIMATE
     assert result.discarded_samples == 31
+
+
+def test_t_calc_07_seventy_percent_boundary_is_compared_in_integer_milliseconds() -> None:
+    # 20 campioni a passo 0,35 s sommano 7 s, ma in virgola mobile 6,999999999999999: sul
+    # limite del 70% di 10 s il carico resta misurato.
+    series = HeartRateSeries(np.arange(20, dtype=np.float64) * 0.35, np.full(20, 150.0))
+    assert float(np.sum(np.append(np.diff(series.seconds), 0.35))) < 7.0  # il trabocchetto
+
+    result = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY, WEIGHT_ONE)
+
+    assert result.source is LoadSource.HEART_RATE
+
+
+def test_t_calc_07_just_under_seventy_percent_in_milliseconds_is_an_estimate() -> None:
+    series = HeartRateSeries(np.arange(20, dtype=np.float64) * 0.35, np.full(20, 150.0))
+
+    result = compute_activity_load(Sport.RUNNING, 10.001, series, PHYSIOLOGY, WEIGHT_ONE)
+
+    assert result.source is LoadSource.ESTIMATE
+
+
+def test_t_calc_07_the_rule_uses_the_moving_time_given_not_a_longer_elapsed_time() -> None:
+    series = constant(150, 1800)
+
+    moving = compute_activity_load(Sport.RUNNING, 1800.0, series, PHYSIOLOGY, WEIGHT_ONE)
+    with_pauses_counted = compute_activity_load(
+        Sport.RUNNING, 7200.0, series, PHYSIOLOGY, WEIGHT_ONE
+    )
+
+    assert moving.source is LoadSource.HEART_RATE
+    assert with_pauses_counted.source is LoadSource.ESTIMATE
 
 
 def test_t_calc_06_bike_threshold_is_four_bpm_lower() -> None:

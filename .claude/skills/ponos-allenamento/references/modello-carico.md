@@ -30,11 +30,12 @@ Un'ora esatta alla FC di soglia dà hrTSS 100. HR = FCmin dà HRr = 0 e carico 0
 - Quando un valore o un peso cambia, i carichi derivati si ricalcolano per
   tutte le attività dal giorno di validità in poi. Il risultato è uguale al
   calcolo da zero (T-CALC-05).
-- Soglia in bici = FC di soglia della corsa − 4 bpm, finché non c'è un test
-  in bici (default del progetto).
-- Vincoli dei parametri (per esempio FCmin < soglia < FCmax) e intervalli
-  ammessi: **punto aperto**, da fissare nei tipi di dominio con limiti
-  inferiore e superiore.
+- Soglia in bici = `max(soglia della corsa − 4, FCmin + 1)` bpm, finché non
+  c'è un test in bici (default del progetto). Il valore si porta al limite
+  invece di rifiutare i parametri: il costruttore di `Physiology` richiede
+  solo `FCmin < soglia ≤ FCmax` per la soglia della corsa.
+- Altri vincoli dei parametri e intervalli ammessi: **punto aperto**, da
+  fissare nei tipi di dominio con limiti inferiore e superiore.
 
 ## 3. Campioni fuori limiti, buchi, attività senza FC
 
@@ -47,7 +48,11 @@ Un'ora esatta alla FC di soglia dà hrTSS 100. HR = FCmin dà HRr = 0 e carico 0
   progetto).
 - Attività senza FC, o con più del 30% di campioni scartati o mancanti
   (default del progetto): carico stimato da `durata × intensità tipica dello
-  sport`, marcato "stimato" in tabella e nei grafici. Le intensità tipiche per
+  sport`, marcato "stimato" in tabella e nei grafici. La durata è il **tempo
+  in movimento** (`total_timer_time` del FIT; se manca, `total_elapsed_time`),
+  non il tempo trascorso, che include le pause (default del progetto). La
+  regola del 30% confronta i secondi contati con il 70% del tempo in
+  movimento, in millisecondi interi, mai in virgola mobile al limite. Le intensità tipiche per
   sport: **punto aperto**, da fissare in fase 3.
 - Forma esatta della tabella di stima e trattamento di attività senza durata:
   punto aperto.

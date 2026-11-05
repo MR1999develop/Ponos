@@ -13,13 +13,14 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pytest
 
+from ponos_coach.activities.domain import Sport
 from ponos_coach.activities.fit_decoder import FitDecodeReason, FitLimits
 from ponos_coach.activities.ports import (
     FitFileRef,
     FitFileTooLargeError,
     FitFileUnreadableError,
 )
-from ponos_coach.load.domain import LoadSource, Sport, SportWeight
+from ponos_coach.load.domain import LoadSource, SportWeight
 from ponos_coach.load.use_cases import (
     FitnessParameters,
     RejectionReason,
