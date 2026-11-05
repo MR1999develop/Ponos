@@ -1,0 +1,160 @@
+[project]
+name = "ponos-coach"
+version = "0.1.0"
+description = "Allenamento di corsa con dati Garmin e frequenza cardiaca"
+readme = "README.md"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [{ name = "MR" }]
+requires-python = ">=3.13"
+dependencies = [
+    "desktop-notifier>=6.2.0",
+    "fitdecode>=0.11.0",
+    "garminconnect>=0.3.20",
+    "keyring>=25.7.0",
+    "numpy>=2.5.4",
+    "platformdirs>=4.14.0",
+    "plotly>=7.1.0",
+    "pyside6>=6.12.0",
+    "tzdata>=2026.6",
+]
+
+[project.gui-scripts]
+ponos-coach = "ponos_coach.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.9"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.170.13",
+    "import-linter>=2.15",
+    "mypy>=2.4.1",
+    "nox>=2026.10.20",
+    "pip-audit>=2.10.1",
+    "pytest>=9.2.0",
+    "pytest-qt>=4.5.0",
+    "ruff>=0.17.3",
+]
+
+[tool.uv]
+# Attesa sulle versioni nuove delle dipendenze (supply chain): niente pacchetti
+# pubblicati da meno di 7 giorni, salvo correzioni di sicurezza decise a mano.
+exclude-newer = "7 days"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F", "I", "UP", "B", "SIM", "C4", "PERF", "RUF", "PGH",
+    "S", "DTZ", "PTH", "T20", "C90", "N", "PL", "TRY", "ANN", "A", "RET", "ARG",
+]
+ignore = [
+    "TRY003",  # messaggi lunghi nelle eccezioni sono accettati
+    "PLR2004", # numeri magici: gestiti in revisione, non dal linter
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 7
+
+[tool.ruff.lint.pylint]
+max-args = 6
+
+[tool.ruff.lint.per-file-ignores]
+# I test usano assert, valori letterali, fixture senza annotazioni di ritorno complesse.
+"tests/**" = ["S101", "PLR2004", "PLR0913", "ANN401", "ARG001", "C901"]
+# I generatori di dati di prova usano random con seme fisso: nessun uso crittografico.
+"tests/fixtures/generators/**" = ["S311"]
+"noxfile.py" = ["ANN401"]
+# Lo spike è uno script da terminale: stampa a schermo per scelta; random
+# serve solo al jitter dei ritentativi, senza uso crittografico.
+"experiments/**" = ["T201", "S311"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src", "tests", "experiments", "noxfile.py"]
+exclude = ["^tests/fixtures/data/"]
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+
+# Moduli di terzi senza tipi: aggiungere qui solo quelli verificati senza stub.
+[[tool.mypy.overrides]]
+module = ["garminconnect.*", "fitdecode.*", "desktop_notifier.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config -ra -m 'not collaudo'"
+xfail_strict = true
+markers = [
+    "collaudo: test lunghi (fuzzing esteso, prestazioni, durata), esclusi di default",
+]
+filterwarnings = [
+    "error",
+]
+
+[tool.importlinter]
+root_package = "ponos_coach"
+include_external_packages = true
+
+# Convenzione interna: ogni funzionalita (activities, load, assessment, goals,
+# planning, injury, profiles) ha domain/ (puro), ports.py (Protocol per gli
+# adattatori) e use_cases.py. Adattatori in garmin, storage, platform;
+# interfaccia in ui; Composition Root in __main__.py.
+
+[[tool.importlinter.contracts]]
+name = "Il dominio e puro (niente Qt, rete, I/O, log)"
+type = "forbidden"
+source_modules = ["ponos_coach.*.domain"]
+forbidden_modules = [
+    "PySide6", "plotly", "garminconnect", "fitdecode", "sqlite3",
+    "keyring", "desktop_notifier", "platformdirs", "logging",
+]
+
+[[tool.importlinter.contracts]]
+name = "Funzionalita e adattatori non importano la ui"
+type = "forbidden"
+source_modules = [
+    "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.profiles", "ponos_coach.garmin", "ponos_coach.storage",
+    "ponos_coach.platform",
+]
+forbidden_modules = ["ponos_coach.ui"]
+
+[[tool.importlinter.contracts]]
+name = "Le funzionalita non importano gli adattatori"
+type = "forbidden"
+source_modules = [
+    "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.profiles",
+]
+forbidden_modules = ["ponos_coach.garmin", "ponos_coach.storage", "ponos_coach.platform"]
+
+[[tool.importlinter.contracts]]
+name = "La ui parla con i casi d'uso, non con gli adattatori"
+type = "forbidden"
+source_modules = ["ponos_coach.ui"]
+forbidden_modules = ["ponos_coach.garmin", "ponos_coach.storage", "ponos_coach.platform"]
+
+[[tool.importlinter.contracts]]
+name = "Gli adattatori sono indipendenti tra loro"
+type = "independence"
+modules = ["ponos_coach.garmin", "ponos_coach.storage", "ponos_coach.platform"]
+
+[[tool.importlinter.contracts]]
+name = "Solo il Composition Root importa tutto (nessuno importa __main__)"
+type = "forbidden"
+source_modules = [
+    "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.profiles", "ponos_coach.garmin", "ponos_coach.storage",
+    "ponos_coach.platform", "ponos_coach.ui",
+]
+forbidden_modules = ["ponos_coach.__main__"]

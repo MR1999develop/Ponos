@@ -101,8 +101,8 @@ parallelo sul codice nel suo worktree.
 
 ## Eccezioni alle regole generali
 
-1. **Login nel browser di sistema con PKCE** (permanente finché Garmin non
-   offre un'API ai privati).
+1. **Login a Garmin nell'app, non nel browser di sistema con PKCE**
+   (permanente finché Garmin non offre un'API ai privati).
    - Motivo: Garmin non ha un'API ufficiale per i privati; l'unico accesso è
      il login non ufficiale usato da `garminconnect`.
    - Compensazione: la password si inserisce in un dialogo dell'app, va solo

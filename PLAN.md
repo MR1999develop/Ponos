@@ -30,6 +30,7 @@ completata e verificata.
 | Soglia in bici | FC di soglia della corsa − 4 bpm, finché non c'è un test in bici |
 | Tipologie di seduta | Scelte dall'utente; il piano programma solo quelle |
 | Import da cartella | Oltre alla sincronizzazione, su richiesta: si sceglie una cartella e si aggiungono i file FIT che contiene |
+| Ricerca e mappa (fase 9) | Filtri delle attività per data, durata, distanza e dislivello; mappa zoomabile con le attività raggruppate in cerchi numerati che cambiano con lo zoom e, a destra, l'elenco delle attività visibili nell'area |
 | Sincronizzazione | All'avvio e con il pulsante Sincronizza; la prima scarica tutto lo storico, le successive solo le attività mancanti; riprende da dove era rimasta dopo una chiusura; notifica a fine sincronizzazione; niente area di notifica |
 | Calendario Garmin | In una fase successiva: invio degli allenamenti a scelta dell'utente ed eliminazione degli allenamenti futuri programmati |
 | Lingue | Italiano e inglese |
@@ -150,6 +151,11 @@ src/ponos_coach/
   ora di creazione), uguale per lo stesso file scaricato da Garmin o copiato
   dall'orologio; l'id Garmin si aggiunge quando è noto. Così la stessa
   attività non entra due volte, qualunque sia la sua origine.
+- Dal FIT si ricavano anche distanza, dislivello positivo, tempo in
+  movimento, punto di partenza e una traccia semplificata (per la mappa),
+  salvati nell'indice SQLite e rigenerabili dal FIT. Le posizioni GPS sono
+  dati personali sensibili (rivelano casa e abitudini): solo in locale, mai
+  nei log.
 - Limiti al confine: dimensione massima del FIT (es. 50 MB) prima della
   lettura, numero massimo di record, durata massima dell'attività.
 - Stato della UI (finestra, pannelli, ultime cartelle) in `QSettings`.
@@ -209,8 +215,9 @@ src/ponos_coach/
   di un'ora alla FC di soglia (in bici: soglia della corsa − 4 bpm finché
   non c'è un test in bici).
 - `carico = hrTSS · peso_sport`. Buchi oltre 10 s non contati.
-- `ATL` e `CTL` sono medie esponenziali giornaliere con costante di tempo 7 e
-  42 giorni; `TSB(giorno) = CTL(giorno − 1) − ATL(giorno − 1)` (forma del
+- `ATL` e `CTL` sono medie esponenziali giornaliere nella forma del PMC:
+  `X(g) = X(g − 1) + (L(g) − X(g − 1)) / τ`, con τ = 7 giorni (ATL) e 42
+  giorni (CTL), partendo da 0 il giorno prima della prima attività; `TSB(giorno) = CTL(giorno − 1) − ATL(giorno − 1)` (forma del
   mattino).
 - Property test: implementazione vettoriale contro implementazione ingenua;
   invarianti (carico ≥ 0, monotonia rispetto a durata e FC).
@@ -272,6 +279,13 @@ src/ponos_coach/
 - Menu File: Nuovo profilo, Apri profilo da cartella, Cambia profilo,
   Rimuovi profilo dall'elenco; il nome del profilo attivo sta nel titolo
   della finestra.
+- Fase 9: filtri delle attività (data, durata, distanza, dislivello, sport),
+  con un solo stato condiviso da tabella e mappa; vista Mappa con la mappa
+  zoomabile al centro, le attività raggruppate in cerchi numerati che si
+  dividono o si uniscono con lo zoom, e a destra l'elenco delle attività
+  visibili nell'area, con selezione sincronizzata. Il modello d'interazione
+  è quello delle viste mappa delle app outdoor per smartphone; l'aspetto
+  resta quello di Ponos Coach.
 - Menu completi con scorciatoie (Sincronizza: F5), annulla e ripeti
   (`QUndoStack`) per obiettivi e calendario, barra di stato con l'ultima
   sincronizzazione.
@@ -300,6 +314,13 @@ src/ponos_coach/
 - Cartella del profilo scelta dall'utente: verificata scrivibile, file creati
   in modo esclusivo, lock contro due istanze; i token non stanno nella
   cartella, che contiene invece dati di salute (va protetta come tale).
+- Pagina della mappa (fase 9): unica eccezione al blocco della rete, solo
+  HTTPS verso l'host delle mappe scelto, con un User-Agent generico dell'app
+  e l'attribuzione richiesta; cache delle tile con tetto di dimensione e
+  comando per svuotarla; `QWebChannel` con due soli messaggi dalla pagina
+  (area visibile, attività cliccata), validati. L'host delle mappe vede le
+  aree consultate: rischio da dichiarare nel threat model, assente con una
+  mappa offline.
 
 ## 5. Fasi
 
@@ -344,7 +365,11 @@ Agenti: `generatore-fixture`, `sviluppatore-nucleo`, `sviluppatore-interfaccia`,
       e test di fuzzing.
 - [ ] Casi d'uso "Importa file FIT" (menu e trascinamento) e "Importa da
       cartella" (sottocartelle, duplicati saltati per `file_id`, riepilogo
-      finale), tabella delle attività con ordinamento e filtri.
+      finale), tabella delle attività con ordinamento (i filtri sono della
+      fase 9).
+- [ ] Dal FIT anche distanza, dislivello positivo, tempo in movimento,
+      punto di partenza e traccia semplificata, salvati nell'indice: la fase
+      9 non dovrà rileggere l'archivio né migrare lo schema per averli.
 
 ### Fase 2 — Sincronizzazione Garmin
 
@@ -421,6 +446,31 @@ Agenti: `generatore-fixture`, `sviluppatore-nucleo`, `sviluppatore-interfaccia`,
       nessun dato personale né percorso locale nel pacchetto.
 - [ ] README con installazione, verifica dell'hash, avviso di SmartScreen,
       messaggio di responsabilità medica.
+
+### Fase 9 — Ricerca e mappa delle attività (dopo il primo rilascio)
+
+- [ ] ADR 005, dopo un prototipo misurato con 50.000 attività: sorgente
+      della mappa (tile raster OpenStreetMap online, mappa vettoriale
+      offline di una regione scaricata una volta, fornitore configurabile) e
+      libreria (Leaflet con il raggruppamento dei marcatori, oppure MapLibre
+      GL JS con i cluster integrati). Aggiornati threat model e specifica.
+- [ ] Filtri dell'elenco attività: data (da–a), durata, distanza, dislivello
+      positivo, sport. Minimo e massimo facoltativi (vuoto = nessun limite),
+      input tolleranti (virgola o punto, "1:30" o "90" per la durata),
+      minimo e massimo invertiti scambiati. Un solo stato dei filtri,
+      condiviso da tabella e mappa; l'app ricorda gli ultimi filtri.
+- [ ] Vista Mappa: attività come punti di partenza, raggruppate in cerchi
+      con il numero di attività che si dividono o si uniscono a ogni livello
+      di zoom; clic su un gruppo → zoom sull'area; clic su un'attività →
+      selezione e traccia sulla mappa.
+- [ ] Elenco a destra delle attività visibili nell'area inquadrata (dopo i
+      filtri), con il conteggio, aggiornato a ogni spostamento o zoom;
+      selezione sincronizzata con la mappa; attività senza posizione
+      (indoor, forza) contate a parte.
+- [ ] Pagina della mappa isolata come quella dei grafici, con la sola
+      eccezione della sezione 4.9.
+- [ ] Test T-FILT e T-MAP (sezione 7.11), T-SEC-14 e T-SEC-15; collaudo e
+      rilascio ripetuti come in fase 8.
 
 ## 6. Squadra di agenti e modelli
 
@@ -632,6 +682,12 @@ model e gli esiti del collaudo possono citarlo.
 - **T-SEC-13** Revisione manuale finale: threat model riletto con un
   giudizio scritto, percorso dei dati non fidati (FIT, JSON, cartelle)
   seguito a mano nel codice, rischi accettati riconfermati.
+- **T-SEC-14** Canale della mappa (fase 9): messaggi malformati (coordinate
+  non numeriche o fuori intervallo, payload enormi, id inesistenti)
+  rifiutati senza effetti; la pagina non può chiamare altro.
+- **T-SEC-15** Rete della mappa (fase 9): richieste verso host diversi da
+  quello delle mappe, o in HTTP, bloccate; nessuna posizione GPS nei log né
+  in file fuori dalle cartelle previste.
 
 ### 7.8 Prestazioni e durata (T-PERF)
 
@@ -671,3 +727,28 @@ riportano p50, p95 e massimo, mai la sola media, con l'ambiente di misura.
   (creare un profilo, aggiungere una gara, leggere la forma di oggi,
   descrivere un infortunio); problemi registrati e corretti prima del
   rilascio.
+
+### 7.11 Ricerca e mappa (T-FILT, T-MAP, fase 9)
+
+- **T-FILT-01** Ogni filtro da solo: confini inclusi e valore appena fuori;
+  filtro vuoto = tutte le attività.
+- **T-FILT-02** Filtri combinati: property test contro un filtro ingenuo
+  scritto nel test.
+- **T-FILT-03** Input tolleranti: virgola e punto, durate "1:30" e "90";
+  minimo maggiore del massimo scambiati; valori negativi rifiutati con un
+  messaggio.
+- **T-FILT-04** Stato condiviso: lo stesso filtro dà gli stessi risultati in
+  tabella e mappa, ed è ricordato alla riapertura.
+- **T-MAP-01** Raggruppamento: a ogni livello di zoom la somma dei numeri dei
+  gruppi visibili è uguale al numero di attività con partenza nell'area.
+- **T-MAP-02** Elenco a destra = attività filtrate con partenza nell'area
+  inquadrata (property test su aree e storici casuali), con il conteggio
+  giusto.
+- **T-MAP-03** Casi di confine: area a cavallo dell'antimeridiano, zoom
+  minimo e massimo, molte attività nello stesso punto, nessuna attività.
+- **T-MAP-04** Attività senza posizione escluse dalla mappa e contate a
+  parte.
+- **T-MAP-05** Prestazioni: con 50.000 attività, spostamento o zoom con
+  elenco aggiornato entro 0,4 s (p95).
+- **T-MAP-06** Selezione sincronizzata: clic nell'elenco → attività
+  evidenziata e traccia sulla mappa; clic sulla mappa → riga selezionata.
