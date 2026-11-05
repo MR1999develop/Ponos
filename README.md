@@ -55,7 +55,7 @@ uv run ponos-coach
 ## Controlli
 
 ```
-uv run nox
+uv run --locked nox
 ```
 
 Esegue formattazione e lint, `mypy --strict`, controllo delle dipendenze tra

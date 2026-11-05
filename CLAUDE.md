@@ -13,12 +13,12 @@ Solo ciò che è specifico di questo progetto. Le decisioni e le fasi stanno in
 
 ## Comandi
 
-- `uv run nox`: tutti i controlli obbligatori (ruff format e lint,
+- `uv run --locked nox`: tutti i controlli obbligatori (ruff format e lint,
   `mypy --strict`, `lint-imports`, pytest con pytest-qt, test delle
   traduzioni, `pip-audit`). La CI esegue esattamente questo.
-- `uv run nox -s collaudo`: campagna lunga della sezione 7 di `PLAN.md`
+- `uv run --locked nox -s collaudo`: campagna lunga della sezione 7 di `PLAN.md`
   (fuzzing esteso, mutazione, prestazioni, test di durata).
-- `uv run nox -s dist`: eseguibile PyInstaller, smoke test, `SHA256SUMS`.
+- `uv run --locked nox -s dist`: eseguibile PyInstaller, smoke test, `SHA256SUMS`.
 - `uv run ponos-coach`: avvia l'app.
 
 ## Documenti di stato e decisioni

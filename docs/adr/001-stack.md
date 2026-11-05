@@ -50,7 +50,7 @@ pacchetto più pesante. Il resto dello stack è in `PLAN.md` sezione 4.1.
 
 ## Come se ne verifica il rispetto
 
-- `lint-imports` in `uv run nox`: il dominio non importa Qt, rete o I/O; le
+- `lint-imports` in `uv run --locked nox`: il dominio non importa Qt, rete o I/O; le
   dipendenze vanno solo `ui → casi d'uso → dominio`.
 - Test T-SEC-06 sulla pagina dei grafici; T-UI-04 sui grafici.
 - Fase 8: dimensione del pacchetto misurata e registrata.

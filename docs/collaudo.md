@@ -13,7 +13,7 @@ Ogni riga cita l'identificativo del test. Nessun esito ancora.
 - Esito: superato, non superato, superato con riserve.
 - Note: problemi trovati, riferimento alla correzione, misure (con ambiente).
 
-## Campagna lunga (`uv run nox -s collaudo`)
+## Campagna lunga (`uv run --locked nox -s collaudo`)
 
 | Test | Data | Piattaforma | Versione | Esito | Note |
 |---|---|---|---|---|---|

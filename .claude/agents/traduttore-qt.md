@@ -12,7 +12,7 @@ Sei il traduttore di Ponos Coach. I testi sorgente nel codice sono in inglese (`
 
 1. Esegui `pyside6-lupdate` (tramite `uv run`) per aggiornare `src/ponos_coach/i18n/ponos_it.ts` e `ponos_en.ts`.
 2. Traduci in italiano ogni voce `unfinished`; per l'inglese conferma il testo sorgente o correggilo se il contesto lo chiede.
-3. Genera i `.qm` con `pyside6-lrelease` ed esegui `uv run nox -s i18n`.
+3. Genera i `.qm` con `pyside6-lrelease` ed esegui `uv run --locked nox -s i18n`.
 
 ## Regole di traduzione
 

@@ -340,7 +340,7 @@ src/ponos_coach/
 - [ ] `pyproject.toml` (`src/`, `authors = ["MR"]`), `uv.lock`, `noxfile.py`
       con tutti i controlli, regole di `import-linter`.
 - [ ] CI su Windows e Ubuntu (permessi minimi, action fissate a SHA), che
-      esegue esattamente `uv run nox`.
+      esegue esattamente `uv run --locked nox`.
 - [ ] ADR: 001 stack, 002 accesso a Garmin, 003 formato dei dati, 004 modello
       di carico. `docs/specifica.md`, `docs/threat-model.md`,
       `docs/dipendenze.md`.
@@ -486,7 +486,7 @@ revisione finale di ogni fase. Lo sviluppo e i controlli vanno agli agenti di
 | `collaudatore` | sonnet | test approfonditi della sezione 7 (end-to-end, robustezza, sicurezza, fuzzing), scritti da chi non ha scritto il codice; non tocca `src/` |
 | `revisore-codice` | sonnet | revisione di un diff rispetto al piano e alle skill; sola lettura |
 | `redattore-documenti` | sonnet | README, `docs/`, ADR, `CLAUDE.md`, skill del progetto |
-| `verificatore` | haiku | esegue `uv run nox` e riassume gli errori; sola lettura |
+| `verificatore` | haiku | esegue `uv run --locked nox` e riassume gli errori; sola lettura |
 | `riparatore-lint` | haiku | correzioni meccaniche di ruff e mypy |
 | `traduttore-qt` | haiku | allinea le traduzioni italiano e inglese |
 | `controllore-conformita` | haiku | licenze, intestazioni, autore, dati personali; sola lettura |
@@ -524,13 +524,13 @@ model e gli esiti del collaudo possono citarlo.
 
 | Livello | Cosa | Strumenti | Quando |
 |---|---|---|---|
-| 1. Dominio | formule, PMC, regole del piano e degli infortuni | pytest, hypothesis | ogni modifica (`uv run nox`) |
+| 1. Dominio | formule, PMC, regole del piano e degli infortuni | pytest, hypothesis | ogni modifica (`uv run --locked nox`) |
 | 2. Casi d'uso | con fake in memoria e SQLite reale temporaneo | pytest | ogni modifica |
 | 3. Adattatori | Garmin (fake e registrazioni), FIT, SQLite, portachiavi, notifiche | pytest | ogni modifica |
 | 4. Interfaccia | modelli di presentazione e viste | pytest-qt `offscreen` | ogni modifica |
 | 5. End-to-end | un percorso per funzionalità, app avviata dal Composition Root | pytest-qt | ogni modifica |
-| 6. Eseguibile | smoke test del pacchetto PyInstaller | `uv run nox -s dist` | prima del rilascio |
-| 7. Campagna lunga | fuzzing esteso, mutazione, prestazioni, sicurezza | `uv run nox -s collaudo` | CI pianificata ogni settimana e prima del rilascio |
+| 6. Eseguibile | smoke test del pacchetto PyInstaller | `uv run --locked nox -s dist` | prima del rilascio |
+| 7. Campagna lunga | fuzzing esteso, mutazione, prestazioni, sicurezza | `uv run --locked nox -s collaudo` | CI pianificata ogni settimana e prima del rilascio |
 
 ### 7.3 Calcolo del carico (T-CALC)
 

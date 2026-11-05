@@ -27,7 +27,7 @@ Sei uno sviluppatore Python di Ponos Coach. Il prompt ti assegna una parte di `P
 - Ogni file `.py` nuovo inizia con `# SPDX-License-Identifier: GPL-3.0-only` e `# Copyright (C) 2026 MR`.
 - Nessuna attesa senza timeout, nessun ritentativo senza limite; log strutturati solo negli adattatori, mai token, password o dati di salute.
 - Nuove dipendenze: solo con licenza compatibile con GPLv3, con `uv add`; elencale nella risposta.
-- Verifica con `uv run ruff format`, `uv run ruff check`, `uv run mypy`, `uv run pytest <percorso>`; alla fine `uv run nox`.
+- Verifica con `uv run --locked ruff format`, `uv run --locked ruff check`, `uv run --locked mypy`, `uv run --locked pytest <percorso>`; alla fine `uv run --locked nox`.
 
 ## Commit
 

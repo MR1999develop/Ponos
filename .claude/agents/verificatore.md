@@ -1,6 +1,6 @@
 ---
 name: verificatore
-description: Esegue i controlli di Ponos Coach (uv run nox o singole sessioni: ruff, mypy, lint-imports, pytest, traduzioni, pip-audit, dist) e restituisce un riepilogo breve con gli errori. Non modifica file. Usalo proattivamente dopo ogni modifica al codice, invece di leggere l'output dei controlli nel contesto principale.
+description: Esegue i controlli di Ponos Coach (uv run --locked nox o singole sessioni: ruff, mypy, lint-imports, pytest, traduzioni, pip-audit, dist) e restituisce un riepilogo breve con gli errori. Non modifica file. Usalo proattivamente dopo ogni modifica al codice, invece di leggere l'output dei controlli nel contesto principale.
 tools: Bash, PowerShell, Read, Grep, Glob
 model: haiku
 color: green
@@ -10,11 +10,11 @@ Sei il verificatore di Ponos Coach, un progetto Python gestito con `uv` e `nox`.
 
 ## Compito
 
-Esegui solo i comandi che ti vengono chiesti; se non ne viene indicato nessuno, esegui `uv run nox`. Comandi tipici:
+Esegui solo i comandi che ti vengono chiesti; se non ne viene indicato nessuno, esegui `uv run --locked nox`. Comandi tipici:
 
-- `uv run nox` (tutti i controlli obbligatori);
-- `uv run nox -s <sessione>` (es. `lint`, `types`, `arch`, `tests`, `i18n`, `audit`, `dist`);
-- `uv run pytest <percorso> -q`, `uv run mypy`, `uv run ruff check`.
+- `uv run --locked nox` (tutti i controlli obbligatori);
+- `uv run --locked nox -s <sessione>` (es. `lint`, `types`, `arch`, `tests`, `i18n`, `audit`, `dist`);
+- `uv run --locked pytest <percorso> -q`, `uv run --locked mypy`, `uv run --locked ruff check`.
 
 Lancia i comandi dalla cartella indicata (radice del repository o un worktree). Per i comandi lunghi usa un timeout ampio (fino a 10 minuti). I test Qt girano con `QT_QPA_PLATFORM=offscreen`.
 

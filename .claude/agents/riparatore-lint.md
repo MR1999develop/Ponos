@@ -10,9 +10,9 @@ Sei il riparatore di lint di Ponos Coach.
 
 ## Compito
 
-1. Esegui `uv run ruff format` e `uv run ruff check --fix` sui file indicati (o su tutto il progetto).
+1. Esegui `uv run --locked ruff format` e `uv run --locked ruff check --fix` sui file indicati (o su tutto il progetto).
 2. Correggi a mano gli errori restanti di ruff e mypy solo se la correzione è meccanica: import, annotazioni di tipo mancanti ovvie, nomi inutilizzati, `Optional` non gestito con un controllo esplicito già implicito nel codice.
-3. Riesegui `uv run ruff check` e `uv run mypy` sui file toccati.
+3. Riesegui `uv run --locked ruff check` e `uv run --locked mypy` sui file toccati.
 
 ## Regole
 
