@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Confine di lettura dei file GPX: `bytes` → `Activity` oppure `FitDecodeError`.
+"""Confine di lettura dei file GPX: `bytes` → `Activity` oppure `GpxDecodeError`.
 
 Il GPX è XML non fidato: si legge a eventi (SAX) con `defusedxml`, senza DTD, entità né
 risorse esterne, a blocchi, e i limiti di dimensione, profondità, numero di punti e lunghezza
 dei testi si controllano prima e durante la lettura (mai si costruisce l'albero intero). Nessun
 I/O: il chiamante legge i byte con un massimo. Un file non valido non si ripara mai; si
-rifiuta con lo stesso errore e gli stessi motivi del lettore FIT (`FitDecodeError`).
+rifiuta con un errore proprio (`GpxDecodeError`) che usa gli stessi motivi del lettore FIT
+(`FitDecodeReason`).
 
 Regole del progetto (PLAN.md sezione 2 punto 12): identità = SHA-256 dei byte; FC da
 `gpxtpx:hr` di TrackPointExtension v1 e v2; sport dal `type` della traccia; tempo in movimento =
@@ -34,6 +35,7 @@ from defusedxml import DefusedXmlException, expatreader
 from numpy.typing import NDArray
 
 from ponos_coach.activities.domain import (
+    EARTH_RADIUS_M,
     MAX_ACTIVITY_FILE_BYTES,
     Activity,
     ActivitySummary,
@@ -44,8 +46,9 @@ from ponos_coach.activities.domain import (
     Sport,
     encode_polyline,
     simplify_indices,
+    truncate_to_millisecond,
 )
-from ponos_coach.activities.fit_decoder import FitDecodeError, FitDecodeReason
+from ponos_coach.activities.fit_decoder import FitDecodeReason
 
 _GPX_NAMESPACES = frozenset(
     {"http://www.topografix.com/GPX/1/0", "http://www.topografix.com/GPX/1/1"}
@@ -56,7 +59,6 @@ _HR_NAMESPACES = frozenset(
         "http://www.garmin.com/xmlschemas/TrackPointExtension/v2",
     }
 )
-_EARTH_RADIUS_M = 6_371_008.8  # raggio medio terrestre (IUGG)
 MOVING_GAP_MAX_S = 30.0  # intervalli più lunghi tra due punti non sono tempo in movimento
 ASCENT_THRESHOLD_M = 3.0  # variazioni di quota più piccole sono rumore
 # Errori del parser su XML ostile: sintassi (SAX), DTD o entità vietati (defusedxml) e codifica
@@ -97,6 +99,14 @@ _SPORT_BY_TYPE = {
     **dict.fromkeys(("walking", "walk"), Sport.WALKING),
     **dict.fromkeys(("strength_training", "strength", "weight_training"), Sport.STRENGTH),
 }
+
+
+class GpxDecodeError(Exception):
+    """Il file GPX non è un'attività valida entro i limiti; `reason` dice perché."""
+
+    def __init__(self, reason: FitDecodeReason) -> None:
+        super().__init__(reason.value)
+        self.reason = reason
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,8 +184,8 @@ def read_xml_root(data: bytes) -> XmlRoot | None:
 # --- Valori ----------------------------------------------------------------------------------
 
 
-def _corrupt() -> FitDecodeError:
-    return FitDecodeError(FitDecodeReason.CORRUPT)
+def _corrupt() -> GpxDecodeError:
+    return GpxDecodeError(FitDecodeReason.CORRUPT)
 
 
 def _parse_time_us(text: str) -> int:
@@ -318,7 +328,7 @@ class _GpxHandler(ContentHandler):
     def _start_point(self, attrs: AttributesNSImpl) -> None:
         self._points += 1
         if self._points > self._limits.max_points:
-            raise FitDecodeError(FitDecodeReason.TOO_MANY_RECORDS)
+            raise GpxDecodeError(FitDecodeReason.TOO_MANY_RECORDS)
         self._point = _Point(_coordinate(attrs, "lat", 90.0), _coordinate(attrs, "lon", 180.0))
 
     def startElementNS(  # noqa: N802 - nome imposto da xml.sax
@@ -396,7 +406,7 @@ def _microseconds(columns: _Columns) -> NDArray[np.int64]:
     when = np.frombuffer(columns.when_us, dtype=np.int64)
     missing = when == _NO_TIME
     if missing.all():
-        raise FitDecodeError(FitDecodeReason.NOT_AN_ACTIVITY)
+        raise GpxDecodeError(FitDecodeReason.NOT_AN_ACTIVITY)
     if missing.any() or (np.diff(when) < 0).any():
         raise _corrupt()
     return when
@@ -408,14 +418,14 @@ def _durations(
     """Tempo trascorso e tempo in movimento (secondi), in interi di microsecondi."""
     elapsed_us = int(when_us[-1] - when_us[0])
     if elapsed_us <= 0:
-        raise FitDecodeError(FitDecodeReason.NOT_AN_ACTIVITY)
+        raise GpxDecodeError(FitDecodeReason.NOT_AN_ACTIVITY)
     if elapsed_us / 1e6 > limits.max_duration_s:
-        raise FitDecodeError(FitDecodeReason.TOO_LONG)
+        raise GpxDecodeError(FitDecodeReason.TOO_LONG)
     gap_us = np.diff(when_us)
     moving = same_segment & (gap_us <= round(MOVING_GAP_MAX_S * 1e6))
     timer_us = int(gap_us[moving].sum())
     if timer_us <= 0:
-        raise FitDecodeError(FitDecodeReason.NOT_AN_ACTIVITY)
+        raise GpxDecodeError(FitDecodeReason.NOT_AN_ACTIVITY)
     return elapsed_us / 1e6, timer_us / 1e6
 
 
@@ -427,7 +437,7 @@ def _distance_m(
     half_dlat, half_dlon = np.diff(lat) / 2.0, np.diff(lon) / 2.0
     a = np.sin(half_dlat) ** 2 + np.cos(lat[:-1]) * np.cos(lat[1:]) * np.sin(half_dlon) ** 2
     a = np.clip(a, 0.0, 1.0)
-    steps = 2.0 * _EARTH_RADIUS_M * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
+    steps = 2.0 * EARTH_RADIUS_M * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
     return float(steps[same_segment].sum())
 
 
@@ -553,7 +563,7 @@ def _heart_rate(
 def _build(data: bytes, handler: _GpxHandler, limits: GpxLimits) -> Activity:
     columns = handler.columns
     if not columns.lat:
-        raise FitDecodeError(FitDecodeReason.NOT_AN_ACTIVITY)
+        raise GpxDecodeError(FitDecodeReason.NOT_AN_ACTIVITY)
     when_us = _microseconds(columns)
     segment = np.frombuffer(columns.segment, dtype=np.intc)
     same_segment = segment[1:] == segment[:-1]
@@ -563,7 +573,7 @@ def _build(data: bytes, handler: _GpxHandler, limits: GpxLimits) -> Activity:
         GpxIdentity(hashlib.sha256(data).hexdigest()),
         FileFormat.GPX,
         map_gpx_sport(handler.sport_text),
-        _EPOCH + int(when_us[0]) * _US,
+        truncate_to_millisecond(_EPOCH + int(when_us[0]) * _US),
         elapsed_s,
         timer_s,
         series,
@@ -582,14 +592,14 @@ def decode_gpx(data: bytes, limits: GpxLimits | None = None) -> Activity:
     L'inizio è l'orario del primo punto; il tempo trascorso va dal primo all'ultimo.
 
     Raises:
-        FitDecodeError: l'unico errore in uscita, con il motivo in `reason`. NOT_AN_ACTIVITY se
+        GpxDecodeError: l'unico errore in uscita, con il motivo in `reason`. NOT_AN_ACTIVITY se
             non ci sono punti, orari, durata o intervalli entro 30 s; CORRUPT per XML non valido
             o ostile, valori malformati, orari incompleti o all'indietro, limiti di profondità
             e di testo superati.
     """
     limits = limits or GpxLimits()
     if not data:
-        raise FitDecodeError(FitDecodeReason.EMPTY)
+        raise GpxDecodeError(FitDecodeReason.EMPTY)
     if len(data) > limits.max_bytes:
-        raise FitDecodeError(FitDecodeReason.TOO_LARGE)
+        raise GpxDecodeError(FitDecodeReason.TOO_LARGE)
     return _build(data, _read_points(data, limits), limits)

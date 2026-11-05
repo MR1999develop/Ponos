@@ -9,6 +9,7 @@ from ponos_coach.activities.domain.duplicates import (
     is_possible_duplicate,
 )
 from ponos_coach.activities.domain.geo import (
+    EARTH_RADIUS_M,
     MAX_POLYLINE_CHARS,
     GeoPoint,
     decode_polyline,
@@ -35,10 +36,12 @@ from ponos_coach.activities.domain.limits import (
 from ponos_coach.activities.domain.record import ActivityOrigin, ActivityRecord, ArchivedFile
 from ponos_coach.activities.domain.sport import Sport
 from ponos_coach.activities.domain.summary import ActivitySummary
+from ponos_coach.activities.domain.timing import truncate_to_millisecond
 
 __all__ = [
     "DUPLICATE_DURATION_TOLERANCE_PERCENT",
     "DUPLICATE_START_TOLERANCE",
+    "EARTH_RADIUS_M",
     "MAX_ACTIVITY_FILE_BYTES",
     "MAX_POLYLINE_CHARS",
     "MAX_TRACK_POINTS",
@@ -64,4 +67,5 @@ __all__ = [
     "is_possible_duplicate",
     "simplify_indices",
     "simplify_track",
+    "truncate_to_millisecond",
 ]

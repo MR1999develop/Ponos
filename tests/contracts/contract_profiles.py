@@ -217,3 +217,64 @@ class ProfileFoldersContract:
         harness.folders.delete_folder(folder)
 
         assert harness.folders.inspect(folder).state is FolderState.MISSING
+
+    def test_inspect_tells_a_profile_folder_from_any_other_non_empty_folder(
+        self, harness: FoldersHarness
+    ) -> None:
+        profile, other = harness.root / "profilo", harness.root / "altro"
+        for folder in (profile, other):
+            harness.folders.create_private_folder(folder)
+        harness.make_profile_folder(profile)
+        harness.put_file(other, "nota.txt")
+
+        assert harness.folders.inspect(profile).has_profile_database
+        assert not harness.folders.inspect(other).has_profile_database
+        assert not harness.folders.inspect(harness.root / "manca").has_profile_database
+
+    def test_remove_if_empty_removes_an_empty_folder(self, harness: FoldersHarness) -> None:
+        folder = harness.root / "vuota"
+        harness.folders.create_private_folder(folder)
+
+        assert harness.folders.remove_if_empty(folder)
+
+        assert harness.folders.inspect(folder).state is FolderState.MISSING
+
+    def test_remove_if_empty_ignores_the_lock_file_left_by_a_released_lock(
+        self, harness: FoldersHarness
+    ) -> None:
+        folder = harness.root / "con-lock"
+        harness.folders.create_private_folder(folder)
+        harness.folders.acquire_lock(folder).release()
+
+        assert harness.folders.remove_if_empty(folder)
+
+        assert harness.folders.inspect(folder).state is FolderState.MISSING
+
+    def test_remove_if_empty_keeps_a_folder_with_anything_else(
+        self, harness: FoldersHarness
+    ) -> None:
+        folder = harness.root / "piena"
+        harness.folders.create_private_folder(folder)
+        harness.folders.acquire_lock(folder).release()
+        harness.put_file(folder, "nota.txt")
+
+        assert not harness.folders.remove_if_empty(folder)
+
+        assert harness.folders.inspect(folder).state is FolderState.NOT_EMPTY
+
+    def test_remove_if_empty_keeps_a_folder_locked_by_someone_else(
+        self, harness: FoldersHarness
+    ) -> None:
+        folder = harness.root / "occupata"
+        harness.folders.create_private_folder(folder)
+        lock = harness.folders.acquire_lock(folder)
+
+        assert not harness.folders.remove_if_empty(folder)
+        assert harness.folders.inspect(folder).state is not FolderState.MISSING
+
+        lock.release()
+
+    def test_remove_if_empty_of_a_missing_folder_does_nothing(
+        self, harness: FoldersHarness
+    ) -> None:
+        assert not harness.folders.remove_if_empty(harness.root / "non-esiste")

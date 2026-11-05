@@ -49,7 +49,7 @@ from ponos_coach.profiles.use_cases import (
 )
 from tests.builders import absolute_path, physiology, registry_entry
 from tests.fakes.profile_storage import InMemoryDisk, InMemoryProfileStorage
-from tests.fakes.profiles import InMemoryProfileFolders, InMemoryProfileRegistry
+from tests.fakes.profiles import InMemoryLock, InMemoryProfileFolders, InMemoryProfileRegistry
 
 NOW = datetime(2026, 11, 5, 9, 30, tzinfo=UTC)
 TODAY = date(2026, 11, 5)
@@ -263,8 +263,7 @@ def test_create_failing_on_the_database_leaves_no_entry_and_no_lock(world: World
 
     assert world.registry.list_entries() == []
     assert folder not in world.disk.locks
-    # Limite noto della porta: la cartella (vuota) creata prima del database resta.
-    assert world.disk.folders[folder] == set()
+    assert folder not in world.disk.folders  # anche la cartella vuota creata prima è tolta
 
 
 def test_create_with_an_unknown_timezone_cleans_up(world: World) -> None:
@@ -434,17 +433,43 @@ def test_open_from_a_folder_without_a_profile_fails_without_taking_the_lock(
     assert world.registry.list_entries() == []
 
 
-def test_open_from_a_non_empty_folder_that_is_not_a_profile_releases_the_lock(
+class _LockCountingFolders(InMemoryProfileFolders):
+    """Cartelle che contano i lock presi."""
+
+    locks_taken = 0
+
+    def acquire_lock(self, folder: Path) -> InMemoryLock:
+        self.locks_taken += 1
+        return super().acquire_lock(folder)
+
+
+def test_open_from_a_non_empty_folder_that_is_not_a_profile_never_takes_the_lock(
     world: World,
 ) -> None:
     folder = absolute_path("profili", "documenti")
     world.disk.folders[folder] = {"tesi.docx"}
+    folders = _LockCountingFolders(world.disk)
+    ports = ProfilePorts(world.registry, folders, InMemoryProfileStorage(world.disk))
 
-    with pytest.raises(ProfileNotFoundError):
-        _open_from_folder(world)(folder)
+    with pytest.raises(NotAProfileFolderError):
+        OpenProfileFromFolder(ports, lambda: NOW)(folder)
+
+    assert folders.locks_taken == 0
+    assert world.registry.list_entries() == []
+
+
+def test_open_registered_of_a_non_empty_folder_that_is_not_a_profile_is_refused(
+    world: World,
+) -> None:
+    folder = absolute_path("profili", "documenti")
+    world.disk.folders[folder] = {"tesi.docx"}
+    entry = registry_entry(1, folder=folder)
+    world.registry.add(entry)
+
+    with pytest.raises(NotAProfileFolderError):
+        _open_registered(world)(entry.profile_id)
 
     assert world.disk.locks == set()
-    assert world.registry.list_entries() == []
 
 
 def test_open_from_folder_reports_the_warnings_of_the_place(world: World) -> None:

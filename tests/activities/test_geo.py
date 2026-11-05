@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import inspect
 import math
 import random
 
@@ -13,12 +14,14 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from ponos_coach.activities import gpx_decoder
 from ponos_coach.activities.domain import (
     MAX_POLYLINE_CHARS,
     MAX_TRACK_POINTS,
     GeoPoint,
     decode_polyline,
     encode_polyline,
+    geo,
     simplify_indices,
     simplify_track,
 )
@@ -308,3 +311,8 @@ def test_hostile_polylines_are_refused(hostile: str, message: str) -> None:
 def test_arbitrary_text_never_crashes_the_decoder(text: str) -> None:
     with contextlib.suppress(ValueError):
         decode_polyline(text)
+
+
+def test_earth_radius_is_defined_once_in_geo() -> None:
+    assert geo.EARTH_RADIUS_M == 6_371_008.8
+    assert "6_371_008" not in inspect.getsource(gpx_decoder)

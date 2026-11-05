@@ -11,6 +11,7 @@ import pytest
 
 from ponos_coach.platform.profile_registry import (
     REGISTRY_FILE_NAME,
+    REGISTRY_LOCK_NAME,
     REGISTRY_MAX_BYTES,
     JsonProfileRegistry,
     RegistryCorruptError,
@@ -93,7 +94,8 @@ def test_an_invalid_file_is_an_explicit_error_and_is_never_overwritten(
         registry.add(registry_entry(1))
 
     assert _config_file(tmp_path).read_bytes() == content
-    assert sorted(p.name for p in tmp_path.iterdir()) == [REGISTRY_FILE_NAME]
+    names = {p.name for p in tmp_path.iterdir()} - {REGISTRY_LOCK_NAME}  # il lock resta
+    assert names == {REGISTRY_FILE_NAME}
 
 
 def test_a_file_of_a_future_version_is_refused_and_kept(tmp_path: Path) -> None:

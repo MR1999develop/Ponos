@@ -112,3 +112,32 @@ def test_a_profile_folder_that_is_itself_a_link_is_not_deleted(
         folders.delete_folder(link)
 
     assert (profile / PROFILE_DATABASE_NAME).exists()
+
+
+# --- remove_if_empty: mai attraverso link ------------------------------------------------
+
+
+def test_remove_if_empty_does_not_follow_a_link_to_an_empty_folder(
+    folders: LocalProfileFolders, tmp_path: Path
+) -> None:
+    empty = tmp_path / "vuota"
+    folders.create_private_folder(empty)
+    link = tmp_path / "scorciatoia"
+    _make_directory_link(link, empty)
+
+    assert not folders.remove_if_empty(link)
+
+    assert empty.is_dir()
+
+
+def test_remove_if_empty_keeps_a_folder_whose_only_content_is_a_link(
+    folders: LocalProfileFolders, tmp_path: Path, outside: Path
+) -> None:
+    folder = tmp_path / "con-link"
+    folders.create_private_folder(folder)
+    _make_directory_link(folder / "collegamento", outside)
+
+    assert not folders.remove_if_empty(folder)
+
+    assert (outside / "preziosa.txt").read_bytes() == b"da non perdere"
+    assert folder.is_dir()

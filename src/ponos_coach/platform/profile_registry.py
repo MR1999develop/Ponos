@@ -9,23 +9,30 @@ Formato (versione 1):
                    "last_used_utc": "<ISO 8601 con fuso UTC>"}]}
 
 I campi che questa versione non conosce (nella radice o in una voce) si conservano al
-risalvataggio. Un file illeggibile, troppo grande, corrotto o di una versione futura è un
-errore esplicito e non si sovrascrive mai.
+risalvataggio. Ogni scrittura (leggi-modifica-scrivi) avviene sotto un lock del sistema
+operativo su `profiles.json.lock`, accanto al file, con attesa limitata: così due istanze
+dell'app non si perdono le modifiche. Un file illeggibile, troppo grande, corrotto o di una
+versione futura è un errore esplicito e non si sovrascrive mai.
 """
 
 from __future__ import annotations
 
 import json
 import os
-from collections.abc import Sequence
+import time
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from ponos_coach.platform.atomic_file import FileTooLargeError, read_limited, write_atomic
+from ponos_coach.platform.file_lock import acquire_file_lock
 from ponos_coach.profiles.domain import ProfileId, ProfileName, RegistryEntry
 from ponos_coach.profiles.ports import (
+    FolderUnavailableError,
     ProfileAlreadyRegisteredError,
+    ProfileInUseError,
     ProfileNotRegisteredError,
     ProfileRegistryError,
 )
@@ -33,6 +40,9 @@ from ponos_coach.profiles.ports import (
 REGISTRY_FILE_NAME = "profiles.json"
 REGISTRY_FORMAT_VERSION = 1
 REGISTRY_MAX_BYTES = 1024 * 1024
+REGISTRY_LOCK_NAME = REGISTRY_FILE_NAME + ".lock"
+REGISTRY_LOCK_TIMEOUT_S = 2.0  # attesa massima del lock di un'altra istanza
+_LOCK_RETRY_INTERVAL_S = 0.05
 
 type _Raw = dict[str, Any]
 
@@ -43,6 +53,10 @@ class RegistryCorruptError(ProfileRegistryError):
 
 class RegistryFormatTooNewError(ProfileRegistryError):
     """Il file dell'elenco è di una versione più nuova di quella che questa app conosce."""
+
+
+class RegistryBusyError(ProfileRegistryError):
+    """Un'altra istanza tiene il lock dell'elenco oltre l'attesa massima: nulla è stato scritto."""
 
 
 def _corrupt(reason: str) -> RegistryCorruptError:
@@ -136,10 +150,18 @@ class JsonProfileRegistry:
 
     Ogni operazione rilegge il file e, se cambia qualcosa, lo riscrive in modo atomico: nessuna
     copia in memoria che possa divergere. La cartella `config_dir` si crea alla prima scrittura.
+    Le scritture prendono prima il lock del sistema operativo su `profiles.json.lock`, attendendo
+    al più `lock_timeout_s` secondi (poi `RegistryBusyError`); la lettura non lo prende, perché
+    il file si sostituisce in modo atomico. Il file di lock resta sul disco: il lock è del
+    sistema, e si libera da solo anche se l'istanza muore.
     """
 
-    def __init__(self, config_dir: Path) -> None:
+    def __init__(self, config_dir: Path, lock_timeout_s: float = REGISTRY_LOCK_TIMEOUT_S) -> None:
+        if lock_timeout_s <= 0:
+            raise ValueError("l'attesa del lock deve essere positiva")
         self._path = config_dir / REGISTRY_FILE_NAME
+        self._lock_path = config_dir / REGISTRY_LOCK_NAME
+        self._lock_timeout_s = lock_timeout_s
 
     def list_entries(self) -> Sequence[RegistryEntry]:
         """Vedi `ProfileRegistry.list_entries`."""
@@ -148,35 +170,63 @@ class JsonProfileRegistry:
 
     def add(self, entry: RegistryEntry) -> None:
         """Vedi `ProfileRegistry.add`."""
-        document = self._load()
-        folder_key = _same_folder_key(entry.folder)
-        for existing in document.entries:
-            if existing.profile_id == entry.profile_id or (
-                _same_folder_key(existing.folder) == folder_key
-            ):
-                raise ProfileAlreadyRegisteredError(str(entry.profile_id))
-        document.raw_entries.append(_raw_from_entry(entry))
-        self._save(document)
+        with self._exclusive():
+            document = self._load()
+            folder_key = _same_folder_key(entry.folder)
+            for existing in document.entries:
+                if existing.profile_id == entry.profile_id or (
+                    _same_folder_key(existing.folder) == folder_key
+                ):
+                    raise ProfileAlreadyRegisteredError(str(entry.profile_id))
+            document.raw_entries.append(_raw_from_entry(entry))
+            self._save(document)
 
     def remove(self, profile_id: ProfileId) -> None:
         """Vedi `ProfileRegistry.remove`."""
-        document = self._load()
-        del document.raw_entries[document.index_of(profile_id)]
-        self._save(document)
+        with self._exclusive():
+            document = self._load()
+            del document.raw_entries[document.index_of(profile_id)]
+            self._save(document)
 
     def mark_used(self, profile_id: ProfileId, when_utc: datetime) -> None:
         """Vedi `ProfileRegistry.mark_used`."""
-        document = self._load()
-        index = document.index_of(profile_id)
-        updated = RegistryEntry(
-            profile_id,
-            document.entries[index].folder,
-            document.entries[index].cached_name,
-            when_utc,
-        )
-        # Si cambia solo il campo: gli altri, anche quelli sconosciuti, restano com'erano.
-        document.raw_entries[index]["last_used_utc"] = _raw_from_entry(updated)["last_used_utc"]
-        self._save(document)
+        with self._exclusive():
+            document = self._load()
+            index = document.index_of(profile_id)
+            updated = RegistryEntry(
+                profile_id,
+                document.entries[index].folder,
+                document.entries[index].cached_name,
+                when_utc,
+            )
+            # Si cambia solo il campo: gli altri, anche quelli sconosciuti, restano com'erano.
+            document.raw_entries[index]["last_used_utc"] = _raw_from_entry(updated)["last_used_utc"]
+            self._save(document)
+
+    @contextmanager
+    def _exclusive(self) -> Iterator[None]:
+        """Tiene il lock del sistema sul file accanto all'elenco, con attesa limitata."""
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise ProfileRegistryError("elenco dei profili non scrivibile") from exc
+        deadline = time.monotonic() + self._lock_timeout_s
+        while True:
+            try:
+                lock = acquire_file_lock(self._lock_path)
+                break
+            except ProfileInUseError as exc:
+                if time.monotonic() >= deadline:
+                    raise RegistryBusyError(
+                        "elenco dei profili in uso da un'altra istanza: riprova"
+                    ) from exc
+                time.sleep(_LOCK_RETRY_INTERVAL_S)
+            except FolderUnavailableError as exc:
+                raise ProfileRegistryError("lock dell'elenco dei profili non ottenibile") from exc
+        try:
+            yield
+        finally:
+            lock.release()
 
     def _load(self) -> _Document:
         try:

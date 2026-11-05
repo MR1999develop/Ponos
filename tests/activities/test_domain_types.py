@@ -30,6 +30,7 @@ from ponos_coach.activities.domain import (
     identity_key,
     is_possible_duplicate,
 )
+from ponos_coach.activities.domain.timing import truncate_to_millisecond
 from tests.builders import IMPORTED_AT, T0, archived_file, fit_identity, gpx_identity, make_record
 
 SHA = "ab" * 32
@@ -300,3 +301,11 @@ def test_duplicate_rule_is_symmetric(delta_s: int, a: float, b: float) -> None:
     other = T0 + timedelta(seconds=delta_s)
 
     assert is_possible_duplicate(T0, a, other, b) == is_possible_duplicate(other, b, T0, a)
+
+
+def test_truncate_to_millisecond_drops_the_finer_fraction_only() -> None:
+    moment = datetime(2026, 3, 2, 7, 0, 0, 123999, tzinfo=UTC)
+
+    assert truncate_to_millisecond(moment) == datetime(2026, 3, 2, 7, 0, 0, 123000, tzinfo=UTC)
+    exact = datetime(2026, 3, 2, 7, 0, 0, 123000, tzinfo=UTC)
+    assert truncate_to_millisecond(exact) == exact

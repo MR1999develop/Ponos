@@ -16,6 +16,8 @@ SPACE_2 = 8
 SPACE_3 = 12
 SPACE_4 = 16
 SPACE_6 = 24
+DIALOG_MIN_WIDTH = 480
+STATUS_PROGRESS_WIDTH = 160
 
 SIDEBAR_WIDTH = 190
 MIN_WINDOW_WIDTH = 800
@@ -49,6 +51,7 @@ class ThemeTokens:
     background: str
     text: str
     text_muted: str
+    error: str
     grid: str
     axis_line: str
     ctl: str
@@ -62,6 +65,7 @@ _LIGHT = ThemeTokens(
     background="#FFFFFF",
     text="#1F2328",
     text_muted="#57606A",
+    error="#B42318",  # rosso solo per gli errori, sempre accanto a parole
     grid="#D8DEE4",
     axis_line="#8C959F",
     ctl=OKABE_ITO_BLUE,
@@ -75,6 +79,7 @@ _DARK = ThemeTokens(
     background="#1E1F22",
     text="#E6E6E6",
     text_muted="#A9ADB3",
+    error="#F97066",
     grid="#3A3D41",
     axis_line="#7D8590",
     ctl=OKABE_ITO_SKY,  # il blu scuro non regge su fondo scuro: stessa famiglia, piu chiaro

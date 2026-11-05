@@ -185,10 +185,10 @@ class NewProfileRequest:
 class CreateProfile:
     """Crea un profilo: cartella privata, lock, database, parametri iniziali, voce nell'elenco.
 
-    Se un passo fallisce non resta nessuna voce nell'elenco, il lock è rilasciato e, se il
-    database era già stato creato, la cartella è cancellata. Limite delle porte: se fallisce
-    la creazione del database stesso, la cartella (vuota, con al più il file di lock) resta,
-    perché `ProfileFolders` cancella solo cartelle che contengono un database.
+    Se un passo fallisce non resta nessuna voce nell'elenco, il lock è rilasciato e la cartella
+    è tolta: con il database già creato si cancella con tutto il contenuto, altrimenti (se
+    fallisce la creazione del database stesso) si toglie se è vuota a parte il file di lock.
+    I genitori creati lungo il percorso restano.
     """
 
     def __init__(
@@ -228,7 +228,7 @@ class CreateProfile:
         ports = self._ports
         folder = request.folder
         ports.folders.create_private_folder(folder)
-        undo.add(lambda: _delete_if_profile(ports.folders, folder))
+        undo.add(lambda: _remove_created_folder(ports.folders, folder))
         lock = ports.folders.acquire_lock(folder)
         undo.add(lock.release)
         profile_id = self._new_profile_id()
@@ -239,12 +239,13 @@ class CreateProfile:
         return ProfileSession(opened, lock, folder, warnings_for(kind))
 
 
-def _delete_if_profile(folders: ProfileFolders, folder: Path) -> None:
-    """Cancella la cartella se contiene già un database; altrimenti non c'è nulla da annullare."""
+def _remove_created_folder(folders: ProfileFolders, folder: Path) -> None:
+    """Toglie la cartella appena creata: con il database la cancella, altrimenti la toglie se
+    è rimasta vuota (a parte il file di lock)."""
     try:
         folders.delete_folder(folder)
     except NotAProfileFolderError:
-        return
+        folders.remove_if_empty(folder)
 
 
 # --- Apri ----------------------------------------------------------------------------------
@@ -266,7 +267,9 @@ class OpenProfileFromFolder:
         """Apre il profilo in `folder`.
 
         Raises:
-            ProfileNotFoundError: la cartella non contiene un profilo.
+            ProfileNotFoundError: la cartella manca o è vuota.
+            NotAProfileFolderError: la cartella ha dei file ma non il database di un profilo
+                (il lock non viene preso).
             ProfileInUseError: il profilo è aperto da un'altra istanza.
             FolderUnavailableError: cartella non leggibile.
             ProfileFormatTooNewError, ProfileCorruptError: database non apribile.
@@ -288,7 +291,8 @@ class OpenRegisteredProfile:
         Raises:
             ProfileNotRegisteredError: id assente dall'elenco.
             ProfileMismatchError: la cartella contiene un altro profilo (nulla cambia).
-            ProfileNotFoundError, ProfileInUseError, FolderUnavailableError,
+            ProfileNotFoundError, NotAProfileFolderError, ProfileInUseError,
+            FolderUnavailableError,
             ProfileFormatTooNewError, ProfileCorruptError, ProfileRegistryError: come
             `OpenProfileFromFolder`.
         """
@@ -310,6 +314,8 @@ def _open_session(
     inspection = ports.folders.inspect(folder)
     if inspection.state is not FolderState.NOT_EMPTY:
         raise ProfileNotFoundError(folder.name)  # niente lock in una cartella vuota o mancante
+    if not inspection.has_profile_database:
+        raise NotAProfileFolderError(folder.name)  # né in una che non ha il database
     undo = _Undo()
     try:
         lock = ports.folders.acquire_lock(folder)

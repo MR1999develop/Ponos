@@ -14,6 +14,15 @@ def check_utc(moment: datetime) -> None:
         raise ValueError("gli istanti devono essere UTC con fuso")
 
 
+def truncate_to_millisecond(moment: datetime) -> datetime:
+    """L'istante senza la frazione sotto il millisecondo (per difetto, fuso conservato).
+
+    L'indice delle attività salva i millisecondi interi e rifiuta frazioni più fini: i
+    lettori e il caso d'uso dell'import le tolgono qui, in un solo posto.
+    """
+    return moment.replace(microsecond=moment.microsecond // 1000 * 1000)
+
+
 def check_durations(elapsed_s: float, timer_s: float) -> None:
     """Durate finite e positive, con il tempo in movimento non oltre il trascorso."""
     for duration in (elapsed_s, timer_s):

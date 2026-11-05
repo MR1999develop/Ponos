@@ -19,7 +19,12 @@ from ponos_coach.activities.fit_decoder import (
     FitLimits,
     decode_activity,
 )
-from ponos_coach.activities.gpx_decoder import GpxLimits, decode_gpx, read_xml_root
+from ponos_coach.activities.gpx_decoder import (
+    GpxDecodeError,
+    GpxLimits,
+    decode_gpx,
+    read_xml_root,
+)
 
 _FIT_SIGNATURE = b".FIT"
 _FIT_SIGNATURE_OFFSET = 8
@@ -128,9 +133,30 @@ def decode_activity_file(
         raise ActivityFileError(ActivityFileReason.EMPTY)
     expected = _expected_format(file_name)
     _check_content(data, expected)
+    return _decode_as(data, expected, limits)
+
+
+def decode_stored_activity(
+    data: bytes, file_format: FileFormat, limits: ActivityFileLimits | None = None
+) -> Activity:
+    """Decodifica un file già archiviato, di cui il formato è noto dall'indice.
+
+    Non c'è un nome da confrontare: il lettore del formato dato fa tutti i controlli del
+    proprio contenuto. Nessun I/O.
+
+    Raises:
+        ActivityFileError: l'unico errore in uscita, come per `decode_activity_file`: EMPTY
+            e poi i motivi del lettore (TOO_LARGE, CORRUPT, NOT_AN_ACTIVITY, TOO_MANY_RECORDS,
+            TOO_LONG).
+    """
+    return _decode_as(data, file_format, limits or ActivityFileLimits())
+
+
+def _decode_as(data: bytes, file_format: FileFormat, limits: ActivityFileLimits) -> Activity:
+    """Il lettore del formato con i suoi limiti; i suoi errori diventano `ActivityFileError`."""
     try:
-        if expected is FileFormat.FIT:
+        if file_format is FileFormat.FIT:
             return decode_activity(data, limits.fit)
         return decode_gpx(data, limits.gpx)
-    except FitDecodeError as exc:
+    except (FitDecodeError, GpxDecodeError) as exc:
         raise ActivityFileError(ActivityFileReason(exc.reason.value)) from exc

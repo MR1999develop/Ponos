@@ -378,3 +378,19 @@ def test_imported_at_comes_from_the_injected_clock() -> None:
     )
 
     assert setup.index.list_by_start()[0].imported_at == moment
+
+
+def test_imported_at_is_truncated_to_the_millisecond() -> None:
+    setup = Setup()
+    moment = datetime(2030, 1, 2, 3, 4, 5, 678901, tzinfo=UTC)
+
+    import_activities(
+        InMemoryImportSource({"a.fit": imp.fit_run(1)}),
+        setup.archive,
+        setup.index,
+        FixedClock(moment),
+    )
+
+    assert setup.index.list_by_start()[0].imported_at == datetime(
+        2030, 1, 2, 3, 4, 5, 678000, tzinfo=UTC
+    )

@@ -22,6 +22,7 @@ from ponos_coach.profiles.ports import (
     FolderNotEmptyError,
     FolderUnavailableError,
     NotAProfileFolderError,
+    ProfileInUseError,
 )
 
 
@@ -33,6 +34,24 @@ def _require_absolute(folder: Path) -> None:
 def _is_empty(folder: Path) -> bool:
     with os.scandir(folder) as entries:
         return next(entries, None) is None
+
+
+def _has_profile_database(folder: Path) -> bool:
+    """Il database è un file vero (non un link) nella cartella."""
+    database = folder / PROFILE_DATABASE_NAME
+    try:
+        return database.is_file() and not is_link(database)
+    except OSError:
+        return False
+
+
+def _only_lock_inside(folder: Path) -> bool:
+    """Vero se nella cartella c'è al più il file di lock, e questo non è un link."""
+    with os.scandir(folder) as entries:
+        names = [entry.name for entry in entries]
+    if not names:
+        return True
+    return names == [PROFILE_LOCK_NAME] and not is_link(folder / PROFILE_LOCK_NAME)
 
 
 class LocalProfileFolders:
@@ -51,13 +70,13 @@ class LocalProfileFolders:
         kind = self._kind_of(folder)
         try:
             if not folder.exists():
-                return FolderInspection(FolderState.MISSING, kind)
+                return FolderInspection(FolderState.MISSING, kind, has_profile_database=False)
             if is_link(folder) or not folder.is_dir():
                 raise FolderUnavailableError(f"{folder.name} non è una cartella")
             state = FolderState.EMPTY if _is_empty(folder) else FolderState.NOT_EMPTY
         except OSError as exc:
             raise FolderUnavailableError(f"{folder.name} non è leggibile") from exc
-        return FolderInspection(state, kind)
+        return FolderInspection(state, kind, _has_profile_database(folder))
 
     def create_private_folder(self, folder: Path) -> None:
         """Vedi `ProfileFolders.create_private_folder`."""
@@ -92,6 +111,28 @@ class LocalProfileFolders:
         if not folder.is_dir():
             raise FolderUnavailableError(f"{folder.name} non esiste")
         return acquire_file_lock(folder / PROFILE_LOCK_NAME)
+
+    def remove_if_empty(self, folder: Path) -> bool:
+        """Vedi `ProfileFolders.remove_if_empty`."""
+        _require_absolute(folder)
+        try:
+            if not folder.exists() or is_link(folder) or not folder.is_dir():
+                return False
+            try:
+                lock = self.acquire_lock(folder)
+            except ProfileInUseError:
+                return False
+            try:
+                if not _only_lock_inside(folder):
+                    return False
+                lock.release()  # su Windows un file aperto non si cancella
+                (folder / PROFILE_LOCK_NAME).unlink(missing_ok=True)
+                folder.rmdir()
+                return True
+            finally:
+                lock.release()
+        except OSError as exc:
+            raise FolderUnavailableError(f"{folder.name}: rimozione non riuscita") from exc
 
     def delete_folder(self, folder: Path) -> None:
         """Vedi `ProfileFolders.delete_folder`.

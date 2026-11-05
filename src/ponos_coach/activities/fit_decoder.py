@@ -34,6 +34,7 @@ from ponos_coach.activities.domain import (
     Sport,
     encode_polyline,
     simplify_indices,
+    truncate_to_millisecond,
 )
 
 # Numeri del profilo FIT (campo `sport` e `sub_sport` del messaggio `session`).
@@ -359,6 +360,7 @@ def _summary(parsed: _Parsed) -> ActivitySummary:
 def _build(parsed: _Parsed, limits: FitLimits) -> Activity:
     file_id = _file_id(parsed)
     start, elapsed_s, timer_s = _timing(parsed)
+    start = truncate_to_millisecond(start)
     if not (math.isfinite(elapsed_s) and math.isfinite(timer_s) and elapsed_s > 0 and timer_s > 0):
         raise FitDecodeError(FitDecodeReason.CORRUPT)
     if elapsed_s > limits.max_duration_s:

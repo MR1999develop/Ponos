@@ -16,6 +16,7 @@ from ponos_coach.activities.decoding import (
     ActivityFileReason,
     DetectedContent,
     decode_activity_file,
+    decode_stored_activity,
     detect_content,
 )
 from ponos_coach.activities.domain import Activity, FileFormat
@@ -140,3 +141,48 @@ def test_reasons_of_the_readers_are_passed_on() -> None:
 
 def test_every_reason_of_the_decoder_is_an_import_issue() -> None:
     assert {reason.value for reason in ActivityFileReason} <= {i.value for i in ImportIssue}
+
+
+# --- File già archiviato di formato noto ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("data", "name", "file_format"),
+    [
+        (imp.fit_run(1), "a.fit", FileFormat.FIT),
+        (
+            gw.build_gpx(gw.GpxSpec([gw.line_points(imp.run_start(1), 30, step_s=10)])),
+            "a.gpx",
+            FileFormat.GPX,
+        ),
+    ],
+)
+def test_stored_file_decodes_like_the_named_one(
+    data: bytes, name: str, file_format: FileFormat
+) -> None:
+    assert_same_activity(
+        decode_stored_activity(data, file_format), decode_activity_file(data, name)
+    )
+
+
+@pytest.mark.parametrize("file_format", [FileFormat.FIT, FileFormat.GPX])
+def test_stored_file_that_is_not_an_activity_raises_the_single_error(
+    file_format: FileFormat,
+) -> None:
+    for data, reason in (
+        (b"", ActivityFileReason.EMPTY),
+        (b"non e un file", ActivityFileReason.CORRUPT),
+    ):
+        with pytest.raises(ActivityFileError) as caught:
+            decode_stored_activity(data, file_format)
+        assert caught.value.reason is reason
+
+
+def test_stored_gpx_with_too_many_points_raises_the_single_error() -> None:
+    data = gw.build_gpx(gw.GpxSpec([gw.line_points(imp.run_start(1), 5, step_s=10)]))
+    limits = ActivityFileLimits(gpx=GpxLimits(max_points=2))
+
+    with pytest.raises(ActivityFileError) as caught:
+        decode_stored_activity(data, FileFormat.GPX, limits)
+
+    assert caught.value.reason is ActivityFileReason.TOO_MANY_RECORDS

@@ -29,6 +29,9 @@ disponibile.
   dati.
 - Sincronizzazione delle attività da Garmin Connect, riprendibile, e import di
   file FIT da una cartella.
+- Per provare l'app senza dati propri: `uv run python -m
+  tests.fixtures.generators.demo_history <cartella>` crea uno storico
+  sintetico di file FIT, da caricare in un profilo con "Importa da cartella".
 - Carico da frequenza cardiaca e grafici di ATL, CTL e TSB.
 - Test di soglia di 30 minuti e zone di allenamento.
 - Obiettivi (gare A/B/C, tempo obiettivo, livello di forma) e piano adattivo.

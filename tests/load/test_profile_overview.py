@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pytest
 
+from ponos_coach.activities.decoding import ActivityFileError, ActivityFileReason
 from ponos_coach.activities.domain import (
     Activity,
     ActivityOrigin,
@@ -18,12 +19,7 @@ from ponos_coach.activities.domain import (
     FileFormat,
     Sport,
 )
-from ponos_coach.activities.fit_decoder import (
-    FitDecodeError,
-    FitDecodeReason,
-    FitLimits,
-    decode_activity,
-)
+from ponos_coach.activities.fit_decoder import FitLimits, decode_activity
 from ponos_coach.load.domain import (
     MissingPhysiologyError,
     SportWeight,
@@ -309,7 +305,7 @@ def test_undecodable_file_is_excluded() -> None:
     two_runs(world)
 
     def failing(_data: bytes, _file_format: FileFormat) -> Activity:
-        raise FitDecodeError(FitDecodeReason.CORRUPT)
+        raise ActivityFileError(ActivityFileReason.CORRUPT)
 
     result = world.overview(decode=failing)
 

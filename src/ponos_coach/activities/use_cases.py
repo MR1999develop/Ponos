@@ -22,6 +22,7 @@ from ponos_coach.activities.domain import (
     ActivityIdentity,
     ActivityOrigin,
     ActivityRecord,
+    truncate_to_millisecond,
 )
 from ponos_coach.activities.ports import (
     ActivityArchive,
@@ -114,7 +115,12 @@ def _add_if_new(
     if twin is not None:
         return FileImportResult(name, ImportStatus.DUPLICATE_OF_OTHER_FORMAT, matches=twin)
     archived = archive.store(data, activity.file_format, activity.start)
-    record = ActivityRecord.from_activity(activity, archived, ActivityOrigin.IMPORT, clock.now())
+    record = ActivityRecord.from_activity(
+        activity,
+        archived,
+        ActivityOrigin.IMPORT,
+        truncate_to_millisecond(clock.now()),
+    )
     index.add(record)
     return FileImportResult(name, ImportStatus.IMPORTED)
 

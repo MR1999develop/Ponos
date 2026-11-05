@@ -20,6 +20,7 @@ from hypothesis import strategies as st
 from ponos_coach.activities.domain import FileFormat, GpxIdentity, Sport, decode_polyline
 from ponos_coach.activities.fit_decoder import FitDecodeError, FitDecodeReason
 from ponos_coach.activities.gpx_decoder import (
+    GpxDecodeError,
     GpxLimits,
     decode_gpx,
     map_gpx_sport,
@@ -34,7 +35,7 @@ LIMITS_TIGHT = GpxLimits(max_depth=6, max_points=3, max_text_chars=10)
 
 
 def reason_of(data: bytes, limits: GpxLimits | None = None) -> FitDecodeReason:
-    with pytest.raises(FitDecodeError) as caught:
+    with pytest.raises(GpxDecodeError) as caught:
         decode_gpx(data, limits)
     return caught.value.reason
 
@@ -511,5 +512,22 @@ def test_mutated_files_are_decoded_or_rejected_never_crash(data: st.DataObject) 
         "repeat": base[:position] + base[position : position + 40] * 3 + base[position:],
     }[mutation]
 
-    with contextlib.suppress(FitDecodeError):  # rifiutare è lecito; ogni altra eccezione no
+    with contextlib.suppress(GpxDecodeError):  # rifiutare è lecito; ogni altra eccezione no
         decode_gpx(mutated)
+
+
+def test_microsecond_times_import_with_the_start_truncated_to_the_millisecond() -> None:
+    data = gw.build_gpx(gw.GpxSpec([meridian(3)]))
+    data = data.replace(b"T07:00:00Z", b"T07:00:00.123456Z")
+
+    activity = decode_gpx(data)
+
+    assert activity.start == datetime(2026, 3, 2, 7, 0, 0, 123000, tzinfo=UTC)
+
+
+def test_the_gpx_error_is_its_own_and_not_a_fit_error() -> None:
+    with pytest.raises(GpxDecodeError) as caught:
+        decode_gpx(b"")
+
+    assert not isinstance(caught.value, FitDecodeError)
+    assert caught.value.reason is FitDecodeReason.EMPTY

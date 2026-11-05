@@ -105,7 +105,8 @@ class ProfileFolders(Protocol):
     """Cartelle dei profili: ispezione, creazione privata, lock esclusivo, cancellazione."""
 
     def inspect(self, folder: Path) -> FolderInspection:
-        """Stato (mancante, vuota, non vuota) e tipo (locale, di rete, sincronizzata, ignoto).
+        """Stato (mancante, vuota, non vuota), tipo (locale, di rete, sincronizzata, ignoto) e
+        se contiene il database di un profilo.
 
         Raises:
             FolderUnavailableError: la cartella esiste ma non si può leggere.
@@ -131,6 +132,17 @@ class ProfileFolders(Protocol):
         Raises:
             ProfileInUseError: il lock è tenuto da un'altra istanza (o da chi chiama).
             FolderUnavailableError: la cartella non esiste o non è scrivibile.
+        """
+        ...
+
+    def remove_if_empty(self, folder: Path) -> bool:
+        """Toglie la cartella se è vuota a parte il file di lock dell'app; non segue i link.
+
+        Serve ad annullare una creazione fallita. Non tocca nulla (e dà `False`) se la cartella
+        manca, è un link, contiene altro oltre al file di lock o è bloccata da un'altra istanza.
+
+        Raises:
+            FolderUnavailableError: cartella non leggibile o rimozione non riuscita.
         """
         ...
 

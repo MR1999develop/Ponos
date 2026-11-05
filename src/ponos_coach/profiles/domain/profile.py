@@ -112,11 +112,12 @@ class FolderState(Enum):
 
 @dataclass(frozen=True, slots=True)
 class FolderInspection:
-    """Esito dell'ispezione di una cartella: stato e tipo (per una cartella mancante, il tipo
-    del posto in cui verrebbe creata)."""
+    """Esito dell'ispezione di una cartella: stato, tipo (per una cartella mancante, il tipo
+    del posto in cui verrebbe creata) e se contiene il database di un profilo."""
 
     state: FolderState
     kind: FolderKind
+    has_profile_database: bool
 
 
 @dataclass(frozen=True, slots=True)

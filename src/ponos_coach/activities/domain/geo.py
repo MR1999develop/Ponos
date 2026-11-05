@@ -18,7 +18,7 @@ from numpy.typing import ArrayLike, NDArray
 
 from ponos_coach.activities.domain.limits import MAX_TRACK_POINTS, TRACK_TOLERANCE_M
 
-_EARTH_RADIUS_M = 6_371_008.8
+EARTH_RADIUS_M = 6_371_008.8  # raggio medio terrestre (IUGG), in metri
 _POLYLINE_SCALE = 1e5  # precisione standard dei polyline: 1e-5 gradi
 _POLYLINE_FIRST_CHAR = 63  # '?'
 _POLYLINE_LAST_CHAR = 126  # '~'
@@ -69,8 +69,8 @@ def _projected(
     lat = np.radians(lat_deg)
     lon = np.unwrap(np.radians(lon_deg))  # attraversa l'antimeridiano senza salti
     scale = math.cos(float(lat.mean()))
-    x = (lon - lon[0]) * scale * _EARTH_RADIUS_M
-    y = (lat - lat[0]) * _EARTH_RADIUS_M
+    x = (lon - lon[0]) * scale * EARTH_RADIUS_M
+    y = (lat - lat[0]) * EARTH_RADIUS_M
     return x, y
 
 

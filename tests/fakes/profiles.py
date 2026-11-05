@@ -11,6 +11,7 @@ from pathlib import Path
 
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
+    PROFILE_LOCK_NAME,
     FolderInspection,
     FolderState,
     ProfileId,
@@ -59,7 +60,7 @@ class InMemoryProfileRegistry:
         self._entries[profile_id] = replace(entry, last_used_utc=when_utc)
 
 
-class _Lock:
+class InMemoryLock:
     def __init__(self, disk: InMemoryDisk, folder: Path) -> None:
         self._disk = disk
         self._folder: Path | None = folder
@@ -83,7 +84,8 @@ class InMemoryProfileFolders:
             state = FolderState.MISSING
         else:
             state = FolderState.NOT_EMPTY if names else FolderState.EMPTY
-        return FolderInspection(state, self.disk.kind_of(folder))
+        has_database = PROFILE_DATABASE_NAME in (names or set())
+        return FolderInspection(state, self.disk.kind_of(folder), has_database)
 
     def create_private_folder(self, folder: Path) -> None:
         """Vedi `ProfileFolders.create_private_folder`."""
@@ -91,14 +93,14 @@ class InMemoryProfileFolders:
             raise FolderNotEmptyError(folder.name)
         self.disk.folders.setdefault(folder, set())
 
-    def acquire_lock(self, folder: Path) -> _Lock:
+    def acquire_lock(self, folder: Path) -> InMemoryLock:
         """Vedi `ProfileFolders.acquire_lock`."""
         if folder not in self.disk.folders:
             raise FolderUnavailableError(folder.name)
         if folder in self.disk.locks:
             raise ProfileInUseError(folder.name)
         self.disk.locks.add(folder)
-        return _Lock(self.disk, folder)
+        return InMemoryLock(self.disk, folder)
 
     def delete_folder(self, folder: Path) -> None:
         """Vedi `ProfileFolders.delete_folder`."""
@@ -108,3 +110,11 @@ class InMemoryProfileFolders:
             raise ProfileInUseError(folder.name)
         del self.disk.folders[folder]
         self.disk.databases.pop(folder, None)
+
+    def remove_if_empty(self, folder: Path) -> bool:
+        """Vedi `ProfileFolders.remove_if_empty`."""
+        names = self.disk.folders.get(folder)
+        if names is None or names - {PROFILE_LOCK_NAME} or folder in self.disk.locks:
+            return False
+        del self.disk.folders[folder]
+        return True
