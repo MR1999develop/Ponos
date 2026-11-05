@@ -1,0 +1,351 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 MR
+"""T-DATI-01 e database ostili: schema v1 congelato, file che non sono il database del profilo.
+
+La riga di difesa di T-DATI-01 e che una migrazione gia rilasciata non si modifica mai: qui lo
+schema v1 e copiato a mano, indipendente dal codice, e i dati scritti con esso devono restare
+leggibili da ogni versione futura dell'app.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+import uuid
+from contextlib import closing
+from datetime import UTC, date, datetime
+from pathlib import Path
+
+import pytest
+
+from ponos_coach.load.domain import Sex
+from ponos_coach.profiles.domain import PROFILE_DATABASE_NAME, ProfileId
+from ponos_coach.profiles.ports import ProfileCorruptError, ProfileFormatTooNewError
+from ponos_coach.storage import sqlite_database, sqlite_schema
+from ponos_coach.storage.sqlite_profile import SqliteProfileStorage
+from tests.collaudo.support import (
+    PROFILE_NAME,
+    create_profile,
+    open_registered,
+    real_ports,
+)
+from tests.fixtures.generators.import_files import fit_run
+
+# Schema v1 come fu rilasciato (PLAN.md 4.3). Non si cambia: per cambiare lo schema si aggiunge
+# la migrazione successiva e un nuovo database congelato qui sotto.
+FROZEN_V1 = (
+    """CREATE TABLE meta (
+        key TEXT NOT NULL PRIMARY KEY CHECK (length(key) BETWEEN 1 AND 64),
+        value TEXT NOT NULL CHECK (length(value) <= 1024)
+    ) STRICT""",
+    """CREATE TABLE activities (
+        id INTEGER PRIMARY KEY,
+        identity_key TEXT NOT NULL UNIQUE CHECK (length(identity_key) BETWEEN 5 AND 128),
+        file_format TEXT NOT NULL CHECK (file_format IN ('fit','gpx')),
+        sport TEXT NOT NULL CHECK (sport IN
+            ('running','trail','cycling','strength','hiking','walking','other')),
+        start_ms INTEGER NOT NULL,
+        elapsed_s REAL NOT NULL CHECK (elapsed_s > 0),
+        timer_s REAL NOT NULL CHECK (timer_s > 0 AND timer_s <= elapsed_s),
+        distance_m REAL CHECK (distance_m IS NULL OR distance_m >= 0),
+        ascent_m REAL CHECK (ascent_m IS NULL OR ascent_m >= 0),
+        start_lat REAL CHECK (start_lat IS NULL OR start_lat BETWEEN -90 AND 90),
+        start_lon REAL CHECK (start_lon IS NULL OR start_lon BETWEEN -180 AND 180),
+        track_polyline TEXT CHECK (track_polyline IS NULL
+            OR length(track_polyline) BETWEEN 1 AND 24000),
+        archive_path TEXT NOT NULL CHECK (length(archive_path) BETWEEN 1 AND 1024),
+        archive_sha256 TEXT NOT NULL CHECK (length(archive_sha256) = 64),
+        archive_size_bytes INTEGER NOT NULL CHECK (archive_size_bytes >= 0),
+        origin TEXT NOT NULL CHECK (origin IN ('import','garmin')),
+        imported_ms INTEGER NOT NULL,
+        garmin_activity_id INTEGER UNIQUE
+            CHECK (garmin_activity_id IS NULL OR garmin_activity_id > 0),
+        CHECK ((start_lat IS NULL) = (start_lon IS NULL)),
+        CHECK (origin <> 'garmin' OR garmin_activity_id IS NOT NULL),
+        CHECK (substr(identity_key, 1, 4) = file_format || ':')
+    ) STRICT""",
+    "CREATE INDEX activities_by_start ON activities (start_ms, identity_key)",
+    """CREATE TABLE physiology (
+        valid_from TEXT NOT NULL PRIMARY KEY CHECK (length(valid_from) = 10),
+        min_bpm INTEGER NOT NULL CHECK (min_bpm >= 20),
+        max_bpm INTEGER NOT NULL CHECK (max_bpm <= 250),
+        threshold_bpm INTEGER NOT NULL CHECK (threshold_bpm >= 40),
+        sex TEXT NOT NULL CHECK (sex IN ('male','female')),
+        CHECK (min_bpm < max_bpm),
+        CHECK (threshold_bpm > min_bpm AND threshold_bpm <= max_bpm)
+    ) STRICT""",
+    """CREATE TABLE load_cache (
+        activity_id INTEGER NOT NULL PRIMARY KEY REFERENCES activities (id) ON DELETE CASCADE,
+        fingerprint TEXT NOT NULL CHECK (length(fingerprint) = 64),
+        trimp REAL NOT NULL,
+        hr_tss REAL NOT NULL,
+        load REAL NOT NULL,
+        used_samples INTEGER NOT NULL CHECK (used_samples >= 0),
+        discarded_samples INTEGER NOT NULL CHECK (discarded_samples >= 0),
+        excluded_seconds REAL NOT NULL CHECK (excluded_seconds >= 0),
+        source TEXT NOT NULL CHECK (source IN ('heart_rate','estimate'))
+    ) STRICT""",
+)
+START = datetime(2026, 3, 2, 7, 0, tzinfo=UTC)
+START_MS = int(START.timestamp()) * 1000
+ARCHIVE_PATH = "2026/" + "ab" * 32 + ".fit"
+SHA = "ab" * 32
+FINGERPRINT = "cd" * 32
+PROFILE_ID = "00000000-0000-4000-8000-0000000000aa"
+
+
+def squash(text: str) -> str:
+    return "".join(text.split())
+
+
+def write_frozen_v1(path: Path) -> None:
+    """Un database v1 come lo avrebbe scritto la prima versione dell'app (senza usare `src`)."""
+    with closing(sqlite3.connect(path)) as raw:
+        for statement in FROZEN_V1:
+            raw.execute(statement)
+        raw.executemany(
+            "INSERT INTO meta (key, value) VALUES (?, ?)",
+            [
+                ("profile_id", PROFILE_ID),
+                ("name", PROFILE_NAME),
+                ("timezone", "Europe/Rome"),
+                ("futuro", "conservami"),
+            ],
+        )
+        raw.execute(
+            "INSERT INTO activities (identity_key, file_format, sport, start_ms, elapsed_s, "
+            "timer_s, distance_m, ascent_m, archive_path, archive_sha256, archive_size_bytes, "
+            "origin, imported_ms) VALUES (?, 'fit', 'running', ?, 3600.0, 3500.0, 10000.0, 120.0, "
+            "?, ?, 1234, 'import', ?)",
+            (f"fit:1:2:3:{START.isoformat()}", START_MS, ARCHIVE_PATH, SHA, START_MS + 1000),
+        )
+        raw.execute(
+            "INSERT INTO physiology VALUES ('2026-01-01', 50, 190, 170, 'female')",
+        )
+        raw.execute(
+            "INSERT INTO load_cache VALUES (1, ?, 80.0, 70.0, 75.0, 3500, 3, 12.5, 'estimate')",
+            (FINGERPRINT,),
+        )
+        raw.execute("PRAGMA user_version = 1")
+        raw.commit()
+
+
+def rows(path: Path, table: str) -> list[tuple[object, ...]]:
+    with closing(sqlite3.connect(path)) as raw:
+        return raw.execute(f"SELECT * FROM {table}").fetchall()  # noqa: S608 - nomi fissi
+
+
+# --- T-DATI-01 -----------------------------------------------------------------------------------
+
+
+def test_t_dati_01_the_released_v1_migration_has_not_changed() -> None:
+    released = tuple(squash(statement) for statement in sqlite_schema.MIGRATIONS[0])
+
+    assert released == tuple(squash(statement) for statement in FROZEN_V1)
+
+
+def test_t_dati_01_a_frozen_v1_database_is_read_by_the_current_code(tmp_path: Path) -> None:
+    write_frozen_v1(tmp_path / PROFILE_DATABASE_NAME)
+
+    opened = SqliteProfileStorage().open(tmp_path)
+    try:
+        assert str(opened.info.profile_id) == PROFILE_ID
+        assert opened.info.name.value == PROFILE_NAME
+        (record,) = opened.activities.list_by_start()
+        assert record.start == START
+        assert (record.elapsed_s, record.timer_s) == (3600.0, 3500.0)
+        assert (record.summary.distance_m, record.summary.ascent_m) == (10000.0, 120.0)
+        assert record.archived.sha256_hex == SHA
+        assert str(record.archived.relative_path) == ARCHIVE_PATH
+        (entry,) = opened.physiology.list_entries()
+        assert entry.valid_from == date(2026, 1, 1)
+        assert entry.physiology.sex is Sex.FEMALE
+    finally:
+        opened.close()
+
+
+def test_t_dati_01_a_future_migration_keeps_every_v1_row_and_the_unknown_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / PROFILE_DATABASE_NAME
+    write_frozen_v1(path)
+    before = {table: rows(path, table) for table in ("meta", "activities", "physiology")}
+    before_cache = rows(path, "load_cache")
+    v2 = (
+        "ALTER TABLE activities ADD COLUMN note TEXT",
+        "CREATE TABLE tag (id INTEGER PRIMARY KEY, name TEXT NOT NULL) STRICT",
+    )
+    monkeypatch.setattr(sqlite_database, "MIGRATIONS", (*sqlite_schema.MIGRATIONS, v2))
+    monkeypatch.setattr(sqlite_database, "SCHEMA_VERSION", sqlite_schema.SCHEMA_VERSION + 1)
+
+    SqliteProfileStorage().open(tmp_path).close()
+
+    after_meta = rows(path, "meta")
+    assert after_meta == before["meta"]  # compreso 'futuro'
+    assert [row[:-1] for row in rows(path, "activities")] == before["activities"]
+    assert rows(path, "physiology") == before["physiology"]
+    assert rows(path, "load_cache") == before_cache
+    with closing(sqlite3.connect(path)) as raw:
+        assert raw.execute("PRAGMA user_version").fetchone() == (2,)
+
+
+def test_t_dati_01_migrating_twice_is_the_same_as_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / PROFILE_DATABASE_NAME
+    write_frozen_v1(path)
+    v2 = ("CREATE TABLE tag (id INTEGER PRIMARY KEY, name TEXT NOT NULL) STRICT",)
+    monkeypatch.setattr(sqlite_database, "MIGRATIONS", (*sqlite_schema.MIGRATIONS, v2))
+    monkeypatch.setattr(sqlite_database, "SCHEMA_VERSION", sqlite_schema.SCHEMA_VERSION + 1)
+
+    SqliteProfileStorage().open(tmp_path).close()
+    first = {table: rows(path, table) for table in ("meta", "activities", "physiology", "tag")}
+    SqliteProfileStorage().open(tmp_path).close()
+
+    assert {table: rows(path, table) for table in first} == first
+
+
+def test_t_dati_01_a_database_from_a_newer_app_is_refused_and_left_alone(tmp_path: Path) -> None:
+    path = tmp_path / PROFILE_DATABASE_NAME
+    write_frozen_v1(path)
+    with closing(sqlite3.connect(path)) as raw:
+        raw.execute(f"PRAGMA user_version = {sqlite_schema.SCHEMA_VERSION + 5}")
+    before = path.read_bytes()
+
+    with pytest.raises(ProfileFormatTooNewError):
+        SqliteProfileStorage().open(tmp_path)
+
+    assert path.read_bytes() == before
+    assert sorted(p.name for p in tmp_path.iterdir()) == [PROFILE_DATABASE_NAME]
+
+
+# --- Database che non e un database di profilo ---------------------------------------------------
+
+
+def foreign_database(path: Path, user_version: int) -> None:
+    with closing(sqlite3.connect(path)) as raw:
+        raw.execute("CREATE TABLE altro (a INTEGER)")
+        raw.execute(f"PRAGMA user_version = {user_version}")
+        raw.commit()
+
+
+@pytest.mark.parametrize("user_version", [0, -1])
+def test_a_sqlite_file_of_another_program_without_the_schema_is_corrupt_and_untouched(
+    tmp_path: Path, user_version: int
+) -> None:
+    path = tmp_path / PROFILE_DATABASE_NAME
+    foreign_database(path, user_version)
+    before = path.read_bytes()
+
+    with pytest.raises(ProfileCorruptError):
+        SqliteProfileStorage().open(tmp_path)
+
+    assert path.read_bytes() == before
+    assert sorted(p.name for p in tmp_path.iterdir()) == [PROFILE_DATABASE_NAME]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="D-F1-01: un file SQLite estraneo con user_version = 1 e senza tabella meta "
+    "solleva sqlite3.OperationalError grezzo, non ProfileCorruptError",
+)
+def test_d_f1_01_a_foreign_sqlite_file_with_user_version_1_is_reported_as_corrupt(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / PROFILE_DATABASE_NAME
+    foreign_database(path, 1)
+
+    with pytest.raises(ProfileCorruptError):
+        SqliteProfileStorage().open(tmp_path)
+
+    assert sorted(p.name for p in tmp_path.iterdir()) == [PROFILE_DATABASE_NAME]
+
+
+@pytest.mark.parametrize(
+    "garbage",
+    [
+        b"questo non e un database " * 400,
+        b"SQLite format 3\x00" + b"\xff" * 5000,
+        b"SQLite format 3\x00",
+        b"\x00" * 8192,
+        b"Atleta di prova\n" * 600,
+    ],
+    ids=["testo", "intestazione-e-rumore", "solo-intestazione", "zeri", "righe-di-testo"],
+)
+def test_a_file_that_is_not_sqlite_is_refused_and_never_overwritten_or_deleted(
+    tmp_path: Path, garbage: bytes
+) -> None:
+    (tmp_path / PROFILE_DATABASE_NAME).write_bytes(garbage)
+
+    with pytest.raises(ProfileCorruptError):
+        SqliteProfileStorage().open(tmp_path)
+
+    assert (tmp_path / PROFILE_DATABASE_NAME).read_bytes() == garbage
+    assert sorted(p.name for p in tmp_path.iterdir()) == [PROFILE_DATABASE_NAME]
+
+
+@pytest.mark.parametrize("keep", [0.5, 0.9])
+def test_a_truncated_real_database_is_refused_and_untouched(tmp_path: Path, keep: float) -> None:
+    profile = create_profile(tmp_path)
+    folder = profile.folder
+    for number in range(40):
+        (tmp_path / f"c{number}.fit").write_bytes(fit_run(number))
+    profile.import_files(sorted(tmp_path.glob("c*.fit")))
+    profile.close()
+    path = folder / PROFILE_DATABASE_NAME
+    data = path.read_bytes()
+    path.write_bytes(data[: int(len(data) * keep)])
+    cut = path.read_bytes()
+
+    with pytest.raises(ProfileCorruptError):
+        SqliteProfileStorage().open(folder)
+
+    assert path.read_bytes() == cut
+
+
+def test_the_database_replaced_by_garbage_fails_the_open_cleanly_and_the_old_one_comes_back(
+    tmp_path: Path,
+) -> None:
+    profile = create_profile(tmp_path)
+    folder, ports = profile.folder, profile.ports
+    (tmp_path / "a.fit").write_bytes(fit_run(1))
+    profile.import_files([tmp_path / "a.fit"])
+    profile_id = profile.session.info.profile_id
+    profile.close()
+    path = folder / PROFILE_DATABASE_NAME
+    original = path.read_bytes()
+    garbage = b"sostituito da un altro programma " * 200
+    path.write_bytes(garbage)
+    registry_before = [
+        (e.profile_id, e.folder, e.last_used_utc) for e in ports.registry.list_entries()
+    ]
+
+    with pytest.raises(ProfileCorruptError):
+        open_registered(ports, profile_id)
+
+    assert path.read_bytes() == garbage  # il file non si ripara e non si cancella
+    assert [
+        (e.profile_id, e.folder, e.last_used_utc) for e in ports.registry.list_entries()
+    ] == registry_before
+    ports.folders.acquire_lock(folder).release()  # il lock preso per aprire e stato rilasciato
+    path.write_bytes(original)
+    reopened = open_registered(real_ports(tmp_path / "config"), profile_id)
+    try:
+        assert len(reopened.records()) == 1
+    finally:
+        reopened.close()
+
+
+def test_a_profile_id_that_is_not_a_uuid4_in_the_database_is_corrupt(tmp_path: Path) -> None:
+    path = tmp_path / PROFILE_DATABASE_NAME
+    write_frozen_v1(path)
+    with closing(sqlite3.connect(path)) as raw:
+        raw.execute("UPDATE meta SET value = ? WHERE key = 'profile_id'", (str(uuid.uuid1()),))
+        raw.commit()
+
+    with pytest.raises(ProfileCorruptError):
+        SqliteProfileStorage().open(tmp_path)
+
+
+def test_the_profile_id_class_rejects_what_the_database_may_hold() -> None:
+    with pytest.raises(ValueError, match="id"):
+        ProfileId.parse("'; DROP TABLE meta; --")
