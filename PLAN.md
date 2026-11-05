@@ -1,0 +1,673 @@
+# Ponos Coach: piano
+
+App desktop (Windows e Ubuntu), con più profili utente, che scarica le
+attività da Garmin Connect,
+calcola il carico dalla frequenza cardiaca, mostra ATL, CTL e TSB e genera un
+piano di allenamento adattivo verso uno o più obiettivi nel calendario, con un
+percorso di recupero dagli infortuni.
+
+Stato: **piano da approvare** (2026-11-05). Si spunta una voce solo se
+completata e verificata.
+
+---
+
+## 1. Decisioni prese con l'utente (2026-11-05)
+
+| Tema | Decisione |
+|---|---|
+| Linguaggio e GUI | Python + PySide6 (Qt 6); tabelle Qt modello/vista |
+| Grafici | Plotly in un `QWebEngineView`, `plotly.js` incluso nell'app, nessun accesso alla rete dalla pagina |
+| Accesso a Garmin | Login diretto non ufficiale con `garminconnect` (MFA); password mai salvata, token nel portachiavi del sistema; import manuale di file FIT come riserva |
+| Sport | Corsa (strada, trail), ciclismo, forza/palestra, escursionismo, camminata, altro |
+| Obiettivi | Gare con data e priorità A/B/C, tempo obiettivo in gara, livello di forma (CTL) a una data; più obiettivi insieme |
+| Infortuni | Descrizione dell'infortunio, domande dell'app, piano di recupero; nessuna diagnosi, segnali d'allarme → medico |
+| Motore del piano | Regole deterministiche (stessi dati → stesso piano), niente LLM |
+| Adattamento | Solo carico da FC (ATL, CTL, TSB) e carico passato |
+| Test di valutazione | Test di soglia di 30' in corsa all'inizio, ripetuto ogni 6–8 settimane |
+| Formula del carico | hrTSS da TRIMP di Banister sul tracciato FC, moltiplicato per il peso dello sport |
+| Profili | Più profili utente; per ogni profilo l'utente sceglie la cartella in cui stanno tutti i suoi dati |
+| FC minima e massima | Inserite dall'utente; un valore di FC fuori da questi limiti è un errore |
+| Soglia in bici | FC di soglia della corsa − 4 bpm, finché non c'è un test in bici |
+| Tipologie di seduta | Scelte dall'utente; il piano programma solo quelle |
+| Import da cartella | Oltre alla sincronizzazione, su richiesta: si sceglie una cartella e si aggiungono i file FIT che contiene |
+| Sincronizzazione | All'avvio e con il pulsante Sincronizza; la prima scarica tutto lo storico, le successive solo le attività mancanti; riprende da dove era rimasta dopo una chiusura; notifica a fine sincronizzazione; niente area di notifica |
+| Calendario Garmin | In una fase successiva: invio degli allenamenti a scelta dell'utente ed eliminazione degli allenamenti futuri programmati |
+| Lingue | Italiano e inglese |
+| Piattaforme e repository | Windows e Ubuntu, GitHub con CI; **il push lo fa l'utente a mano** |
+
+## 2. Decisioni di default (le ho fissate io: da confermare o correggere)
+
+1. **Cartella del profilo:** scelta alla creazione del profilo (proposta: la
+   cartella dati dell'utente) e autosufficiente: database, archivio FIT e
+   backup stanno lì, così si può spostare o aprire da un altro PC con "Apri
+   profilo da cartella". Fanno eccezione i token Garmin, che restano nel
+   portachiavi del sistema legati all'id del profilo. L'elenco dei profili e
+   l'ultimo usato stanno nella configurazione dell'app.
+2. **Rimuovere un profilo** lo toglie solo dall'elenco; cancellarne la
+   cartella è un comando a parte, con conferma che mostra cartella e
+   contenuto.
+3. **FC fuori limiti:** si scarta il singolo campione, non l'attività. Il
+   dettaglio dell'attività dice quanti campioni sono stati scartati; se molti
+   superano la massima, l'app propone di rivederla. FC minima, FC massima e
+   soglia hanno una data di validità: ogni attività usa i valori del suo
+   periodo, e il cambio di un valore ricalcola i carichi derivati.
+4. **Attività senza FC** (o con più del 30% dei campioni scartati o
+   mancanti): carico stimato da durata × intensità tipica dello sport,
+   marcato "stimato" in tabella e nei grafici.
+5. **Tipologie di seduta:** elenco per sport (es. corsa facile, lungo,
+   soglia, ripetute, bici facile, forza, escursionismo) con caselle da
+   spuntare. Se un obiettivo richiede una tipologia esclusa (es. mezza
+   maratona senza lunghi), il piano lo segnala ma non la aggiunge.
+6. **Notifica di fine sincronizzazione:** notifica di sistema (toast su
+   Windows, notifica del desktop su Ubuntu) con il numero di attività nuove,
+   più il messaggio nella barra di stato.
+7. **Pesi di default degli sport** (provvisori, da tarare in fase 3): corsa
+   1,0; trail 1,1; ciclismo 0,8; escursionismo 0,8; camminata 0,6; forza 1,2
+   (la FC sottostima il carico della forza); altro 0,8.
+8. **Disponibilità settimanale** inserita dall'utente: giorni disponibili, ore
+   massime a settimana, giorno del lungo. Il piano non la supera mai.
+9. **Dati sul disco:** file FIT originali come fonte di verità delle attività;
+   SQLite come indice e per i dati dell'utente (obiettivi, piani, infortuni,
+   impostazioni); carichi e PMC derivati e rigenerabili.
+10. **Messaggio di responsabilità** nell'app e nel README: Ponos Coach non è un
+    dispositivo medico.
+11. **Import da cartella:** solo file `.fit`, sottocartelle comprese; i file
+    si copiano nell'archivio del profilo e la cartella d'origine non si
+    tocca; i duplicati (già importati o già scaricati da Garmin) si saltano;
+    alla fine un riepilogo. L'app ricorda l'ultima cartella usata. Tetti:
+    50.000 file FIT, 500.000 voci esaminate (file e cartelle di ogni tipo),
+    32 livelli di sottocartelle, 50 MB per file. Il primo tetto è circa sette
+    volte un decennio con due attività al giorno; gli altri impediscono di
+    scandire per errore un disco intero.
+
+## 3. Rischi principali
+
+| Rischio | Conseguenza | Risposta |
+|---|---|---|
+| Garmin cambia il login o le API (è già successo a marzo 2026) | Sincronizzazione ferma | Adattatore isolato dietro una porta, test di contratto su risposte registrate e anonimizzate, import FIT manuale sempre disponibile, versione di `garminconnect` bloccata e aggiornata dopo prova |
+| Accesso non ufficiale contrario ai termini d'uso, blocco temporaneo (429) | Account rallentato o segnalato | Poche richieste: solo all'avvio e a mano, pausa tra le richieste, backoff con limite, nessun ritentativo infinito |
+| Consigli di allenamento sbagliati o pericolosi | Sovraccarico, infortuni | Limiti rigidi di rampa del CTL e di TSB, regole testate con scenari, segnali d'allarme, nessuna diagnosi |
+| Pacchetto pesante (QtWebEngine) | ~250 MB | Accettato con la scelta di Plotly; misurato in fase 8 |
+| Prima sincronizzazione di tutto lo storico | Centinaia o migliaia di richieste: lunga e a rischio di 429 | Pause e backoff, giornale riprendibile, avanzamento con tempo stimato; si può chiudere l'app e riprendere |
+| Cartella del profilo su disco di rete o sincronizzato (OneDrive, NAS) | SQLite può corrompersi con lock e sincronizzazioni a metà scrittura | Avviso alla scelta della cartella; un solo processo per profilo (file di lock) |
+
+## 4. Architettura
+
+### 4.1 Stack e dipendenze candidate
+
+Ogni dipendenza diretta si valida e si registra in `docs/dipendenze.md`
+(licenza compatibile con GPLv3, manutenzione, alternative).
+
+- Python 3.13 o successivo (fissato con `uv python pin` nella fase 0, se
+  PySide6 e `garminconnect` lo supportano), `uv` con `uv.lock`.
+- Esecuzione: `PySide6` con `PySide6-Addons` per QtWebEngine (LGPL-3.0),
+  `plotly` (MIT, anche per il `plotly.js` incluso), `garminconnect` (MIT),
+  `fitdecode` (MIT), `numpy` (BSD), `keyring` (MIT), `desktop-notifier`
+  (MIT), `platformdirs` (MIT).
+- Sviluppo: `pytest`, `pytest-qt`, `hypothesis`, `ruff`, `mypy --strict`,
+  `import-linter`, `pip-audit`, `nox`, `pyinstaller` (`.spec` versionato).
+
+### 4.2 Pacchetti (cartelle per funzionalità)
+
+```
+src/ponos_coach/
+  activities/       attività, lettura FIT, import, sincronizzazione (casi d'uso)
+  load/             TRIMP, hrTSS, pesi degli sport, PMC (ATL, CTL, TSB), parametri fisiologici
+  assessment/       test di soglia 30', zone FC e di ritmo, retest
+  goals/            obiettivi (gara A/B/C, tempo obiettivo, CTL a una data)
+  planning/         periodizzazione, modelli di seduta, adattamento, proiezione del PMC
+  injury/           questionario, segnali d'allarme, percorso di ripresa
+  profiles/         profili utente, cartella dei dati, blocco contro due istanze
+  garmin/           adattatore garminconnect (porte ActivitySource e WorkoutCalendar)
+  storage/          SQLite (schema, migrazioni con user_version), archivio FIT
+  platform/         portachiavi, notifiche, cartelle dell'app
+  ui/               finestra Qt, modelli di presentazione, grafici Plotly, tabelle, dialoghi
+  i18n/             file .ts e .qm
+  __main__.py       Composition Root
+```
+
+- In ogni funzionalità il dominio è puro (niente I/O, Qt, rete né log); i casi
+  d'uso caricano, chiamano il dominio e salvano in un'unica transazione.
+- Dipendenze permesse: `ui → casi d'uso → dominio`; gli adattatori
+  (`garmin`, `storage`, `platform`) implementano porte definite nelle
+  funzionalità. Nessun ciclo. Le regole stanno in `importlinter` e la CI le
+  verifica.
+- Il piano è un valore: il nucleo restituisce il piano, il guscio lo salva o
+  lo invia a Garmin; prova a vuoto e test senza I/O.
+
+### 4.3 Dati
+
+- Cartella del profilo, scelta dall'utente: `ponos.sqlite3` (WAL,
+  `foreign_keys = ON`, parametri `?`, schema con `user_version` e migrazioni
+  versionate; contiene id del profilo e versione del formato),
+  `fit/<anno>/<id_attività>.fit`, `backup/`, `ponos.lock` (creato in modo
+  esclusivo: un solo processo per profilo).
+- Configurazione dell'app (`platformdirs`): elenco dei profili con le loro
+  cartelle e ultimo profilo usato.
+- Ogni FIT ha SHA-256 registrato; scrittura su file temporaneo, flush,
+  rinomina; il record in SQLite si scrive dopo il file.
+- Identità dell'attività: il `file_id` del FIT (produttore, numero di serie,
+  ora di creazione), uguale per lo stesso file scaricato da Garmin o copiato
+  dall'orologio; l'id Garmin si aggiunge quando è noto. Così la stessa
+  attività non entra due volte, qualunque sia la sua origine.
+- Limiti al confine: dimensione massima del FIT (es. 50 MB) prima della
+  lettura, numero massimo di record, durata massima dell'attività.
+- Stato della UI (finestra, pannelli, ultime cartelle) in `QSettings`.
+
+### 4.4 Sincronizzazione riprendibile e import da cartella
+
+1. Token dal portachiavi; se mancano o sono scaduti, dialogo di login con MFA.
+   La password va solo a `garminconnect` e non si salva.
+2. Prima sincronizzazione del profilo: elenco di tutto lo storico, a pagine,
+   con il punto raggiunto salvato nel giornale. Sincronizzazioni successive:
+   elenco dalle più recenti finché si trova una pagina di attività già note,
+   più le voci rimaste in sospeso o fallite. Ogni id nuovo diventa una voce
+   "da scaricare" nel giornale di SQLite (idempotente per id Garmin). Il
+   comando "Verifica completa" rielenca tutto lo storico (solo l'elenco,
+   senza riscaricare) per trovare attività caricate su Garmin in ritardo con
+   date vecchie.
+3. Per ogni voce: download del FIT originale (zip), controlli dei limiti,
+   scrittura durevole nell'archivio, lettura, calcolo del carico; una sola
+   transazione segna la voce come completata.
+4. Pausa tra le richieste con jitter; su 429 o errori transitori backoff
+   esponenziale con tetto e numero massimo di tentativi; poi errore chiaro.
+5. Se l'app si chiude a metà, all'avvio successivo riparte dalle voci in
+   sospeso e cancella i temporanei orfani.
+6. Il lavoro gira in un worker con annullamento; la UI mostra avanzamento e
+   Annulla. A fine sincronizzazione: notifica di sistema, barra di stato, PMC
+   e piano aggiornati.
+7. Prima di scaricare, un'attività dell'elenco Garmin con la stessa ora
+   d'inizio e lo stesso sport di una già importata da file si abbina a
+   quella senza riscaricarla.
+
+**Import da cartella** (comando "Importa da cartella…", su richiesta):
+
+1. Si sceglie una cartella e la si esamina prima di importare (solo nomi e
+   dimensioni): file `.fit` anche nelle sottocartelle, solo file regolari
+   che stanno davvero dentro la cartella (niente collegamenti o reparse
+   point che portano fuori). Tetti: 50.000 file FIT, 500.000 voci
+   esaminate, 32 livelli, 50 MB per file (i file più grandi sono segnalati
+   e saltati). Se un tetto dei primi tre si supera, l'esame si ferma, non si
+   importa nulla e l'app chiede di scegliere una sottocartella: niente
+   import parziali a sorpresa. I tetti sono costanti in un solo modulo.
+2. Ogni file passa dagli stessi controlli dei FIT scaricati e si copia
+   nell'archivio del profilo; la cartella d'origine non si modifica mai.
+3. I duplicati (stesso `file_id`) si saltano. L'import è idempotente: se si
+   interrompe, basta rilanciarlo.
+4. Worker con avanzamento e Annulla; alla fine un riepilogo (importate, già
+   presenti, ignorate, con errore e motivo per ogni file), PMC e piano
+   aggiornati.
+
+### 4.5 Modello di carico
+
+- `HRr(t) = (HR(t) − FCmin) / (FCmax − FCmin)`, con FC minima (a riposo) e
+  massima inserite dall'utente; i campioni fuori da `[FCmin, FCmax]` sono
+  errori: si scartano e si contano.
+- `TRIMP = Σ Δt[min] · HRr · 0,64 · e^(k · HRr)`, con `k = 1,92` (uomo) o
+  `1,67` (donna), dal profilo.
+- `hrTSS = 100 · TRIMP / TRIMP_1h_soglia`, dove `TRIMP_1h_soglia` è il TRIMP
+  di un'ora alla FC di soglia (in bici: soglia della corsa − 4 bpm finché
+  non c'è un test in bici).
+- `carico = hrTSS · peso_sport`. Buchi oltre 10 s non contati.
+- `ATL` e `CTL` sono medie esponenziali giornaliere con costante di tempo 7 e
+  42 giorni; `TSB(giorno) = CTL(giorno − 1) − ATL(giorno − 1)` (forma del
+  mattino).
+- Property test: implementazione vettoriale contro implementazione ingenua;
+  invarianti (carico ≥ 0, monotonia rispetto a durata e FC).
+
+### 4.6 Motore del piano (regole deterministiche)
+
+- **Ingressi:** PMC di oggi, obiettivi, disponibilità, tipologie di seduta
+  scelte, infortuni attivi, ultimo test (FC e ritmo di soglia), pesi degli
+  sport.
+- **Macrociclo** per ogni obiettivo A, all'indietro dalla data: scarico
+  (7–14 giorni secondo la distanza), picco, costruzione, base. CTL obiettivo
+  dal livello di forma richiesto o da una stima per distanza e tempo, limitato
+  dalla rampa massima (default +5 CTL a settimana, +3 dopo un infortunio).
+- **Mesocicli 3:1:** tre settimane di carico e una di scarico (60–70%).
+- **Obiettivi B:** 3–4 giorni di mini-scarico; **C:** nessuno scarico.
+- **Settimana:** carico obiettivo distribuito nei giorni disponibili,
+  alternanza duro/facile, al massimo 2–3 sedute intense, lungo nel giorno
+  scelto, distribuzione 80/20 dell'intensità in base.
+- **Sedute** da modelli per sport e fase (facile, lungo, medio, soglia a
+  intervalli, VO2max, recupero, forza, alternativa), **solo tra le tipologie
+  scelte dall'utente**: durata, zone FC o di ritmo, carico stimato (che
+  alimenta la proiezione del PMC). Se all'obiettivo manca una tipologia
+  necessaria, il piano lo dice e spiega l'effetto.
+- **Tempo obiettivo:** dal ritmo di soglia si stima il tempo possibile e si
+  dichiara l'obiettivo realistico, ambizioso o non raggiungibile entro la
+  data.
+- **Adattamento:** dopo ogni sincronizzazione si confronta fatto e
+  pianificato e si ricalcola da domani; il passato resta storia. TSB sotto
+  −30 o ATL/CTL oltre 1,5 inseriscono recupero; il carico perso non si
+  recupera oltre la rampa massima.
+- **Test:** test di soglia 30' prima del piano e ogni 6–8 settimane in una
+  settimana di scarico; dopo il test si aggiornano soglia e zone.
+- Piano salvato con versione e con i parametri che l'hanno generato.
+
+### 4.7 Infortuni
+
+- **Questionario:** zona e lato, data e modo d'insorgenza (improvviso o
+  graduale), dolore 0–10 a riposo, camminando, correndo e il mattino dopo,
+  attività che non fanno male, diagnosi e indicazioni del medico (testo
+  libero, solo in locale).
+- **Segnali d'allarme** (dolore notturno o a riposo forte, gonfiore o
+  deformità, formicolii o perdita di forza, impossibilità di caricare il
+  peso, febbre, dolore al petto o palpitazioni): stop del piano per quella
+  zona e invito a un medico.
+- **Percorso a gradini:** riposo o attività alternative senza dolore →
+  camminata → corsa e cammino → corsa continua facile → volume → intensità.
+  Si sale se il dolore resta ≤ 3/10 durante e torna al livello di base il
+  mattino dopo; si scende se peggiora. Durante il percorso l'app fa domande
+  ogni giorno (check-in).
+- Le attività alternative senza dolore mantengono il CTL.
+
+### 4.8 Interfaccia
+
+- Barra laterale: Panoramica (PMC, seduta di oggi, forma), Attività (tabella
+  e dettaglio con FC e zone), Calendario (mese e settimana: fatto,
+  pianificato, obiettivi, test, infortuni), Obiettivi, Infortuni, Test,
+  Impostazioni del profilo (pesi, FC minima, massima e soglia con date,
+  sesso, disponibilità, tipologie di seduta, account Garmin).
+- Menu File: Nuovo profilo, Apri profilo da cartella, Cambia profilo,
+  Rimuovi profilo dall'elenco; il nome del profilo attivo sta nel titolo
+  della finestra.
+- Menu completi con scorciatoie (Sincronizza: F5), annulla e ripeti
+  (`QUndoStack`) per obiettivi e calendario, barra di stato con l'ultima
+  sincronizzazione.
+- Grafici Plotly: PMC (CTL, ATL, TSB, barre del carico giornaliero,
+  proiezione tratteggiata dal piano, linee verticali degli obiettivi), carico
+  settimanale per sport, tempo nelle zone, FC dell'attività. Tavolozza
+  Okabe-Ito, assi con nome e unità, tema chiaro e scuro dagli stessi token,
+  esportazione SVG e PNG.
+- Primo avvio guidato (anche per ogni nuovo profilo): nome e cartella del
+  profilo, login Garmin, FC minima e massima, sesso (per il TRIMP),
+  disponibilità, tipologie di seduta, proposta del test di soglia; poi la
+  prima sincronizzazione di tutto lo storico.
+
+### 4.9 Sicurezza (dettaglio in `docs/threat-model.md`)
+
+- Confini di fiducia: risposte JSON di Garmin, file FIT (da Garmin,
+  importati a mano o da una cartella), pagina web dei grafici, portachiavi.
+- Input esterni trasformati in tipi di dominio al confine, con limiti prima
+  della lettura; fuzzing del lettore FIT con `hypothesis`.
+- Pagina dei grafici: solo contenuto locale, accesso alla rete bloccato da
+  un intercettore, dati passati come JSON codificato, nessun `QWebChannel`
+  salvo necessità dichiarata.
+- Token nel Credential Manager (Windows) o Secret Service (Ubuntu), dichiarati
+  leggibili dai processi dell'utente. Log strutturati senza token, password né
+  dati di salute.
+- Cartella del profilo scelta dall'utente: verificata scrivibile, file creati
+  in modo esclusivo, lock contro due istanze; i token non stanno nella
+  cartella, che contiene invece dati di salute (va protetta come tale).
+
+## 5. Fasi
+
+### Fase 0 — Spike Garmin e scheletro
+
+- [ ] Spike `experiments/garmin_spike.py`, **lanciato dall'utente nel proprio
+      terminale** (Claude non inserisce password): login con MFA, token nel
+      portachiavi, ultime 5 attività, conteggio di tutto lo storico a pagine
+      (per stimare la durata della prima sincronizzazione), download di un
+      FIT originale, lettura
+      del tracciato FC, elenco (solo lettura) degli allenamenti programmati e
+      verifica delle funzioni per crearli ed eliminarli. Risultato in
+      `experiments/garmin_spike.md`, senza dati personali.
+- [ ] `git init`, autore e committer MR nella configurazione del repository,
+      `LICENSE` (GPLv3), `README.md`, `SECURITY.md`, `TIDY.md`, `.gitignore`,
+      `.gitattributes`.
+- [ ] `pyproject.toml` (`src/`, `authors = ["MR"]`), `uv.lock`, `noxfile.py`
+      con tutti i controlli, regole di `import-linter`.
+- [ ] CI su Windows e Ubuntu (permessi minimi, action fissate a SHA), che
+      esegue esattamente `uv run nox`.
+- [ ] ADR: 001 stack, 002 accesso a Garmin, 003 formato dei dati, 004 modello
+      di carico. `docs/specifica.md`, `docs/threat-model.md`,
+      `docs/dipendenze.md`.
+- [ ] Skill del progetto `.claude/skills/ponos-allenamento/` (modello di
+      carico, PMC, periodizzazione, test, infortuni, sincronizzazione,
+      formato dei dati).
+- [ ] Scheletro che gira end-to-end: la finestra si apre e mostra il PMC
+      calcolato da un FIT di prova sintetico.
+
+Agenti: `generatore-fixture`, `sviluppatore-nucleo`, `sviluppatore-interfaccia`,
+`redattore-documenti`, `registro-dipendenze`, `verificatore`.
+
+### Fase 1 — Profili, archivio e import FIT
+
+- [ ] Profili: creazione con scelta della cartella, apertura da cartella,
+      cambio, rimozione dall'elenco, cancellazione della cartella con
+      conferma; lock contro due istanze; avviso per cartelle di rete o
+      sincronizzate.
+- [ ] Schema SQLite v1 e migrazioni; archivio FIT con scrittura durevole e
+      SHA-256.
+- [ ] Lettore FIT con limiti, tipi di dominio (attività, sport, tracciato FC)
+      e test di fuzzing.
+- [ ] Casi d'uso "Importa file FIT" (menu e trascinamento) e "Importa da
+      cartella" (sottocartelle, duplicati saltati per `file_id`, riepilogo
+      finale), tabella delle attività con ordinamento e filtri.
+
+### Fase 2 — Sincronizzazione Garmin
+
+- [ ] Adattatore `garmin` dietro la porta `ActivitySource`, con test di
+      contratto su risposte registrate e anonimizzate e su un fake.
+- [ ] Dialogo di login con MFA, token nel portachiavi per profilo, logout.
+- [ ] Sincronizzazione riprendibile (sezione 4.4): prima tutto lo storico,
+      poi solo le attività mancanti, "Verifica completa"; giornale, pause,
+      backoff, annullamento, ripresa dopo chiusura (test che interrompe a
+      metà, sia durante l'elenco sia durante i download).
+- [ ] Abbinamento con le attività già importate da file, senza duplicati né
+      download inutili.
+- [ ] Sincronizzazione all'avvio e con F5; notifica di sistema e barra di
+      stato.
+
+### Fase 3 — Carico e grafici
+
+- [ ] Parametri fisiologici con data di validità inseriti dall'utente (FC
+      minima e massima, sesso, soglia; soglia in bici = corsa − 4 bpm);
+      campioni fuori limiti scartati e contati.
+- [ ] TRIMP e hrTSS, pesi degli sport, stima per attività senza FC; ricalcolo
+      quando cambiano parametri o pesi.
+- [ ] PMC (ATL, CTL, TSB) con property test.
+- [ ] Grafici Plotly in `QWebEngineView` isolato: PMC, carico settimanale per
+      sport, zone, FC dell'attività; esportazione SVG e PNG.
+
+### Fase 4 — Test di valutazione
+
+- [ ] Protocollo del test di soglia 30' (istruzioni nell'app), riconoscimento
+      dell'attività del test (scelta dall'utente), calcolo della FC e del
+      ritmo di soglia, zone FC e di ritmo.
+- [ ] Storico dei test e retest proposto ogni 6–8 settimane.
+
+### Fase 5 — Obiettivi e piano adattivo
+
+- [ ] Obiettivi nel calendario (A/B/C, tempo obiettivo, CTL a una data), con
+      annulla.
+- [ ] Disponibilità settimanale.
+- [ ] Scelta delle tipologie di seduta per sport; avviso quando un obiettivo
+      ne richiede una esclusa.
+- [ ] Motore del piano (sezione 4.6) con test a scenari (un obiettivo, due A
+      vicini, A + B, obiettivo irraggiungibile, sedute saltate, carico
+      eccessivo).
+- [ ] Vista calendario: pianificato contro fatto; proiezione del PMC nel
+      grafico.
+- [ ] Ricalcolo del piano dopo ogni sincronizzazione.
+
+### Fase 6 — Infortuni e recupero
+
+- [ ] Questionario, segnali d'allarme, percorso a gradini, check-in
+      giornaliero (sezione 4.7), con test per ogni regola di salita, discesa e
+      stop.
+- [ ] Integrazione con il piano: zona colpita sospesa, alternative, rampa
+      ridotta dopo il rientro.
+
+### Fase 7 — Calendario Garmin
+
+- [ ] Porta `WorkoutCalendar`: invio degli allenamenti strutturati (zone FC,
+      durate), a scelta dell'utente (piano intero, settimana, singola seduta).
+- [ ] Elenco degli allenamenti futuri programmati su Garmin ed eliminazione
+      selettiva con conferma che mostra l'elenco e un bottone con il verbo;
+      copia locale di ciò che si elimina, per poterlo ricreare.
+- [ ] Gli allenamenti creati dall'app sono riconoscibili (prefisso nel nome).
+
+### Fase 8 — Rilascio
+
+- [ ] Collaudo completo (sezione 7) superato sull'eseguibile, su Windows e
+      Ubuntu, con esiti registrati in `docs/collaudo.md`.
+- [ ] Backup e ripristino di un profilo in un file versionato, con test di
+      ripristino.
+- [ ] PyInstaller con `.spec` versionato per Windows e Ubuntu, smoke test
+      sull'eseguibile, `SHA256SUMS`, misura della dimensione del pacchetto.
+- [ ] Controllo di conformità: licenze, intestazioni, autore dei commit,
+      nessun dato personale né percorso locale nel pacchetto.
+- [ ] README con installazione, verifica dell'hash, avviso di SmartScreen,
+      messaggio di responsabilità medica.
+
+## 6. Squadra di agenti e modelli
+
+La sessione principale (Opus) fa domande, piano, orchestrazione e la
+revisione finale di ogni fase. Lo sviluppo e i controlli vanno agli agenti di
+`.claude/agents/`, con modelli più economici:
+
+| Agente | Modello | Compito |
+|---|---|---|
+| `sviluppatore-nucleo` | sonnet | dominio, casi d'uso, adattatori (carico, piano, infortuni, sincronizzazione, archivio) |
+| `sviluppatore-interfaccia` | sonnet | finestra Qt, modelli di presentazione, tabelle, grafici Plotly, dialoghi |
+| `generatore-fixture` | sonnet | FIT sintetici, risposte Garmin anonimizzate, scenari per il piano |
+| `collaudatore` | sonnet | test approfonditi della sezione 7 (end-to-end, robustezza, sicurezza, fuzzing), scritti da chi non ha scritto il codice; non tocca `src/` |
+| `revisore-codice` | sonnet | revisione di un diff rispetto al piano e alle skill; sola lettura |
+| `redattore-documenti` | sonnet | README, `docs/`, ADR, `CLAUDE.md`, skill del progetto |
+| `verificatore` | haiku | esegue `uv run nox` e riassume gli errori; sola lettura |
+| `riparatore-lint` | haiku | correzioni meccaniche di ruff e mypy |
+| `traduttore-qt` | haiku | allinea le traduzioni italiano e inglese |
+| `controllore-conformita` | haiku | licenze, intestazioni, autore, dati personali; sola lettura |
+| `registro-dipendenze` | haiku | `docs/dipendenze.md`, licenze, `pip-audit` |
+
+Orchestrazione: in parallelo solo su file che non si sovrappongono, ogni
+lavoro parallelo sul codice nel suo worktree; dopo ogni modifica
+`verificatore`; a fine fase `revisore-codice`, poi la revisione della
+sessione principale. Nessun agente fa `git push`.
+
+## 7. Piano di test
+
+Ogni test ha un identificativo, così la matrice minaccia → test del threat
+model e gli esiti del collaudo possono citarlo.
+
+### 7.1 Principi
+
+- Ogni funzione nasce con un test d'accettazione che fallisce, scritto nel
+  linguaggio del dominio e avviato dalla stessa funzione d'avvio della
+  produzione. I test di una funzione fanno parte della fase in cui nasce: una
+  voce di fase non si spunta senza i suoi test.
+- Test deterministici: orologio, casualità e rete iniettati; niente `sleep`;
+  si attende una condizione con un timeout definito in un solo posto.
+- SQLite e file reali (in cartelle temporanee) nei test d'integrazione;
+  Garmin sostituito da un fake verificato da test di contratto, eseguiti sia
+  sul fake sia sulle risposte registrate e anonimizzate.
+- Per ogni test positivo un test negativo con input ostile; ogni controllo ha
+  un test che ne verifica il rifiuto; ogni minaccia del threat model ha
+  almeno un test.
+- Ogni bug trovato diventa prima un test che fallisce.
+- I test approfonditi li scrive `collaudatore`, non chi ha scritto il
+  codice.
+
+### 7.2 Livelli ed esecuzione
+
+| Livello | Cosa | Strumenti | Quando |
+|---|---|---|---|
+| 1. Dominio | formule, PMC, regole del piano e degli infortuni | pytest, hypothesis | ogni modifica (`uv run nox`) |
+| 2. Casi d'uso | con fake in memoria e SQLite reale temporaneo | pytest | ogni modifica |
+| 3. Adattatori | Garmin (fake e registrazioni), FIT, SQLite, portachiavi, notifiche | pytest | ogni modifica |
+| 4. Interfaccia | modelli di presentazione e viste | pytest-qt `offscreen` | ogni modifica |
+| 5. End-to-end | un percorso per funzionalità, app avviata dal Composition Root | pytest-qt | ogni modifica |
+| 6. Eseguibile | smoke test del pacchetto PyInstaller | `uv run nox -s dist` | prima del rilascio |
+| 7. Campagna lunga | fuzzing esteso, mutazione, prestazioni, sicurezza | `uv run nox -s collaudo` | CI pianificata ogni settimana e prima del rilascio |
+
+### 7.3 Calcolo del carico (T-CALC)
+
+- **T-CALC-01** Valori calcolati a mano: 60 minuti a FC costante pari alla
+  soglia danno hrTSS 100; FC uguale alla minima dà 0.
+- **T-CALC-02** Property test: implementazione vettoriale uguale a quella
+  ingenua, con tolleranza dichiarata, su tracciati casuali.
+- **T-CALC-03** Invarianti: carico ≥ 0; crescente con durata e FC; un
+  campione fuori limiti non cambia il risultato; peso 0 → carico 0.
+- **T-CALC-04** PMC: risposta a un singolo giorno di carico (decadimento con
+  costanti 7 e 42), carico costante L → CTL tende a L, TSB del mattino
+  calcolato con i valori del giorno prima.
+- **T-CALC-05** Parametri con data di validità: attività a cavallo di un
+  cambio; ricalcolo dopo una modifica uguale al calcolo da zero.
+- **T-CALC-06** Soglia in bici = soglia corsa − 4 bpm; attività senza FC o
+  con più del 30% di campioni scartati → stima marcata.
+- **T-CALC-07** Casi limite: attività di 1 s e di 24 h, FC piatta, buchi
+  oltre 10 s, attività a cavallo della mezzanotte, cambio dell'ora legale,
+  viaggi in un altro fuso.
+
+### 7.4 Piano, test di soglia e infortuni (T-PIANO, T-INF)
+
+- **T-PIANO-01** Determinismo: stessi ingressi → piano identico byte per
+  byte una volta serializzato; l'ordine di inserimento degli obiettivi non
+  conta.
+- **T-PIANO-02** Vincoli sempre rispettati, con property test su ingressi
+  casuali: rampa del CTL entro il massimo, ore entro la disponibilità, solo
+  giorni disponibili, solo tipologie scelte, al massimo 3 sedute intense a
+  settimana, mai due dure di seguito, scarico prima di ogni obiettivo A e B.
+- **T-PIANO-03** Scenari: un obiettivo A; due A a 3 settimane; A + B + C;
+  obiettivo irraggiungibile (avviso, nessuna rampa oltre il limite);
+  obiettivo oggi o nel passato; nessuna disponibilità; tipologia necessaria
+  esclusa (avviso); partenza da CTL 0 e da CTL 100.
+- **T-PIANO-04** Adattamento: sedute saltate (nessun recupero oltre la
+  rampa), carico eccessivo (TSB sotto −30 → recupero), attività non
+  pianificate, attività vecchie arrivate tardi che cambiano il passato.
+- **T-PIANO-05** Tempo obiettivo: classificazione realistico, ambizioso o
+  irraggiungibile, verificata ai confini.
+- **T-PIANO-06** Test di soglia: FC di soglia = media degli ultimi 20' su
+  tracciati sintetici; test interrotto o troppo corto rifiutato; retest
+  proposto dopo 6–8 settimane in una settimana di scarico.
+- **T-INF-01** Ogni segnale d'allarme, uno per test, ferma il piano della
+  zona e mostra l'invito al medico.
+- **T-INF-02** Percorso a gradini: si sale con dolore ≤ 3 e mattino normale,
+  si scende se peggiora, nessun salto di gradino, check-in mancante = nessuna
+  salita.
+- **T-INF-03** Integrazione con il piano: zona colpita sospesa, attività
+  alternative senza dolore che mantengono il carico, rampa ridotta dopo il
+  rientro.
+
+### 7.5 Dati, sincronizzazione e import (T-DATI, T-SYNC, T-IMP)
+
+- **T-DATI-01** Migrazioni: un database di prova per ogni versione dello
+  schema, portato all'ultima; campi sconosciuti conservati.
+- **T-DATI-02** Interruzione in ogni punto della scrittura di un FIT (prima
+  del flush, dopo il flush, prima della rinomina, prima del commit), con un
+  adattatore del file system che fallisce all'N-esima operazione: all'avvio
+  nessun record senza file e nessun temporaneo orfano.
+- **T-DATI-03** Integrità: FIT dell'archivio alterato → segnalato, mai usato
+  in silenzio.
+- **T-DATI-04** Lock: seconda istanza sullo stesso profilo rifiutata con un
+  messaggio; lock rimasto da un crash riconosciuto e superato.
+- **T-DATI-05** Backup e ripristino in una cartella nuova: profilo identico
+  (attività, parametri, obiettivi, piano, infortuni).
+- **T-SYNC-01** Prima sincronizzazione completa e poi incrementale, con il
+  fake di Garmin e uno storico di 5.000 attività.
+- **T-SYNC-02** Processo terminato davvero (kill di un sottoprocesso) durante
+  l'elenco e durante i download, in più punti: al riavvio nessun duplicato e
+  nessuna attività persa.
+- **T-SYNC-03** 429, errori 5xx, timeout, risposte troncate o malformate:
+  backoff con tetto, numero massimo di tentativi, errore comprensibile,
+  nessun ciclo infinito (orologio finto).
+- **T-SYNC-04** Token scaduto o revocato → dialogo di login; MFA richiesto;
+  un login fallito non salva nulla.
+- **T-SYNC-05** Attività già importate da file: nessun download e nessun
+  duplicato; "Verifica completa" trova le attività caricate in ritardo.
+- **T-SYNC-06** Annulla: la sincronizzazione si ferma entro 1 s e lascia lo
+  stato coerente.
+- **T-IMP-01** Albero con sottocartelle, duplicati, file non FIT e FIT
+  rovinati: riepilogo esatto, file per file.
+- **T-IMP-02** Tetti: 50.000 file FIT, 500.000 voci e 32 livelli, ciascuno
+  provato al limite e un passo oltre (nessun import, messaggio); file oltre
+  50 MB saltato e segnalato.
+- **T-IMP-03** Idempotenza: import ripetuto → nessun cambiamento.
+
+### 7.6 Interfaccia (T-UI)
+
+- **T-UI-01** Un end-to-end per funzionalità dall'avvio reale: primo avvio
+  guidato, nuovo profilo, import da cartella, sincronizzazione (fake),
+  obiettivo → piano → calendario, test di soglia, infortunio → percorso.
+- **T-UI-02** Il thread della UI non si blocca: durante sincronizzazione e
+  import un evento di input si elabora entro 100 ms.
+- **T-UI-03** Annulla e ripeti per obiettivi e calendario; conferma con
+  attrito solo per l'irreversibile (cancellazione della cartella,
+  eliminazione di allenamenti su Garmin).
+- **T-UI-04** Grafici: le figure contengono le serie attese, con assi e
+  unità; esportazione SVG e PNG produce file validi; temi chiaro e scuro.
+- **T-UI-05** Accessibilità: contrasto dei token ≥ 4,5:1 per il testo e
+  ≥ 3:1 per bordi e serie dei grafici in entrambi i temi; tutto raggiungibile
+  da tastiera; ogni controllo con un nome accessibile.
+- **T-UI-06** Traduzioni: italiano e inglese con gli stessi testi, nessuna
+  voce non tradotta, plurali corretti, layout che regge testi lunghi.
+- **T-UI-07** L'app ricorda finestra, pannelli, ultimo profilo, ultima
+  cartella di import.
+- **T-UI-08** Gestore unico degli errori: un'eccezione imprevista mostra un
+  messaggio generico e registra il dettaglio.
+
+### 7.7 Sicurezza (T-SEC)
+
+- **T-SEC-01** Fuzzing del lettore FIT: `hypothesis` a ogni modifica e una
+  campagna lunga con un fuzzer guidato dalla copertura, con limiti di tempo e
+  memoria. Oracoli oltre il crash: nessuna eccezione non gestita, tempo e
+  memoria sotto il tetto. Ogni input che fa fallire si riduce e diventa un
+  test normale.
+- **T-SEC-02** FIT ostili: dimensioni dichiarate enormi, record senza fine,
+  file oltre 50 MB, estensione `.fit` con altro contenuto → rifiutati prima
+  di allocare.
+- **T-SEC-03** Risposte Garmin ostili: JSON enormi o annidati in profondità,
+  tipi sbagliati, id non numerici o con percorsi (`../`), nomi di attività
+  con HTML o script → rifiutati o trattati come testo.
+- **T-SEC-04** Percorsi: nessun dato esterno entra nei nomi dei file
+  dell'archivio (li genera il programma); nell'import da cartella symlink,
+  junction e reparse point verso l'esterno, nomi riservati di Windows e
+  percorsi lunghi → ignorati e segnalati.
+- **T-SEC-05** SQL: nomi e note con apici e frammenti SQL salvati e riletti
+  identici; controllo statico che vieta SQL composto con f-string o
+  concatenazione.
+- **T-SEC-06** Pagina dei grafici: una richiesta di rete e un'immagine remota
+  tentate dalla pagina vengono bloccate; un nome di attività con `<script>`
+  appare come testo; nessun `QWebChannel` esposto.
+- **T-SEC-07** Segreti: con un token segnaposto noto, dopo login,
+  sincronizzazione, crash e chiusura il token non compare nella cartella del
+  profilo, nella configurazione, nei log, nei temporanei né nei rapporti
+  d'errore; il logout lo cancella dal portachiavi.
+- **T-SEC-08** Log: nessun dato di salute (dolore, infortuni, FC), nessuna
+  password né input non controllato; caratteri di controllo neutralizzati.
+- **T-SEC-09** Cartella del profilo: file creati in modo esclusivo, permessi
+  solo per l'utente (descrittore esplicito su Windows, 0700/0600 su Ubuntu),
+  cartella di rete o sincronizzata segnalata.
+- **T-SEC-10** Calendario Garmin (fase 7): l'eliminazione tocca solo gli
+  allenamenti futuri scelti, dopo la conferma e dopo averne salvato una
+  copia locale.
+- **T-SEC-11** Analisi statica in CI: regole di sicurezza di ruff, `mypy
+  --strict`, ricerca di segreti nel repository, `pip-audit` bloccante per
+  vulnerabilità sfruttate o critiche, licenze ammesse.
+- **T-SEC-12** Pacchetto: nessun percorso locale né nome utente negli
+  eseguibili, nessun file di sviluppo, hash uguali a `SHA256SUMS`; su
+  Windows DLL caricate solo dalla cartella dell'app e di sistema.
+- **T-SEC-13** Revisione manuale finale: threat model riletto con un
+  giudizio scritto, percorso dei dati non fidati (FIT, JSON, cartelle)
+  seguito a mano nel codice, rischi accettati riconfermati.
+
+### 7.8 Prestazioni e durata (T-PERF)
+
+Budget iniziali, da confermare con le prime misure della fase 3; si
+riportano p50, p95 e massimo, mai la sola media, con l'ambiente di misura.
+
+- **T-PERF-01** Profilo sintetico di 10 anni (5.000 attività): finestra
+  usabile entro 2 s dall'avvio, ricalcolo completo del PMC < 1 s, ricalcolo
+  del piano < 0,5 s, grafico PMC interattivo < 0,4 s, import di 1.000 FIT
+  < 2 minuti.
+- **T-PERF-02** Memoria sotto un tetto dichiarato durante l'import al limite
+  dei 50.000 file.
+- **T-PERF-03** Durata: 100 sincronizzazioni di seguito con il fake, senza
+  crescita di memoria, file temporanei o handle aperti.
+- **T-PERF-04** Regressioni: la CI pianificata segnala un peggioramento oltre
+  il rumore misurato.
+
+### 7.9 Qualità dei test (T-QUAL)
+
+- **T-QUAL-01** Test di mutazione su `load`, `planning`, `injury` e sul
+  lettore FIT: almeno l'85% dei mutanti uccisi, ogni sopravvissuto
+  analizzato.
+- **T-QUAL-02** Passata sistematica su ogni tipo di dominio (FC, pesi, date,
+  durate, tetti): partizioni dalla specifica e confini con il valore al
+  limite e appena oltre.
+- **T-QUAL-03** Copertura dei rami usata come allarme: ogni ramo scoperto del
+  dominio analizzato uno per uno.
+
+### 7.10 Collaudo manuale prima del rilascio
+
+- **T-MAN-01** Su Windows e Ubuntu puliti, dall'eseguibile: primo avvio,
+  login reale con MFA (lo fa l'utente), prima sincronizzazione reale, import
+  da una cartella reale, piano verso un obiettivo reale, invio e
+  cancellazione di un allenamento sul calendario Garmin. Esiti con data in
+  `docs/collaudo.md`.
+- **T-MAN-02** Test d'usabilità leggero con 2–3 persone e compiti precisi
+  (creare un profilo, aggiungere una gara, leggere la forma di oggi,
+  descrivere un infortunio); problemi registrati e corretti prima del
+  rilascio.

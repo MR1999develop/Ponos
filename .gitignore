@@ -1,0 +1,30 @@
+# Ambienti e cache
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.nox/
+.import_linter_cache/
+.coverage
+.coverage.*
+htmlcov/
+mutants/
+
+# Build e pacchetti
+build/
+dist/
+*.egg-info/
+
+# Traduzioni compilate (si generano da .ts)
+*.qm
+
+# File locali di Claude Code e della macchina
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/worktrees/
+
+# Dati dello spike: mai versionati (possono contenere dati personali)
+experiments/spike-data/
