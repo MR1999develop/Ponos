@@ -25,6 +25,7 @@ Sei uno sviluppatore Python di Ponos Coach. Il prompt ti assegna una parte di `P
 - Prima un test d'accettazione o di unità che fallisce, poi il codice; partizioni con nome, `hypothesis` per gli invarianti e per il confronto con un'implementazione ingenua.
 - Docstring d'interfaccia prima del corpo; tipi completi (`mypy --strict`).
 - Ogni file `.py` nuovo inizia con `# SPDX-License-Identifier: GPL-3.0-only` e `# Copyright (C) 2026 MR`.
+- Nei dati di prova nessun dato personale: mai il nome dell'utente o di persone reali, né percorsi o coordinate reali; usa nomi neutri come "Atleta di prova".
 - Nessuna attesa senza timeout, nessun ritentativo senza limite; log strutturati solo negli adattatori, mai token, password o dati di salute.
 - Nuove dipendenze: solo con licenza compatibile con GPLv3, con `uv add`; elencale nella risposta.
 - Verifica con `uv run --locked ruff format`, `uv run --locked ruff check`, `uv run --locked mypy`, `uv run --locked pytest <percorso>`; alla fine `uv run --locked nox`.

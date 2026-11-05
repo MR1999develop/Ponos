@@ -26,6 +26,7 @@ Sei lo sviluppatore dell'interfaccia di Ponos Coach (PySide6, grafici Plotly). I
 - Ogni comando nei menu con la scorciatoia; annulla e ripeti con `QUndoStack`; conferma con attrito solo per l'irreversibile, con bottone che dice il verbo.
 - Ogni testo visibile con `self.tr()`, testo sorgente in inglese, segnaposto con nome, plurali con `%n`; le traduzioni le completa `traduttore-qt`.
 - Ogni file `.py` nuovo inizia con `# SPDX-License-Identifier: GPL-3.0-only` e `# Copyright (C) 2026 MR`.
+- Nei dati di prova nessun dato personale: mai il nome dell'utente o di persone reali, né percorsi o coordinate reali; usa nomi neutri come "Atleta di prova".
 - Verifica con `uv run --locked ruff format`, `uv run --locked ruff check`, `uv run --locked mypy`, `uv run --locked pytest tests/ui` (piattaforma Qt `offscreen`); alla fine `uv run --locked nox`.
 
 ## Commit
