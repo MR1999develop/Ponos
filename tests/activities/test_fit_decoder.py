@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import math
 import struct
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -14,7 +15,13 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from ponos_coach.activities.domain import Sport
+from ponos_coach.activities.domain import (
+    MAX_TRACK_POINTS,
+    FileFormat,
+    FitIdentity,
+    Sport,
+    decode_polyline,
+)
 from ponos_coach.activities.fit_decoder import (
     FitDecodeError,
     FitDecodeReason,
@@ -54,9 +61,11 @@ def test_valid_run_becomes_an_activity() -> None:
     assert activity.sport is Sport.RUNNING
     assert activity.start == RUN_START
     assert activity.elapsed_s == 3600.0
-    assert activity.file_id.serial_number == 5000001
-    assert activity.file_id.manufacturer == fw.MANUFACTURER_DEVELOPMENT
-    assert activity.file_id.time_created == RUN_START
+    assert activity.file_format is FileFormat.FIT
+    assert isinstance(activity.identity, FitIdentity)
+    assert activity.identity.file_id.serial_number == 5000001
+    assert activity.identity.file_id.manufacturer == fw.MANUFACTURER_DEVELOPMENT
+    assert activity.identity.file_id.time_created == RUN_START
     assert activity.heart_rate is not None
     assert len(activity.heart_rate) == 3600
     assert activity.heart_rate.seconds[-1] == 3599.0
@@ -65,8 +74,8 @@ def test_valid_run_becomes_an_activity() -> None:
 
 def test_copy_has_the_same_identity() -> None:
     assert (
-        decode_activity(valid_bytes()).file_id
-        == decode_activity(valid_bytes("copy_of_run_constant_160.fit")).file_id
+        decode_activity(valid_bytes()).identity
+        == decode_activity(valid_bytes("copy_of_run_constant_160.fit")).identity
     )
 
 
@@ -302,3 +311,145 @@ def test_header_with_correct_sizes_is_what_the_hostile_files_break() -> None:
     valid = fw.build_activity(small_activity())
     assert decode_activity(valid).elapsed_s == 5.0
     assert struct.unpack_from("<I", valid, 4)[0] == len(valid) - fw.HEADER_SIZE - 2
+
+
+# --- Riepilogo: distanza, dislivello, partenza e traccia ------------------------------------
+
+SEA = (-30.0, -20.0)  # coordinate inventate, in mare aperto
+
+
+def gps_activity(start_position: tuple[float, float] | None = None) -> fw.ActivitySpec:
+    """Attività di 5 campioni con posizioni lungo un parallelo, a 3 m/s."""
+    spec = small_activity()
+    samples = [
+        replace(s, lat_deg=SEA[0], lon_deg=SEA[1] + i * 3.0 / 96_300.0, distance_m=i * 3.0)
+        for i, s in enumerate(spec.samples)
+    ]
+    return replace(spec, samples=samples, start_position=start_position)
+
+
+def test_run_with_gps_has_distance_ascent_start_and_track() -> None:
+    activity = decode_activity(valid_bytes("run_gps_loop.fit"))
+    summary = activity.summary
+
+    assert summary.distance_m == pytest.approx(3597.0)
+    assert summary.ascent_m == 60.0
+    assert summary.start_point is not None
+    assert summary.start_point.lat_deg == pytest.approx(-30.0, abs=1e-6)
+    assert summary.start_point.lon_deg == pytest.approx(-19.9969, abs=1e-4)
+    assert summary.track_polyline is not None
+    track = decode_polyline(summary.track_polyline)
+    assert 10 < len(track) < 1200  # semplificata: molto meno dei 1200 record
+    assert track[0].lat_deg == pytest.approx(summary.start_point.lat_deg, abs=1e-5)
+
+
+def test_indoor_bike_has_a_distance_but_no_position() -> None:
+    activity = decode_activity(valid_bytes("bike_indoor_no_gps.fit"))
+
+    assert activity.sport is Sport.CYCLING
+    assert activity.summary.distance_m == pytest.approx(14_392.0)
+    assert activity.summary.ascent_m is None
+    assert activity.summary.start_point is None
+    assert activity.summary.track_polyline is None
+
+
+def test_files_without_summary_fields_have_an_empty_summary() -> None:
+    summary = decode_activity(valid_bytes()).summary
+
+    assert (summary.distance_m, summary.ascent_m) == (None, None)
+    assert (summary.start_point, summary.track_polyline) == (None, None)
+
+
+def test_start_point_is_the_first_valid_record_when_the_session_has_none() -> None:
+    activity = decode_activity(valid_bytes("run_gps_invalid_positions.fit"))
+
+    assert activity.summary.start_point is not None
+    # Le prime 30 posizioni sono non valide: la partenza è il record 30, a 75 m dall'origine.
+    assert activity.summary.start_point.lon_deg == pytest.approx(-20.0 + 75.0 / 96_300.0, abs=1e-5)
+    assert activity.summary.track_polyline is not None
+    assert len(decode_polyline(activity.summary.track_polyline)) == 2  # linea retta
+
+
+def test_session_start_position_wins_over_the_records() -> None:
+    spec = gps_activity(start_position=(10.5, 20.25))
+
+    start = decode_activity(fw.build_activity(spec)).summary.start_point
+
+    assert start is not None
+    assert (start.lat_deg, start.lon_deg) == pytest.approx((10.5, 20.25), abs=1e-6)
+
+
+def test_semicircles_convert_to_degrees_at_the_extremes() -> None:
+    spec = gps_activity(start_position=(-90.0, -180.0))
+
+    start = decode_activity(fw.build_activity(spec)).summary.start_point
+
+    assert start is not None
+    assert (start.lat_deg, start.lon_deg) == (-90.0, -180.0)
+
+
+def test_positions_outside_the_globe_are_ignored_not_repaired() -> None:
+    spec = small_activity()
+    samples = [replace(s, lat_deg=91.0, lon_deg=10.0) for s in spec.samples]  # 91° di latitudine
+
+    summary = decode_activity(fw.build_activity(replace(spec, samples=samples))).summary
+
+    assert summary.start_point is None
+    assert summary.track_polyline is None
+
+
+def test_a_record_with_only_one_valid_coordinate_is_ignored() -> None:
+    spec = small_activity()
+    samples = [replace(s, lat_deg=10.0, lon_deg=None) for s in spec.samples]
+
+    summary = decode_activity(fw.build_activity(replace(spec, samples=samples))).summary
+
+    assert summary.start_point is None
+
+
+def test_invalid_session_distance_and_ascent_are_ignored() -> None:
+    # 0xFFFFFFFF (distanza, scala 100) e 0xFFFF (dislivello) sono i valori "non validi" FIT.
+    spec = replace(small_activity(), total_distance_m=42_949_672.95, total_ascent_m=0xFFFF)
+
+    summary = decode_activity(fw.build_activity(spec)).summary
+
+    assert (summary.distance_m, summary.ascent_m) == (None, None)
+
+
+def test_a_long_track_is_capped_at_the_project_limit() -> None:
+    start = datetime(2026, 3, 2, 7, 0, tzinfo=UTC)
+    first = fw.datetime_to_fit(start)
+    n = 5000
+    samples = [
+        fw.Sample(first + i, 120, 45.0 + 0.0003 * math.sin(i * 0.7), 9.0 + i * 1e-5)
+        for i in range(n)
+    ]
+    spec = fw.ActivitySpec(start, fw.Sport.RUNNING, fw.SubSport.GENERIC, samples)
+
+    polyline = decode_activity(fw.build_activity(spec)).summary.track_polyline
+
+    assert polyline is not None
+    assert len(decode_polyline(polyline)) <= MAX_TRACK_POINTS
+
+
+# --- Regola del tempo in movimento ----------------------------------------------------------
+
+
+def test_timer_up_to_one_second_above_elapsed_is_brought_to_elapsed() -> None:
+    spec = replace(small_activity(), total_elapsed_ms=60_000, total_timer_ms=61_000)
+
+    activity = decode_activity(fw.build_activity(spec))
+
+    assert (activity.elapsed_s, activity.timer_s) == (60.0, 60.0)
+
+
+def test_timer_more_than_one_second_above_elapsed_is_a_corrupt_file() -> None:
+    spec = replace(small_activity(), total_elapsed_ms=60_000, total_timer_ms=61_001)
+
+    assert reason_of(fw.build_activity(spec)) is FitDecodeReason.CORRUPT
+
+
+def test_timer_below_elapsed_is_kept() -> None:
+    spec = replace(small_activity(), total_elapsed_ms=60_000, total_timer_ms=59_999)
+
+    assert decode_activity(fw.build_activity(spec)).timer_s == 59.999

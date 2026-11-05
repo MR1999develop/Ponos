@@ -15,7 +15,7 @@ from enum import Enum
 from types import MappingProxyType
 from zoneinfo import ZoneInfo
 
-from ponos_coach.activities.domain import Activity, FileId, Sport
+from ponos_coach.activities.domain import Activity, ActivityIdentity, Sport
 from ponos_coach.activities.fit_decoder import (
     FitDecodeError,
     FitDecodeReason,
@@ -49,7 +49,7 @@ class RejectionReason(Enum):
     TOO_MANY_RECORDS = "too_many_records"
     TOO_LONG = "too_long"
     UNREADABLE = "unreadable"
-    DUPLICATE = "duplicate"  # stesso file_id di un'attività già considerata
+    DUPLICATE = "duplicate"  # stessa identità di un'attività già considerata
 
 
 _DECODE_TO_REJECTION = {
@@ -94,7 +94,7 @@ class ActivityEntry:
     """
 
     file_name: str
-    file_id: FileId
+    identity: ActivityIdentity
     sport: Sport
     start: datetime
     local_day: date
@@ -131,7 +131,7 @@ def _load_entry(ref: FitFileRef, activity: Activity, params: FitnessParameters) 
     )
     local_day = activity.start.astimezone(params.timezone).date()
     return ActivityEntry(
-        ref.name, activity.file_id, activity.sport, activity.start, local_day,
+        ref.name, activity.identity, activity.sport, activity.start, local_day,
         activity.elapsed_s, activity.timer_s, load,
     )  # fmt: skip
 
@@ -148,13 +148,13 @@ def compute_fitness_overview(
 
     Ogni file è letto con il tetto di byte dei parametri, decodificato e calcolato; un file
     illeggibile o non valido finisce in `rejected` senza fermare gli altri, e un secondo file
-    con lo stesso `file_id` è `DUPLICATE`. Il PMC parte dal primo giorno locale con attività
+    con la stessa identità è `DUPLICATE`. Il PMC parte dal primo giorno locale con attività
     (le attività dopo `today` compaiono nell'elenco ma non nel PMC) e somma i carichi pesati
     del giorno. Deterministico: stessa sorgente e parametri, stesso risultato.
     """
     entries: list[ActivityEntry] = []
     rejected: list[RejectedFile] = []
-    seen: set[FileId] = set()
+    seen: set[ActivityIdentity] = set()
     for ref in source.list_files():
         try:
             activity = _read_activity(source, ref, params.fit_limits)
@@ -167,10 +167,10 @@ def compute_fitness_overview(
         except FitSourceError:
             rejected.append(RejectedFile(ref.name, RejectionReason.UNREADABLE))
             continue
-        if activity.file_id in seen:
+        if activity.identity in seen:
             rejected.append(RejectedFile(ref.name, RejectionReason.DUPLICATE))
             continue
-        seen.add(activity.file_id)
+        seen.add(activity.identity)
         entries.append(_load_entry(ref, activity, params))
     entries.sort(key=lambda entry: (entry.start, entry.file_name))
     return FitnessOverview(_pmc_of(entries, today), tuple(entries), tuple(rejected))

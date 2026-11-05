@@ -9,11 +9,21 @@ Con seme fisso e date fisse, ogni esecuzione produce gli stessi byte.
 from __future__ import annotations
 
 import random
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 from . import fit_writer as fw
-from .tracks import Track, add_noise, drift, hold, ramp, to_samples
+from .tracks import (
+    Track,
+    add_noise,
+    circle_positions,
+    drift,
+    hold,
+    ramp,
+    straight_positions,
+    to_samples,
+)
 
 SEED = 20260101
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -116,6 +126,64 @@ def build_valid(rng: random.Random) -> dict[str, bytes]:
     return out
 
 
+def build_gps(rng: random.Random) -> dict[str, bytes]:
+    """File con posizioni e distanza (coordinate inventate in mare aperto).
+
+    Si generano con un proprio generatore casuale: i byte dei file di `build_valid` non
+    dipendono da questi.
+    """
+    out: dict[str, bytes] = {}
+
+    # Corsa su un cerchio di 300 m di raggio, 3 m/s, con quota e dislivello dichiarato.
+    loop = circle_positions(1200, 300.0, 3.0)
+    base = _spec(9, fw.Sport.RUNNING, fw.SubSport.ROAD, add_noise(hold(150, 1200), rng), 5000010)
+    samples = [
+        replace(
+            s,
+            lat_deg=lat,
+            lon_deg=lon,
+            distance_m=dist,
+            altitude_m=100.0 + 10.0 * ((i // 100) % 2),
+        )
+        for i, (s, (lat, lon, dist)) in enumerate(zip(base.samples, loop, strict=True))
+    ]
+    out["run_gps_loop.fit"] = fw.build_activity(
+        replace(
+            base,
+            samples=samples,
+            total_distance_m=loop[-1][2],
+            total_ascent_m=60,
+            start_position=(loop[0][0], loop[0][1]),
+        )
+    )
+
+    # Bici indoor: nessuna posizione, distanza dal sensore, nessun dislivello.
+    trainer = _spec(
+        10, fw.Sport.CYCLING, fw.SubSport.INDOOR_CYCLING,
+        add_noise(hold(130, 1800), rng), 5000011,
+    )  # fmt: skip
+    trainer_samples = [replace(s, distance_m=i * 8.0) for i, s in enumerate(trainer.samples)]
+    out["bike_indoor_no_gps.fit"] = fw.build_activity(
+        replace(trainer, samples=trainer_samples, total_distance_m=1799 * 8.0)
+    )
+
+    # Linea retta con posizioni non valide all'inizio e in mezzo; la sessione non dichiara la
+    # partenza: vale il primo record valido.
+    line = straight_positions(600, 2.5)
+    gaps = [*range(30), *range(300, 310)]
+    straight = _spec(
+        11, fw.Sport.RUNNING, fw.SubSport.GENERIC, add_noise(hold(140, 600), rng), 5000012
+    )
+    straight_samples = [
+        s if i in gaps else replace(s, lat_deg=lat, lon_deg=lon)
+        for i, (s, (lat, lon, _)) in enumerate(zip(straight.samples, line, strict=True))
+    ]
+    out["run_gps_invalid_positions.fit"] = fw.build_activity(
+        replace(straight, samples=straight_samples)
+    )
+    return out
+
+
 def build_hostile(valid: bytes) -> dict[str, bytes]:
     """File ostili derivati da un file valido piccolo."""
     return {
@@ -147,6 +215,7 @@ def main() -> None:
     valid = build_valid(rng)
     # Stesso file_id e stessi byte, nome diverso: duplicato per T-IMP.
     valid["copy_of_run_constant_160.fit"] = valid["run_constant_160.fit"]
+    valid.update(build_gps(random.Random(SEED + 1)))
     _write(DATA_DIR / "fit", valid)
     small = fw.build_activity(
         _spec(0, fw.Sport.RUNNING, fw.SubSport.GENERIC, hold(120, 5), 5000100)

@@ -20,12 +20,16 @@ PROFILE_VERSION = 2100
 HEADER_SIZE = 14
 INVALID_UINT8 = 0xFF
 INVALID_UINT32 = 0xFFFFFFFF
+INVALID_SINT32 = 0x7FFFFFFF
+INVALID_UINT16 = 0xFFFF
+SEMICIRCLES_PER_DEGREE = 2**31 / 180.0
 MANUFACTURER_DEVELOPMENT = 255
 
 # Tipi base FIT (numero del tipo, formato struct, dimensione).
 _ENUM = 0x00
 _UINT8 = 0x02
 _UINT16 = 0x84
+_SINT32 = 0x85
 _UINT32 = 0x86
 _UINT32Z = 0x8C
 
@@ -57,6 +61,7 @@ class SubSport(IntEnum):
 
     GENERIC = 0
     TREADMILL = 1
+    INDOOR_CYCLING = 6
     TRAIL = 3
     ROAD = 7
     STRENGTH_TRAINING = 20
@@ -64,10 +69,19 @@ class SubSport(IntEnum):
 
 @dataclass(frozen=True)
 class Sample:
-    """Un messaggio `record`: secondi FIT e FC (None = valore non valido 0xFF)."""
+    """Un messaggio `record`: secondi FIT, FC (None = non valida 0xFF) e, se presenti,
+    posizione in gradi, quota in metri e distanza cumulata in metri.
+
+    I campi di posizione, quota e distanza entrano nella definizione del record solo se
+    almeno un campione del file li ha; un campione senza valore scrive il valore non valido.
+    """
 
     timestamp: int
     heart_rate: int | None = None
+    lat_deg: float | None = None
+    lon_deg: float | None = None
+    altitude_m: float | None = None
+    distance_m: float | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +97,9 @@ class ActivitySpec:
     time_created: datetime | None = None  # default: l'inizio dell'attività
     total_elapsed_ms: int | None = None  # default: dal primo all'ultimo campione + 1 s
     total_timer_ms: int | None = None  # default: uguale al tempo trascorso
+    total_distance_m: float | None = None  # campo della sessione, se presente
+    total_ascent_m: int | None = None  # campo della sessione, se presente
+    start_position: tuple[float, float] | None = None  # (lat, lon) in gradi, nella sessione
 
 
 def datetime_to_fit(moment: datetime) -> int:
@@ -140,6 +157,48 @@ def _data(local: int, fmt: str, *values: int) -> bytes:
     return struct.pack("<B" + fmt, local, *values)
 
 
+def degrees_to_semicircles(degrees: float) -> int:
+    """Gradi → semicerchi FIT (interi con segno a 32 bit)."""
+    return round(degrees * SEMICIRCLES_PER_DEGREE)
+
+
+def _opt(value: float | None, scale: float, invalid: int, offset: float = 0.0) -> int:
+    return invalid if value is None else round((value + offset) * scale)
+
+
+def _record_messages(samples: list[Sample]) -> bytes:
+    """Definizione e dati dei `record`. Senza posizione, quota né distanza il formato è quello
+    originale (stessi byte delle fixture già versionate)."""
+    has_position = any(s.lat_deg is not None or s.lon_deg is not None for s in samples)
+    has_altitude = any(s.altitude_m is not None for s in samples)
+    has_distance = any(s.distance_m is not None for s in samples)
+    fields = [(253, 4, _UINT32), (3, 1, _UINT8)]
+    fmt = "IB"
+    if has_position:
+        fields += [(0, 4, _SINT32), (1, 4, _SINT32)]
+        fmt += "ii"
+    if has_distance:
+        fields.append((5, 4, _UINT32))  # scala 100: centimetri
+        fmt += "I"
+    if has_altitude:
+        fields.append((2, 2, _UINT16))  # scala 5, offset 500
+        fmt += "H"
+    out = bytearray(_definition(1, _MSG_RECORD, fields))
+    for s in samples:
+        values = [s.timestamp, INVALID_UINT8 if s.heart_rate is None else s.heart_rate]
+        if has_position:
+            values += [
+                INVALID_SINT32 if degrees is None else degrees_to_semicircles(degrees)
+                for degrees in (s.lat_deg, s.lon_deg)
+            ]
+        if has_distance:
+            values.append(_opt(s.distance_m, 100, INVALID_UINT32))
+        if has_altitude:
+            values.append(_opt(s.altitude_m, 5, INVALID_UINT16, 500.0))
+        out += _data(1, fmt, *values)
+    return bytes(out)
+
+
 def build_body(spec: ActivitySpec) -> bytes:
     """Corpo (messaggi) di un'attività: file_id, record, lap, session, activity."""
     start = datetime_to_fit(spec.start)
@@ -163,17 +222,29 @@ def build_body(spec: ActivitySpec) -> bytes:
         0, "BHHII", 4, MANUFACTURER_DEVELOPMENT, spec.product, spec.serial_number, created
     )
 
-    body += _definition(1, _MSG_RECORD, [(253, 4, _UINT32), (3, 1, _UINT8)])
-    for sample in spec.samples:
-        hr = INVALID_UINT8 if sample.heart_rate is None else sample.heart_rate
-        body += _data(1, "IB", sample.timestamp, hr)
+    body += _record_messages(spec.samples)
 
     timing = [(253, 4, _UINT32), (2, 4, _UINT32), (7, 4, _UINT32), (8, 4, _UINT32)]
     body += _definition(2, _MSG_LAP, timing)
     body += _data(2, "IIII", end, start, elapsed, timer)
 
-    body += _definition(3, _MSG_SESSION, [*timing, (5, 1, _ENUM), (6, 1, _ENUM)])
-    body += _data(3, "IIIIBB", end, start, elapsed, timer, int(spec.sport), int(spec.sub_sport))
+    session_fields = [*timing, (5, 1, _ENUM), (6, 1, _ENUM)]
+    session_fmt = "IIIIBB"
+    session_values = [end, start, elapsed, timer, int(spec.sport), int(spec.sub_sport)]
+    if spec.start_position is not None:
+        session_fields += [(3, 4, _SINT32), (4, 4, _SINT32)]
+        session_fmt += "ii"
+        session_values += [degrees_to_semicircles(d) for d in spec.start_position]
+    if spec.total_distance_m is not None:
+        session_fields.append((9, 4, _UINT32))  # scala 100
+        session_fmt += "I"
+        session_values.append(round(spec.total_distance_m * 100))
+    if spec.total_ascent_m is not None:
+        session_fields.append((22, 2, _UINT16))
+        session_fmt += "H"
+        session_values.append(spec.total_ascent_m)
+    body += _definition(3, _MSG_SESSION, session_fields)
+    body += _data(3, session_fmt, *session_values)
 
     body += _definition(4, _MSG_ACTIVITY, [(253, 4, _UINT32), (0, 4, _UINT32), (1, 2, _UINT16)])
     body += _data(4, "IIH", end, timer, 1)

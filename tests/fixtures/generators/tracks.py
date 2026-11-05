@@ -8,6 +8,7 @@ solo un generatore con seme esplicito, così i byte sono ripetibili.
 
 from __future__ import annotations
 
+import math
 import random
 
 from .fit_writer import Sample
@@ -40,3 +41,40 @@ def add_noise(track: Track, rng: random.Random, amplitude: int = 1) -> Track:
 def to_samples(first_timestamp: int, track: Track, step_s: int = 1) -> list[Sample]:
     """Trasforma il tracciato in campioni a passo costante."""
     return [Sample(first_timestamp + i * step_s, v) for i, v in enumerate(track)]
+
+
+# Coordinate inventate, in mare aperto (Atlantico meridionale): nessun luogo abitato.
+SEA_LAT_DEG = -30.0
+SEA_LON_DEG = -20.0
+_METERS_PER_DEGREE_LAT = 111_195.0
+
+
+def circle_positions(
+    count: int, radius_m: float, speed_ms: float
+) -> list[tuple[float, float, float]]:
+    """Giro su un cerchio attorno al punto in mare: (lat, lon, distanza cumulata in m).
+
+    Un campione al secondo a velocità costante; il primo punto è a est del centro.
+    """
+    out: list[tuple[float, float, float]] = []
+    meters_per_degree_lon = _METERS_PER_DEGREE_LAT * math.cos(math.radians(SEA_LAT_DEG))
+    for i in range(count):
+        distance = i * speed_ms
+        angle = distance / radius_m
+        out.append(
+            (
+                SEA_LAT_DEG + radius_m * math.sin(angle) / _METERS_PER_DEGREE_LAT,
+                SEA_LON_DEG + radius_m * math.cos(angle) / meters_per_degree_lon,
+                distance,
+            )
+        )
+    return out
+
+
+def straight_positions(count: int, speed_ms: float) -> list[tuple[float, float, float]]:
+    """Linea verso est dal punto in mare: (lat, lon, distanza cumulata in m), 1 campione/s."""
+    meters_per_degree_lon = _METERS_PER_DEGREE_LAT * math.cos(math.radians(SEA_LAT_DEG))
+    return [
+        (SEA_LAT_DEG, SEA_LON_DEG + i * speed_ms / meters_per_degree_lon, i * speed_ms)
+        for i in range(count)
+    ]

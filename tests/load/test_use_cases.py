@@ -277,4 +277,5 @@ def test_folder_import_of_the_fixture_folder_end_to_end(tmp_path: Path) -> None:
     rejected = {r.file_name: r.reason for r in overview.rejected}
     # L'elenco è per nome: la copia viene prima e vince; l'originale è il duplicato.
     assert rejected == {"run_constant_160.fit": RejectionReason.DUPLICATE}
-    assert len(overview.activities) == 9
+    # 9 della fase 0 (senza la copia) più le 3 fixture con posizioni e distanza.
+    assert len(overview.activities) == 12

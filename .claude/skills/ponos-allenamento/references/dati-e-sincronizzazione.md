@@ -11,7 +11,7 @@ Scelta dall'utente alla creazione; autosufficiente.
 ```
 <cartella del profilo>/
   ponos.sqlite3     database (WAL, foreign_keys = ON)
-  fit/<anno>/<id_attività>.fit
+  archivio/<anno>/<nome generato>.fit|.gpx
   backup/
   ponos.lock        creato in modo esclusivo
 ```
@@ -37,10 +37,19 @@ Scelta dall'utente alla creazione; autosufficiente.
 - Campi sconosciuti conservati al risalvataggio.
 - Elenco preciso di tabelle e colonne: **punto aperto**, lo fissa la fase 1.
 
-## 3. Archivio FIT
+## 3. Archivio dei file originali
 
-- I FIT originali sono la fonte di verità delle attività.
-- Ogni FIT ha il suo SHA-256 registrato.
+- I file originali (FIT, GPX) sono la fonte di verità delle attività; la porta
+  è `ActivityArchive` (`activities/ports.py`).
+- Ogni file ha il suo SHA-256 e la sua dimensione registrati
+  (`ArchivedFile`: percorso relativo, SHA-256, byte). Il percorso relativo è
+  generato dal programma, fatto solo di caratteri `A-Za-z0-9._-` (nessun dato
+  esterno entra in un nome) e relativo alla cartella dell'archivio; l'anno è
+  quello dell'inizio. Salvare gli stessi byte due volte dà lo stesso
+  riferimento (idempotente).
+- Leggere dall'archivio verifica sempre dimensione e SHA-256 (nessuna lettura
+  non verificata) e rispetta un massimo di byte; `verify` controlla senza
+  tenere il file in memoria.
 - Scrittura: file temporaneo, flush, rinomina; il record in SQLite si scrive
   dopo il file. Il nome lo genera il programma, mai un dato esterno.
 - All'avvio: nessun record senza file, nessun temporaneo orfano.
@@ -58,13 +67,51 @@ Scelta dall'utente alla creazione; autosufficiente.
 - L'attività porta il tempo trascorso (`total_elapsed_time`) e il tempo in
   movimento (`total_timer_time`, ripiego sul trascorso se manca); i limiti di
   durata si applicano al trascorso.
+- Regola timer/trascorso (default del progetto): tempo in movimento maggiore
+  del trascorso di oltre 1 s (confronto in millisecondi) → file corrotto;
+  entro 1 s → portato al trascorso. Invariante di `Activity` e
+  `ActivityRecord`: `timer_s <= elapsed_s`.
+
+### Riepilogo ricavato dal file (`ActivitySummary`)
+
+- Distanza (`total_distance` della sessione, m), dislivello positivo
+  (`total_ascent`, m; per un GPX la soglia di 3 m), punto di partenza e
+  traccia semplificata; ogni voce può mancare (bici indoor: solo distanza).
+  Somma sulle sessioni che le dichiarano; valori non validi (0xFFFFFFFF,
+  0xFFFF) ignorati, mai riparati.
+- Partenza: `start_position_*` della prima sessione, altrimenti il primo
+  record con posizione valida. Semicerchi → gradi (`s * 180 / 2^31`);
+  il valore non valido 0x7FFFFFFF e le coordinate fuori da ±90°/±180° si
+  ignorano; un record con una sola coordinata valida non conta.
+- Traccia: i record con posizione valida, semplificati con
+  Ramer-Douglas-Peucker iterativo (`simplify_indices`, tolleranza 10 m,
+  tetto 2000 punti: si divide sempre il tratto con lo scostamento maggiore e
+  ci si ferma sotto la tolleranza o al tetto) e salvati come polyline.
+- Polyline: algoritmo standard dei polyline codificati, precisione 1e-5
+  gradi (circa 1 m), latitudine e longitudine alternate, differenze dal punto
+  precedente; solo caratteri ASCII 63-126, al massimo 24.000 caratteri
+  (2000 punti). Decodificare rifiuta caratteri fuori intervallo, valori o
+  coppie incomplete e coordinate fuori dal globo.
+- Le posizioni sono dati personali sensibili: solo nell'indice locale, mai nei
+  log. Costanti in `activities/domain/limits.py`.
 
 ## 4. Identità dell'attività
 
-- `file_id` del FIT: produttore, numero di serie, ora di creazione. È uguale
-  per lo stesso file scaricato da Garmin o copiato dall'orologio.
-- L'id Garmin si aggiunge quando è noto.
-- Così la stessa attività non entra due volte, qualunque sia l'origine.
+- Unione di due casi (`ActivityIdentity`): `FitIdentity(FileId)` con il
+  `file_id` del FIT (produttore, prodotto, numero di serie, ora di creazione
+  UTC), uguale per lo stesso file scaricato da Garmin o copiato
+  dall'orologio; `GpxIdentity(sha256_hex)` con lo SHA-256 dei byte del GPX,
+  che non ha un `file_id`.
+- Chiave testuale stabile per i dati salvati (`identity_key` /
+  `identity_from_key`): `fit:<produttore>:<prodotto>:<serie>:<ora ISO UTC>`
+  oppure `gpx:<sha256>`.
+- L'id Garmin (facoltativo) si aggiunge quando è noto; con origine `GARMIN`
+  c'è sempre. Un'identità e un id Garmin sono unici nell'indice.
+- La stessa attività arrivata come FIT e come GPX non ha la stessa identità:
+  si riconosce come possibile duplicato con `is_possible_duplicate` (inizi a
+  non più di 60 s, tempi trascorsi che differiscono al più del 5% del
+  maggiore, confronto in millisecondi interi, simmetrico); si tiene la prima
+  arrivata. `ActivityIndex.find_possible_duplicates` applica quella funzione.
 
 ## 5. Sincronizzazione riprendibile
 
@@ -129,3 +176,18 @@ Scelta dall'utente alla creazione; autosufficiente.
 
 `T-DATI-01…05`, `T-SYNC-01…06`, `T-IMP-01…03`, `T-SEC-02`, `T-SEC-04` in
 `PLAN.md` sezione 7.
+
+## 9. Porte della fase 1 e test di contratto
+
+- Porte: `ActivityArchive` e `ActivityIndex` (`activities/ports.py`),
+  `PhysiologyStore` e `LoadCache` (`load/ports.py`), `ProfileRegistry`,
+  `ProfileFolders` e `ProfileStorage` (`profiles/ports.py`). `ProfileStorage`
+  apre un `OpenProfile` i cui tre store condividono una connessione:
+  `activities.transaction()` copre anche parametri e cache.
+- Una transazione per volta (annidare è `TransactionStateError`); fuori da
+  una transazione ogni operazione è atomica da sola.
+- Il lock del profilo (`ProfileFolders.acquire_lock`) è separato dal database:
+  prima si prende il lock, poi si apre il database.
+- I fake in memoria stanno in `tests/fakes/`; i contratti in
+  `tests/contracts/` (classi `*Contract` con la fixture `harness`): ogni
+  adattatore reale li eredita con la propria impalcatura.

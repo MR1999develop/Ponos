@@ -25,6 +25,14 @@ scrivono i test in una cartella temporanea.
 | `run_hr_out_of_range.fit` | Corsa con campioni a 0 e 250 bpm: campioni scartati e contati, T-CALC-03 |
 | `run_one_second.fit` | Attività di 1 s (un solo record): T-CALC-07 |
 | `hike_24h.fit` | Escursione di 24 h, un campione ogni 5 s: durata massima, T-CALC-07 |
+| `run_gps_loop.fit` | Corsa di 20' su un cerchio di 300 m di raggio a 3 m/s, con posizioni, quota, distanza (3597 m) e dislivello (60 m) di sessione, partenza dichiarata: riepilogo, traccia semplificata e polyline |
+| `bike_indoor_no_gps.fit` | Bici indoor (`sub_sport` indoor_cycling) di 30' senza posizioni: distanza dal sensore (14392 m), nessun dislivello né traccia |
+| `run_gps_invalid_positions.fit` | Corsa su linea retta verso est con posizioni non valide (0x7FFFFFFF) nei primi 30 record e in 10 a metà; la sessione non dichiara la partenza: vale il primo record valido |
+
+Le tre fixture con posizioni (generate da `build_gps`, con un proprio seme) usano
+coordinate inventate in mare aperto, attorno a 30° S 20° O, lontane da ogni
+luogo abitato. Quelle sopra non hanno posizioni né distanza e i loro byte non
+cambiano mai: `tests/fixtures/test_fixture_hashes.py` ne verifica gli SHA-256.
 
 ## `fit-ostili/` (script: `generators/make_fixtures.py`, derivati da un FIT valido di 5 campioni)
 
