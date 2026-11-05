@@ -49,8 +49,12 @@ Il comportamento previsto è descritto in `docs/specifica.md`, le decisioni in
 
 ```
 uv sync
+uv run --locked nox -s i18n
 uv run ponos-coach
 ```
+
+Il comando `nox -s i18n` genera le traduzioni italiane (`.qm`); senza, l'app
+parte in inglese. `uv run ponos-coach --lang en` o `--lang it` forza la lingua.
 
 ## Controlli
 

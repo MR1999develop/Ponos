@@ -198,11 +198,11 @@ class MainWindow(QMainWindow):
             self._settings.setValue(_KEY_LAST_FOLDER, str(folder))
 
     def show_about(self) -> None:
-        """Informazioni: versione, licenza e avviso che non e un dispositivo medico."""
+        """Informazioni: versione, licenza e avviso che non è un dispositivo medico."""
         text = "\n\n".join(
             (
                 self.tr("Version {version}").format(version=ponos_coach.__version__),
-                self.tr("Running training with Garmin and heart-rate data."),
+                self.tr("Adaptive training coach with Garmin and heart-rate data."),
                 self.tr("License: GPL-3.0-only."),
                 self.tr(
                     "Ponos Coach is not a medical device and gives no diagnosis. "

@@ -338,21 +338,26 @@ src/ponos_coach/
       del tracciato FC, elenco (solo lettura) degli allenamenti programmati e
       verifica delle funzioni per crearli ed eliminarli. Risultato in
       `experiments/garmin_spike.md`, senza dati personali.
-- [ ] `git init`, autore e committer MR nella configurazione del repository,
+      *Stato 2026-11-05: script pronto e rivisto, da lanciare
+      (`uv run --locked python experiments/garmin_spike.py`).*
+- [x] `git init`, autore e committer MR nella configurazione del repository,
       `LICENSE` (GPLv3), `README.md`, `SECURITY.md`, `TIDY.md`, `.gitignore`,
       `.gitattributes`.
-- [ ] `pyproject.toml` (`src/`, `authors = ["MR"]`), `uv.lock`, `noxfile.py`
+- [x] `pyproject.toml` (`src/`, `authors = ["MR"]`), `uv.lock`, `noxfile.py`
       con tutti i controlli, regole di `import-linter`.
 - [ ] CI su Windows e Ubuntu (permessi minimi, action fissate a SHA), che
       esegue esattamente `uv run --locked nox`.
-- [ ] ADR: 001 stack, 002 accesso a Garmin, 003 formato dei dati, 004 modello
+      *Stato 2026-11-05: `ci.yml` scritto e rivisto; da verificare al primo
+      push (pacchetti di sistema di Ubuntu per QtWebEngine non provati).*
+- [x] ADR: 001 stack, 002 accesso a Garmin, 003 formato dei dati, 004 modello
       di carico. `docs/specifica.md`, `docs/threat-model.md`,
       `docs/dipendenze.md`.
-- [ ] Skill del progetto `.claude/skills/ponos-allenamento/` (modello di
+- [x] Skill del progetto `.claude/skills/ponos-allenamento/` (modello di
       carico, PMC, periodizzazione, test, infortuni, sincronizzazione,
       formato dei dati).
-- [ ] Scheletro che gira end-to-end: la finestra si apre e mostra il PMC
-      calcolato da un FIT di prova sintetico.
+- [x] Scheletro che gira end-to-end: la finestra si apre e mostra il PMC
+      calcolato da un FIT di prova sintetico (test end-to-end con il motore
+      web reale; interfaccia in italiano e inglese).
 
 Agenti: `generatore-fixture`, `sviluppatore-nucleo`, `sviluppatore-interfaccia`,
 `redattore-documenti`, `registro-dipendenze`, `verificatore`.

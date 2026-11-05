@@ -9,7 +9,7 @@ from datetime import UTC, date, datetime, timedelta
 from ponos_coach.activities.domain import FileId, Sport
 from ponos_coach.load.domain import ActivityLoad, LoadSource, PmcSeries, compute_pmc
 from ponos_coach.load.use_cases import ActivityEntry
-from ponos_coach.ui.pmc_figure import PmcChartLabels
+from ponos_coach.ui.pmc_figure import PLOTLY_MODEBAR_KEYS, PmcChartLabels
 
 LABELS = PmcChartLabels(
     x_axis="Date",
@@ -21,6 +21,7 @@ LABELS = PmcChartLabels(
     daily_load="Daily load",
     export_png="Save as PNG",
     export_svg="Save as SVG",
+    modebar={key: f"{key} (test)" for key in PLOTLY_MODEBAR_KEYS},
 )
 
 FIRST_DAY = date(2026, 3, 2)

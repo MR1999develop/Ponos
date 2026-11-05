@@ -5,11 +5,19 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
+from typing import Any
 
 import numpy as np
 import pytest
 
-from ponos_coach.ui.pmc_figure import build_pmc_figure, daily_load_of, render_script
+from ponos_coach.ui.pmc_figure import (
+    PLOTLY_LOCALE_NAME,
+    PLOTLY_MODEBAR_KEYS,
+    build_pmc_figure,
+    daily_load_of,
+    render_script,
+)
 from ponos_coach.ui.tokens import Theme, tokens_for
 from tests.ui.helpers import FIRST_DAY, LABELS, entry, small_history
 
@@ -97,10 +105,36 @@ def test_render_script_passes_data_as_a_single_json_argument() -> None:
     assert script.startswith(prefix)
     assert script.endswith(suffix)
     payload = json.loads(script[len(prefix) : -len(suffix)])
-    assert set(payload) == {"figure", "labels", "filename"}
+    assert set(payload) == {"figure", "labels", "locale", "filename"}
     assert payload["figure"]["data"][0]["name"] == "Fitness (CTL)"
     assert payload["labels"] == {"png": "Save as PNG", "svg": "Save as SVG"}
+    assert payload["locale"]["name"] == PLOTLY_LOCALE_NAME
     assert script.isascii()
+
+
+def test_modebar_titles_travel_as_the_plotly_language_dictionary() -> None:
+    pmc, entries = small_history()
+    figure = build_pmc_figure(pmc, entries, LABELS, tokens_for(Theme.LIGHT))
+
+    payload = _payload(render_script(figure, LABELS))
+
+    assert payload["locale"]["dictionary"] == {key: f"{key} (test)" for key in PLOTLY_MODEBAR_KEYS}
+    assert "Zoom in" in payload["locale"]["dictionary"]
+
+
+def test_modebar_labels_must_cover_exactly_the_plotly_titles() -> None:
+    incomplete = {key: key for key in PLOTLY_MODEBAR_KEYS[1:]}
+
+    with pytest.raises(ValueError, match="modebar"):
+        replace(LABELS, modebar=incomplete)
+    with pytest.raises(ValueError, match="modebar"):
+        replace(LABELS, modebar={**LABELS.modebar, "Unknown": "x"})
+
+
+def _payload(script: str) -> dict[str, Any]:
+    prefix, suffix = "ponosRender(", ");"
+    loaded: dict[str, Any] = json.loads(script[len(prefix) : -len(suffix)])
+    return loaded
 
 
 @pytest.mark.parametrize("theme", list(Theme))

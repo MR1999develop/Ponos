@@ -3,7 +3,7 @@
 "use strict";
 
 // Disegna una figura Plotly. L'unico ingresso e `ponosRender(payload)`, dove `payload` e
-// un oggetto JSON prodotto da Python con json.dumps: { figure, labels, filename }.
+// un oggetto JSON prodotto da Python con json.dumps: { figure, labels, locale, filename }.
 // Nessun dato entra come HTML: Plotly riceve solo oggetti.
 (function () {
   var host = document.getElementById("chart");
@@ -22,7 +22,14 @@
 
   window.ponosRender = function (payload) {
     var labels = payload.labels;
+    // Titoli della barra tradotti da Python: dizionario di lingua di Plotly, senza testi in JS.
+    Plotly.register({
+      moduleType: "locale",
+      name: payload.locale.name,
+      dictionary: payload.locale.dictionary,
+    });
     var config = {
+      locale: payload.locale.name,
       displaylogo: false,
       responsive: true,
       scrollZoom: false,

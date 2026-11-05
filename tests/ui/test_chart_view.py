@@ -81,6 +81,28 @@ def test_page_cannot_reach_the_network_and_has_no_channel(qtbot: QtBot) -> None:
     assert evaluate(qtbot, view, "typeof QWebChannel") == "undefined"
 
 
+def test_modebar_buttons_carry_the_titles_from_the_configuration(qtbot: QtBot) -> None:
+    view = drawn_view(qtbot)
+
+    titles = evaluate(
+        qtbot,
+        view,
+        "Array.from(document.querySelectorAll('.modebar-btn')).map(e => e.dataset.title)",
+    )
+    ticks = evaluate(
+        qtbot,
+        view,
+        "Array.from(document.querySelectorAll('.x2tick text')).map(e => e.textContent)",
+    )
+
+    assert isinstance(titles, list)
+    assert {"Zoom (test)", "Pan (test)", "Autoscale (test)", "Reset axes (test)"} <= set(titles)
+    assert not {"Zoom", "Pan", "Autoscale", "Reset axes"} & set(titles)  # niente inglese di Plotly
+    assert isinstance(ticks, list)
+    assert ticks
+    assert all(isinstance(tick, str) and tick for tick in ticks)  # le date si formattano ancora
+
+
 @pytest.mark.parametrize(("title", "suffix"), [("Save as SVG", ".svg"), ("Save as PNG", ".png")])
 def test_modebar_exports_svg_and_png_through_the_download_handler(
     qtbot: QtBot, tmp_path: Path, title: str, suffix: str

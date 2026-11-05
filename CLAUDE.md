@@ -16,6 +16,10 @@ Solo ciò che è specifico di questo progetto. Le decisioni e le fasi stanno in
 - `uv run --locked nox`: tutti i controlli obbligatori (ruff format e lint,
   `mypy --strict`, `lint-imports`, pytest con pytest-qt, test delle
   traduzioni, `pip-audit`). La CI esegue esattamente questo.
+- `uv run --locked nox -s i18n`: controlla che `ponos_it.ts` sia completo e
+  coerente con i sorgenti e genera i `.qm` (già nei controlli di default).
+- `uv run --locked nox -s i18n_update`: aggiorna `ponos_it.ts` dai sorgenti
+  (lo usa il traduttore).
 - `uv run --locked nox -s collaudo`: campagna lunga della sezione 7 di `PLAN.md`
   (fuzzing esteso, mutazione, prestazioni, test di durata).
 - `uv run --locked nox -s dist`: eseguibile PyInstaller, smoke test, `SHA256SUMS`.

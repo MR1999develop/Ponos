@@ -214,4 +214,15 @@ class OverviewPage(QWidget):
             daily_load=self.tr("Daily load"),
             export_png=self.tr("Save chart as PNG"),
             export_svg=self.tr("Save chart as SVG"),
+            modebar={
+                "Zoom": self.tr("Zoom"),
+                "Pan": self.tr("Pan"),
+                "Zoom in": self.tr("Zoom in"),
+                "Zoom out": self.tr("Zoom out"),
+                "Autoscale": self.tr("Autoscale"),
+                "Reset axes": self.tr("Reset axes"),
+                "Toggle Spike Lines": self.tr("Toggle spike lines"),
+                "Show closest data on hover": self.tr("Show closest data on hover"),
+                "Compare data on hover": self.tr("Compare data on hover"),
+            },
         )

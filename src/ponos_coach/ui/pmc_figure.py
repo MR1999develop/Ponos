@@ -12,7 +12,7 @@ from __future__ import annotations
 import html
 import json
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 
@@ -30,12 +30,30 @@ _LINE_WIDTH = 2
 _TOP_ROW_SHARE = 0.68
 _EXPORT_FILE_STEM = "ponos-coach-pmc"
 
+# Titoli dei bottoni della barra di Plotly: sono le chiavi del suo dizionario di lingua (il
+# testo inglese che Plotly cerca), non testi mostrati. La vista le traduce con `tr()`.
+PLOTLY_MODEBAR_KEYS: tuple[str, ...] = (
+    "Zoom",
+    "Pan",
+    "Zoom in",
+    "Zoom out",
+    "Autoscale",
+    "Reset axes",
+    "Toggle Spike Lines",
+    "Show closest data on hover",
+    "Compare data on hover",
+)
+PLOTLY_LOCALE_NAME = "ponos"
+
 type PmcFigure = go.Figure
 
 
 @dataclass(frozen=True, slots=True)
 class PmcChartLabels:
-    """Testi del grafico, gia tradotti dalla vista."""
+    """Testi del grafico, gia tradotti dalla vista.
+
+    `modebar` traduce i bottoni della barra di Plotly: una voce per ogni `PLOTLY_MODEBAR_KEYS`.
+    """
 
     x_axis: str
     load_axis: str
@@ -46,6 +64,11 @@ class PmcChartLabels:
     daily_load: str
     export_png: str
     export_svg: str
+    modebar: Mapping[str, str]
+
+    def __post_init__(self) -> None:
+        if set(self.modebar) != set(PLOTLY_MODEBAR_KEYS):
+            raise ValueError("modebar must translate exactly the Plotly modebar titles")
 
 
 def daily_load_of(activities: Sequence[ActivityEntry], days: Sequence[date]) -> list[float]:
@@ -151,6 +174,8 @@ def render_script(figure: go.Figure, labels: PmcChartLabels) -> str:
     payload = {
         "figure": json.loads(pio.to_json(figure)),
         "labels": {"png": labels.export_png, "svg": labels.export_svg},
+        # Dizionario di lingua di Plotly: la pagina lo registra, nessun testo si compone in JS.
+        "locale": {"name": PLOTLY_LOCALE_NAME, "dictionary": dict(labels.modebar)},
         "filename": _EXPORT_FILE_STEM,
     }
     return f"ponosRender({json.dumps(payload, ensure_ascii=True, allow_nan=False)});"
