@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import colorsys
 import json
 from datetime import date, timedelta
 
@@ -35,6 +36,8 @@ from ponos_coach.ui.tokens import Theme, tokens_for
 from tests.ui.helpers import CHROME
 
 MONDAY = date(2025, 9, 1)  # un lunedì
+RED_ORANGE_END = 50.0  # gradi di tinta: da 0 a qui sono rossi, arancio e ambra
+RED_START = 335.0  # da qui a 360 il rosso
 SPORT_NAMES = {sport: f"Sport {sport.value}" for sport in Sport}
 LOAD_LABELS = WeeklyLoadLabels("Week", "Load", SPORT_NAMES, CHROME)
 ZONES_LABELS = WeeklyZonesLabels("Week", "Time in zone", "Zone", CHROME)
@@ -110,7 +113,7 @@ def test_weekly_load_axes_have_names_and_units_and_bars_start_at_zero() -> None:
 
     assert layout.xaxis.title.text == "Week"
     assert layout.xaxis.type == "date"
-    assert layout.yaxis.title.text == "Load (hrTSS/week)"
+    assert layout.yaxis.title.text == "Load (hrTSS per week)"
     assert layout.yaxis.rangemode == "tozero"
 
 
@@ -169,7 +172,7 @@ def test_zones_are_in_hours_per_week_and_the_axes_say_so() -> None:
     # la prima settimana ha due attività (corsa e pedalata), ciascuna con 600 s in Z1 e 1200 s in Z2
     first_week_hours = [float(trace.y[0]) for trace in figure.data]
     assert first_week_hours == pytest.approx([1200 / 3600, 2400 / 3600, 0, 0, 0])
-    assert figure.layout.yaxis.title.text == "Time in zone (h/week)"
+    assert figure.layout.yaxis.title.text == "Time in zone (hours per week)"
     assert figure.layout.yaxis.rangemode == "tozero"
     assert figure.layout.xaxis.title.text == "Week"
 
@@ -222,3 +225,129 @@ def test_no_value_is_negative() -> None:
     figure = build_weekly_zones_figure(weekly, ZONES_LABELS, tokens_for(Theme.LIGHT))
 
     assert all(np.all(np.asarray(trace.y) >= 0) for trace in figure.data)
+
+
+# --- Serie degli sport, colori, unità ed etichette delle zone -----------------------------------
+
+
+def every_sport_week(loads: dict[Sport, float]) -> list[DayLoad]:
+    """Un'attività per sport nella stessa settimana, con il carico dato."""
+    return [DayLoad(MONDAY, sport, load, ZoneSeconds.ZERO) for sport, load in loads.items()]
+
+
+def traces_of(items: list[DayLoad]) -> dict[str, float]:
+    weekly = weekly_load_by_sport(items, MONDAY + timedelta(days=3))
+    figure = build_weekly_load_figure(weekly, LOAD_LABELS, tokens_for(Theme.LIGHT))
+    return {str(trace.name): float(np.sum(trace.y)) for trace in figure.data}
+
+
+def test_up_to_five_sports_each_get_their_own_series() -> None:
+    loads = {
+        Sport.RUNNING: 50.0,
+        Sport.CYCLING: 40.0,
+        Sport.STRENGTH: 30.0,
+        Sport.HIKING: 20.0,
+        Sport.OTHER: 10.0,
+    }
+
+    assert traces_of(every_sport_week(loads)) == {SPORT_NAMES[s]: v for s, v in loads.items()}
+
+
+def test_with_more_than_five_sports_the_least_loaded_are_grouped_in_other() -> None:
+    loads = {
+        Sport.RUNNING: 70.0,
+        Sport.TRAIL: 5.0,
+        Sport.CYCLING: 60.0,
+        Sport.STRENGTH: 50.0,
+        Sport.HIKING: 40.0,
+        Sport.WALKING: 8.0,
+        Sport.OTHER: 2.0,
+    }
+
+    series = traces_of(every_sport_week(loads))
+
+    assert len(series) == 5
+    assert series == {
+        SPORT_NAMES[Sport.RUNNING]: 70.0,
+        SPORT_NAMES[Sport.CYCLING]: 60.0,
+        SPORT_NAMES[Sport.STRENGTH]: 50.0,
+        SPORT_NAMES[Sport.HIKING]: 40.0,
+        SPORT_NAMES[Sport.OTHER]: 15.0,  # trail + walking + other
+    }
+    assert sum(series.values()) == sum(loads.values())  # il carico totale non cambia
+
+
+def test_the_grouping_keeps_the_sport_order_other_last_and_the_color_of_each_sport() -> None:
+    weekly = weekly_load_by_sport(
+        every_sport_week({sport: float(10 + number) for number, sport in enumerate(Sport)}),
+        MONDAY + timedelta(days=3),
+    )
+    tokens = tokens_for(Theme.DARK)
+
+    figure = build_weekly_load_figure(weekly, LOAD_LABELS, tokens)
+
+    names = [str(trace.name) for trace in figure.data]
+    assert names[-1] == SPORT_NAMES[Sport.OTHER]
+    order = [next(s for s, n in SPORT_NAMES.items() if n == name) for name in names]
+    assert order == sorted(order, key=list(Sport).index)
+    assert [trace.marker.color for trace in figure.data] == [sport_color(s, tokens) for s in order]
+
+
+def test_a_tie_in_the_load_is_broken_by_the_order_of_the_sports() -> None:
+    loads = dict.fromkeys(Sport, 10.0)
+
+    series = traces_of(every_sport_week(loads))
+
+    assert set(series) == {
+        SPORT_NAMES[Sport.RUNNING],
+        SPORT_NAMES[Sport.TRAIL],
+        SPORT_NAMES[Sport.CYCLING],
+        SPORT_NAMES[Sport.STRENGTH],
+        SPORT_NAMES[Sport.OTHER],
+    }
+
+
+@pytest.mark.parametrize("theme", list(Theme))
+def test_no_sport_color_is_red_or_orange(theme: Theme) -> None:
+    for sport in Sport:
+        red, green, blue = (
+            int(sport_color(sport, tokens_for(theme))[i : i + 2], 16) for i in (1, 3, 5)
+        )
+        hue, saturation, _ = colorsys.rgb_to_hsv(red / 255, green / 255, blue / 255)
+        degrees = hue * 360
+        warm = degrees < RED_ORANGE_END or degrees > RED_START
+        assert not (warm and saturation > 0.25), (sport, degrees)  # grigi e neri non contano
+
+
+def test_the_units_of_the_axes_and_tooltips_come_from_the_labels() -> None:
+    weekly = weekly_load_by_sport(long_history(4), through_of(4))
+    load_labels = WeeklyLoadLabels("W", "L", SPORT_NAMES, CHROME, unit="hrTSS a settimana")
+    zones_labels = WeeklyZonesLabels("W", "T", "Z", CHROME, unit="ore a settimana")
+
+    load = build_weekly_load_figure(weekly, load_labels, tokens_for(Theme.LIGHT))
+    zones = build_weekly_zones_figure(
+        weekly_zone_seconds(long_history(4), through_of(4)), zones_labels, tokens_for(Theme.LIGHT)
+    )
+
+    assert load.layout.yaxis.title.text == "L (hrTSS a settimana)"
+    assert "hrTSS a settimana" in load.data[0].hovertemplate
+    assert zones.layout.yaxis.title.text == "T (ore a settimana)"
+
+
+def test_zone_labels_with_non_integer_boundaries_say_less_than_the_next_boundary() -> None:
+    starts = (82.5, 88.5, 94.0, 100.0)
+
+    labels = [zone_label(index, starts) for index in range(ZONE_COUNT)]
+
+    assert labels == [
+        "Z1 <82.5%",
+        "Z2 82.5\u2013<88.5%",
+        "Z3 88.5\u2013<94%",
+        "Z4 94\u2013<100%",
+        "Z5 \u2265100%",
+    ]
+
+
+def test_zone_labels_with_whole_boundaries_end_one_point_before_the_next() -> None:
+    assert zone_label(1, (85.0, 90.0, 95.0, 100.0)) == "Z2 85\u201389%"
+    assert zone_label(1) == "Z2 85\u201389%"

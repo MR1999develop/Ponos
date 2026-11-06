@@ -62,27 +62,6 @@ from tests.ui.test_translations import build_real_catalog
 from tests.ui.workspace_support import close_window, compose, make_settings
 
 TS_FILE = Path(__file__).resolve().parents[2] / "src" / "ponos_coach" / "i18n" / "ponos_it.ts"
-D_F3_03 = (
-    "D-F3-03: le tre caselle di FC di 'Modifica profilo' non hanno nome accessibile "
-    "(l'etichetta è collegata al contenitore del campo, non alla casella)"
-)
-D_F3_04 = (
-    "D-F3-04: in 'Nuovo profilo' nome, cartella e caselle di FC non hanno nome accessibile "
-    "(stessa causa di D-F3-03)"
-)
-D_F3_05 = (
-    "D-F3-05: in 'Modifica profilo' per un profilo senza dati fissi l'ordine del Tab parte "
-    "dalle misure e visita altezza e data di nascita, in cima al dialogo, per ultime"
-)
-D_F3_11 = (
-    "D-F3-11: nella finestra 'Dettaglio attività' le etichette della pagina di messaggio "
-    "(caricamento, file mancante, file alterato...) restano più basse del testo che devono "
-    "mostrare: righe tagliate"
-)
-D_F3_10 = (
-    "D-F3-10: in inglese i plurali restano 'activity(ies)' / 'sample(s)': la forma plurale "
-    "non esiste per la lingua sorgente"
-)
 
 
 @pytest.fixture
@@ -179,19 +158,7 @@ def test_t_ui_05_every_control_of_the_new_dialogs_can_take_the_focus_with_the_ta
         assert widget.focusPolicy() & Qt.FocusPolicy.TabFocus, widget.objectName()
 
 
-def _name_params(failing: dict[str, str]) -> list[object]:
-    return [
-        pytest.param(name, marks=pytest.mark.xfail(strict=True, reason=failing[name]))
-        if name in failing
-        else pytest.param(name)
-        for name in DIALOGS
-    ]
-
-
-@pytest.mark.parametrize(
-    "name",
-    _name_params({"edit": D_F3_03, "edit_fixed_missing": D_F3_03, "new_profile": D_F3_04}),
-)
+@pytest.mark.parametrize("name", list(DIALOGS))
 def test_t_ui_05_every_control_of_the_new_dialogs_has_an_accessible_name(
     qtbot: QtBot, name: str
 ) -> None:
@@ -219,15 +186,7 @@ def y_of(widget: QWidget, dialog: QDialog) -> int:
     return widget.mapTo(dialog, QPoint(0, 0)).y()
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        pytest.param("edit_fixed_missing", marks=pytest.mark.xfail(strict=True, reason=D_F3_05)),
-        "edit",
-        "weights",
-        "new_profile",
-    ],
-)
+@pytest.mark.parametrize("name", ["edit_fixed_missing", "edit", "weights", "new_profile"])
 def test_t_ui_05_the_tab_order_follows_the_visual_order_from_top_to_bottom(
     qtbot: QtBot, name: str
 ) -> None:
@@ -364,7 +323,6 @@ def test_t_ui_06_italian_plurals_carry_the_number_and_use_the_singular_only_for_
 
 
 @pytest.mark.parametrize("count", [1, 2, 5])
-@pytest.mark.xfail(strict=True, reason=D_F3_10)
 def test_t_ui_06_english_plurals_do_not_use_the_optional_ending_form(count: int) -> None:
     for message in plural_messages():
         text = QCoreApplication.translate(
@@ -451,7 +409,6 @@ def test_t_ui_06_the_layout_holds_the_italian_texts(
     assert dialog.sizeHint().width() <= 1100
 
 
-@pytest.mark.xfail(strict=True, reason=D_F3_11)
 def test_t_ui_06_the_message_pages_of_the_detail_window_show_every_line_of_their_text(
     qtbot: QtBot,
 ) -> None:

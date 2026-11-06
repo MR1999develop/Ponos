@@ -7,7 +7,9 @@ dell'app, intercettore che blocca ogni altra richiesta, nessun `QWebChannel`, ne
 contestuale, nessuna finestra aggiuntiva. I dati entrano come JSON (`render_script`).
 
 Il profilo del motore web (`ChartEngine`) è uno solo per l'app e serve tutti i grafici: ogni
-`ChartView` ha la sua pagina. Alla chiusura si distruggono prima le pagine, poi il profilo.
+`ChartView` ha la sua pagina e si registra nel motore. Alla chiusura `ChartEngine.dispose`
+distrugge in modo sincrono le pagine registrate e poi il profilo: l'ordine non dipende da quello
+dei figli di Qt.
 """
 
 from __future__ import annotations
@@ -31,6 +33,8 @@ from PySide6.QtWebEngineCore import (
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QVBoxLayout, QWidget
+from shiboken6 import delete as delete_now
+from shiboken6 import isValid
 
 from ponos_coach.ui.chart_payload import PreparedChart
 from ponos_coach.ui.web_policy import APP_PAGE_URL, APP_SCHEME, is_request_allowed
@@ -110,10 +114,10 @@ class ChartEngine(QObject):
     disegna prima lo avvia da sé. Tiene gli oggetti del motore, perché i riferimenti li tengono
     vivi.
 
-    Ordine di distruzione: il profilo non può sparire prima delle pagine, e Qt distrugge i figli di
-    un oggetto nell'ordine in cui sono stati aggiunti. Il motore è figlio della finestra e, a ogni
-    nuova vista (e a fine costruzione della finestra), `keep_last` lo rimette in fondo all'elenco
-    dei figli: ogni pagina, in qualunque finestra figlia, sparisce prima del profilo.
+    Ordine di distruzione: il profilo non può sparire prima delle pagine. Le viste si registrano
+    (`register`); `dispose`, chiamata alla chiusura della finestra e da `aboutToQuit`, distrugge
+    subito le pagine delle viste ancora vive e poi il profilo. Una vista chiusa prima (un dialogo)
+    ha già distrutto la sua pagina da sé.
     """
 
     def __init__(
@@ -125,17 +129,16 @@ class ChartEngine(QObject):
         self._interceptor: AppOnlyInterceptor | None = None
         self._scheme_handler: AppSchemeHandler | None = None
         self._disposed = False
+        self._views: list[ChartView] = []
 
-    def keep_last(self) -> None:
-        """Rimette il motore in fondo ai figli del genitore: sarà l'ultimo a essere distrutto."""
-        parent = self.parent()
-        if parent is not None:
-            self.setParent(None)
-            self.setParent(parent)
+    def register(self, view: ChartView) -> None:
+        """Una vista che userà il profilo: `dispose` ne distruggerà la pagina prima del profilo."""
+        self._views = [known for known in self._views if isValid(known)]
+        self._views.append(view)
 
     @property
     def started(self) -> bool:
-        """Vero se il profilo è stato creato."""
+        """Vero se il profilo è stato creato (e non ancora distrutto)."""
         return self._profile is not None
 
     @property
@@ -159,12 +162,21 @@ class ChartEngine(QObject):
         return self._profile
 
     def dispose(self) -> None:
-        """Distrugge il profilo; da chiamare dopo `ChartView.dispose` di tutte le viste."""
+        """Distrugge le pagine delle viste registrate ancora vive e poi il profilo, subito.
+
+        Idempotente. Da chiamare alla chiusura della finestra e da `aboutToQuit`; dopo, il motore
+        non crea più pagine.
+        """
         if self._disposed:
             return
         self._disposed = True
-        if self._profile is not None:
-            self._profile.deleteLater()  # dopo le pagine, già in coda di distruzione
+        for view in self._views:
+            if isValid(view):
+                view.dispose()
+        self._views.clear()
+        profile, self._profile = self._profile, None
+        if profile is not None and isValid(profile):
+            delete_now(profile)
 
     def _on_download_requested(self, request: QWebEngineDownloadRequest) -> None:
         file_name = Path(request.suggestedFileName()).name
@@ -200,7 +212,7 @@ class ChartView(QWidget):
         self._view: QWebEngineView | None = None
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
-        engine.keep_last()
+        engine.register(self)
 
     @property
     def engine_started(self) -> bool:
@@ -252,14 +264,21 @@ class ChartView(QWidget):
         return self._page
 
     def dispose(self) -> None:
-        """Distrugge la pagina prima del profilo (ordine richiesto dal motore web); idempotente."""
+        """Distrugge subito la pagina (il motore la vuole prima del profilo); idempotente."""
         if self._disposed:
             return
         self._disposed = True
-        if self._page is None or self._view is None:
+        page, view = self._page, self._view
+        self._page = None
+        self._view = None
+        if page is None or view is None:
             return
-        self._view.setPage(None)  # type: ignore[arg-type]  # stub senza Optional
-        self._page.deleteLater()  # prima del profilo: il motore la vuole già distrutta
+        if isValid(view):
+            view.setPage(None)  # type: ignore[arg-type]  # stub senza Optional
+        if isValid(page):
+            delete_now(page)
+        if isValid(view):
+            delete_now(view)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt
         """Chiudendo il widget si rilascia la pagina."""

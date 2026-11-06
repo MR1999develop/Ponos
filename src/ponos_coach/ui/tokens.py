@@ -32,16 +32,21 @@ OKABE_ITO_VERMILLION = "#D55E00"
 OKABE_ITO_GREEN = "#009E73"
 OKABE_ITO_SKY = "#56B4E9"
 OKABE_ITO_ORANGE = "#E69F00"
+OKABE_ITO_YELLOW = "#F0E442"
 
-# Okabe-Ito più scuri, per i temi chiari: gli originali (arancio e azzurro) non arrivano a 3:1
+# Okabe-Ito più scuri, per i temi chiari: gli originali (giallo e azzurro) non arrivano a 3:1
 # sul bianco. Stessa tonalità, solo meno luminosi.
-OKABE_ITO_ORANGE_DEEP = "#A86B00"
+OKABE_ITO_YELLOW_DEEP = "#8C8305"
 OKABE_ITO_SKY_DEEP = "#2E8BC0"
 OKABE_ITO_PURPLE = "#CC79A7"
 
-# Grigi neutri per le barre del carico giornaliero (contesto, non una categoria).
+# Il nero di Okabe-Ito è il colore del testo del tema; i grigi neutri sono la categoria "Altro"
+# e il fondo delle barre del carico giornaliero (contesto, non una categoria).
+BLACK_LIGHT = "#1F2328"
+BLACK_DARK = "#E6E6E6"
 NEUTRAL_LIGHT = "#6E7781"
 NEUTRAL_DARK = "#8B949E"
+DAILY_LOAD_LIGHT = "#57606A"  # più scuro del neutro: le barre, con la loro opacità, arrivano a 3:1
 
 
 # Scala sequenziale delle zone di FC: stessa famiglia di tinte (blu-viola), solo la luminosità
@@ -117,7 +122,7 @@ class ThemeTokens:
     tsb: str
     daily_load: str
     daily_load_opacity: float
-    categories: tuple[str, ...]  # sette colori di categoria, uno per posto: vedi `category_color`
+    categories: tuple[str, ...]  # sette colori di categoria, uno per posto (mai rosso né arancio)
     zones: tuple[str, ...]  # da Z1 a Z5, dal meno al più intenso
     band_opacity: float  # trasparenza delle bande di zona dietro una curva
 
@@ -132,19 +137,19 @@ _LIGHT = ThemeTokens(
     ctl=OKABE_ITO_BLUE,
     atl=OKABE_ITO_VERMILLION,
     tsb=OKABE_ITO_GREEN,
-    daily_load=NEUTRAL_LIGHT,
-    daily_load_opacity=0.6,
+    daily_load=DAILY_LOAD_LIGHT,
+    daily_load_opacity=0.74,
     categories=(
         OKABE_ITO_BLUE,
-        OKABE_ITO_VERMILLION,
+        OKABE_ITO_YELLOW_DEEP,
         OKABE_ITO_GREEN,
-        OKABE_ITO_ORANGE_DEEP,
-        OKABE_ITO_SKY_DEEP,
         OKABE_ITO_PURPLE,
+        OKABE_ITO_SKY_DEEP,
+        BLACK_LIGHT,
         NEUTRAL_LIGHT,
     ),
     zones=_zone_ramp(_ZONE_LIGHTNESS_LIGHT),
-    band_opacity=0.18,
+    band_opacity=0.14,  # abbastanza tenue da lasciare i nomi delle zone a 4,5:1
 )
 
 _DARK = ThemeTokens(
@@ -158,18 +163,18 @@ _DARK = ThemeTokens(
     atl=OKABE_ITO_ORANGE,
     tsb=OKABE_ITO_GREEN,
     daily_load=NEUTRAL_DARK,
-    daily_load_opacity=0.6,
+    daily_load_opacity=0.72,
     categories=(
         OKABE_ITO_BLUE,
-        OKABE_ITO_VERMILLION,
+        OKABE_ITO_YELLOW,
         OKABE_ITO_GREEN,
-        OKABE_ITO_ORANGE,
-        OKABE_ITO_SKY,
         OKABE_ITO_PURPLE,
+        OKABE_ITO_SKY,
+        BLACK_DARK,
         NEUTRAL_DARK,
     ),
     zones=_zone_ramp(_ZONE_LIGHTNESS_DARK),
-    band_opacity=0.28,
+    band_opacity=0.16,  # nomi delle zone a 4,5:1 e croci degli scarti a 3:1
 )
 
 

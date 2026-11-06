@@ -76,7 +76,6 @@ WORKER = (
     Path(__file__).resolve().parents[1] / "fixtures" / "generators" / "collaudo_fase3_worker.py"
 )
 TODAY = date(2026, 7, 1)
-D_F3_02 = "D-F3-02: SportWeightsForm.set_value(nan) non si riporta al limite e build() solleva"
 
 
 # --- Peso: partizioni e confini ---------------------------------------------------------------
@@ -306,7 +305,6 @@ def test_t_qual_02_the_weights_form_clamps_to_the_limits_with_two_decimals(
     assert form.build()[Sport.RUNNING].value == form.value(Sport.RUNNING)
 
 
-@pytest.mark.xfail(strict=True, reason=D_F3_02)
 def test_t_qual_02_the_weights_form_brings_a_nan_to_a_limit_like_any_out_of_range_value() -> None:
     form = SportWeightsForm({sport: default_weight(sport) for sport in Sport})
 

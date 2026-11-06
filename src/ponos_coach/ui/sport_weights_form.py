@@ -9,6 +9,7 @@ testi.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 
 from ponos_coach.activities.domain import Sport
@@ -34,8 +35,10 @@ class SportWeightsForm:
         return self._values[sport]
 
     def set_value(self, sport: Sport, value: float) -> None:
-        """L'utente cambia un peso; fuori intervallo si porta al limite più vicino."""
-        self._values[sport] = _clamped(value)
+        """L'utente cambia un peso; fuori intervallo si porta al limite più vicino. Un valore non
+        numerico (NaN) non cambia nulla: azzerare il peso toglierebbe lo sport dal carico."""
+        if not math.isnan(value):
+            self._values[sport] = _clamped(value)
 
     def restore_defaults(self) -> None:
         """Rimette i pesi di default di tutti gli sport."""

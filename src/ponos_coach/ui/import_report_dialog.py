@@ -117,19 +117,19 @@ class ImportReportDialog(QDialog):
 
     def summary_lines(self, report: ImportReport) -> list[str]:
         """Una riga per ogni esito presente (l'importate sempre)."""
-        lines = [self.tr("%n activity(ies) imported", "", report.imported)]
+        lines = [self.tr("Activities imported: %n", "", report.imported)]
         if report.already_present:
-            lines.append(self.tr("%n already in the profile", "", report.already_present))
+            lines.append(self.tr("Already in the profile: %n", "", report.already_present))
         if report.repaired:
             lines.append(
                 self.tr(
-                    "%n archived file(s) repaired from the imported original", "", report.repaired
+                    "Archived files repaired from the imported original: %n", "", report.repaired
                 )
             )
         if report.ignored:
-            lines.append(self.tr("%n file(s) ignored (not an activity)", "", report.ignored))
+            lines.append(self.tr("Files ignored (not an activity): %n", "", report.ignored))
         if report.failed:
-            lines.append(self.tr("%n file(s) with an error", "", report.failed))
+            lines.append(self.tr("Files with an error: %n", "", report.failed))
         if report.cancelled:
             lines.append(self.tr("The import was stopped: run it again to continue."))
         return lines

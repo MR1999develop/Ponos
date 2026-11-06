@@ -2,7 +2,9 @@
 
 **Quando leggerlo:** scrivendo o rivedendo `load`, i test `T-CALC`, i grafici
 del PMC o la documentazione dei numeri. Sezione 1 di `SKILL.md`. Fonti: BAN,
-COG. ADR: `docs/adr/004-modello-carico.md`.
+COG. ADR: `docs/adr/004-modello-carico.md`; misure datate, pesi salvati e zone:
+`docs/adr/007-dati-del-profilo-e-zone.md` (qui le regole operative, non le
+motivazioni).
 
 ## 1. Formule
 

@@ -32,6 +32,7 @@ from ponos_coach.profiles.domain import FolderKind
 from ponos_coach.profiles.use_cases import NewProfileRequest
 from ponos_coach.ui.birth_date_edit import BirthDateEdit
 from ponos_coach.ui.body_input import body_problem_text
+from ponos_coach.ui.form_rows import add_field_row
 from ponos_coach.ui.heart_rate_rules import (
     MAX_ALLOWED_BPM,
     MIN_ALLOWED_BPM,
@@ -125,7 +126,9 @@ class NewProfileDialog(QDialog):
     def _build_layout(self) -> None:
         layout = QFormLayout()
         layout.setVerticalSpacing(SPACE_2)
-        layout.addRow(self.tr("Profile name"), self._with_error(self._name, Field.NAME))
+        add_field_row(
+            layout, self.tr("Profile name"), self._name, self._with_error(self._name, Field.NAME)
+        )
         folder_row = QHBoxLayout()
         folder_row.addWidget(self._folder, stretch=1)
         folder_row.addWidget(self._browse)
@@ -137,12 +140,16 @@ class NewProfileDialog(QDialog):
         folder_column.addWidget(self._destination_note)
         folder_column.addWidget(self._folder_note)
         folder_column.addWidget(self._errors[Field.FOLDER])
-        layout.addRow(self.tr("Profile folder"), folder_box)
-        layout.addRow(self.tr("Height (cm)"), self._with_error(self._height, Field.HEIGHT))
-        layout.addRow(self.tr("Weight (kg)"), self._with_error(self._weight, Field.WEIGHT))
-        layout.addRow(self.tr("Date of birth"), self._with_error(self._birth, Field.BIRTH_DATE))
-        layout.addRow(self.tr("Resting heart rate"), self._with_error(self._min, Field.MIN_BPM))
-        layout.addRow(self.tr("Maximum heart rate"), self._with_error(self._max, Field.MAX_BPM))
+        add_field_row(layout, self.tr("Profile folder"), self._folder, folder_box)
+        rows = (
+            (self.tr("Height (cm)"), self._height, Field.HEIGHT),
+            (self.tr("Weight (kg)"), self._weight, Field.WEIGHT),
+            (self.tr("Date of birth"), self._birth, Field.BIRTH_DATE),
+            (self.tr("Resting heart rate"), self._min, Field.MIN_BPM),
+            (self.tr("Maximum heart rate"), self._max, Field.MAX_BPM),
+        )
+        for text, widget, field in rows:
+            add_field_row(layout, text, widget, self._with_error(widget, field))
         threshold_box = QWidget(self)
         threshold_column = QVBoxLayout(threshold_box)
         threshold_column.setContentsMargins(0, 0, 0, 0)
@@ -150,7 +157,7 @@ class NewProfileDialog(QDialog):
         threshold_column.addWidget(self._threshold)
         threshold_column.addWidget(self._threshold_note)
         threshold_column.addWidget(self._errors[Field.THRESHOLD])
-        layout.addRow(self.tr("Threshold heart rate"), threshold_box)
+        add_field_row(layout, self.tr("Threshold heart rate"), self._threshold, threshold_box)
         sex_box = QWidget(self)
         sex_row = QHBoxLayout(sex_box)
         sex_row.setContentsMargins(0, 0, 0, 0)

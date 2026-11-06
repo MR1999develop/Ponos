@@ -116,14 +116,14 @@ def test_first_run_creates_a_profile_imports_a_folder_and_updates_table_and_over
     assert [item.name for item in report.not_imported] == ["bad.fit"]
     dialog = next(box for box in window.open_boxes if isinstance(box, ImportReportDialog))
     assert dialog.table.model().rowCount() == 1
-    assert "8 activity(ies) imported" in dialog.summary_text
+    assert "Activities imported: 8" in dialog.summary_text
 
     wait_ready(qtbot, window, FILES_IN_FIXTURE_FOLDER)
     assert window.activities_page.model.rowCount() == FILES_IN_FIXTURE_FOLDER
     assert window.status_texts == (
-        "8 activity(ies)",
-        "0 excluded activity(ies)",
-        f"{DAYS_IN_CHART} day(s) in the chart",
+        "Activities: 8",
+        "Excluded activities: 0",
+        f"Days in the chart: {DAYS_IN_CHART}",
     )
     chart = window.overview_page.chart
     qtbot.waitUntil(
@@ -256,7 +256,7 @@ def test_deleting_a_profile_folder_asks_with_friction_and_only_then_deletes(
 
     assert 'profile "One"' in box.text()
     assert str(folder) in box.informativeText()
-    assert "8 activity(ies) will be deleted." in box.informativeText()
+    assert "Activities that will be deleted: 8." in box.informativeText()
     assert box.defaultButton().text() == "Cancel"  # il bottone sicuro è quello predefinito
     assert box.escapeButton().text() == "Cancel"
     click(box, "Cancel")
@@ -485,7 +485,7 @@ def test_ui_stays_responsive_during_import_and_stop_cancels_it_then_import_resum
     assert window.import_files_action.toolTip()  # il motivo
     assert not window.new_profile_action.isEnabled()
     assert window.stop_action.isEnabled()
-    assert "of 9 file(s)" in window.import_status_text
+    assert "Files imported:" in window.import_status_text and "of 9" in window.import_status_text
     assert latency_of_one_event(qtbot) < 0.1  # T-UI-02
 
     with qtbot.waitSignal(window.controller.import_finished, timeout=WAIT_MS) as blocker:
@@ -589,7 +589,7 @@ def test_exceeding_a_limit_invites_to_choose_a_subfolder_and_imports_nothing(
 
     box = open_message_box(qtbot, window, "errorMessage")
     assert box.text() == "The folder is too large to import at once"
-    assert "50000 activity file(s)" in box.informativeText()
+    assert "the limit is 50000" in box.informativeText()
     assert "Choose a subfolder" in box.informativeText()
     wait_ready(qtbot, window, 0)
     assert window.activities_page.model.rowCount() == 0

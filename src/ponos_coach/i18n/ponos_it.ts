@@ -130,17 +130,17 @@
         <translation>da {low} a {high}</translation>
     </message>
     <message numerus="yes">
-        <source>%n heart-rate sample(s) outside your limits were not used, and are marked in the chart.</source>
+        <source>Heart-rate samples outside your limits: %n. They were not used and are marked in the chart.</source>
         <translation>
-            <numerusform>%n campione di frequenza cardiaca fuori dai limiti impostati non è stato usato ed è segnato nel grafico.</numerusform>
-            <numerusform>%n campioni di frequenza cardiaca fuori dai limiti impostati non sono stati usati e sono segnati nel grafico.</numerusform>
+            <numerusform>Campioni di frequenza cardiaca fuori dai limiti impostati: %n. Non sono stati usati e sono segnati nel grafico.</numerusform>
+            <numerusform>Campioni di frequenza cardiaca fuori dai limiti impostati: %n. Non sono stati usati e sono segnati nel grafico.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>%n heart-rate sample(s) with a repeated or earlier time were skipped when the file was read.</source>
+        <source>Heart-rate samples skipped when the file was read because their time was repeated or earlier: %n.</source>
         <translation>
-            <numerusform>%n campione di frequenza cardiaca con orario ripetuto o precedente è stato saltato alla lettura del file.</numerusform>
-            <numerusform>%n campioni di frequenza cardiaca con orario ripetuto o precedente sono stati saltati alla lettura del file.</numerusform>
+            <numerusform>Campioni di frequenza cardiaca saltati nella lettura del file perché con un tempo ripetuto o precedente: %n.</numerusform>
+            <numerusform>Campioni di frequenza cardiaca saltati nella lettura del file perché con un tempo ripetuto o precedente: %n.</numerusform>
         </translation>
     </message>
 </context>
@@ -435,24 +435,24 @@
         <translation>Non è stato importato nulla. Scegli una sottocartella e importala.</translation>
     </message>
     <message numerus="yes">
-        <source>The folder has more than %n activity file(s).</source>
+        <source>The folder has too many activity files: the limit is %n.</source>
         <translation>
-            <numerusform>La cartella contiene più di %n file di attività.</numerusform>
-            <numerusform>La cartella contiene più di %n file di attività.</numerusform>
+            <numerusform>La cartella contiene troppi file di attività: il limite è %n.</numerusform>
+            <numerusform>La cartella contiene troppi file di attività: il limite è %n.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>The folder has more than %n file(s) and folder(s) in total.</source>
+        <source>The folder has too many files and folders: the limit is %n in total.</source>
         <translation>
-            <numerusform>La cartella contiene più di %n elemento in totale (file e cartelle).</numerusform>
-            <numerusform>La cartella contiene più di %n elementi in totale (file e cartelle).</numerusform>
+            <numerusform>La cartella contiene troppi file e cartelle: il limite è %n in totale.</numerusform>
+            <numerusform>La cartella contiene troppi file e cartelle: il limite è %n in totale.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>The folder has more than %n level(s) of subfolders.</source>
+        <source>The folder has too many levels of subfolders: the limit is %n.</source>
         <translation>
-            <numerusform>La cartella ha più di %n livello di sottocartelle.</numerusform>
-            <numerusform>La cartella ha più di %n livelli di sottocartelle.</numerusform>
+            <numerusform>La cartella ha troppi livelli di sottocartelle: il limite è %n.</numerusform>
+            <numerusform>La cartella ha troppi livelli di sottocartelle: il limite è %n.</numerusform>
         </translation>
     </message>
     <message>
@@ -774,38 +774,38 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Chiudi</translation>
     </message>
     <message numerus="yes">
-        <source>%n activity(ies) imported</source>
+        <source>Activities imported: %n</source>
         <translation>
-            <numerusform>%n attività importata</numerusform>
-            <numerusform>%n attività importate</numerusform>
+            <numerusform>Attività importate: %n</numerusform>
+            <numerusform>Attività importate: %n</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>%n already in the profile</source>
+        <source>Already in the profile: %n</source>
         <translation>
-            <numerusform>%n già presente nel profilo</numerusform>
-            <numerusform>%n già presenti nel profilo</numerusform>
+            <numerusform>Già nel profilo: %n</numerusform>
+            <numerusform>Già nel profilo: %n</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>%n archived file(s) repaired from the imported original</source>
+        <source>Archived files repaired from the imported original: %n</source>
         <translation>
-            <numerusform>%n file archiviato riparato dall&apos;originale importato</numerusform>
-            <numerusform>%n file archiviati riparati dall&apos;originale importato</numerusform>
+            <numerusform>File archiviati riparati dall&apos;originale importato: %n</numerusform>
+            <numerusform>File archiviati riparati dall&apos;originale importato: %n</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>%n file(s) ignored (not an activity)</source>
+        <source>Files ignored (not an activity): %n</source>
         <translation>
-            <numerusform>%n file ignorato (non è un&apos;attività)</numerusform>
-            <numerusform>%n file ignorati (non sono attività)</numerusform>
+            <numerusform>File ignorati (non sono attività): %n</numerusform>
+            <numerusform>File ignorati (non sono attività): %n</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>%n file(s) with an error</source>
+        <source>Files with an error: %n</source>
         <translation>
-            <numerusform>%n file con errore</numerusform>
-            <numerusform>%n file con errori</numerusform>
+            <numerusform>File con un errore: %n</numerusform>
+            <numerusform>File con un errore: %n</numerusform>
         </translation>
     </message>
     <message>
@@ -824,9 +824,9 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Preparazione in corso...</translation>
     </message>
     <message numerus="yes">
-        <source>Calculated {done} of %n activity(ies)</source>
+        <source>Activities calculated: {done} of %n</source>
         <translation>
-            <numerusform>Attività calcolata: {done} di %n</numerusform>
+            <numerusform>Attività calcolate: {done} di %n</numerusform>
             <numerusform>Attività calcolate: {done} di %n</numerusform>
         </translation>
     </message>
@@ -982,10 +982,24 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Non è stato possibile leggere il numero di attività.</translation>
     </message>
     <message numerus="yes">
-        <source>%n activity(ies) will be deleted.</source>
+        <source>Activities: %n</source>
         <translation>
-            <numerusform>Sarà eliminata %n attività.</numerusform>
-            <numerusform>Saranno eliminate %n attività.</numerusform>
+            <numerusform>Attività: %n</numerusform>
+            <numerusform>Attività: %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Excluded activities: %n</source>
+        <translation>
+            <numerusform>Attività escluse: %n</numerusform>
+            <numerusform>Attività escluse: %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Days in the chart: %n</source>
+        <translation>
+            <numerusform>Giorni nel grafico: %n</numerusform>
+            <numerusform>Giorni nel grafico: %n</numerusform>
         </translation>
     </message>
     <message>
@@ -1020,20 +1034,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>Looking for activity files...</source>
         <translation>Ricerca dei file di attività in corso...</translation>
     </message>
-    <message numerus="yes">
-        <source>Imported {done} of %n file(s)</source>
-        <translation>
-            <numerusform>Importato {done} di %n file</numerusform>
-            <numerusform>Importati {done} di %n file</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
-        <source>%n activity(ies) imported</source>
-        <translation>
-            <numerusform>%n attività importata</numerusform>
-            <numerusform>%n attività importate</numerusform>
-        </translation>
-    </message>
     <message>
         <source>The log files are in: {folder}</source>
         <translation>I file di log si trovano in: {folder}</translation>
@@ -1062,13 +1062,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>Select an activity in the Activities list first.</source>
         <translation>Seleziona prima un&apos;attività nell&apos;elenco Attività.</translation>
     </message>
-    <message numerus="yes">
-        <source>%n excluded activity(ies)</source>
-        <translation>
-            <numerusform>%n attività esclusa</numerusform>
-            <numerusform>%n attività escluse</numerusform>
-        </translation>
-    </message>
     <message>
         <source>Closing the profile...</source>
         <translation>Chiusura del profilo in corso...</translation>
@@ -1089,6 +1082,27 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>Version {version}</source>
         <translation>Versione {version}</translation>
     </message>
+    <message numerus="yes">
+        <source>Activities that will be deleted: %n.</source>
+        <translation>
+            <numerusform>Attività che verranno eliminate: %n.</numerusform>
+            <numerusform>Attività che verranno eliminate: %n.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Files imported: {done} of %n</source>
+        <translation>
+            <numerusform>File importati: {done} di %n</numerusform>
+            <numerusform>File importati: {done} di %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Activities imported: %n</source>
+        <translation>
+            <numerusform>Attività importate: %n</numerusform>
+            <numerusform>Attività importate: %n</numerusform>
+        </translation>
+    </message>
     <message>
         <source>Adaptive training coach with Garmin and heart-rate data.</source>
         <translation>Coach di allenamento adattivo con dati Garmin e frequenza cardiaca.</translation>
@@ -1104,20 +1118,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Save chart</source>
         <translation>Salva grafico</translation>
-    </message>
-    <message numerus="yes">
-        <source>%n activity(ies)</source>
-        <translation>
-            <numerusform>%n attività</numerusform>
-            <numerusform>%n attività</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
-        <source>%n day(s) in the chart</source>
-        <translation>
-            <numerusform>%n giorno nel grafico</numerusform>
-            <numerusform>%n giorni nel grafico</numerusform>
-        </translation>
     </message>
 </context>
 <context>
@@ -1141,6 +1141,45 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Threshold HR (bpm)</source>
         <translation>FC di soglia (bpm)</translation>
+    </message>
+</context>
+<context>
+    <name>MeasurementTexts</name>
+    <message>
+        <source>Weight valid from {first} onwards.</source>
+        <translation>Peso valido dal {first} in poi.</translation>
+    </message>
+    <message>
+        <source>Heart rate valid from {first} onwards.</source>
+        <translation>Frequenza cardiaca valida dal {first} in poi.</translation>
+    </message>
+    <message>
+        <source>Weight valid from {first} to {last}.</source>
+        <translation>Peso valido dal {first} al {last}.</translation>
+    </message>
+    <message>
+        <source>Heart rate valid from {first} to {last}.</source>
+        <translation>Frequenza cardiaca valida dal {first} al {last}.</translation>
+    </message>
+    <message>
+        <source>The new weight applies only until {last}: a later weight replaces it after that day.</source>
+        <translation>Il nuovo peso vale solo fino al {last}: dopo quel giorno lo sostituisce un peso successivo.</translation>
+    </message>
+    <message>
+        <source>The new heart-rate values apply only until {last}: later values replace them after that day.</source>
+        <translation>I nuovi valori di frequenza cardiaca valgono solo fino al {last}: dopo quel giorno li sostituiscono valori successivi.</translation>
+    </message>
+    <message>
+        <source>In force on this day: {value} kg</source>
+        <translation>In vigore quel giorno: {value} kg</translation>
+    </message>
+    <message>
+        <source>No weight is recorded for this day.</source>
+        <translation>Per quel giorno non c&apos;è ancora un peso registrato.</translation>
+    </message>
+    <message>
+        <source>In force on this day: {value} bpm</source>
+        <translation>In vigore quel giorno: {value} bpm</translation>
     </message>
 </context>
 <context>
@@ -1379,8 +1418,16 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Carico giornaliero</translation>
     </message>
     <message>
+        <source>hrTSS per day</source>
+        <translation>hrTSS al giorno</translation>
+    </message>
+    <message>
         <source>Week (starting Monday)</source>
         <translation>Settimana (da lunedì)</translation>
+    </message>
+    <message>
+        <source>hrTSS per week</source>
+        <translation>hrTSS a settimana</translation>
     </message>
     <message>
         <source>Time in zone</source>
@@ -1390,12 +1437,20 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>Heart-rate zone (% of threshold)</source>
         <translation>Zona di frequenza cardiaca (% della soglia)</translation>
     </message>
+    <message>
+        <source>hours per week</source>
+        <translation>ore a settimana</translation>
+    </message>
 </context>
 <context>
     <name>ProfileDialogs</name>
     <message>
-        <source>Profile updated. The load is being recalculated.</source>
-        <translation>Profilo aggiornato. Il carico si sta ricalcolando.</translation>
+        <source>Profile updated.</source>
+        <translation>Profilo aggiornato.</translation>
+    </message>
+    <message>
+        <source>The load is being recalculated.</source>
+        <translation>Il carico si sta ricalcolando.</translation>
     </message>
     <message>
         <source>Sport weights saved. The load is being recalculated.</source>
@@ -1563,20 +1618,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>meno di un minuto rimanente</translation>
     </message>
     <message numerus="yes">
-        <source>about %n minute(s) left</source>
-        <translation>
-            <numerusform>circa %n minuto rimanente</numerusform>
-            <numerusform>circa %n minuti rimanenti</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
-        <source>about %n hour(s) left</source>
-        <translation>
-            <numerusform>circa %n ora rimanente</numerusform>
-            <numerusform>circa %n ore rimanenti</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
         <source>Listing activities: {done} of %n</source>
         <translation>
             <numerusform>Elenco dell&apos;attività: {done} di %n</numerusform>
@@ -1683,38 +1724,45 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Garmin è aggiornato</translation>
     </message>
     <message numerus="yes">
-        <source>Synchronised: %n new activity(ies)</source>
+        <source>New activities synchronised: %n</source>
         <translation>
-            <numerusform>Sincronizzata: %n nuova attività</numerusform>
-            <numerusform>Sincronizzate: %n nuove attività</numerusform>
+            <numerusform>Nuove attività sincronizzate: %n</numerusform>
+            <numerusform>Nuove attività sincronizzate: %n</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>Synchronised: %n new activity(ies), {matched} matched with imported files</source>
+        <source>New activities synchronised: %n, matched with imported files: {matched}</source>
         <translation>
-            <numerusform>Sincronizzata: %n nuova attività. Abbinate a file importati: {matched}</numerusform>
-            <numerusform>Sincronizzate: %n nuove attività. Abbinate a file importati: {matched}</numerusform>
+            <numerusform>Nuove attività sincronizzate: %n, abbinate ai file importati: {matched}</numerusform>
+            <numerusform>Nuove attività sincronizzate: %n, abbinate ai file importati: {matched}</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>%n new activity(ies) downloaded</source>
+        <source>New activities downloaded: %n</source>
         <translation>
-            <numerusform>%n nuova attività scaricata</numerusform>
-            <numerusform>%n nuove attività scaricate</numerusform>
+            <numerusform>Nuove attività scaricate: %n</numerusform>
+            <numerusform>Nuove attività scaricate: %n</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>%n activity(ies) matched with files you imported</source>
+        <source>Activities matched with files you imported: %n</source>
         <translation>
-            <numerusform>%n attività abbinata a un file importato</numerusform>
-            <numerusform>%n attività abbinate a file importati</numerusform>
+            <numerusform>Attività abbinate ai file che hai importato: %n</numerusform>
+            <numerusform>Attività abbinate ai file che hai importato: %n</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>%n activity(ies) not downloaded:</source>
+        <source>Activities already in the profile: %n</source>
         <translation>
-            <numerusform>%n attività non scaricata:</numerusform>
-            <numerusform>%n attività non scaricate:</numerusform>
+            <numerusform>Attività già presenti nel profilo: %n</numerusform>
+            <numerusform>Attività già presenti nel profilo: %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Activities not downloaded: %n</source>
+        <translation>
+            <numerusform>Attività non scaricate: %n</numerusform>
+            <numerusform>Attività non scaricate: %n</numerusform>
         </translation>
     </message>
     <message>
@@ -1725,16 +1773,23 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>Garmin did not provide a valid original file for this activity</source>
         <translation>Garmin non ha fornito un originale valido per questa attività</translation>
     </message>
+    <message numerus="yes">
+        <source>about %n min left</source>
+        <translation>
+            <numerusform>circa %n minuto rimanente</numerusform>
+            <numerusform>circa %n minuti rimanenti</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>about %n h left</source>
+        <translation>
+            <numerusform>circa %n ora rimanente</numerusform>
+            <numerusform>circa %n ore rimanenti</numerusform>
+        </translation>
+    </message>
     <message>
         <source>The profile was busy with another task or could not be written. Try again; if it persists, check that the disk is not full.</source>
         <translation>Il profilo era occupato da un altro lavoro oppure non si è potuto scrivere. Riprova; se il problema persiste, controlla che il disco non sia pieno.</translation>
-    </message>
-    <message numerus="yes">
-        <source>%n activity(ies) were already in the profile</source>
-        <translation>
-            <numerusform>%n attività era già nel profilo</numerusform>
-            <numerusform>%n attività erano già nel profilo</numerusform>
-        </translation>
     </message>
     <message>
         <source>Synchronise again when you are ready: it resumes where it left off.</source>

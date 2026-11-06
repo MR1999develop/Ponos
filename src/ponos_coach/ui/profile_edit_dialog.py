@@ -11,6 +11,7 @@ storico. Il dialogo modifica una copia: "Annulla" non cambia nulla. Il salvatagg
 from __future__ import annotations
 
 from datetime import date
+from itertools import pairwise
 
 from PySide6.QtCore import QDate, QLocale, Qt, Signal
 from PySide6.QtGui import QShowEvent
@@ -30,10 +31,11 @@ from PySide6.QtWidgets import (
 )
 
 from ponos_coach.load.domain import Sex
-from ponos_coach.profiles.domain import MIN_BIRTH_DATE
+from ponos_coach.profiles.domain import MIN_MEASUREMENT_DATE
 from ponos_coach.profiles.measurements import MeasurementHistory, MeasurementProblem
 from ponos_coach.ui.birth_date_edit import BirthDateEdit, to_qdate
 from ponos_coach.ui.body_input import BodyProblem, body_problem_text
+from ponos_coach.ui.form_rows import add_field_row
 from ponos_coach.ui.heart_rate_rules import (
     MAX_ALLOWED_BPM,
     MIN_ALLOWED_BPM,
@@ -46,6 +48,7 @@ from ponos_coach.ui.measurement_history_model import (
     sorted_history_model,
     weight_text,
 )
+from ponos_coach.ui.measurement_texts import in_force_text, superseded_text
 from ponos_coach.ui.measurements_form import (
     EditField,
     EditIssue,
@@ -55,6 +58,7 @@ from ponos_coach.ui.measurements_form import (
 from ponos_coach.ui.tokens import DIALOG_MIN_WIDTH, SPACE_1, SPACE_2, SPACE_4, Theme, tokens_for
 
 _TABLE_MIN_HEIGHT = 140
+_NOTE_FIELDS = (EditField.WEIGHT, EditField.MIN_BPM, EditField.MAX_BPM, EditField.THRESHOLD)
 
 
 class ProfileEditDialog(QDialog):
@@ -73,9 +77,11 @@ class ProfileEditDialog(QDialog):
         super().__init__(parent)
         self._form = form
         self._profile_name = profile_name
-        self._error_color = tokens_for(theme).error
+        self._tokens = tokens_for(theme)
         self._show_errors = False
         self._errors = {field: self._error_label() for field in EditField}
+        self._notes = {field: self._note_label() for field in _NOTE_FIELDS}
+        self._validity_notice = self._note_label()
         self._history_model = MeasurementHistoryModel(self)
         self.setWindowTitle(self.tr("Edit profile"))
         self.setMinimumWidth(DIALOG_MIN_WIDTH)
@@ -93,7 +99,7 @@ class ProfileEditDialog(QDialog):
         self._valid_from.setAccessibleName(self.tr("Valid from"))
         self._valid_from.setCalendarPopup(True)
         self._valid_from.setDisplayFormat(QLocale().dateFormat(QLocale.FormatType.ShortFormat))
-        self._valid_from.setMinimumDate(to_qdate(MIN_BIRTH_DATE))
+        self._valid_from.setMinimumDate(to_qdate(MIN_MEASUREMENT_DATE))
         self._valid_from.setMaximumDate(to_qdate(self._form.today))
         self._valid_from.dateChanged.connect(self._on_valid_from_changed)
 
@@ -111,6 +117,7 @@ class ProfileEditDialog(QDialog):
         self._build_fixed_fields()
         self._build_history_table()
         self._build_buttons()
+        self._set_tab_order()
         outer = QVBoxLayout(self)
         outer.setSpacing(SPACE_4)
         outer.addWidget(self._fixed_group())
@@ -153,6 +160,24 @@ class ProfileEditDialog(QDialog):
         self._buttons.accepted.connect(self._on_save)
         self._buttons.rejected.connect(self.reject)
 
+    def _set_tab_order(self) -> None:
+        """Il Tab segue l'ordine visivo, dall'alto in basso: prima i dati fissi da completare."""
+        cancel = self._buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        order = [
+            self._height,
+            self._birth,
+            self._valid_from,
+            self._weight,
+            self._min,
+            self._max,
+            self._threshold,
+            self._table,
+            self._save,
+            cancel,
+        ]
+        for first, second in pairwise(order):
+            QWidget.setTabOrder(first, second)
+
     def _fixed_group(self) -> QGroupBox:
         box = QGroupBox(self.tr("Profile data"), self)
         layout = QFormLayout(box)
@@ -170,9 +195,17 @@ class ProfileEditDialog(QDialog):
             )
             note.setWordWrap(True)
             layout.addRow(note)
-            layout.addRow(self.tr("Height (cm)"), self._with_error(self._height, EditField.HEIGHT))
-            layout.addRow(
-                self.tr("Date of birth"), self._with_error(self._birth, EditField.BIRTH_DATE)
+            add_field_row(
+                layout,
+                self.tr("Height (cm)"),
+                self._height,
+                self._with_error(self._height, EditField.HEIGHT),
+            )
+            add_field_row(
+                layout,
+                self.tr("Date of birth"),
+                self._birth,
+                self._with_error(self._birth, EditField.BIRTH_DATE),
             )
         else:
             height = self.tr("{cm} cm").format(cm=fixed.height.cm)
@@ -199,15 +232,16 @@ class ProfileEditDialog(QDialog):
         )
         hint.setWordWrap(True)
         layout.addRow(hint)
-        layout.addRow(
-            self.tr("Valid from"), self._with_error(self._valid_from, EditField.VALID_FROM)
+        rows = (
+            (self.tr("Valid from"), self._valid_from, EditField.VALID_FROM),
+            (self.tr("Weight (kg)"), self._weight, EditField.WEIGHT),
+            (self.tr("Resting heart rate"), self._min, EditField.MIN_BPM),
+            (self.tr("Maximum heart rate"), self._max, EditField.MAX_BPM),
+            (self.tr("Threshold heart rate"), self._threshold, EditField.THRESHOLD),
         )
-        layout.addRow(self.tr("Weight (kg)"), self._with_error(self._weight, EditField.WEIGHT))
-        layout.addRow(self.tr("Resting heart rate"), self._with_error(self._min, EditField.MIN_BPM))
-        layout.addRow(self.tr("Maximum heart rate"), self._with_error(self._max, EditField.MAX_BPM))
-        layout.addRow(
-            self.tr("Threshold heart rate"), self._with_error(self._threshold, EditField.THRESHOLD)
-        )
+        for text, widget, field in rows:
+            add_field_row(layout, text, widget, self._with_error(widget, field))
+        layout.addRow(self._validity_notice)
         return box
 
     def _read_only(self, text: str, name: str) -> QLabel:
@@ -228,7 +262,16 @@ class ProfileEditDialog(QDialog):
         label = QLabel(self)
         label.setTextFormat(Qt.TextFormat.PlainText)
         label.setWordWrap(True)
-        label.setStyleSheet(f"color: {self._error_color};")
+        label.setStyleSheet(f"color: {self._tokens.error};")
+        label.setVisible(False)
+        return label
+
+    def _note_label(self) -> QLabel:
+        """Riga di spiegazione sotto un campo (testo attenuato, con contrasto sufficiente)."""
+        label = QLabel(self)
+        label.setTextFormat(Qt.TextFormat.PlainText)
+        label.setWordWrap(True)
+        label.setStyleSheet(f"color: {self._tokens.text_muted};")
         label.setVisible(False)
         return label
 
@@ -238,6 +281,9 @@ class ProfileEditDialog(QDialog):
         column.setContentsMargins(0, 0, 0, 0)
         column.setSpacing(SPACE_1)
         column.addWidget(widget)
+        note = self._notes.get(field)
+        if note is not None:
+            column.addWidget(note)
         column.addWidget(self._errors[field])
         return box
 
@@ -297,6 +343,17 @@ class ProfileEditDialog(QDialog):
         """Messaggio mostrato sotto un campo (vuoto se non c'è)."""
         return self._errors[field].text()
 
+    def note_text(self, field: EditField) -> str:
+        """Ciò che vale quel giorno per un campo cambiato (vuoto se il campo non è cambiato)."""
+        label = self._notes[field]
+        return label.text() if label.isVisibleTo(self) else ""
+
+    @property
+    def validity_notice_text(self) -> str:
+        """Avviso che una misura successiva sostituisce la nuova (vuoto se non c'è)."""
+        label = self._validity_notice
+        return label.text() if label.isVisibleTo(self) else ""
+
     # --- Dal modello alla vista -------------------------------------------------------
 
     def set_history(self, history: MeasurementHistory) -> None:
@@ -343,7 +400,7 @@ class ProfileEditDialog(QDialog):
             ),
             MeasurementProblem.DATE_IN_FUTURE: self.tr("The date cannot be in the future."),
             MeasurementProblem.DATE_TOO_OLD: self.tr("The date cannot be before {first}.").format(
-                first=MIN_BIRTH_DATE.isoformat()
+                first=MIN_MEASUREMENT_DATE.isoformat()
             ),
             MeasurementProblem.INVALID_HEART_RATE: self.tr(
                 "The heart-rate values do not fit together: the resting rate must be below the "
@@ -362,7 +419,24 @@ class ProfileEditDialog(QDialog):
 
     def _after_edit(self) -> None:
         self._update_save_button()
+        self._refresh_notes()
         self._refresh_errors()
+
+    def _refresh_notes(self) -> None:
+        """Cosa cambia rispetto al giorno scelto e per quanto varrebbe: si ricalcola a ogni modifica
+        e a ogni cambio di giorno, così le note non restano quelle di un altro giorno."""
+        changes = {change.field: change for change in self._form.changes()}
+        for field, label in self._notes.items():
+            change = changes.get(field)
+            label.setText("" if change is None else in_force_text(change))
+            label.setVisible(change is not None)
+        lines = [
+            superseded_text(pending.series, pending.period.valid_to)
+            for pending in self._form.pending_periods()
+            if pending.period.valid_to is not None
+        ]
+        self._validity_notice.setText("\n".join(lines))
+        self._validity_notice.setVisible(bool(lines))
 
     def _on_valid_from_changed(self, value: QDate) -> None:
         self._form.set_valid_from(date(value.year(), value.month(), value.day()))

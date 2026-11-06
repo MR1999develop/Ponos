@@ -50,6 +50,7 @@ from ponos_coach.ui.hr_figure import (
 )
 from ponos_coach.ui.load_figures import (
     CHART_WEEKS,
+    MAX_SPORT_SERIES,
     WeeklyLoadLabels,
     WeeklyZonesLabels,
     build_weekly_load_figure,
@@ -71,10 +72,6 @@ ZONES_LABELS = WeeklyZonesLabels("Week", "Time in zone", "Zone", CHROME)
 HR_LABELS = HeartRateLabels("Time", "Heart rate", "Heart rate", "Discarded", CHROME)
 LIMITS = HeartRateLimits(50, 190)
 THROUGH = date(2026, 6, 28)  # una domenica
-D_F3_06 = "D-F3-06: nomi delle zone nel grafico della FC sotto 4,5:1 sulle bande di zona"
-D_F3_07 = "D-F3-07: le barre del carico giornaliero (opacità 0,6) rendono sotto 3:1 sul fondo"
-D_F3_08 = "D-F3-08: le croci dei campioni scartati sotto 3:1 sulle bande di zona del tema scuro"
-D_F3_09 = "D-F3-09: CTL e ATL differiscono solo per il colore (stessa linea, stesso spessore)"
 
 
 # --- Dati e costruttori ------------------------------------------------------------------------
@@ -309,8 +306,25 @@ def test_t_ui_04_the_bars_hold_the_weekly_sums_of_the_last_26_weeks_only(
     shown_weeks = [last_monday - timedelta(weeks=n) for n in range(CHART_WEEKS - 1, -1, -1)]
     first_monday = min((w for w, _ in load_by_week), default=None)
 
+    shown_set = set(shown_weeks)
+    totals = {
+        sport: sum(v for (w, s), v in load_by_week.items() if s is sport and w in shown_set)
+        for sport in Sport
+    }
+    with_load = [sport for sport in Sport if totals[sport] > 0]
+    # Al più cinque serie (R4): oltre, restano i quattro sport con più carico (a parità vale
+    # l'ordine di `Sport`) e tutti gli altri, con "Altro", si sommano in "Altro".
+    members: dict[Sport, list[Sport]] = {sport: [sport] for sport in with_load}
+    if len(with_load) > MAX_SPORT_SERIES:
+        named = [sport for sport in with_load if sport is not Sport.OTHER]
+        kept = sorted(named, key=lambda sport: -totals[sport])[: MAX_SPORT_SERIES - 1]
+        members = {sport: [sport] for sport in kept}
+        members[Sport.OTHER] = [sport for sport in with_load if sport not in kept]
+
+    drawn: set[Sport] = set()
     for trace in load_figure.data:
         sport = next(s for s, name in SPORT_NAMES.items() if name == trace.name)
+        drawn.add(sport)
         assert trace.marker.color == sport_color(sport, tokens)
         xs = [d if isinstance(d, date) else date.fromisoformat(str(d)) for d in trace.x]
         assert (
@@ -320,11 +334,10 @@ def test_t_ui_04_the_bars_hold_the_weekly_sums_of_the_last_26_weeks_only(
             ]
         )
         for week, value in zip(xs, trace.y, strict=True):
-            assert value == pytest.approx(load_by_week.get((week, sport), 0.0))
-    sports_with_load = {s for (w, s), v in load_by_week.items() if w in set(shown_weeks) and v > 0}
-    assert {next(s for s, n in SPORT_NAMES.items() if n == t.name) for t in load_figure.data} == (
-        sports_with_load
-    )
+            expected = sum(load_by_week.get((week, member), 0.0) for member in members[sport])
+            assert value == pytest.approx(expected)
+    assert drawn == set(members)
+    assert len(load_figure.data) <= MAX_SPORT_SERIES
     for zone, trace in enumerate(zones_figure.data):
         for week, value in zip(trace.x, trace.y, strict=True):
             monday = week if isinstance(week, date) else date.fromisoformat(str(week))
@@ -393,11 +406,7 @@ def test_t_ui_05_every_series_and_zone_colour_reaches_3_to_1_on_the_background(
         assert contrast(color, tokens.background) >= 3.0, (name, color)
 
 
-@pytest.mark.parametrize(
-    "theme",
-    [Theme.LIGHT, Theme.DARK],
-)
-@pytest.mark.xfail(strict=True, reason=D_F3_07)
+@pytest.mark.parametrize("theme", THEMES)
 def test_t_ui_05_the_daily_load_bars_as_drawn_reach_3_to_1(theme: Theme) -> None:
     tokens = tokens_for(theme)
     visible = blend(tokens.daily_load, tokens.background, tokens.daily_load_opacity)
@@ -419,19 +428,8 @@ def test_t_ui_05_the_heart_rate_curve_reaches_3_to_1_on_each_zone_band(
     assert contrast(tokens.ctl, band_colour(tokens, zone)) >= 3.0
 
 
-def _band_params(failing: dict[Theme, set[int]]) -> list[object]:
-    return [
-        pytest.param(
-            theme, zone,
-            marks=pytest.mark.xfail(strict=True, reason=D_F3_06)
-            if zone in failing.get(theme, set()) else (),
-        )
-        for theme in THEMES
-        for zone in range(5)
-    ]  # fmt: skip
-
-
-@pytest.mark.parametrize(("theme", "zone"), _band_params({Theme.LIGHT: {4}, Theme.DARK: {2, 3, 4}}))
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("zone", range(5))
 def test_t_ui_05_the_zone_names_in_the_heart_rate_chart_reach_4_5_to_1_on_their_band(
     theme: Theme, zone: int
 ) -> None:
@@ -443,16 +441,8 @@ def test_t_ui_05_the_zone_names_in_the_heart_rate_chart_reach_4_5_to_1_on_their_
     assert contrast(label_color, band_colour(tokens, zone)) >= 4.5
 
 
-@pytest.mark.parametrize(
-    ("theme", "zone"),
-    [
-        pytest.param(t, z, marks=pytest.mark.xfail(strict=True, reason=D_F3_08))
-        if t is Theme.DARK and z == 4
-        else pytest.param(t, z)
-        for t in THEMES
-        for z in range(5)
-    ],
-)
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("zone", range(5))
 def test_t_ui_05_the_discarded_sample_crosses_reach_3_to_1_on_each_zone_band(
     theme: Theme, zone: int
 ) -> None:
@@ -461,7 +451,6 @@ def test_t_ui_05_the_discarded_sample_crosses_reach_3_to_1_on_each_zone_band(
     assert contrast(tokens.error, band_colour(tokens, zone)) >= 3.0
 
 
-@pytest.mark.xfail(strict=True, reason=D_F3_09)
 def test_t_ui_05_the_two_load_lines_of_the_pmc_differ_by_more_than_the_colour() -> None:
     pmc, entries = small_history()
     figure = build_pmc_figure(pmc, entries, LABELS, tokens_for(Theme.LIGHT))

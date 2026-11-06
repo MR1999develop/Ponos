@@ -11,20 +11,26 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from PySide6.QtCore import QModelIndex, QSettings, Qt, QTimer
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QListWidget
+from PySide6.QtWidgets import QListWidget, QTableView
 from pytestqt.qtbot import QtBot
+from shiboken6 import isValid
 
+from ponos_coach.load.domain import ZoneSeconds
 from ponos_coach.profiles.domain import PROFILE_ARCHIVE_DIR
 from ponos_coach.ui import activity_detail_loader, overview_page
+from ponos_coach.ui.activity_detail import DetailReady
 from ponos_coach.ui.activity_detail_dialog import ActivityDetailDialog
+from ponos_coach.ui.chart_view import ChartEngine
 from ponos_coach.ui.hr_figure import prepare_heart_rate_chart
 from ponos_coach.ui.load_figures import prepare_weekly_zones_chart
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.overview_state import Ready
+from tests.ui.test_activity_detail import detail_with
 from tests.ui.workspace_support import (
     FILES_IN_FIXTURE_FOLDER,
     WAIT_MS,
@@ -110,10 +116,10 @@ def test_the_overview_shows_three_charts_pmc_weekly_load_and_zones(
     assert load is not None
     assert zones is not None
     assert [t.name for t in load.data] == ["Running"]
-    assert load.layout.yaxis.title.text == "Load (hrTSS/week)"
+    assert load.layout.yaxis.title.text == "Load (hrTSS per week)"
     assert load.layout.xaxis.title.text == "Week (starting Monday)"
     assert zones.data[0].name == "Z1 <85%"
-    assert zones.layout.yaxis.title.text == "Time in zone (h/week)"
+    assert zones.layout.yaxis.title.text == "Time in zone (hours per week)"
     assert zones.layout.legend.title.text == "Heart-rate zone (% of threshold)"
     assert all(trace.type == "bar" for trace in (*load.data, *zones.data))
     assert load.layout.yaxis.rangemode == "tozero"
@@ -266,3 +272,57 @@ def test_closing_the_window_with_the_detail_open_finishes_the_closing(
 
     assert window.is_closed
     assert window.profile_dialogs.detail_dialog is None
+
+
+def test_closing_a_window_with_several_charts_and_details_open_destroys_every_page_first(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    page = window.overview_page
+    window.activities_page.table.selectRow(0)
+    window.detail_action.trigger()
+    first = open_detail(qtbot, window)
+    qtbot.waitUntil(first.shows_chart, timeout=WAIT_MS)
+    first.close()  # un dettaglio già chiuso e uno ancora aperto alla chiusura della finestra
+    qtbot.waitUntil(lambda: window.profile_dialogs.detail_dialog is None, timeout=WAIT_MS)
+    window.detail_action.trigger()
+    second = open_detail(qtbot, window)
+    qtbot.waitUntil(second.shows_chart, timeout=WAIT_MS)
+    views = [page.chart, page.load_chart, page.zones_chart, second.chart]
+    pages = [view.page for view in views]
+    assert all(isValid(web_page) for web_page in pages)
+
+    close_window(qtbot, window)
+
+    assert window.is_closed
+    assert not any(isValid(web_page) for web_page in pages)  # distrutte subito, non in coda
+    assert not any(view.engine_started for view in views if isValid(view))
+
+
+def test_releasing_the_web_engine_twice_is_harmless_and_after_it_no_page_is_created(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    view = window.overview_page.chart
+    web_page = view.page
+
+    window.release_web_engine()  # come da `aboutToQuit`
+    window.release_web_engine()
+
+    assert not isValid(web_page)
+    assert not view.engine_started
+    view.start_engine()  # il motore non c'è più: nessuna pagina nuova
+    assert not view.engine_started
+
+
+def test_without_heart_rate_the_detail_hides_the_table_of_the_zones(qtbot: QtBot) -> None:
+    dialog = ActivityDetailDialog(ChartEngine(lambda _name: None), ZoneInfo("Europe/Rome"))
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    dialog.show_outcome(DetailReady(detail_with(ZoneSeconds.ZERO), None))  # senza FC: stimato
+
+    table = dialog.findChild(QTableView, "detailZones")
+    assert table is not None
+    assert not table.isVisibleTo(dialog)  # cinque righe a 0:00:00 direbbero il falso
+    assert dialog.message_page.title_text == "No heart-rate data"

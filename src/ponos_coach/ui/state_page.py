@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from ponos_coach.ui.tokens import SPACE_2, SPACE_4, SPACE_6, STATE_PAGE_MAX_WIDTH, TITLE_SCALE
 
@@ -39,9 +39,16 @@ class StatePage(QWidget):
         inner.addWidget(self._body)
         inner.addSpacing(SPACE_4)
         inner.addWidget(self._button, alignment=Qt.AlignmentFlag.AlignLeft)
+        # Centrata con due spaziatori, non con l'allineamento del layout: con l'allineamento Qt
+        # calcola l'altezza sulla larghezza ideale della colonna e le etichette a capo restano
+        # più basse del loro testo (righe tagliate).
+        centered = QHBoxLayout()
+        centered.addStretch(1)
+        centered.addWidget(column)
+        centered.addStretch(1)
         outer = QVBoxLayout(self)
         outer.addStretch(1)
-        outer.addWidget(column, alignment=Qt.AlignmentFlag.AlignHCenter)
+        outer.addLayout(centered)
         outer.addStretch(2)
 
     def set_content(self, title: str, body: str, button_text: str) -> None:

@@ -90,7 +90,7 @@ def test_the_progress_names_the_phase_the_counter_and_the_time_left() -> None:
 
     assert listing == "Listing activities: 200 of 1000"
     assert unknown_total == "Listing activities: 200"
-    assert downloading == "Downloading activity 5 of 20 - about 3 minute(s) left"
+    assert downloading == "Downloading activity 5 of 20 - about 3 min left"
 
 
 def test_the_time_left_is_omitted_until_it_is_known() -> None:
@@ -101,7 +101,7 @@ def test_the_time_left_is_omitted_until_it_is_known() -> None:
 
 def test_remaining_time_in_words() -> None:
     assert remaining_text(10.0) == "less than a minute left"
-    assert remaining_text(7200.0) == "about 2 hour(s) left"
+    assert remaining_text(7200.0) == "about 2 h left"
 
 
 def test_the_notification_carries_the_number_of_new_activities() -> None:
@@ -113,9 +113,9 @@ def test_the_notification_carries_the_number_of_new_activities() -> None:
 
 def test_the_headline_tells_how_it_went() -> None:
     assert headline_text(finished()) == "Garmin is up to date"
-    assert headline_text(finished(downloaded=3)) == "Synchronised: 3 new activity(ies)"
+    assert headline_text(finished(downloaded=3)) == "New activities synchronised: 3"
     assert headline_text(finished(downloaded=3, matched=2)) == (
-        "Synchronised: 3 new activity(ies), 2 matched with imported files"
+        "New activities synchronised: 3, matched with imported files: 2"
     )
     assert headline_text(finished(stop=StopReason.CANCELLED)) == "Synchronisation stopped"
     assert (
@@ -136,9 +136,9 @@ def test_the_summary_lists_new_matched_failed_with_reasons_and_the_stop() -> Non
 
     lines = summary_lines(result)
 
-    assert lines[0] == "4 new activity(ies) downloaded"
-    assert lines[1] == "1 activity(ies) matched with files you imported"
-    assert lines[2] == "3 activity(ies) not downloaded:"
+    assert lines[0] == "New activities downloaded: 4"
+    assert lines[1] == "Activities matched with files you imported: 1"
+    assert lines[2] == "Activities not downloaded: 3"
     assert lines[3] == "  the file format is not supported (for example TCX): 2"
     assert lines[4] == "  the file is damaged: 1"
     assert lines[5] == stop_reason_text(StopReason.SERVICE_UNAVAILABLE)
@@ -162,9 +162,9 @@ def test_files_already_in_the_profile_are_said_apart_and_never_called_new() -> N
 
     lines = summary_lines(result)
 
-    assert lines[0] == "1 new activity(ies) downloaded"
-    assert lines[1] == "4 activity(ies) were already in the profile"
-    assert headline_text(result) == "Synchronised: 1 new activity(ies)"
+    assert lines[0] == "New activities downloaded: 1"
+    assert lines[1] == "Activities already in the profile: 4"
+    assert headline_text(result) == "New activities synchronised: 1"
     assert headline_text(finished(already_present=4)) == "Garmin is up to date"
 
 

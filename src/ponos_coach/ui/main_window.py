@@ -177,7 +177,6 @@ class MainWindow(QMainWindow):
         self._restore_geometry()
         self._restore_section()
         self._connect_controller()
-        self._engine.keep_last()  # dopo ogni widget con pagine web: vedi `ChartEngine`
         QGuiApplication.styleHints().colorSchemeChanged.connect(self._on_color_scheme_changed)
         self._on_overview_changed(controller.overview_state)
         self._update_actions()
@@ -640,7 +639,7 @@ class MainWindow(QMainWindow):
         if preview.activities is None:
             count_text = self.tr("The number of activities could not be read.")
         else:
-            count_text = self.tr("%n activity(ies) will be deleted.", "", preview.activities)
+            count_text = self.tr("Activities that will be deleted: %n.", "", preview.activities)
         box.setInformativeText(
             "\n".join(
                 (
@@ -726,14 +725,14 @@ class MainWindow(QMainWindow):
             return
         # {done}: files already handled; %n: files to import.
         self._import_label.setText(
-            self.tr("Imported {done} of %n file(s)", "", progress.total).format(done=progress.done)
+            self.tr("Files imported: {done} of %n", "", progress.total).format(done=progress.done)
         )
         self._import_bar.setRange(0, progress.total)
         self._import_bar.setValue(progress.done)
 
     def _on_import_finished(self, report: ImportReport) -> None:
         self.statusBar().showMessage(
-            self.tr("%n activity(ies) imported", "", report.imported), _STATUS_MESSAGE_MS
+            self.tr("Activities imported: %n", "", report.imported), _STATUS_MESSAGE_MS
         )
         dialog = ImportReportDialog(report, self)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
@@ -905,10 +904,10 @@ class MainWindow(QMainWindow):
             label.setVisible(summary is not None)
         if summary is None or not isinstance(state, Ready):
             return
-        self._activities_label.setText(self.tr("%n activity(ies)", "", summary.activities))
-        self._excluded_label.setText(self.tr("%n excluded activity(ies)", "", summary.excluded))
+        self._activities_label.setText(self.tr("Activities: %n", "", summary.activities))
+        self._excluded_label.setText(self.tr("Excluded activities: %n", "", summary.excluded))
         self._excluded_label.setVisible(summary.excluded > 0)
-        self._days_label.setText(self.tr("%n day(s) in the chart", "", summary.pmc_days))
+        self._days_label.setText(self.tr("Days in the chart: %n", "", summary.pmc_days))
         self._excluded_label.setToolTip(self._excluded_tooltip(state.overview))
 
     def _excluded_tooltip(self, overview: ProfileOverview) -> str:
@@ -938,6 +937,14 @@ class MainWindow(QMainWindow):
             self._engine_timer.start(0)
 
     def _start_web_engine(self) -> None:
+        """Avvia le tre pagine web subito dopo il primo `show()`, non "al primo bisogno".
+
+        Misura (offscreen, Chromium a freddo): il primo avvio costa circa 185 ms nel thread della
+        UI, ogni vista in più circa 3 ms. Rimandarlo al primo disegno o all'inizio del calcolo
+        sposterebbe 185 ms dentro l'importazione e il disegno, oltre il limite di 100 ms per
+        evento (T-UI-02); rimandare solo le due viste secondarie ne risparmia 6. Qui l'utente non
+        ha ancora un'azione in corso.
+        """
         self._overview.start_engines()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt
@@ -945,12 +952,19 @@ class MainWindow(QMainWindow):
 
         Il primo tempo annulla i lavori e chiede al thread dei dati di chiudere il profilo; la
         finestra resta aperta e un timer controlla se il thread ha finito. Al secondo tempo
-        (thread finito) rilascia il motore web e si chiude davvero. Oltre il tetto di attesa
-        avvisa e lascia la finestra aperta: un thread in esecuzione non si distrugge mai.
+        (thread finito) si chiude davvero. Oltre il tetto di attesa avvisa e lascia la finestra
+        aperta: un thread in esecuzione non si distrugge mai.
+
+        I dialoghi e il motore web (pagine, poi profilo) si rilasciano già al primo tempo, subito:
+        la finestra può essere distrutta in qualunque momento dopo il primo `close()` (lo fa
+        anche `qtbot`), e Qt distrugge i figli nell'ordine in cui sono nati, non quello che
+        serve al motore web. Se l'attesa scade i grafici restano vuoti.
         """
         if not self._closed:
             self._remember_window_state()
             self._controller.begin_shutdown()
+            self._dialogs.close_all()
+            self.release_web_engine()
             if not self._controller.has_stopped:
                 event.ignore()
                 self._wait_for_shutdown()
@@ -986,9 +1000,11 @@ class MainWindow(QMainWindow):
             self.tr("Wait a moment, then close the window again."),
         )
 
-    def _finish_closing(self) -> None:
-        self._dialogs.close_all()
-        self._overview.dispose_charts()
+    def release_web_engine(self) -> None:
+        """Distrugge pagine e profilo del motore web (idempotente): alla chiusura della finestra
+        e da `aboutToQuit`, prima che Qt distrugga gli oggetti."""
         self._engine.dispose()
+
+    def _finish_closing(self) -> None:
         self.statusBar().clearMessage()
         self._closed = True

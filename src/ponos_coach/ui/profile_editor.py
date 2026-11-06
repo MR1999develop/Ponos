@@ -11,6 +11,7 @@ FC e dati fissi sono dati di salute: mai nei log né nei messaggi d'errore.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, Signal
 
@@ -21,11 +22,20 @@ from ponos_coach.profiles.measurements import (
     InvalidMeasurementsError,
     MeasurementHistory,
     ReadMeasurementHistory,
+    SavedMeasurements,
     UpdateMeasurements,
 )
 from ponos_coach.ui.data_thread import JobFailed, JobOutcome, JobSucceeded
 from ponos_coach.ui.measurements_form import MeasurementsRequest, issue_for_rejection
 from ponos_coach.ui.workspace import ProfileAccess, WorkspaceController
+
+
+@dataclass(frozen=True, slots=True)
+class SavedEdit:
+    """Esito di un salvataggio: lo storico riletto e i periodi di validità effettivi."""
+
+    history: MeasurementHistory
+    saved: SavedMeasurements
 
 
 def _read_history(access: ProfileAccess) -> MeasurementHistory:
@@ -37,7 +47,7 @@ class ProfileEditor(QObject):
     """Lavori di modifica del profilo aperto. Gli esiti arrivano come segnali nel thread UI."""
 
     measurements_loaded = Signal(object)  # MeasurementHistory
-    measurements_saved = Signal(object)  # MeasurementHistory, già riletto dopo il salvataggio
+    measurements_saved = Signal(object)  # SavedEdit: storico già riletto e periodi di validità
     measurements_rejected = Signal(object)  # EditIssue
     sport_weights_loaded = Signal(object)  # Mapping[Sport, SportWeight]
     sport_weights_saved = Signal()
@@ -60,16 +70,16 @@ class ProfileEditor(QObject):
         if not self._controller.can_edit_profile:
             return False
 
-        def work(access: ProfileAccess) -> MeasurementHistory:
+        def work(access: ProfileAccess) -> SavedEdit:
             session = access.session
-            UpdateMeasurements(
+            saved = UpdateMeasurements(
                 session.activities,
                 session.physiology,
                 session.weights,
                 access.today,
                 session.fixed_data,
             )(request.update, request.fixed)
-            return _read_history(access)
+            return SavedEdit(_read_history(access), saved)
 
         return self._controller.run_on_profile(work, self._after_save_measurements)
 
@@ -80,7 +90,7 @@ class ProfileEditor(QObject):
             self.failed.emit(self._controller.describe_failure(outcome.error))
 
     def _after_save_measurements(self, outcome: JobOutcome) -> None:
-        if isinstance(outcome, JobSucceeded) and isinstance(outcome.value, MeasurementHistory):
+        if isinstance(outcome, JobSucceeded) and isinstance(outcome.value, SavedEdit):
             self.measurements_saved.emit(outcome.value)
             self._controller.request_overview_refresh()
         elif isinstance(outcome, JobFailed):

@@ -73,7 +73,7 @@ Si ripete per ogni nuovo profilo. I passi:
 
 1. Nome e cartella del profilo.
 2. Login Garmin (si può rimandare: l'import di file FIT funziona sempre).
-3. FC minima e massima.
+3. Altezza, peso e data di nascita; FC minima, massima e di soglia.
 4. Sesso (serve al calcolo del carico).
 5. Disponibilità settimanale.
 6. Tipologie di seduta.
@@ -81,9 +81,11 @@ Si ripete per ogni nuovo profilo. I passi:
 
 Poi parte la prima sincronizzazione di tutto lo storico.
 
-Stato della fase 1: il primo avvio apre il dialogo "Nuovo profilo" con nome,
-cartella, FC a riposo, massima e di soglia (stimata al 90% della massima
-finché l'utente non la fissa), sesso e fuso orario. I passi successivi
+Stato della fase 3: il primo avvio apre il dialogo "Nuovo profilo" con nome,
+cartella, altezza, peso, data di nascita, FC a riposo, massima e di soglia
+(stimata al 90% della massima finché l'utente non la fissa), sesso e fuso
+orario. Altezza, peso e data di nascita sono obbligatori e sono dati di
+salute: restano nel database del profilo (sezione 5). I passi successivi
 arrivano con le loro fasi. Nella fase 2 il login Garmin non è un passo del
 dialogo: si fa da Garmin, Collega account Garmin… (sezione 3).
 
@@ -252,8 +254,39 @@ disponibile).
 ## 5. Parametri fisiologici
 
 - L'utente inserisce FC minima, FC massima, sesso e FC di soglia.
-- Ogni valore ha una data di validità. Ogni attività usa i valori del suo
-  periodo. Se un valore cambia, i carichi si ricalcolano.
+- Alla creazione del profilo servono anche altezza (intera, da 100 a 250 cm),
+  peso (da 20,0 a 300,0 kg, una cifra decimale; si scrive `70,5` o `70.5`) e
+  data di nascita (dal 1900-01-01 a cinque anni fa). Sono dati personali di
+  salute: stanno solo nel database del profilo e non compaiono mai in log,
+  messaggi o catene d'errore.
+- **Fissi e datati.** Altezza e data di nascita sono fisse: una volta scritte
+  non si cambiano più. Peso, FC minima, FC massima e soglia sono misure
+  datate: ogni valore ha una data di validità. Ogni attività usa i valori del
+  suo periodo. Se un valore cambia, i carichi si ricalcolano. Il peso
+  corporeo non entra nel calcolo del carico.
+- **Validità di una misura.** Una misura vale dal giorno scelto fino alla
+  misura successiva della stessa serie (il peso e i valori di FC sono due
+  serie). Una misura con data passata non cambia quindi ciò che vale dopo una
+  misura più recente. Per lo stesso giorno la nuova misura sostituisce la
+  vecchia. I valori che non si cambiano restano quelli in vigore quel giorno.
+  La data non può essere nel futuro né prima del 1900-01-01. Il vincolo
+  FC minima < soglia <= FC massima si verifica sul risultato. Decisione:
+  [ADR 007](adr/007-dati-del-profilo-e-zone.md).
+- **Modifica profilo** (menu Profilo, Ctrl+E):
+  - in alto i dati fissi in sola lettura (nome, altezza, data di nascita,
+    sesso); sotto, le misure da aggiornare con il giorno da cui valgono
+    (oggi per default), il peso e le tre FC; in fondo lo storico delle
+    misure, ordinabile cliccando l'intestazione, senza linee;
+  - dopo il salvataggio mostra il periodo di validità effettivo della misura
+    salvata (da quale giorno, e fino a quale);
+  - se la data scelta è passata e la misura vale solo fino alla misura
+    successiva, lo dice con un avviso, perché non vale "da allora in poi";
+  - "Salva modifiche" è disabilitato finché non cambia almeno un valore, con
+    il motivo nel suggerimento; "Annulla" non cambia nulla;
+  - un errore compare sotto il campo che lo causa.
+- **Profili creati prima della fase 3.** Non hanno altezza né data di nascita
+  e restano validi. "Modifica profilo" li chiede una volta sola, nello stesso
+  salvataggio delle altre misure, e dopo non si cambiano.
 - In bici la soglia è quella della corsa meno 4 bpm, finché non c'è un test in
   bici.
 - Un valore di FC fuori da minima e massima è un errore: il campione si
@@ -261,7 +294,18 @@ disponibile).
   Se molti superano la massima, l'app propone di rivederla.
 - Attività senza FC, o con troppi campioni scartati, hanno un carico stimato,
   marcato "stimato" in tabella e nei grafici.
-- I pesi degli sport si possono modificare nelle impostazioni del profilo.
+
+### Pesi degli sport
+
+- Menu Profilo, "Pesi degli sport…" (Ctrl+Maiusc+W): un peso da 0 a 5 per
+  ogni sport, con due decimali. Il peso moltiplica il carico di ogni attività
+  di quello sport: 1,00 lascia il carico com'è calcolato, 0 toglie lo sport
+  dal carico.
+- Cambiare un peso ricalcola solo le attività di quello sport.
+- "Ripristina predefiniti" riporta tutti i pesi al valore di partenza (è
+  disabilitato se lo sono già). "Salva pesi" è disabilitato senza modifiche,
+  con il motivo nel suggerimento. "Annulla" non cambia nulla.
+- Si salvano solo i pesi diversi dal predefinito.
 
 Formule e valori: [modello di carico](../.claude/skills/ponos-allenamento/references/modello-carico.md).
 
@@ -270,10 +314,57 @@ Formule e valori: [modello di carico](../.claude/skills/ponos-allenamento/refere
 - La Panoramica mostra la forma di oggi, la seduta di oggi e il grafico PMC
   (CTL, ATL, TSB, carico giornaliero, proiezione del piano, linee degli
   obiettivi).
-- Altri grafici: carico settimanale per sport, tempo nelle zone, FC
-  dell'attività.
-- Assi con nome e unità, tema chiaro e scuro, esportazione in SVG e PNG.
+- Altri grafici: carico settimanale per sport, tempo nelle zone (entrambi
+  nella Panoramica) e FC dell'attività (nel dettaglio dell'attività).
+- Assi con nome e unità tradotte, tema chiaro e scuro, esportazione in SVG e
+  PNG.
+- Nessun significato è affidato al solo colore: CTL e ATL si distinguono anche
+  senza colore, i segmenti sono separati da una linea del colore di fondo e i
+  campioni scartati hanno una croce.
 - I grafici non accedono alla rete.
+
+### Carico settimanale per sport
+
+- Barre impilate che partono da zero, una per settimana ISO (da lunedì a
+  domenica, giorni locali del profilo), ultime 26 settimane; con la barra del
+  grafico si ingrandisce. Le settimane senza attività ci sono, a zero.
+- Al massimo cinque serie: i quattro sport con più carico nel periodo e la
+  voce "Altro" per gli altri. Nessun colore rosso o arancio, riservati a
+  errori e avvisi.
+- Unità: hrTSS a settimana. Il suggerimento sul segmento dice sport e valore.
+
+### Tempo nelle zone
+
+- Barre impilate in ore per settimana, con Z1 in basso e Z5 in alto, sulle
+  stesse 26 settimane.
+- Le cinque zone sono definite sulla soglia dello sport (in bici, la soglia
+  della bici): Z1 sotto 85%, Z2 85-89%, Z3 90-94%, Z4 95-99%, Z5 dal 100%.
+  Sono percentuali di default del progetto, riviste in fase 4 con il test di
+  soglia ([ADR 007](adr/007-dati-del-profilo-e-zone.md)). Un campione sul
+  confine appartiene alla zona più alta.
+- La scala dei colori ha luminosità crescente: l'ordine si legge anche senza
+  i colori, e la legenda dà il nome e i confini di ogni zona.
+- I secondi in zona contano gli stessi campioni del carico: i campioni fuori
+  da FC minima e massima sono scartati e gli intervalli oltre 10 s non contano.
+  Un'attività senza FC non ha tempo in zona.
+
+### Dettaglio dell'attività
+
+- Si apre con doppio clic o Invio su una riga della pagina Attività, o dal
+  menu Profilo, "Dettaglio attività…" (Ctrl+D). La finestra non è modale e
+  si può tenere aperta mentre si usa l'app.
+- Mostra il riepilogo (inizio nel fuso del profilo, tempo in movimento e
+  trascorso, distanza, dislivello, carico e sua origine, soglia e limiti di FC
+  validi in quel giorno), la curva della FC con le bande delle zone e i loro
+  nomi, e la tabella del tempo in ogni zona (tempo e quota percentuale).
+- I campioni di FC scartati dal carico sono segnati nel grafico con una croce;
+  un avviso dice quanti sono, e quanti il lettore del file ha saltato perché con
+  orario ripetuto o all'indietro.
+- Senza FC la finestra lo dice e il carico è stimato. Se il file nell'archivio
+  manca, è alterato o non si legge, la finestra dice il motivo; un file alterato
+  non si usa mai in silenzio.
+- Le curve molto lunghe si diradano a 3.000 punti, tenendo tutti i campioni
+  scartati.
 
 ### Panoramica
 
@@ -300,7 +391,7 @@ Formule e valori: [modello di carico](../.claude/skills/ponos-allenamento/refere
   vuota dove il dato manca (per esempio la distanza di una seduta indoor).
 - Senza attività, la pagina invita a importare file.
 - I filtri (data, durata, distanza, dislivello, sport) arrivano con la fase 9.
-- Il dettaglio dell'attività, con FC e zone, arriva con i grafici (fase 3).
+- Doppio clic o Invio su una riga apre il dettaglio dell'attività (sezione 6).
 
 ## 7. Test di soglia
 
@@ -372,7 +463,11 @@ Regole: [infortuni](../.claude/skills/ponos-allenamento/references/infortuni.md)
 
 ## 13. Comportamenti generali
 
-- Interfaccia in italiano e inglese.
+- Interfaccia in italiano e inglese. La lingua predefinita è l'inglese, non
+  quella del sistema. Il menu Lingua ha "English" e "Italiano" (i nomi non si
+  traducono) e la scelta si ricorda: si applica al prossimo avvio.
+  `ponos-coach --lang en` o `--lang it` ha la precedenza. Se il catalogo
+  italiano manca, l'app parte in inglese e lo scrive nel log.
 - Menu completi con scorciatoie; tutto usabile da tastiera.
 - Annulla e ripeti per obiettivi e calendario.
 - L'app ricorda finestra, pannelli, ultimo profilo e ultime cartelle. Nella

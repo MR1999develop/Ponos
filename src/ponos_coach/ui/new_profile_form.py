@@ -22,10 +22,13 @@ from pathlib import Path
 from ponos_coach.load.domain import HeartRateLimits, Physiology, Sex, ThresholdHeartRate
 from ponos_coach.profiles.domain import (
     NAME_MAX_CHARS,
+    BirthDate,
     FixedProfileData,
     FolderState,
+    Height,
     InvalidProfileNameError,
     ProfileName,
+    Weight,
 )
 from ponos_coach.profiles.use_cases import NewProfileRequest
 from ponos_coach.ui.body_input import BodyProblem, read_birth_date, read_height, read_weight
@@ -121,6 +124,10 @@ _HEART_RATE_PROBLEMS = {
 }
 _PROBLEM_TO_HEART_RATE = {problem: rule for rule, problem in _HEART_RATE_PROBLEMS.items()}
 
+type BodyReadings = tuple[
+    Height | BodyProblem, Weight | BodyProblem, BirthDate | BodyProblem
+]  # altezza, peso e data di nascita letti una volta sola
+
 
 def heart_rate_problem_of(problem: Problem) -> HeartRateProblem | None:
     """La regola di `heart_rate_rules` violata da un problema di FC."""
@@ -215,21 +222,24 @@ class NewProfileForm:
 
         `today` (data di oggi nel fuso del profilo) serve al limite della data di nascita.
         """
-        found = [
-            *self._name_problems(),
-            *self._folder_problems(),
-            *self._body_problems(today),
-            *self._heart_rate_problems(),
-        ]
-        return tuple(found)
+        return self._problems_of(self._read_body(today))
 
-    def _body_problems(self, today: date) -> list[Problem]:
-        readings = (
+    def _read_body(self, today: date) -> BodyReadings:
+        """Altezza, peso e data di nascita: valori validi o la categoria del problema."""
+        return (
             read_height(self.height_text),
             read_weight(self.weight_text),
             read_birth_date(self.birth_date, today),
         )
-        return [_BODY_PROBLEMS[item] for item in readings if isinstance(item, BodyProblem)]
+
+    def _problems_of(self, readings: BodyReadings) -> tuple[Problem, ...]:
+        found = [
+            *self._name_problems(),
+            *self._folder_problems(),
+            *(_BODY_PROBLEMS[item] for item in readings if isinstance(item, BodyProblem)),
+            *self._heart_rate_problems(),
+        ]
+        return tuple(found)
 
     def _name_problems(self) -> list[Problem]:
         text = unicodedata.normalize("NFC", self.name).strip()
@@ -268,10 +278,9 @@ class NewProfileForm:
 
     def build_request(self, today: date) -> NewProfileRequest | tuple[Problem, ...]:
         """La richiesta di creazione, oppure i problemi che la impediscono."""
-        found = self.problems(today)
-        height = read_height(self.height_text)
-        weight = read_weight(self.weight_text)
-        birth = read_birth_date(self.birth_date, today)
+        readings = self._read_body(today)
+        height, weight, birth = readings
+        found = self._problems_of(readings)
         if (
             found
             or isinstance(height, BodyProblem)

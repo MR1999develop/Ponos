@@ -130,7 +130,7 @@ class LoadingPage(QWidget):
             return
         # {done}: activities already calculated; %n: number of activities in the profile.
         self._label.setText(
-            self.tr("Calculated {done} of %n activity(ies)", "", total).format(done=done)
+            self.tr("Activities calculated: {done} of %n", "", total).format(done=done)
         )
         self._bar.setRange(0, total)
         self._bar.setValue(done)
@@ -195,11 +195,6 @@ class OverviewPage(QWidget):
         """Avvia le pagine web dei tre grafici (dopo il primo `show()` della finestra)."""
         for view in self._views():
             view.start_engine()
-
-    def dispose_charts(self) -> None:
-        """Distrugge le pagine web dei tre grafici, prima del profilo del motore."""
-        for view in self._views():
-            view.dispose()
 
     def _views(self) -> tuple[ChartView, ChartView, ChartView]:
         return (self._chart, self._load_chart, self._zones_chart)
@@ -310,6 +305,7 @@ class OverviewPage(QWidget):
             tsb=self.tr("Form (TSB)"),
             daily_load=self.tr("Daily load"),
             chrome=chrome,
+            load_unit=self.tr("hrTSS per day"),
         )
 
     def _load_labels(self, chrome: ChartChrome) -> WeeklyLoadLabels:
@@ -318,6 +314,7 @@ class OverviewPage(QWidget):
             y_axis=self.tr("Load"),
             sports={sport: sport_text(sport) for sport in Sport},
             chrome=chrome,
+            unit=self.tr("hrTSS per week"),
         )
 
     def _zones_labels(self, chrome: ChartChrome) -> WeeklyZonesLabels:
@@ -326,4 +323,5 @@ class OverviewPage(QWidget):
             y_axis=self.tr("Time in zone"),
             legend_title=self.tr("Heart-rate zone (% of threshold)"),
             chrome=chrome,
+            unit=self.tr("hours per week"),
         )

@@ -1,8 +1,10 @@
 # Threat model
 
-Versione della fase 2 (2026-11-06): aggiunge il login nell'app, l'archivio dei
-token, le risposte e i download di Garmin, i log della libreria e le notifiche.
-Sulla base di quella della fase 1 (2026-11-05, aggiornata il 2026-11-06 con i
+Versione della fase 3 (2026-11-06): aggiunge altezza, peso e data di nascita
+come dati personali di salute, le misure datate, i pesi degli sport, le zone di
+FC e i dettagli di attività. Sulla base di quella della fase 2 (2026-11-06:
+login nell'app, archivio dei token, risposte e download di Garmin, log della
+libreria e notifiche) e di quella della fase 1 (2026-11-05, aggiornata il 2026-11-06 con i
 difetti del collaudo e il confine dei log) e della fase 0. Da
 riaggiornare nella stessa modifica di ogni funzione che tocca un confine di
 fiducia. Gli identificativi dei test (`T-SEC-04`…) sono quelli della sezione 7
@@ -77,6 +79,7 @@ Confini:
 | Credenziali e token Garmin | accesso all'account dell'utente; la password e il codice MFA vivono solo nel thread del login, i token nel loro archivio |
 | Account Garmin dell'utente | blocco (429) o segnalazione per uso anomalo; calendario modificabile |
 | Dati di salute: FC, infortuni, dolore, note del medico | riservatezza |
+| Altezza, peso e data di nascita (con lo storico del peso) | dati personali di salute: stanno solo nel database del profilo; mai in log, messaggi o catene d'errore; in chiaro come gli altri dati del profilo (rischio accettato, sezione 5) |
 | Posizioni GPS delle attività | rivelano casa e abitudini |
 | Integrità dei dati del profilo (file originali, database, parametri) | calcoli e piano si basano su di essi; un piano sbagliato può danneggiare |
 | Disponibilità dell'app e dei dati | non perdere anni di storico |
@@ -144,6 +147,13 @@ servizio, E elevazione dei privilegi.
 | B3 | Cartella del profilo creata con permessi larghi (DACL ereditata, file system che ignora i modi) | I | T-SEC-09 |
 | B3 | Iniezione SQL da nomi e note | T | T-SEC-05 |
 | B3 | Database di versione vecchia o sconosciuta; migrazione che lo rovina | T | T-DATI-01 |
+| B3 | Migrazione v2 → v3 interrotta a metà o fatta da due istanze insieme | T, D | T-DATI-01 |
+| B3 | Altezza o data di nascita modificate o cancellate dopo la creazione (bug o SQL diretto) | T | T-DATI-01 (trigger), T-QUAL-02 |
+| B3 | Peso, altezza o data di nascita fuori intervallo, con cifre non ASCII, NaN, esponenti o testo enorme (input dell'utente o file del profilo alterato) | T, D | T-QUAL-02, T-DATI-01 |
+| B3 | Misura con giorno di validità nel futuro, prima del 1900-01-01 o che porta FC incoerenti | T | T-QUAL-02 |
+| B3 | Peso di uno sport NaN, infinito o fuori da 0-5 che azzera o gonfia il carico | T | T-QUAL-02, D-F3-02 |
+| B3 | Carico di una versione precedente mescolato ai nuovi dopo un cambio di parametri, pesi, zone o modello | T | T-CALC-05, T-CALC-01 |
+| B3 | Altezza, peso, data di nascita o FC in log, messaggi, catene d'errore | I | T-SEC-08 |
 | B3 | Database di versione futura riscritto da una versione vecchia | T | T-DATI-01 |
 | B3 | Cancellazione della cartella di un profilo che porta fuori (link, giunzione) o cancella file dell'utente non creati dall'app | T, E | T-SEC-04, T-UI-03 |
 | B3 | Cancellazione della cartella di un profilo aperto altrove | T, D | T-DATI-04 |
@@ -152,6 +162,9 @@ servizio, E elevazione dei privilegi.
 | B4 | La pagina fa richieste di rete o carica immagini remote | I | T-SEC-06 |
 | B4 | Script nei dati eseguito nella pagina; ponte verso il codice dell'app | E | T-SEC-06 |
 | B4 | Esportazione SVG/PNG con contenuto non voluto | I | T-UI-04 |
+| B4 | Grafici della fase 3 (carico settimanale, zone, FC dell'attività) con nomi o testi non controllati nella pagina | T, E | T-SEC-06, T-UI-04 |
+| B3 | File dell'archivio sparito o alterato mentre il dettaglio è aperto o mentre si calcola | T | T-DATI-03, scenari di `tests/collaudo/test_fase3_scenari.py` |
+| B3 | Pesi cambiati durante una sincronizzazione: carichi che non corrispondono al calcolo da zero | T | T-CALC-05, `tests/collaudo/test_fase3_scenari.py` |
 | B5 | Token nella cartella, nella configurazione, nei log, nei temporanei, nei backup | I | T-SEC-07 |
 | B5 | Token non cancellato dopo il logout | I | T-SEC-07 |
 | B5 | Altro processo dell'utente legge il token | I | rischio accettato (assunzioni) |
@@ -304,6 +317,30 @@ servizio, E elevazione dei privilegi.
 - Gestore unico degli errori con messaggio generico.
 - Dipendenze: lockfile, `pip-audit` bloccante, licenze controllate; CI con
   permessi minimi e action fissate a SHA; `SHA256SUMS` per i pacchetti.
+- Dati personali del corpo (fase 3, ADR 007): altezza, peso e data di nascita
+  diventano tipi di dominio validi per costruzione (`Height`, `Weight`,
+  `BirthDate`) e le loro eccezioni non ripetono il valore rifiutato. Il peso è
+  un intero in decimi di chilo; il testo si legge con una grammatica stretta
+  (lunghezza prima, solo cifre ASCII, un separatore decimale; esponenti,
+  `NaN`, `_` e cifre a larghezza piena rifiutati, mai reinterpretati). Il
+  database ripete i limiti con `CHECK`; altezza e data di nascita hanno un
+  trigger che rifiuta `UPDATE` e `DELETE`. Il giorno di validità di una misura
+  non è nel futuro né prima del 1900-01-01; il vincolo tra le FC si verifica
+  sul risultato. Nessuno di questi valori entra in un log, in un messaggio o
+  nella catena di un errore (T-SEC-08); l'interfaccia mostra i problemi con
+  categorie enumerate, non con il valore.
+- Misure, pesi degli sport e dati fissi si scrivono in una sola transazione
+  (o tutto o niente); la migrazione v3 passa dalla copia di sicurezza e si
+  prova interrotta a ogni istruzione (T-DATI-01). La cache dei carichi è
+  derivata: la migrazione la svuota e l'impronta comprende parametri, peso
+  dello sport, percentuali delle zone e versione del modello, così nessun
+  carico vecchio resta mescolato ai nuovi (T-CALC-05).
+- Zone e dettaglio: i secondi in zona vengono dagli stessi campioni del carico
+  (scarti e buchi compresi); il dettaglio rilegge l'originale dall'archivio con
+  gli stessi controlli di dimensione e SHA-256, e un file mancante o alterato è
+  un esito con il motivo, mai usato in silenzio. Le figure sono costruite da
+  funzioni pure e passano dalla stessa pagina locale e senza rete dei grafici
+  precedenti.
 - Piano deterministico con limiti rigidi di rampa e segnali d'allarme degli
   infortuni; nessuna diagnosi.
 
@@ -351,6 +388,12 @@ servizio, E elevazione dei privilegi.
 | Integrità e crash | T-DATI-01, T-DATI-02, T-DATI-03, T-DATI-05 |
 | Risorse | T-PERF-02, T-PERF-03 |
 | Errori imprevisti | T-UI-08, T-IMP-01 |
+| Dati personali del corpo: limiti, grammatica del peso, dati fissi immutabili | T-QUAL-02, T-DATI-01 |
+| Migrazione v3 interrotta o concorrente | T-DATI-01 |
+| Altezza, peso, data di nascita e FC nei log | T-SEC-08 (`tests/collaudo/test_fase3_log_salute.py`) |
+| Carico coerente dopo cambi di parametri, pesi e zone | T-CALC-01…07 |
+| Grafici e finestre della fase 3 (contrasto, tastiera, nomi accessibili, lingue) | T-UI-04, T-UI-05, T-UI-06, T-UI-07 |
+| Budget con 5.000 attività | T-PERF-01 |
 
 ### Casi chiusi dal collaudo della fase 1 (D-F1)
 
@@ -385,6 +428,26 @@ difetti hanno l'id nel nome (`test_d_f2_NN_…`) o in un commento.
 | D-F2-03 | Un download che era un'altra attività rispetto all'id elencato si registrava sotto quell'id | Il file deve coincidere con la voce (inizio e durata, regola dei duplicati); se no la voce fallisce in modo definitivo (`REMOTE_REJECTED`) e non si registra nulla | T-SYNC-05 | `tests/collaudo/test_fase2_sincronizzazione.py`, `tests/activities/test_sync_errors.py` |
 | D-F2-04 | Se Garmin riceveva un'attività nuova durante la prima sincronizzazione, la più vecchia scivolava oltre il totale dichiarato e non si elencava | L'elenco finisce con una pagina corta o vuota, mai al totale dichiarato; il totale serve solo all'avanzamento; la verifica completa recupera ciò che fosse sfuggito | T-SYNC-01 | `tests/collaudo/test_fase2_sincronizzazione.py`, `tests/activities/test_sync_volume.py`, `tests/activities/test_sync_domain.py` |
 
+### Casi chiusi dal collaudo della fase 3 (D-F3)
+
+Difetti trovati dal collaudo della fase 3 (D-F3-01…11) e comportamento che
+li chiude. Tutti chiusi il 2026-11-06: i loro test, nati come previsti-fallito
+(`xfail` stretto), passano senza marcatura.
+
+| Id | Difetto | Comportamento | Test (piano) | Test (file) |
+|---|---|---|---|---|
+| D-F3-01 | `Weight.parse` accettava "7_0.5", cifre non ASCII o a larghezza piena ed esponenti | Solo cifre ASCII con un separatore decimale | T-QUAL-02 | `tests/collaudo/test_fase3_dati_personali.py`, `tests/profiles/test_body_types.py` |
+| D-F3-02 | `SportWeightsForm.set_value(nan)` faceva sollevare `build()` | Un NaN o un infinito non cambia il valore in vigore; `build()` dà sempre pesi tra 0 e 5 | T-QUAL-02 | `tests/collaudo/test_fase3_dati_personali.py` |
+| D-F3-03 | Le tre caselle di FC di "Modifica profilo" non avevano nome accessibile (l'etichetta era legata al contenitore, non alla casella) | Ogni casella ha il suo nome accessibile | T-UI-05 | `tests/collaudo/test_fase3_interfaccia.py` |
+| D-F3-04 | In "Nuovo profilo" nome, cartella e caselle di FC senza nome accessibile (stessa causa di D-F3-03) | Ogni controllo ha il suo nome accessibile | T-UI-05 | `tests/collaudo/test_fase3_interfaccia.py` |
+| D-F3-05 | In "Modifica profilo", per un profilo senza dati fissi, il Tab partiva dalle misure e visitava altezza e data di nascita, in cima al dialogo, per ultime | L'ordine del Tab segue quello visivo, dall'alto | T-UI-05 | `tests/collaudo/test_fase3_interfaccia.py` |
+| D-F3-06 | Nomi delle zone nel grafico della FC sotto 4,5:1 sulle bande di zona | Contrasto del testo almeno 4,5:1 su ogni banda, in entrambi i temi | T-UI-05 | `tests/collaudo/test_fase3_grafici.py` |
+| D-F3-07 | Le barre del carico giornaliero (opacità 0,6) rendevano sotto 3:1 sul fondo | Barre almeno 3:1 sul fondo, come disegnate | T-UI-05 | `tests/collaudo/test_fase3_grafici.py` |
+| D-F3-08 | Le croci dei campioni scartati sotto 3:1 sulle bande di zona del tema scuro | Croci almeno 3:1 su ogni banda | T-UI-05 | `tests/collaudo/test_fase3_grafici.py` |
+| D-F3-09 | CTL e ATL differivano solo per il colore (stessa linea, stesso spessore) | Le linee si distinguono anche senza colore | T-UI-05 | `tests/collaudo/test_fase3_grafici.py` |
+| D-F3-10 | In inglese i plurali restavano "activity(ies)" e "sample(s)": la forma plurale non esiste per la lingua sorgente | I plurali inglesi hanno la forma vera per il numero, senza desinenza opzionale | T-UI-06 | `tests/collaudo/test_fase3_interfaccia.py` |
+| D-F3-11 | Nella finestra "Dettaglio attività" le etichette della pagina di messaggio (caricamento, file mancante, file alterato) restavano più basse del testo: righe tagliate | Le etichette mostrano ogni riga del loro testo | T-UI-06 | `tests/collaudo/test_fase3_interfaccia.py` |
+
 Casi chiusi dalla revisione e dalla correzione del nucleo (gli id `R` sono
 quelli citati nei test):
 
@@ -411,7 +474,7 @@ quelli citati nei test):
 | Risposta o download letti per intero in memoria dalla libreria prima del tetto | Il tetto di 50 MB si applica dopo la lettura. Compensazione: il timeout di 15 s e i limiti dello ZIP a valle (T-SEC-02). |
 | Entropia di DPAPI non segreta | Il codice è pubblico; l'entropia lega il file all'app e al profilo, non protegge dall'utente stesso. |
 | Abbinamento sbagliato tra due attività quasi uguali (60 s, 5%, stesso sport) | Il file originale importato resta; l'altra attività non si scarica. Come per i duplicati tra FIT e GPX, meglio non perdere dati. |
-| Dati di salute in chiaro nella cartella del profilo, protetti solo dai permessi del sistema | Semplicità e apertura con altri strumenti; cifrare richiede gestione di una password e di una chiave di recupero. Accettato dall'utente il 2026-11-05. Compensazione: permessi della cartella solo per l'utente (T-SEC-09); il README consiglia la cifratura del disco (BitLocker su Windows, LUKS su Ubuntu). |
+| Dati di salute in chiaro nella cartella del profilo, protetti solo dai permessi del sistema | Semplicità e apertura con altri strumenti; cifrare richiede gestione di una password e di una chiave di recupero. Accettato dall'utente il 2026-11-05. Dalla fase 3 vi stanno anche altezza, peso (con lo storico) e data di nascita. Compensazione: permessi della cartella solo per l'utente (T-SEC-09); il README consiglia la cifratura del disco (BitLocker su Windows, LUKS su Ubuntu). |
 | Copie del database in `backup/` e file dell'archivio con gli stessi dati di salute | Stesso rischio e stessa compensazione della cartella del profilo: stessi permessi privati. |
 | Cartella del profilo su rete o in una cartella sincronizzata | L'app avverte ma non vieta: l'utente può avere un NAS affidabile. Su questi posti il lock e il WAL di SQLite non sono garantiti; un database rovinato si segnala all'apertura. |
 | Rilevamento di rete e cloud non completo | Si riconoscono UNC, unità remote, mount di rete, OneDrive, Dropbox, Google Drive e iCloud Drive per nome e variabili; un servizio sconosciuto non è riconosciuto. Nel dubbio il tipo è ignoto e non c'è avviso. |
@@ -432,5 +495,7 @@ quelli citati nei test):
   `SyncPolicy` vanno rivisti con il suo esito.
 - Il comportamento della chiusura durante un login o un download è in
   evoluzione nella fase 2; da rileggere con la versione finale.
+- L'id D-F3-01 non compare in nessun test della fase 3: da assegnare a un
+  difetto o da lasciare vuoto.
 - I difetti D-F1 e D-F2 non sono ancora registrati in `docs/collaudo.md`: lo
   fa la sessione principale.

@@ -457,23 +457,28 @@ POSIX compresi; campagna di collaudo verde su Windows (esiti in
 
 ### Fase 3 — Carico e grafici
 
-- [ ] Lingua: inglese predefinito, menu Lingua con inglese e italiano,
+- [x] Lingua: inglese predefinito, menu Lingua con inglese e italiano,
       scelta ricordata.
-- [ ] Dati del profilo: altezza, peso e data di nascita alla creazione;
+- [x] Dati del profilo: altezza, peso e data di nascita alla creazione;
       "Modifica profilo" con misure datate (peso, FC minima, FC massima,
       soglia) e il loro storico; campi fissi in sola lettura. Altezza,
       peso e data di nascita sono dati personali: solo nel database del
       profilo, mai nei log.
-- [ ] Parametri fisiologici con data di validità inseriti dall'utente (FC
+- [x] Parametri fisiologici con data di validità inseriti dall'utente (FC
       minima e massima, sesso, soglia; soglia in bici = corsa − 4 bpm);
       campioni fuori limiti scartati e contati.
-- [ ] TRIMP e hrTSS, pesi degli sport, stima per attività senza FC; ricalcolo
+- [x] TRIMP e hrTSS, pesi degli sport, stima per attività senza FC; ricalcolo
       quando cambiano parametri o pesi.
-- [ ] PMC (ATL, CTL, TSB) con property test.
-- [ ] Grafici Plotly in `QWebEngineView` isolato: PMC, carico settimanale per
+- [x] PMC (ATL, CTL, TSB) con property test.
+- [x] Grafici Plotly in `QWebEngineView` isolato: PMC, carico settimanale per
       sport, zone, FC dell'attività; esportazione SVG e PNG. Zone FC sulla
       soglia secondo Friel, cinque zone (Z1 < 85%, Z2 85–89%, Z3 90–94%,
       Z4 95–99%, Z5 ≥ 100%: default del progetto, rivisto in fase 4).
+
+*Stato 2026-11-06: completata sul ramo `fase-3-carico-e-grafici`; controlli e
+collaudo verdi su Windows. I plurali inglesi usano frasi invarianti
+("Activities imported: %n"), perché l'inglese è il testo sorgente senza un
+catalogo proprio.*
 
 ### Fase 4 — Test di valutazione
 

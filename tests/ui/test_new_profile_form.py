@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -13,7 +14,12 @@ import pytest
 from ponos_coach.load.domain import HeartRateLimits, Physiology, Sex, ThresholdHeartRate
 from ponos_coach.profiles.domain import BirthDate, FolderState, Height, Weight
 from ponos_coach.profiles.use_cases import NewProfileRequest
-from ponos_coach.ui.body_input import latest_birth_date
+from ponos_coach.ui.body_input import (
+    latest_birth_date,
+    read_birth_date,
+    read_height,
+    read_weight,
+)
 from ponos_coach.ui.heart_rate_rules import MAX_ALLOWED_BPM, MIN_ALLOWED_BPM, MIN_THRESHOLD_BPM
 from ponos_coach.ui.new_profile_form import (
     Field,
@@ -329,3 +335,33 @@ def test_the_subfolder_for_a_reserved_name_is_suffixed() -> None:
 
     assert form.destination == str(BASE / "AUX_profile")
     assert form.problems(TODAY) == ()
+
+
+def counting(calls: list[str], name: str, reader: Callable[..., object]) -> Callable[..., object]:
+    """Lo stesso lettore, che annota ogni chiamata."""
+
+    def read(*args: object) -> object:
+        calls.append(name)
+        return reader(*args)
+
+    return read
+
+
+def test_building_the_request_reads_height_weight_and_birth_date_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    target = "ponos_coach.ui.new_profile_form"
+    monkeypatch.setattr(f"{target}.read_height", counting(calls, "height", read_height))
+    monkeypatch.setattr(f"{target}.read_weight", counting(calls, "weight", read_weight))
+    monkeypatch.setattr(f"{target}.read_birth_date", counting(calls, "birth", read_birth_date))
+    form = make_form("Atleta di prova")
+    form.choose_folder(str(BASE))
+    form.height_text = "172"
+    form.weight_text = "68,5"
+    form.birth_date = date(1990, 5, 1)
+
+    result = form.build_request(TODAY)
+
+    assert isinstance(result, NewProfileRequest)
+    assert sorted(calls) == ["birth", "height", "weight"]  # una lettura per valore, non due

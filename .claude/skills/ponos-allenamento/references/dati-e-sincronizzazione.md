@@ -113,6 +113,7 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
     connessione e stessa transazione di `activities.transaction()`.
   - Altezza, peso e data di nascita sono dati di salute: mai nei log né nei
     messaggi d'errore (i tipi di dominio e gli store non ripetono i valori).
+    Motivazioni e alternative: `docs/adr/007-dati-del-profilo-e-zone.md`.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.

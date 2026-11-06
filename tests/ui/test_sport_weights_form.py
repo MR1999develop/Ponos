@@ -81,3 +81,24 @@ def test_build_gives_one_valid_weight_per_sport() -> None:
 
     assert set(built) == set(Sport)
     assert built[Sport.TRAIL] == SportWeight(1.75)
+
+
+@pytest.mark.parametrize("typed", [float("nan"), -float("nan")])
+def test_a_nan_changes_nothing_and_build_never_raises(typed: float) -> None:
+    form = make_form()
+    form.set_value(Sport.TRAIL, 1.75)
+
+    form.set_value(Sport.TRAIL, typed)
+
+    assert form.value(Sport.TRAIL) == 1.75  # azzerarlo toglierebbe lo sport dal carico
+    assert form.build()[Sport.TRAIL] == SportWeight(1.75)
+
+
+@pytest.mark.parametrize(("typed", "shown"), [(float("inf"), 5.0), (float("-inf"), 0.0)])
+def test_infinities_are_brought_to_the_nearest_limit(typed: float, shown: float) -> None:
+    form = make_form()
+
+    form.set_value(Sport.RUNNING, typed)
+
+    assert form.value(Sport.RUNNING) == shown
+    assert form.build()[Sport.RUNNING] == SportWeight(shown)

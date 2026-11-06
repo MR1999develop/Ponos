@@ -12,8 +12,10 @@ import json
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QUrl
+from PySide6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
+from shiboken6 import isValid
 
 from ponos_coach.ui.chart_payload import prepare_figure
 from ponos_coach.ui.chart_view import ChartEngine, ChartView
@@ -128,3 +130,46 @@ def _complete(path: Path) -> bool:
     return data.startswith(b"\x89PNG\r\n\x1a\n") and data.rstrip(b"\x00").endswith(
         b"IEND\xaeB`\x82"
     )
+
+
+def test_disposing_the_engine_destroys_every_registered_page_and_then_the_profile(
+    qtbot: QtBot,
+) -> None:
+    host = QWidget()
+    qtbot.addWidget(host)
+    engine = ChartEngine(lambda _name: None, host)
+    views = [ChartView(engine, f"Chart {number}", host) for number in range(3)]
+    pages = [view.page for view in views]
+    profile = engine.start()
+    assert profile is not None
+    assert all(isValid(page) for page in pages)
+
+    engine.dispose()
+
+    assert not any(isValid(page) for page in pages)  # subito, non in coda di distruzione
+    assert not isValid(profile)
+    assert engine.disposed
+    assert not engine.started
+    assert not any(view.engine_started for view in views)
+    views[0].start_engine()  # dopo lo smontaggio nessuna pagina nasce
+    assert not views[0].engine_started
+    engine.dispose()  # idempotente
+
+
+def test_a_view_closed_earlier_has_already_destroyed_its_page_and_the_engine_skips_it(
+    qtbot: QtBot,
+) -> None:
+    host = QWidget()
+    qtbot.addWidget(host)
+    engine = ChartEngine(lambda _name: None, host)
+    early = ChartView(engine, "Early", host)
+    late = ChartView(engine, "Late", host)
+    early_page, late_page = early.page, late.page
+
+    early.dispose()  # per esempio un dialogo chiuso
+    assert not isValid(early_page)
+    early.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    engine.dispose()  # la vista distrutta non si tocca; l'altra sì
+
+    assert not isValid(late_page)

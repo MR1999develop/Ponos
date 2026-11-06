@@ -27,9 +27,15 @@ from ponos_coach.ui.chart_texts import chart_chrome
 from ponos_coach.ui.chart_view import ChartEngine
 from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.hr_figure import HeartRateLabels
-from ponos_coach.ui.measurements_form import EditIssue, MeasurementsForm, MeasurementsRequest
+from ponos_coach.ui.measurement_texts import saved_period_text
+from ponos_coach.ui.measurements_form import (
+    EditIssue,
+    MeasurementSeries,
+    MeasurementsForm,
+    MeasurementsRequest,
+)
 from ponos_coach.ui.profile_edit_dialog import ProfileEditDialog
-from ponos_coach.ui.profile_editor import ProfileEditor
+from ponos_coach.ui.profile_editor import ProfileEditor, SavedEdit
 from ponos_coach.ui.sport_weights_dialog import SportWeightsDialog
 from ponos_coach.ui.sport_weights_form import SportWeightsForm
 from ponos_coach.ui.tokens import Theme, tokens_for
@@ -124,14 +130,28 @@ class ProfileDialogs(QObject):
         if isinstance(request, MeasurementsRequest) and not self._editor.save_measurements(request):
             self._not_now()
 
-    def _on_measurements_saved(self, history: object) -> None:
+    def _on_measurements_saved(self, edit: object) -> None:
         dialog = self._edit_dialog
-        if dialog is not None and isinstance(history, MeasurementHistory):
-            dialog.set_history(history)
+        if dialog is not None and isinstance(edit, SavedEdit):
+            dialog.set_history(edit.history)
             dialog.accept()
+            periods = [
+                saved_period_text(series, period)
+                for series, period in (
+                    (MeasurementSeries.WEIGHT, edit.saved.weight),
+                    (MeasurementSeries.HEART_RATE, edit.saved.heart_rate),
+                )
+                if period is not None
+            ]
             self._notify(
-                QCoreApplication.translate(
-                    "ProfileDialogs", "Profile updated. The load is being recalculated."
+                " ".join(
+                    [
+                        QCoreApplication.translate("ProfileDialogs", "Profile updated."),
+                        *periods,
+                        QCoreApplication.translate(
+                            "ProfileDialogs", "The load is being recalculated."
+                        ),
+                    ]
                 )
             )
 

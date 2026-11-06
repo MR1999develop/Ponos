@@ -4,6 +4,8 @@
 
 Due pannelli con lo stesso asse delle date: in alto CTL, ATL e carico giornaliero (barre da
 zero), in basso la forma (TSB), che puo essere negativa. La legenda segue l'ordine delle serie.
+CTL e ATL si distinguono anche senza il colore: ATL e tratteggiata e ogni linea porta il suo nome
+accanto all'ultimo punto.
 Il payload per la pagina e un JSON prodotto da `json.dumps` (`render_script`).
 """
 
@@ -29,9 +31,11 @@ from ponos_coach.ui.chart_payload import (
 )
 from ponos_coach.ui.tokens import ThemeTokens
 
-LOAD_UNIT = "hrTSS/day"  # unita del carico giornaliero e delle sue medie (CTL, ATL, TSB)
+LOAD_UNIT = "hrTSS per day"  # unita del carico giornaliero e delle sue medie (CTL, ATL, TSB)
 MAX_NAMES_PER_DAY = 5  # nomi di attivita mostrati nel suggerimento di una barra
 _LINE_WIDTH = 2
+_ATL_DASH = "dash"  # ATL e tratteggiata: CTL e ATL differiscono anche senza il colore
+_END_LABEL_SHIFT = 4  # pixel tra l'ultimo punto e il nome della linea
 _TOP_ROW_SHARE = 0.68
 EXPORT_FILE_STEM = "ponos-coach-pmc"
 
@@ -57,6 +61,7 @@ class PmcChartLabels:
     tsb: str
     daily_load: str
     chrome: ChartChrome
+    load_unit: str = LOAD_UNIT  # "hrTSS per day", tradotto come frase intera
 
 
 def daily_load_of(activities: Sequence[ChartActivity], days: Sequence[date]) -> list[float]:
@@ -96,20 +101,21 @@ def build_pmc_figure(
         row_heights=[_TOP_ROW_SHARE, 1 - _TOP_ROW_SHARE],
         vertical_spacing=0.06,
     )
-    hover = f"%{{x|%Y-%m-%d}}<br>%{{y:.1f}} {LOAD_UNIT}<extra>%{{fullData.name}}</extra>"
+    unit = labels.load_unit
+    hover = f"%{{x|%Y-%m-%d}}<br>%{{y:.1f}} {unit}<extra>%{{fullData.name}}</extra>"
 
-    def line(name: str, values: object, color: str) -> go.Scatter:
+    def line(name: str, values: object, color: str, dash: str = "solid") -> go.Scatter:
         return go.Scatter(
             x=days,
             y=values,
             name=name,
             mode="lines",
-            line={"color": color, "width": _LINE_WIDTH},
+            line={"color": color, "width": _LINE_WIDTH, "dash": dash},
             hovertemplate=hover,
         )
 
     figure.add_trace(line(labels.ctl, pmc.ctl, tokens.ctl), row=1, col=1)
-    figure.add_trace(line(labels.atl, pmc.atl, tokens.atl), row=1, col=1)
+    figure.add_trace(line(labels.atl, pmc.atl, tokens.atl, _ATL_DASH), row=1, col=1)
     figure.add_trace(line(labels.tsb, pmc.tsb, tokens.tsb), row=2, col=1)
     figure.add_trace(
         go.Bar(
@@ -126,13 +132,13 @@ def build_pmc_figure(
     figure.update_xaxes(axis_style(tokens, ""))
     figure.update_xaxes(axis_style(tokens, labels.x_axis), type="date", row=2, col=1)
     figure.update_yaxes(
-        axis_style(tokens, f"{labels.load_axis} ({LOAD_UNIT})"),
+        axis_style(tokens, f"{labels.load_axis} ({unit})"),
         rangemode="tozero",  # le barre partono da zero
         row=1,
         col=1,
     )
     figure.update_yaxes(
-        axis_style(tokens, f"{labels.form_axis} ({LOAD_UNIT})"), zeroline=True, row=2, col=1
+        axis_style(tokens, f"{labels.form_axis} ({unit})"), zeroline=True, row=2, col=1
     )
     figure.update_layout(
         **base_layout(tokens),
@@ -140,8 +146,36 @@ def build_pmc_figure(
         margin={"l": 64, "r": 16, "t": 40, "b": 48},
         bargap=0.1,
         hovermode="x unified",
+        annotations=_end_labels(pmc, labels, tokens),
     )
     return figure
+
+
+def _end_labels(
+    pmc: PmcSeries, labels: PmcChartLabels, tokens: ThemeTokens
+) -> list[dict[str, object]]:
+    """Il nome di CTL e di ATL accanto all'ultimo punto: la linea più alta ha il nome sopra, l'altra
+    sotto, così i due nomi non si sovrappongono; il colore del testo è quello del tema."""
+    if len(pmc) == 0:
+        return []
+    last_day = pmc.days[-1]
+    ends = ((labels.ctl, float(pmc.ctl[-1])), (labels.atl, float(pmc.atl[-1])))
+    higher = max(ends, key=lambda end: end[1])
+    return [
+        {
+            "xref": "x",
+            "yref": "y",
+            "x": last_day,
+            "y": value,
+            "text": name,
+            "showarrow": False,
+            "xanchor": "right",
+            "yanchor": "bottom" if (name, value) == higher else "top",
+            "yshift": _END_LABEL_SHIFT if (name, value) == higher else -_END_LABEL_SHIFT,
+            "font": {"color": tokens.text},
+        }
+        for name, value in ends
+    ]
 
 
 def prepare_chart(

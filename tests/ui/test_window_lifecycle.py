@@ -277,7 +277,7 @@ def test_the_deletion_preview_counts_without_opening_or_touching_the_profile(
     window.delete_menu.actions()[1].trigger()
 
     box = open_message_box(qtbot, window, "deleteConfirmation")
-    assert "8 activity(ies) will be deleted." in box.informativeText()
+    assert "Activities that will be deleted: 8." in box.informativeText()
     assert sorted(path.name for path in folder.iterdir()) == before  # niente lock né migrazioni
     click(box, "Cancel")
 
@@ -321,7 +321,7 @@ def test_reimporting_a_file_whose_archive_copy_is_gone_reports_a_repair(
     assert report.imported == 0
     dialogs = [box for box in window.open_boxes if isinstance(box, ImportReportDialog)]
     dialog = dialogs[-1]  # l'ultimo riepilogo
-    assert "1 archived file(s) repaired from the imported original" in dialog.summary_text
+    assert "Archived files repaired from the imported original: 1" in dialog.summary_text
 
 
 # --- R14: l'elenco dei profili inutilizzabile ------------------------------------------------

@@ -28,7 +28,7 @@ from ponos_coach.load.domain import (
     ThresholdHeartRate,
     default_weight,
 )
-from ponos_coach.profiles.domain import ProfileName, Weight
+from ponos_coach.profiles.domain import MIN_MEASUREMENT_DATE, ProfileName, Weight
 from ponos_coach.profiles.measurements import MeasurementUpdate
 from ponos_coach.profiles.use_cases import NewProfileRequest
 from ponos_coach.ui.birth_date_edit import NOT_SET_DATE
@@ -574,3 +574,72 @@ def test_closing_the_window_with_the_dialogs_open_finishes_the_closing(
 
     assert window.is_closed
     assert window.profile_dialogs.weights_dialog is None
+
+
+# --- Periodo di validità (R6) ----------------------------------------------------------------
+
+
+def test_the_validity_day_can_go_back_to_the_first_day_the_domain_accepts(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    dialog = open_edit_dialog(qtbot, window)
+
+    assert dialog.valid_from_edit.minimumDate() == QDate(MIN_MEASUREMENT_DATE.year, 1, 1)
+
+
+def test_a_day_before_a_later_measurement_warns_before_saving_and_the_status_gives_the_period(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    dialog = open_edit_dialog(qtbot, window)
+    assert dialog.validity_notice_text == ""  # niente da avvisare finché non si cambia nulla
+    dialog.valid_from_edit.setDate(QDate(2026, 5, 10))
+    dialog.weight_edit.clear()
+    QTest.keyClicks(dialog.weight_edit, "64,0")
+
+    # il profilo ha già un peso da oggi (30 giugno): il nuovo vale fino al giorno prima
+    assert "only until" in dialog.validity_notice_text
+    assert "6/29/26" in dialog.validity_notice_text
+    assert dialog.note_text(EditField.WEIGHT) == "No weight is recorded for this day."
+    assert window.profile_dialogs.edit_dialog is dialog  # l'avviso non è un dialogo che blocca
+    click(dialog.save_button)
+    qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
+
+    message = window.statusBar().currentMessage()
+    assert "Weight valid from 5/10/26 to 6/29/26." in message
+    assert "Heart rate valid" not in message  # la FC non è stata toccata
+    assert "recalculated" in message
+
+
+def test_the_status_says_from_when_an_open_period_holds_onwards(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    dialog = open_edit_dialog(qtbot, window)
+    dialog.threshold_box.setValue(150)
+
+    assert dialog.validity_notice_text == ""  # oggi: nessuna voce successiva
+    click(dialog.save_button)
+    qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
+
+    assert "Heart rate valid from 6/30/26 onwards." in window.statusBar().currentMessage()
+
+
+def test_changing_the_day_after_an_edit_shows_the_value_in_force_the_new_day(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    dialog = open_edit_dialog(qtbot, window)
+    dialog.threshold_box.setValue(150)
+    assert dialog.note_text(EditField.THRESHOLD) == "In force on this day: 171 bpm"
+
+    dialog.valid_from_edit.setDate(QDate(2026, 5, 10))
+
+    assert dialog.threshold_box.value() == 150  # la modifica non si perde
+    assert dialog.note_text(EditField.THRESHOLD) == "In force on this day: 171 bpm"
+    assert "only until" in dialog.validity_notice_text  # ora c'è una voce successiva (oggi)
+    dialog.threshold_box.setValue(171)  # di nuovo il valore in vigore: non è più una modifica
+    assert dialog.note_text(EditField.THRESHOLD) == ""
+    assert dialog.validity_notice_text == ""
+    assert not dialog.save_button.isEnabled()

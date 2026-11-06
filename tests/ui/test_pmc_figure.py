@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 import pytest
 
+from ponos_coach.load.domain import PmcSeries
 from ponos_coach.ui.chart_payload import PLOTLY_LOCALE_NAME, PLOTLY_MODEBAR_KEYS, render_script
 from ponos_coach.ui.pmc_figure import EXPORT_FILE_STEM, build_pmc_figure, daily_load_of
 from ponos_coach.ui.tokens import Theme, tokens_for
@@ -50,8 +51,8 @@ def test_axes_have_names_with_units_and_bars_start_at_zero() -> None:
     layout = build_pmc_figure(pmc, entries, LABELS, tokens_for(Theme.LIGHT)).layout
 
     assert layout.xaxis2.title.text == "Date"
-    assert layout.yaxis.title.text == "Load (hrTSS/day)"
-    assert layout.yaxis2.title.text == "Form (hrTSS/day)"
+    assert layout.yaxis.title.text == "Load (hrTSS per day)"
+    assert layout.yaxis2.title.text == "Form (hrTSS per day)"
     assert layout.yaxis.rangemode == "tozero"
 
 
@@ -149,3 +150,50 @@ def _luminance(color: str) -> float:
 def _contrast(a: str, b: str) -> float:
     high, low = sorted((_luminance(a), _luminance(b)), reverse=True)
     return (high + 0.05) / (low + 0.05)
+
+
+# --- CTL e ATL distinguibili anche senza il colore ---------------------------------------------
+
+
+def test_atl_is_dashed_and_ctl_solid_with_the_same_width() -> None:
+    pmc, entries = small_history()
+
+    figure = build_pmc_figure(pmc, entries, LABELS, tokens_for(Theme.LIGHT))
+
+    ctl, atl = figure.data[0], figure.data[1]
+    assert (ctl.line.dash, atl.line.dash) == ("solid", "dash")
+    assert ctl.line.width == atl.line.width
+
+
+def test_each_line_carries_its_name_next_to_its_last_point_in_the_text_colour() -> None:
+    pmc, entries = small_history()
+    tokens = tokens_for(Theme.DARK)
+
+    figure = build_pmc_figure(pmc, entries, LABELS, tokens)
+
+    names = {a.text: a for a in figure.layout.annotations}
+    assert set(names) == {"Fitness (CTL)", "Fatigue (ATL)"}
+    last_day = pmc.days[-1]
+    for text, value in (("Fitness (CTL)", pmc.ctl[-1]), ("Fatigue (ATL)", pmc.atl[-1])):
+        assert names[text].x == last_day
+        assert names[text].y == pytest.approx(value)
+        assert names[text].font.color == tokens.text
+    higher, lower = sorted(names.values(), key=lambda a: a.y, reverse=True)
+    assert (higher.yanchor, lower.yanchor) == ("bottom", "top")  # i nomi non si sovrappongono
+
+
+def test_an_empty_series_has_no_end_labels() -> None:
+    figure = build_pmc_figure(PmcSeries.empty(FIRST_DAY), [], LABELS, tokens_for(Theme.LIGHT))
+
+    assert len(figure.layout.annotations) == 0
+
+
+def test_the_load_unit_comes_from_the_labels_for_axes_and_tooltips() -> None:
+    pmc, entries = small_history()
+    labels = replace(LABELS, load_unit="hrTSS al giorno")
+
+    figure = build_pmc_figure(pmc, entries, labels, tokens_for(Theme.LIGHT))
+
+    assert figure.layout.yaxis.title.text == "Load (hrTSS al giorno)"
+    assert figure.layout.yaxis2.title.text == "Form (hrTSS al giorno)"
+    assert "hrTSS al giorno" in figure.data[0].hovertemplate

@@ -241,16 +241,24 @@ def _import_limit(error: ImportLimitExceededError) -> ErrorMessage:
     match error.limit:
         case ImportLimit.ACTIVITY_FILES:
             what = QCoreApplication.translate(
-                "Errors", "The folder has more than %n activity file(s).", "", error.maximum
+                "Errors",
+                "The folder has too many activity files: the limit is %n.",
+                "",
+                error.maximum,
             )
         case ImportLimit.EXAMINED_ENTRIES:
             what = QCoreApplication.translate(
-                "Errors", "The folder has more than %n file(s) and folder(s) in total.", "",
+                "Errors",
+                "The folder has too many files and folders: the limit is %n in total.",
+                "",
                 error.maximum,
-            )  # fmt: skip
+            )
         case ImportLimit.DEPTH:
             what = QCoreApplication.translate(
-                "Errors", "The folder has more than %n level(s) of subfolders.", "", error.maximum
+                "Errors",
+                "The folder has too many levels of subfolders: the limit is %n.",
+                "",
+                error.maximum,
             )
     return ErrorMessage(title, what, remedy)
 

@@ -275,6 +275,7 @@ class ActivityDetailDialog(QDialog):
         self._set_details_visible(True)
         self._fill_summary(detail)
         self._zone_model.set_rows(zone_rows(detail))
+        self._table.setVisible(ready.chart is not None)  # senza FC il carico è stimato: niente zone
         if ready.chart is None:
             self._show_message(
                 self.tr("No heart-rate data"),
@@ -318,8 +319,8 @@ class ActivityDetailDialog(QDialog):
         if discarded:
             notes.append(
                 self.tr(
-                    "%n heart-rate sample(s) outside your limits were not used, and are marked "
-                    "in the chart.",
+                    "Heart-rate samples outside your limits: %n. They were not used and are "
+                    "marked in the chart.",
                     "",
                     discarded,
                 )
@@ -327,8 +328,8 @@ class ActivityDetailDialog(QDialog):
         if detail.unordered_hr_samples:
             notes.append(
                 self.tr(
-                    "%n heart-rate sample(s) with a repeated or earlier time were skipped "
-                    "when the file was read.",
+                    "Heart-rate samples skipped when the file was read because their time was "
+                    "repeated or earlier: %n.",
                     "",
                     detail.unordered_hr_samples,
                 )

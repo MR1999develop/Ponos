@@ -368,6 +368,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         command_line, settings=settings, log_dir=log_dir, language=report.language
     )
     notifier.occurred.connect(window.show_unexpected_error)
+    app.aboutToQuit.connect(window.release_web_engine)  # pagine e profilo web, prima dei figli
     window.show()
     window.start()
     exit_code = app.exec()
