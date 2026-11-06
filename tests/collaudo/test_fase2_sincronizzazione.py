@@ -24,6 +24,7 @@ import requests
 
 from ponos_coach.activities.decoding import decode_stored_activity
 from ponos_coach.activities.domain import (
+    FailureReason,
     GarminActivityId,
     ListingKind,
     RemoteActivity,
@@ -239,12 +240,6 @@ def shifting_client(tmp_runs: int) -> tuple[ScriptedClient, RemoteActivity]:
     return client, newest
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F2-04: il totale dichiarato si fissa alla prima pagina; se Garmin riceve un'attivita "
-    "nuova mentre il primo elenco e in corso, la piu vecchia scivola oltre il totale e non entra "
-    "piu nemmeno nelle sincronizzazioni incrementali (solo 'Verifica completa' la trova)",
-)
 def test_d_f2_04_a_new_activity_during_the_first_listing_loses_no_old_one() -> None:
     import tempfile  # noqa: PLC0415
 
@@ -274,23 +269,25 @@ def test_d_f2_04_the_lost_activity_comes_back_with_a_full_verification(tmp_path:
         stack.close()
 
 
-def assert_every_downloaded_id_has_its_activity(stack: Stack, runs: list[RemoteActivity]) -> None:
-    """Ogni voce del giornale `DOWNLOADED` ha un record con lo stesso id e l'inizio dell'elenco."""
+def assert_every_downloaded_id_has_its_activity(
+    stack: Stack, runs: list[RemoteActivity], rejected: frozenset[int] = frozenset()
+) -> None:
+    """Ogni voce `DOWNLOADED` ha un record con lo stesso id e l'inizio dell'elenco; le voci il
+    cui file era di un'altra attività (`rejected`) sono fallite per sempre e senza record."""
     by_id = {r.garmin_activity_id: r for r in stack.profile.records()}
     for run in runs:
         entry = stack.profile.session.sync_journal.get(run.garmin_id)
+        if run.garmin_id.value in rejected:
+            assert entry is not None and entry.status is SyncStatus.FAILED
+            assert entry.failure is FailureReason.REMOTE_REJECTED
+            assert run.garmin_id.value not in by_id
+            continue
         assert entry is not None and entry.status is SyncStatus.DOWNLOADED
         record = by_id.get(run.garmin_id.value)
         assert record is not None, f"id {run.garmin_id.value} segnato scaricato ma senza attivita"
         assert abs((record.start - run.start).total_seconds()) <= 60
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F2-03: il file scaricato non si confronta con la voce dell'elenco: se Garmin "
-    "risponde col file di un'altra attivita, la voce si segna scaricata senza la sua attivita "
-    "(o con l'inizio sbagliato) e non si riprova mai",
-)
 @pytest.mark.parametrize(
     "listed, served", [(5, 9), (9, 5)], ids=["older-gets-newer", "newer-gets-older"]
 )
@@ -305,7 +302,7 @@ def test_d_f2_03_a_download_that_is_another_activity_is_not_accepted_for_the_lis
     try:
         finished(stack.sync())
 
-        assert_every_downloaded_id_has_its_activity(stack, runs)
+        assert_every_downloaded_id_has_its_activity(stack, runs, frozenset({wrong}))
     finally:
         stack.close()
 
@@ -331,7 +328,9 @@ def test_d_f2_03_the_same_case_never_corrupts_the_database_or_the_archive(
         stack.close()
 
 
-def test_t_sync_the_same_file_under_two_garmin_ids_is_one_record(tmp_path: Path) -> None:
+def test_t_sync_the_same_file_under_two_garmin_ids_is_one_record_and_the_second_id_fails(
+    tmp_path: Path,
+) -> None:
     runs = [remote_run(n) for n in range(4)]
     client = scripted_client(history=runs)
     client._downloads[FIRST_ACTIVITY_ID + 1] = garmin_download(fit_run(0), FIRST_ACTIVITY_ID + 1)
@@ -339,7 +338,11 @@ def test_t_sync_the_same_file_under_two_garmin_ids_is_one_record(tmp_path: Path)
     try:
         outcome = finished(stack.sync()).outcome
 
-        assert outcome.completed and outcome.failures == ()
+        # id 1 riceve il file di un'altra attività (D-F2-03): non coincide con la sua voce
+        assert outcome.completed
+        assert [(f.garmin_id.value, f.reason) for f in outcome.failures] == [
+            (FIRST_ACTIVITY_ID + 1, FailureReason.REMOTE_REJECTED)
+        ]
         assert len(stack.profile.records()) == 3
         assert stack.journal_counts()[SyncStatus.PENDING] == 0
     finally:

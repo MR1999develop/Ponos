@@ -39,6 +39,10 @@ _SELECT_ENTRIES: Final = "SELECT " + _JOURNAL_COLUMNS + " FROM sync_journal "  #
 _TO_DO_ORDER: Final = (
     "WHERE status IN ('pending', 'retryable') ORDER BY start_ms DESC, garmin_id DESC LIMIT ?"
 )
+_EXHAUSTED_ORDER: Final = (
+    "WHERE status = 'failed' AND failure = 'attempts_exhausted' "
+    "ORDER BY start_ms DESC, garmin_id DESC LIMIT ?"
+)
 
 
 @contextmanager
@@ -150,6 +154,16 @@ class SqliteSyncJournal:
             raise ValueError("il limite deve essere almeno 1")
         with _translating():
             rows = self._db.connection.execute(_SELECT_ENTRIES + _TO_DO_ORDER, (limit,)).fetchall()
+        return _entries(rows)
+
+    def next_exhausted(self, limit: int) -> Sequence[JournalEntry]:
+        """Le prime `limit` voci fallite per tentativi esauriti, dalla più recente."""
+        if limit < 1:
+            raise ValueError("il limite deve essere almeno 1")
+        with _translating():
+            rows = self._db.connection.execute(
+                _SELECT_ENTRIES + _EXHAUSTED_ORDER, (limit,)
+            ).fetchall()
         return _entries(rows)
 
     def get(self, garmin_id: GarminActivityId) -> JournalEntry | None:

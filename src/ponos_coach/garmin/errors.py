@@ -20,6 +20,7 @@ la registra deve scrivere il tipo, non il testo.
 from __future__ import annotations
 
 import math
+import re
 from enum import Enum
 from typing import Final
 
@@ -43,6 +44,7 @@ MAX_RETRY_AFTER_S: Final = 3600.0  # oltre un'ora l'attesa suggerita non si pren
 _MAX_CHAIN: Final = 8  # profondità massima della catena delle cause che si esamina
 _RATE_LIMIT_STATUSES: Final = frozenset({427, 429})  # 427: blocco del login di Garmin
 _TRANSIENT_STATUSES: Final = frozenset({408, 425})
+_RETRY_AFTER: Final = re.compile(r"[0-9]{1,20}(?:\.[0-9]{1,6})?")  # solo cifre ASCII
 _NETWORK_MODULES: Final = ("requests", "urllib3", "curl_cffi", "http", "ssl", "socket")
 
 
@@ -93,13 +95,14 @@ def _is_network_failure(exc: BaseException) -> bool:
 
 
 def _retry_after_s(chain: list[BaseException]) -> float | None:
-    """`Retry-After` in secondi interi o decimali, se Garmin lo dice in modo sensato."""
+    """`Retry-After` in secondi (cifre ASCII, intere o decimali), se Garmin lo dice in modo
+    sensato; altrimenti None. Non solleva mai: l'intestazione è un input non fidato."""
     for exc in chain:
         headers = getattr(_response_of(exc), "headers", None)
         getter = getattr(headers, "get", None)
         raw = getter("Retry-After") if callable(getter) else None
-        if not isinstance(raw, str) or not raw.strip().replace(".", "", 1).isdigit():
-            continue
+        if not isinstance(raw, str) or _RETRY_AFTER.fullmatch(raw.strip()) is None:
+            continue  # non ASCII, con segno o altro: nessuna attesa suggerita
         value = float(raw)
         if math.isfinite(value) and value > 0:
             return min(value, MAX_RETRY_AFTER_S)

@@ -53,7 +53,8 @@ WORKABLE_STATUSES: Final = frozenset({SyncStatus.PENDING, SyncStatus.RETRYABLE})
 _FAILURE_STATUSES: Final = frozenset({SyncStatus.RETRYABLE, SyncStatus.FAILED})
 
 # Da -> verso. Le voci da lavorare vanno in uno qualsiasi degli altri stati (RETRYABLE incluso,
-# se fallisce ancora); gli stati finali non si muovono.
+# se fallisce ancora); DOWNLOADED e MATCHED non si muovono; FAILED torna solo a PENDING e solo
+# per `rearm_exhausted` (la "Verifica completa" riarma i tentativi esauriti).
 ALLOWED_TRANSITIONS: Final[Mapping[SyncStatus, frozenset[SyncStatus]]] = {
     SyncStatus.PENDING: frozenset(
         {SyncStatus.DOWNLOADED, SyncStatus.MATCHED, SyncStatus.RETRYABLE, SyncStatus.FAILED}
@@ -63,7 +64,7 @@ ALLOWED_TRANSITIONS: Final[Mapping[SyncStatus, frozenset[SyncStatus]]] = {
     ),
     SyncStatus.DOWNLOADED: frozenset(),
     SyncStatus.MATCHED: frozenset(),
-    SyncStatus.FAILED: frozenset(),
+    SyncStatus.FAILED: frozenset({SyncStatus.PENDING}),
 }
 
 
@@ -171,6 +172,24 @@ def mark_failed(
     return JournalEntry(entry.remote, status, now, attempts, cause)
 
 
+def rearm_exhausted(entry: JournalEntry, now: datetime) -> JournalEntry:
+    """Riarma una voce fallita per tentativi esauriti: torna da scaricare, senza tentativi.
+
+    Serve alla "Verifica completa": i tentativi consumati prima (anche per colpa della rete)
+    non condannano per sempre un'attività valida. Le altre cause definitive (formato non
+    supportato, file corrotto...) restano tali.
+
+    Raises:
+        InvalidTransitionError: la voce non è `FAILED` con `ATTEMPTS_EXHAUSTED`.
+    """
+    if (
+        entry.status is not SyncStatus.FAILED
+        or entry.failure is not FailureReason.ATTEMPTS_EXHAUSTED
+    ):
+        raise InvalidTransitionError(f"{entry.status.value} -> {SyncStatus.PENDING.value}")
+    return JournalEntry(entry.remote, SyncStatus.PENDING, now)
+
+
 # --- Cursore dell'elenco -----------------------------------------------------------------------
 
 
@@ -186,8 +205,9 @@ class ListingKind(Enum):
 class ListingCursor:
     """Punto raggiunto in un elenco remoto: la prossima posizione e il totale dichiarato.
 
-    `completed` dice che l'elenco è finito: non si avanza più, per ripartire si usa
-    `ListingCursor.start()`.
+    Il totale serve solo all'avanzamento (può essere vecchio: Garmin riceve attività nuove
+    mentre si elenca); non decide quando l'elenco finisce. `completed` dice che l'elenco è
+    finito: non si avanza più, per ripartire si usa `ListingCursor.start()`.
     """
 
     next_offset: int
@@ -222,9 +242,12 @@ def advance_cursor(
 ) -> ListingCursor:
     """Cursore dopo aver elaborato `page`, chiesta con `limit` voci.
 
-    L'elenco è finito se Garmin ha restituito meno di `limit` voci (nessuna compresa), si è
-    raggiunto il totale dichiarato oppure, solo se `known_ids` è dato (elenco incrementale), la
-    pagina è tutta di id già noti (`is_known_page`).
+    L'elenco è finito se Garmin ha restituito meno di `limit` voci (nessuna compresa) oppure,
+    solo se `known_ids` è dato (elenco incrementale), la pagina è tutta di id già noti
+    (`is_known_page`). Il totale dichiarato **non** lo ferma: si fissa alla prima pagina e, se
+    Garmin riceve un'attività nuova durante l'elenco, la più vecchia scivolerebbe oltre; basta
+    una pagina corta o vuota (al più una richiesta in più quando il totale è un multiplo
+    esatto di `limit`). Il tetto alle pagine è `MAX_LISTED_ACTIVITIES` del caso d'uso.
 
     Raises:
         ValueError: cursore già completato, pagina non alla posizione del cursore, `limit`
@@ -238,9 +261,5 @@ def advance_cursor(
         raise ValueError("limite di pagina non valido o superato")
     total = page.declared_total if page.declared_total is not None else cursor.declared_total
     next_offset = cursor.next_offset + page.raw_count
-    done = (
-        page.raw_count < limit
-        or (total is not None and next_offset >= total)
-        or (known_ids is not None and is_known_page(page, known_ids))
-    )
+    done = page.raw_count < limit or (known_ids is not None and is_known_page(page, known_ids))
     return ListingCursor(next_offset, total, done)

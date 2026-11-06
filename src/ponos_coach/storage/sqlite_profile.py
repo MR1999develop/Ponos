@@ -158,8 +158,11 @@ class SqliteProfileStorage:
         peeked = peek_database(folder / PROFILE_DATABASE_NAME)
         return ProfilePeek(_info_from(peeked.meta, peeked.user_version), peeked.activity_count)
 
-    def open(self, folder: Path) -> OpenProfile:
+    def open(self, folder: Path, *, check_integrity: bool = True) -> OpenProfile:
         """Apre il database, migrandolo se è più vecchio (con copia di sicurezza in `backup/`).
+
+        `check_integrity=False` salta i controlli di integrità completi: solo per una seconda
+        connessione a un profilo già aperto e verificato (la sincronizzazione).
 
         Raises:
             ProfileNotFoundError: manca il database.
@@ -167,7 +170,7 @@ class SqliteProfileStorage:
             ProfileCorruptError: database illeggibile, non integro o non di un profilo.
             ProfileStorageError: altro guasto o migrazione fallita (il database resta com'era).
         """
-        db = open_database(folder / PROFILE_DATABASE_NAME)
+        db = open_database(folder / PROFILE_DATABASE_NAME, check_integrity=check_integrity)
         try:
             return SqliteOpenProfile(db, _read_info(db))
         except BaseException:

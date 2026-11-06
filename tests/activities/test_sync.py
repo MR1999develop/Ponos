@@ -202,7 +202,8 @@ def test_t_sync_05_the_same_file_already_imported_is_linked_not_duplicated() -> 
 
     outcome = rig.run()
 
-    assert (outcome.downloaded, outcome.matched) == (3, 0)
+    # già nel profilo (stesso file): collegate, mai contate come scaricate (R6)
+    assert (outcome.downloaded, outcome.matched, outcome.already_present) == (0, 0, 3)
     assert len(rig.fake.downloads) == 3
     records = rig.records()
     assert len(records) == 3
@@ -361,7 +362,7 @@ def test_an_unexpected_error_in_a_helper_fails_only_that_entry_and_logs_only_its
 # --- Scrittura: archivio prima, record poi, una transazione -----------------------------------
 
 
-def test_the_archive_is_written_before_the_record_inside_one_transaction() -> None:
+def test_the_archive_is_written_before_the_short_transaction_of_the_record() -> None:
     rig = in_memory_rig(1)
     log = OrderLog()
     rig.archive = ObservedArchive(rig.archive, log)  # type: ignore[arg-type]
@@ -369,8 +370,9 @@ def test_the_archive_is_written_before_the_record_inside_one_transaction() -> No
 
     rig.run()
 
-    # La prima transazione è quella della pagina dell'elenco; poi quella della voce.
-    assert log.events == ["begin", "commit", "begin", "store", "add", "commit"]
+    # La prima transazione è quella della pagina dell'elenco; poi l'archivio (R13) e,
+    # solo dopo, la transazione breve del record e della voce.
+    assert log.events == ["begin", "commit", "store", "begin", "add", "commit"]
 
 
 def test_a_failing_record_write_rolls_back_the_entry_and_a_rerun_finishes_without_duplicates() -> (

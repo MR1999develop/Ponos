@@ -26,7 +26,12 @@ from ponos_coach.activities.domain import (
     SyncStatus,
     is_possible_duplicate,
 )
-from ponos_coach.activities.ports import ActivityIndexError, TransactionStateError
+from ponos_coach.activities.ports import (
+    ActivityIndexError,
+    StorageBusyError,
+    SyncJournalError,
+    TransactionStateError,
+)
 from ponos_coach.load.domain import LoadSource, Sex
 from ponos_coach.profiles.domain import PROFILE_DATABASE_NAME, ProfileId, ProfileName
 from ponos_coach.profiles.ports import (
@@ -786,3 +791,69 @@ def test_a_foreign_sqlite_file_with_a_meta_table_but_no_activity_tables_is_corru
 
     with pytest.raises(ProfileCorruptError):
         SqliteProfileStorage().open(tmp_path)
+
+
+# --- R2: database occupato all'apertura della transazione -------------------------------------
+
+
+def test_r2_a_database_held_by_another_connection_gives_a_port_error_not_a_raw_one(
+    tmp_path: Path,
+) -> None:
+    create_database(_db_path(tmp_path), {}).close()
+    holder = open_database(_db_path(tmp_path))
+    waiter = open_database(_db_path(tmp_path))
+    try:
+        waiter.connection.execute("PRAGMA busy_timeout = 20")  # il test non aspetta 5 s
+        with holder.transaction():
+            with pytest.raises(StorageBusyError) as caught, waiter.transaction():
+                pytest.fail("la transazione non doveva cominciare")
+            assert isinstance(caught.value, ActivityIndexError)
+            assert isinstance(caught.value, SyncJournalError)
+            assert isinstance(caught.value.__cause__, sqlite3.OperationalError)
+        with waiter.transaction():  # libero: ora si apre, e la connessione non è rimasta storta
+            waiter.connection.execute("SELECT 1")
+    finally:
+        holder.close()
+        waiter.close()
+
+
+def _spy_on_integrity_checks(monkeypatch: pytest.MonkeyPatch, calls: list[str]) -> None:
+    real = sqlite_database._check_integrity
+
+    def spy(connection: sqlite3.Connection) -> None:
+        calls.append("x")
+        real(connection)
+
+    monkeypatch.setattr(sqlite_database, "_check_integrity", spy)
+
+
+# --- R15: la seconda connessione può saltare i controlli di integrità -------------------------
+
+
+def test_r15_an_extra_connection_can_skip_the_integrity_checks_but_a_normal_open_runs_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    create_database(_db_path(tmp_path), {}).close()
+    calls: list[str] = []
+    _spy_on_integrity_checks(monkeypatch, calls)
+
+    open_database(_db_path(tmp_path), check_integrity=False).close()
+    assert calls == []
+    open_database(_db_path(tmp_path)).close()
+    assert calls == ["x"]
+
+
+def test_r15_an_older_database_is_checked_even_when_the_checks_are_skipped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    create_database(_db_path(tmp_path), {}).close()
+    newer = ("CREATE TABLE note (id INTEGER PRIMARY KEY) STRICT",)
+    monkeypatch.setattr(sqlite_database, "MIGRATIONS", (*sqlite_schema.MIGRATIONS, newer))
+    monkeypatch.setattr(sqlite_database, "SCHEMA_VERSION", SCHEMA_VERSION + 1)
+    calls: list[str] = []
+    _spy_on_integrity_checks(monkeypatch, calls)
+
+    migrating = open_database(_db_path(tmp_path), check_integrity=False)
+
+    assert calls == ["x"]
+    migrating.close()

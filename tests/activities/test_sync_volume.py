@@ -80,7 +80,8 @@ def test_t_sync_01_five_thousand_activities_full_then_incremental(rig: SyncRig) 
     assert full.completed
     assert (full.new_entries, full.downloaded, full.matched) == (HISTORY, HISTORY, 0)
     assert full.status_counts[SyncStatus.DOWNLOADED] == HISTORY
-    assert rig.fake.call_count(Call.LIST_PAGE) == HISTORY // PAGE_SIZE
+    # una pagina vuota chiude l'elenco: il totale dichiarato non lo ferma (D-F2-04)
+    assert rig.fake.call_count(Call.LIST_PAGE) == HISTORY // PAGE_SIZE + 1
     assert rig.fake.call_count(Call.DOWNLOAD) == HISTORY
     assert len(set(rig.fake.downloads)) == HISTORY  # nessun download ripetuto
     assert rig.journal.load_cursor(ListingKind.FULL) == ListingCursor(HISTORY, HISTORY, True)

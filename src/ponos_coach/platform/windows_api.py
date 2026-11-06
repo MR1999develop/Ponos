@@ -254,6 +254,8 @@ if sys.platform == "win32":
         try:
             return ctypes.string_at(result.pbData, result.cbData) if result.pbData else b""
         finally:
+            if not protect and result.pbData:  # il buffer di sistema ha il testo in chiaro
+                ctypes.memset(result.pbData, 0, result.cbData)
             _kernel32.LocalFree(result.pbData)
 
     def protect_data(data: bytes, entropy: bytes) -> bytes:

@@ -9,8 +9,10 @@ riprendere la sessione. Il login non ritenta: ogni errore è tradotto nel tipo d
 
 Limiti: la richiesta del codice MFA (`prompt_mfa_code`) è una callback dell'interfaccia e non
 ha un timeout qui, che attenderebbe una persona; il numero di richieste per login è limitato.
-Se i token si rinnovano durante la sessione, il rinnovo non viene salvato: alla ripresa
-successiva la libreria li rinnova da sé.
+I token che la sessione restituisce (`GarminSession.tokens`) sono quelli dopo l'accesso o la
+ripresa, rinnovati se la libreria li ha rinnovati: li salva il chiamante (il worker di
+sincronizzazione li riscrive nel portachiavi se sono cambiati). Un rinnovo che avviene più tardi,
+durante la sessione, non si salva: alla ripresa successiva la libreria li rinnova da sé.
 """
 
 from __future__ import annotations

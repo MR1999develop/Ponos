@@ -95,8 +95,8 @@ class _CountingStorage(InMemoryProfileStorage):
     ) -> OpenProfile:
         return self._counted(super().create(folder, profile_id, name, timezone_name))
 
-    def open(self, folder: Path) -> OpenProfile:
-        return self._counted(super().open(folder))
+    def open(self, folder: Path, *, check_integrity: bool = True) -> OpenProfile:
+        return self._counted(super().open(folder, check_integrity=check_integrity))
 
     def _counted(self, opened: OpenProfile) -> OpenProfile:
         self.opened += 1

@@ -47,6 +47,13 @@ class GarminActivitySource:
         richiesta per pagina raddoppierebbe il carico; se la richiesta del totale fallisce
         per altro che autenticazione o limite di frequenza, il totale resta ignoto.
 
+        Scelta documentata (R12): la richiesta del totale è parte della stessa chiamata
+        `list_page` della prima pagina, quindi sta sotto la stessa disciplina del chiamante:
+        una sola pausa prima della chiamata, e se Garmin limita la frequenza o chiede il login
+        l'errore esce dalla chiamata e il chiamante applica backoff o si ferma. Costa una
+        richiesta in più per elenco (non per pagina), senza una seconda pausa fra le due; il
+        totale serve solo all'avanzamento e non decide quando l'elenco finisce.
+
         Raises:
             ValueError: `offset` negativo o `limit` fuori da 1..`MAX_PAGE_SIZE`.
         """

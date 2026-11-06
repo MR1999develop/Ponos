@@ -8,13 +8,14 @@ contratto in `tests/`. Nessuna porta registra dati di posizione o di salute.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Collection, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import PurePosixPath
-from typing import Protocol
+from typing import Final, Protocol
 
 from ponos_coach.activities.domain import (
     ActivityIdentity,
@@ -30,6 +31,8 @@ from ponos_coach.activities.domain import (
     SessionTokens,
     SyncStatus,
 )
+
+IMPLAUSIBLE_RETRY_AFTER_S: Final = 86_400.0  # un giorno: oltre, l'attesa non si prende sul serio
 
 # --- Archivio dei file originali ---------------------------------------------------------
 
@@ -106,6 +109,10 @@ class ActivityArchive(Protocol):
 # --- Indice delle attività -----------------------------------------------------------------
 
 
+class SyncJournalError(Exception):
+    """Radice degli errori del giornale della sincronizzazione."""
+
+
 class ActivityIndexError(Exception):
     """Radice degli errori dell'indice delle attività."""
 
@@ -120,6 +127,11 @@ class ActivityNotFoundError(ActivityIndexError):
 
 class TransactionStateError(ActivityIndexError):
     """Transazione annidata: una transazione per volta, per connessione."""
+
+
+class StorageBusyError(ActivityIndexError, SyncJournalError):
+    """Il database è occupato da un altro processo oltre l'attesa massima: la transazione non è
+    nemmeno cominciata, nulla è cambiato. Si può ritentare più tardi."""
 
 
 class ActivityIndex(Protocol):
@@ -334,10 +346,6 @@ class ImportSource(Protocol):
 # --- Giornale della sincronizzazione -------------------------------------------------------
 
 
-class SyncJournalError(Exception):
-    """Radice degli errori del giornale della sincronizzazione."""
-
-
 class UnknownJournalEntryError(SyncJournalError):
     """La voce non è nel giornale."""
 
@@ -374,6 +382,16 @@ class SyncJournal(Protocol):
         """Al più `limit` voci da lavorare (`PENDING` e `RETRYABLE`).
 
         Ordine stabile: inizio dell'attività dal più recente, a parità id Garmin decrescente.
+
+        Raises:
+            ValueError: `limit` minore di 1.
+        """
+        ...
+
+    def next_exhausted(self, limit: int) -> Sequence[JournalEntry]:
+        """Al più `limit` voci fallite per `ATTEMPTS_EXHAUSTED`, stesso ordine di
+        `next_to_process`. Servono alla "Verifica completa", che le riarma con
+        `rearm_exhausted`.
 
         Raises:
             ValueError: `limit` minore di 1.
@@ -427,12 +445,22 @@ class AuthenticationRequiredError(ActivitySourceError):
 class RateLimitedError(ActivitySourceError):
     """Garmin limita la frequenza (HTTP 429): rallentare, poi ritentare con il backoff.
 
-    `retry_after_s` è l'attesa suggerita da Garmin (`Retry-After`), se la dice.
+    `retry_after_s` è l'attesa suggerita da Garmin (`Retry-After`), se la dice: sempre `None`
+    o un numero finito, non negativo e non oltre `IMPLAUSIBLE_RETRY_AFTER_S`. Un valore negativo,
+    NaN o infinito, o più grande del massimo, diventa `IMPLAUSIBLE_RETRY_AFTER_S`: un'attesa
+    che nessun tetto accetta, così il chiamante si ferma con un esito chiaro invece di
+    sollevare o di dormire a lungo. (L'adattatore Garmin scarta già le intestazioni illeggibili:
+    nessun suggerimento, `None`.)
     """
 
     def __init__(self, retry_after_s: float | None = None) -> None:
         super().__init__("frequenza limitata")
-        self.retry_after_s = retry_after_s
+        if retry_after_s is None:
+            self.retry_after_s: float | None = None
+        elif math.isfinite(retry_after_s) and 0 <= retry_after_s <= IMPLAUSIBLE_RETRY_AFTER_S:
+            self.retry_after_s = retry_after_s
+        else:
+            self.retry_after_s = IMPLAUSIBLE_RETRY_AFTER_S
 
 
 class TransientSourceError(ActivitySourceError):

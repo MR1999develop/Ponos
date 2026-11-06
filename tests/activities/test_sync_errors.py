@@ -10,6 +10,7 @@ più un test a proprietà sugli invarianti con interruzioni a caso. Orologio e a
 from __future__ import annotations
 
 from collections import Counter
+from contextlib import AbstractContextManager
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -23,14 +24,23 @@ from ponos_coach.activities.domain import (
     SyncStatus,
 )
 from ponos_coach.activities.ports import (
+    ActivityIndex,
     AuthenticationRequiredError,
     DefinitiveSourceError,
     RateLimitedError,
     ServiceUnavailableError,
+    StorageBusyError,
     TransientSourceError,
 )
-from ponos_coach.activities.sync import EntryFailure, StopReason, SyncPhase, SyncProgress
-from tests.fakes.garmin import Call, OriginalKind
+from ponos_coach.activities.sync import (
+    EntryFailure,
+    StopReason,
+    SyncMode,
+    SyncPhase,
+    SyncProgress,
+)
+from tests.activities.import_fakes import ObservedIndex, OrderLog
+from tests.fakes.garmin import Call, OriginalKind, original_zip
 from tests.fixtures.generators.sync_harness import SyncRig, in_memory_rig, remote_id
 
 PAUSE_S = 1.375  # pausa minima 1 s più metà del jitter massimo
@@ -80,8 +90,8 @@ def test_t_sync_03_a_suggested_wait_over_the_cap_stops_at_once_with_a_clear_outc
 
     assert outcome.stop is StopReason.RATE_LIMITED
     assert not outcome.completed
-    assert outcome.failures == (EntryFailure(remote_id(2), FailureReason.RATE_LIMITED),)
-    assert rig.status_of(2) is SyncStatus.RETRYABLE  # si riprova alla prossima volta
+    assert outcome.failures == ()  # un giro fermato dal limite non consuma tentativi (R1)
+    assert rig.status_of(2) is SyncStatus.PENDING  # si riprova alla prossima volta
     assert rig.status_of(1) is SyncStatus.PENDING
     assert rig.wait.waits == [PAUSE_S]  # nessuna attesa lunga
     assert rig.journal.last_completed_at() is None
@@ -97,7 +107,7 @@ def test_t_sync_03_a_permanent_429_gives_up_after_the_attempt_limit_within_the_c
     assert attempts_on(rig, 2) == 5  # max_attempts_per_request
     assert rig.wait.waits == [PAUSE_S, *BACKOFF_S]
     assert max(rig.wait.waits) <= CAP_S
-    assert rig.status_of(2) is SyncStatus.RETRYABLE
+    assert rig.status_of(2) is SyncStatus.PENDING  # nessun tentativo consumato (R1)
     assert len(rig.fake.downloads) == 5  # le altre voci non sono state toccate
 
 
@@ -151,8 +161,8 @@ def test_t_sync_03_a_service_that_stays_down_stops_after_three_entries() -> None
 
     assert outcome.stop is StopReason.SERVICE_UNAVAILABLE
     assert len(rig.fake.downloads) == 15  # tre voci per cinque tentativi, non dieci voci
-    assert outcome.failures_by_reason() == {FailureReason.TRANSIENT_ERROR: 3}
-    assert outcome.status_counts[SyncStatus.PENDING] == 7
+    assert outcome.failures_by_reason() == {}  # la rete era giù: nessuna voce ha consumato nulla
+    assert outcome.status_counts[SyncStatus.PENDING] == 10
     assert max(rig.wait.waits) <= CAP_S
     assert rig.journal.last_completed_at() is None
 
@@ -229,7 +239,7 @@ def test_t_sync_03_malformed_entries_are_skipped_and_the_cursor_still_advances()
     outcome = rig.run()
 
     assert (outcome.completed, outcome.downloaded) == (True, 5)
-    assert list_offsets(rig) == [0, 5]
+    assert list_offsets(rig) == [0, 5, 10]  # una pagina vuota chiude l'elenco
     assert rig.journal.get(remote_id(7)) is None
 
 
@@ -405,3 +415,130 @@ def test_however_the_runs_are_interrupted_every_good_activity_is_recorded_exactl
     assert final.status_counts[SyncStatus.PENDING] == 0
     # Un annullamento non cade mai tra download e conferma: ogni originale si scarica una volta.
     assert all(times == 1 for times in Counter(rig.fake.downloads).values())
+
+
+# --- R1: un giro fermato dalla rete non consuma tentativi --------------------------------------
+
+
+def test_r1_runs_stopped_by_the_rate_limit_never_exhaust_the_attempts_of_a_valid_entry() -> None:
+    rig = in_memory_rig(2)
+    rig.fake.fail_download_of(remote_id(1), RateLimitedError(), times=20)  # quattro giri da cinque
+
+    for _ in range(4):
+        outcome = rig.run()
+        assert outcome.stop is StopReason.RATE_LIMITED
+
+    entry = rig.journal.get(remote_id(1))
+    assert entry is not None
+    assert (entry.status, entry.failed_attempts) == (SyncStatus.PENDING, 0)
+    assert rig.run().completed
+    assert rig.status_of(1) is SyncStatus.DOWNLOADED
+
+
+def test_r1_failures_held_back_by_an_unreachable_service_are_dropped_not_written() -> None:
+    rig = in_memory_rig(6)
+    for number in (5, 4, 3):  # le tre voci più recenti: il servizio tace
+        rig.fake.fail_download_of(
+            remote_id(number), ServiceUnavailableError("non risponde"), times=5
+        )
+
+    outcome = rig.run()
+
+    assert outcome.stop is StopReason.SERVICE_UNAVAILABLE
+    assert outcome.failures == ()
+    assert all(rig.status_of(n) is SyncStatus.PENDING for n in range(6))
+    assert rig.run().completed and rig.status_of(5) is SyncStatus.DOWNLOADED
+
+
+def test_r1_a_failure_is_written_once_garmin_answers_for_a_later_entry() -> None:
+    rig = in_memory_rig(3)
+    rig.fake.fail_download_of(remote_id(2), TransientSourceError("timeout"))
+
+    outcome = rig.run()
+
+    assert outcome.completed
+    assert outcome.failures == (EntryFailure(remote_id(2), FailureReason.TRANSIENT_ERROR),)
+    assert rig.status_of(2) is SyncStatus.RETRYABLE
+
+
+def test_r1_the_full_verification_rearms_entries_with_exhausted_attempts() -> None:
+    rig = in_memory_rig(2)
+    rig.fake.fail_download_of(remote_id(1), TransientSourceError("timeout"), times=15)
+    for _ in range(3):
+        rig.run()
+    entry = rig.journal.get(remote_id(1))
+    assert entry is not None and entry.failure is FailureReason.ATTEMPTS_EXHAUSTED
+    assert rig.run().downloaded == 0  # una sincronizzazione normale non la riprova
+
+    outcome = rig.run(SyncMode.VERIFY)
+
+    assert (outcome.completed, outcome.downloaded) == (True, 1)
+    rearmed = rig.journal.get(remote_id(1))
+    assert rearmed is not None
+    assert (rearmed.status, rearmed.failed_attempts) == (SyncStatus.DOWNLOADED, 0)
+
+
+def test_r1_the_verification_leaves_definitive_failures_alone() -> None:
+    rig = in_memory_rig(2)
+    rig.fake.set_kind(remote_id(1), OriginalKind.CORRUPT_FIT)
+    rig.run()
+
+    outcome = rig.run(SyncMode.VERIFY)
+
+    assert outcome.downloaded == 0
+    entry = rig.journal.get(remote_id(1))
+    assert entry is not None and entry.status is SyncStatus.FAILED
+
+
+# --- R2: database occupato ------------------------------------------------------------------------
+
+
+class _BusyAfter(ObservedIndex):
+    """Un indice la cui `transaction` dà `StorageBusyError` dalla `busy_from`-esima in poi."""
+
+    def __init__(self, inner: ActivityIndex, busy_from: int) -> None:
+        super().__init__(inner, OrderLog())
+        self._busy_from = busy_from
+        self._opened = 0
+
+    def transaction(self) -> AbstractContextManager[None]:
+        self._opened += 1
+        if self._opened >= self._busy_from:
+            raise StorageBusyError("database occupato")
+        return super().transaction()
+
+
+def test_r2_a_busy_database_stops_the_sync_with_a_storage_error_and_touches_no_entry() -> None:
+    rig = in_memory_rig(3)
+    real_index = rig.index
+    rig.index = _BusyAfter(real_index, busy_from=2)  # la pagina dell'elenco passa, la voce no
+
+    outcome = rig.run()
+
+    assert outcome.stop is StopReason.STORAGE_ERROR
+    assert not outcome.completed
+    assert outcome.failures == ()
+    assert all(rig.status_of(n) is SyncStatus.PENDING for n in range(3))
+    rig.index = real_index
+    assert rig.run().completed
+    assert len(rig.records()) == 3
+    assert len(rig.memory.files) == 3  # il file già scritto non si raddoppia
+
+
+# --- D-F2-03: il file scaricato deve essere quello della voce ---------------------------------
+
+
+def test_d_f2_03_a_download_of_another_activity_fails_the_entry_for_good_and_is_not_recorded() -> (
+    None
+):
+    rig = in_memory_rig(3)
+    rig.fake.set_original(remote_id(1), original_zip(2))  # Garmin dà il file della corsa 2
+
+    outcome = rig.run()
+
+    assert outcome.completed
+    assert outcome.failures == (EntryFailure(remote_id(1), FailureReason.REMOTE_REJECTED),)
+    assert rig.status_of(1) is SyncStatus.FAILED
+    assert rig.status_of(0) is SyncStatus.DOWNLOADED
+    assert outcome.downloaded == 2
+    assert len(rig.records()) == 2

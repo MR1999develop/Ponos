@@ -71,6 +71,11 @@ class TestSourceErrors:
             ("99999", MAX_RETRY_AFTER_S),
             ("3600", 3600.0),
             ("1e3", None),
+            ("²", None),  # D-F2-01: cifra che float() non legge
+            ("٣", None),  # cifra araba: non ASCII
+            ("+5", None),
+            ("5 6", None),
+            ("9" * 500, None),
         ],
     )
     def test_retry_after_is_read_only_when_it_is_a_sensible_number(

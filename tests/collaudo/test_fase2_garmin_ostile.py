@@ -319,11 +319,6 @@ def test_t_sync_03_any_retry_after_gives_a_bounded_sync_with_a_clear_outcome(
     assert all(0 <= wait <= rig.policy.backoff_cap_s for wait in rig.wait.waits)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F2-01: Retry-After con una cifra che float() non legge (es. '²') solleva ValueError "
-    "da translate_source_error invece di un errore della porta",
-)
 def test_d_f2_01_retry_after_with_a_superscript_digit_is_an_error_of_the_port() -> None:
     client = ScriptedClient([GOOD])
     client.list_failures.append(rate_limit_error("\u00b2"))
@@ -333,16 +328,17 @@ def test_d_f2_01_retry_after_with_a_superscript_digit_is_an_error_of_the_port() 
         source.list_page(0, 100)
 
 
-def test_d_f2_01_the_same_header_through_the_stack_ends_as_an_unexpected_problem_not_a_crash(
+def test_d_f2_01_the_same_header_through_the_stack_is_ignored_and_the_backoff_goes_on(
     tmp_path: Path,
 ) -> None:
     client = scripted_client(1)
     client.list_failures.append(rate_limit_error("\u00b2"))
     stack = build_stack(tmp_path, client)
     try:
-        result = stack.sync()  # il worker ha il confine del thread: non solleva
+        result = stack.sync()  # nessuna attesa suggerita: vale il solo backoff, poi riesce
 
-        assert not isinstance(result, SyncFinished) or not result.outcome.completed
+        assert isinstance(result, SyncFinished) and result.outcome.completed
+        assert len(client.list_calls) == 2
     finally:
         stack.close()
 
@@ -361,13 +357,7 @@ def test_t_sync_03_a_429_with_a_huge_wait_stops_without_sleeping_for_it(tmp_path
         stack.close()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F2-02: una sorgente che dà RateLimitedError con attesa negativa o NaN fa sollevare "
-    "ValueError da synchronize_activities (retry_wait_s) invece di un esito; la porta non valida "
-    "retry_after_s (l'adattatore Garmin non lo produce, ma la porta e' il contratto)",
-)
-@pytest.mark.parametrize("wait", [-5.0, float("nan")])
+@pytest.mark.parametrize("wait", [-5.0, float("nan"), float("inf")])
 def test_d_f2_02_a_source_with_a_hostile_retry_after_value_gives_an_outcome_not_an_exception(
     wait: float,
 ) -> None:

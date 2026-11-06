@@ -10,6 +10,7 @@ from pathlib import Path
 import keyring
 import pytest
 from keyring.backend import KeyringBackend
+from keyring.backends.chainer import ChainerBackend
 from keyring.errors import PasswordDeleteError
 
 from ponos_coach.platform import token_store as token_store_module
@@ -51,6 +52,17 @@ class _MemoryBackend(KeyringBackend):
         if (service, username) not in self.items:
             raise PasswordDeleteError("assente")
         del self.items[(service, username)]
+
+
+class _ChainOf(ChainerBackend):
+    """Un `ChainerBackend` con i backend dati, senza cercarli nel sistema."""
+
+    def __init__(self, backends: list[KeyringBackend]) -> None:
+        self._given = backends
+
+    @property
+    def backends(self) -> list[KeyringBackend]:
+        return self._given
 
 
 def _secret_file(base: Path, profile_id: ProfileId = PROFILE_A) -> Path:
@@ -171,6 +183,31 @@ class TestDpapiFiles:
 class TestPlatformChoice:
     def test_plain_backend_is_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(keyring, "get_keyring", _MemoryBackend)
+        monkeypatch.setattr(token_store_module, "_IS_WINDOWS", False)
+
+        with pytest.raises(TokenStoreUnavailableError):
+            create_token_store(Path())
+
+    def test_a_chainer_backend_is_searched_for_the_secret_service(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        secret_service = type(
+            "Backend", (_MemoryBackend,), {"__module__": "keyring.backends.SecretService"}
+        )()
+        chain = _ChainOf([_MemoryBackend(), secret_service])
+        monkeypatch.setattr(keyring, "get_keyring", lambda: chain)
+        monkeypatch.setattr(token_store_module, "_IS_WINDOWS", False)
+
+        store = create_token_store(Path())
+
+        store.save(PROFILE_A, TOKENS_A)
+        assert store.load(PROFILE_A) == TOKENS_A
+        assert secret_service.items  # ha scritto il Secret Service, non l'altro backend
+
+    def test_a_chainer_backend_without_the_secret_service_is_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(keyring, "get_keyring", lambda: _ChainOf([_MemoryBackend()]))
         monkeypatch.setattr(token_store_module, "_IS_WINDOWS", False)
 
         with pytest.raises(TokenStoreUnavailableError):

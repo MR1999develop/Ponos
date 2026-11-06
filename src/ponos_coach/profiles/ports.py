@@ -325,8 +325,13 @@ class ProfileStorage(Protocol):
         """
         ...
 
-    def open(self, folder: Path) -> OpenProfile:
+    def open(self, folder: Path, *, check_integrity: bool = True) -> OpenProfile:
         """Apre il database, portandolo alla versione più recente se è più vecchio.
+
+        `check_integrity=False` salta i controlli di integrità completi (leggono tutto il
+        file): solo per una seconda connessione allo stesso profilo già aperto e verificato,
+        come quella del thread di sincronizzazione. L'apertura normale li fa sempre; un
+        database da migrare si controlla comunque.
 
         Prima di migrare mette una copia coerente del database in `backup/`, con le versioni di
         partenza e di arrivo nel nome.

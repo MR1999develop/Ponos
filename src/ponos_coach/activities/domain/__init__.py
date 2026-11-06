@@ -46,6 +46,7 @@ from ponos_coach.activities.domain.journal import (
     mark_failed,
     mark_matched,
     pending_entry,
+    rearm_exhausted,
 )
 from ponos_coach.activities.domain.limits import (
     MAX_ACTIVITY_FILE_BYTES,
@@ -61,6 +62,7 @@ from ponos_coach.activities.domain.remote import (
     ActivityPage,
     RemoteActivity,
     find_matching_import,
+    original_matches_listing,
     sport_from_garmin_key,
 )
 from ponos_coach.activities.domain.session_tokens import MAX_TOKEN_CHARS, SessionTokens
@@ -143,8 +145,10 @@ __all__ = [
     "mark_downloaded",
     "mark_failed",
     "mark_matched",
+    "original_matches_listing",
     "pause_between_requests_s",
     "pending_entry",
+    "rearm_exhausted",
     "retry_wait_s",
     "simplify_indices",
     "simplify_track",

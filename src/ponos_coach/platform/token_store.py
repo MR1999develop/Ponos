@@ -23,6 +23,7 @@ from typing import Final
 
 import keyring
 from keyring.backend import KeyringBackend
+from keyring.backends.chainer import ChainerBackend
 from keyring.errors import KeyringError, PasswordDeleteError
 
 from ponos_coach.activities.domain import MAX_TOKEN_CHARS, SessionTokens
@@ -159,20 +160,28 @@ class KeyringTokenStore:
             raise TokenStoreUnavailableError("token non cancellati") from exc
 
 
+def _is_secret_service(backend: KeyringBackend) -> bool:
+    return type(backend).__module__ == _SECRET_SERVICE_MODULE and backend.priority > 0
+
+
 def _secret_service_backend() -> KeyringBackend:
     """Il backend attivo di `keyring`, se è il Secret Service e funziona.
+
+    Se `keyring` ha scelto il `ChainerBackend` (più backend utilizzabili insieme), si cerca tra
+    i suoi quello del Secret Service e si usa direttamente quello: mai un altro della catena.
 
     Raises:
         TokenStoreUnavailableError: backend assente, in chiaro o di altro tipo.
     """
     try:
-        backend = keyring.get_keyring()
-        usable = type(backend).__module__ == _SECRET_SERVICE_MODULE and backend.priority > 0
+        active = keyring.get_keyring()
+        candidates = list(active.backends) if isinstance(active, ChainerBackend) else [active]
+        found = next((item for item in candidates if _is_secret_service(item)), None)
     except (KeyringError, RuntimeError, OSError) as exc:
         raise TokenStoreUnavailableError("Secret Service non disponibile") from exc
-    if not usable:
+    if found is None:
         raise TokenStoreUnavailableError("Secret Service non disponibile")
-    return backend
+    return found
 
 
 def create_token_store(base_dir: Path) -> TokenStore:

@@ -147,3 +147,12 @@ def find_matching_import(
     if not matching:
         return None
     return min(matching, key=lambda r: (abs(r.start - remote.start), identity_key(r.identity)))
+
+
+def original_matches_listing(remote: RemoteActivity, start: datetime, elapsed_s: float) -> bool:
+    """Vero se un file scaricato (inizio `start`, tempo trascorso `elapsed_s`) è l'attività
+    dell'elenco: stessa regola dei duplicati (inizi a non più di 60 s, durate entro il 5%).
+
+    Un file che non coincide è di un'altra attività: non si registra per quell'id.
+    """
+    return is_possible_duplicate(remote.start, remote.duration_s, start, elapsed_s)

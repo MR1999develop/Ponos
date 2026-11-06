@@ -19,6 +19,7 @@ from pathlib import Path
 from ponos_coach.activities.domain import (
     ActivityIdentity,
     ActivityRecord,
+    FailureReason,
     GarminActivityId,
     InvalidTransitionError,
     JournalEntry,
@@ -214,6 +215,17 @@ class _Journal:
         todo.sort(key=lambda e: (e.remote.start, e.garmin_id.value), reverse=True)
         return todo[:limit]
 
+    def next_exhausted(self, limit: int) -> Sequence[JournalEntry]:
+        if limit < 1:
+            raise ValueError("il limite deve essere almeno 1")
+        exhausted = [
+            e
+            for e in self._db.journal.values()
+            if e.status is SyncStatus.FAILED and e.failure is FailureReason.ATTEMPTS_EXHAUSTED
+        ]
+        exhausted.sort(key=lambda e: (e.remote.start, e.garmin_id.value), reverse=True)
+        return exhausted[:limit]
+
     def get(self, garmin_id: GarminActivityId) -> JournalEntry | None:
         return self._db.journal.get(garmin_id)
 
@@ -332,8 +344,9 @@ class InMemoryProfileStorage:
             raise ProfileNotFoundError(folder.name)
         return ProfilePeek(database.info, len(database.records))
 
-    def open(self, folder: Path) -> OpenProfile:
-        """Vedi `ProfileStorage.open`."""
+    def open(self, folder: Path, *, check_integrity: bool = True) -> OpenProfile:
+        """Vedi `ProfileStorage.open` (i controlli di integrità non hanno senso in memoria)."""
+        del check_integrity
         database = self.disk.databases.get(folder)
         if database is None:
             raise ProfileNotFoundError(folder.name)

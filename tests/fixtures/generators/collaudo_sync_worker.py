@@ -158,6 +158,9 @@ class _BlockingJournal:
     def next_to_process(self, limit: int) -> Sequence[JournalEntry]:
         return self._inner.next_to_process(limit)
 
+    def next_exhausted(self, limit: int) -> Sequence[JournalEntry]:
+        return self._inner.next_exhausted(limit)
+
     def get(self, garmin_id: GarminActivityId) -> JournalEntry | None:
         return self._inner.get(garmin_id)
 

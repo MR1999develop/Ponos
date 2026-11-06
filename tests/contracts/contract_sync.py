@@ -27,6 +27,7 @@ from ponos_coach.activities.domain import (
     mark_failed,
     mark_matched,
     pending_entry,
+    rearm_exhausted,
 )
 from ponos_coach.activities.ports import (
     ActivityNotFoundError,
@@ -333,6 +334,39 @@ class SyncJournalContract:
     def test_next_to_process_needs_a_positive_limit(self, harness: StorageHarness) -> None:
         with closing(create(harness)) as profile, pytest.raises(ValueError, match="limite"):
             profile.sync_journal.next_to_process(0)
+
+    def test_exhausted_entries_are_listed_newest_first_and_rearmed_to_pending(
+        self, harness: StorageHarness
+    ) -> None:
+        with closing(create(harness)) as profile:
+            journal = profile.sync_journal
+            journal.add_pending([remote_activity(n) for n in range(1, 5)], IMPORTED_AT)
+            for number, reason in (
+                (1, FailureReason.CORRUPT_FILE),
+                (2, FailureReason.TRANSIENT_ERROR),
+                (3, FailureReason.TRANSIENT_ERROR),
+            ):
+                entry = journal.get(_id(number))
+                assert entry is not None
+                attempts = 3 if number != 1 else 1
+                for _ in range(attempts):
+                    entry = mark_failed(entry, reason, IMPORTED_AT, attempts)
+                    if entry.status is SyncStatus.FAILED:
+                        break
+                journal.update(entry)
+
+            exhausted = journal.next_exhausted(10)
+
+            assert [e.garmin_id for e in exhausted] == [_id(3), _id(2)]
+            assert all(e.failure is FailureReason.ATTEMPTS_EXHAUSTED for e in exhausted)
+            journal.update(rearm_exhausted(exhausted[0], LATER))
+            assert journal.get(_id(3)) == pending_entry(exhausted[0].remote, LATER)
+            assert [e.garmin_id for e in journal.next_exhausted(10)] == [_id(2)]
+            assert [e.garmin_id for e in journal.next_exhausted(1)] == [_id(2)]
+
+    def test_next_exhausted_needs_a_positive_limit(self, harness: StorageHarness) -> None:
+        with closing(create(harness)) as profile, pytest.raises(ValueError, match="limite"):
+            profile.sync_journal.next_exhausted(0)
 
     def test_last_completed_instant_is_kept_and_replaced(self, harness: StorageHarness) -> None:
         with closing(create(harness)) as profile:

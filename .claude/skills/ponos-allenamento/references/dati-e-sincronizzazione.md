@@ -190,8 +190,12 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
    trova una pagina di attività già note, più le voci in sospeso o fallite.
 3. Ogni id nuovo diventa una voce "da scaricare" nel giornale (idempotente
    per id Garmin).
+   L'elenco finisce con una pagina corta o vuota, mai al totale dichiarato
+   (Garmin può ricevere attività nuove durante l'elenco): il totale serve
+   solo all'avanzamento.
 4. "Verifica completa": rielenca tutto lo storico senza riscaricare, per
-   trovare attività con date vecchie caricate in ritardo.
+   trovare attività con date vecchie caricate in ritardo; riarma anche le voci
+   fallite per `ATTEMPTS_EXHAUSTED` (`rearm_exhausted`: tornano `PENDING`).
 5. Per ogni voce: download del FIT originale (zip), controlli dei limiti,
    scrittura durevole, lettura, calcolo del carico; una transazione segna la
    voce completata.
@@ -234,8 +238,9 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   `RETRYABLE` (fallita per una causa transitoria), `FAILED` (definitiva). Non
   c'è uno stato "in corso": download, archivio e conferma stanno in una sola
   transazione, quindi un'interruzione lascia la voce `PENDING`. Da `PENDING` e
-  `RETRYABLE` si va in tutti gli altri (anche `RETRYABLE` → `RETRYABLE`); gli
-  stati finali non si muovono (`can_transition`, `InvalidTransitionError`),
+  `RETRYABLE` si va in tutti gli altri (anche `RETRYABLE` → `RETRYABLE`);
+  `DOWNLOADED` e `MATCHED` non si muovono, `FAILED` solo verso `PENDING` e solo
+  per `rearm_exhausted` (`can_transition`, `InvalidTransitionError`),
   e il database rifiuta le combinazioni incoerenti con i CHECK.
 - Cause (`FailureReason`): ritentabili `TRANSIENT_ERROR` e `RATE_LIMITED`;
   definitive `UNSUPPORTED_FORMAT` (per esempio un TCX), `CORRUPT_FILE`,
@@ -244,7 +249,13 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   causa definitiva → `FAILED`; causa ritentabile → `RETRYABLE` fino al terzo
   fallimento (`max_syncs_per_activity`), poi `FAILED` con
   `ATTEMPTS_EXHAUSTED`. Un errore di scrittura locale (disco pieno) non è
-  della voce: ferma la sincronizzazione, non si registra sulla voce.
+  della voce: ferma la sincronizzazione, non si registra sulla voce. Neppure
+  un giro fermato da limite di frequenza o servizio irraggiungibile consuma
+  tentativi: i fallimenti di rete si scrivono solo se Garmin risponde per una
+  voce successiva. Il file scaricato deve coincidere con la voce (inizio e
+  durata, regola dei duplicati); se no `REMOTE_REJECTED`, mai registrato.
+  `SyncOutcome.downloaded` conta solo le attività nuove, `matched` i gemelli
+  in un altro formato, `already_present` i file già nel profilo.
 - Lavoro: `next_to_process(limit)` dà `PENDING` e `RETRYABLE` dalla più
   recente (a parità, id decrescente); `add_pending` è idempotente per id e non
   tocca le voci esistenti.

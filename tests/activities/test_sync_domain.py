@@ -42,11 +42,14 @@ from ponos_coach.activities.domain import (
     mark_downloaded,
     mark_failed,
     mark_matched,
+    original_matches_listing,
     pause_between_requests_s,
     pending_entry,
+    rearm_exhausted,
     retry_wait_s,
     sport_from_garmin_key,
 )
+from ponos_coach.activities.ports import IMPLAUSIBLE_RETRY_AFTER_S, RateLimitedError
 from tests.builders import IMPORTED_AT, T0, fit_identity, gpx_identity, make_record, remote_activity
 
 NOW = IMPORTED_AT
@@ -330,6 +333,74 @@ class TestJournalEntry:
         assert (done.status, done.failed_attempts, done.failure) == (SyncStatus.DOWNLOADED, 2, None)
 
 
+class TestRearm:
+    def _exhausted(self) -> JournalEntry:
+        return JournalEntry(
+            remote_activity(1), SyncStatus.FAILED, NOW, 3, FailureReason.ATTEMPTS_EXHAUSTED
+        )
+
+    def test_an_exhausted_entry_goes_back_to_pending_without_attempts(self) -> None:
+        rearmed = rearm_exhausted(self._exhausted(), LATER)
+
+        assert rearmed == pending_entry(remote_activity(1), LATER)
+        assert (rearmed.failed_attempts, rearmed.failure) == (0, None)
+
+    @pytest.mark.parametrize("status", list(SyncStatus))
+    def test_any_other_entry_cannot_be_rearmed(self, status: SyncStatus) -> None:
+        entry = _entry(status)
+
+        with pytest.raises(InvalidTransitionError):
+            rearm_exhausted(entry, LATER)
+
+    @pytest.mark.parametrize(
+        "reason", [r for r in DEFINITIVE if r is not FailureReason.ATTEMPTS_EXHAUSTED]
+    )
+    def test_a_definitive_failure_is_not_rearmed(self, reason: FailureReason) -> None:
+        entry = JournalEntry(remote_activity(1), SyncStatus.FAILED, NOW, 1, reason)
+
+        with pytest.raises(InvalidTransitionError):
+            rearm_exhausted(entry, LATER)
+
+
+class TestOriginalMatchesListing:
+    def test_the_same_start_and_duration_match(self) -> None:
+        remote = remote_activity(1)
+
+        assert original_matches_listing(remote, remote.start, remote.duration_s)
+
+    def test_a_start_a_minute_off_still_matches_but_a_day_off_does_not(self) -> None:
+        remote = remote_activity(1)
+
+        assert original_matches_listing(
+            remote, remote.start + timedelta(seconds=60), remote.duration_s
+        )
+        assert not original_matches_listing(
+            remote, remote.start + timedelta(days=1), remote.duration_s
+        )
+
+    def test_a_much_longer_file_does_not_match(self) -> None:
+        remote = remote_activity(1)
+
+        assert not original_matches_listing(remote, remote.start, remote.duration_s * 2)
+
+
+class TestRateLimitedErrorHint:
+    @pytest.mark.parametrize("value", [None, 0.0, 5.0, 3600.0])
+    def test_a_sensible_hint_is_kept(self, value: float | None) -> None:
+        assert RateLimitedError(value).retry_after_s == value
+
+    @pytest.mark.parametrize(
+        "value", [-1.0, float("-inf"), float("nan"), float("inf"), 1e12, 86_401.0]
+    )
+    def test_an_unusable_hint_becomes_an_implausible_wait_so_the_caller_stops(
+        self, value: float
+    ) -> None:
+        error = RateLimitedError(value)
+
+        assert error.retry_after_s == IMPLAUSIBLE_RETRY_AFTER_S
+        assert retry_wait_s(DEFAULT_POLICY, 1, NO_JITTER, error.retry_after_s) is None
+
+
 class TestTransitions:
     @pytest.mark.parametrize("old", list(SyncStatus))
     @pytest.mark.parametrize("new", list(SyncStatus))
@@ -338,7 +409,7 @@ class TestTransitions:
     ) -> None:
         expected = (
             old in (SyncStatus.PENDING, SyncStatus.RETRYABLE) and new is not SyncStatus.PENDING
-        )
+        ) or (old is SyncStatus.FAILED and new is SyncStatus.PENDING)  # solo per rearm_exhausted
 
         assert can_transition(old, new) is expected
         assert (new in ALLOWED_TRANSITIONS[old]) is expected
@@ -452,10 +523,18 @@ class TestListingCursor:
 
         assert second == ListingCursor(200, 250, False)
 
-    def test_reaching_the_declared_total_completes_the_listing(self) -> None:
+    def test_reaching_the_declared_total_does_not_complete_the_listing(self) -> None:
+        # D-F2-04: il totale si fissa alla prima pagina e può essere vecchio.
         cursor = advance_cursor(ListingCursor(100, 200, False), _page(100, 100, total=200), 100)
 
-        assert cursor == ListingCursor(200, 200, True)
+        assert cursor == ListingCursor(200, 200, False)
+
+    def test_a_page_past_the_declared_total_is_still_asked_for_and_completes_when_short(
+        self,
+    ) -> None:
+        cursor = advance_cursor(ListingCursor(200, 200, False), _page(200, 1), 100)
+
+        assert cursor == ListingCursor(201, 200, True)
 
     def test_a_short_page_completes_the_listing_even_without_a_total(self) -> None:
         assert advance_cursor(ListingCursor(200, None, False), _page(200, 7), 100).completed
