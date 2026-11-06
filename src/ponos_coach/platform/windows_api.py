@@ -52,6 +52,33 @@ if sys.platform == "win32":
     _kernel32.GetDriveTypeW.argtypes = [wintypes.LPCWSTR]
     _kernel32.GetDriveTypeW.restype = wintypes.UINT
 
+    _crypt32 = ctypes.WinDLL("crypt32", use_last_error=True)
+    _CRYPTPROTECT_UI_FORBIDDEN = 0x1
+
+    class _DataBlob(ctypes.Structure):
+        _fields_ = (("cbData", wintypes.DWORD), ("pbData", ctypes.c_void_p))
+
+    _crypt32.CryptProtectData.argtypes = [
+        ctypes.POINTER(_DataBlob),
+        wintypes.LPCWSTR,
+        ctypes.POINTER(_DataBlob),
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.POINTER(_DataBlob),
+    ]
+    _crypt32.CryptProtectData.restype = wintypes.BOOL
+    _crypt32.CryptUnprotectData.argtypes = [
+        ctypes.POINTER(_DataBlob),
+        ctypes.c_void_p,
+        ctypes.POINTER(_DataBlob),
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.POINTER(_DataBlob),
+    ]
+    _crypt32.CryptUnprotectData.restype = wintypes.BOOL
+
     _advapi32.OpenProcessToken.argtypes = [
         wintypes.HANDLE,
         wintypes.DWORD,
@@ -202,7 +229,58 @@ if sys.platform == "win32":
         """Tipo dell'unità (`GetDriveTypeW`): 4 = di rete, 0 o 1 = sconosciuta."""
         return int(_kernel32.GetDriveTypeW(root))
 
+    def _blob_of(data: bytes) -> tuple[_DataBlob, ctypes.Array[ctypes.c_char]]:
+        """Blob su una copia di `data`; il buffer va tenuto vivo finché serve il blob."""
+        buffer = ctypes.create_string_buffer(data, max(len(data), 1))
+        return _DataBlob(len(data), ctypes.cast(buffer, ctypes.c_void_p)), buffer
+
+    def _crypt(data: bytes, entropy: bytes, *, protect: bool) -> bytes:
+        source, source_buffer = _blob_of(data)
+        extra, extra_buffer = _blob_of(entropy)
+        result = _DataBlob()
+        function = _crypt32.CryptProtectData if protect else _crypt32.CryptUnprotectData
+        # Stessa forma di argomenti per le due funzioni (la descrizione è None e non serve).
+        if not function(
+            ctypes.byref(source),
+            None,
+            ctypes.byref(extra),
+            None,
+            None,
+            _CRYPTPROTECT_UI_FORBIDDEN,
+            ctypes.byref(result),
+        ):
+            _raise_last_error()
+        del source_buffer, extra_buffer  # vivi fino alla fine della chiamata
+        try:
+            return ctypes.string_at(result.pbData, result.cbData) if result.pbData else b""
+        finally:
+            _kernel32.LocalFree(result.pbData)
+
+    def protect_data(data: bytes, entropy: bytes) -> bytes:
+        """Cifra `data` con DPAPI (ambito utente) e un'entropia aggiuntiva.
+
+        Raises:
+            OSError: cifratura non riuscita.
+        """
+        return _crypt(data, entropy, protect=True)
+
+    def unprotect_data(blob: bytes, entropy: bytes) -> bytes:
+        """Decifra un blob di `protect_data` (stesso utente, stessa entropia).
+
+        Raises:
+            OSError: blob alterato, di un altro utente o con un'altra entropia.
+        """
+        return _crypt(blob, entropy, protect=False)
+
 else:
+
+    def protect_data(data: bytes, entropy: bytes) -> bytes:
+        """Solo Windows."""
+        raise NotImplementedError
+
+    def unprotect_data(blob: bytes, entropy: bytes) -> bytes:
+        """Solo Windows."""
+        raise NotImplementedError
 
     def current_user_sid() -> str:
         """Solo Windows."""

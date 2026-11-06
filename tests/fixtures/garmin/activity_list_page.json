@@ -1,0 +1,62 @@
+[
+  {
+    "activityId": 1000005,
+    "activityName": "Corsa di prova",
+    "startTimeLocal": "2026-05-06 09:00:00",
+    "startTimeGMT": "2026-05-06 07:00:00",
+    "activityType": {"typeId": 1, "typeKey": "running", "parentTypeId": 17, "isHidden": false},
+    "distance": 5200.5,
+    "duration": 1795.2,
+    "movingDuration": 1790.0,
+    "elapsedDuration": 1800.4,
+    "elevationGain": 31.0,
+    "averageSpeed": 2.89,
+    "averageHR": 148.0,
+    "maxHR": 171.0,
+    "calories": 410.0,
+    "manualActivity": false,
+    "userRoles": ["SCOPE_GOLF_API_READ"]
+  },
+  {
+    "activityId": "1000004",
+    "activityName": "Ciclismo di prova",
+    "startTimeLocal": "2026-05-05 09:00:00",
+    "startTimeGMT": "2026-05-05 07:00:00.0",
+    "activityType": {"typeId": 2, "typeKey": "road_biking", "parentTypeId": 2, "isHidden": false},
+    "distance": 20500.0,
+    "duration": 3600.0,
+    "movingDuration": 3500.0,
+    "elapsedDuration": 3720.0,
+    "averageHR": 131.0,
+    "maxHR": 160.0
+  },
+  {
+    "activityId": 1000003,
+    "activityName": "Camminata senza fascia",
+    "startTimeLocal": "2026-05-04 09:00:00",
+    "startTimeGMT": "2026-05-04 07:00:00",
+    "activityType": {"typeId": 9, "typeKey": "walking", "parentTypeId": 17, "isHidden": false},
+    "distance": 3000.0,
+    "duration": 2400.0,
+    "averageHR": null,
+    "maxHR": null
+  },
+  {
+    "activityId": 1000002,
+    "activityName": "Pesi",
+    "startTimeLocal": "2026-05-03 18:00:00",
+    "startTimeGMT": "2026-05-03 16:00:00",
+    "activityType": {"typeId": 13, "typeKey": "strength_training", "parentTypeId": 29, "isHidden": false},
+    "duration": 2700.0,
+    "elapsedDuration": 3000.0
+  },
+  {
+    "activityId": 1000001,
+    "activityName": "Nuoto di prova",
+    "startTimeLocal": "2026-05-02 06:30:00",
+    "startTimeGMT": "2026-05-02 04:30:00",
+    "activityType": {"typeId": 18, "typeKey": "lap_swimming", "parentTypeId": 26, "isHidden": false},
+    "duration": 1500.0,
+    "averageHR": 0
+  }
+]

@@ -22,12 +22,9 @@ assoluto, unità, controlli o nome riservato si rifiuta. Voci cifrate e ZIP anni
 from __future__ import annotations
 
 import os
-import re
 import stat
-import struct
 import unicodedata
 import zipfile
-import zlib
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
@@ -48,23 +45,23 @@ from ponos_coach.activities.ports import (
     ImportSourceUnreadableError,
     SkippedEntry,
 )
-
-_REPARSE_POINT = 0x400  # FILE_ATTRIBUTE_REPARSE_POINT: collegamenti e giunzioni su Windows
-_ACTIVITY_SUFFIXES = (".fit", ".gpx")
-_ZIP_SUFFIX = ".zip"
-_CANDIDATE_SUFFIXES = (*_ACTIVITY_SUFFIXES, _ZIP_SUFFIX)
-_BLOCK_BYTES = 64 * 1024
-_DISPLAY_CHARS = 255
-_ZIP_ENTRY_NAME_CHARS = 1024
-_ZIP_STORED, _ZIP_DEFLATED, _ZIP_AES = 0, 8, 99
-_ZIP_ENCRYPTED_FLAGS = 0x1 | 0x40 | 0x2000  # cifrata, cifratura forte, directory mascherata
-_DRIVE = re.compile(r"[A-Za-z]:")
-_INVALID_NAME_CHARS = frozenset('<>:"|?*')
-_RESERVED_NAMES = frozenset(
-    {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
-    | {f"{device}{digit}" for device in ("COM", "LPT") for digit in "123456789¹²³"}
+from ponos_coach.zipread import (
+    ACTIVITY_SUFFIXES,
+    ZIP_SUFFIX,
+    ZipLimits,
+    ZipReadError,
+    ZipReason,
+    entry_issue,
+    extract_entry,
+    file_suffix,
+    has_invalid_windows_chars,
+    is_reserved_name,
+    open_checked_zip,
 )
 
+_REPARSE_POINT = 0x400  # FILE_ATTRIBUTE_REPARSE_POINT: collegamenti e giunzioni su Windows
+_CANDIDATE_SUFFIXES = (*ACTIVITY_SUFFIXES, ZIP_SUFFIX)
+_DISPLAY_CHARS = 255
 # Apertura sicura: sola lettura, niente collegamenti dove il sistema lo sa evitare, non bloccante
 # su POSIX, binaria su Windows, non ereditata dai processi figli.
 _OPEN_FLAGS = (
@@ -75,33 +72,6 @@ _OPEN_FLAGS = (
     | getattr(os, "O_CLOEXEC", 0)
 )
 
-# Directory centrale e record finale dello ZIP.
-_EOCD = struct.Struct("<4sHHHHIIH")
-_EOCD_SIGNATURE = b"PK\x05\x06"
-_EOCD_MAX_COMMENT = 0xFFFF
-_ZIP64_LOCATOR = struct.Struct("<4sIQI")
-_ZIP64_LOCATOR_SIGNATURE = b"PK\x06\x07"
-_ZIP64_RECORD = struct.Struct("<4sQHHIIQQQQ")
-_ZIP64_RECORD_SIGNATURE = b"PK\x06\x06"
-_CENTRAL_HEADER = struct.Struct("<4sHHHHHHIIIHHHHHII")
-_CENTRAL_SIGNATURE = b"PK\x01\x02"
-_UINT16_MAX = 0xFFFF
-_UINT32_MAX = 0xFFFFFFFF
-
-_ZIP_ERRORS = (
-    zipfile.BadZipFile,
-    zipfile.LargeZipFile,
-    OSError,
-    ValueError,
-    EOFError,
-    OverflowError,
-    NotImplementedError,
-    RuntimeError,
-    zlib.error,
-    struct.error,
-)
-
-
 # --- Nomi --------------------------------------------------------------------------------------
 
 
@@ -111,37 +81,9 @@ def _display(text: str) -> str:
     return clean[:_DISPLAY_CHARS]
 
 
-def _suffix(name: str) -> str:
-    """Suffisso minuscolo con il punto (vuoto se manca)."""
-    _, dot, tail = name.rpartition(".")
-    return f".{tail.lower()}" if dot else ""
-
-
-def _is_reserved_name(name: str) -> bool:
-    """Nome riservato di Windows (`CON`, `NUL`, `COM1`...) con qualunque estensione."""
-    return name.split(".", 1)[0].rstrip(" ").upper() in _RESERVED_NAMES
-
-
-def _has_invalid_windows_chars(name: str) -> bool:
-    """Caratteri di controllo o `<>:"|?*`, oppure punto o spazio finale."""
-    return name != name.rstrip(" .") or any(c in _INVALID_NAME_CHARS or ord(c) < 32 for c in name)
-
-
 def _is_unusable_folder_name(name: str) -> bool:
     """Nome di file o cartella da saltare: riservato ovunque, non valido dove è Windows."""
-    return _is_reserved_name(name) or (os.name == "nt" and _has_invalid_windows_chars(name))
-
-
-def _is_safe_zip_entry_name(name: str) -> bool:
-    """Nome di una voce senza `..`, percorso assoluto, unità, controlli né nomi di Windows."""
-    if not name or len(name) > _ZIP_ENTRY_NAME_CHARS or name[0] in "/\\":
-        return False
-    if _DRIVE.match(name) or any(ord(c) < 32 or ord(c) == 127 for c in name):
-        return False
-    parts = [part for part in re.split(r"[\\/]", name) if part]
-    return ".." not in parts and not any(
-        _is_reserved_name(part) or _has_invalid_windows_chars(part) for part in parts
-    )
+    return is_reserved_name(name) or (os.name == "nt" and has_invalid_windows_chars(name))
 
 
 # --- File e cartelle ---------------------------------------------------------------------------
@@ -256,129 +198,53 @@ def _read_file(location: _Location, max_bytes: int) -> bytes:
 # --- ZIP ---------------------------------------------------------------------------------------
 
 
-def _locate_zip64(handle: BinaryIO, end_position: int) -> tuple[int, int, int]:
-    """Voci, byte e inizio della directory centrale da un record ZIP64."""
-    record_position = end_position - _ZIP64_LOCATOR.size - _ZIP64_RECORD.size
-    if record_position < 0:
-        raise ImportEntryError(ImportIssue.ARCHIVE_INVALID)
-    handle.seek(record_position)
-    raw = handle.read(_ZIP64_RECORD.size + _ZIP64_LOCATOR.size)
-    if len(raw) != _ZIP64_RECORD.size + _ZIP64_LOCATOR.size:
-        raise ImportEntryError(ImportIssue.ARCHIVE_INVALID)
-    record = _ZIP64_RECORD.unpack_from(raw)
-    locator = _ZIP64_LOCATOR.unpack_from(raw, _ZIP64_RECORD.size)
-    if record[0] != _ZIP64_RECORD_SIGNATURE or locator[0] != _ZIP64_LOCATOR_SIGNATURE:
-        raise ImportEntryError(ImportIssue.ARCHIVE_INVALID)
-    total, directory_bytes = record[7], record[8]
-    return total, directory_bytes, record_position - directory_bytes
+def _zip_limits(limits: ImportLimits) -> ZipLimits:
+    """I tetti dell'import espressi per `zipread`."""
+    return ZipLimits(
+        max_entries=limits.max_zip_entries,
+        max_total_bytes=limits.max_zip_total_bytes,
+        max_ratio=limits.max_zip_ratio,
+        max_directory_bytes=limits.max_zip_directory_bytes,
+        max_entry_bytes=limits.max_file_bytes,
+    )
 
 
-def _locate_directory(handle: BinaryIO, file_size: int) -> tuple[int, int, int]:
-    """(voci dichiarate, byte, posizione) della directory centrale, dal record finale."""
-    tail_length = min(file_size, _EOCD.size + _EOCD_MAX_COMMENT)
-    handle.seek(file_size - tail_length)
-    tail = handle.read(tail_length)
-    found = tail.rfind(_EOCD_SIGNATURE)
-    if found < 0 or len(tail) - found < _EOCD.size:
-        raise ImportEntryError(ImportIssue.ARCHIVE_INVALID)
-    fields = _EOCD.unpack_from(tail, found)
-    _, disk, directory_disk, on_disk, total, directory_bytes, directory_offset, _ = fields
-    end_position = file_size - tail_length + found
-    if disk or directory_disk or on_disk != total:
-        raise ImportEntryError(ImportIssue.ARCHIVE_INVALID)  # archivio su più dischi
-    if _UINT16_MAX in (total, on_disk) or _UINT32_MAX in (directory_bytes, directory_offset):
-        return _locate_zip64(handle, end_position)
-    return total, directory_bytes, end_position - directory_bytes
+_ISSUE_BY_REASON = {
+    ZipReason.ARCHIVE_INVALID: ImportIssue.ARCHIVE_INVALID,
+    ZipReason.ARCHIVE_LIMIT: ImportIssue.ARCHIVE_LIMIT,
+    ZipReason.ENCRYPTED: ImportIssue.ENCRYPTED,
+    ZipReason.UNSAFE_NAME: ImportIssue.UNSAFE_NAME,
+    ZipReason.TOO_LARGE: ImportIssue.TOO_LARGE,
+    ZipReason.NESTED_ARCHIVE: ImportIssue.NESTED_ARCHIVE,
+}
 
 
-def _count_directory_entries(raw: bytes, limit: int) -> int:
-    """Voci della directory centrale contate sui byte stessi; oltre `limit` si ferma."""
-    position = count = 0
-    while position < len(raw):
-        if raw[position : position + 4] != _CENTRAL_SIGNATURE or position + 46 > len(raw):
-            raise ImportEntryError(ImportIssue.ARCHIVE_INVALID)
-        name_bytes, extra_bytes, comment_bytes = struct.unpack_from("<HHH", raw, position + 28)
-        position += 46 + name_bytes + extra_bytes + comment_bytes
-        count += 1
-        if count > limit:
-            raise ImportEntryError(ImportIssue.ARCHIVE_LIMIT)
-    if position != len(raw):
-        raise ImportEntryError(ImportIssue.ARCHIVE_INVALID)
-    return count
-
-
-def _check_directory(handle: BinaryIO, limits: ImportLimits) -> int:
-    """Controlla la directory centrale prima di lasciarla leggere a `zipfile`: dimensione,
-    numero di voci dichiarato e reale. Restituisce il numero di voci."""
-    file_size = os.fstat(handle.fileno()).st_size
-    declared, directory_bytes, start = _locate_directory(handle, file_size)
-    if declared > limits.max_zip_entries or directory_bytes > limits.max_zip_directory_bytes:
-        raise ImportEntryError(ImportIssue.ARCHIVE_LIMIT)
-    if start < 0:
-        raise ImportEntryError(ImportIssue.ARCHIVE_INVALID)
-    handle.seek(start)
-    raw = handle.read(directory_bytes)
-    if len(raw) != directory_bytes:
-        raise ImportEntryError(ImportIssue.ARCHIVE_INVALID)
-    if _count_directory_entries(raw, limits.max_zip_entries) != declared:
-        raise ImportEntryError(ImportIssue.ARCHIVE_INVALID)
-    return declared
+def _issue_of(reason: ZipReason) -> ImportIssue:
+    """Il motivo di `zipread` come motivo dell'import (quelli di una voce singola sono mappati;
+    gli altri non nascono qui e valgono archivio non valido)."""
+    return _ISSUE_BY_REASON.get(reason, ImportIssue.ARCHIVE_INVALID)
 
 
 def _open_checked_zip(handle: BinaryIO, limits: ImportLimits) -> zipfile.ZipFile:
-    """ZIP con directory controllata: voci, byte e nomi; la somma delle dimensioni dichiarate e
-    i nomi duplicati (anche solo per maiuscole) si rifiutano per tutto l'archivio."""
+    """ZIP con directory controllata (vedi `zipread.open_checked_zip`), errori come import."""
     try:
-        declared = _check_directory(handle, limits)
-        archive = zipfile.ZipFile(handle)
-    except _ZIP_ERRORS as exc:
-        raise ImportEntryError(ImportIssue.ARCHIVE_INVALID) from exc
-    infos = archive.infolist()
-    names = {info.filename.lower() for info in infos}
-    if len(infos) != declared or len(names) != len(infos):
-        archive.close()
-        raise ImportEntryError(ImportIssue.ARCHIVE_INVALID)
-    if sum(info.file_size for info in infos) > limits.max_zip_total_bytes:
-        archive.close()
-        raise ImportEntryError(ImportIssue.ARCHIVE_LIMIT)
-    return archive
+        return open_checked_zip(handle, _zip_limits(limits))
+    except ZipReadError as error:
+        raise ImportEntryError(_issue_of(error.reason)) from error
 
 
 def _entry_issue(info: zipfile.ZipInfo, limits: ImportLimits) -> ImportIssue | None:
     """Perché una voce `.fit` o `.gpx` non si estrae (None se va bene), da dati dichiarati."""
-    checks = (
-        (not _is_safe_zip_entry_name(info.filename), ImportIssue.UNSAFE_NAME),
-        (
-            bool(info.flag_bits & _ZIP_ENCRYPTED_FLAGS) or info.compress_type == _ZIP_AES,
-            ImportIssue.ENCRYPTED,
-        ),
-        (info.compress_type not in (_ZIP_STORED, _ZIP_DEFLATED), ImportIssue.ARCHIVE_INVALID),
-        (info.file_size > limits.max_file_bytes, ImportIssue.TOO_LARGE),
-        (info.file_size > limits.max_zip_ratio * info.compress_size, ImportIssue.ARCHIVE_LIMIT),
-    )
-    return next((issue for failed, issue in checks if failed), None)
-
-
-def _entry_suffix(name: str) -> str:
-    return _suffix(re.split(r"[\\/]", name)[-1])
+    reason = entry_issue(info, _zip_limits(limits))
+    return None if reason is None else _issue_of(reason)
 
 
 def _extract(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
-    """Estrae la voce in memoria a blocchi; la dimensione reale deve essere quella dichiarata."""
-    chunks: list[bytes] = []
-    total = 0
+    """Estrae la voce in memoria a blocchi (vedi `zipread.extract_entry`)."""
     try:
-        with archive.open(info) as stream:
-            while chunk := stream.read(_BLOCK_BYTES):
-                total += len(chunk)
-                if total > info.file_size:
-                    raise ImportEntryError(ImportIssue.ARCHIVE_INVALID)
-                chunks.append(chunk)
-    except _ZIP_ERRORS as exc:  # CRC errato, deflate corrotto, voce troncata
-        raise ImportEntryError(ImportIssue.ARCHIVE_INVALID) from exc
-    if total != info.file_size:
-        raise ImportEntryError(ImportIssue.ARCHIVE_INVALID)
-    return b"".join(chunks)
+        return extract_entry(archive, info)
+    except ZipReadError as error:
+        raise ImportEntryError(_issue_of(error.reason)) from error
 
 
 @dataclass(slots=True)
@@ -484,7 +350,7 @@ class _PathSource(ABC):
 
     def _handle_candidate(self, location: _Location, display: str, size: int) -> None:
         """Un file regolare con suffisso `.fit`, `.gpx` o `.zip` e nome utilizzabile."""
-        if _suffix(location.parts[-1]) == _ZIP_SUFFIX:
+        if file_suffix(location.parts[-1]) == ZIP_SUFFIX:
             self._handle_zip(location, display)
             return
         self._note_activity_file()
@@ -510,11 +376,11 @@ class _PathSource(ABC):
     def _handle_zip_entry(
         self, zip_location: _Location, zip_display: str, index: int, info: zipfile.ZipInfo
     ) -> None:
-        suffix = _entry_suffix(info.filename)
-        if info.is_dir() or suffix not in (*_ACTIVITY_SUFFIXES, _ZIP_SUFFIX):
+        suffix = file_suffix(info.filename)
+        if info.is_dir() or suffix not in (*ACTIVITY_SUFFIXES, ZIP_SUFFIX):
             return
         display = f"{zip_display}!{_display(info.filename)}"
-        if suffix == _ZIP_SUFFIX:
+        if suffix == ZIP_SUFFIX:
             self._skip(display, ImportIssue.NESTED_ARCHIVE)
             return
         self._note_activity_file()
@@ -628,7 +494,7 @@ class FolderImportSource(_PathSource):
             self._visit_directory(parts, entry.name, display, pending)
         elif kind is _Kind.FILE:
             self._visit_file(root, (*parts, entry.name), display, size)
-        elif kind is not _Kind.SPECIAL or _suffix(entry.name) in _CANDIDATE_SUFFIXES:
+        elif kind is not _Kind.SPECIAL or file_suffix(entry.name) in _CANDIDATE_SUFFIXES:
             self._skip(display, _not_a_file_issue(kind))
 
     def _visit_directory(
@@ -644,7 +510,7 @@ class FolderImportSource(_PathSource):
 
     def _visit_file(self, root: Path, parts: tuple[str, ...], display: str, size: int) -> None:
         name = parts[-1]
-        if _suffix(name) not in _CANDIDATE_SUFFIXES:
+        if file_suffix(name) not in _CANDIDATE_SUFFIXES:
             return
         issue = self._name_issue(name, display)
         if issue is not None:
@@ -681,7 +547,7 @@ class FilesImportSource(_PathSource):
         kind, size = _classify(path)
         if kind is not _Kind.FILE:
             self._skip(display, _not_a_file_issue(kind))
-        elif _suffix(name) not in _CANDIDATE_SUFFIXES:
+        elif file_suffix(name) not in _CANDIDATE_SUFFIXES:
             self._skip(display, ImportIssue.UNSUPPORTED_FORMAT)
         else:
             self._handle_candidate(_Location(path.parent, (name,)), display, size)
