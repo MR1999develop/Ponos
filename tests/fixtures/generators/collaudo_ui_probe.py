@@ -123,7 +123,7 @@ def main(argv: list[str]) -> int:
         parse_command_line([]),
         settings=QSettings(str(root / "settings.ini"), QSettings.Format.IniFormat),
         config_dir=root / "config",
-        profiles_dir=root / "profiles",
+        documents_dir=root / "documents",
         system_timezone_id="Europe/Rome",
         clock=lambda _zone: date(2026, 12, 31),
     )

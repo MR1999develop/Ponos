@@ -764,6 +764,10 @@
         <translation>Per esempio, il tuo nome</translation>
     </message>
     <message>
+        <source>Choose where to save the profile</source>
+        <translation>Scegli dove salvare il profilo</translation>
+    </message>
+    <message>
         <source>Browse...</source>
         <translation>Sfoglia...</translation>
     </message>
@@ -836,10 +840,6 @@
         <translation>Inserisci il percorso completo della cartella, a partire dal disco o dalla radice.</translation>
     </message>
     <message>
-        <source>This folder is not empty. Choose a new or empty folder.</source>
-        <translation>Questa cartella non è vuota. Scegline una nuova o vuota.</translation>
-    </message>
-    <message>
         <source>The resting heart rate must be lower than the maximum.</source>
         <translation>La frequenza a riposo deve essere inferiore alla massima.</translation>
     </message>
@@ -852,6 +852,10 @@
         <translation>La soglia non può essere superiore alla massima.</translation>
     </message>
     <message>
+        <source>Data will go in: {folder}</source>
+        <translation>I dati andranno in: {folder}</translation>
+    </message>
+    <message>
         <source>This folder could not be examined. Check that you can read and write it.</source>
         <translation>Non è stato possibile esaminare questa cartella. Controlla che tu possa leggerla e scriverla.</translation>
     </message>
@@ -862,10 +866,6 @@
     <message>
         <source>This folder is synchronised online: the database may become damaged.</source>
         <translation>Questa cartella è sincronizzata online: il database potrebbe danneggiarsi.</translation>
-    </message>
-    <message>
-        <source>This folder is not empty.</source>
-        <translation>Questa cartella non è vuota.</translation>
     </message>
 </context>
 <context>

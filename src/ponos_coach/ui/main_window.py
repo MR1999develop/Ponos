@@ -95,11 +95,24 @@ _AVAILABLE_SECTIONS = (_SECTION_OVERVIEW, _SECTION_ACTIVITIES)
 _SHUTDOWN_POLL_MS = 20
 
 
+FolderPicker = Callable[[QWidget, str, str], str]
+"""Selettore di cartella: (madre, titolo, partenza) -> cartella scelta ("" se annulla)."""
+
+
+def native_folder_picker(parent: QWidget, title: str, start: str) -> str:
+    """Selettore di cartella del sistema."""
+    return QFileDialog.getExistingDirectory(parent, title, start)
+
+
 @dataclass(frozen=True, slots=True)
 class NewProfileDefaults:
-    """Proposte del modulo "Nuovo profilo", decise dal Composition Root."""
+    """Dipendenze del modulo "Nuovo profilo", decise dal Composition Root.
 
-    parent_folder: Path
+    `documents_folder` è solo il punto di partenza del selettore la prima volta, non una proposta.
+    """
+
+    documents_folder: Path
+    pick_folder: FolderPicker
     timezone_name: str
     timezone_fell_back: bool
     today: Callable[[ZoneInfo], date]
@@ -393,7 +406,7 @@ class MainWindow(QMainWindow):
         if self._new_dialog is not None or not self._controller.can_change_profile:
             return
         if form is None:
-            form = NewProfileForm(self._defaults.parent_folder, self._defaults.timezone_name)
+            form = NewProfileForm(self._defaults.timezone_name)
         dialog = NewProfileDialog(
             form,
             self._defaults.today(ZoneInfo(self._defaults.timezone_name)),
@@ -416,8 +429,15 @@ class MainWindow(QMainWindow):
     def _on_new_dialog_closed(self) -> None:
         self._new_dialog = None
 
-    def _choose_new_profile_folder(self, start: str) -> str:
-        return QFileDialog.getExistingDirectory(self, self.tr("Choose the profile folder"), start)
+    def _choose_new_profile_folder(self) -> str:
+        """Chiede la cartella del profilo partendo dall'ultima usata (o da Documenti)."""
+        start = str(self._settings.value(_KEY_LAST_PROFILE_FOLDER, "", type=str))
+        if not start:
+            start = str(self._defaults.documents_folder)
+        chosen = self._defaults.pick_folder(self, self.tr("Choose the profile folder"), start)
+        if chosen:
+            self._settings.setValue(_KEY_LAST_PROFILE_FOLDER, str(Path(chosen).parent))
+        return chosen
 
     def choose_profile_folder(self) -> None:
         """Chiede una cartella con un profilo e lo apre."""

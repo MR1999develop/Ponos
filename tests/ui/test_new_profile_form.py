@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Modulo "Nuovo profilo": proposte, stima della soglia e validazione, senza finestra."""
+"""Modulo "Nuovo profilo": destinazione, stima della soglia e validazione, senza finestra."""
 
 from __future__ import annotations
 
@@ -28,30 +28,64 @@ TODAY = date(2026, 5, 1)
 
 
 def make_form(name: str = "Ada") -> NewProfileForm:
-    result = NewProfileForm(BASE, "Europe/Rome")
+    result = NewProfileForm("Europe/Rome")
     result.name = name
+    result.choose_folder(str(BASE))
     return result
 
 
-def test_folder_follows_the_name_until_the_user_chooses_one() -> None:
+def test_the_folder_starts_empty_and_blocks_creation_until_chosen() -> None:
+    form = NewProfileForm("Europe/Rome")
+    form.name = "Ada"
+
+    assert form.folder_text == ""
+    assert form.destination == ""
+    assert form.folder_problem() is Problem.FOLDER_EMPTY
+
+    form.choose_folder(str(BASE))
+    assert form.folder_problem() is None
+
+
+def test_an_empty_or_missing_folder_is_the_destination() -> None:
     form = make_form("Ada")
-    assert form.folder_text == str(BASE / "Ada")
+
+    form.folder_state = FolderState.EMPTY
+    assert form.destination == str(BASE)
+    form.folder_state = FolderState.MISSING
+    assert form.destination == str(BASE)
+    assert not form.uses_subfolder
+
+
+def test_a_non_empty_folder_gets_a_subfolder_named_after_the_profile() -> None:
+    form = make_form("Ada")
+    form.folder_state = FolderState.NOT_EMPTY
+
+    assert form.uses_subfolder
+    assert form.destination == str(BASE / "Ada")
+    assert form.problems() == ()
     form.name = "Ada B"
-    assert form.folder_text == str(BASE / "Ada B")
+    assert form.destination == str(BASE / "Ada B")
+    request = form.build_request(TODAY)
+    assert isinstance(request, NewProfileRequest)
+    assert request.folder == BASE / "Ada B"
 
-    form.choose_folder(str(BASE / "mine"))
-    form.name = "Other"
 
-    assert form.folder_text == str(BASE / "mine")
-    assert not form.folder_is_proposed
-    form.choose_folder("")  # vuota: torna alla proposta
-    assert form.folder_text == str(BASE / "Other")
+def test_choosing_another_folder_forgets_the_previous_examination() -> None:
+    form = make_form("Ada")
+    form.folder_state = FolderState.NOT_EMPTY
+
+    form.choose_folder(str(BASE / "other"))
+
+    assert not form.uses_subfolder
+    assert form.destination == str(BASE / "other")
 
 
 def test_characters_not_allowed_in_a_folder_name_are_replaced() -> None:
     assert folder_name_from('a/b:c*"d') == "a_b_c__d"
     assert folder_name_from("trailing. ") == "trailing"
-    assert make_form("").folder_text == ""
+    form = make_form("")
+    form.folder_state = FolderState.NOT_EMPTY
+    assert form.destination == ""
 
 
 def test_threshold_is_an_estimate_at_90_percent_until_the_user_sets_it() -> None:
@@ -105,16 +139,10 @@ def test_invalid_names_are_reported(name: str, expected: Problem) -> None:
     assert form.problems() == (expected,)
 
 
-def test_relative_and_occupied_folders_are_reported() -> None:
+def test_a_relative_folder_is_reported() -> None:
     form = make_form()
     form.choose_folder("relative/folder")
     assert form.problems() == (Problem.FOLDER_NOT_ABSOLUTE,)
-
-    form.choose_folder(str(BASE / "full"))
-    form.folder_state = FolderState.NOT_EMPTY
-    assert form.problems() == (Problem.FOLDER_NOT_EMPTY,)
-    form.folder_state = FolderState.EMPTY
-    assert form.problems() == ()
 
 
 def test_heart_rate_relations_are_reported_on_the_right_field() -> None:
@@ -146,7 +174,9 @@ def test_a_valid_form_builds_the_request() -> None:
 
 
 def test_an_invalid_form_returns_the_problems_instead() -> None:
-    assert make_form("").build_request(TODAY) == (Problem.NAME_EMPTY, Problem.FOLDER_EMPTY)
+    form = make_form("")
+    form.choose_folder("")
+    assert form.build_request(TODAY) == (Problem.NAME_EMPTY, Problem.FOLDER_EMPTY)
 
 
 @pytest.mark.parametrize(
@@ -162,21 +192,20 @@ def test_an_invalid_form_returns_the_problems_instead() -> None:
         ("COM¹", "COM¹_profile"),
     ],
 )
-def test_the_proposed_folder_never_uses_a_windows_reserved_device_name(
-    name: str, folder: str
-) -> None:
+def test_the_folder_name_never_uses_a_windows_reserved_device_name(name: str, folder: str) -> None:
     assert folder_name_from(name) == folder
 
 
 @pytest.mark.parametrize("name", ["Console", "COM10", "LPT0", "CON:", "Ada con", "a.CON", "COM"])
 def test_names_that_only_look_reserved_are_left_alone(name: str) -> None:
-    proposed = folder_name_from(name)
+    derived = folder_name_from(name)
 
-    assert proposed == name.replace(":", "_")
+    assert derived == name.replace(":", "_")
 
 
-def test_the_form_proposes_the_suffixed_folder_for_a_reserved_name() -> None:
+def test_the_subfolder_for_a_reserved_name_is_suffixed() -> None:
     form = make_form("AUX")
+    form.folder_state = FolderState.NOT_EMPTY
 
-    assert form.folder_text == str(BASE / "AUX_profile")
+    assert form.destination == str(BASE / "AUX_profile")
     assert form.problems() == ()

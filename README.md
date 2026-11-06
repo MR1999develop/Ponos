@@ -53,8 +53,10 @@ Il comportamento previsto è descritto in `docs/specifica.md`, le decisioni in
 Al primo avvio si apre il dialogo "Nuovo profilo". Servono:
 
 1. il nome del profilo;
-2. la cartella dei dati: l'app ne propone una con il nome del profilo, che
-   deve non esistere o essere vuota (si può cambiare con "Sfoglia");
+2. la cartella dei dati, da scegliere con "Sfoglia…": se è vuota la usa così
+   com'è, altrimenti crea dentro una sottocartella con il nome del profilo e
+   mostra dove andranno i dati; meglio evitare cartelle sincronizzate come
+   OneDrive (su Windows spesso anche Documenti);
 3. la frequenza cardiaca a riposo e la massima; la soglia è stimata al 90%
    della massima finché non la si fissa con il test;
 4. il sesso (serve alla formula del carico).
@@ -105,10 +107,6 @@ Tutti i dati di un profilo stanno nella cartella scelta alla creazione:
 Non spostare né modificare a mano questi file mentre l'app è aperta. L'elenco
 dei profili è nella cartella di configurazione dell'app (`profiles.json`). I
 token Garmin non stanno mai nella cartella del profilo.
-
-La cartella proposta per i profili nuovi è nella cartella dati locale dell'app
-(`profiles`), non in Documenti: su Windows Documenti è spesso sincronizzata con
-OneDrive, che può rovinare il database.
 
 ## Dati e privacy
 

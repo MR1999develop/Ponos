@@ -47,7 +47,13 @@ from ponos_coach.ui.bootstrap import prepare_qt
 from ponos_coach.ui.data_thread import DataThread
 from ponos_coach.ui.diagnostics import ErrorNotifier, configure_logging, install_exception_hooks
 from ponos_coach.ui.errors import ErrorContext, RegistryProblem
-from ponos_coach.ui.main_window import APP_NAME, MainWindow, NewProfileDefaults
+from ponos_coach.ui.main_window import (
+    APP_NAME,
+    FolderPicker,
+    MainWindow,
+    NewProfileDefaults,
+    native_folder_picker,
+)
 from ponos_coach.ui.translations import (
     Language,
     TranslationReport,
@@ -149,7 +155,8 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
     *,
     settings: QSettings,
     config_dir: Path | None = None,
-    profiles_dir: Path | None = None,
+    documents_dir: Path | None = None,
+    folder_picker: FolderPicker | None = None,
     system_timezone_id: str | None = None,
     clock: Callable[[ZoneInfo], date] | None = None,
     now_utc: Callable[[], datetime] | None = None,
@@ -159,8 +166,9 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
 ) -> MainWindow:
     """Costruisce la finestra con tutte le dipendenze (richiede una `QApplication`).
 
-    `config_dir` (elenco dei profili) e `profiles_dir` (cartella proposta per i profili nuovi)
-    valgono i luoghi dell'utente se omessi; `system_timezone_id`, `clock`, `now_utc` e
+    `config_dir` (elenco dei profili) e `documents_dir` (punto di partenza del selettore di
+    cartella la prima volta) valgono i luoghi dell'utente se omessi; `folder_picker` è il selettore
+    di cartella (finto nei test); `system_timezone_id`, `clock`, `now_utc` e
     `import_sources` e `decode` rendono deterministico l'avvio nei test; `log_dir` è la cartella
     dei log che il menu Aiuto apre. Non apre nessun profilo:
     lo fa `MainWindow.start()`, dopo `show()`.
@@ -168,10 +176,8 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
     del command_line  # per ora nessuna opzione cambia la composizione
     if config_dir is None:
         config_dir = Path(platformdirs.user_config_dir("PonosCoach", appauthor=False))
-    if profiles_dir is None:
-        # Cartella dati locale, non Documenti: su Windows Documenti è spesso sincronizzata
-        # con OneDrive, che l'app sconsiglia per SQLite (PLAN, sezione 3).
-        profiles_dir = Path(platformdirs.user_data_dir("PonosCoach", appauthor=False)) / "profiles"
+    if documents_dir is None:
+        documents_dir = Path(platformdirs.user_documents_dir())
     if log_dir is None:
         log_dir = _default_log_dir()
     if system_timezone_id is None:
@@ -205,7 +211,9 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
         errors=ErrorContext(_registry_problem, config_dir),
     )
     controller = WorkspaceController(services)
-    defaults = NewProfileDefaults(profiles_dir, zone.key, fell_back, today_in)
+    defaults = NewProfileDefaults(
+        documents_dir, folder_picker or native_folder_picker, zone.key, fell_back, today_in
+    )
     window = MainWindow(controller, settings, defaults, log_folder=log_dir)
     controller.setParent(window)
     return window

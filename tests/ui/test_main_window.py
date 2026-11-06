@@ -25,11 +25,12 @@ from ponos_coach.activities.ports import (
     ImportLimitExceededError,
     ImportScan,
 )
-from ponos_coach.profiles.domain import ProfileId, ProfileName
+from ponos_coach.profiles.domain import FolderState, ProfileId, ProfileName
 from ponos_coach.profiles.use_cases import FolderWarning
 from ponos_coach.ui.import_report import ImportReport
 from ponos_coach.ui.import_report_dialog import ImportReportDialog
 from ponos_coach.ui.main_window import MainWindow
+from ponos_coach.ui.new_profile_dialog import NewProfileDialog
 from ponos_coach.ui.new_profile_form import Field
 from ponos_coach.ui.overview_state import Cancelled, Idle, Loading, Ready
 from ponos_coach.ui.workspace import ImportSources, ProfileView
@@ -41,9 +42,12 @@ from tests.ui.workspace_support import (
     close_window,
     compose,
     create_profile,
+    fill_new_profile,
     gated_sources,
     make_import_folder,
     make_settings,
+    pick_profile_folder,
+    picker_of,
     wait_ready,
 )
 
@@ -262,33 +266,133 @@ def test_deleting_a_profile_folder_asks_with_friction_and_only_then_deletes(
 # --- Dialogo "Nuovo profilo" -------------------------------------------------------------------
 
 
+def open_first_run_dialog(qtbot: QtBot, window: MainWindow) -> NewProfileDialog:
+    window.start()
+    qtbot.waitUntil(lambda: window.new_profile_dialog is not None, timeout=WAIT_MS)
+    dialog = window.new_profile_dialog
+    assert dialog is not None
+    return dialog
+
+
 def test_the_new_profile_form_validates_in_place_and_estimates_the_threshold(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
-    window.start()
-    qtbot.waitUntil(lambda: window.new_profile_dialog is not None, timeout=WAIT_MS)
-    dialog = window.new_profile_dialog
-    assert dialog is not None
+    dialog = open_first_run_dialog(qtbot, window)
     assert dialog.threshold_note_text.startswith("Estimated at 90%")  # da confermare col test
     assert dialog.error_text(Field.NAME) == ""  # nessun errore prima del primo invio
+    assert dialog.folder_edit.text() == ""  # nessuna proposta: la cartella si chiede
 
+    pick_profile_folder(window, dialog, tmp_path / "profiles" / "A")
     QTest.mouseClick(dialog.create_button, Qt.MouseButton.LeftButton)
 
     assert dialog.error_text(Field.NAME) == "Enter a name for the profile."
     assert window.controller.profile is None
     QTest.keyClicks(dialog.name_edit, "A")
     assert dialog.error_text(Field.NAME) == ""  # poi si aggiorna mentre si scrive
-    assert dialog.folder_edit.text() == str(tmp_path / "profiles" / "A")  # proposta dal nome
 
-    (tmp_path / "profiles" / "A").mkdir(parents=True)
-    (tmp_path / "profiles" / "A" / "something.txt").write_text("x", encoding="utf-8")
-    dialog.name_edit.editingFinished.emit()  # esame della cartella nel thread dei dati
-    qtbot.waitUntil(lambda: dialog.error_text(Field.FOLDER) != "", timeout=WAIT_MS)
-    assert dialog.error_text(Field.FOLDER).startswith("This folder is not empty")
+
+def test_the_folder_field_starts_empty_and_creation_waits_for_a_folder(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = compose(tmp_path, settings)
+    qtbot.addWidget(window)
+
+    dialog = open_first_run_dialog(qtbot, window)
+
+    assert dialog.folder_edit.text() == ""
+    assert not dialog.create_button.isEnabled()
+    assert dialog.create_button.toolTip() == (
+        "Choose the folder where the profile data will be saved."
+    )
+    pick_profile_folder(window, dialog, tmp_path / "chosen")
+    assert dialog.create_button.isEnabled()
+    assert dialog.create_button.toolTip() == ""
+
+
+def test_an_empty_or_missing_folder_is_the_profile_folder(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = compose(tmp_path, settings)
+    qtbot.addWidget(window)
+    dialog = open_first_run_dialog(qtbot, window)
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    QTest.keyClicks(dialog.name_edit, "Ada")
+
+    pick_profile_folder(window, dialog, empty)
+    qtbot.waitUntil(lambda: dialog.form.folder_state is FolderState.EMPTY, timeout=WAIT_MS)
+
+    assert dialog.form.destination == str(empty)
+    assert dialog.destination_text == ""
     QTest.mouseClick(dialog.create_button, Qt.MouseButton.LeftButton)
-    assert window.controller.profile is None
+    qtbot.waitUntil(lambda: window.controller.profile is not None, timeout=WAIT_MS)
+    assert window.controller.profile is not None
+    assert window.controller.profile.folder == empty
+
+
+def test_a_folder_with_files_gets_a_subfolder_named_after_the_profile(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = compose(tmp_path, settings)
+    qtbot.addWidget(window)
+    dialog = open_first_run_dialog(qtbot, window)
+    busy = tmp_path / "busy"
+    busy.mkdir()
+    (busy / "something.txt").write_text("x", encoding="utf-8")
+    QTest.keyClicks(dialog.name_edit, "Ada")
+
+    pick_profile_folder(window, dialog, busy)
+    qtbot.waitUntil(lambda: dialog.destination_text != "", timeout=WAIT_MS)
+
+    assert dialog.destination_text == f"Data will go in: {busy / 'Ada'}"
+    assert dialog.create_button.isEnabled()
+    QTest.mouseClick(dialog.create_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: window.controller.profile is not None, timeout=WAIT_MS)
+    assert window.controller.profile is not None
+    assert window.controller.profile.folder == busy / "Ada"
+    assert (busy / "something.txt").is_file()  # il contenuto esistente non si tocca
+
+
+def test_changing_the_name_updates_the_destination_subfolder(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = compose(tmp_path, settings)
+    qtbot.addWidget(window)
+    dialog = open_first_run_dialog(qtbot, window)
+    busy = tmp_path / "busy"
+    busy.mkdir()
+    (busy / "something.txt").write_text("x", encoding="utf-8")
+    QTest.keyClicks(dialog.name_edit, "Ada")
+    pick_profile_folder(window, dialog, busy)
+    qtbot.waitUntil(lambda: dialog.destination_text != "", timeout=WAIT_MS)
+
+    QTest.keyClicks(dialog.name_edit, " B")
+    assert dialog.destination_text == f"Data will go in: {busy / 'Ada B'}"
+    dialog.name_edit.clear()
+    dialog.name_edit.textEdited.emit("CON")
+    assert dialog.destination_text == f"Data will go in: {busy / 'CON_profile'}"
+
+
+def test_the_last_profile_folder_is_remembered_as_the_start_of_the_picker(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = compose(tmp_path, settings)
+    qtbot.addWidget(window)
+    dialog = open_first_run_dialog(qtbot, window)
+    picker = picker_of(window)
+
+    pick_profile_folder(window, dialog, tmp_path / "somewhere" / "mine")
+
+    assert picker.starts == [str(tmp_path / "documents")]  # la prima volta: Documenti
+    dialog.reject()
+    qtbot.waitUntil(lambda: window.new_profile_dialog is None, timeout=WAIT_MS)
+    window.show_new_profile()
+    reopened = window.new_profile_dialog
+    assert reopened is not None
+    pick_profile_folder(window, reopened, tmp_path / "other")
+    assert picker.starts[-1] == str(tmp_path / "somewhere")  # poi l'ultima usata
 
 
 def test_a_failed_creation_reopens_the_form_with_the_data_already_typed(
@@ -296,12 +400,10 @@ def test_a_failed_creation_reopens_the_form_with_the_data_already_typed(
 ) -> None:
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
-    window.start()
-    qtbot.waitUntil(lambda: window.new_profile_dialog is not None, timeout=WAIT_MS)
-    dialog = window.new_profile_dialog
-    assert dialog is not None
+    dialog = open_first_run_dialog(qtbot, window)
     QTest.keyClicks(dialog.name_edit, "Ada")
     folder = tmp_path / "profiles" / "Ada"
+    QTest.keyClicks(dialog.folder_edit, str(folder))  # scritta a mano: nessun esame prima
     folder.mkdir(parents=True)
     (folder / "late.txt").write_text("x", encoding="utf-8")  # compare dopo l'esame del modulo
     QTest.mouseClick(dialog.create_button, Qt.MouseButton.LeftButton)
@@ -513,7 +615,7 @@ def test_dropping_files_on_the_window_imports_them(
     assert not refused.isAccepted()  # senza profilo non si importa
     dialog = window.new_profile_dialog
     assert dialog is not None
-    QTest.keyClicks(dialog.name_edit, "Ada")
+    fill_new_profile(window, dialog, "Ada")
     QTest.mouseClick(dialog.create_button, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: window.controller.can_import, timeout=WAIT_MS)
     files = []

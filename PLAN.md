@@ -40,8 +40,9 @@ completata e verificata.
 
 ## 2. Decisioni di default (le ho fissate io: da confermare o correggere)
 
-1. **Cartella del profilo:** scelta alla creazione del profilo (proposta: la
-   cartella dati dell'utente) e autosufficiente: database, archivio FIT e
+1. **Cartella del profilo:** chiesta all'utente alla creazione del profilo,
+   senza proposte automatiche (decisione dell'utente del 2026-11-06), e
+   autosufficiente: database, archivio FIT e
    backup stanno lì, così si può spostare o aprire da un altro PC con "Apri
    profilo da cartella". Fanno eccezione i token Garmin, che restano nel
    portachiavi del sistema legati all'id del profilo. L'elenco dei profili e

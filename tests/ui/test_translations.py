@@ -70,7 +70,7 @@ def window_action_texts(tmp_path: Path, qtbot: QtBot) -> set[str]:
         parse_command_line([]),
         settings=settings,
         config_dir=tmp_path / "config",
-        profiles_dir=tmp_path / "profiles",
+        documents_dir=tmp_path / "documents",
         system_timezone_id="UTC",
         clock=lambda _zone: date(2026, 2, 1),
     )

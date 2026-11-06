@@ -14,10 +14,14 @@ Ponos Coach non è un dispositivo medico e non fa diagnosi.
 - Al primo avvio, senza profili, si apre il dialogo "Nuovo profilo".
 - Alla creazione l'utente sceglie la cartella del profilo. Lì stanno tutti i
   suoi dati: database, archivio dei file originali (FIT e GPX), backup.
-- La cartella proposta sta nella cartella dati locale dell'app, con il nome
-  del profilo, e si può cambiare. Non è in Documenti, perché su Windows
-  Documenti è spesso sincronizzata con OneDrive. La cartella deve non esistere
-  o essere vuota; l'app la crea leggibile solo dall'utente.
+- Nessuna cartella è proposta: il campo parte vuoto e "Crea profilo" resta
+  disabilitato finché l'utente non sceglie una cartella con "Sfoglia…" o la
+  scrive. Il selettore parte dall'ultima cartella usata per i profili, la
+  prima volta da Documenti. Se la cartella scelta è vuota o non esiste, è la
+  cartella del profilo; se contiene altri file, il profilo va in una
+  sottocartella con il suo nome, e il dialogo mostra dove andranno i dati.
+  L'app crea la cartella leggibile solo dall'utente. Le cartelle sincronizzate
+  (OneDrive, spesso anche Documenti su Windows) sono sconsigliate.
 - La cartella si può spostare o aprire da un altro PC con "Apri profilo da
   cartella".
 - Se la cartella è su un disco di rete o in una cartella sincronizzata

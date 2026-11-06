@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from ponos_coach.load.domain import Sex
-from ponos_coach.profiles.domain import FolderKind, FolderState
+from ponos_coach.profiles.domain import FolderKind
 from ponos_coach.profiles.use_cases import NewProfileRequest
 from ponos_coach.ui.new_profile_form import (
     MAX_ALLOWED_BPM,
@@ -52,7 +52,7 @@ class NewProfileDialog(QDialog):
         form: NewProfileForm,
         today: date,
         inspect_folder: Callable[[Path], None],
-        choose_folder: Callable[[str], str],
+        choose_folder: Callable[[], str],
         theme: Theme,
         parent: QWidget | None = None,
     ) -> None:
@@ -84,11 +84,13 @@ class NewProfileDialog(QDialog):
 
         self._folder = QLineEdit(self)
         self._folder.setObjectName("profileFolder")
+        self._folder.setPlaceholderText(self.tr("Choose where to save the profile"))
         self._folder.textEdited.connect(self._on_folder_edited)
         self._folder.editingFinished.connect(self._request_inspection)
         self._browse = QPushButton(self.tr("Browse..."), self)
         self._browse.clicked.connect(self._on_browse)
         self._folder_note = self._note_label()
+        self._destination_note = self._note_label()
 
         self._min = self._bpm_box(MIN_ALLOWED_BPM, "minHeartRate")
         self._max = self._bpm_box(MIN_ALLOWED_BPM, "maxHeartRate")
@@ -116,6 +118,7 @@ class NewProfileDialog(QDialog):
         folder_column.setContentsMargins(0, 0, 0, 0)
         folder_column.setSpacing(SPACE_1)
         folder_column.addLayout(folder_row)
+        folder_column.addWidget(self._destination_note)
         folder_column.addWidget(self._folder_note)
         folder_column.addWidget(self._errors[Field.FOLDER])
         layout.addRow(self.tr("Profile folder"), folder_box)
@@ -145,6 +148,7 @@ class NewProfileDialog(QDialog):
             self.tr("Create profile"), QDialogButtonBox.ButtonRole.AcceptRole
         )
         self._create.setDefault(True)
+        self._update_create_button()
         self._buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         self._buttons.accepted.connect(self._on_create)
         self._buttons.rejected.connect(self.reject)
@@ -203,6 +207,16 @@ class NewProfileDialog(QDialog):
         return self._folder
 
     @property
+    def browse_button(self) -> QPushButton:
+        """Bottone "Sfoglia..."."""
+        return self._browse
+
+    @property
+    def destination_text(self) -> str:
+        """Riga "I dati andranno in: ..." (vuota se non è mostrata)."""
+        return self._destination_note.text() if self._destination_note.isVisible() else ""
+
+    @property
     def create_button(self) -> QPushButton:
         """Bottone "Crea profilo"."""
         return self._create
@@ -222,6 +236,7 @@ class NewProfileDialog(QDialog):
         form = self._form
         self._name.setText(form.name)
         self._folder.setText(form.folder_text)
+        self._refresh_destination()
         self._min.setValue(form.min_bpm)
         self._max.setValue(form.max_bpm)
         self._sync_threshold()
@@ -260,9 +275,6 @@ class NewProfileDialog(QDialog):
             Problem.FOLDER_NOT_ABSOLUTE: self.tr(
                 "Enter the full path of the folder, starting from the drive or root."
             ),
-            Problem.FOLDER_NOT_EMPTY: self.tr(
-                "This folder is not empty. Choose a new or empty folder."
-            ),
             Problem.MIN_NOT_BELOW_MAX: self.tr(
                 "The resting heart rate must be lower than the maximum."
             ),
@@ -279,23 +291,36 @@ class NewProfileDialog(QDialog):
 
     def _on_name_edited(self, text: str) -> None:
         self._form.name = text
-        if self._form.folder_is_proposed:
-            self._folder.setText(self._form.folder_text)
-            self._form.folder_state = None
+        self._refresh_destination()
         self._refresh_errors()
 
     def _on_folder_edited(self, text: str) -> None:
         self._form.choose_folder(text)
         self._folder_note.setVisible(False)
+        self._refresh_destination()
+        self._update_create_button()
         self._refresh_errors()
 
     def _on_browse(self) -> None:
-        chosen = self._choose_folder(self._folder.text())
+        chosen = self._choose_folder()
         if chosen:
             self._folder.setText(chosen)
-            self._form.choose_folder(chosen)
-            self._refresh_errors()
+            self._on_folder_edited(chosen)
             self._request_inspection()
+
+    def _refresh_destination(self) -> None:
+        """Dice dove andranno i dati quando la cartella scelta contiene già altro."""
+        destination = self._form.destination if self._form.uses_subfolder else ""
+        self._destination_note.setText(
+            self.tr("Data will go in: {folder}").format(folder=destination)
+        )
+        self._destination_note.setVisible(bool(destination))
+
+    def _update_create_button(self) -> None:
+        """ "Crea profilo" resta disabilitato, con il motivo nel tooltip, senza cartella valida."""
+        problem = self._form.folder_problem()
+        self._create.setEnabled(problem is None)
+        self._create.setToolTip("" if problem is None else self._problem_text(problem))
 
     def _on_min_changed(self, value: int) -> None:
         self._form.min_bpm = value
@@ -325,6 +350,7 @@ class NewProfileDialog(QDialog):
             return
         if check.inspection is None:
             self._form.folder_state = None
+            self._refresh_destination()
             self._folder_note.setText(
                 self.tr("This folder could not be examined. Check that you can read and write it.")
             )
@@ -340,12 +366,9 @@ class NewProfileDialog(QDialog):
             notes.append(
                 self.tr("This folder is synchronised online: the database may become damaged.")
             )
-        if check.inspection.state is FolderState.NOT_EMPTY:
-            notes.append(self.tr("This folder is not empty."))
         self._folder_note.setText(" ".join(notes))
         self._folder_note.setVisible(bool(notes))
-        if check.inspection.state is FolderState.NOT_EMPTY:
-            self._show_errors = True
+        self._refresh_destination()
         self._refresh_errors()
 
     def _on_create(self) -> None:
