@@ -30,6 +30,8 @@ from ponos_coach.profiles.domain import (
 from ponos_coach.profiles.ports import FixedDataAlreadySetError, ProfileStorageError
 from ponos_coach.storage import sqlite_database, sqlite_schema
 from ponos_coach.storage.sqlite_profile import SqliteProfileStorage
+from ponos_coach.storage.sqlite_profile_data import SqliteFixedDataStore, SqliteWeightStore
+from ponos_coach.storage.sqlite_stores import SqlitePhysiologyStore
 from tests.collaudo.test_database_del_profilo import (
     FINGERPRINT,
     FROZEN_V2,
@@ -44,14 +46,20 @@ FROZEN_V3 = (
     """CREATE TABLE profile_body (
         id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
         height_cm INTEGER NOT NULL CHECK (height_cm BETWEEN 100 AND 250),
-        birth_date TEXT NOT NULL CHECK (length(birth_date) = 10 AND birth_date >= '1900-01-01')
+        birth_date TEXT NOT NULL
+            CHECK (date(birth_date) IS birth_date AND birth_date >= '1900-01-01')
     ) STRICT""",
     """CREATE TRIGGER profile_body_is_fixed BEFORE UPDATE ON profile_body
     BEGIN
         SELECT RAISE(ABORT, 'profile_body is fixed');
     END""",
+    """CREATE TRIGGER profile_body_is_kept BEFORE DELETE ON profile_body
+    BEGIN
+        SELECT RAISE(ABORT, 'profile_body is fixed');
+    END""",
     """CREATE TABLE weight (
-        valid_from TEXT NOT NULL PRIMARY KEY CHECK (length(valid_from) = 10),
+        valid_from TEXT NOT NULL PRIMARY KEY
+            CHECK (date(valid_from) IS valid_from AND valid_from >= '1900-01-01'),
         tenths_kg INTEGER NOT NULL CHECK (tenths_kg BETWEEN 200 AND 3000)
     ) STRICT""",
     """CREATE TABLE sport_weights (
@@ -217,6 +225,18 @@ def test_the_database_refuses_to_change_the_fixed_data_even_with_a_direct_update
             raw.execute("UPDATE profile_body SET height_cm = 180")
 
 
+def test_the_database_refuses_to_delete_the_fixed_data_even_with_a_direct_delete(
+    tmp_path: Path,
+) -> None:
+    write_frozen_v2(tmp_path / PROFILE_DATABASE_NAME)
+    SqliteProfileStorage().open(tmp_path).close()
+    with closing(sqlite3.connect(tmp_path / PROFILE_DATABASE_NAME)) as raw:
+        raw.execute("INSERT INTO profile_body VALUES (1, 172, '1990-05-17')")
+
+        with pytest.raises(sqlite3.IntegrityError, match="fixed"):
+            raw.execute("DELETE FROM profile_body")
+
+
 @pytest.mark.parametrize(
     "statement",
     [
@@ -224,6 +244,13 @@ def test_the_database_refuses_to_change_the_fixed_data_even_with_a_direct_update
         "INSERT INTO profile_body VALUES (1, 251, '1990-05-17')",  # off point: 250 è il massimo
         "INSERT INTO profile_body VALUES (1, 172, '1899-12-31')",  # prima del 1900-01-01
         "INSERT INTO profile_body VALUES (2, 172, '1990-05-17')",  # una sola riga
+        "INSERT INTO profile_body VALUES (1, 172, '1990-02-30')",  # giorno inesistente
+        "INSERT INTO profile_body VALUES (1, 172, '1990-13-01')",  # mese inesistente
+        "INSERT INTO profile_body VALUES (1, 172, 'abcdefghij')",  # lunghezza giusta, non una data
+        "INSERT INTO profile_body VALUES (1, 172, '1990-5-17-0')",  # lunghezza giusta, non ISO
+        "INSERT INTO weight VALUES ('2026-02-30', 700)",  # giorno inesistente
+        "INSERT INTO weight VALUES ('xxxxxxxxxx', 700)",  # lunghezza giusta, non una data
+        "INSERT INTO weight VALUES ('1899-12-31', 700)",  # prima del 1900-01-01
         "INSERT INTO weight VALUES ('2026-01-01', 199)",  # sotto 20,0 kg
         "INSERT INTO weight VALUES ('2026-01-01', 3001)",  # sopra 300,0 kg
         "INSERT INTO sport_weights VALUES ('curling', 1.0)",  # sport sconosciuto
@@ -248,6 +275,7 @@ def test_the_database_refuses_personal_data_outside_the_domain_limits(
     [
         "INSERT INTO profile_body VALUES (1, 100, '1900-01-01')",  # on point: minimi ammessi
         "INSERT INTO profile_body VALUES (1, 250, '2020-02-29')",  # on point: massimo
+        "INSERT INTO weight VALUES ('1900-01-01', 700)",  # prima data ammessa
         "INSERT INTO weight VALUES ('2026-01-01', 200)",  # 20,0 kg
         "INSERT INTO weight VALUES ('2026-01-01', 3000)",  # 300,0 kg
         "INSERT INTO sport_weights VALUES ('running', 0.0)",
@@ -275,3 +303,46 @@ def test_weight_entry_round_trips_through_a_migrated_database(tmp_path: Path) ->
         assert reopened.weights.list_entries() == [entry]
     finally:
         reopened.close()
+
+
+class _UncheckedDatabase:
+    """Un database senza vincoli CHECK (il file vero rifiuta già di aprirsi con date non valide)."""
+
+    def __init__(self, statement: str) -> None:
+        self.connection = sqlite3.connect(":memory:")
+        self.connection.execute("CREATE TABLE profile_body (id, height_cm, birth_date)")
+        self.connection.execute("CREATE TABLE weight (valid_from, tenths_kg)")
+        self.connection.execute(
+            "CREATE TABLE physiology (valid_from, min_bpm, max_bpm, threshold_bpm, sex)"
+        )
+        self.connection.execute(statement)
+
+
+@pytest.mark.parametrize(
+    ("statement", "read"),
+    [
+        ("INSERT INTO profile_body VALUES (1, 172, '1990-13-45-SEGRETO')", "fixed"),
+        ("INSERT INTO weight VALUES ('2026-13-45-SEGRETO', 700)", "weight"),
+        ("INSERT INTO physiology VALUES ('2026-13-45-SEGRETO', 50, 190, 170, 'male')", "heart"),
+    ],
+)
+def test_a_stored_date_that_cannot_be_read_is_reported_without_the_text_that_was_read(
+    statement: str, read: str
+) -> None:
+    db = _UncheckedDatabase(statement)
+    readers = {
+        "fixed": SqliteFixedDataStore(db).get,  # type: ignore[arg-type]
+        "weight": SqliteWeightStore(db).list_entries,  # type: ignore[arg-type]
+        "heart": SqlitePhysiologyStore(db).list_entries,  # type: ignore[arg-type]
+    }
+
+    try:
+        with pytest.raises(Exception, match=r"non valid") as error:
+            readers[read]()
+    finally:
+        db.connection.close()
+
+    chain: BaseException | None = error.value
+    while chain is not None:
+        assert "SEGRETO" not in str(chain)
+        chain = chain.__cause__ or (None if chain.__suppress_context__ else chain.__context__)

@@ -36,6 +36,7 @@ from ponos_coach.load.domain.sport import (
     SportWeight,
     customised_weights,
     default_weight,
+    effective_weight,
     effective_weights,
     typical_intensity,
 )
@@ -71,6 +72,7 @@ __all__ = [
     "compute_pmc",
     "customised_weights",
     "default_weight",
+    "effective_weight",
     "effective_weights",
     "iso_week_start",
     "load_fingerprint",

@@ -4,8 +4,15 @@
 
 Z1 sotto l'85% della soglia, Z2 85-89%, Z3 90-94%, Z4 95-99%, Z5 dal 100% in su. Percentuali
 di default del progetto, rivedute in fase 4; stanno solo qui. Il confine inferiore appartiene
-alla zona più alta (`bpm >= 85% della soglia` è Z2). I confronti sono su interi: `bpm * 100`
-contro `percentuale * soglia`, mai una percentuale in virgola mobile al limite.
+alla zona più alta (`bpm >= 85% della soglia` è Z2). I confronti sono su valori in
+virgola mobile ma esatti: `bpm * 100` contro `percentuale * soglia` (intero), mai una
+percentuale in virgola mobile al limite.
+
+Esattezza: i decodificatori danno bpm interi (FIT e GPX portano interi, da 0 a 255 e 0 a 999),
+quindi `bpm * 100` e `percentuale * soglia` sono interi piccoli, rappresentati esattamente da
+float64, e il confronto sul confine non ha arrotondamenti. Per un bpm frazionario (che nessun
+decodificatore produce) il prodotto `bpm * 100` sarebbe arrotondato e un campione a un'unità di
+ultima cifra dal confine potrebbe cadere nella zona accanto: non è un caso supportato.
 """
 
 from __future__ import annotations

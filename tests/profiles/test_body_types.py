@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -158,3 +158,21 @@ def test_fixed_data_holds_height_and_birth_date() -> None:
     data = FixedProfileData(Height(172), BirthDate(date(1990, 5, 17)))
 
     assert (data.height.cm, data.birth_date.value) == (172, date(1990, 5, 17))
+
+
+@pytest.mark.parametrize(
+    ("today", "latest"),
+    [
+        (date(2026, 7, 1), date(2021, 7, 1)),
+        (date(2028, 2, 29), date(2023, 2, 28)),  # il 29 febbraio diventa il 28
+        (date(2026, 3, 1), date(2021, 3, 1)),
+        (date(2005, 1, 1), date(2000, 1, 1)),
+    ],
+)
+def test_the_latest_birth_date_is_five_years_before_today_and_is_the_one_birth_date_on_accepts(
+    today: date, latest: date
+) -> None:
+    assert BirthDate.latest(today) == latest
+    assert BirthDate.on(latest, today).value == latest
+    with pytest.raises(ValueError, match="data di nascita"):
+        BirthDate.on(latest + timedelta(days=1), today)

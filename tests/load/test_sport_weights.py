@@ -13,6 +13,7 @@ from ponos_coach.load.domain import (
     SportWeight,
     customised_weights,
     default_weight,
+    effective_weight,
     effective_weights,
 )
 from ponos_coach.load.use_cases import GetSportWeights, SetSportWeights
@@ -191,3 +192,11 @@ def test_an_empty_overview_has_empty_aggregations() -> None:
 
     assert overview.weekly_load(TODAY).weeks == ()
     assert overview.weekly_zones(TODAY).weeks == ()
+
+
+def test_effective_weight_is_the_saved_one_or_the_default() -> None:
+    saved = {Sport.TRAIL: SportWeight(1.4)}
+
+    assert effective_weight(Sport.TRAIL, saved) == SportWeight(1.4)
+    assert effective_weight(Sport.RUNNING, saved) == default_weight(Sport.RUNNING)
+    assert all(effective_weight(s, saved) == effective_weights(saved)[s] for s in Sport)

@@ -31,8 +31,10 @@ Colonne di v2 (sincronizzazione Garmin, tutte `STRICT`):
 Colonne di v3 (dati personali, pesi degli sport e zone di FC):
 
 - `profile_body`: una sola riga (`id = 1`) con altezza (cm) e data di nascita, fisse: un trigger
-  rifiuta ogni `UPDATE`. Assente nei profili creati prima della v3 (da completare una volta).
-- `weight`: serie del peso con data di validità, in decimi di chilogrammo interi.
+  rifiuta ogni `UPDATE` e ogni `DELETE`; la data di nascita è una data ISO esistente
+  (`date(col) IS col`). Assente nei profili creati prima della v3 (da completare una volta).
+- `weight`: serie del peso con data di validità (data ISO esistente, non anteriore al
+  1900-01-01), in decimi di chilogrammo interi.
 - `sport_weights`: solo i pesi degli sport diversi dal default.
 - `load_cache`: cinque colonne `zone1_s ... zone5_s` con i secondi in ciascuna zona. La cache è
   derivata e rigenerabile: la migrazione la svuota, così nessun carico resta senza zone.
@@ -73,6 +75,7 @@ V2_LISTING_KINDS: Final = frozenset(_LISTING_KINDS.replace("'", "").split(","))
 V3_HEIGHT_CM = (100, 250)
 V3_WEIGHT_TENTHS_KG = (200, 3000)
 V3_MIN_BIRTH_DATE = "1900-01-01"
+V3_MIN_MEASUREMENT_DATE = "1900-01-01"
 V3_SPORT_WEIGHT_MAX = 5.0
 ZONE_COLUMNS: Final = ("zone1_s", "zone2_s", "zone3_s", "zone4_s", "zone5_s")
 
@@ -191,12 +194,12 @@ _V3_PROFILE_BODY = f"""
 CREATE TABLE profile_body (
     id         INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
     height_cm  INTEGER NOT NULL CHECK (height_cm BETWEEN {V3_HEIGHT_CM[0]} AND {V3_HEIGHT_CM[1]}),
-    birth_date TEXT    NOT NULL CHECK (length(birth_date) = 10
+    birth_date TEXT    NOT NULL CHECK (date(birth_date) IS birth_date
                                        AND birth_date >= '{V3_MIN_BIRTH_DATE}')
 ) STRICT
 """
 
-# Altezza e data di nascita sono fisse: nemmeno un UPDATE diretto le cambia.
+# Altezza e data di nascita sono fisse: nemmeno un UPDATE o un DELETE diretto le cambia.
 _V3_PROFILE_BODY_FIXED = """
 CREATE TRIGGER profile_body_is_fixed BEFORE UPDATE ON profile_body
 BEGIN
@@ -204,9 +207,17 @@ BEGIN
 END
 """
 
+_V3_PROFILE_BODY_KEPT = """
+CREATE TRIGGER profile_body_is_kept BEFORE DELETE ON profile_body
+BEGIN
+    SELECT RAISE(ABORT, 'profile_body is fixed');
+END
+"""
+
 _V3_WEIGHT = f"""
 CREATE TABLE weight (
-    valid_from TEXT    NOT NULL PRIMARY KEY CHECK (length(valid_from) = 10),
+    valid_from TEXT    NOT NULL PRIMARY KEY CHECK (date(valid_from) IS valid_from
+                                               AND valid_from >= '{V3_MIN_MEASUREMENT_DATE}'),
     tenths_kg  INTEGER NOT NULL CHECK (tenths_kg BETWEEN {V3_WEIGHT_TENTHS_KG[0]}
                                                      AND {V3_WEIGHT_TENTHS_KG[1]})
 ) STRICT
@@ -233,6 +244,7 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     (
         _V3_PROFILE_BODY,
         _V3_PROFILE_BODY_FIXED,
+        _V3_PROFILE_BODY_KEPT,
         _V3_WEIGHT,
         _V3_SPORT_WEIGHTS,
         _V3_CLEAR_LOAD_CACHE,

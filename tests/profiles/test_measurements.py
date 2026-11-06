@@ -27,12 +27,12 @@ from ponos_coach.profiles.domain import (
     WeightEntry,
 )
 from ponos_coach.profiles.measurements import (
-    CompleteFixedProfileData,
     InvalidMeasurementsError,
     MeasurementProblem,
     MeasurementUpdate,
     ReadMeasurementHistory,
     UpdateMeasurements,
+    ValidityPeriod,
 )
 from ponos_coach.profiles.ports import FixedDataAlreadySetError
 from ponos_coach.profiles.use_cases import (
@@ -78,7 +78,7 @@ def create_profile(request: NewProfileRequest | None = None, *, number: int = 1)
 
 def updater(session: ProfileSession, today: date = TODAY) -> UpdateMeasurements:
     return UpdateMeasurements(
-        session.activities, session.physiology, session.weights, lambda: today
+        session.activities, session.physiology, session.weights, lambda: today, session.fixed_data
     )
 
 
@@ -277,6 +277,7 @@ def test_t_calc_05_a_heart_rate_change_from_a_date_recalculates_like_from_scratc
         world.profile.physiology,
         world.profile.weights,
         lambda: date(2026, 3, 1),
+        world.profile.fixed_data,
     )(MeasurementUpdate(date(2026, 2, 1), max_bpm=180, threshold_bpm=160))
     after_change = world.overview()
 
@@ -339,10 +340,133 @@ def test_fixed_data_can_be_completed_once_and_never_changed() -> None:
             TODAY,
         )
     )
-    complete = CompleteFixedProfileData(session.fixed_data)
+    complete = updater(session)
 
-    complete(FIXED)
+    saved = complete(fixed=FIXED)
     with pytest.raises(FixedDataAlreadySetError):
-        complete(FixedProfileData(Height(180), BirthDate(date(1985, 1, 1))))
+        complete(fixed=FixedProfileData(Height(180), BirthDate(date(1985, 1, 1))))
 
     assert session.fixed_data.get() == FIXED
+    assert saved.fixed_completed
+    assert saved.weight is None
+    assert saved.heart_rate is None
+
+
+def _without_fixed_data(number: int) -> ProfileSession:
+    return create_profile(
+        NewProfileRequest(
+            ProfileName.parse("Atleta di prova"),
+            absolute_path("misure", f"unica{number}"),
+            "UTC",
+            FEMALE,
+            TODAY,
+        ),
+        number=number,
+    )
+
+
+def test_fixed_data_weight_and_heart_rate_are_saved_together() -> None:
+    session = _without_fixed_data(2)
+
+    saved = updater(session)(
+        MeasurementUpdate(date(2026, 2, 1), Weight(710), threshold_bpm=165), FIXED
+    )
+
+    assert saved.fixed_completed
+    assert session.fixed_data.get() == FIXED
+    assert WeightEntry(date(2026, 2, 1), Weight(710)) in list(session.weights.list_entries())
+    assert entries(session)[0].valid_from == date(2026, 2, 1)
+
+
+def test_when_the_fixed_data_cannot_be_completed_the_measurements_are_not_saved() -> None:
+    session = create_profile()  # i dati fissi ci sono già
+    weights_before = list(session.weights.list_entries())
+    entries_before = entries(session)
+
+    with pytest.raises(FixedDataAlreadySetError):
+        updater(session)(
+            MeasurementUpdate(date(2026, 2, 1), Weight(710), threshold_bpm=165),
+            FixedProfileData(Height(180), BirthDate(date(1985, 1, 1))),
+        )
+
+    assert list(session.weights.list_entries()) == weights_before
+    assert entries(session) == entries_before
+    assert session.fixed_data.get() == FIXED
+
+
+def test_when_the_measurements_are_refused_the_fixed_data_are_not_completed() -> None:
+    session = _without_fixed_data(3)
+
+    with pytest.raises(InvalidMeasurementsError) as error:
+        updater(session)(MeasurementUpdate(TODAY, min_bpm=171), FIXED)  # soglia 170: incoerente
+
+    assert error.value.problem is MeasurementProblem.INVALID_HEART_RATE
+    assert session.fixed_data.get() is None
+
+
+def test_saving_nothing_is_refused() -> None:
+    with pytest.raises(InvalidMeasurementsError) as error:
+        updater(create_profile())()
+
+    assert error.value.problem is MeasurementProblem.NOTHING_TO_UPDATE
+
+
+# --- Periodo di validità effettivo (R6) -------------------------------------------------------
+
+
+def test_a_past_measurement_is_valid_until_the_day_before_the_next_existing_entry() -> None:
+    session = create_profile()  # peso e parametri da TODAY (1 marzo)
+    update = updater(session)
+
+    saved = update(MeasurementUpdate(date(2026, 1, 10), Weight(720), threshold_bpm=165))
+
+    assert saved.weight == ValidityPeriod(date(2026, 1, 10), date(2026, 2, 28))
+    assert saved.heart_rate == ValidityPeriod(date(2026, 1, 10), date(2026, 2, 28))
+    assert not saved.fixed_completed
+
+
+def test_the_latest_measurement_is_valid_until_the_next_one() -> None:
+    session = create_profile()
+
+    saved = updater(session)(MeasurementUpdate(TODAY, Weight(720)))
+
+    assert saved.weight == ValidityPeriod(TODAY, None)
+    assert saved.heart_rate is None  # la serie della FC non è toccata
+
+
+def test_the_period_of_the_weight_and_of_the_heart_rate_follow_their_own_series() -> None:
+    session = create_profile()
+    update = updater(session)
+    update(MeasurementUpdate(date(2026, 2, 1), Weight(710)))  # solo peso, febbraio
+
+    saved = update(MeasurementUpdate(date(2026, 1, 1), Weight(715), min_bpm=55))
+
+    assert saved.weight == ValidityPeriod(date(2026, 1, 1), date(2026, 1, 31))
+    assert saved.heart_rate == ValidityPeriod(date(2026, 1, 1), date(2026, 2, 28))
+
+
+def test_replacing_the_same_day_keeps_the_same_period() -> None:
+    session = create_profile()
+    update = updater(session)
+    update(MeasurementUpdate(date(2026, 2, 1), Weight(710)))
+
+    saved = update(MeasurementUpdate(date(2026, 2, 1), Weight(711)))
+
+    assert saved.weight == ValidityPeriod(date(2026, 2, 1), date(2026, 2, 28))
+
+
+@pytest.mark.parametrize(
+    ("day", "accepted"),
+    [(date(1899, 12, 31), False), (date(1900, 1, 1), True), (date(1900, 1, 2), True)],
+)
+def test_the_oldest_accepted_measurement_day_is_the_first_of_1900(
+    day: date, accepted: bool
+) -> None:
+    session = create_profile()
+    if accepted:
+        updater(session)(MeasurementUpdate(day, Weight(700)))
+        assert WeightEntry(day, Weight(700)) in list(session.weights.list_entries())
+    else:
+        with pytest.raises(InvalidMeasurementsError) as error:
+            updater(session)(MeasurementUpdate(day, Weight(700)))
+        assert error.value.problem is MeasurementProblem.DATE_TOO_OLD

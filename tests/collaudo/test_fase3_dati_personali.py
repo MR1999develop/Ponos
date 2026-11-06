@@ -76,10 +76,6 @@ WORKER = (
     Path(__file__).resolve().parents[1] / "fixtures" / "generators" / "collaudo_fase3_worker.py"
 )
 TODAY = date(2026, 7, 1)
-D_F3_01 = (
-    "D-F3-01: Weight.parse accetta numeri non canonici (esponente, separatore '_', cifre non "
-    "ASCII) invece di rifiutarli al confine"
-)
 D_F3_02 = "D-F3-02: SportWeightsForm.set_value(nan) non si riporta al limite e build() solleva"
 
 
@@ -96,7 +92,11 @@ INVALID_WEIGHTS = [
     "-Infinity", "1e400", "1e-1000", "0x46", "9" * 17, "0" * 17 + "70", "--70", "70-",
     "\u0667\u0660\u066b\u0665",
 ]  # fmt: skip
-NON_CANONICAL_WEIGHTS = ["7_0.5", "\u0667\u0660", "\uff17\uff10", "7e1", ".5e2", "7E1", "700e-1"]
+NON_CANONICAL_WEIGHTS = [
+    "7_0.5", "\u0667\u0660", "\uff17\uff10", "7e1", ".5e2", "7E1", "700e-1", "7 0.5", "70 .5",
+    "70. 5", "70.5\u00a0", "\u00a070.5", "70.\uff15", "70,5e0", "+-70", "0x46", ".5", "70..5",
+    "70,.5", "7_0",
+]  # fmt: skip
 
 
 @pytest.mark.parametrize(("text", "tenths"), VALID_WEIGHTS)
@@ -113,13 +113,7 @@ def test_t_qual_02_weight_text_invalid_partitions_and_just_beyond_the_limits(tex
     assert read_weight(text) is expected
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        pytest.param(t, marks=pytest.mark.xfail(strict=True, reason=D_F3_01))
-        for t in NON_CANONICAL_WEIGHTS
-    ],
-)
+@pytest.mark.parametrize("text", NON_CANONICAL_WEIGHTS)
 def test_t_qual_02_weight_text_with_hostile_numerals_is_refused_not_reinterpreted(
     text: str,
 ) -> None:
@@ -376,7 +370,11 @@ def test_t_qual_02_validity_day_partitions_and_limits_through_the_use_case_and_t
     profile = create_profile(tmp_path)
     session = profile.session
     update = UpdateMeasurements(
-        session.activities, session.physiology, session.weights, lambda: TODAY
+        session.activities,
+        session.physiology,
+        session.weights,
+        lambda: TODAY,
+        session.fixed_data,
     )
     try:
         request = MeasurementUpdate(day, Weight(700), threshold_bpm=160)

@@ -42,7 +42,14 @@ Un'ora esatta alla FC di soglia dà hrTSS 100. HR = FCmin dà HRr = 0 e carico 0
   uno o più tra peso, FC minima, FC massima e soglia una data di validità
   (non nel futuro, non prima del 1900-01-01). I valori non indicati restano
   quelli validi **quel giorno** (non gli ultimi); lo stesso giorno sostituisce;
-  il sesso resta quello della creazione; tutto in una transazione. Il peso
+  il sesso resta quello della creazione; tutto in una transazione, insieme ai
+  dati fissi da completare (un solo caso d'uso per "Modifica profilo").
+  **Periodo di validità**: una misura vale dal suo giorno fino alla voce
+  successiva già esistente della *stessa serie* (peso e parametri di FC sono due
+  serie); quindi una misura con data passata non cambia ciò che vale dopo una
+  voce più recente. Il caso d'uso restituisce il periodo effettivo
+  (`ValidityPeriod`: da, fino al giorno prima della voce successiva o aperto)
+  perché l'interfaccia lo mostri. Il peso
   corporeo ha la sua serie e non entra nel carico. Altezza (100-250 cm) e data
   di nascita (dal 1900-01-01 a oggi meno 5 anni) sono fisse; il peso va da
   20,0 a 300,0 kg in decimi interi.

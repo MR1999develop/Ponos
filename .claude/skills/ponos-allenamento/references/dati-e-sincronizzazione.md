@@ -89,13 +89,14 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   che li confronta con gli enum del dominio.
 - **Schema v3** (dati personali, pesi degli sport, zone; tutte `STRICT`):
   - `profile_body`: una sola riga (`id = 1`) con altezza in cm (CHECK
-    100-250) e data di nascita (CHECK `>= 1900-01-01`). Altezza e data di
-    nascita sono **fisse**: un trigger `BEFORE UPDATE` rifiuta ogni
-    modifica, la porta `FixedDataStore.set_once` scrive una volta sola
+    100-250) e data di nascita (CHECK `date(col) IS col` e `>= 1900-01-01`). Altezza e data di
+    nascita sono **fisse**: un trigger `BEFORE UPDATE` e uno `BEFORE DELETE` rifiutano ogni
+    modifica e cancellazione, la porta `FixedDataStore.set_once` scrive una volta sola
     (`FixedDataAlreadySetError` poi). La riga manca nei profili creati
     prima della v3: restano validi, i dati si completano una volta in
-    "Modifica profilo" (`CompleteFixedProfileData`).
-  - `weight`: serie del peso, `valid_from` ISO e `tenths_kg` intero
+    "Modifica profilo" (`UpdateMeasurements`, nella stessa transazione di peso e FC).
+  - `weight`: serie del peso, `valid_from` data ISO esistente (`date(col) IS col`, non
+    prima del 1900-01-01) e `tenths_kg` intero
     (200-3000: nessun float binario). Si aggiunge con `UpdateMeasurements`;
     la stessa data sostituisce.
   - `sport_weights`: solo i pesi diversi dal default (`REAL` tra 0 e 5);

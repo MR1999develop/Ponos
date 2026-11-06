@@ -286,8 +286,8 @@ class SqlitePhysiologyStore:
                 )
                 for row in rows
             ]
-        except ValueError as exc:
-            raise LoadStoreError("parametri fisiologici non validi") from exc
+        except ValueError:  # il testo letto (una data) non si conserva nella catena delle cause
+            raise LoadStoreError("parametri fisiologici non validi") from None
 
 
 class SqliteLoadCache:

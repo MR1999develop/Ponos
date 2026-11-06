@@ -47,7 +47,7 @@ from ponos_coach.load.domain import (
     compute_activity_load,
     compute_pmc,
     customised_weights,
-    default_weight,
+    effective_weight,
     effective_weights,
     load_fingerprint,
     physiology_for_day,
@@ -62,10 +62,17 @@ def local_day_of(start: datetime, timezone: ZoneInfo) -> date:
     return start.astimezone(timezone).date()
 
 
-def _load_of(activity: Activity, physiology: Physiology, weight: SportWeight) -> ActivityLoad:
-    """Carico dell'attività sul tempo in movimento (unico punto di calcolo)."""
+def load_of_activity(
+    activity: Activity, physiology: Physiology, saved_weights: Mapping[Sport, SportWeight]
+) -> ActivityLoad:
+    """Carico dell'attività sul tempo in movimento: l'unico punto di calcolo, usato dalla
+    panoramica e dal dettaglio. Il peso dello sport è quello salvato o, senza, il default."""
     return compute_activity_load(
-        activity.sport, activity.timer_s, activity.heart_rate, physiology, weight
+        activity.sport,
+        activity.timer_s,
+        activity.heart_rate,
+        physiology,
+        effective_weight(activity.sport, saved_weights),
     )
 
 
@@ -274,8 +281,7 @@ class ComputeProfileOverview:
                 )
                 load = self._cache.get(record.identity, fingerprint)
                 if load is None:
-                    weight = default_weight(record.sport) if saved is None else saved
-                    outcome = self._compute(record, physiology, weight)
+                    outcome = self._compute(record, physiology, saved_weights)
                     if isinstance(outcome, ExclusionReason):
                         excluded.append(ExcludedActivity(record.identity, outcome))
                     else:
@@ -290,13 +296,16 @@ class ComputeProfileOverview:
         return ProfileOverview(pmc, tuple(activities), tuple(excluded))
 
     def _compute(
-        self, record: ActivityRecord, physiology: Physiology, weight: SportWeight
+        self,
+        record: ActivityRecord,
+        physiology: Physiology,
+        saved_weights: Mapping[Sport, SportWeight],
     ) -> ActivityLoad | ExclusionReason:
         """Carico dall'originale in archivio, o il motivo per cui non si può calcolare."""
         activity = read_original_activity(self._archive, record, self._decode, self._max_file_bytes)
         if isinstance(activity, ExclusionReason):
             return activity
-        return _load_of(activity, physiology, weight)
+        return load_of_activity(activity, physiology, saved_weights)
 
     def _store(self, computed: list[_Computed]) -> None:
         if not computed:

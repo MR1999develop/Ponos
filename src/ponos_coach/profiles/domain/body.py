@@ -9,6 +9,7 @@ creazione del profilo; il peso ha una serie di voci con data di validità.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -18,9 +19,14 @@ HEIGHT_MAX_CM = 250
 WEIGHT_MIN_TENTHS_KG = 200  # 20,0 kg
 WEIGHT_MAX_TENTHS_KG = 3000  # 300,0 kg
 MIN_BIRTH_DATE = date(1900, 1, 1)
+MIN_MEASUREMENT_DATE = date(1900, 1, 1)  # prima data di validità ammessa per le misure
 MIN_AGE_YEARS = 5  # default del progetto: nessun profilo per chi ha meno di 5 anni
 _WEIGHT_TEXT_MAX_CHARS = 16  # la lunghezza si controlla prima di analizzare il testo
 _TENTHS_PER_KG = 10
+_ASCII_BLANKS = " \t\r\n"  # gli spazi ai due estremi; altri spazi (anche Unicode) sono rifiutati
+# Grammatica ammessa per il testo del peso: solo cifre ASCII, al più un separatore decimale
+# (virgola o punto); il numero di cifre decimali significative lo controlla `from_kg`.
+_WEIGHT_TEXT = re.compile(r"\+?[0-9]+(?:[.,][0-9]*)?", re.ASCII)
 _MIN_KG = Decimal(WEIGHT_MIN_TENTHS_KG) / _TENTHS_PER_KG
 _MAX_KG = Decimal(WEIGHT_MAX_TENTHS_KG) / _TENTHS_PER_KG
 _FEBRUARY = 2
@@ -74,15 +80,22 @@ class Weight:
     def parse(cls, text: str) -> Weight:
         """Peso da testo dell'utente: accetta virgola o punto decimale (`70,5` e `70.5`).
 
+        Solo cifre ASCII, un segno `+` iniziale facoltativo e al più un separatore decimale;
+        spazi (ASCII) solo ai due estremi. Esponenti, `_`, cifre non ASCII o a larghezza piena,
+        `NaN` e `Infinity` sono rifiutati, mai reinterpretati.
+
         Raises:
-            ValueError: testo troppo lungo, non numerico, con più di una cifra decimale o
-                fuori da 20,0-300,0 kg.
+            ValueError: testo troppo lungo, non scritto con questa grammatica, con più di una
+                cifra decimale significativa o fuori da 20,0-300,0 kg.
         """
         if len(text) > _WEIGHT_TEXT_MAX_CHARS:
             raise ValueError("il peso deve essere un numero")
+        stripped = text.strip(_ASCII_BLANKS)
+        if _WEIGHT_TEXT.fullmatch(stripped) is None:
+            raise ValueError("il peso deve essere un numero")
         try:
-            kg = Decimal(text.strip().replace(",", "."))
-        except InvalidOperation as exc:
+            kg = Decimal(stripped.replace(",", "."))
+        except InvalidOperation as exc:  # irraggiungibile: la grammatica è un sottoinsieme
             raise ValueError("il peso deve essere un numero") from exc
         return cls.from_kg(kg)
 
@@ -112,7 +125,8 @@ class BirthDate:
     """Data di nascita, non anteriore al 1900-01-01.
 
     Il limite superiore (oggi meno 5 anni) dipende dall'orologio, che il dominio non legge:
-    lo verifica `BirthDate.on`, da usare quando la data la inserisce l'utente. Il costruttore
+    lo calcola `BirthDate.latest(today)` e lo verifica `BirthDate.on`, da usare quando la data
+    la inserisce l'utente. Il costruttore
     serve anche a rileggere una data già salvata, che non diventa invalida con il passare del
     tempo.
     """
@@ -123,6 +137,12 @@ class BirthDate:
         if self.value < MIN_BIRTH_DATE:
             raise ValueError("la data di nascita non può essere anteriore al 1900-01-01")
 
+    @staticmethod
+    def latest(today: date) -> date:
+        """L'ultima data di nascita ammessa oggi: `today` meno 5 anni (29 febbraio compreso:
+        diventa il 28 febbraio)."""
+        return _years_before(today, MIN_AGE_YEARS)
+
     @classmethod
     def on(cls, value: date, today: date) -> BirthDate:
         """Data di nascita inserita oggi: da 1900-01-01 a `today` meno 5 anni (incluso).
@@ -130,7 +150,7 @@ class BirthDate:
         Raises:
             ValueError: data fuori da questi limiti.
         """
-        if value > _years_before(today, MIN_AGE_YEARS):
+        if value > cls.latest(today):
             raise ValueError(f"la data di nascita deve essere di almeno {MIN_AGE_YEARS} anni fa")
         return cls(value)
 

@@ -292,7 +292,11 @@ def apply_random_step(rng: random.Random, profile: RealProfile, history: list[st
     """Un'operazione a caso sul profilo; i rifiuti non cambiano nulla (verificato dal chiamante)."""
     session = profile.session
     update = UpdateMeasurements(
-        session.activities, session.physiology, session.weights, lambda: TODAY
+        session.activities,
+        session.physiology,
+        session.weights,
+        lambda: TODAY,
+        session.fixed_data,
     )
     day = rng.choice(CHANGE_DAYS)
     kind = rng.choice(("threshold", "limits", "weight_only", "sport_weights", "future", "both"))
@@ -350,7 +354,11 @@ def test_t_calc_05_the_same_update_repeated_and_the_same_day_replaced_leave_one_
     profile = profile_with_mixed(tmp_path)
     session = profile.session
     update = UpdateMeasurements(
-        session.activities, session.physiology, session.weights, lambda: TODAY
+        session.activities,
+        session.physiology,
+        session.weights,
+        lambda: TODAY,
+        session.fixed_data,
     )
     try:
         for _ in range(3):
@@ -397,7 +405,11 @@ def test_t_calc_05_the_heart_rate_constraint_holds_for_every_combination_and_ref
     profile = create_profile(tmp_path)
     session = profile.session
     update = UpdateMeasurements(
-        session.activities, session.physiology, session.weights, lambda: TODAY
+        session.activities,
+        session.physiology,
+        session.weights,
+        lambda: TODAY,
+        session.fixed_data,
     )
     base = PhysiologyEntry(CONSTRAINT_DAY, make_physiology(BASE[2]))
     accepted = refused = 0

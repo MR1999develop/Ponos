@@ -18,7 +18,6 @@ from ponos_coach.activities.domain import Sport
 from ponos_coach.load.domain import SportWeight
 from ponos_coach.load.use_cases import GetSportWeights, SetSportWeights
 from ponos_coach.profiles.measurements import (
-    CompleteFixedProfileData,
     InvalidMeasurementsError,
     MeasurementHistory,
     ReadMeasurementHistory,
@@ -63,12 +62,13 @@ class ProfileEditor(QObject):
 
         def work(access: ProfileAccess) -> MeasurementHistory:
             session = access.session
-            if request.update is not None:
-                UpdateMeasurements(
-                    session.activities, session.physiology, session.weights, access.today
-                )(request.update)
-            if request.fixed is not None:
-                CompleteFixedProfileData(session.fixed_data)(request.fixed)
+            UpdateMeasurements(
+                session.activities,
+                session.physiology,
+                session.weights,
+                access.today,
+                session.fixed_data,
+            )(request.update, request.fixed)
             return _read_history(access)
 
         return self._controller.run_on_profile(work, self._after_save_measurements)

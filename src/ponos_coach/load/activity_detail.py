@@ -27,8 +27,6 @@ from ponos_coach.activities.ports import ActivityArchive, ActivityIndex, Activit
 from ponos_coach.load.domain import (
     ActivityLoad,
     HeartRateLimits,
-    compute_activity_load,
-    default_weight,
     out_of_limits,
     physiology_for_day,
     threshold_for_sport,
@@ -39,6 +37,7 @@ from ponos_coach.load.use_cases import (
     Decoder,
     ExcludedActivity,
     ExclusionReason,
+    load_of_activity,
     local_day_of,
     read_original_activity,
 )
@@ -142,11 +141,7 @@ class GetActivityDetail:
             return ExcludedActivity(identity, activity)
         local_day = local_day_of(record.start, self._timezone)
         physiology = physiology_for_day(self._physiology.list_entries(), local_day)
-        saved = self._sport_weights.load().get(record.sport)
-        weight = default_weight(record.sport) if saved is None else saved
-        load = compute_activity_load(
-            activity.sport, activity.timer_s, activity.heart_rate, physiology, weight
-        )
+        load = load_of_activity(activity, physiology, self._sport_weights.load())
         threshold = threshold_for_sport(physiology, activity.sport)
         series = activity.heart_rate
         return ActivityDetail(

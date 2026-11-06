@@ -45,8 +45,8 @@ class SqliteFixedDataStore:
             return None
         try:
             return FixedProfileData(Height(row[0]), BirthDate(date.fromisoformat(row[1])))
-        except ValueError as exc:
-            raise ProfileDataError("dati del profilo non validi") from exc
+        except ValueError:  # il testo letto (una data) non si conserva nella catena delle cause
+            raise ProfileDataError("dati del profilo non validi") from None
 
     def set_once(self, data: FixedProfileData) -> None:
         """Imposta i dati fissi; se ci sono già, `FixedDataAlreadySetError`."""
@@ -95,8 +95,8 @@ class SqliteWeightStore:
             raise ProfileDataError("lettura del peso non riuscita") from exc
         try:
             return [WeightEntry(date.fromisoformat(r[0]), Weight(r[1])) for r in rows]
-        except ValueError as exc:
-            raise ProfileDataError("peso salvato non valido") from exc
+        except ValueError:  # il testo letto (una data) non si conserva nella catena delle cause
+            raise ProfileDataError("peso salvato non valido") from None
 
 
 class SqliteSportWeightStore:

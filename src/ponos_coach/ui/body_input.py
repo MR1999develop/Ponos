@@ -9,7 +9,7 @@ messaggio, in un log né in un'eccezione. Il dominio decide cosa è valido (`Hei
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 from enum import Enum
 
 from PySide6.QtCore import QCoreApplication
@@ -28,7 +28,6 @@ from ponos_coach.profiles.domain import (
 
 _HEIGHT_TEXT_MAX_CHARS = 3  # la lunghezza si controlla prima di leggere il numero
 _TENTHS_PER_KG = 10
-_LONGEST_FIVE_YEARS_DAYS = 366 * MIN_AGE_YEARS  # sempre almeno cinque anni fa
 
 
 class BodyProblem(Enum):
@@ -77,14 +76,7 @@ def read_birth_date(value: date | None, today: date) -> BirthDate | BodyProblem:
 
 def latest_birth_date(today: date) -> date:
     """L'ultima data di nascita ammessa oggi, secondo il dominio (per il limite del selettore)."""
-    day = today - timedelta(days=_LONGEST_FIVE_YEARS_DAYS)
-    while True:
-        following = day + timedelta(days=1)
-        try:
-            BirthDate.on(following, today)
-        except ValueError:
-            return day
-        day = following
+    return BirthDate.latest(today)
 
 
 def body_problem_text(problem: BodyProblem) -> str:
