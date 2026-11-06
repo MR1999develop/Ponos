@@ -5,13 +5,17 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
+import random
 import sys
+import time
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Final
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import platformdirs
@@ -20,8 +24,12 @@ from PySide6.QtWidgets import QApplication
 
 import ponos_coach
 from ponos_coach.activities.decoding import decode_stored_activity
+from ponos_coach.activities.domain import DEFAULT_POLICY, FailureReason, FileFormat, SyncPolicy
+from ponos_coach.activities.ports import GarminAccount
+from ponos_coach.activities.sync import ExtractedOriginal, OriginalExtractionError
 from ponos_coach.load.use_cases import Decoder
 from ponos_coach.platform.folder_kind import SystemFolderKindDetector
+from ponos_coach.platform.notifier import DesktopNotifier
 from ponos_coach.platform.profile_folders import LocalProfileFolders
 from ponos_coach.platform.profile_registry import (
     JsonProfileRegistry,
@@ -29,7 +37,9 @@ from ponos_coach.platform.profile_registry import (
     RegistryCorruptError,
     RegistryFormatTooNewError,
 )
+from ponos_coach.platform.token_store import create_token_store
 from ponos_coach.profiles.domain import ProfileId
+from ponos_coach.profiles.ports import TokenStore, TokenStoreUnavailableError
 from ponos_coach.profiles.use_cases import (
     CreateProfile,
     DeleteProfileFolder,
@@ -54,6 +64,7 @@ from ponos_coach.ui.main_window import (
     NewProfileDefaults,
     native_folder_picker,
 )
+from ponos_coach.ui.sync_worker import SyncServices, SystemNotifier
 from ponos_coach.ui.translations import (
     Language,
     TranslationReport,
@@ -68,9 +79,23 @@ from ponos_coach.ui.workspace import (
     WorkspaceController,
     WorkspaceServices,
 )
+from ponos_coach.zipread import ZipReadError, ZipReason, read_activity_entry
 
 _ORGANIZATION = "PonosCoach"
 _FALLBACK_ZONE = ZoneInfo("UTC")
+_LOG = logging.getLogger("ponos_coach.main")  # sotto "ponos_coach": lo raccoglie il file di log
+
+# Perché uno ZIP scaricato non dà un file di attività -> causa definitiva della voce del giornale.
+_FAILURE_BY_ZIP_REASON: Final[Mapping[ZipReason, FailureReason]] = {
+    ZipReason.ARCHIVE_INVALID: FailureReason.ARCHIVE_INVALID,
+    ZipReason.ARCHIVE_LIMIT: FailureReason.ARCHIVE_INVALID,
+    ZipReason.ENCRYPTED: FailureReason.ARCHIVE_INVALID,
+    ZipReason.UNSAFE_NAME: FailureReason.ARCHIVE_INVALID,
+    ZipReason.TOO_LARGE: FailureReason.FILE_TOO_LARGE,
+    ZipReason.NESTED_ARCHIVE: FailureReason.ARCHIVE_INVALID,
+    ZipReason.NO_ACTIVITY: FailureReason.UNSUPPORTED_FORMAT,  # per esempio solo un TCX
+    ZipReason.MULTIPLE_ACTIVITIES: FailureReason.ARCHIVE_INVALID,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +156,47 @@ class _SystemClock:
         return datetime.now(UTC)
 
 
+class _SystemSyncClock:
+    """Orologio della sincronizzazione: istanti in UTC e durate con l'orologio monotono."""
+
+    def now(self) -> datetime:
+        return datetime.now(UTC)
+
+    def monotonic(self) -> float:
+        return time.monotonic()
+
+
+def extract_original_activity(content: bytes) -> ExtractedOriginal:
+    """Il file di attività dentro lo ZIP scaricato da Garmin, con i tetti di `zipread`.
+
+    Raises:
+        OriginalExtractionError: lo ZIP non dà un file di attività; la causa è sempre definitiva.
+    """
+    try:
+        entry = read_activity_entry(content)
+    except ZipReadError as error:
+        raise OriginalExtractionError(_FAILURE_BY_ZIP_REASON[error.reason]) from error
+    return ExtractedOriginal(entry.content, FileFormat(entry.suffix.removeprefix(".")))
+
+
+def _default_garmin_account() -> GarminAccount:
+    """L'account vero, su `garminconnect`; l'import è qui perché pesa e serve solo al primo uso."""
+    from ponos_coach.garmin.account import GarminConnectAccount  # noqa: PLC0415
+    from ponos_coach.garmin.connect import ConnectClientFactory  # noqa: PLC0415
+
+    return GarminConnectAccount(ConnectClientFactory())
+
+
+def _default_token_store(data_dir: Path) -> TokenStore | None:
+    """I token nel portachiavi del sistema; `None` se non si può usare (per esempio Linux senza
+    Secret Service): allora l'account non si collega e l'import da file resta disponibile."""
+    try:
+        return create_token_store(data_dir)
+    except TokenStoreUnavailableError:
+        _LOG.warning("The system keychain is not available: Garmin accounts cannot be connected")
+        return None
+
+
 def _registry_problem(error: BaseException) -> RegistryProblem | None:
     """Quale guasto dell'elenco dei profili è (i suoi tipi sono dell'adattatore, non della ui)."""
     if isinstance(error, RegistryFormatTooNewError):
@@ -163,6 +229,11 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
     import_sources: ImportSources | None = None,
     decode: Decoder | None = None,
     log_dir: Path | None = None,
+    garmin_account: GarminAccount | None = None,
+    token_store: TokenStore | None = None,
+    notifier: SystemNotifier | None = None,
+    sync_policy: SyncPolicy | None = None,
+    data_dir: Path | None = None,
 ) -> MainWindow:
     """Costruisce la finestra con tutte le dipendenze (richiede una `QApplication`).
 
@@ -170,8 +241,11 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
     cartella la prima volta) valgono i luoghi dell'utente se omessi; `folder_picker` è il selettore
     di cartella (finto nei test); `system_timezone_id`, `clock`, `now_utc` e
     `import_sources` e `decode` rendono deterministico l'avvio nei test; `log_dir` è la cartella
-    dei log che il menu Aiuto apre. Non apre nessun profilo:
-    lo fa `MainWindow.start()`, dopo `show()`.
+    dei log che il menu Aiuto apre. `garmin_account`, `token_store`, `notifier` e `sync_policy`
+    sostituiscono Garmin, il portachiavi, la notifica di sistema e le pause della
+    sincronizzazione (finti nei test); `data_dir` è la cartella dati locale dell'app, dove stanno
+    i token cifrati su Windows. Non apre nessun profilo: lo fa `MainWindow.start()`, dopo
+    `show()`.
     """
     del command_line  # per ora nessuna opzione cambia la composizione
     if config_dir is None:
@@ -185,6 +259,8 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
     zone, fell_back = resolve_user_timezone(system_timezone_id)
     today_in = clock or (lambda tz: datetime.now(tz).date())
     utc_now = now_utc or (lambda: datetime.now(UTC))
+    if data_dir is None:
+        data_dir = Path(platformdirs.user_data_dir("PonosCoach", appauthor=False))
 
     ports = ProfilePorts(
         JsonProfileRegistry(config_dir),
@@ -208,6 +284,16 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
         decode=decode or decode_stored_activity,
         clock=_SystemClock(),
         today=today_in,
+        sync=SyncServices(
+            account=garmin_account or _default_garmin_account(),
+            tokens=token_store or _default_token_store(data_dir),
+            extract_original=extract_original_activity,
+            decode=decode_stored_activity,
+            clock=_SystemSyncClock(),
+            make_rng=random.Random,
+            notifier=notifier or DesktopNotifier(APP_NAME),
+            policy=sync_policy or DEFAULT_POLICY,
+        ),
         errors=ErrorContext(_registry_problem, config_dir),
     )
     controller = WorkspaceController(services)

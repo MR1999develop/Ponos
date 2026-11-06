@@ -28,21 +28,36 @@ _SPORT_KEY: Final = re.compile(r"[a-z][a-z0-9_]{0,63}")
 
 # Chiavi di tipo dell'attività di Garmin (`typeKey`) -> sport dell'app. Il resto è `OTHER`.
 _SPORT_BY_KEY: Final[dict[str, Sport]] = {
+    # Sottochiavi note di Garmin: default del progetto, da confermare con la struttura
+    # reale delle risposte (spike); le chiavi ignote finiscono in OTHER.
     "running": Sport.RUNNING,
+    "street_running": Sport.RUNNING,
     "treadmill_running": Sport.RUNNING,
+    "indoor_running": Sport.RUNNING,
     "track_running": Sport.RUNNING,
     "virtual_run": Sport.RUNNING,
+    "ultra_run": Sport.RUNNING,
+    "obstacle_run": Sport.RUNNING,
     "trail_running": Sport.TRAIL,
     "cycling": Sport.CYCLING,
     "road_biking": Sport.CYCLING,
     "mountain_biking": Sport.CYCLING,
     "gravel_cycling": Sport.CYCLING,
+    "cyclocross": Sport.CYCLING,
+    "track_cycling": Sport.CYCLING,
+    "recumbent_cycling": Sport.CYCLING,
+    "downhill_biking": Sport.CYCLING,
+    "bmx": Sport.CYCLING,
     "indoor_cycling": Sport.CYCLING,
     "virtual_ride": Sport.CYCLING,
     "e_bike_fitness": Sport.CYCLING,
+    "e_bike_mountain": Sport.CYCLING,
     "strength_training": Sport.STRENGTH,
     "hiking": Sport.HIKING,
     "walking": Sport.WALKING,
+    "casual_walking": Sport.WALKING,
+    "speed_walking": Sport.WALKING,
+    "indoor_walking": Sport.WALKING,
 }
 
 

@@ -696,6 +696,11 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Stop": QKeySequence("Esc").toString(),
         "Quit": QKeySequence("Ctrl+Q").toString(),
         "Open the log folder": QKeySequence("Ctrl+Shift+L").toString(),
+        "Connect Garmin account...": QKeySequence("Ctrl+G").toString(),
+        "Disconnect Garmin account": QKeySequence("Ctrl+Shift+G").toString(),
+        "Synchronise": QKeySequence("F5").toString(),
+        "Full check": QKeySequence("Ctrl+F5").toString(),
+        "Stop synchronisation": QKeySequence("Shift+F5").toString(),
     }
 
 

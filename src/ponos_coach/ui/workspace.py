@@ -5,7 +5,9 @@
 Il controller vive nel thread della UI e tiene lo stato di presentazione; ogni lavoro sul
 profilo (apertura, creazione, import, panoramica, cambio, chiusura) è un `Job` eseguito dal
 `DataThread`, che possiede la connessione SQLite. Gli esiti tornano come segnali. Un esito
-"vecchio" (di una panoramica già sostituita) si ignora.
+"vecchio" (di una panoramica già sostituita) si ignora. La sincronizzazione con Garmin è del
+`SyncController`, con un thread e una connessione propri; da qui si decidono solo le
+conseguenze (profilo bloccato mentre scarica, panoramica ricalcolata alla fine).
 """
 
 from __future__ import annotations
@@ -60,6 +62,9 @@ from ponos_coach.ui.diagnostics import exception_chain
 from ponos_coach.ui.errors import ErrorContext, ErrorMessage, describe_error
 from ponos_coach.ui.import_report import ImportReport
 from ponos_coach.ui.overview_state import Cancelled, Failed, Idle, Loading, OverviewState, Ready
+from ponos_coach.ui.sync_controller import SyncController
+from ponos_coach.ui.sync_model import SyncResult, new_activity_count
+from ponos_coach.ui.sync_worker import SyncServices
 
 _LOG = logging.getLogger(__name__)
 
@@ -110,6 +115,7 @@ class WorkspaceServices:
     decode: Decoder
     clock: Clock
     today: Callable[[ZoneInfo], date]
+    sync: SyncServices
     errors: ErrorContext = field(default_factory=ErrorContext)
 
 
@@ -261,6 +267,11 @@ class WorkspaceController(QObject):
         self._thread = DataThread(self._data.close)  # senza genitore: vedi `DataThread`
         self._thread.progressed.connect(self._on_progress)
         self._thread.completed.connect(self._on_completed)
+        self._sync = SyncController(
+            services.sync, services.ports.storage, services.archive_for, self
+        )
+        self._sync.state_changed.connect(self.busy_changed)
+        self._sync.sync_finished.connect(self._after_sync)
         self._pending: dict[int, _Pending] = {}
         self._profile: ProfileView | None = None
         self._entries: tuple[RegistryEntry, ...] = ()
@@ -284,6 +295,11 @@ class WorkspaceController(QObject):
         return self._entries
 
     @property
+    def sync(self) -> SyncController:
+        """L'account Garmin e la sincronizzazione del profilo aperto."""
+        return self._sync
+
+    @property
     def overview_state(self) -> OverviewState:
         """Stato della panoramica."""
         return self._overview_state
@@ -305,18 +321,24 @@ class WorkspaceController(QObject):
 
     @property
     def has_stopped(self) -> bool:
-        """Vero se il thread dei dati ha finito (e con lui chiuso il profilo)."""
-        return self._thread.has_stopped
+        """Vero se il thread dei dati e quello dell'account hanno finito (profilo chiuso)."""
+        return self._thread.has_stopped and self._sync.has_stopped
 
     @property
     def can_change_profile(self) -> bool:
-        """Si può creare, aprire, cambiare, rimuovere o cancellare un profilo."""
+        """Si può creare, aprire, cambiare, rimuovere o cancellare un profilo (non mentre si
+        importa né mentre si sincronizza: il profilo è in uso)."""
+        return self.can_import_now and not self._sync.is_syncing
+
+    @property
+    def can_import_now(self) -> bool:
+        """Nessuna apertura, import o chiusura in corso (una sincronizzazione non conta)."""
         return not self._closing and not self._opening and self._import_progress is None
 
     @property
     def can_import(self) -> bool:
-        """Si può avviare un import."""
-        return self._profile is not None and self.can_change_profile
+        """Si può avviare un import, anche mentre si sincronizza (connessioni separate)."""
+        return self._profile is not None and self.can_import_now
 
     @property
     def can_stop(self) -> bool:
@@ -438,6 +460,7 @@ class WorkspaceController(QObject):
         self._cancel_overview()
         if self._import_handle is not None:
             self._import_handle.cancel()
+        self._sync.begin_shutdown()
         self._thread.request_shutdown()
         self.busy_changed.emit()
 
@@ -608,6 +631,7 @@ class WorkspaceController(QObject):
             self._set_opening(False)
             self.profile_changed.emit(opened.view)
             self._start_overview()
+            self._sync.profile_opened(opened.view.profile_id, opened.view.folder)
         else:
             self._finish_failed_open(outcome)
 
@@ -694,6 +718,16 @@ class WorkspaceController(QObject):
             case _:
                 pass
         self._start_overview()
+
+    # --- Sincronizzazione -------------------------------------------------------------
+
+    def _after_sync(self, result: SyncResult) -> None:
+        """Alla fine di un giro con attività nuove la panoramica si ricalcola (nel thread dei
+        dati); se un import è in corso lo farà lui alla sua fine."""
+        if self._closing or self._profile is None or self._import_progress is not None:
+            return
+        if new_activity_count(result) > 0:
+            self._start_overview()
 
     # --- Notifiche di stato -----------------------------------------------------------
 

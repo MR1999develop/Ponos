@@ -191,7 +191,7 @@ def test_the_help_menu_opens_the_log_folder_with_the_system_file_manager(
 
     assert opened == [QUrl.fromLocalFile(str(logs))]
     assert logs.is_dir()  # se non c'era ancora la crea: non si apre una cartella inesistente
-    help_menu = window.menuBar().actions()[1].menu()
+    help_menu = window.menuBar().actions()[-1].menu()
     assert isinstance(help_menu, QMenu)
     assert window.log_action in help_menu.actions()
 
