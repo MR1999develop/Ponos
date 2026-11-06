@@ -94,7 +94,11 @@ parallelo sul codice nel suo worktree.
 
 - Autore e committer già nella configurazione del repository; nessuno script
   ne imposta un altro.
-- **Mai `git push`**: il push lo fa l'utente a mano.
+- **Push automatico** (regola dell'utente del 2026-11-06): la sessione
+  principale fa il push da sola dopo ogni commit con `uv run --locked nox`
+  verde, sul ramo di lavoro della fase (`origin`, repository pubblico
+  `MR1999develop/Ponos`). Mai `--force` né riscrittura di commit già
+  pushati; su `main` si arriva solo con una PR. Gli agenti non fanno push.
 
 ## Dominio
 

@@ -36,7 +36,7 @@ completata e verificata.
 | Sincronizzazione | All'avvio e con il pulsante Sincronizza; la prima scarica tutto lo storico, le successive solo le attività mancanti; riprende da dove era rimasta dopo una chiusura; notifica a fine sincronizzazione; niente area di notifica |
 | Calendario Garmin | In una fase successiva: invio degli allenamenti a scelta dell'utente ed eliminazione degli allenamenti futuri programmati |
 | Lingue | Italiano e inglese |
-| Piattaforme e repository | Windows e Ubuntu, GitHub con CI; **il push lo fa l'utente a mano** |
+| Piattaforme e repository | Windows e Ubuntu, GitHub con CI (repository pubblico); push automatico della sessione principale sul ramo di lavoro, su `main` solo con PR (dal 2026-11-06; prima lo faceva l'utente a mano) |
 
 ## 2. Decisioni di default (le ho fissate io: da confermare o correggere)
 
