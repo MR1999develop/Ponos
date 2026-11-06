@@ -374,10 +374,10 @@ src/ponos_coach/
       `.gitattributes`.
 - [x] `pyproject.toml` (`src/`, `authors = ["MR"]`), `uv.lock`, `noxfile.py`
       con tutti i controlli, regole di `import-linter`.
-- [ ] CI su Windows e Ubuntu (permessi minimi, action fissate a SHA), che
+- [x] CI su Windows e Ubuntu (permessi minimi, action fissate a SHA), che
       esegue esattamente `uv run --locked nox`.
-      *Stato 2026-11-05: `ci.yml` scritto e rivisto; da verificare al primo
-      push (pacchetti di sistema di Ubuntu per QtWebEngine non provati).*
+      *Verificata il 2026-11-06 sulla PR #1: verde su `windows-latest` e
+      `ubuntu-latest`, test POSIX compresi.*
 - [x] ADR: 001 stack, 002 accesso a Garmin, 003 formato dei dati, 004 modello
       di carico. `docs/specifica.md`, `docs/threat-model.md`,
       `docs/dipendenze.md`.
@@ -412,10 +412,10 @@ Agenti: `generatore-fixture`, `sviluppatore-nucleo`, `sviluppatore-interfaccia`,
       punto di partenza e traccia semplificata, salvati nell'indice: la fase
       9 non dovrà rileggere l'archivio né migrare lo schema per averli.
 
-*Stato 2026-11-06: fase completata sul ramo `fase-1-profili-archivio`;
-controlli e campagna di collaudo verdi su Windows (esiti in
-`docs/collaudo.md`); test POSIX (symlink, FIFO, permessi) da verificare
-nella CI su Ubuntu al primo push.*
+*Stato 2026-11-06: fase completata sul ramo `fase-1-profili-archivio`
+(PR #1); controlli verdi in locale e nella CI su Windows e Ubuntu, test
+POSIX compresi; campagna di collaudo verde su Windows (esiti in
+`docs/collaudo.md`).*
 
 ### Fase 2 — Sincronizzazione Garmin
 
