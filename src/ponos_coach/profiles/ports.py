@@ -13,7 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
-from ponos_coach.activities.ports import ActivityIndex
+from ponos_coach.activities.domain import SessionTokens
+from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.load.ports import LoadCache, PhysiologyStore
 from ponos_coach.profiles.domain import (
     FolderInspection,
@@ -182,6 +183,56 @@ class ProfileFolders(Protocol):
         ...
 
 
+# --- Token di Garmin -----------------------------------------------------------------------
+
+
+class TokenStoreError(Exception):
+    """Radice degli errori dell'archivio dei token. Mai token nei messaggi."""
+
+
+class TokenStoreUnavailableError(TokenStoreError):
+    """Il portachiavi non si può usare (bloccato, assente, permessi, I/O)."""
+
+
+class TokenStoreCorruptError(TokenStoreError):
+    """C'è un contenuto per il profilo ma non è leggibile (alterato, di un altro utente o di una
+    versione sconosciuta): chi chiama lo tratta come "nessun token" e chiede il login."""
+
+
+class TokenStore(Protocol):
+    """Token di Garmin per profilo, nel portachiavi del sistema (mai nella cartella del profilo).
+
+    Ogni profilo ha i suoi token, legati al suo id: quelli di un profilo non si leggono con l'id
+    di un altro. I token si proteggono con il sistema (DPAPI su Windows, Secret Service su
+    Ubuntu) e non compaiono in log né messaggi.
+    """
+
+    def save(self, profile_id: ProfileId, tokens: SessionTokens) -> None:
+        """Salva i token del profilo, sostituendo quelli che c'erano (tutto o niente).
+
+        Raises:
+            TokenStoreUnavailableError: salvataggio non riuscito; i token di prima restano.
+        """
+        ...
+
+    def load(self, profile_id: ProfileId) -> SessionTokens | None:
+        """I token del profilo, o None se non ce ne sono.
+
+        Raises:
+            TokenStoreCorruptError: il contenuto c'è ma non si legge.
+            TokenStoreUnavailableError: il portachiavi non risponde.
+        """
+        ...
+
+    def delete(self, profile_id: ProfileId) -> None:
+        """Cancella i token del profilo (logout). Idempotente: nessun errore se non ci sono.
+
+        Raises:
+            TokenStoreUnavailableError: cancellazione non riuscita.
+        """
+        ...
+
+
 # --- Database del profilo ------------------------------------------------------------------
 
 
@@ -208,7 +259,8 @@ class ProfileCorruptError(ProfileStorageError):
 class OpenProfile(Protocol):
     """Un profilo aperto: le sue informazioni e gli store che condividono una connessione.
 
-    Le transazioni di `activities.transaction()` coprono anche `physiology` e `load_cache`.
+    Le transazioni di `activities.transaction()` coprono anche `sync_journal`, `physiology`
+    e `load_cache`.
     Va chiuso con `close()`; dopo la chiusura gli store non si usano più.
     """
 
@@ -220,6 +272,11 @@ class OpenProfile(Protocol):
     @property
     def activities(self) -> ActivityIndex:
         """Indice delle attività."""
+        ...
+
+    @property
+    def sync_journal(self) -> SyncJournal:
+        """Giornale della sincronizzazione (stessa connessione e transazione dell'indice)."""
         ...
 
     @property

@@ -16,10 +16,14 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from ponos_coach.activities.domain import (
+    RETRYABLE_REASONS,
     ActivityOrigin,
     ActivityRecord,
+    FailureReason,
     FileFormat,
+    ListingKind,
     Sport,
+    SyncStatus,
     is_possible_duplicate,
 )
 from ponos_coach.activities.ports import ActivityIndexError, TransactionStateError
@@ -48,6 +52,7 @@ from tests.contracts.contract_storage import (
     PhysiologyStoreContract,
     ProfileStorageContract,
 )
+from tests.contracts.contract_sync import ActivityIndexGarminIdContract, SyncJournalContract
 from tests.contracts.harness import StorageHarness
 
 
@@ -81,6 +86,14 @@ class TestSqliteActivityIndex(_DiskStorageFixture, ActivityIndexContract):
     pass
 
 
+class TestSqliteActivityIndexGarminIds(_DiskStorageFixture, ActivityIndexGarminIdContract):
+    pass
+
+
+class TestSqliteSyncJournal(_DiskStorageFixture, SyncJournalContract):
+    pass
+
+
 class TestSqlitePhysiologyStore(_DiskStorageFixture, PhysiologyStoreContract):
     pass
 
@@ -107,7 +120,15 @@ def test_new_database_has_the_latest_schema_and_the_expected_tables(tmp_path: Pa
         assert raw.execute("PRAGMA user_version").fetchone() == (SCHEMA_VERSION,)
         tables = {r[0] for r in raw.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         meta = dict(raw.execute("SELECT key, value FROM meta").fetchall())
-    assert tables == {"meta", "activities", "physiology", "load_cache"}
+    assert tables == {
+        "meta",
+        "activities",
+        "physiology",
+        "load_cache",
+        "sync_journal",
+        "sync_cursor",
+        "sync_state",
+    }
     assert meta == {
         "profile_id": str(PROFILE_ID),
         "name": "Atleta di prova",
@@ -128,6 +149,14 @@ def test_closed_sets_of_schema_v1_match_the_domain_enums() -> None:
     assert {o.value for o in ActivityOrigin} == sqlite_schema.V1_ORIGINS
     assert {s.value for s in Sex} == sqlite_schema.V1_SEXES
     assert {s.value for s in LoadSource} == sqlite_schema.V1_LOAD_SOURCES
+
+
+def test_closed_sets_of_schema_v2_match_the_domain_enums() -> None:
+    """Un valore nuovo in un enum della sincronizzazione obbliga a scrivere una migrazione."""
+    assert {s.value for s in SyncStatus} == sqlite_schema.V2_SYNC_STATUSES
+    assert {f.value for f in FailureReason} == sqlite_schema.V2_FAILURES
+    assert {f.value for f in RETRYABLE_REASONS} == sqlite_schema.V2_RETRYABLE_FAILURES
+    assert {k.value for k in ListingKind} == sqlite_schema.V2_LISTING_KINDS
 
 
 def test_empty_database_is_migrated_to_the_latest_version_in_one_transaction(
@@ -422,6 +451,76 @@ def test_database_refuses_rows_that_break_the_domain_invariants(
 ) -> None:
     with pytest.raises(sqlite3.IntegrityError):
         raw_db.connection.execute(_INSERT, _with(**changes))
+
+
+_JOURNAL_INSERT = (
+    "INSERT INTO sync_journal (garmin_id, start_ms, duration_s, sport_key, has_heart_rate, "
+    "status, failed_attempts, failure, updated_ms) VALUES (?, 0, 60.0, 'running', 1, ?, ?, ?, 0)"
+)
+
+
+def test_database_accepts_the_coherent_journal_rows(
+    raw_db: sqlite_database.SqliteDatabase,
+) -> None:
+    for number, row in enumerate(
+        [
+            ("pending", 0, None),
+            ("downloaded", 0, None),
+            ("downloaded", 2, None),
+            ("matched", 1, None),
+            ("retryable", 1, "rate_limited"),
+            ("failed", 3, "attempts_exhausted"),
+            ("failed", 1, "corrupt_file"),
+        ],
+        start=1,
+    ):
+        raw_db.connection.execute(_JOURNAL_INSERT, (number, *row))
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        ("sconosciuto", 0, None),  # stato fuori dall'insieme chiuso
+        ("pending", 1, None),  # da scaricare ma con tentativi falliti
+        ("pending", 0, "corrupt_file"),  # causa senza fallimento
+        ("downloaded", 0, "corrupt_file"),
+        ("retryable", 1, None),  # fallimento senza causa
+        ("retryable", 0, "rate_limited"),  # nessun tentativo fallito
+        ("retryable", 1, "corrupt_file"),  # ritentabile con causa definitiva
+        ("failed", 1, "rate_limited"),  # definitiva con causa ritentabile
+        ("failed", 0, "corrupt_file"),
+        ("failed", 1, "causa inventata"),
+        ("failed", -1, "corrupt_file"),
+    ],
+    ids=lambda r: f"{r[0]}-{r[1]}-{r[2]}",
+)
+def test_database_refuses_incoherent_journal_rows(
+    raw_db: sqlite_database.SqliteDatabase, row: tuple[str, int, str | None]
+) -> None:
+    with pytest.raises(sqlite3.IntegrityError):
+        raw_db.connection.execute(_JOURNAL_INSERT, (1, *row))
+
+
+def test_database_refuses_bad_journal_keys_and_cursors(
+    raw_db: sqlite_database.SqliteDatabase,
+) -> None:
+    for bad_id in (0, -5):
+        with pytest.raises(sqlite3.IntegrityError):
+            raw_db.connection.execute(_JOURNAL_INSERT, (bad_id, "pending", 0, None))
+    raw_db.connection.execute(_JOURNAL_INSERT, (1, "pending", 0, None))
+    with pytest.raises(sqlite3.IntegrityError):  # stesso id Garmin: chiave primaria
+        raw_db.connection.execute(_JOURNAL_INSERT, (1, "pending", 0, None))
+    cursor = "INSERT INTO sync_cursor VALUES (?, ?, ?, ?)"
+    for bad in (
+        ("altro", 0, None, 0),
+        ("full", -1, None, 0),
+        ("full", 0, -1, 0),
+        ("full", 0, None, 2),
+    ):
+        with pytest.raises(sqlite3.IntegrityError):
+            raw_db.connection.execute(cursor, bad)
+    with pytest.raises(sqlite3.IntegrityError):  # una sola riga di stato
+        raw_db.connection.execute("INSERT INTO sync_state VALUES (2, 0)")
 
 
 def test_database_refuses_inconsistent_physiology(raw_db: sqlite_database.SqliteDatabase) -> None:

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from ponos_coach.activities.ports import ActivityIndex
+from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.load.domain import PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore
 from ponos_coach.profiles.domain import (
@@ -115,6 +115,10 @@ class _CountingProfile:
     @property
     def activities(self) -> ActivityIndex:
         return self._inner.activities
+
+    @property
+    def sync_journal(self) -> SyncJournal:
+        return self._inner.sync_journal
 
     @property
     def physiology(self) -> PhysiologyStore:

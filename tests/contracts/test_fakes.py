@@ -13,8 +13,13 @@ from pathlib import Path
 import pytest
 
 from ponos_coach.activities.domain import ArchivedFile
-from ponos_coach.profiles.domain import PROFILE_DATABASE_NAME, FolderKind
-from ponos_coach.profiles.ports import ProfileFolders, ProfileRegistry, ProfileStorage
+from ponos_coach.profiles.domain import PROFILE_DATABASE_NAME, FolderKind, ProfileId
+from ponos_coach.profiles.ports import (
+    ProfileFolders,
+    ProfileRegistry,
+    ProfileStorage,
+    TokenStore,
+)
 from tests.builders import absolute_path
 from tests.contracts.contract_archive import ActivityArchiveContract
 from tests.contracts.contract_profiles import ProfileFoldersContract, ProfileRegistryContract
@@ -26,15 +31,19 @@ from tests.contracts.contract_storage import (
     PhysiologyStoreContract,
     ProfileStorageContract,
 )
+from tests.contracts.contract_sync import ActivityIndexGarminIdContract, SyncJournalContract
+from tests.contracts.contract_tokens import TokenStoreContract
 from tests.contracts.harness import (
     ArchiveHarness,
     FoldersHarness,
     RegistryHarness,
     StorageHarness,
+    TokenStoreHarness,
 )
 from tests.fakes.archive import InMemoryActivityArchive
 from tests.fakes.profile_storage import InMemoryDisk, InMemoryProfileStorage
 from tests.fakes.profiles import InMemoryProfileFolders, InMemoryProfileRegistry
+from tests.fakes.tokens import InMemoryTokenStore
 
 
 class _FakeArchiveHarness:
@@ -140,6 +149,35 @@ class TestFakeProfileStorage(_FakeStorageFixture, ProfileStorageContract):
 
 class TestFakeActivityIndex(_FakeStorageFixture, ActivityIndexContract):
     pass
+
+
+class TestFakeActivityIndexGarminIds(_FakeStorageFixture, ActivityIndexGarminIdContract):
+    pass
+
+
+class TestFakeSyncJournal(_FakeStorageFixture, SyncJournalContract):
+    pass
+
+
+class _FakeTokenStoreHarness:
+    def __init__(self) -> None:
+        self._store = InMemoryTokenStore()
+
+    @property
+    def store(self) -> TokenStore:
+        return self._store
+
+    def reopen(self) -> TokenStore:
+        return self._store  # il supporto è la memoria dello stesso oggetto
+
+    def corrupt(self, profile_id: ProfileId) -> None:
+        self._store.corrupt(profile_id)
+
+
+class TestFakeTokenStore(TokenStoreContract):
+    @pytest.fixture
+    def harness(self) -> TokenStoreHarness:
+        return _FakeTokenStoreHarness()
 
 
 class TestFakePhysiologyStore(_FakeStorageFixture, PhysiologyStoreContract):

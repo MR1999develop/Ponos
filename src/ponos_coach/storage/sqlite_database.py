@@ -87,6 +87,19 @@ class SqliteDatabase:
         finally:
             self._in_transaction = False
 
+    @contextmanager
+    def atomic(self) -> Iterator[None]:
+        """Dentro una transazione aperta ne fa parte; altrimenti ne apre una per il blocco.
+
+        Serve alle operazioni di uno store che fanno più scritture e valgono tutte o nessuna
+        anche fuori da `transaction()`.
+        """
+        if self._in_transaction:
+            yield
+        else:
+            with self.transaction():
+                yield
+
     def close(self) -> None:
         """Checkpoint del WAL e chiusura; la connessione si chiude anche se il checkpoint fallisce.
 

@@ -72,10 +72,17 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   istruzioni in una transazione, mai `executescript`; una migrazione
   rilasciata non si modifica.
 - Tempi in millisecondi UTC interi; durate misurate in secondi.
-- Contiene l'indice delle attività, i parametri fisiologici e la cache dei
-  carichi; obiettivi, piani, infortuni, impostazioni e giornale della
-  sincronizzazione arrivano con le loro fasi, con nuove migrazioni. Carichi e
-  PMC sono derivati e rigenerabili.
+- Contiene l'indice delle attività, i parametri fisiologici, la cache dei
+  carichi e (dalla v2) il giornale della sincronizzazione; obiettivi, piani,
+  infortuni e impostazioni arrivano con le loro fasi, con nuove migrazioni.
+  Carichi e PMC sono derivati e rigenerabili.
+- **Schema v2** (`sync_journal`, `sync_cursor`, `sync_state`, tutte `STRICT`,
+  tempi in millisecondi UTC): vedi la sezione 5. La migrazione v1 → v2 passa
+  dalla copia `backup/ponos-v1-v2.sqlite3` come ogni migrazione (T-DATI-01
+  prova un database v1 congelato scritto a mano in
+  `tests/collaudo/test_database_del_profilo.py`, insieme alle due migrazioni
+  congelate). Gli insiemi chiusi della v2 (stati, cause, elenchi) hanno un test
+  che li confronta con gli enum del dominio.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.
@@ -190,8 +197,16 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
    voce completata.
 6. Pause tra le richieste con jitter; su 429 o errori transitori, backoff
    esponenziale con tetto e numero massimo di tentativi; poi errore chiaro.
-   Valori di pausa, tetto e tentativi: **punti aperti** (costanti in un solo
-   posto, da fissare con lo spike della fase 0).
+   Valori (default del progetto, in `SyncPolicy`, `activities/domain/
+   sync_policy.py`, da rivedere con l'esito dello spike): pausa minima 1 s più
+   jitter fino a 0,75 s; backoff da 5 s che raddoppia, più il jitter, con
+   tetto 120 s; al massimo 5 tentativi per la stessa richiesta (il quinto
+   fallimento ferma i tentativi); 3 sincronizzazioni fallite per la stessa
+   attività prima di "fallita definitiva". Un'attesa suggerita da Garmin
+   (`Retry-After`) alza il minimo dell'attesa; se supera il tetto non si
+   aspetta, si ferma con un errore chiaro. Il jitter viene da una sorgente
+   casuale iniettata (`RandomSource`, `random.Random` la soddisfa). Pagine
+   dell'elenco da 100 voci (massimo 1000); tetto dello ZIP scaricato 50 MB.
 7. Chiusura a metà: all'avvio successivo si riparte dalle voci in sospeso e si
    cancellano i temporanei orfani.
 8. Il lavoro gira in un worker con annullamento (si ferma entro 1 s); la UI
@@ -199,8 +214,53 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
    PMC e piano aggiornati.
 9. Abbinamento: prima di scaricare, un'attività dell'elenco Garmin con la
    stessa ora d'inizio e lo stesso sport di una già importata da file si
-   abbina a quella senza riscaricarla. Tolleranza sull'ora d'inizio:
-   **punto aperto**.
+   abbina a quella senza riscaricarla. Regola (`find_matching_import`): il
+   record non ha ancora un id Garmin, lo sport coincide (`sport_from_garmin_key`
+   mappa le chiavi di Garmin sugli sport dell'app, il resto è `OTHER`) e vale
+   `is_possible_duplicate` (inizi entro 60 s, durate entro il 5%); con più
+   candidati il più vicino nell'inizio, poi la chiave d'identità più piccola.
+   L'abbinamento collega l'id con `ActivityIndex.link_garmin_id` e segna la
+   voce `MATCHED`; l'origine del record resta `IMPORT`.
+
+### Giornale, stati e cursori
+
+- Ogni attività remota è una voce di `sync_journal` (chiave primaria l'id
+  Garmin), con il riepilogo dell'elenco (`RemoteActivity`: inizio, durata,
+  chiave dello sport, FC nota; nessun testo libero di Garmin), lo stato, i
+  tentativi falliti e la causa. Id, inizio e durata sono validati al confine
+  (`GarminActivityId.parse`, `RemoteActivity`, `ActivityPage`); una voce
+  malformata si scarta e conta in `raw_count`.
+- Stati (`SyncStatus`): `PENDING` (da scaricare), `DOWNLOADED`, `MATCHED`,
+  `RETRYABLE` (fallita per una causa transitoria), `FAILED` (definitiva). Non
+  c'è uno stato "in corso": download, archivio e conferma stanno in una sola
+  transazione, quindi un'interruzione lascia la voce `PENDING`. Da `PENDING` e
+  `RETRYABLE` si va in tutti gli altri (anche `RETRYABLE` → `RETRYABLE`); gli
+  stati finali non si muovono (`can_transition`, `InvalidTransitionError`),
+  e il database rifiuta le combinazioni incoerenti con i CHECK.
+- Cause (`FailureReason`): ritentabili `TRANSIENT_ERROR` e `RATE_LIMITED`;
+  definitive `UNSUPPORTED_FORMAT` (per esempio un TCX), `CORRUPT_FILE`,
+  `FILE_TOO_LARGE`, `NOT_AN_ACTIVITY`, `ARCHIVE_INVALID`, `REMOTE_REJECTED`
+  (originale assente o rifiutato) e `ATTEMPTS_EXHAUSTED`. `mark_failed`:
+  causa definitiva → `FAILED`; causa ritentabile → `RETRYABLE` fino al terzo
+  fallimento (`max_syncs_per_activity`), poi `FAILED` con
+  `ATTEMPTS_EXHAUSTED`. Un errore di scrittura locale (disco pieno) non è
+  della voce: ferma la sincronizzazione, non si registra sulla voce.
+- Lavoro: `next_to_process(limit)` dà `PENDING` e `RETRYABLE` dalla più
+  recente (a parità, id decrescente); `add_pending` è idempotente per id e non
+  tocca le voci esistenti.
+- Cursori (`ListingKind`): `FULL` (prima sincronizzazione), `VERIFY` ("Verifica
+  completa") e `INCREMENTAL`. `ListingCursor` (prossima posizione, totale
+  dichiarato, completato) avanza con `advance_cursor` e si salva a ogni
+  pagina, dopo aver aggiunto le voci della pagina nella stessa transazione.
+  L'elenco finisce con una pagina corta, al raggiungimento del totale o, solo
+  per `INCREMENTAL`, con una pagina intera di id già noti (`is_known_page`). Il
+  cursore incrementale si salva anche lui, così un'interruzione a metà non
+  fa perdere le pagine non ancora lette. Un elenco completato riparte da
+  `ListingCursor.start()`.
+- `sync_state` ricorda la fine dell'ultima sincronizzazione
+  (`record_completed`, per la barra di stato).
+- Stima del tempo restante: media mobile delle ultime 20 durate per voce
+  (pause comprese) per le voci rimaste (`estimate_remaining_s`).
 
 ## 6. Import di file, cartelle e ZIP
 
@@ -279,6 +339,22 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
 
 ## 9. Porte della fase 1 e test di contratto
 
+- Porte della fase 2: `ActivitySource` (pagina dell'elenco, download dello ZIP
+  con tetto di byte), `GarminAccount` (`login` con funzione per il codice MFA,
+  `resume` da token; entrambi dànno una `GarminSession` con sorgente e token da
+  salvare), `SyncJournal` (stessa connessione e transazione dell'indice),
+  `ActivityIndex.find_by_garmin_id` e `link_garmin_id`, e in
+  `profiles/ports.py` `TokenStore` (token per profilo: `save`, `load`,
+  `delete`). I token sono `SessionTokens`, una stringa opaca il cui `repr`
+  non mostra mai il contenuto. Errori di Garmin, distinti dove cambia la
+  reazione: `AuthenticationRequiredError`, `RateLimitedError`
+  (`retry_after_s`), `TransientSourceError` (`ServiceUnavailableError`),
+  `DefinitiveSourceError` (`DownloadTooLargeError`), `InvalidCredentialsError`
+  e `MfaCancelledError`; `TokenStoreUnavailableError` e
+  `TokenStoreCorruptError` per il portachiavi. Fake in `tests/fakes/garmin.py`
+  (`FakeActivitySource` con guasti per chiamata o per attività e risposta
+  lenta, `FakeGarminAccount`) e `tests/fakes/tokens.py`; contratti in
+  `tests/contracts/contract_sync.py` e `contract_tokens.py`.
 - Porte: `ActivityArchive` e `ActivityIndex` (`activities/ports.py`),
   `PhysiologyStore` e `LoadCache` (`load/ports.py`), `ProfileRegistry`,
   `ProfileFolders` e `ProfileStorage` (`profiles/ports.py`). `ProfileStorage`

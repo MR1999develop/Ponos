@@ -25,7 +25,7 @@ from contextlib import AbstractContextManager
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from ponos_coach.activities.domain import ActivityIdentity, ActivityRecord
+from ponos_coach.activities.domain import ActivityIdentity, ActivityRecord, GarminActivityId
 from ponos_coach.activities.ports import ActivityIndex
 from ponos_coach.activities.use_cases import import_activities
 from ponos_coach.load.domain import HeartRateLimits, Physiology, Sex, ThresholdHeartRate
@@ -137,6 +137,12 @@ class _BlockingIndex:
 
     def list_by_start(self) -> Sequence[ActivityRecord]:
         return self._inner.list_by_start()
+
+    def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
+        return self._inner.find_by_garmin_id(garmin_id)
+
+    def link_garmin_id(self, identity: ActivityIdentity, garmin_id: GarminActivityId) -> None:
+        self._inner.link_garmin_id(identity, garmin_id)
 
 
 class _Clock:
