@@ -253,3 +253,12 @@ Vincoli:
   di un'altra attività è D-F2-03.
 - Risposte ostili: T-SEC-03.
 - `lint-imports`: solo `garmin` importa `garminconnect`.
+
+## Nota di attuazione 2026-11-06
+
+Esito dello spike con un account reale (`experiments/garmin_spike.md`):
+
+- Il token serializzato è di 4510 byte in UTF-16, oltre il limite del Credential
+  Manager: conferma che i token non stanno lì ma protetti con DPAPI in un file.
+- Il login non ha richiesto l'MFA (il percorso con codice resta supportato).
+- L'inizio del file FIT coincide con l'inizio dell'elenco (differenza 0 s).

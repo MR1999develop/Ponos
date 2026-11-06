@@ -39,11 +39,11 @@ class TestRecordedLookingPage:
 
         assert raw_count == 5
         assert [item.garmin_id.value for item in items] == [
-            1000005,
-            1000004,
-            1000003,
-            1000002,
-            1000001,
+            1000000005,
+            1000000004,
+            1000000003,
+            1000000002,
+            1000000001,
         ]
 
     def test_first_entry_values(self) -> None:
@@ -56,21 +56,51 @@ class TestRecordedLookingPage:
         assert first.sport is Sport.RUNNING
         assert first.has_heart_rate is True
 
+    def test_real_shaped_entries_have_a_numeric_heart_rate_and_elapsed_duration(self) -> None:
+        items, _ = parse_page(load_json("activity_list_page.json"))
+
+        assert [item.has_heart_rate for item in items] == [True] * 5
+        assert [item.duration_s for item in items] == [1800.4, 3720.0, 2460.0, 3000.0, 1530.0]
+
     def test_string_id_and_decimal_time_are_read(self) -> None:
-        items, _ = parse_page(load_json("activity_list_page.json"))
+        item = parse_entry(entry(activityId="1000004", startTimeGMT="2026-05-05 07:00:00.0"))
 
-        assert items[1].garmin_id == GarminActivityId(1000004)
-        assert items[1].start == datetime(2026, 5, 5, 7, 0, tzinfo=UTC)
+        assert item is not None
+        assert item.garmin_id == GarminActivityId(1000004)
+        assert item.start == datetime(2026, 5, 5, 7, 0, tzinfo=UTC)
 
-    def test_heart_rate_null_zero_and_missing_are_told_apart(self) -> None:
-        items, _ = parse_page(load_json("activity_list_page.json"))
+    @pytest.mark.parametrize(
+        ("changes", "expected"),
+        [({"averageHR": None}, False), ({"averageHR": 0}, False), ({"averageHR": 148.0}, True)],
+    )
+    def test_heart_rate_null_and_zero_mean_not_recorded(
+        self, changes: dict[str, object], expected: bool
+    ) -> None:
+        item = parse_entry(entry(**changes))
 
-        assert [item.has_heart_rate for item in items] == [True, True, False, None, False]
+        assert item is not None
+        assert item.has_heart_rate is expected
 
-    def test_elapsed_duration_is_preferred_and_duration_is_the_fallback(self) -> None:
-        items, _ = parse_page(load_json("activity_list_page.json"))
+    def test_a_missing_heart_rate_key_is_unknown(self) -> None:
+        item = parse_entry(VALID)
 
-        assert [item.duration_s for item in items] == [1800.4, 3720.0, 2400.0, 3000.0, 1500.0]
+        assert item is not None
+        assert item.has_heart_rate is None
+
+    def test_duration_is_the_fallback_when_elapsed_duration_is_absent(self) -> None:
+        item = parse_entry(entry(duration=2400.0))
+
+        assert item is not None
+        assert item.duration_s == 2400.0
+
+    def test_elapsed_duration_wins_over_duration(self) -> None:
+        item = parse_entry(entry(duration=2400.0, elapsedDuration=3000.0))
+
+        assert item is not None
+        assert item.duration_s == 3000.0
+
+    def test_the_count_response_is_a_bare_integer(self) -> None:
+        assert parse_total(load_json("count_activities.json")) == 1234
 
     def test_a_dict_with_an_activity_list_is_accepted(self) -> None:
         items, raw_count = parse_page({"activityList": [VALID]})

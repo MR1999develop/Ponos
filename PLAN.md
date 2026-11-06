@@ -425,11 +425,10 @@ POSIX compresi; campagna di collaudo verde su Windows (esiti in
 
 ### Fase 2 — Sincronizzazione Garmin
 
-- [ ] Adattatore `garmin` dietro la porta `ActivitySource`, con test di
+- [x] Adattatore `garmin` dietro la porta `ActivitySource`, con test di
       contratto su risposte registrate e anonimizzate e su un fake.
-      *Stato 2026-11-06: adattatore e contratti fatti su fixture SINTETICHE
-      ricavate dalla libreria; da sostituire con la struttura reale che lo
-      spike scrive in `experiments/garmin_spike_shapes.json`.*
+      *Stato 2026-11-06: fixture sulla struttura reale registrata dallo
+      spike del 2026-11-06 (valori inventati).*
 - [x] Dialogo di login con MFA, token protetti dal sistema per profilo
       (DPAPI su Windows, Secret Service su Linux), logout.
 - [x] Sincronizzazione riprendibile (sezione 4.4): prima tutto lo storico,
