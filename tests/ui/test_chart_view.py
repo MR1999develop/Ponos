@@ -15,15 +15,16 @@ import pytest
 from PySide6.QtCore import QUrl
 from pytestqt.qtbot import QtBot
 
-from ponos_coach.ui.chart_view import PmcChartView
-from ponos_coach.ui.pmc_figure import build_pmc_figure
+from ponos_coach.ui.chart_payload import prepare_figure
+from ponos_coach.ui.chart_view import ChartEngine, ChartView
+from ponos_coach.ui.pmc_figure import EXPORT_FILE_STEM, build_pmc_figure
 from ponos_coach.ui.tokens import Theme, tokens_for
 from tests.ui.helpers import LABELS, small_history
 
 WAIT_MS = 60_000
 
 
-def evaluate(qtbot: QtBot, view: PmcChartView, expression: str) -> object:
+def evaluate(qtbot: QtBot, view: ChartView, expression: str) -> object:
     """Valuta un'espressione nella pagina e ne attende il risultato (senza sleep)."""
     box: list[str] = []
     view.page.runJavaScript(f"JSON.stringify(({expression}))", box.append)
@@ -31,22 +32,26 @@ def evaluate(qtbot: QtBot, view: PmcChartView, expression: str) -> object:
     return json.loads(box[0])
 
 
-def execute(qtbot: QtBot, view: PmcChartView, statements: str) -> None:
+def execute(qtbot: QtBot, view: ChartView, statements: str) -> None:
     """Esegue istruzioni nella pagina e attende che siano finite."""
     done: list[object] = []
     view.page.runJavaScript(f"{statements}\n1", done.append)
     qtbot.waitUntil(lambda: bool(done), timeout=WAIT_MS)
 
 
-def drawn_view(qtbot: QtBot, export_to: Path | None = None) -> PmcChartView:
-    view = PmcChartView(lambda _name: export_to)
+def drawn_view(qtbot: QtBot, export_to: Path | None = None) -> ChartView:
+    engine = ChartEngine(lambda _name: export_to)
+    view = ChartView(engine, "Test chart")
+    engine.setParent(view)  # il profilo del motore vive quanto la vista
     qtbot.addWidget(view)
     view.resize(900, 560)
     view.show()
     pmc, entries = small_history()
     figure = build_pmc_figure(pmc, entries, LABELS, tokens_for(Theme.LIGHT))
     with qtbot.waitSignal(view.drawn, timeout=WAIT_MS):
-        view.show_figure(figure, LABELS, tokens_for(Theme.LIGHT).background)
+        view.show_prepared(
+            prepare_figure(figure, LABELS.chrome, EXPORT_FILE_STEM, tokens_for(Theme.LIGHT))
+        )
     return view
 
 

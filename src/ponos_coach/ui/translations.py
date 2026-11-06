@@ -2,7 +2,10 @@
 # Copyright (C) 2026 MR
 """Lingua dell'interfaccia: sceglie italiano o inglese e installa i traduttori di Qt.
 
-I testi sorgente nel codice sono la versione inglese: per l'inglese non si installa nulla.
+La lingua predefinita è l'inglese (non quella del sistema); l'utente può sceglierne un'altra dal
+menu Lingua e la scelta resta nelle impostazioni, applicata al prossimo avvio; `--lang` ha la
+precedenza. I testi sorgente nel codice sono la versione inglese: per l'inglese non si installa
+nulla.
 Per l'italiano servono `ponos_it.qm` (generato da `ponos_it.ts` con `nox -s i18n`, ignorato da
 git) e, per i dialoghi standard di Qt, `qtbase_it.qm` dalla cartella delle traduzioni di PySide6.
 Un `.qm` mancante non e un errore per l'utente: l'app parte in inglese e lo scrive nel log.
@@ -11,15 +14,15 @@ Un `.qm` mancante non e un errore per l'utente: l'app parte in inglese e lo scri
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QLibraryInfo, QTranslator
+from PySide6.QtCore import QCoreApplication, QLibraryInfo, QSettings, QTranslator
 
 _LOG = logging.getLogger(__name__)
 
+LANGUAGE_KEY = "language/code"
 APP_CATALOG = "ponos_it.qm"
 QT_CATALOG = "qtbase_it.qm"
 
@@ -29,6 +32,11 @@ class Language(StrEnum):
 
     ITALIAN = "it"
     ENGLISH = "en"
+
+    @property
+    def native_name(self) -> str:
+        """Il nome della lingua nella lingua stessa: non si traduce (serve a riconoscerla)."""
+        return "Italiano" if self is Language.ITALIAN else "English"
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,18 +49,28 @@ class TranslationReport:
     translators: tuple[QTranslator, ...]
 
 
-def choose_language(forced: Language | None, ui_languages: Sequence[str]) -> Language:
-    """La lingua forzata, altrimenti quella preferita dal sistema (la prima di `ui_languages`).
-
-    Italiano solo se la lingua preferita e l'italiano (`it`, `it-IT`, `it_CH`...); altrimenti
-    inglese, anche per elenchi vuoti o codici sconosciuti.
-    """
+def choose_language(forced: Language | None, saved: Language | None) -> Language:
+    """La lingua forzata (`--lang`), altrimenti quella scelta dall'utente, altrimenti l'inglese."""
     if forced is not None:
         return forced
-    if not ui_languages:
-        return Language.ENGLISH
-    primary = ui_languages[0].replace("_", "-").split("-", maxsplit=1)[0].lower()
-    return Language.ITALIAN if primary == Language.ITALIAN.value else Language.ENGLISH
+    return Language.ENGLISH if saved is None else saved
+
+
+def saved_language(settings: QSettings) -> Language | None:
+    """La lingua scelta dall'utente; un valore assente, rovinato o sconosciuto vale "nessuna"."""
+    raw = settings.value(LANGUAGE_KEY)
+    if not isinstance(raw, str):
+        return None
+    try:
+        return Language(raw)
+    except ValueError:
+        return None
+
+
+def save_language(settings: QSettings, language: Language) -> None:
+    """Ricorda la lingua scelta per i prossimi avvii."""
+    settings.setValue(LANGUAGE_KEY, language.value)
+    settings.sync()
 
 
 def app_translations_dir() -> Path:

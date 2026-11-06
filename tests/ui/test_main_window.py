@@ -9,6 +9,7 @@ import time
 import uuid
 import warnings
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -42,6 +43,7 @@ from tests.ui.workspace_support import (
     close_window,
     compose,
     create_profile,
+    fill_body_data,
     fill_new_profile,
     gated_sources,
     make_import_folder,
@@ -130,7 +132,14 @@ def test_first_run_creates_a_profile_imports_a_folder_and_updates_table_and_over
     figure = chart.current_figure
     assert figure is not None
     assert len(figure.data[0].x) == DAYS_IN_CHART
-    assert page.current_widget() is page.chart
+    assert page.current_widget() is page.charts_widget
+    qtbot.waitUntil(
+        lambda: (
+            page.load_chart.current_figure is not None
+            and page.zones_chart.current_figure is not None
+        ),
+        timeout=WAIT_MS,
+    )
     assert settings.value("import/lastFolder", "", type=str) == str(folder)
     assert not window.import_status_text or not window.controller.import_progress
 
@@ -320,6 +329,7 @@ def test_an_empty_or_missing_folder_is_the_profile_folder(
     empty = tmp_path / "empty"
     empty.mkdir()
     QTest.keyClicks(dialog.name_edit, "Ada")
+    fill_body_data(dialog)
 
     pick_profile_folder(window, dialog, empty)
     qtbot.waitUntil(lambda: dialog.form.folder_state is FolderState.EMPTY, timeout=WAIT_MS)
@@ -342,6 +352,7 @@ def test_a_folder_with_files_gets_a_subfolder_named_after_the_profile(
     busy.mkdir()
     (busy / "something.txt").write_text("x", encoding="utf-8")
     QTest.keyClicks(dialog.name_edit, "Ada")
+    fill_body_data(dialog)
 
     pick_profile_folder(window, dialog, busy)
     qtbot.waitUntil(lambda: dialog.destination_text != "", timeout=WAIT_MS)
@@ -402,6 +413,7 @@ def test_a_failed_creation_reopens_the_form_with_the_data_already_typed(
     qtbot.addWidget(window)
     dialog = open_first_run_dialog(qtbot, window)
     QTest.keyClicks(dialog.name_edit, "Ada")
+    fill_body_data(dialog)
     folder = tmp_path / "profiles" / "Ada"
     QTest.keyClicks(dialog.folder_edit, str(folder))  # scritta a mano: nessun esame prima
     folder.mkdir(parents=True)
@@ -415,6 +427,9 @@ def test_a_failed_creation_reopens_the_form_with_the_data_already_typed(
     reopened = window.new_profile_dialog
     assert reopened is not None
     assert reopened.name_edit.text() == "Ada"
+    assert reopened.height_edit.text() == "170"  # anche altezza, peso e data di nascita
+    assert reopened.weight_edit.text() == "65,5"
+    assert reopened.birth_edit.selected_date() == date(1995, 4, 2)
 
 
 def test_folder_warnings_are_shown_without_blocking(
@@ -696,6 +711,9 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Stop": QKeySequence("Esc").toString(),
         "Quit": QKeySequence("Ctrl+Q").toString(),
         "Open the log folder": QKeySequence("Ctrl+Shift+L").toString(),
+        "Edit profile...": QKeySequence("Ctrl+E").toString(),
+        "Sport weights...": QKeySequence("Ctrl+Shift+W").toString(),
+        "Activity detail...": QKeySequence("Ctrl+D").toString(),
         "Connect Garmin account...": QKeySequence("Ctrl+G").toString(),
         "Disconnect Garmin account": QKeySequence("Ctrl+Shift+G").toString(),
         "Synchronise": QKeySequence("F5").toString(),

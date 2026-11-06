@@ -10,41 +10,30 @@ Il payload per la pagina e un JSON prodotto da `json.dumps` (`render_script`).
 from __future__ import annotations
 
 import html
-import json
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
 import plotly.graph_objects as go
-import plotly.io as pio
 from plotly.subplots import make_subplots
 
 from ponos_coach.load.domain import PmcSeries
+from ponos_coach.ui.chart_payload import (
+    LEGEND_Y,
+    ChartChrome,
+    PreparedChart,
+    axis_style,
+    base_layout,
+    prepare_figure,
+)
 from ponos_coach.ui.tokens import ThemeTokens
 
 LOAD_UNIT = "hrTSS/day"  # unita del carico giornaliero e delle sue medie (CTL, ATL, TSB)
 MAX_NAMES_PER_DAY = 5  # nomi di attivita mostrati nel suggerimento di una barra
 _LINE_WIDTH = 2
 _TOP_ROW_SHARE = 0.68
-_EXPORT_FILE_STEM = "ponos-coach-pmc"
-
-# Titoli dei bottoni della barra di Plotly: sono le chiavi del suo dizionario di lingua (il
-# testo inglese che Plotly cerca), non testi mostrati. La vista le traduce con `tr()`.
-PLOTLY_MODEBAR_KEYS: tuple[str, ...] = (
-    "Zoom",
-    "Pan",
-    "Zoom in",
-    "Zoom out",
-    "Autoscale",
-    "Reset axes",
-    "Toggle Spike Lines",
-    "Show closest data on hover",
-    "Compare data on hover",
-)
-PLOTLY_LOCALE_NAME = "ponos"
-
-type PmcFigure = go.Figure
+EXPORT_FILE_STEM = "ponos-coach-pmc"
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,10 +47,7 @@ class ChartActivity:
 
 @dataclass(frozen=True, slots=True)
 class PmcChartLabels:
-    """Testi del grafico, gia tradotti dalla vista.
-
-    `modebar` traduce i bottoni della barra di Plotly: una voce per ogni `PLOTLY_MODEBAR_KEYS`.
-    """
+    """Testi del grafico, già tradotti dalla vista."""
 
     x_axis: str
     load_axis: str
@@ -70,13 +56,7 @@ class PmcChartLabels:
     atl: str
     tsb: str
     daily_load: str
-    export_png: str
-    export_svg: str
-    modebar: Mapping[str, str]
-
-    def __post_init__(self) -> None:
-        if set(self.modebar) != set(PLOTLY_MODEBAR_KEYS):
-            raise ValueError("modebar must translate exactly the Plotly modebar titles")
+    chrome: ChartChrome
 
 
 def daily_load_of(activities: Sequence[ChartActivity], days: Sequence[date]) -> list[float]:
@@ -99,17 +79,6 @@ def _day_hover_text(activities: Sequence[ChartActivity], days: Sequence[date]) -
         lines = shown[:MAX_NAMES_PER_DAY] + ([f"+{extra}"] if extra > 0 else [])
         texts.append("<br>".join(lines))
     return texts
-
-
-def _axis_style(tokens: ThemeTokens, title: str) -> dict[str, object]:
-    return {
-        "title": {"text": title},
-        "gridcolor": tokens.grid,
-        "linecolor": tokens.axis_line,
-        "zerolinecolor": tokens.axis_line,
-        "tickfont": {"color": tokens.text_muted},
-        "title_font": {"color": tokens.text},
-    }
 
 
 def build_pmc_figure(
@@ -154,48 +123,25 @@ def build_pmc_figure(
         row=1,
         col=1,
     )
-    figure.update_xaxes(_axis_style(tokens, ""))
-    figure.update_xaxes(_axis_style(tokens, labels.x_axis), type="date", row=2, col=1)
+    figure.update_xaxes(axis_style(tokens, ""))
+    figure.update_xaxes(axis_style(tokens, labels.x_axis), type="date", row=2, col=1)
     figure.update_yaxes(
-        _axis_style(tokens, f"{labels.load_axis} ({LOAD_UNIT})"),
+        axis_style(tokens, f"{labels.load_axis} ({LOAD_UNIT})"),
         rangemode="tozero",  # le barre partono da zero
         row=1,
         col=1,
     )
     figure.update_yaxes(
-        _axis_style(tokens, f"{labels.form_axis} ({LOAD_UNIT})"), zeroline=True, row=2, col=1
+        axis_style(tokens, f"{labels.form_axis} ({LOAD_UNIT})"), zeroline=True, row=2, col=1
     )
     figure.update_layout(
-        paper_bgcolor=tokens.background,
-        plot_bgcolor=tokens.background,
-        font={"color": tokens.text},
-        legend={"orientation": "h", "traceorder": "normal", "y": 1.08, "x": 0},
+        **base_layout(tokens),
+        legend={"orientation": "h", "traceorder": "normal", "y": LEGEND_Y, "x": 0},
         margin={"l": 64, "r": 16, "t": 40, "b": 48},
         bargap=0.1,
         hovermode="x unified",
     )
     return figure
-
-
-def render_script(figure: go.Figure, labels: PmcChartLabels) -> str:
-    """Chiamata JavaScript che disegna la figura: l'argomento e un solo JSON (`json.dumps`)."""
-    payload = {
-        "figure": json.loads(pio.to_json(figure)),
-        "labels": {"png": labels.export_png, "svg": labels.export_svg},
-        # Dizionario di lingua di Plotly: la pagina lo registra, nessun testo si compone in JS.
-        "locale": {"name": PLOTLY_LOCALE_NAME, "dictionary": dict(labels.modebar)},
-        "filename": _EXPORT_FILE_STEM,
-    }
-    return f"ponosRender({json.dumps(payload, ensure_ascii=True, allow_nan=False)});"
-
-
-@dataclass(frozen=True, slots=True)
-class PreparedChart:
-    """Un grafico pronto da mostrare: figura, chiamata JavaScript e colore di fondo."""
-
-    figure: PmcFigure
-    script: str
-    background: str
 
 
 def prepare_chart(
@@ -207,4 +153,4 @@ def prepare_chart(
     """Costruisce figura e JSON: lavoro puro e pesante (circa 100 ms al primo grafico), adatto
     a un thread che non è quello della UI."""
     figure = build_pmc_figure(pmc, activities, labels, tokens)
-    return PreparedChart(figure, render_script(figure, labels), tokens.background)
+    return prepare_figure(figure, labels.chrome, EXPORT_FILE_STEM, tokens)

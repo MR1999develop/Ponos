@@ -54,3 +54,13 @@ class StatePage(QWidget):
     def button(self) -> QPushButton:
         """Il bottone del primo passo."""
         return self._button
+
+    @property
+    def title_text(self) -> str:
+        """Il titolo mostrato."""
+        return self._title.text()
+
+    @property
+    def body_text(self) -> str:
+        """La spiegazione mostrata."""
+        return self._body.text()

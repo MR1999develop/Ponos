@@ -11,13 +11,8 @@ from typing import Any
 import numpy as np
 import pytest
 
-from ponos_coach.ui.pmc_figure import (
-    PLOTLY_LOCALE_NAME,
-    PLOTLY_MODEBAR_KEYS,
-    build_pmc_figure,
-    daily_load_of,
-    render_script,
-)
+from ponos_coach.ui.chart_payload import PLOTLY_LOCALE_NAME, PLOTLY_MODEBAR_KEYS, render_script
+from ponos_coach.ui.pmc_figure import EXPORT_FILE_STEM, build_pmc_figure, daily_load_of
 from ponos_coach.ui.tokens import Theme, tokens_for
 from tests.ui.helpers import FIRST_DAY, LABELS, entry, small_history
 
@@ -99,7 +94,7 @@ def test_render_script_passes_data_as_a_single_json_argument() -> None:
     hostile = [entry(FIRST_DAY, 10.0, "');alert(1);//.fit")]
     figure = build_pmc_figure(pmc, hostile, LABELS, tokens_for(Theme.LIGHT))
 
-    script = render_script(figure, LABELS)
+    script = render_script(figure, LABELS.chrome, EXPORT_FILE_STEM)
 
     prefix, suffix = "ponosRender(", ");"
     assert script.startswith(prefix)
@@ -116,7 +111,7 @@ def test_modebar_titles_travel_as_the_plotly_language_dictionary() -> None:
     pmc, entries = small_history()
     figure = build_pmc_figure(pmc, entries, LABELS, tokens_for(Theme.LIGHT))
 
-    payload = _payload(render_script(figure, LABELS))
+    payload = _payload(render_script(figure, LABELS.chrome, EXPORT_FILE_STEM))
 
     assert payload["locale"]["dictionary"] == {key: f"{key} (test)" for key in PLOTLY_MODEBAR_KEYS}
     assert "Zoom in" in payload["locale"]["dictionary"]
@@ -126,9 +121,9 @@ def test_modebar_labels_must_cover_exactly_the_plotly_titles() -> None:
     incomplete = {key: key for key in PLOTLY_MODEBAR_KEYS[1:]}
 
     with pytest.raises(ValueError, match="modebar"):
-        replace(LABELS, modebar=incomplete)
+        replace(LABELS.chrome, modebar=incomplete)
     with pytest.raises(ValueError, match="modebar"):
-        replace(LABELS, modebar={**LABELS.modebar, "Unknown": "x"})
+        replace(LABELS.chrome, modebar={**LABELS.chrome.modebar, "Unknown": "x"})
 
 
 def _payload(script: str) -> dict[str, Any]:

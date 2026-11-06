@@ -73,6 +73,7 @@ __all__ = [
     "FolderCheck",
     "ImportProgress",
     "ImportSources",
+    "ProfileAccess",
     "ProfileUseCases",
     "ProfileView",
     "WorkspaceController",
@@ -160,6 +161,21 @@ class DeletionPreview:
 
     entry: RegistryEntry
     activities: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileAccess:
+    """Il profilo aperto, per i lavori che girano nel thread dei dati (`run_on_profile`).
+
+    Non lasciare mai la sessione al thread della UI: serve solo dentro il lavoro. `today` è la
+    data di oggi nel fuso del profilo.
+    """
+
+    session: ProfileSession
+    archive: ActivityArchive
+    zone: ZoneInfo
+    decode: Decoder
+    today: Callable[[], date]
 
 
 # --- Stato che vive solo nel thread dei dati ------------------------------------------------
@@ -278,6 +294,7 @@ class WorkspaceController(QObject):
         self._overview_state: OverviewState = Idle()
         self._opening = False
         self._closing = False
+        self._overview_stale = False
         self._import_progress: ImportProgress | None = None
         self._overview_handle: JobHandle | None = None
         self._import_handle: JobHandle | None = None
@@ -339,6 +356,12 @@ class WorkspaceController(QObject):
     def can_import(self) -> bool:
         """Si può avviare un import, anche mentre si sincronizza (connessioni separate)."""
         return self._profile is not None and self.can_import_now
+
+    @property
+    def can_edit_profile(self) -> bool:
+        """Si possono cambiare misure e pesi: profilo aperto e nessuna apertura, import, chiusura
+        né calcolo della panoramica in corso (il lavoro aspetterebbe in coda)."""
+        return self._profile is not None and self.can_import_now and self._overview_handle is None
 
     @property
     def can_stop(self) -> bool:
@@ -445,6 +468,53 @@ class WorkspaceController(QObject):
         self._start_overview()
         return True
 
+    def request_overview_refresh(self) -> None:
+        """Ricalcola la panoramica dopo un cambio di misure o di pesi.
+
+        Se ora non si può (sincronizzazione in corso) lo si fa alla fine del giro.
+        """
+        if self._profile is None or self._closing:
+            return
+        if self.can_change_profile:
+            self._start_overview()
+        else:
+            self._overview_stale = True
+
+    def run_on_profile(
+        self,
+        work: Callable[[ProfileAccess], object],
+        on_done: Callable[[JobOutcome], None],
+    ) -> bool:
+        """Esegue `work` nel thread dei dati sul profilo aperto; l'esito arriva nel thread UI.
+
+        Falso (nulla parte) se non c'è un profilo aperto o l'app si sta chiudendo. Chi chiama
+        decide cosa fare dell'esito, compreso l'errore.
+        """
+        if self._profile is None:
+            return False
+        services = self._services
+        data = self._data
+
+        def job(_context: JobContext) -> object:
+            current = data.require()
+            access = ProfileAccess(
+                current.session,
+                current.archive,
+                current.zone,
+                services.decode,
+                lambda: services.today(current.zone),
+            )
+            return work(access)
+
+        def done(_job_id: int, outcome: JobOutcome) -> None:
+            on_done(outcome)
+
+        return self._submit(job, done) is not None
+
+    def describe_failure(self, error: BaseException) -> ErrorMessage:
+        """Il messaggio per l'utente di un errore, con i dati del Composition Root."""
+        return describe_error(error, self._services.errors)
+
     def cancel_current(self) -> None:
         """Ferma l'import in corso o, se non c'è, il calcolo della panoramica."""
         if self._import_handle is not None:
@@ -483,12 +553,9 @@ class WorkspaceController(QObject):
             if isinstance(outcome, JobSucceeded):
                 on_done(outcome.value)
             elif isinstance(outcome, JobFailed):
-                on_failed(self._describe(outcome.error))
+                on_failed(self.describe_failure(outcome.error))
 
         return self._submit(job, done) is not None
-
-    def _describe(self, error: BaseException) -> ErrorMessage:
-        return describe_error(error, self._services.errors)
 
     # --- Lavori -----------------------------------------------------------------------
 
@@ -639,7 +706,7 @@ class WorkspaceController(QObject):
     def _finish_failed_open(self, outcome: JobOutcome) -> None:
         self._set_opening(False)
         if isinstance(outcome, JobFailed):
-            self.operation_failed.emit(self._describe(outcome.error))
+            self.operation_failed.emit(self.describe_failure(outcome.error))
         if self._profile is None:
             self._set_overview(Idle())
         else:
@@ -649,13 +716,13 @@ class WorkspaceController(QObject):
         if isinstance(outcome, JobSucceeded) and isinstance(outcome.value, tuple):
             self._set_entries(outcome.value)
         elif isinstance(outcome, JobFailed):
-            self.operation_failed.emit(self._describe(outcome.error))
+            self.operation_failed.emit(self.describe_failure(outcome.error))
 
     def _after_deletion_preview(self, _job_id: int, outcome: JobOutcome) -> None:
         if isinstance(outcome, JobSucceeded) and isinstance(outcome.value, DeletionPreview):
             self.deletion_requested.emit(outcome.value)
         elif isinstance(outcome, JobFailed):
-            self.operation_failed.emit(self._describe(outcome.error))
+            self.operation_failed.emit(self.describe_failure(outcome.error))
 
     # --- Panoramica -------------------------------------------------------------------
 
@@ -663,6 +730,7 @@ class WorkspaceController(QObject):
         if self._closing:
             return
         self._cancel_overview()
+        self._overview_stale = False
         self._set_overview(Loading(0, 0))
         self._overview_handle = self._submit(
             self._overview_job(), self._after_overview, self._on_overview_progress
@@ -727,7 +795,7 @@ class WorkspaceController(QObject):
         dati); se un import è in corso lo farà lui alla sua fine."""
         if self._closing or self._profile is None or self._import_progress is not None:
             return
-        if new_activity_count(result) > 0:
+        if new_activity_count(result) > 0 or self._overview_stale:
             self._start_overview()
 
     # --- Notifiche di stato -----------------------------------------------------------

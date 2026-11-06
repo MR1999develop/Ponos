@@ -413,7 +413,7 @@ def test_the_chart_figure_is_built_outside_the_ui_thread(
 
     assert threads
     assert threading.get_ident() not in threads
-    assert window.overview_page.current_widget() is chart
+    assert window.overview_page.current_widget() is window.overview_page.charts_widget
 
 
 def test_the_web_engine_starts_after_the_first_show_not_in_the_constructor(

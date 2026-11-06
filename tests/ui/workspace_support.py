@@ -32,6 +32,7 @@ from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
 from ponos_coach.ui.overview_state import Ready
 from ponos_coach.ui.sync_worker import MFA_WAIT_S
+from ponos_coach.ui.translations import Language
 from ponos_coach.ui.workspace import ImportSources
 from tests.fakes.garmin import FakeActivitySource, FakeGarminAccount
 from tests.fakes.notifier import RecordingNotifier
@@ -129,6 +130,7 @@ def compose(
     fakes: GarminFakes | None = None,
     default_token_store: bool = False,
     mfa_wait_s: float = MFA_WAIT_S,
+    language: Language = Language.ENGLISH,
 ) -> MainWindow:
     """Finestra dal Composition Root, con configurazione e profili in `tmp_path`.
 
@@ -159,6 +161,7 @@ def compose(
         sync_policy=FAST_POLICY,
         data_dir=tmp_path / "data",
         mfa_wait_s=mfa_wait_s,
+        language=language,
     )
     _PICKERS[window] = picker
     _FAKES[window] = garmin
@@ -184,9 +187,22 @@ def make_import_folder(tmp_path: Path) -> Path:
     return folder
 
 
+def fill_body_data(
+    dialog: NewProfileDialog,
+    height: str = "170",
+    weight: str = "65,5",
+    birth: date = date(1995, 4, 2),
+) -> None:
+    """Scrive altezza, peso e data di nascita (valori di prova, di nessuna persona reale)."""
+    QTest.keyClicks(dialog.height_edit, height)
+    QTest.keyClicks(dialog.weight_edit, weight)
+    dialog.birth_edit.select(birth)
+
+
 def fill_new_profile(window: MainWindow, dialog: NewProfileDialog, name: str) -> None:
-    """Scrive il nome e sceglie la cartella `<profiles>/<nome>` con il selettore finto."""
+    """Scrive nome e dati del corpo e sceglie la cartella `<profiles>/<nome>` (selettore finto)."""
     QTest.keyClicks(dialog.name_edit, name)
+    fill_body_data(dialog)
     pick_profile_folder(window, dialog, picker_of(window).base / name)
 
 

@@ -20,7 +20,7 @@ from typing import Final
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import platformdirs
-from PySide6.QtCore import QCoreApplication, QLocale, QSettings, QTimeZone
+from PySide6.QtCore import QCoreApplication, QSettings, QTimeZone
 from PySide6.QtWidgets import QApplication
 
 import ponos_coach
@@ -80,6 +80,7 @@ from ponos_coach.ui.translations import (
     choose_language,
     install_translators,
     qt_translations_dir,
+    saved_language,
 )
 from ponos_coach.ui.workspace import (
     ImportSources,
@@ -120,7 +121,7 @@ def parse_command_line(argv: Sequence[str]) -> CommandLine:
         "--lang",
         choices=[language.value for language in Language],
         default=None,
-        help="force the interface language (default: the system language)",
+        help="force the interface language (default: the saved choice, else English)",
     )
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {ponos_coach.__version__}"
@@ -141,14 +142,13 @@ def setup_translations(
     app: QCoreApplication,
     command_line: CommandLine,
     *,
-    ui_languages: Sequence[str] | None = None,
+    saved: Language | None = None,
     app_dir: Path | None = None,
     qt_dir: Path | None = None,
 ) -> TranslationReport:
-    """Sceglie la lingua (`--lang` o sistema) e installa i traduttori, prima della finestra."""
-    if ui_languages is None:
-        ui_languages = QLocale.system().uiLanguages()
-    language = choose_language(command_line.language, ui_languages)
+    """Sceglie la lingua (`--lang`, poi la scelta salvata, poi l'inglese) e installa i traduttori,
+    prima della finestra."""
+    language = choose_language(command_line.language, saved)
     return install_translators(
         app,
         language,
@@ -272,6 +272,7 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
     sync_policy: SyncPolicy | None = None,
     data_dir: Path | None = None,
     mfa_wait_s: float = MFA_WAIT_S,
+    language: Language = Language.ENGLISH,
 ) -> MainWindow:
     """Costruisce la finestra con tutte le dipendenze (richiede una `QApplication`).
 
@@ -282,8 +283,9 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
     dei log che il menu Aiuto apre. `garmin_account`, `token_store`, `notifier` e `sync_policy`
     sostituiscono Garmin, il portachiavi, la notifica di sistema e le pause della
     sincronizzazione (finti nei test); `data_dir` è la cartella dati locale dell'app, dove stanno
-    i token cifrati su Windows; `mfa_wait_s` è quanto si aspetta il codice MFA. Non apre nessun
-    profilo: lo fa `MainWindow.start()`, dopo `show()`.
+    i token cifrati su Windows; `mfa_wait_s` è quanto si aspetta il codice MFA; `language` è la
+    lingua già installata (il menu Lingua la mostra spuntata). Non apre nessun profilo: lo fa
+    `MainWindow.start()`, dopo `show()`.
     """
     del command_line  # per ora nessuna opzione cambia la composizione
     if config_dir is None:
@@ -340,7 +342,7 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
     defaults = NewProfileDefaults(
         documents_dir, folder_picker or native_folder_picker, zone.key, fell_back, today_in
     )
-    window = MainWindow(controller, settings, defaults, log_folder=log_dir)
+    window = MainWindow(controller, settings, defaults, log_folder=log_dir, language=language)
     controller.setParent(window)
     return window
 
@@ -358,10 +360,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     app.setOrganizationName(_ORGANIZATION)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(ponos_coach.__version__)
-    setup_translations(app, command_line)
+    settings = QSettings()
+    report = setup_translations(app, command_line, saved=saved_language(settings))
     notifier = ErrorNotifier(app)
     install_exception_hooks(notifier.notify)
-    window = compose_main_window(command_line, settings=QSettings(), log_dir=log_dir)
+    window = compose_main_window(
+        command_line, settings=settings, log_dir=log_dir, language=report.language
+    )
     notifier.occurred.connect(window.show_unexpected_error)
     window.show()
     window.start()

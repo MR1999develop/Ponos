@@ -1,10 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Pagina "Panoramica": vista umile che mostra lo stato deciso da `overview_state`."""
+"""Pagina "Panoramica": vista umile che mostra lo stato deciso da `overview_state`.
+
+Quando il calcolo è pronto mostra tre grafici uno sotto l'altro: PMC, carico settimanale per
+sport e tempo nelle zone. Le tre figure (e i loro JSON) si costruiscono insieme fuori dal thread
+della UI.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QLocale, Qt, QTime, Signal
@@ -12,15 +19,26 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
+    QSplitter,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from ponos_coach.activities.domain import Sport
+from ponos_coach.load.domain import PmcSeries
 from ponos_coach.load.use_cases import ProfileActivity
 from ponos_coach.ui.activity_text import sport_text
-from ponos_coach.ui.chart_view import ExportPathChooser, PmcChartView
+from ponos_coach.ui.chart_payload import ChartChrome, PreparedChart
+from ponos_coach.ui.chart_texts import chart_chrome
+from ponos_coach.ui.chart_view import ChartEngine, ChartView
 from ponos_coach.ui.errors import ErrorMessage
+from ponos_coach.ui.load_figures import (
+    WeeklyLoadLabels,
+    WeeklyZonesLabels,
+    prepare_weekly_load_chart,
+    prepare_weekly_zones_chart,
+)
 from ponos_coach.ui.overview_state import (
     Cancelled,
     Failed,
@@ -32,7 +50,7 @@ from ponos_coach.ui.overview_state import (
     page_of,
     primary_action_of,
 )
-from ponos_coach.ui.pmc_figure import ChartActivity, PmcChartLabels, PreparedChart, prepare_chart
+from ponos_coach.ui.pmc_figure import ChartActivity, PmcChartLabels, prepare_chart
 from ponos_coach.ui.state_page import StatePage
 from ponos_coach.ui.tokens import (
     SPACE_2,
@@ -47,6 +65,24 @@ type ChartScheduler = Callable[
     [Callable[[], object], Callable[[object], None], Callable[[ErrorMessage], None]], bool
 ]
 """Esegue un lavoro fuori dal thread della UI e ne consegna l'esito nel thread della UI."""
+
+
+# Altezze relative dei tre grafici: il PMC ha due pannelli, gli altri uno.
+_CHART_STRETCH = (4, 3, 3)
+
+
+@dataclass(frozen=True, slots=True)
+class OverviewCharts:
+    """I tre grafici della panoramica, pronti da mostrare."""
+
+    pmc: PreparedChart
+    weekly_load: PreparedChart
+    weekly_zones: PreparedChart
+
+
+def last_day_of(pmc: PmcSeries) -> date:
+    """L'ultimo giorno della serie PMC (di norma oggi); il primo se è vuota."""
+    return pmc.first_day + timedelta(days=max(len(pmc) - 1, 0))
 
 
 def chart_activity_of(activity: ProfileActivity, zone: ZoneInfo) -> ChartActivity:
@@ -108,7 +144,7 @@ class OverviewPage(QWidget):
 
     def __init__(
         self,
-        choose_export_path: ExportPathChooser,
+        engine: ChartEngine,
         schedule_chart: ChartScheduler,
         parent: QWidget | None = None,
     ) -> None:
@@ -120,18 +156,53 @@ class OverviewPage(QWidget):
         self._state_page.action_requested.connect(self._on_state_action)
         self._loading_page = LoadingPage(self)
         self._loading_page.cancel_requested.connect(self.cancel_requested)
-        self._chart = PmcChartView(choose_export_path, self)
+        self._chart = ChartView(engine, self.tr("Fitness and fatigue chart"), self)
+        self._load_chart = ChartView(engine, self.tr("Weekly load chart"), self)
+        self._zones_chart = ChartView(engine, self.tr("Time in zones chart"), self)
+        self._charts = QSplitter(Qt.Orientation.Vertical, self)
+        self._charts.setChildrenCollapsible(False)
+        for index, view in enumerate((self._chart, self._load_chart, self._zones_chart)):
+            self._charts.addWidget(view)
+            self._charts.setStretchFactor(index, _CHART_STRETCH[index])
         self._stack = QStackedWidget(self)
-        for widget in (self._state_page, self._loading_page, self._chart):
+        for widget in (self._state_page, self._loading_page, self._charts):
             self._stack.addWidget(widget)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._stack)
 
     @property
-    def chart(self) -> PmcChartView:
-        """Vista del grafico."""
+    def chart(self) -> ChartView:
+        """Vista del grafico PMC."""
         return self._chart
+
+    @property
+    def load_chart(self) -> ChartView:
+        """Vista del carico settimanale per sport."""
+        return self._load_chart
+
+    @property
+    def zones_chart(self) -> ChartView:
+        """Vista del tempo nelle zone di FC."""
+        return self._zones_chart
+
+    @property
+    def charts_widget(self) -> QWidget:
+        """Il pannello con i tre grafici (la pagina mostrata a calcolo pronto)."""
+        return self._charts
+
+    def start_engines(self) -> None:
+        """Avvia le pagine web dei tre grafici (dopo il primo `show()` della finestra)."""
+        for view in self._views():
+            view.start_engine()
+
+    def dispose_charts(self) -> None:
+        """Distrugge le pagine web dei tre grafici, prima del profilo del motore."""
+        for view in self._views():
+            view.dispose()
+
+    def _views(self) -> tuple[ChartView, ChartView, ChartView]:
+        return (self._chart, self._load_chart, self._zones_chart)
 
     @property
     def state_page(self) -> StatePage:
@@ -162,18 +233,29 @@ class OverviewPage(QWidget):
 
     def _request_chart(self, state: Ready, theme: Theme, zone: ZoneInfo) -> None:
         tokens = tokens_for(theme)
-        labels = self._chart_labels()
-        pmc = state.overview.pmc
-        activities = [chart_activity_of(item, zone) for item in state.overview.activities]
+        chrome = self._chrome()
+        labels = self._chart_labels(chrome)
+        load_labels = self._load_labels(chrome)
+        zones_labels = self._zones_labels(chrome)
+        overview = state.overview
+        pmc = overview.pmc
+        activities = [chart_activity_of(item, zone) for item in overview.activities]
         request = self._chart_request
 
         def build() -> object:
-            return prepare_chart(pmc, activities, labels, tokens)
+            through = last_day_of(pmc)
+            return OverviewCharts(
+                prepare_chart(pmc, activities, labels, tokens),
+                prepare_weekly_load_chart(overview.weekly_load(through), load_labels, tokens),
+                prepare_weekly_zones_chart(overview.weekly_zones(through), zones_labels, tokens),
+            )
 
         def show(prepared: object) -> None:
-            if request == self._chart_request and isinstance(prepared, PreparedChart):
-                self._chart.show_prepared(prepared)
-                self._stack.setCurrentWidget(self._chart)
+            if request == self._chart_request and isinstance(prepared, OverviewCharts):
+                self._chart.show_prepared(prepared.pmc)
+                self._load_chart.show_prepared(prepared.weekly_load)
+                self._zones_chart.show_prepared(prepared.weekly_zones)
+                self._stack.setCurrentWidget(self._charts)
 
         def failed(message: ErrorMessage) -> None:
             if request == self._chart_request:
@@ -215,7 +297,10 @@ class OverviewPage(QWidget):
                     self.tr("New profile..."),
                 )
 
-    def _chart_labels(self) -> PmcChartLabels:
+    def _chrome(self) -> ChartChrome:
+        return chart_chrome()
+
+    def _chart_labels(self, chrome: ChartChrome) -> PmcChartLabels:
         return PmcChartLabels(
             x_axis=self.tr("Date"),
             load_axis=self.tr("Load"),
@@ -224,17 +309,21 @@ class OverviewPage(QWidget):
             atl=self.tr("Fatigue (ATL)"),
             tsb=self.tr("Form (TSB)"),
             daily_load=self.tr("Daily load"),
-            export_png=self.tr("Save chart as PNG"),
-            export_svg=self.tr("Save chart as SVG"),
-            modebar={
-                "Zoom": self.tr("Zoom"),
-                "Pan": self.tr("Pan"),
-                "Zoom in": self.tr("Zoom in"),
-                "Zoom out": self.tr("Zoom out"),
-                "Autoscale": self.tr("Autoscale"),
-                "Reset axes": self.tr("Reset axes"),
-                "Toggle Spike Lines": self.tr("Toggle spike lines"),
-                "Show closest data on hover": self.tr("Show closest data on hover"),
-                "Compare data on hover": self.tr("Compare data on hover"),
-            },
+            chrome=chrome,
+        )
+
+    def _load_labels(self, chrome: ChartChrome) -> WeeklyLoadLabels:
+        return WeeklyLoadLabels(
+            x_axis=self.tr("Week (starting Monday)"),
+            y_axis=self.tr("Load"),
+            sports={sport: sport_text(sport) for sport in Sport},
+            chrome=chrome,
+        )
+
+    def _zones_labels(self, chrome: ChartChrome) -> WeeklyZonesLabels:
+        return WeeklyZonesLabels(
+            x_axis=self.tr("Week (starting Monday)"),
+            y_axis=self.tr("Time in zone"),
+            legend_title=self.tr("Heart-rate zone (% of threshold)"),
+            chrome=chrome,
         )

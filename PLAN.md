@@ -93,6 +93,15 @@ completata e verificata.
     rumore della quota. Un GPX senza orari non è un'attività e si rifiuta. I
     TCX non sono supportati: rifiutati con il motivo.
 
+## 2b. Decisioni rimandate
+
+- **Integrazione AI** (valutata il 2026-11-06, da decidere in seguito):
+  server MCP in sola lettura su stdio, usabile da Claude o Gemini senza
+  chiavi nell'app (consigliato, dopo la fase 5); in alternativa un
+  assistente dentro l'app via API, opzionale e disattivato di default, con
+  consenso esplicito prima di inviare dati di salute. In nessun caso il
+  modello decide il piano: le regole restano l'unica autorità sui carichi.
+
 ## 3. Rischi principali
 
 | Rischio | Conseguenza | Risposta |

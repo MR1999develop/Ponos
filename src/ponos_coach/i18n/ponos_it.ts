@@ -60,6 +60,91 @@
     </message>
 </context>
 <context>
+    <name>ActivityDetailDialog</name>
+    <message>
+        <source>Activity detail</source>
+        <translation>Dettaglio attività</translation>
+    </message>
+    <message>
+        <source>Heart rate chart</source>
+        <translation>Grafico della frequenza cardiaca</translation>
+    </message>
+    <message>
+        <source>Time in each zone</source>
+        <translation>Tempo in ogni zona</translation>
+    </message>
+    <message>
+        <source>Started</source>
+        <translation>Inizio</translation>
+    </message>
+    <message>
+        <source>Moving time (h:mm:ss)</source>
+        <translation>Tempo in movimento (h:mm:ss)</translation>
+    </message>
+    <message>
+        <source>Elapsed time (h:mm:ss)</source>
+        <translation>Tempo trascorso (h:mm:ss)</translation>
+    </message>
+    <message>
+        <source>Distance (km)</source>
+        <translation>Distanza (km)</translation>
+    </message>
+    <message>
+        <source>Ascent (m)</source>
+        <translation>Dislivello (m)</translation>
+    </message>
+    <message>
+        <source>Load (hrTSS)</source>
+        <translation>Carico (hrTSS)</translation>
+    </message>
+    <message>
+        <source>Load from</source>
+        <translation>Carico da</translation>
+    </message>
+    <message>
+        <source>Threshold heart rate (bpm)</source>
+        <translation>Frequenza cardiaca di soglia (bpm)</translation>
+    </message>
+    <message>
+        <source>Heart-rate limits (bpm)</source>
+        <translation>Limiti della frequenza cardiaca (bpm)</translation>
+    </message>
+    <message>
+        <source>Loading the activity...</source>
+        <translation>Caricamento dell&apos;attività...</translation>
+    </message>
+    <message>
+        <source>No heart-rate data</source>
+        <translation>Nessun dato di frequenza cardiaca</translation>
+    </message>
+    <message>
+        <source>This activity has no heart-rate samples, so its load is estimated.</source>
+        <translation>Questa attività non ha campioni di frequenza cardiaca, quindi il carico è stimato.</translation>
+    </message>
+    <message>
+        <source>{sport}, {started}</source>
+        <translation>{sport}, {started}</translation>
+    </message>
+    <message>
+        <source>{low} to {high}</source>
+        <translation>da {low} a {high}</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n heart-rate sample(s) outside your limits were not used, and are marked in the chart.</source>
+        <translation>
+            <numerusform>%n campione di frequenza cardiaca fuori dai limiti impostati non è stato usato ed è segnato nel grafico.</numerusform>
+            <numerusform>%n campioni di frequenza cardiaca fuori dai limiti impostati non sono stati usati e sono segnati nel grafico.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n heart-rate sample(s) with a repeated or earlier time were skipped when the file was read.</source>
+        <translation>
+            <numerusform>%n campione di frequenza cardiaca con orario ripetuto o precedente è stato saltato alla lettura del file.</numerusform>
+            <numerusform>%n campioni di frequenza cardiaca con orario ripetuto o precedente sono stati saltati alla lettura del file.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>ActivityTableModel</name>
     <message>
         <source>Date and time</source>
@@ -92,6 +177,91 @@
     <message>
         <source>Format</source>
         <translation>Formato</translation>
+    </message>
+</context>
+<context>
+    <name>BirthDateEdit</name>
+    <message>
+        <source>Date of birth</source>
+        <translation>Data di nascita</translation>
+    </message>
+    <message>
+        <source>Select the date</source>
+        <translation>Scegli la data</translation>
+    </message>
+</context>
+<context>
+    <name>BodyInput</name>
+    <message>
+        <source>Enter the height in centimetres.</source>
+        <translation>Inserisci l&apos;altezza in centimetri.</translation>
+    </message>
+    <message>
+        <source>Enter the height as a whole number of centimetres, from {low} to {high}.</source>
+        <translation>Inserisci l&apos;altezza in centimetri interi, da {low} a {high}.</translation>
+    </message>
+    <message>
+        <source>Enter the weight in kilograms.</source>
+        <translation>Inserisci il peso in chilogrammi.</translation>
+    </message>
+    <message>
+        <source>Enter the weight in kilograms with at most one decimal, from {low} to {high}.</source>
+        <translation>Inserisci il peso in chilogrammi con al massimo un decimale, da {low} a {high}.</translation>
+    </message>
+    <message>
+        <source>Enter the date of birth.</source>
+        <translation>Scegli la data di nascita.</translation>
+    </message>
+    <message>
+        <source>The date of birth must be at least {years} years ago and not before {first}.</source>
+        <translation>La data di nascita deve essere di almeno {years} anni fa e non anteriore al {first}.</translation>
+    </message>
+</context>
+<context>
+    <name>Charts</name>
+    <message>
+        <source>Save chart as PNG</source>
+        <translation>Salva grafico come PNG</translation>
+    </message>
+    <message>
+        <source>Save chart as SVG</source>
+        <translation>Salva grafico come SVG</translation>
+    </message>
+    <message>
+        <source>Zoom</source>
+        <translation>Zoom</translation>
+    </message>
+    <message>
+        <source>Pan</source>
+        <translation>Sposta</translation>
+    </message>
+    <message>
+        <source>Zoom in</source>
+        <translation>Ingrandisci</translation>
+    </message>
+    <message>
+        <source>Zoom out</source>
+        <translation>Riduci</translation>
+    </message>
+    <message>
+        <source>Autoscale</source>
+        <translation>Scala automatica</translation>
+    </message>
+    <message>
+        <source>Reset axes</source>
+        <translation>Reimposta assi</translation>
+    </message>
+    <message>
+        <source>Toggle spike lines</source>
+        <translation>Mostra/nascondi linee guida</translation>
+    </message>
+    <message>
+        <source>Show closest data on hover</source>
+        <translation>Mostra dato più vicino al passaggio del mouse</translation>
+    </message>
+    <message>
+        <source>Compare data on hover</source>
+        <translation>Confronta dati al passaggio del mouse</translation>
     </message>
 </context>
 <context>
@@ -321,6 +491,42 @@
 <context>
     <name>Exclusions</name>
     <message>
+        <source>Import the original file again to see its detail.</source>
+        <translation>Importa di nuovo il file originale per vederne il dettaglio.</translation>
+    </message>
+    <message>
+        <source>The file of this activity is no longer in the archive.</source>
+        <translation>Il file di questa attività non è più nell&apos;archivio.</translation>
+    </message>
+    <message>
+        <source>The file of this activity changed after it was saved, so it cannot be trusted.</source>
+        <translation>Il file di questa attività è cambiato dopo il salvataggio, quindi non è affidabile.</translation>
+    </message>
+    <message>
+        <source>The file of this activity is larger than Ponos Coach can read.</source>
+        <translation>Il file di questa attività è più grande di quanto Ponos Coach riesca a leggere.</translation>
+    </message>
+    <message>
+        <source>This file cannot be opened.</source>
+        <translation>Questo file non può essere aperto.</translation>
+    </message>
+    <message>
+        <source>Ponos Coach could not read the file of this activity.</source>
+        <translation>Ponos Coach non è riuscito a leggere il file di questa attività.</translation>
+    </message>
+    <message>
+        <source>Check that you can read the profile folder, then try again.</source>
+        <translation>Controlla di poter leggere la cartella del profilo, poi riprova.</translation>
+    </message>
+    <message>
+        <source>The file of this activity is no longer a valid activity file.</source>
+        <translation>Il file di questa attività non è più un file di attività valido.</translation>
+    </message>
+    <message>
+        <source>The activity detail is not available</source>
+        <translation>Il dettaglio dell&apos;attività non è disponibile</translation>
+    </message>
+    <message>
         <source>file missing from the archive</source>
         <translation>file mancante nell&apos;archivio</translation>
     </message>
@@ -457,6 +663,21 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Connect account...</source>
         <translation>Collega account...</translation>
+    </message>
+</context>
+<context>
+    <name>HeartRate</name>
+    <message>
+        <source>The resting heart rate must be lower than the maximum.</source>
+        <translation>La frequenza a riposo deve essere inferiore alla massima.</translation>
+    </message>
+    <message>
+        <source>The threshold must be higher than the resting heart rate.</source>
+        <translation>La soglia deve essere superiore alla frequenza a riposo.</translation>
+    </message>
+    <message>
+        <source>The threshold cannot be higher than the maximum.</source>
+        <translation>La soglia non può essere superiore alla massima.</translation>
     </message>
 </context>
 <context>
@@ -637,6 +858,18 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Esci</translation>
     </message>
     <message>
+        <source>Edit profile...</source>
+        <translation>Modifica profilo...</translation>
+    </message>
+    <message>
+        <source>Sport weights...</source>
+        <translation>Pesi degli sport...</translation>
+    </message>
+    <message>
+        <source>Activity detail...</source>
+        <translation>Dettaglio attività...</translation>
+    </message>
+    <message>
         <source>About Ponos Coach</source>
         <translation>Informazioni su Ponos Coach</translation>
     </message>
@@ -665,8 +898,16 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Elimina cartella del profilo</translation>
     </message>
     <message>
+        <source>Profile</source>
+        <translation>Profilo</translation>
+    </message>
+    <message>
         <source>Help</source>
         <translation>Aiuto</translation>
+    </message>
+    <message>
+        <source>Language</source>
+        <translation>Lingua</translation>
     </message>
     <message>
         <source>Sections</source>
@@ -707,6 +948,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Stop import</source>
         <translation>Interrompi importazione</translation>
+    </message>
+    <message>
+        <source>The language changes the next time Ponos Coach starts.</source>
+        <translation>La lingua cambierà al prossimo avvio di Ponos Coach.</translation>
     </message>
     <message>
         <source>Choose the profile folder</source>
@@ -813,6 +1058,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>There is nothing to stop.</source>
         <translation>Non c&apos;è nulla da interrompere.</translation>
     </message>
+    <message>
+        <source>Select an activity in the Activities list first.</source>
+        <translation>Seleziona prima un&apos;attività nell&apos;elenco Attività.</translation>
+    </message>
     <message numerus="yes">
         <source>%n excluded activity(ies)</source>
         <translation>
@@ -872,6 +1121,29 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
 </context>
 <context>
+    <name>MeasurementHistoryModel</name>
+    <message>
+        <source>Valid from</source>
+        <translation>Valido dal</translation>
+    </message>
+    <message>
+        <source>Weight (kg)</source>
+        <translation>Peso (kg)</translation>
+    </message>
+    <message>
+        <source>Resting HR (bpm)</source>
+        <translation>FC a riposo (bpm)</translation>
+    </message>
+    <message>
+        <source>Maximum HR (bpm)</source>
+        <translation>FC massima (bpm)</translation>
+    </message>
+    <message>
+        <source>Threshold HR (bpm)</source>
+        <translation>FC di soglia (bpm)</translation>
+    </message>
+</context>
+<context>
     <name>MfaCodeDialog</name>
     <message>
         <source>Garmin verification code</source>
@@ -913,6 +1185,22 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Sfoglia...</translation>
     </message>
     <message>
+        <source>Height (cm)</source>
+        <translation>Altezza (cm)</translation>
+    </message>
+    <message>
+        <source>For example, 175</source>
+        <translation>Per esempio, 175</translation>
+    </message>
+    <message>
+        <source>Weight (kg)</source>
+        <translation>Peso (kg)</translation>
+    </message>
+    <message>
+        <source>For example, 68.5</source>
+        <translation>Per esempio, 68,5</translation>
+    </message>
+    <message>
         <source>Male</source>
         <translation>Maschio</translation>
     </message>
@@ -927,6 +1215,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Profile folder</source>
         <translation>Cartella del profilo</translation>
+    </message>
+    <message>
+        <source>Date of birth</source>
+        <translation>Data di nascita</translation>
     </message>
     <message>
         <source>Resting heart rate</source>
@@ -981,18 +1273,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Inserisci il percorso completo della cartella, a partire dal disco o dalla radice.</translation>
     </message>
     <message>
-        <source>The resting heart rate must be lower than the maximum.</source>
-        <translation>La frequenza a riposo deve essere inferiore alla massima.</translation>
-    </message>
-    <message>
-        <source>The threshold must be higher than the resting heart rate.</source>
-        <translation>La soglia deve essere superiore alla frequenza a riposo.</translation>
-    </message>
-    <message>
-        <source>The threshold cannot be higher than the maximum.</source>
-        <translation>La soglia non può essere superiore alla massima.</translation>
-    </message>
-    <message>
         <source>Data will go in: {folder}</source>
         <translation>I dati andranno in: {folder}</translation>
     </message>
@@ -1022,6 +1302,18 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
 </context>
 <context>
     <name>OverviewPage</name>
+    <message>
+        <source>Fitness and fatigue chart</source>
+        <translation>Grafico di condizione e fatica</translation>
+    </message>
+    <message>
+        <source>Weekly load chart</source>
+        <translation>Grafico del carico settimanale</translation>
+    </message>
+    <message>
+        <source>Time in zones chart</source>
+        <translation>Grafico del tempo nelle zone</translation>
+    </message>
     <message>
         <source>Calculate again</source>
         <translation>Calcola di nuovo</translation>
@@ -1087,55 +1379,181 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Carico giornaliero</translation>
     </message>
     <message>
-        <source>Save chart as PNG</source>
-        <translation>Salva grafico come PNG</translation>
+        <source>Week (starting Monday)</source>
+        <translation>Settimana (da lunedì)</translation>
     </message>
     <message>
-        <source>Save chart as SVG</source>
-        <translation>Salva grafico come SVG</translation>
+        <source>Time in zone</source>
+        <translation>Tempo in zona</translation>
     </message>
     <message>
-        <source>Zoom</source>
-        <translation>Zoom</translation>
-    </message>
-    <message>
-        <source>Pan</source>
-        <translation>Sposta</translation>
-    </message>
-    <message>
-        <source>Zoom in</source>
-        <translation>Ingrandisci</translation>
-    </message>
-    <message>
-        <source>Zoom out</source>
-        <translation>Riduci</translation>
-    </message>
-    <message>
-        <source>Autoscale</source>
-        <translation>Scala automatica</translation>
-    </message>
-    <message>
-        <source>Reset axes</source>
-        <translation>Reimposta assi</translation>
-    </message>
-    <message>
-        <source>Toggle spike lines</source>
-        <translation>Mostra/nascondi linee guida</translation>
-    </message>
-    <message>
-        <source>Show closest data on hover</source>
-        <translation>Mostra dato più vicino al passaggio del mouse</translation>
-    </message>
-    <message>
-        <source>Compare data on hover</source>
-        <translation>Confronta dati al passaggio del mouse</translation>
+        <source>Heart-rate zone (% of threshold)</source>
+        <translation>Zona di frequenza cardiaca (% della soglia)</translation>
     </message>
 </context>
 <context>
-    <name>PmcChartView</name>
+    <name>ProfileDialogs</name>
     <message>
-        <source>Fitness and fatigue chart</source>
-        <translation>Grafico di condizione e fatica</translation>
+        <source>Profile updated. The load is being recalculated.</source>
+        <translation>Profilo aggiornato. Il carico si sta ricalcolando.</translation>
+    </message>
+    <message>
+        <source>Sport weights saved. The load is being recalculated.</source>
+        <translation>Pesi degli sport salvati. Il carico si sta ricalcolando.</translation>
+    </message>
+    <message>
+        <source>Time</source>
+        <translation>Tempo</translation>
+    </message>
+    <message>
+        <source>Heart rate</source>
+        <translation>Frequenza cardiaca</translation>
+    </message>
+    <message>
+        <source>Samples outside your limits</source>
+        <translation>Campioni fuori dai limiti</translation>
+    </message>
+    <message>
+        <source>The profile is busy. Save again when the operation has finished.</source>
+        <translation>Il profilo è occupato. Salva di nuovo quando l&apos;operazione è finita.</translation>
+    </message>
+</context>
+<context>
+    <name>ProfileEditDialog</name>
+    <message>
+        <source>Edit profile</source>
+        <translation>Modifica profilo</translation>
+    </message>
+    <message>
+        <source>Valid from</source>
+        <translation>Valido dal</translation>
+    </message>
+    <message>
+        <source>Weight (kg)</source>
+        <translation>Peso (kg)</translation>
+    </message>
+    <message>
+        <source>History</source>
+        <translation>Storico</translation>
+    </message>
+    <message>
+        <source>Height (cm)</source>
+        <translation>Altezza (cm)</translation>
+    </message>
+    <message>
+        <source>Measurement history</source>
+        <translation>Storico delle misure</translation>
+    </message>
+    <message>
+        <source>Save changes</source>
+        <translation>Salva modifiche</translation>
+    </message>
+    <message>
+        <source>Profile data</source>
+        <translation>Dati del profilo</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nome</translation>
+    </message>
+    <message>
+        <source>Male</source>
+        <translation>Maschio</translation>
+    </message>
+    <message>
+        <source>Female</source>
+        <translation>Femmina</translation>
+    </message>
+    <message>
+        <source>Height and date of birth are missing from this profile. Enter them once: they cannot be changed afterwards.</source>
+        <translation>In questo profilo mancano altezza e data di nascita. Inseriscile una volta sola: dopo non si possono più cambiare.</translation>
+    </message>
+    <message>
+        <source>Date of birth</source>
+        <translation>Data di nascita</translation>
+    </message>
+    <message>
+        <source>{cm} cm</source>
+        <translation>{cm} cm</translation>
+    </message>
+    <message>
+        <source>Height</source>
+        <translation>Altezza</translation>
+    </message>
+    <message>
+        <source>Sex</source>
+        <translation>Sesso</translation>
+    </message>
+    <message>
+        <source>New measurements</source>
+        <translation>Nuove misure</translation>
+    </message>
+    <message>
+        <source>Fields you do not change keep the values in force on the chosen day. The load of past activities is recalculated.</source>
+        <translation>I campi che non cambi mantengono i valori in vigore nel giorno scelto. Il carico delle attività passate viene ricalcolato.</translation>
+    </message>
+    <message>
+        <source>Resting heart rate</source>
+        <translation>Frequenza cardiaca a riposo</translation>
+    </message>
+    <message>
+        <source>Maximum heart rate</source>
+        <translation>Frequenza cardiaca massima</translation>
+    </message>
+    <message>
+        <source>Threshold heart rate</source>
+        <translation>Frequenza cardiaca di soglia</translation>
+    </message>
+    <message>
+        <source> bpm</source>
+        <translation> bpm</translation>
+    </message>
+    <message>
+        <source>Nothing has changed: change at least one value.</source>
+        <translation>Non è cambiato nulla: cambia almeno un valore.</translation>
+    </message>
+    <message>
+        <source>The date cannot be in the future.</source>
+        <translation>La data non può essere nel futuro.</translation>
+    </message>
+    <message>
+        <source>The date cannot be before {first}.</source>
+        <translation>La data non può essere anteriore al {first}.</translation>
+    </message>
+    <message>
+        <source>The heart-rate values do not fit together: the resting rate must be below the threshold, and the threshold not above the maximum.</source>
+        <translation>I valori di frequenza cardiaca non sono coerenti: la frequenza a riposo deve essere inferiore alla soglia e la soglia non superiore alla massima.</translation>
+    </message>
+    <message>
+        <source>Change at least one value first.</source>
+        <translation>Prima cambia almeno un valore.</translation>
+    </message>
+</context>
+<context>
+    <name>SportWeightsDialog</name>
+    <message>
+        <source>Sport weights</source>
+        <translation>Pesi degli sport</translation>
+    </message>
+    <message>
+        <source>The weight of a sport multiplies the load of each of its activities: 1.00 leaves the load as calculated, 0 removes the sport from the load. Changing a weight recalculates every activity.</source>
+        <translation>Il peso di uno sport moltiplica il carico di ogni sua attività: 1,00 lascia il carico com&apos;è calcolato, 0 toglie lo sport dal carico. Cambiare un peso ricalcola ogni attività.</translation>
+    </message>
+    <message>
+        <source>Restore defaults</source>
+        <translation>Ripristina predefiniti</translation>
+    </message>
+    <message>
+        <source>Save weights</source>
+        <translation>Salva pesi</translation>
+    </message>
+    <message>
+        <source>Change at least one weight first.</source>
+        <translation>Prima cambia almeno un peso.</translation>
+    </message>
+    <message>
+        <source>All weights already have their default value.</source>
+        <translation>Tutti i pesi hanno già il valore predefinito.</translation>
     </message>
 </context>
 <context>
@@ -1389,6 +1807,21 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>No synchronisation is running.</source>
         <translation>Nessuna sincronizzazione è in corso.</translation>
+    </message>
+</context>
+<context>
+    <name>ZoneTableModel</name>
+    <message>
+        <source>Zone (% of threshold)</source>
+        <translation>Zona (% della soglia)</translation>
+    </message>
+    <message>
+        <source>Time (h:mm:ss)</source>
+        <translation>Tempo (h:mm:ss)</translation>
+    </message>
+    <message>
+        <source>Share of the time in zones (%)</source>
+        <translation>Quota del tempo in zona (%)</translation>
     </message>
 </context>
 </TS>

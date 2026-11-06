@@ -20,10 +20,13 @@ from pytestqt.qtbot import QtBot
 from ponos_coach.__main__ import compose_main_window, main, parse_command_line, setup_translations
 from ponos_coach.ui.translations import (
     APP_CATALOG,
+    LANGUAGE_KEY,
     Language,
     TranslationReport,
     choose_language,
     qt_translations_dir,
+    save_language,
+    saved_language,
 )
 
 MINIMAL_CATALOG = """<?xml version="1.0" encoding="utf-8"?>
@@ -64,6 +67,19 @@ def build_catalog(folder: Path) -> Path:
     return target
 
 
+def build_real_catalog(folder: Path) -> Path:
+    """Compila con `pyside6-lrelease` il catalogo italiano vero del progetto."""
+    source = Path(__file__).resolve().parents[2] / "src" / "ponos_coach" / "i18n" / "ponos_it.ts"
+    scripts = Path(sys.executable).parent
+    tool = shutil.which("pyside6-lrelease", path=str(scripts)) or shutil.which("pyside6-lrelease")
+    assert tool is not None
+    target = folder / APP_CATALOG
+    subprocess.run(  # noqa: S603 - strumento del progetto, argomenti fissi
+        [tool, str(source), "-qm", str(target)], check=True, capture_output=True, timeout=60
+    )
+    return target
+
+
 def window_action_texts(tmp_path: Path, qtbot: QtBot) -> set[str]:
     settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
     window = compose_main_window(
@@ -79,24 +95,52 @@ def window_action_texts(tmp_path: Path, qtbot: QtBot) -> set[str]:
 
 
 @pytest.mark.parametrize(
-    ("forced", "system", "expected"),
+    ("forced", "saved", "expected"),
     [
-        (None, ["it-IT", "en-US"], Language.ITALIAN),
-        (None, ["it"], Language.ITALIAN),
-        (None, ["IT_ch"], Language.ITALIAN),
-        (None, ["en-US", "it-IT"], Language.ENGLISH),  # conta la preferita, non la presenza
-        (None, ["de-DE"], Language.ENGLISH),
-        (None, ["C"], Language.ENGLISH),
-        (None, [], Language.ENGLISH),
-        (Language.ENGLISH, ["it-IT"], Language.ENGLISH),
-        (Language.ITALIAN, ["en-US"], Language.ITALIAN),
-        (Language.ITALIAN, [], Language.ITALIAN),
+        (None, None, Language.ENGLISH),  # predefinita: l'inglese, mai la lingua del sistema
+        (None, Language.ITALIAN, Language.ITALIAN),
+        (None, Language.ENGLISH, Language.ENGLISH),
+        (Language.ENGLISH, Language.ITALIAN, Language.ENGLISH),  # `--lang` ha la precedenza
+        (Language.ITALIAN, Language.ENGLISH, Language.ITALIAN),
+        (Language.ITALIAN, None, Language.ITALIAN),
     ],
 )
-def test_language_is_the_forced_one_else_the_first_system_ui_language(
-    forced: Language | None, system: list[str], expected: Language
+def test_language_is_the_forced_one_else_the_saved_choice_else_english(
+    forced: Language | None, saved: Language | None, expected: Language
 ) -> None:
-    assert choose_language(forced, system) is expected
+    assert choose_language(forced, saved) is expected
+
+
+def test_the_system_language_does_not_decide(qapp: QCoreApplication) -> None:
+    report = setup_translations(qapp, parse_command_line([]), app_dir=Path(), qt_dir=Path())
+
+    assert report.language is Language.ENGLISH
+    assert report.translators == ()
+
+
+def test_the_saved_choice_is_remembered_and_read_back(tmp_path: Path) -> None:
+    settings = QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)
+    assert saved_language(settings) is None
+
+    save_language(settings, Language.ITALIAN)
+
+    again = QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)
+    assert saved_language(again) is Language.ITALIAN
+
+
+@pytest.mark.parametrize("raw", ["fr", "", "IT", "it ", "../it", "1", "x" * 1000])
+def test_a_damaged_saved_language_counts_as_not_chosen(tmp_path: Path, raw: str) -> None:
+    settings = QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)
+    settings.setValue(LANGUAGE_KEY, raw)
+
+    assert saved_language(settings) is None
+
+
+def test_a_saved_value_that_is_not_text_counts_as_not_chosen(tmp_path: Path) -> None:
+    settings = QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)
+    settings.setValue(LANGUAGE_KEY, 7)
+
+    assert saved_language(settings) is None
 
 
 def test_lang_option_selects_the_language_and_rejects_unknown_codes() -> None:
@@ -114,7 +158,6 @@ def test_with_lang_it_and_a_catalog_the_window_text_is_italian(
     report = setup_translations(
         qapp,
         parse_command_line(["--lang", "it"]),
-        ui_languages=["en-US"],
         app_dir=tmp_path,
         qt_dir=qt_translations_dir(),
     )
@@ -176,7 +219,7 @@ def test_english_installs_nothing_even_when_the_catalog_exists(
     report = setup_translations(
         qapp,
         parse_command_line(["--lang", "en"]),
-        ui_languages=["it-IT"],
+        saved=Language.ITALIAN,
         app_dir=tmp_path,
         qt_dir=tmp_path,
     )
@@ -184,3 +227,26 @@ def test_english_installs_nothing_even_when_the_catalog_exists(
 
     assert report.translators == ()
     assert QCoreApplication.translate("MainWindow", "Quit") == "Quit"
+
+
+def test_the_real_italian_catalog_translates_the_new_menus_and_keeps_language_names(
+    qtbot: QtBot, tmp_path: Path, installed: list[TranslationReport], qapp: QCoreApplication
+) -> None:
+    build_real_catalog(tmp_path)
+
+    report = setup_translations(
+        qapp,
+        parse_command_line([]),
+        saved=Language.ITALIAN,
+        app_dir=tmp_path,
+        qt_dir=qt_translations_dir(),
+    )
+    installed.append(report)
+    texts = window_action_texts(tmp_path, qtbot)
+
+    assert report.language is Language.ITALIAN
+    assert report.app_loaded
+    assert {"Profilo", "Lingua", "Modifica profilo...", "Pesi degli sport..."} <= texts
+    assert {"Dettaglio attività...", "Aiuto"} <= texts
+    assert {"English", "Italiano"} <= texts  # il nome di una lingua non si traduce
+    assert "Edit profile..." not in texts

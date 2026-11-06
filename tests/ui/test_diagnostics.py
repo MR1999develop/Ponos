@@ -29,6 +29,7 @@ from ponos_coach.ui.diagnostics import (
     neutralize,
 )
 from ponos_coach.ui.main_window import MainWindow
+from ponos_coach.ui.translations import Language, TranslationReport
 from tests.ui.workspace_support import make_settings
 
 USER_FOLDER = "C:/Users/someone/Segreto_Di_Prova"
@@ -229,7 +230,11 @@ def test_the_composition_root_logs_to_the_user_log_folder_and_installs_the_hooks
         return 0
 
     monkeypatch.setattr(entry_point, "QApplication", lambda _argv: app)
-    monkeypatch.setattr(entry_point, "setup_translations", lambda *_a, **_k: None)  # niente lingua
+    monkeypatch.setattr(
+        entry_point,
+        "setup_translations",
+        lambda *_a, **_k: TranslationReport(Language.ENGLISH, False, False, ()),  # niente lingua
+    )
     monkeypatch.setattr(entry_point, "QSettings", lambda: make_settings(tmp_path))
     monkeypatch.setattr(app, "exec", fake_exec, raising=False)
     monkeypatch.setattr(platformdirs, "user_log_dir", lambda *_a, **_k: str(logs), raising=True)
