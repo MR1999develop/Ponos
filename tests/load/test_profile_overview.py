@@ -32,6 +32,7 @@ from ponos_coach.load.use_cases import (
     ExclusionReason,
     OverviewCancelledError,
     ProfileOverview,
+    SetSportWeights,
 )
 from ponos_coach.profiles.domain import ProfileId, ProfileName
 from ponos_coach.profiles.ports import OpenProfile
@@ -103,6 +104,8 @@ class World:
         max_file_bytes: int = 50_000_000,
         decode: Decoder = decode_fit,
     ) -> ProfileOverview:
+        if weights is not None:
+            SetSportWeights(self.profile.activities, self.profile.sport_weights)(weights)
         checks = 0
 
         def is_cancelled() -> bool:
@@ -116,9 +119,9 @@ class World:
             self.profile.physiology,
             self.profile.load_cache,
             decode,
+            sport_weights=self.profile.sport_weights,
             timezone=ROME,
             today=lambda: TODAY,
-            sport_weights=weights,
             max_file_bytes=max_file_bytes,
             is_cancelled=is_cancelled,
             report=(lambda done, total: progress.append((done, total)))

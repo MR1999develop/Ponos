@@ -15,14 +15,16 @@ from typing import Protocol
 
 from ponos_coach.activities.domain import SessionTokens
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
-from ponos_coach.load.ports import LoadCache, PhysiologyStore
+from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.profiles.domain import (
+    FixedProfileData,
     FolderInspection,
     ProfileId,
     ProfileInfo,
     ProfileName,
     ProfilePeek,
     RegistryEntry,
+    WeightEntry,
 )
 
 # --- Elenco dei profili --------------------------------------------------------------------
@@ -256,11 +258,61 @@ class ProfileCorruptError(ProfileStorageError):
     """Il database non si apre o non supera i controlli di integrità."""
 
 
+class ProfileDataError(ProfileStorageError):
+    """Lettura o scrittura dei dati personali del profilo non riuscita. Mai valori nei messaggi."""
+
+
+class FixedDataAlreadySetError(ProfileDataError):
+    """Altezza e data di nascita sono già impostate: sono fisse e non si cambiano."""
+
+
+class FixedDataStore(Protocol):
+    """Altezza e data di nascita: si impostano una volta sola, alla creazione del profilo o,
+    per un profilo che non le ha (creato prima che esistessero), una volta più tardi."""
+
+    def get(self) -> FixedProfileData | None:
+        """I dati fissi, o None se il profilo non li ha ancora.
+
+        Raises:
+            ProfileDataError: dati illeggibili o non validi.
+        """
+        ...
+
+    def set_once(self, data: FixedProfileData) -> None:
+        """Imposta i dati fissi.
+
+        Raises:
+            FixedDataAlreadySetError: ci sono già; nulla cambia.
+            ProfileDataError: scrittura non riuscita.
+        """
+        ...
+
+
+class WeightStore(Protocol):
+    """Serie del peso con data di validità."""
+
+    def put(self, entry: WeightEntry) -> None:
+        """Salva il peso valido da `entry.valid_from`; la stessa data sostituisce la voce.
+
+        Raises:
+            ProfileDataError: scrittura non riuscita.
+        """
+        ...
+
+    def list_entries(self) -> Sequence[WeightEntry]:
+        """Tutte le voci per data di validità crescente (una sola per data).
+
+        Raises:
+            ProfileDataError: dati illeggibili o non validi.
+        """
+        ...
+
+
 class OpenProfile(Protocol):
     """Un profilo aperto: le sue informazioni e gli store che condividono una connessione.
 
-    Le transazioni di `activities.transaction()` coprono anche `sync_journal`, `physiology`
-    e `load_cache`.
+    Le transazioni di `activities.transaction()` coprono anche `sync_journal`, `physiology`,
+    `weights`, `fixed_data`, `sport_weights` e `load_cache`.
     Va chiuso con `close()`; dopo la chiusura gli store non si usano più.
     """
 
@@ -282,6 +334,21 @@ class OpenProfile(Protocol):
     @property
     def physiology(self) -> PhysiologyStore:
         """Parametri fisiologici con data di validità."""
+        ...
+
+    @property
+    def weights(self) -> WeightStore:
+        """Serie del peso con data di validità."""
+        ...
+
+    @property
+    def fixed_data(self) -> FixedDataStore:
+        """Altezza e data di nascita (fisse)."""
+        ...
+
+    @property
+    def sport_weights(self) -> SportWeightStore:
+        """Pesi degli sport scelti dall'utente."""
         ...
 
     @property

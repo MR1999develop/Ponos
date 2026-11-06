@@ -34,8 +34,18 @@ Un'ora esatta alla FC di soglia dà hrTSS 100. HR = FCmin dà HRr = 0 e carico 0
   c'è un test in bici (default del progetto). Il valore si porta al limite
   invece di rifiutare i parametri: il costruttore di `Physiology` richiede
   solo `FCmin < soglia ≤ FCmax` per la soglia della corsa.
-- Altri vincoli dei parametri e intervalli ammessi: **punto aperto**, da
-  fissare nei tipi di dominio con limiti inferiore e superiore.
+- Intervalli ammessi (default del progetto, nei tipi di dominio): FC minima
+  20-250, FC massima fino a 250 con minima < massima, soglia 40-250 con
+  minima < soglia <= massima; il vincolo si verifica sul risultato di un
+  aggiornamento, non sul singolo valore.
+- **Misure datate** (`profiles/measurements.py`): `UpdateMeasurements` dà a
+  uno o più tra peso, FC minima, FC massima e soglia una data di validità
+  (non nel futuro, non prima del 1900-01-01). I valori non indicati restano
+  quelli validi **quel giorno** (non gli ultimi); lo stesso giorno sostituisce;
+  il sesso resta quello della creazione; tutto in una transazione. Il peso
+  corporeo ha la sua serie e non entra nel carico. Altezza (100-250 cm) e data
+  di nascita (dal 1900-01-01 a oggi meno 5 anni) sono fisse; il peso va da
+  20,0 a 300,0 kg in decimi interi.
 
 ## 3. Campioni fuori limiti, buchi, attività senza FC
 
@@ -59,8 +69,11 @@ Un'ora esatta alla FC di soglia dà hrTSS 100. HR = FCmin dà HRr = 0 e carico 0
 
 ## 4. Pesi degli sport
 
-Default del progetto, provvisori, da tarare in fase 3. L'utente li può
-cambiare.
+Default del progetto (`load/domain/sport.py`), provvisori. L'utente li
+cambia: i pesi scelti stanno nel profilo (tabella `sport_weights`, solo quelli
+diversi dal default) e `ComputeProfileOverview` legge quelli salvati a ogni
+calcolo. L'impronta di un carico comprende solo il peso dello sport di
+quell'attività: cambiare il peso della bici non fa ricalcolare le corse.
 
 | Sport | Peso |
 |---|---|
@@ -73,6 +86,41 @@ cambiare.
 | Altro | 0,8 |
 
 Motivo per la forza: la FC sottostima il suo carico. Peso 0 dà carico 0.
+
+## 4b. Zone di FC
+
+Cinque zone sulla soglia dello sport (in bici la soglia della bici), secondo
+Friel; percentuali di default del progetto in un solo posto
+(`ZONE_STARTS_PERCENT` in `load/domain/zones.py`), da rivedere in fase 4:
+
+| Zona | FC in % della soglia |
+|---|---|
+| Z1 | sotto 85% |
+| Z2 | da 85% a 89% (sotto 90%) |
+| Z3 | da 90% a 94% (sotto 95%) |
+| Z4 | da 95% a 99% (sotto 100%) |
+| Z5 | 100% e oltre |
+
+- Il confine inferiore appartiene alla zona più alta (144,5 bpm con soglia 170 è
+  Z2; 153 è esattamente il 90%: Z3). Il confronto è su interi (`bpm * 100`
+  contro `percentuale * soglia`), mai su percentuali in virgola mobile.
+- I **secondi in ogni zona** (`ActivityLoad.zone_seconds`, `ZoneSeconds`) sono
+  quelli dei campioni contati dal carico: stessi scarti (FC fuori limiti) e
+  stessi buchi (intervalli oltre 10 s esclusi). Senza serie di FC sono zero;
+  per una stima fatta con pochi campioni validi sono quelli misurati.
+- Si salvano nella cache dei carichi (colonne `zone1_s ... zone5_s`) legati alla
+  stessa impronta del carico; l'impronta comprende le percentuali delle zone e
+  `LOAD_MODEL_VERSION` (2 dalla fase 3).
+- Aggregazioni per i grafici (`load/domain/aggregation.py`, pure e vettoriali):
+  carico per settimana ISO (lunedì-domenica, giorni locali del profilo) e per
+  sport, secondi per zona per settimana; le settimane senza attività, dalla
+  prima a quella di oggi, ci sono a zero; le attività dopo oggi si ignorano
+  come nel PMC. `ProfileOverview.weekly_load(oggi)` e `.weekly_zones(oggi)`.
+- Dettaglio di un'attività (`load/activity_detail.py`, `GetActivityDetail`):
+  legge e decodifica l'originale, restituisce tracciato di FC (con i campioni
+  scartati marcati), limiti, soglia e confini delle zone validi quel giorno,
+  riepilogo e carico; un guasto del file è l'esito `ExcludedActivity` con il
+  motivo (mancante, alterato, troppo grande, illeggibile, non decodificabile).
 
 ## 5. PMC
 

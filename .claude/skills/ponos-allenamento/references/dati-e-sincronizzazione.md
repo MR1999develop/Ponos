@@ -39,8 +39,9 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   utente e SYSTEM alla creazione; Ubuntu: 0700 verificato). Database, archivio
   e backup ereditano i permessi privati della cartella; file creati in modo
   esclusivo.
-- **Creazione:** cartella, lock, database, parametri iniziali e voce
-  nell'elenco; se un passo fallisce, il rollback annulla solo ciò che ha
+- **Creazione:** cartella, lock, database, misure iniziali (parametri
+  fisiologici, peso, altezza e data di nascita in una sola transazione) e
+  voce nell'elenco; se un passo fallisce, il rollback annulla solo ciò che ha
   creato. Chi perde la gara con un'altra istanza sulla stessa cartella non
   tocca il profilo del vincitore (T-DATI-06).
 - **Elenco:** `ProfileRegistry.upsert` porta l'elenco allo stato "questo
@@ -75,8 +76,9 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   rilasciata non si modifica.
 - Tempi in millisecondi UTC interi; durate misurate in secondi.
 - Contiene l'indice delle attività, i parametri fisiologici, la cache dei
-  carichi e (dalla v2) il giornale della sincronizzazione; obiettivi, piani,
-  infortuni e impostazioni arrivano con le loro fasi, con nuove migrazioni.
+  carichi, (dalla v2) il giornale della sincronizzazione e (dalla v3) i dati
+  personali, il peso e i pesi degli sport; obiettivi, piani, infortuni e
+  impostazioni arrivano con le loro fasi, con nuove migrazioni.
   Carichi e PMC sono derivati e rigenerabili.
 - **Schema v2** (`sync_journal`, `sync_cursor`, `sync_state`, tutte `STRICT`,
   tempi in millisecondi UTC): vedi la sezione 5. La migrazione v1 → v2 passa
@@ -85,6 +87,31 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   `tests/collaudo/test_database_del_profilo.py`, insieme alle due migrazioni
   congelate). Gli insiemi chiusi della v2 (stati, cause, elenchi) hanno un test
   che li confronta con gli enum del dominio.
+- **Schema v3** (dati personali, pesi degli sport, zone; tutte `STRICT`):
+  - `profile_body`: una sola riga (`id = 1`) con altezza in cm (CHECK
+    100-250) e data di nascita (CHECK `>= 1900-01-01`). Altezza e data di
+    nascita sono **fisse**: un trigger `BEFORE UPDATE` rifiuta ogni
+    modifica, la porta `FixedDataStore.set_once` scrive una volta sola
+    (`FixedDataAlreadySetError` poi). La riga manca nei profili creati
+    prima della v3: restano validi, i dati si completano una volta in
+    "Modifica profilo" (`CompleteFixedProfileData`).
+  - `weight`: serie del peso, `valid_from` ISO e `tenths_kg` intero
+    (200-3000: nessun float binario). Si aggiunge con `UpdateMeasurements`;
+    la stessa data sostituisce.
+  - `sport_weights`: solo i pesi diversi dal default (`REAL` tra 0 e 5);
+    `SetSportWeights` sostituisce l'insieme in una transazione.
+  - `load_cache` guadagna `zone1_s ... zone5_s` (secondi in zona, `>= 0`).
+    La cache è derivata: la migrazione la svuota, così nessun carico resta
+    senza zone (`LOAD_MODEL_VERSION` 2 lo garantisce anche per le impronte).
+  - La migrazione v2 → v3 passa da `backup/ponos-v2-v3.sqlite3`. T-DATI-01:
+    `tests/collaudo/test_fase3_migrazione.py` ha la v3 congelata e un
+    database v2 scritto a mano, dati intatti, copia coerente, migrazione
+    interrotta a metà, limiti dei CHECK e trigger.
+  - `OpenProfile` espone anche `weights` (`WeightStore`), `fixed_data`
+    (`FixedDataStore`) e `sport_weights` (`SportWeightStore`): stessa
+    connessione e stessa transazione di `activities.transaction()`.
+  - Altezza, peso e data di nascita sono dati di salute: mai nei log né nei
+    messaggi d'errore (i tipi di dominio e gli store non ripetono i valori).
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.
@@ -404,10 +431,12 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
   lenta, `FakeGarminAccount`) e `tests/fakes/tokens.py`; contratti in
   `tests/contracts/contract_sync.py` e `contract_tokens.py`.
 - Porte: `ActivityArchive` e `ActivityIndex` (`activities/ports.py`),
-  `PhysiologyStore` e `LoadCache` (`load/ports.py`), `ProfileRegistry`,
+  `PhysiologyStore`, `SportWeightStore` e `LoadCache` (`load/ports.py`),
+  `WeightStore` e `FixedDataStore` (`profiles/ports.py`), `ProfileRegistry`,
   `ProfileFolders` e `ProfileStorage` (`profiles/ports.py`). `ProfileStorage`
-  apre un `OpenProfile` i cui tre store condividono una connessione:
-  `activities.transaction()` copre anche parametri e cache.
+  apre un `OpenProfile` i cui store condividono una connessione:
+  `activities.transaction()` copre anche parametri, peso, dati fissi, pesi
+  degli sport e cache.
 - Una transazione per volta (annidare è `TransactionStateError`); fuori da
   una transazione ogni operazione è atomica da sola.
 - Il lock del profilo (`ProfileFolders.acquire_lock`) è separato dal database:

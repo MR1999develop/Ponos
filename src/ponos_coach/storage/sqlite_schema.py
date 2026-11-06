@@ -27,6 +27,15 @@ Colonne di v2 (sincronizzazione Garmin, tutte `STRICT`):
   cancellazione dell'attività.
 - `sync_cursor`: il punto raggiunto in ciascun elenco remoto (`full`, `verify`, `incremental`).
 - `sync_state`: una sola riga (`id = 1`) con la fine dell'ultima sincronizzazione.
+
+Colonne di v3 (dati personali, pesi degli sport e zone di FC):
+
+- `profile_body`: una sola riga (`id = 1`) con altezza (cm) e data di nascita, fisse: un trigger
+  rifiuta ogni `UPDATE`. Assente nei profili creati prima della v3 (da completare una volta).
+- `weight`: serie del peso con data di validità, in decimi di chilogrammo interi.
+- `sport_weights`: solo i pesi degli sport diversi dal default.
+- `load_cache`: cinque colonne `zone1_s ... zone5_s` con i secondi in ciascuna zona. La cache è
+  derivata e rigenerabile: la migrazione la svuota, così nessun carico resta senza zone.
 """
 
 from __future__ import annotations
@@ -60,9 +69,17 @@ V2_FAILURES: Final = frozenset(_FAILURES.replace("'", "").split(","))
 V2_RETRYABLE_FAILURES: Final = frozenset(_RETRYABLE_FAILURES.replace("'", "").split(","))
 V2_LISTING_KINDS: Final = frozenset(_LISTING_KINDS.replace("'", "").split(","))
 
+# Limiti dei dati personali (gli stessi dei tipi di dominio), congelati qui apposta.
+V3_HEIGHT_CM = (100, 250)
+V3_WEIGHT_TENTHS_KG = (200, 3000)
+V3_MIN_BIRTH_DATE = "1900-01-01"
+V3_SPORT_WEIGHT_MAX = 5.0
+ZONE_COLUMNS: Final = ("zone1_s", "zone2_s", "zone3_s", "zone4_s", "zone5_s")
+
 # Le tabelle che ogni database di profilo ha dalla v1: senza, il file non è di un profilo.
 V1_TABLES: Final = frozenset({"meta", "activities", "physiology", "load_cache"})
 V2_TABLES: Final = frozenset({"sync_journal", "sync_cursor", "sync_state"})
+V3_TABLES: Final = frozenset({"profile_body", "weight", "sport_weights"})
 
 _V1_META = """
 CREATE TABLE meta (
@@ -170,10 +187,57 @@ CREATE TABLE sync_state (
 ) STRICT
 """
 
+_V3_PROFILE_BODY = f"""
+CREATE TABLE profile_body (
+    id         INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    height_cm  INTEGER NOT NULL CHECK (height_cm BETWEEN {V3_HEIGHT_CM[0]} AND {V3_HEIGHT_CM[1]}),
+    birth_date TEXT    NOT NULL CHECK (length(birth_date) = 10
+                                       AND birth_date >= '{V3_MIN_BIRTH_DATE}')
+) STRICT
+"""
+
+# Altezza e data di nascita sono fisse: nemmeno un UPDATE diretto le cambia.
+_V3_PROFILE_BODY_FIXED = """
+CREATE TRIGGER profile_body_is_fixed BEFORE UPDATE ON profile_body
+BEGIN
+    SELECT RAISE(ABORT, 'profile_body is fixed');
+END
+"""
+
+_V3_WEIGHT = f"""
+CREATE TABLE weight (
+    valid_from TEXT    NOT NULL PRIMARY KEY CHECK (length(valid_from) = 10),
+    tenths_kg  INTEGER NOT NULL CHECK (tenths_kg BETWEEN {V3_WEIGHT_TENTHS_KG[0]}
+                                                     AND {V3_WEIGHT_TENTHS_KG[1]})
+) STRICT
+"""
+
+_V3_SPORT_WEIGHTS = f"""
+CREATE TABLE sport_weights (
+    sport  TEXT NOT NULL PRIMARY KEY CHECK (sport IN ({_SPORTS})),
+    weight REAL NOT NULL CHECK (weight >= 0 AND weight <= {V3_SPORT_WEIGHT_MAX})
+) STRICT
+"""
+
+# I carichi salvati non hanno le zone: la cache è derivata, si svuota e si ricalcola dai file.
+_V3_CLEAR_LOAD_CACHE = "DELETE FROM load_cache"
+_V3_ZONE_COLUMNS = tuple(
+    f"ALTER TABLE load_cache ADD COLUMN {column} REAL NOT NULL DEFAULT 0 CHECK ({column} >= 0)"
+    for column in ZONE_COLUMNS
+)
+
 # Migrazione i (indice i-1): porta lo schema dalla versione i-1 alla i.
 MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     (_V1_META, _V1_ACTIVITIES, _V1_ACTIVITIES_START_INDEX, _V1_PHYSIOLOGY, _V1_LOAD_CACHE),
     (_V2_SYNC_JOURNAL, _V2_SYNC_JOURNAL_TO_DO_INDEX, _V2_SYNC_CURSOR, _V2_SYNC_STATE),
+    (
+        _V3_PROFILE_BODY,
+        _V3_PROFILE_BODY_FIXED,
+        _V3_WEIGHT,
+        _V3_SPORT_WEIGHTS,
+        _V3_CLEAR_LOAD_CACHE,
+        *_V3_ZONE_COLUMNS,
+    ),
 )
 
 SCHEMA_VERSION: Final = len(MIGRATIONS)

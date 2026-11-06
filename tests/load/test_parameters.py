@@ -17,6 +17,7 @@ from ponos_coach.load.domain import (
     SportWeight,
     ThresholdHeartRate,
     load_fingerprint,
+    parameters,
 )
 from tests.builders import physiology, physiology_entry
 
@@ -69,3 +70,20 @@ def test_entry_keeps_its_date_and_parameters() -> None:
 
     assert entry.valid_from == date(2026, 1, 1)
     assert entry.physiology.threshold.bpm == 168
+
+
+def test_fingerprint_changes_when_the_zone_percentages_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Le zone fanno parte del modello: ridefinirle invalida i carichi salvati."""
+    before = load_fingerprint(physiology(), {})
+    monkeypatch.setattr(parameters, "ZONE_STARTS_PERCENT", (80, 88, 94, 100))
+
+    assert load_fingerprint(physiology(), {}) != before
+
+
+def test_fingerprint_changes_with_the_model_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    before = load_fingerprint(physiology(), {})
+    monkeypatch.setattr(parameters, "LOAD_MODEL_VERSION", parameters.LOAD_MODEL_VERSION + 1)
+
+    assert load_fingerprint(physiology(), {}) != before

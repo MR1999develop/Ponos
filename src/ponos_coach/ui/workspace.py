@@ -561,6 +561,7 @@ class WorkspaceController(QObject):
                 session.physiology,
                 session.load_cache,
                 services.decode,
+                sport_weights=session.sport_weights,
                 timezone=current.zone,
                 today=lambda: services.today(current.zone),
                 is_cancelled=context.is_cancelled,

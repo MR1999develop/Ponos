@@ -6,6 +6,15 @@ from ponos_coach.load.domain.activity_load import (
     ActivityLoad,
     LoadSource,
     compute_activity_load,
+    out_of_limits,
+)
+from ponos_coach.load.domain.aggregation import (
+    DayLoad,
+    WeeklyLoad,
+    WeeklyZones,
+    iso_week_start,
+    weekly_load_by_sport,
+    weekly_zone_seconds,
 )
 from ponos_coach.load.domain.heart_rate import (
     HeartRateLimits,
@@ -23,11 +32,28 @@ from ponos_coach.load.domain.parameters import (
     physiology_for_day,
 )
 from ponos_coach.load.domain.pmc import PmcSeries, compute_pmc
-from ponos_coach.load.domain.sport import SportWeight, default_weight, typical_intensity
+from ponos_coach.load.domain.sport import (
+    SportWeight,
+    customised_weights,
+    default_weight,
+    effective_weights,
+    typical_intensity,
+)
+from ponos_coach.load.domain.zones import (
+    ZONE_COUNT,
+    ZONE_STARTS_PERCENT,
+    ZoneSeconds,
+    seconds_per_zone,
+    zone_indices,
+    zone_starts_bpm,
+)
 
 __all__ = [
     "LOAD_MODEL_VERSION",
+    "ZONE_COUNT",
+    "ZONE_STARTS_PERCENT",
     "ActivityLoad",
+    "DayLoad",
     "HeartRateLimits",
     "LoadFingerprint",
     "LoadSource",
@@ -38,11 +64,23 @@ __all__ = [
     "Sex",
     "SportWeight",
     "ThresholdHeartRate",
+    "WeeklyLoad",
+    "WeeklyZones",
+    "ZoneSeconds",
     "compute_activity_load",
     "compute_pmc",
+    "customised_weights",
     "default_weight",
+    "effective_weights",
+    "iso_week_start",
     "load_fingerprint",
+    "out_of_limits",
     "physiology_for_day",
+    "seconds_per_zone",
     "threshold_for_sport",
     "typical_intensity",
+    "weekly_load_by_sport",
+    "weekly_zone_seconds",
+    "zone_indices",
+    "zone_starts_bpm",
 ]

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Database dei profili in memoria: `ProfileStorage`, `OpenProfile` e i tre store.
+"""Database dei profili in memoria: `ProfileStorage`, `OpenProfile` e gli store.
 
 I dati di ogni profilo vivono nel `InMemoryDisk` (come il file del database): chiudere e
 riaprire il profilo li ritrova. Una transazione salva una copia dei dati e la ripristina se
@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from pathlib import Path
+from types import MappingProxyType
 
 from ponos_coach.activities.domain import (
     ActivityIdentity,
@@ -26,6 +27,7 @@ from ponos_coach.activities.domain import (
     ListingCursor,
     ListingKind,
     RemoteActivity,
+    Sport,
     SyncStatus,
     can_transition,
     identity_key,
@@ -40,24 +42,34 @@ from ponos_coach.activities.ports import (
     TransactionStateError,
     UnknownJournalEntryError,
 )
-from ponos_coach.load.domain import ActivityLoad, LoadFingerprint, PhysiologyEntry
-from ponos_coach.load.ports import LoadCache, PhysiologyStore, UnknownActivityError
+from ponos_coach.load.domain import ActivityLoad, LoadFingerprint, PhysiologyEntry, SportWeight
+from ponos_coach.load.ports import (
+    LoadCache,
+    PhysiologyStore,
+    SportWeightStore,
+    UnknownActivityError,
+)
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
+    FixedProfileData,
     FolderKind,
     ProfileId,
     ProfileInfo,
     ProfileName,
     ProfilePeek,
+    WeightEntry,
 )
 from ponos_coach.profiles.ports import (
+    FixedDataAlreadySetError,
+    FixedDataStore,
     OpenProfile,
     ProfileAlreadyExistsError,
     ProfileNotFoundError,
+    WeightStore,
 )
 from ponos_coach.profiles.timezones import require_known_timezone
 
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 
 
 @dataclass
@@ -68,6 +80,9 @@ class _Database:
     records: dict[str, ActivityRecord] = field(default_factory=dict)  # per chiave d'identità
     garmin_ids: set[int] = field(default_factory=set)
     physiology: dict[date, PhysiologyEntry] = field(default_factory=dict)
+    weights: dict[date, WeightEntry] = field(default_factory=dict)
+    fixed: FixedProfileData | None = None
+    sport_weights: dict[Sport, SportWeight] = field(default_factory=dict)
     loads: dict[str, tuple[LoadFingerprint, ActivityLoad]] = field(default_factory=dict)
     cursors: dict[ListingKind, ListingCursor] = field(default_factory=dict)
     journal: dict[GarminActivityId, JournalEntry] = field(default_factory=dict)
@@ -81,6 +96,9 @@ class _Database:
                 self.records,
                 self.garmin_ids,
                 self.physiology,
+                self.weights,
+                self.fixed,
+                self.sport_weights,
                 self.loads,
                 self.cursors,
                 self.journal,
@@ -94,6 +112,9 @@ class _Database:
             self.records,
             self.garmin_ids,
             self.physiology,
+            self.weights,
+            self.fixed,
+            self.sport_weights,
             self.loads,
             self.cursors,
             self.journal,
@@ -263,6 +284,41 @@ class _Physiology:
         return [self._db.physiology[day] for day in sorted(self._db.physiology)]
 
 
+class _Weights:
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def put(self, entry: WeightEntry) -> None:
+        self._db.weights[entry.valid_from] = entry
+
+    def list_entries(self) -> Sequence[WeightEntry]:
+        return [self._db.weights[day] for day in sorted(self._db.weights)]
+
+
+class _FixedData:
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def get(self) -> FixedProfileData | None:
+        return self._db.fixed
+
+    def set_once(self, data: FixedProfileData) -> None:
+        if self._db.fixed is not None:
+            raise FixedDataAlreadySetError("già impostati")
+        self._db.fixed = data
+
+
+class _SportWeights:
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def load(self) -> Mapping[Sport, SportWeight]:
+        return MappingProxyType(dict(self._db.sport_weights))
+
+    def replace(self, weights: Mapping[Sport, SportWeight]) -> None:
+        self._db.sport_weights = dict(weights)
+
+
 class _Cache:
     def __init__(self, database: _Database) -> None:
         self._db = database
@@ -292,6 +348,9 @@ class _OpenProfile:
         self._index = _Index(database)
         self._journal = _Journal(database)
         self._physiology = _Physiology(database)
+        self._weights = _Weights(database)
+        self._fixed_data = _FixedData(database)
+        self._sport_weights = _SportWeights(database)
         self._cache = _Cache(database)
 
     @property
@@ -309,6 +368,18 @@ class _OpenProfile:
     @property
     def physiology(self) -> PhysiologyStore:
         return self._physiology
+
+    @property
+    def weights(self) -> WeightStore:
+        return self._weights
+
+    @property
+    def fixed_data(self) -> FixedDataStore:
+        return self._fixed_data
+
+    @property
+    def sport_weights(self) -> SportWeightStore:
+        return self._sport_weights
 
     @property
     def load_cache(self) -> LoadCache:

@@ -15,8 +15,9 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ponos_coach.activities.domain import HeartRateSeries, Sport
-from ponos_coach.load.domain.heart_rate import Physiology, threshold_for_sport
+from ponos_coach.load.domain.heart_rate import HeartRateLimits, Physiology, threshold_for_sport
 from ponos_coach.load.domain.sport import SportWeight, typical_intensity
+from ponos_coach.load.domain.zones import ZoneSeconds, seconds_per_zone
 
 MAX_GAP_S = 10.0  # default del progetto: oltre questo intervallo tra campioni, non si conta
 MAX_BAD_FRACTION = 0.30  # default del progetto: oltre, il carico è una stima
@@ -40,6 +41,10 @@ class ActivityLoad:
 
     `used_samples` sono i campioni contati (0 per una stima); `discarded_samples` quelli con
     FC fuori da `[min, max]`; `excluded_seconds` i secondi di intervalli oltre 10 s non contati.
+    `zone_seconds` sono i secondi dei campioni contati in ciascuna zona di FC (sulla soglia dello
+    sport): gli stessi campioni del carico, quindi senza scarti né buchi; tutti zero se non c'è
+    una serie di FC (anche per una stima fatta con pochi campioni validi i secondi in zona sono
+    quelli misurati).
     """
 
     trimp: float
@@ -49,6 +54,7 @@ class ActivityLoad:
     discarded_samples: int
     excluded_seconds: float
     source: LoadSource
+    zone_seconds: ZoneSeconds = ZoneSeconds.ZERO
 
 
 def trimp_per_minute(hrr: float, k: float) -> float:
@@ -72,18 +78,29 @@ def _sample_validity_s(seconds: NDArray[np.float64]) -> NDArray[np.float64]:
     return np.append(gaps, np.median(gaps))
 
 
-def _estimated(
+def out_of_limits(series: HeartRateSeries, limits: HeartRateLimits) -> NDArray[np.bool_]:
+    """Maschera dei campioni con FC fuori da `[min, max]`: sono quelli scartati dal carico."""
+    return ~_in_range(series, limits)
+
+
+def _in_range(series: HeartRateSeries, limits: HeartRateLimits) -> NDArray[np.bool_]:
+    return (series.bpm >= limits.min_bpm) & (series.bpm <= limits.max_bpm)
+
+
+def _estimated(  # noqa: PLR0913 - i dati dell'esito, tutti necessari
     sport: Sport,
     moving_time_s: float,
     physiology: Physiology,
     weight: SportWeight,
+    *,
     discarded: int,
     excluded_s: float,
+    zones: ZoneSeconds,
 ) -> ActivityLoad:
     hr_tss = moving_time_s / 3600.0 * 100.0 * typical_intensity(sport) ** 2
     trimp = hr_tss / 100.0 * hour_at_threshold_trimp(sport, physiology)
     return ActivityLoad(
-        trimp, hr_tss, hr_tss * weight.value, 0, discarded, excluded_s, LoadSource.ESTIMATE
+        trimp, hr_tss, hr_tss * weight.value, 0, discarded, excluded_s, LoadSource.ESTIMATE, zones
     )
 
 
@@ -117,17 +134,36 @@ def compute_activity_load(
     if not math.isfinite(moving_time_s) or moving_time_s <= 0:
         raise ValueError("la durata deve essere finita e positiva")
     if series is None:
-        return _estimated(sport, moving_time_s, physiology, weight, 0, 0.0)
+        return _estimated(
+            sport,
+            moving_time_s,
+            physiology,
+            weight,
+            discarded=0,
+            excluded_s=0.0,
+            zones=ZoneSeconds.ZERO,
+        )
 
     limits = physiology.limits
     validity = _sample_validity_s(series.seconds)
-    in_range = (series.bpm >= limits.min_bpm) & (series.bpm <= limits.max_bpm)
+    in_range = _in_range(series, limits)
     counted = in_range & (validity <= MAX_GAP_S)
     discarded = int(np.count_nonzero(~in_range))
     excluded_s = float(validity[in_range & ~counted].sum())
     counted_s = float(validity[counted].sum())
+    zones = seconds_per_zone(
+        series.bpm[counted], validity[counted], threshold_for_sport(physiology, sport)
+    )
     if _is_mostly_missing(counted_s, moving_time_s):
-        return _estimated(sport, moving_time_s, physiology, weight, discarded, excluded_s)
+        return _estimated(
+            sport,
+            moving_time_s,
+            physiology,
+            weight,
+            discarded=discarded,
+            excluded_s=excluded_s,
+            zones=zones,
+        )
 
     hrr = (series.bpm[counted] - limits.min_bpm) / limits.reserve_bpm
     per_minute = hrr * _BANISTER_COEFFICIENT * np.exp(physiology.sex.banister_k * hrr)
@@ -141,4 +177,5 @@ def compute_activity_load(
         discarded,
         excluded_s,
         LoadSource.HEART_RATE,
+        zones,
     )

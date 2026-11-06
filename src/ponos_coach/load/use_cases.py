@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Casi d'uso della panoramica della forma: carico delle attività e PMC.
+"""Casi d'uso della panoramica della forma: carico delle attività, PMC, pesi degli sport.
 
 - `ComputeProfileOverview`: panoramica di un profilo (indice, archivio, cache dei carichi):
   giorno locale, calcolo del carico, serie PMC.
+- `GetSportWeights` e `SetSportWeights`: leggono e impostano i pesi degli sport del profilo.
 """
 
 from __future__ import annotations
@@ -36,20 +37,27 @@ from ponos_coach.activities.ports import (
 )
 from ponos_coach.load.domain import (
     ActivityLoad,
+    DayLoad,
     LoadFingerprint,
     Physiology,
     PmcSeries,
     SportWeight,
+    WeeklyLoad,
+    WeeklyZones,
     compute_activity_load,
     compute_pmc,
+    customised_weights,
     default_weight,
+    effective_weights,
     load_fingerprint,
     physiology_for_day,
+    weekly_load_by_sport,
+    weekly_zone_seconds,
 )
-from ponos_coach.load.ports import LoadCache, PhysiologyStore
+from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 
 
-def _local_day(start: datetime, timezone: ZoneInfo) -> date:
+def local_day_of(start: datetime, timezone: ZoneInfo) -> date:
     """Giorno locale (nel fuso del profilo) dell'inizio di un'attività."""
     return start.astimezone(timezone).date()
 
@@ -130,6 +138,55 @@ class ProfileOverview:
     activities: tuple[ProfileActivity, ...]
     excluded: tuple[ExcludedActivity, ...]
 
+    def day_loads(self) -> tuple[DayLoad, ...]:
+        """Le attività nella forma delle aggregazioni (giorno locale, sport, carico, zone)."""
+        return tuple(
+            DayLoad(a.local_day, a.sport, a.load.load, a.load.zone_seconds) for a in self.activities
+        )
+
+    def weekly_load(self, through: date) -> WeeklyLoad:
+        """Carico per settimana ISO e sport fino alla settimana di `through` (di solito oggi)."""
+        return weekly_load_by_sport(self.day_loads(), through)
+
+    def weekly_zones(self, through: date) -> WeeklyZones:
+        """Secondi per zona di FC e settimana ISO fino alla settimana di `through`."""
+        return weekly_zone_seconds(self.day_loads(), through)
+
+
+def _read_bytes(
+    archive: ActivityArchive, record: ActivityRecord, max_file_bytes: int
+) -> bytes | ExclusionReason:
+    try:
+        return archive.read(record.archived, max_file_bytes)
+    except ArchiveFileMissingError:
+        return ExclusionReason.FILE_MISSING
+    except ArchiveIntegrityError:
+        return ExclusionReason.FILE_ALTERED
+    except ArchiveTooLargeError:
+        return ExclusionReason.FILE_TOO_LARGE
+    except ArchiveError:
+        return ExclusionReason.UNREADABLE
+
+
+def read_original_activity(
+    archive: ActivityArchive, record: ActivityRecord, decode: Decoder, max_file_bytes: int
+) -> Activity | ExclusionReason:
+    """Legge l'originale dall'archivio (con il tetto di byte) e lo decodifica.
+
+    Un guasto non solleva: dà il motivo (file mancante, alterato, troppo grande, illeggibile,
+    non decodificabile, o con un'identità diversa da quella del record).
+    """
+    data = _read_bytes(archive, record, max_file_bytes)
+    if isinstance(data, ExclusionReason):
+        return data
+    try:
+        activity = decode(data, record.file_format)
+    except ActivityFileError:
+        return ExclusionReason.DECODE_FAILED
+    if activity.identity != record.identity:
+        return ExclusionReason.FILE_ALTERED
+    return activity
+
 
 def _never_cancelled() -> bool:
     return False
@@ -152,6 +209,10 @@ class ComputeProfileOverview:
     I carichi calcolati si scrivono in cache in una sola transazione alla fine (anche dopo un
     annullamento). Deterministico: stessi dati e parametri, stesso risultato.
 
+    I pesi degli sport sono quelli salvati nel profilo (`sport_weights`), letti a ogni calcolo;
+    uno sport senza peso salvato usa il default. L'impronta di un'attività comprende solo il
+    peso del suo sport: cambiare quello della bici non fa ricalcolare le corse.
+
     Dipendenze volatili iniettate: porte, `decode` (fornita dal Composition Root), `today`
     (oggi, nel fuso del profilo), `is_cancelled` (annullamento cooperativo, controllato prima di
     ogni attività) e `report(fatte, totali)` per l'avanzamento.
@@ -165,9 +226,9 @@ class ComputeProfileOverview:
         cache: LoadCache,
         decode: Decoder,
         *,
+        sport_weights: SportWeightStore,
         timezone: ZoneInfo,
         today: Callable[[], date],
-        sport_weights: Mapping[Sport, SportWeight] | None = None,
         max_file_bytes: int = MAX_ACTIVITY_FILE_BYTES,
         is_cancelled: Callable[[], bool] = _never_cancelled,
         report: Callable[[int, int], None] = _ignore_progress,
@@ -181,7 +242,7 @@ class ComputeProfileOverview:
         self._decode = decode
         self._timezone = timezone
         self._today = today
-        self._weights = MappingProxyType(dict(sport_weights or {}))
+        self._sport_weights = sport_weights
         self._max_file_bytes = max_file_bytes
         self._is_cancelled = is_cancelled
         self._report = report
@@ -196,6 +257,7 @@ class ComputeProfileOverview:
         records = self._index.list_by_start()
         today = self._today()
         entries = self._physiology.list_entries() if records else ()
+        saved_weights = self._sport_weights.load() if records else {}
         activities: list[ProfileActivity] = []
         excluded: list[ExcludedActivity] = []
         computed: list[_Computed] = []
@@ -204,12 +266,16 @@ class ComputeProfileOverview:
             for done, record in enumerate(records, start=1):
                 if self._is_cancelled():
                     raise OverviewCancelledError
-                local_day = _local_day(record.start, self._timezone)
+                local_day = local_day_of(record.start, self._timezone)
                 physiology = physiology_for_day(entries, local_day)
-                fingerprint = load_fingerprint(physiology, self._weights)
+                saved = saved_weights.get(record.sport)
+                fingerprint = load_fingerprint(
+                    physiology, {} if saved is None else {record.sport: saved}
+                )
                 load = self._cache.get(record.identity, fingerprint)
                 if load is None:
-                    outcome = self._compute(record, physiology)
+                    weight = default_weight(record.sport) if saved is None else saved
+                    outcome = self._compute(record, physiology, weight)
                     if isinstance(outcome, ExclusionReason):
                         excluded.append(ExcludedActivity(record.identity, outcome))
                     else:
@@ -224,32 +290,13 @@ class ComputeProfileOverview:
         return ProfileOverview(pmc, tuple(activities), tuple(excluded))
 
     def _compute(
-        self, record: ActivityRecord, physiology: Physiology
+        self, record: ActivityRecord, physiology: Physiology, weight: SportWeight
     ) -> ActivityLoad | ExclusionReason:
         """Carico dall'originale in archivio, o il motivo per cui non si può calcolare."""
-        data = self._read(record)
-        if isinstance(data, ExclusionReason):
-            return data
-        try:
-            activity = self._decode(data, record.file_format)
-        except ActivityFileError:
-            return ExclusionReason.DECODE_FAILED
-        if activity.identity != record.identity:
-            return ExclusionReason.FILE_ALTERED
-        weight = self._weights.get(record.sport, default_weight(record.sport))
+        activity = read_original_activity(self._archive, record, self._decode, self._max_file_bytes)
+        if isinstance(activity, ExclusionReason):
+            return activity
         return _load_of(activity, physiology, weight)
-
-    def _read(self, record: ActivityRecord) -> bytes | ExclusionReason:
-        try:
-            return self._archive.read(record.archived, self._max_file_bytes)
-        except ArchiveFileMissingError:
-            return ExclusionReason.FILE_MISSING
-        except ArchiveIntegrityError:
-            return ExclusionReason.FILE_ALTERED
-        except ArchiveTooLargeError:
-            return ExclusionReason.FILE_TOO_LARGE
-        except ArchiveError:
-            return ExclusionReason.UNREADABLE
 
     def _store(self, computed: list[_Computed]) -> None:
         if not computed:
@@ -266,3 +313,43 @@ def _profile_activity(
         record.identity, record.sport, record.start, local_day,
         record.elapsed_s, record.timer_s, record.summary, load,
     )  # fmt: skip
+
+
+# --- Pesi degli sport -----------------------------------------------------------------------
+
+
+class GetSportWeights:
+    """Legge i pesi degli sport del profilo: quelli scelti dall'utente, il default per il resto."""
+
+    def __init__(self, store: SportWeightStore) -> None:
+        self._store = store
+
+    def __call__(self) -> Mapping[Sport, SportWeight]:
+        """Il peso di ogni sport, tutti presenti.
+
+        Raises:
+            LoadStoreError: pesi salvati illeggibili.
+        """
+        return MappingProxyType(effective_weights(self._store.load()))
+
+
+class SetSportWeights:
+    """Imposta i pesi degli sport del profilo.
+
+    Si salvano solo i pesi diversi dal default (forma canonica: nessun ricalcolo inutile dei
+    carichi). I carichi già calcolati con altri pesi si ricalcolano da soli alla panoramica
+    successiva, perché l'impronta cambia.
+    """
+
+    def __init__(self, activities: ActivityIndex, store: SportWeightStore) -> None:
+        self._activities = activities
+        self._store = store
+
+    def __call__(self, weights: Mapping[Sport, SportWeight]) -> None:
+        """Sostituisce i pesi salvati con `weights` (gli sport non indicati tornano al default).
+
+        Raises:
+            LoadStoreError: scrittura non riuscita; i pesi di prima restano.
+        """
+        with self._activities.transaction():
+            self._store.replace(customised_weights(weights))

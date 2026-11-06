@@ -1,0 +1,266 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 MR
+"""Caso d'uso `GetActivityDetail`: tracciato, zone valide quel giorno, riepilogo, carico, errori."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from datetime import UTC, datetime
+
+import numpy as np
+import pytest
+
+from ponos_coach.activities.decoding import ActivityFileError, ActivityFileReason
+from ponos_coach.activities.domain import (
+    Activity,
+    ActivityOrigin,
+    ActivityRecord,
+    FileFormat,
+    Sport,
+)
+from ponos_coach.activities.ports import ActivityNotFoundError
+from ponos_coach.load.activity_detail import ActivityDetail, GetActivityDetail
+from ponos_coach.load.domain import (
+    LoadSource,
+    MissingPhysiologyError,
+    SportWeight,
+    zone_starts_bpm,
+)
+from ponos_coach.load.use_cases import ExcludedActivity, ExclusionReason, SetSportWeights
+from tests.builders import IMPORTED_AT, fit_identity, physiology_entry
+from tests.fixtures.generators import fit_writer as fw
+from tests.load.test_profile_overview import (
+    CHANGE_DAY,
+    FIRST_PARAMS_DAY,
+    ROME,
+    World,
+    decode_fit,
+)
+
+START = datetime(2026, 2, 10, 7, 0, tzinfo=UTC)
+
+
+def add_activity(
+    world: World, bpm: Sequence[int | None], *, serial: int = 1, start: datetime = START
+) -> ActivityRecord:
+    """Un'attività a 1 Hz con questi bpm (None = senza FC valida) nell'archivio del mondo."""
+    first = fw.datetime_to_fit(start)
+    samples = [fw.Sample(first + i, value) for i, value in enumerate(bpm)]
+    spec = fw.ActivitySpec(
+        start, fw.Sport.RUNNING, fw.SubSport.GENERIC, samples, serial_number=serial
+    )
+    data = fw.build_activity(spec)
+    activity = decode_fit(data, FileFormat.FIT)
+    archived = world.archive.store(data, FileFormat.FIT, activity.start)
+    record = ActivityRecord.from_activity(activity, archived, ActivityOrigin.IMPORT, IMPORTED_AT)
+    world.profile.activities.add(record)
+    return record
+
+
+def use_case(
+    world: World, *, decode: object = decode_fit, max_file_bytes: int = 50_000_000
+) -> GetActivityDetail:
+    return GetActivityDetail(
+        world.profile.activities,
+        world.archive,
+        world.profile.physiology,
+        world.profile.sport_weights,
+        decode,  # type: ignore[arg-type]
+        timezone=ROME,
+        max_file_bytes=max_file_bytes,
+    )
+
+
+def detail_of(world: World, record: ActivityRecord) -> ActivityDetail:
+    found = use_case(world)(record.identity)
+    assert isinstance(found, ActivityDetail)
+    return found
+
+
+def test_detail_gives_trace_load_summary_and_zone_bounds_of_the_day() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
+    record = add_activity(world, [150] * 600)
+
+    detail = detail_of(world, record)
+
+    assert detail.identity == record.identity
+    assert detail.sport is Sport.RUNNING
+    assert detail.start == START
+    assert detail.local_day == START.astimezone(ROME).date()
+    assert (detail.elapsed_s, detail.timer_s) == (record.elapsed_s, record.timer_s)
+    assert detail.summary == record.summary
+    assert detail.threshold_bpm == 170
+    assert (detail.limits.min_bpm, detail.limits.max_bpm) == (50, 190)
+    assert detail.zone_starts_bpm == zone_starts_bpm(170) == (144.5, 153.0, 161.5, 170.0)
+    assert detail.load.source is LoadSource.HEART_RATE
+    assert detail.load.zone_seconds.values == (0.0, 600.0, 0.0, 0.0, 0.0)  # 150 bpm: Z2
+    assert detail.trace is not None
+    assert detail.trace.seconds.tolist() == list(range(600))
+    assert set(detail.trace.bpm.tolist()) == {150.0}
+    assert detail.trace.discarded_count == 0
+
+
+def test_the_detail_load_is_the_one_of_the_overview() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
+    record = add_activity(world, [150] * 300 + [185] * 300)
+
+    overview = world.overview()
+    detail = detail_of(world, record)
+
+    (entry,) = overview.activities
+    assert detail.load == entry.load
+    assert detail.local_day == entry.local_day
+
+
+def test_out_of_limit_samples_are_marked_as_discarded_in_the_trace() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    bpm: list[int | None] = [150] * 20
+    bpm[3], bpm[9] = 200, 40  # sopra la massima 190, sotto la minima 50
+    record = add_activity(world, bpm)
+
+    detail = detail_of(world, record)
+
+    assert detail.trace is not None
+    assert np.flatnonzero(detail.trace.discarded).tolist() == [3, 9]
+    assert detail.trace.discarded_count == detail.load.discarded_samples == 2
+    assert detail.trace.bpm[3] == 200.0  # il campione scartato si vede, marcato
+
+
+def test_limits_and_zones_are_the_ones_valid_on_the_activity_day() -> None:
+    """T-CALC-05: due attività a cavallo di un cambio di soglia e di FC massima."""
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
+    world.profile.physiology.put(physiology_entry(CHANGE_DAY, 160))
+    before = add_activity(world, [150] * 60, serial=1, start=datetime(2026, 1, 15, 7, tzinfo=UTC))
+    after = add_activity(world, [150] * 60, serial=2, start=datetime(2026, 2, 10, 7, tzinfo=UTC))
+
+    detail_before, detail_after = detail_of(world, before), detail_of(world, after)
+
+    assert (detail_before.threshold_bpm, detail_after.threshold_bpm) == (170, 160)
+    assert detail_after.zone_starts_bpm == (136.0, 144.0, 152.0, 160.0)
+    assert detail_before.load.zone_seconds.values == (0.0, 60.0, 0.0, 0.0, 0.0)  # 150 = 88%
+    assert detail_after.load.zone_seconds.values == (0.0, 0.0, 60.0, 0.0, 0.0)  # 150 = 93,75%
+
+
+def test_a_saved_sport_weight_changes_the_load_in_the_detail() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [150] * 600)
+    plain = detail_of(world, record).load.load
+
+    SetSportWeights(world.profile.activities, world.profile.sport_weights)(
+        {Sport.RUNNING: SportWeight(1.5)}
+    )
+
+    assert detail_of(world, record).load.load == pytest.approx(plain * 1.5)
+
+
+def test_an_activity_without_heart_rate_has_no_trace_and_an_estimated_load() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [None] * 600)
+
+    detail = detail_of(world, record)
+
+    assert detail.trace is None
+    assert detail.load.source is LoadSource.ESTIMATE
+    assert detail.load.zone_seconds.total == 0.0
+
+
+def test_the_detail_reads_the_file_but_leaves_the_load_cache_alone() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [150] * 60)
+
+    detail_of(world, record)
+
+    assert world.archive.reads == 1
+    world.overview()
+    assert world.archive.reads == 2  # la cache era vuota: la panoramica ha dovuto leggere
+
+
+def test_an_unknown_activity_is_an_error_of_the_caller() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+
+    with pytest.raises(ActivityNotFoundError):
+        use_case(world)(fit_identity(99))
+
+
+def test_a_profile_without_parameters_cannot_show_a_detail() -> None:
+    world = World()
+    record = add_activity(world, [150] * 60)
+
+    with pytest.raises(MissingPhysiologyError):
+        use_case(world)(record.identity)
+
+
+def test_a_missing_file_is_a_clear_outcome() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [150] * 60)
+    del world.archive.files[record.archived.relative_path]
+
+    assert use_case(world)(record.identity) == ExcludedActivity(
+        record.identity, ExclusionReason.FILE_MISSING
+    )
+
+
+def test_an_altered_file_is_a_clear_outcome() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [150] * 60)
+    data = bytearray(world.archive.files[record.archived.relative_path])
+    data[20] ^= 0xFF  # stessa dimensione, contenuto diverso: lo SHA-256 non torna più
+    world.archive.files[record.archived.relative_path] = bytes(data)
+
+    assert use_case(world)(record.identity) == ExcludedActivity(
+        record.identity, ExclusionReason.FILE_ALTERED
+    )
+
+
+def test_a_file_over_the_byte_cap_is_a_clear_outcome() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [150] * 60)
+
+    assert use_case(world, max_file_bytes=100)(record.identity) == ExcludedActivity(
+        record.identity, ExclusionReason.FILE_TOO_LARGE
+    )
+
+
+def test_a_file_that_does_not_decode_is_a_clear_outcome() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [150] * 60)
+
+    def broken(_data: bytes, _file_format: FileFormat) -> Activity:
+        raise ActivityFileError(ActivityFileReason.CORRUPT)
+
+    assert use_case(world, decode=broken)(record.identity) == ExcludedActivity(
+        record.identity, ExclusionReason.DECODE_FAILED
+    )
+
+
+def test_a_file_with_another_identity_counts_as_altered() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [150] * 60, serial=1)
+    other = add_activity(world, [150] * 60, serial=2, start=datetime(2026, 2, 11, 7, tzinfo=UTC))
+
+    def wrong_file(_data: bytes, file_format: FileFormat) -> Activity:
+        return decode_fit(world.archive.files[other.archived.relative_path], file_format)
+
+    assert use_case(world, decode=wrong_file)(record.identity) == ExcludedActivity(
+        record.identity, ExclusionReason.FILE_ALTERED
+    )
+
+
+def test_the_byte_cap_must_be_positive() -> None:
+    world = World()
+
+    with pytest.raises(ValueError, match="byte"):
+        use_case(world, max_file_bytes=0)
