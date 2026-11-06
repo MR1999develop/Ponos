@@ -108,7 +108,11 @@ def test_new_database_has_the_latest_schema_and_the_expected_tables(tmp_path: Pa
         tables = {r[0] for r in raw.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         meta = dict(raw.execute("SELECT key, value FROM meta").fetchall())
     assert tables == {"meta", "activities", "physiology", "load_cache"}
-    assert meta == {"profile_id": str(PROFILE_ID), "name": "Marta", "timezone": "Europe/Rome"}
+    assert meta == {
+        "profile_id": str(PROFILE_ID),
+        "name": "Atleta di prova",
+        "timezone": "Europe/Rome",
+    }
 
 
 def test_closed_database_leaves_a_single_file_after_the_checkpoint(tmp_path: Path) -> None:
@@ -327,7 +331,7 @@ def test_failed_creation_removes_the_file_it_made(
 
 
 def test_name_with_quotes_and_unicode_round_trips(tmp_path: Path) -> None:
-    name = ProfileName.parse("Marta' \"; DROP TABLE meta; -- è 日本")
+    name = ProfileName.parse("Atleta di prova' \"; DROP TABLE meta; -- è 日本")
     SqliteProfileStorage().create(tmp_path, PROFILE_ID, name, "UTC").close()
 
     with closing(SqliteProfileStorage().open(tmp_path)) as profile:

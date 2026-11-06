@@ -147,3 +147,36 @@ def test_a_valid_form_builds_the_request() -> None:
 
 def test_an_invalid_form_returns_the_problems_instead() -> None:
     assert make_form("").build_request(TODAY) == (Problem.NAME_EMPTY, Problem.FOLDER_EMPTY)
+
+
+@pytest.mark.parametrize(
+    ("name", "folder"),
+    [
+        ("CON", "CON_profile"),
+        ("con", "con_profile"),
+        ("Prn.txt", "Prn_profile.txt"),
+        ("COM1", "COM1_profile"),
+        ("lpt9", "lpt9_profile"),
+        ("Aux ", "Aux_profile"),
+        ("NUL.tar.gz", "NUL_profile.tar.gz"),
+        ("COM¹", "COM¹_profile"),
+    ],
+)
+def test_the_proposed_folder_never_uses_a_windows_reserved_device_name(
+    name: str, folder: str
+) -> None:
+    assert folder_name_from(name) == folder
+
+
+@pytest.mark.parametrize("name", ["Console", "COM10", "LPT0", "CON:", "Ada con", "a.CON", "COM"])
+def test_names_that_only_look_reserved_are_left_alone(name: str) -> None:
+    proposed = folder_name_from(name)
+
+    assert proposed == name.replace(":", "_")
+
+
+def test_the_form_proposes_the_suffixed_folder_for_a_reserved_name() -> None:
+    form = make_form("AUX")
+
+    assert form.folder_text == str(BASE / "AUX_profile")
+    assert form.problems() == ()

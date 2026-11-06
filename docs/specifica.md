@@ -29,19 +29,34 @@ Ponos Coach non è un dispositivo medico e non fa diagnosi.
   rifiutata con un messaggio.
 - Un profilo salvato da una versione più nuova dell'app non si apre: il
   messaggio invita ad aggiornare. Prima di portare un profilo vecchio alla
-  versione attuale, l'app ne copia il database in `backup/`.
+  versione attuale, l'app ne copia il database in `backup/`
+  (`ponos-v{da}-v{a}.sqlite3`); se la copia non riesce, non migra.
 - Menu File: Nuovo profilo (Ctrl+N), Apri profilo da cartella (Ctrl+O), Cambia
   profilo, Rimuovi profilo dall'elenco, Elimina cartella del profilo. Il nome
   del profilo attivo sta nel titolo della finestra. Mentre un'operazione è in
   corso i comandi sono disabilitati, con il motivo nel suggerimento.
+- Menu Aiuto: "Apri la cartella dei log" (Ctrl+Maiusc+L) apre con il gestore
+  di file del sistema la cartella dove l'app scrive i suoi log; se non
+  riesce a aprirla, dice dov'è. Il log contiene eventi e tipi di errore, mai
+  dati personali, di salute, nomi di file o percorsi. È un file con rotazione
+  (circa 4 MB al massimo).
+- Chiusura della finestra: se un lavoro è in corso (per esempio un import)
+  l'app lo interrompe, aspetta che finisca e intanto scrive "Chiusura del
+  profilo in corso..." nella barra di stato; la finestra non si blocca. Se il
+  lavoro non finisce entro 10 secondi, la finestra resta aperta e un
+  messaggio ("Ponos Coach sta ancora chiudendo il profilo") invita ad
+  attendere e a chiuderla di nuovo.
 - "Rimuovi" toglie il profilo solo dall'elenco. Cancellare la cartella è un
   comando a parte e non vale per il profilo aperto.
 - La conferma dell'eliminazione mostra il nome del profilo, la cartella e il
   numero di attività (letto senza modificare il database; se non si legge, lo
   dice). Il bottone dice "Elimina cartella", il predefinito è Annulla.
 - L'eliminazione cancella solo ciò che l'app ha creato: il database, i suoi
-  file `-wal` e `-shm`, `archivio/`, `backup/` e il file di blocco. Se nella
-  cartella c'è altro, o un collegamento, è rifiutata.
+  file `-wal`, `-shm` e `-journal`, `archivio/`, `backup/` e il file di
+  blocco. Se nella cartella c'è altro (per esempio file dell'utente), o un
+  collegamento, è rifiutata: il messaggio "La cartella non è stata eliminata"
+  dice che non è stato eliminato nulla e chiede di spostare o eliminare a mano
+  quei file, poi riprovare, oppure di rimuovere il profilo dall'elenco.
 - I dati di salute restano in locale. Le credenziali Garmin non stanno nella
   cartella.
 
@@ -97,7 +112,7 @@ arrivano con le loro fasi.
   non è un'attività. I TCX non sono supportati e vengono rifiutati con il
   motivo. Il formato si riconosce dal contenuto e deve coincidere con
   l'estensione.
-- Un'attività con un orario d'inizio fuori dal periodo 1990–2099 (UTC) è
+- Un'attività con l'inizio o la fine fuori dal periodo 1990–2099 (UTC) è
   rifiutata come file danneggiato.
 - Con una cartella, l'app la esamina prima di importare (nomi e dimensioni,
   sottocartelle comprese). Salta, segnalandoli, i collegamenti simbolici, le
@@ -122,7 +137,9 @@ arrivano con le loro fasi.
   - importata;
   - già presente (anche se arrivata in un altro formato);
   - riparata: l'attività c'era già, ma il suo file nell'archivio mancava o
-    era alterato; reimportandolo, l'app lo rimette a posto;
+    era alterato; reimportando lo stesso file originale, l'app lo rimette a
+    posto. Il riepilogo la conta a parte ("n file archiviati riparati
+    dall'originale importato"), non come problema;
   - ignorata: il file non è un'attività;
   - con errore, col motivo (danneggiato, troppo grande, non leggibile, non
     salvato…).
@@ -258,7 +275,11 @@ Regole: [infortuni](../.claude/skills/ponos-allenamento/references/infortuni.md)
 - Interfaccia in italiano e inglese.
 - Menu completi con scorciatoie; tutto usabile da tastiera.
 - Annulla e ripeti per obiettivi e calendario.
-- L'app ricorda finestra, pannelli, ultimo profilo e ultime cartelle.
+- L'app ricorda finestra, pannelli, ultimo profilo e ultime cartelle. Nella
+  fase 1: dimensioni e posizione della finestra, la sezione aperta (si salva
+  appena cambia; un valore non valido apre la Panoramica; una geometria
+  illeggibile dà la finestra predefinita), le cartelle degli import, della
+  scelta del profilo e dell'esportazione dei grafici, l'ultimo profilo.
 - Le operazioni lunghe non bloccano la finestra e si possono annullare.
 - Un errore imprevisto mostra un messaggio generico; il dettaglio va nel log,
   senza dati di salute.

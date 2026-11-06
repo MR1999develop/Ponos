@@ -392,24 +392,29 @@ Agenti: `generatore-fixture`, `sviluppatore-nucleo`, `sviluppatore-interfaccia`,
 
 ### Fase 1 — Profili, archivio e import FIT
 
-- [ ] Profili: creazione con scelta della cartella, apertura da cartella,
+- [x] Profili: creazione con scelta della cartella, apertura da cartella,
       cambio, rimozione dall'elenco, cancellazione della cartella con
       conferma; lock contro due istanze; avviso per cartelle di rete o
       sincronizzate.
-- [ ] Schema SQLite v1 e migrazioni; archivio FIT con scrittura durevole e
+- [x] Schema SQLite v1 e migrazioni; archivio FIT con scrittura durevole e
       SHA-256.
-- [ ] Lettore FIT con limiti, tipi di dominio (attività, sport, tracciato FC)
+- [x] Lettore FIT con limiti, tipi di dominio (attività, sport, tracciato FC)
       e test di fuzzing.
-- [ ] Lettore GPX (sezione 2 punto 12, sezione 4.9) con lo stesso tipo
+- [x] Lettore GPX (sezione 2 punto 12, sezione 4.9) con lo stesso tipo
       d'errore e gli stessi tipi di dominio del lettore FIT; riconoscimento
       del formato dal contenuto; duplicati tra FIT e GPX.
-- [ ] Casi d'uso "Importa file" FIT, GPX e ZIP (menu e trascinamento) e "Importa da
+- [x] Casi d'uso "Importa file" FIT, GPX e ZIP (menu e trascinamento) e "Importa da
       cartella" (sottocartelle, duplicati saltati per `file_id`, riepilogo
       finale), tabella delle attività con ordinamento (i filtri sono della
       fase 9).
-- [ ] Dal FIT anche distanza, dislivello positivo, tempo in movimento,
+- [x] Dal FIT anche distanza, dislivello positivo, tempo in movimento,
       punto di partenza e traccia semplificata, salvati nell'indice: la fase
       9 non dovrà rileggere l'archivio né migrare lo schema per averli.
+
+*Stato 2026-11-06: fase completata sul ramo `fase-1-profili-archivio`;
+controlli e campagna di collaudo verdi su Windows (esiti in
+`docs/collaudo.md`); test POSIX (symlink, FIFO, permessi) da verificare
+nella CI su Ubuntu al primo push.*
 
 ### Fase 2 — Sincronizzazione Garmin
 

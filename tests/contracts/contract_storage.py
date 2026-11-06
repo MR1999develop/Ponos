@@ -39,7 +39,7 @@ from tests.builders import T0, fit_identity, gpx_identity, make_record, physiolo
 from tests.contracts.harness import StorageHarness
 
 PROFILE_ID = ProfileId.parse("11111111-1111-4111-8111-111111111111")
-NAME = ProfileName.parse("Marta")
+NAME = ProfileName.parse("Atleta di prova")
 FINGERPRINT = LoadFingerprint("a" * 64)
 OTHER_FINGERPRINT = LoadFingerprint("b" * 64)
 LOAD = ActivityLoad(80.0, 75.0, 75.0, 3500, 4, 12.5, LoadSource.HEART_RATE)
@@ -73,7 +73,7 @@ class ProfileStorageContract:
         harness.storage.create(folder, PROFILE_ID, NAME, "Europe/Rome").close()
 
         with pytest.raises(ProfileAlreadyExistsError):
-            harness.storage.create(folder, PROFILE_ID, ProfileName.parse("Altro"), "UTC")
+            harness.storage.create(folder, PROFILE_ID, ProfileName.parse("Atleta B"), "UTC")
         with closing(harness.storage.open(folder)) as profile:
             assert profile.info.name == NAME
 

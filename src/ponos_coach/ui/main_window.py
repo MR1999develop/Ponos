@@ -9,6 +9,7 @@ presentazione; qui ci sono solo widget, comandi e dialoghi.
 from __future__ import annotations
 
 import html
+import time
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -17,14 +18,16 @@ from functools import partial
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QByteArray, QSettings, Qt, QTimer, QUrl
 from PySide6.QtGui import (
     QAction,
     QCloseEvent,
+    QDesktopServices,
     QDragEnterEvent,
     QDropEvent,
     QGuiApplication,
     QKeySequence,
+    QShowEvent,
 )
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -46,7 +49,8 @@ from ponos_coach.load.use_cases import ProfileOverview
 from ponos_coach.profiles.domain import ProfileId, RegistryEntry
 from ponos_coach.profiles.use_cases import FolderWarning, NewProfileRequest
 from ponos_coach.ui.activity_table import ActivitiesPage
-from ponos_coach.ui.errors import ErrorMessage, exclusion_reason_text
+from ponos_coach.ui.data_thread import SHUTDOWN_WAIT_MS
+from ponos_coach.ui.errors import ErrorMessage, exclusion_reason_text, unexpected_error_message
 from ponos_coach.ui.import_report import ImportReport
 from ponos_coach.ui.import_report_dialog import ImportReportDialog
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
@@ -78,6 +82,7 @@ from ponos_coach.ui.workspace import (
 
 APP_NAME = "Ponos Coach"
 _KEY_GEOMETRY = "window/geometry"
+_KEY_SECTION = "window/section"
 _KEY_LAST_FOLDER = "import/lastFolder"
 _KEY_LAST_FILES_FOLDER = "import/lastFilesFolder"
 _KEY_LAST_PROFILE_FOLDER = "profiles/lastOpenFolder"
@@ -86,6 +91,8 @@ _DEFAULT_SIZE = (1100, 720)
 _STATUS_MESSAGE_MS = 8000
 _SECTION_OVERVIEW = 0
 _SECTION_ACTIVITIES = 1
+_AVAILABLE_SECTIONS = (_SECTION_OVERVIEW, _SECTION_ACTIVITIES)
+_SHUTDOWN_POLL_MS = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,11 +120,24 @@ class MainWindow(QMainWindow):
         settings: QSettings,
         defaults: NewProfileDefaults,
         parent: QWidget | None = None,
+        *,
+        log_folder: Path | None = None,
     ) -> None:
         super().__init__(parent)
         self._controller = controller
         self._settings = settings
         self._defaults = defaults
+        self._log_folder = log_folder
+        self.shutdown_wait_ms = SHUTDOWN_WAIT_MS  # tetto dell'attesa alla chiusura
+        self._shutdown_deadline = 0.0
+        self._closed = False
+        self._engine_requested = False
+        self._shutdown_timer = QTimer(self)
+        self._shutdown_timer.setInterval(_SHUTDOWN_POLL_MS)
+        self._shutdown_timer.timeout.connect(self._poll_shutdown)
+        self._engine_timer = QTimer(self)
+        self._engine_timer.setSingleShot(True)
+        self._engine_timer.timeout.connect(self._start_web_engine)
         self._zone = ZoneInfo("UTC")
         self._failed_form: NewProfileForm | None = None
         self._creating_form: NewProfileForm | None = None
@@ -131,6 +151,7 @@ class MainWindow(QMainWindow):
         self._build_content()
         self._build_status_bar()
         self._restore_geometry()
+        self._restore_section()
         self._connect_controller()
         QGuiApplication.styleHints().colorSchemeChanged.connect(self._on_color_scheme_changed)
         self._on_overview_changed(controller.overview_state)
@@ -159,6 +180,12 @@ class MainWindow(QMainWindow):
         self._stop_action = self._action(self.tr("Stop"), "Esc", self._controller.cancel_current)
         self._quit_action = self._action(self.tr("Quit"), "Ctrl+Q", self.close)
         self._about_action = self._action(self.tr("About Ponos Coach"), None, self.show_about)
+        self._log_action = self._action(
+            self.tr("Open the log folder"), "Ctrl+Shift+L", self.open_log_folder
+        )
+        if self._log_folder is None:
+            self._log_action.setEnabled(False)
+            self._log_action.setToolTip(self.tr("The log folder is not known."))
 
     def _build_menus(self) -> None:
         file_menu = self.menuBar().addMenu(self.tr("File"))
@@ -174,6 +201,8 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(self._quit_action)
         help_menu = self.menuBar().addMenu(self.tr("Help"))
+        help_menu.addAction(self._log_action)
+        help_menu.addSeparator()
         help_menu.addAction(self._about_action)
 
     def _build_content(self) -> None:
@@ -199,7 +228,7 @@ class MainWindow(QMainWindow):
         self._sidebar.setCurrentRow(_SECTION_OVERVIEW)
         self._sidebar.currentRowChanged.connect(self._on_section_changed)
 
-        self._overview = OverviewPage(self._choose_export_path, self)
+        self._overview = OverviewPage(self._choose_export_path, self._controller.compute, self)
         self._overview.action_requested.connect(self._on_overview_action)
         self._overview.cancel_requested.connect(self._controller.cancel_current)
         self._activities = ActivitiesPage(self)
@@ -295,6 +324,16 @@ class MainWindow(QMainWindow):
     def folder_warning_text(self) -> str:
         """Avviso sulla cartella del profilo aperto (vuoto se non ce n'è)."""
         return self._warning_label.text()
+
+    @property
+    def log_action(self) -> QAction:
+        """Azione "Apri la cartella dei log"."""
+        return self._log_action
+
+    @property
+    def is_closed(self) -> bool:
+        """Vero quando la chiusura è finita (il profilo è chiuso e il motore web rilasciato)."""
+        return self._closed
 
     @property
     def new_profile_action(self) -> QAction:
@@ -552,7 +591,7 @@ class MainWindow(QMainWindow):
 
     # --- Errori e messaggi ---------------------------------------------------------------
 
-    def _on_operation_failed(self, message: ErrorMessage) -> None:
+    def _show_error(self, message: ErrorMessage, name: str = "errorMessage") -> None:
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Warning)
         box.setWindowTitle(message.title)
@@ -560,9 +599,40 @@ class MainWindow(QMainWindow):
         box.setText(message.title)
         box.setInformativeText(f"{message.what}\n\n{message.remedy}")
         box.setStandardButtons(QMessageBox.StandardButton.Ok)
-        box.setObjectName("errorMessage")
+        box.setObjectName(name)
         self._remember(box)
         box.open()
+
+    def show_unexpected_error(self) -> None:
+        """Messaggio generico del gestore di ultima istanza (uno solo alla volta)."""
+        if any(b.objectName() == "unexpectedError" and b.isVisible() for b in self._boxes):
+            return
+        self._show_error(unexpected_error_message(), "unexpectedError")
+
+    def open_log_folder(self) -> None:
+        """Apre la cartella dei log con il gestore di file del sistema."""
+        folder = self._log_folder
+        if folder is None:
+            return
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            opened = QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+        except OSError:
+            opened = False
+        if not opened:
+            # {folder}: where the log files are (a folder of the application).
+            where = self.tr("The log files are in: {folder}").format(folder=folder)
+            self._show_error(
+                ErrorMessage(
+                    self.tr("The log folder cannot be opened"),
+                    self.tr("Ponos Coach could not open the folder with the log files."),
+                    where,
+                ),
+                "logFolderError",
+            )
+
+    def _on_operation_failed(self, message: ErrorMessage) -> None:
+        self._show_error(message)
         if self._creating_form is not None:
             form, self._creating_form = self._creating_form, None
             self.show_new_profile(form)  # i dati scritti non si perdono
@@ -607,6 +677,15 @@ class MainWindow(QMainWindow):
     def _on_section_changed(self, row: int) -> None:
         if 0 <= row < self._pages.count():
             self._pages.setCurrentIndex(row)
+            self._settings.setValue(_KEY_SECTION, row)
+
+    def _restore_section(self) -> None:
+        """Riapre la sezione dell'ultima volta; un valore salvato non valido vale la prima."""
+        try:
+            row = int(str(self._settings.value(_KEY_SECTION)))
+        except ValueError:
+            row = _SECTION_OVERVIEW
+        self._sidebar.setCurrentRow(row if row in _AVAILABLE_SECTIONS else _SECTION_OVERVIEW)
 
     def _on_overview_action(self, action: object) -> None:
         if action is PrimaryAction.NEW_PROFILE:
@@ -677,14 +756,70 @@ class MainWindow(QMainWindow):
     # --- Chiusura ------------------------------------------------------------------------
 
     def _restore_geometry(self) -> None:
+        """Ripristina la geometria salvata; un valore che non è un blocco di byte valido vale
+        la dimensione predefinita (impostazioni modificate a mano o rovinate)."""
         saved = self._settings.value(_KEY_GEOMETRY)
-        if saved is None or not self.restoreGeometry(saved):
-            self.resize(*_DEFAULT_SIZE)
+        if isinstance(saved, QByteArray | bytes | bytearray) and self.restoreGeometry(saved):
+            return
+        self.resize(*_DEFAULT_SIZE)
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt
+        """Dopo il primo `show()` avvia il motore web: la finestra compare prima."""
+        super().showEvent(event)
+        if not self._engine_requested:
+            self._engine_requested = True
+            self._engine_timer.start(0)
+
+    def _start_web_engine(self) -> None:
+        self._overview.chart.start_engine()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt
-        """Ricorda la geometria, ferma il thread dei dati e lo attende, rilascia il motore web."""
+        """Chiusura in due tempi, senza bloccare il thread della UI.
+
+        Il primo tempo annulla i lavori e chiede al thread dei dati di chiudere il profilo; la
+        finestra resta aperta e un timer controlla se il thread ha finito. Al secondo tempo
+        (thread finito) rilascia il motore web e si chiude davvero. Oltre il tetto di attesa
+        avvisa e lascia la finestra aperta: un thread in esecuzione non si distrugge mai.
+        """
+        if not self._closed:
+            self._remember_window_state()
+            self._controller.begin_shutdown()
+            if not self._controller.has_stopped:
+                event.ignore()
+                self._wait_for_shutdown()
+                return
+            self._finish_closing()
+        super().closeEvent(event)
+
+    def _remember_window_state(self) -> None:
         self._settings.setValue(_KEY_GEOMETRY, self.saveGeometry())
         self._settings.sync()
-        self._controller.shutdown()
+
+    def _wait_for_shutdown(self) -> None:
+        if self._shutdown_timer.isActive():
+            return
+        self._shutdown_deadline = time.monotonic() + self.shutdown_wait_ms / 1000
+        self.statusBar().showMessage(self.tr("Closing the profile..."))
+        self._shutdown_timer.start()
+
+    def _poll_shutdown(self) -> None:
+        if self._controller.has_stopped:
+            self._shutdown_timer.stop()
+            self._finish_closing()
+            self.close()  # ora la chiusura è completa
+        elif time.monotonic() >= self._shutdown_deadline:
+            self._shutdown_timer.stop()
+            self.statusBar().clearMessage()
+            self._show_error(self._not_closed_message(), "shutdownTimeout")
+
+    def _not_closed_message(self) -> ErrorMessage:
+        return ErrorMessage(
+            self.tr("Ponos Coach is still closing the profile"),
+            self.tr("The profile is still being saved, so the window stays open to protect it."),
+            self.tr("Wait a moment, then close the window again."),
+        )
+
+    def _finish_closing(self) -> None:
         self._overview.chart.dispose()
-        super().closeEvent(event)
+        self.statusBar().clearMessage()
+        self._closed = True

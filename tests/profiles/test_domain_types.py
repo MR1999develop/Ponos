@@ -82,9 +82,9 @@ NO_BREAK_SPACE = chr(0x00A0)
 
 
 def test_name_is_stripped_and_normalised_to_nfc() -> None:
-    assert ProfileName.parse("  Marta  ").value == "Marta"
-    assert ProfileName.parse("Jos" + "e" + COMBINING_ACUTE).value == "Jos" + E_ACUTE
-    assert ProfileName.parse(chr(9) + " Anna Maria" + NO_BREAK_SPACE).value == "Anna Maria"
+    assert ProfileName.parse("  Atleta di prova  ").value == "Atleta di prova"
+    assert ProfileName.parse("Atl" + "e" + COMBINING_ACUTE).value == "Atl" + E_ACUTE
+    assert ProfileName.parse(chr(9) + " Atleta A" + NO_BREAK_SPACE).value == "Atleta A"
 
 
 def test_name_length_on_and_off_point() -> None:
@@ -128,8 +128,8 @@ def test_names_with_control_or_format_characters_are_refused(special: str) -> No
 
 
 def test_constructor_only_takes_already_normalised_text() -> None:
-    assert ProfileName("Marta").value == "Marta"
-    for text in (" Marta", "Marta ", "Jose" + COMBINING_ACUTE):
+    assert ProfileName("Atleta di prova").value == "Atleta di prova"
+    for text in (" Atleta di prova", "Atleta di prova ", "Atle" + COMBINING_ACUTE):
         with pytest.raises(InvalidProfileNameError, match="normalizzato"):
             ProfileName(text)
 
@@ -161,7 +161,7 @@ def entry(**changes: object) -> RegistryEntry:
     fields: dict[str, object] = {
         "profile_id": ProfileId.parse("11111111-1111-4111-8111-111111111111"),
         "folder": absolute_path("p"),
-        "cached_name": ProfileName.parse("Marta"),
+        "cached_name": ProfileName.parse("Atleta di prova"),
         "last_used_utc": IMPORTED_AT,
     }
     fields.update(changes)
@@ -182,7 +182,7 @@ def test_registry_entry_needs_an_absolute_folder_and_a_utc_time() -> None:
 def info(**changes: object) -> ProfileInfo:
     fields: dict[str, object] = {
         "profile_id": ProfileId.parse("11111111-1111-4111-8111-111111111111"),
-        "name": ProfileName.parse("Marta"),
+        "name": ProfileName.parse("Atleta di prova"),
         "timezone_name": "Europe/Rome",
         "format_version": 1,
     }

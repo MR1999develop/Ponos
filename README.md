@@ -63,7 +63,12 @@ Altri profili: File, Nuovo profilo (Ctrl+N). Un profilo spostato o copiato su
 un altro PC si apre con File, Apri profilo da cartella (Ctrl+O). Con File,
 Cambia profilo si passa da uno all'altro. "Rimuovi profilo dall'elenco" non
 tocca i dati; "Elimina cartella del profilo" li cancella per sempre, dopo una
-conferma, e solo se nella cartella ci sono soltanto file creati dall'app.
+conferma, e solo se nella cartella ci sono soltanto file creati dall'app: se
+c'è altro (per esempio file tuoi) non cancella nulla e lo dice. Alla chiusura
+dell'app, se un lavoro è in corso (un import), l'app lo ferma e aspetta che
+finisca; se non riesce entro 10 secondi lascia la finestra aperta e avvisa, e
+basta chiuderla di nuovo. L'app ricorda la sezione aperta, la finestra e le
+ultime cartelle usate.
 
 ## Importare le attività
 
@@ -81,7 +86,9 @@ ZIP, come l'archivio che si scarica dal sito Garmin.
 I file originali non vengono modificati: l'app ne tiene una copia nel profilo.
 Le attività già presenti si saltano, quindi rilanciare l'import è sicuro. Alla
 fine un riepilogo dice quante attività sono state importate e, per ogni file
-non importato, il motivo. Le attività compaiono nella pagina Attività e nel
+non importato, il motivo. Se un'attività c'era già ma il suo file nell'archivio
+mancava o era alterato, reimportare lo stesso file lo rimette a posto: il
+riepilogo lo conta come "riparato". Le attività compaiono nella pagina Attività e nel
 grafico della Panoramica. I file TCX non sono supportati.
 
 ## Dove stanno i dati
@@ -91,7 +98,8 @@ Tutti i dati di un profilo stanno nella cartella scelta alla creazione:
 - `ponos.sqlite3`: il database (con i file `-wal` e `-shm` mentre l'app è
   aperta);
 - `archivio/<anno>/`: i file originali, con il nome dato dal loro SHA-256;
-- `backup/`: le copie del database fatte prima di un aggiornamento del formato;
+- `backup/`: le copie del database fatte prima di un aggiornamento del formato
+  (`ponos-v{da}-v{a}.sqlite3`);
 - `ponos.lock`: impedisce di aprire lo stesso profilo due volte.
 
 Non spostare né modificare a mano questi file mentre l'app è aperta. L'elenco
@@ -111,6 +119,13 @@ furto del disco attiva la cifratura del disco (BitLocker su Windows, LUKS su
 Ubuntu). Evita cartelle di rete o sincronizzate (OneDrive, NAS): se ne scegli
 una, l'app avverte, ma il database può rovinarsi. Anche `archivio/` e
 `backup/` contengono dati di salute e posizioni GPS.
+
+## Log
+
+L'app scrive un log con rotazione (al massimo circa 4 MB) nella cartella dei
+log dell'utente. Per aprirla: Aiuto, Apri la cartella dei log (Ctrl+Maiusc+L).
+Il log ha eventi e tipi di errore, senza percorsi, nomi di file né dati di
+salute. Se qualcosa non va, allegalo a una segnalazione dopo averlo riletto.
 
 ## Avvio da sorgente
 

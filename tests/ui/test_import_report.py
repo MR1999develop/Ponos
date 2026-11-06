@@ -46,3 +46,20 @@ def test_every_reason_has_a_plain_sentence(issue: ImportIssue) -> None:
 
     assert text.endswith(".")
     assert "_" not in text  # mai l identificatore tecnico
+
+
+def test_a_repaired_archive_file_is_counted_apart_and_not_as_a_problem() -> None:
+    identity = profile_activity(datetime(2026, 3, 2, 7, 0, tzinfo=UTC)).identity
+    summary = ImportSummary(
+        (
+            FileImportResult("a.fit", ImportStatus.REPAIRED, matches=identity),
+            FileImportResult("b.fit", ImportStatus.IMPORTED),
+        ),
+        cancelled=False,
+    )
+
+    report = ImportReport.from_summary(summary)
+
+    assert (report.imported, report.repaired, report.already_present) == (1, 1, 0)
+    assert report.examined == 2
+    assert report.not_imported == ()

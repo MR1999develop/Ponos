@@ -17,8 +17,11 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import ClassVar
 
 from PySide6.QtCore import QObject, QThread, Signal
+
+from ponos_coach.ui.diagnostics import exception_chain
 
 _LOG = logging.getLogger(__name__)
 _PROGRESS_INTERVAL_S = 0.05  # al massimo 20 aggiornamenti al secondo
@@ -27,6 +30,10 @@ SHUTDOWN_WAIT_MS = 10_000
 
 class JobCancelledError(Exception):
     """Sollevata da un lavoro che si ferma perché l'utente ha annullato."""
+
+
+class DataThreadClosedError(Exception):
+    """Un lavoro è stato accodato dopo la richiesta di chiusura del thread dei dati."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,9 +107,16 @@ class _Stop:
 class DataThread(QThread):
     """Coda di lavori eseguiti in sequenza in un unico thread.
 
-    `submit` e `shutdown` si chiamano dal thread della UI. `on_exit` gira nel thread dei dati
-    quando la coda finisce: lì si chiude il profilo, nello stesso thread che lo ha aperto.
+    `submit`, `request_shutdown` e `shutdown` si chiamano dal thread della UI. `on_exit` gira nel
+    thread dei dati quando la coda finisce: lì si chiude il profilo, nello stesso thread che lo
+    ha aperto. Dopo `request_shutdown` il thread non accetta più lavori.
+
+    Il thread non ha un genitore Qt e finché gira lo tiene vivo la classe: distruggere un
+    `QThread` in esecuzione abortisce il processo, per esempio se la finestra viene distrutta
+    mentre il profilo si sta ancora chiudendo.
     """
+
+    _running: ClassVar[set[DataThread]] = set()
 
     progressed = Signal(int, int, int)  # id del lavoro, fatti, totale
     completed = Signal(int, object)  # id del lavoro, JobOutcome
@@ -114,29 +128,74 @@ class DataThread(QThread):
         self._pending: dict[int, threading.Event] = {}
         self._lock = threading.Lock()
         self._next_id = 1
+        self._closing = False
+
+    @property
+    def is_closing(self) -> bool:
+        """Vero dopo `request_shutdown`: nessun nuovo lavoro."""
+        return self._closing
+
+    @property
+    def has_stopped(self) -> bool:
+        """Vero se il thread non gira più (mai partito o già finito)."""
+        return not self.isRunning()
 
     def submit(self, job: Job) -> JobHandle:
-        """Accoda un lavoro; parte il thread se non è ancora partito."""
+        """Accoda un lavoro; parte il thread se non è ancora partito.
+
+        Raises:
+            DataThreadClosedError: la chiusura è già stata richiesta.
+        """
         cancel = threading.Event()
         with self._lock:
+            if self._closing:
+                raise DataThreadClosedError
             job_id = self._next_id
             self._next_id += 1
             self._pending[job_id] = cancel
         self._queue.put(_Queued(job_id, job, cancel))
         if not self.isRunning():
+            self._keep_alive()
             self.start()
         return JobHandle(job_id, cancel)
 
-    def shutdown(self, wait_ms: int = SHUTDOWN_WAIT_MS) -> bool:
-        """Annulla i lavori, chiude la coda e attende il thread, al massimo `wait_ms`.
+    def _keep_alive(self) -> None:
+        """Tiene vivo il thread finché gira; toglie quelli già finiti (dal thread della UI)."""
+        DataThread._running = {thread for thread in DataThread._running if thread.isRunning()}
+        DataThread._running.add(self)
 
-        Il thread non si termina mai a forza: se non finisce in tempo si scrive nel log e il
-        chiamante decide. Restituisce vero se il thread è terminato.
+    @classmethod
+    def stop_all(cls, wait_ms: int = SHUTDOWN_WAIT_MS) -> bool:
+        """Chiede la chiusura di tutti i thread dei dati ancora vivi e li attende (per ciascuno
+        al massimo `wait_ms`). Per chi esce dal processo o chiude un test; vero se tutti
+        sono finiti."""
+        threads = list(cls._running)
+        for thread in threads:
+            thread.request_shutdown()
+        return all(thread.wait(wait_ms) for thread in threads)
+
+    def request_shutdown(self) -> None:
+        """Annulla i lavori e chiude la coda, senza attendere; si può ripetere.
+
+        Il thread finisce da solo, chiudendo il profilo con `on_exit`. Chi vuole sapere quando
+        ha finito guarda `has_stopped`.
         """
         with self._lock:
+            if self._closing:
+                return
+            self._closing = True
             for cancel in self._pending.values():
                 cancel.set()
         self._queue.put(_Stop())
+
+    def shutdown(self, wait_ms: int = SHUTDOWN_WAIT_MS) -> bool:
+        """Come `request_shutdown`, poi attende il thread al massimo `wait_ms`.
+
+        Il thread non si termina mai a forza: se non finisce in tempo si scrive nel log e il
+        chiamante decide. Restituisce vero se il thread è terminato. Blocca il chiamante: la
+        finestra usa `request_shutdown` e controlla senza attendere.
+        """
+        self.request_shutdown()
         if not self.isRunning():
             return True  # mai avviato o già finito: nessun profilo può essere rimasto aperto
         if self.wait(wait_ms):
@@ -172,12 +231,13 @@ class DataThread(QThread):
         except JobCancelledError:
             return JobCancelled()
         except Exception as error:  # confine del thread: l'errore va alla UI, che lo descrive
-            _LOG.error("Job %d failed: %s", item.job_id, type(error).__qualname__, exc_info=True)
+            # Solo i tipi: il testo di un'eccezione può contenere percorsi o dati dell'utente.
+            _LOG.error("Job %d failed: %s", item.job_id, exception_chain(error))
             return JobFailed(error)
         return JobSucceeded(value)
 
     def _close(self) -> None:
         try:
             self._on_exit()
-        except Exception:  # la chiusura non deve impedire al thread di finire
-            _LOG.error("Closing the profile failed", exc_info=True)
+        except Exception as error:  # la chiusura non deve impedire al thread di finire
+            _LOG.error("Closing the profile failed: %s", exception_chain(error))

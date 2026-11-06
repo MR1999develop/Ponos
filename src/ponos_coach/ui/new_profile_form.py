@@ -34,6 +34,13 @@ MAX_ALLOWED_BPM = 250
 MIN_THRESHOLD_BPM = 40
 
 _FORBIDDEN_IN_FOLDER_NAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+# Nomi che Windows riserva ai dispositivi, anche con un'estensione (CON.txt); COM e LPT con le
+# cifre in apice sono riservati allo stesso modo.
+_RESERVED_DEVICE_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"{prefix}{digit}" for prefix in ("COM", "LPT") for digit in "123456789¹²³"}
+)
+RESERVED_NAME_SUFFIX = "_profile"
 
 
 class Field(Enum):
@@ -66,9 +73,18 @@ class Problem(Enum):
 
 
 def folder_name_from(profile_name: str) -> str:
-    """Nome di cartella proposto da un nome di profilo: caratteri vietati sostituiti da `_`."""
+    """Nome di cartella proposto da un nome di profilo.
+
+    I caratteri vietati diventano `_`; un nome che Windows riserva a un dispositivo (CON, PRN,
+    AUX, NUL, COM1-9, LPT1-9, anche con un'estensione) prende il suffisso `_profile` prima
+    dell'estensione.
+    """
     cleaned = _FORBIDDEN_IN_FOLDER_NAME.sub("_", unicodedata.normalize("NFC", profile_name))
-    return cleaned.strip().rstrip(". ")
+    cleaned = cleaned.strip().rstrip(". ")
+    stem, dot, extension = cleaned.partition(".")
+    if stem.rstrip(" ").upper() in _RESERVED_DEVICE_NAMES:
+        return f"{stem}{RESERVED_NAME_SUFFIX}{dot}{extension}"
+    return cleaned
 
 
 def estimated_threshold(max_bpm: int) -> int:

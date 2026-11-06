@@ -23,7 +23,12 @@ from ponos_coach.activities.decoding import decode_stored_activity
 from ponos_coach.load.use_cases import Decoder
 from ponos_coach.platform.folder_kind import SystemFolderKindDetector
 from ponos_coach.platform.profile_folders import LocalProfileFolders
-from ponos_coach.platform.profile_registry import JsonProfileRegistry
+from ponos_coach.platform.profile_registry import (
+    JsonProfileRegistry,
+    RegistryBusyError,
+    RegistryCorruptError,
+    RegistryFormatTooNewError,
+)
 from ponos_coach.profiles.domain import ProfileId
 from ponos_coach.profiles.use_cases import (
     CreateProfile,
@@ -31,6 +36,7 @@ from ponos_coach.profiles.use_cases import (
     ListProfiles,
     OpenProfileFromFolder,
     OpenRegisteredProfile,
+    PeekProfile,
     ProfilePorts,
     RemoveProfileFromList,
 )
@@ -38,6 +44,9 @@ from ponos_coach.storage.file_archive import FileArchive
 from ponos_coach.storage.import_scan import FilesImportSource, FolderImportSource
 from ponos_coach.storage.sqlite_profile import SqliteProfileStorage
 from ponos_coach.ui.bootstrap import prepare_qt
+from ponos_coach.ui.data_thread import DataThread
+from ponos_coach.ui.diagnostics import ErrorNotifier, configure_logging, install_exception_hooks
+from ponos_coach.ui.errors import ErrorContext, RegistryProblem
 from ponos_coach.ui.main_window import APP_NAME, MainWindow, NewProfileDefaults
 from ponos_coach.ui.translations import (
     Language,
@@ -116,6 +125,21 @@ class _SystemClock:
         return datetime.now(UTC)
 
 
+def _registry_problem(error: BaseException) -> RegistryProblem | None:
+    """Quale guasto dell'elenco dei profili è (i suoi tipi sono dell'adattatore, non della ui)."""
+    if isinstance(error, RegistryFormatTooNewError):
+        return RegistryProblem.TOO_NEW
+    if isinstance(error, RegistryBusyError):
+        return RegistryProblem.BUSY
+    if isinstance(error, RegistryCorruptError):
+        return RegistryProblem.CORRUPT
+    return None
+
+
+def _default_log_dir() -> Path:
+    return Path(platformdirs.user_log_dir("PonosCoach", appauthor=False))
+
+
 def _default_import_sources() -> ImportSources:
     return ImportSources(files=FilesImportSource, folder=FolderImportSource)
 
@@ -131,12 +155,14 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
     now_utc: Callable[[], datetime] | None = None,
     import_sources: ImportSources | None = None,
     decode: Decoder | None = None,
+    log_dir: Path | None = None,
 ) -> MainWindow:
     """Costruisce la finestra con tutte le dipendenze (richiede una `QApplication`).
 
     `config_dir` (elenco dei profili) e `profiles_dir` (cartella proposta per i profili nuovi)
     valgono i luoghi dell'utente se omessi; `system_timezone_id`, `clock`, `now_utc` e
-    `import_sources` e `decode` rendono deterministico l'avvio nei test. Non apre nessun profilo:
+    `import_sources` e `decode` rendono deterministico l'avvio nei test; `log_dir` è la cartella
+    dei log che il menu Aiuto apre. Non apre nessun profilo:
     lo fa `MainWindow.start()`, dopo `show()`.
     """
     del command_line  # per ora nessuna opzione cambia la composizione
@@ -146,6 +172,8 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
         # Cartella dati locale, non Documenti: su Windows Documenti è spesso sincronizzata
         # con OneDrive, che l'app sconsiglia per SQLite (PLAN, sezione 3).
         profiles_dir = Path(platformdirs.user_data_dir("PonosCoach", appauthor=False)) / "profiles"
+    if log_dir is None:
+        log_dir = _default_log_dir()
     if system_timezone_id is None:
         system_timezone_id = bytes(QTimeZone.systemTimeZoneId().data()).decode("ascii", "replace")
     zone, fell_back = resolve_user_timezone(system_timezone_id)
@@ -164,6 +192,7 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
         list_all=ListProfiles(ports),
         remove=RemoveProfileFromList(ports),
         delete=DeleteProfileFolder(ports),
+        peek=PeekProfile(ports),
     )
     services = WorkspaceServices(
         ports=ports,
@@ -173,10 +202,11 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
         decode=decode or decode_stored_activity,
         clock=_SystemClock(),
         today=today_in,
+        errors=ErrorContext(_registry_problem, config_dir),
     )
     controller = WorkspaceController(services)
     defaults = NewProfileDefaults(profiles_dir, zone.key, fell_back, today_in)
-    window = MainWindow(controller, settings, defaults)
+    window = MainWindow(controller, settings, defaults, log_folder=log_dir)
     controller.setParent(window)
     return window
 
@@ -187,16 +217,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         command_line = parse_command_line(sys.argv[1:] if argv is None else argv)
     except SystemExit as exit_request:
         return exit_request.code if isinstance(exit_request.code, int) else 1
+    log_dir = _default_log_dir()
+    configure_logging(log_dir, version=ponos_coach.__version__)
     prepare_qt()
     app = QApplication([APP_NAME])
     app.setOrganizationName(_ORGANIZATION)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(ponos_coach.__version__)
     setup_translations(app, command_line)
-    window = compose_main_window(command_line, settings=QSettings())
+    notifier = ErrorNotifier(app)
+    install_exception_hooks(notifier.notify)
+    window = compose_main_window(command_line, settings=QSettings(), log_dir=log_dir)
+    notifier.occurred.connect(window.show_unexpected_error)
     window.show()
     window.start()
-    return app.exec()
+    exit_code = app.exec()
+    # Se `exec` ritorna senza che la finestra abbia chiuso (sessione di sistema, `quit`), nessun
+    # thread dei dati deve restare in esecuzione: distruggerlo a processo in uscita abortisce.
+    DataThread.stop_all()
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover

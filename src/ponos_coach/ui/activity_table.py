@@ -52,6 +52,10 @@ _DISTANCE_DECIMALS = 2
 
 type _Key = float | str
 
+# Righe che la larghezza delle colonne guarda: i testi hanno tutti la stessa forma, quindi un
+# campione basta (300 righe intere costavano circa 80 ms nel thread della UI).
+_WIDTH_SAMPLE_ROWS = 30
+
 _ALIGN_RIGHT = int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 _ALIGN_LEFT = int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
@@ -242,6 +246,7 @@ class ActivitiesPage(QWidget):
         self._table.verticalHeader().setVisible(False)
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self._table.horizontalHeader().setStretchLastSection(True)
+        self._table.horizontalHeader().setResizeContentsPrecision(_WIDTH_SAMPLE_ROWS)
         self._empty = StatePage(self)
         self._empty.set_content(
             self.tr("No activities yet"),

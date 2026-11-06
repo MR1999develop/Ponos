@@ -187,3 +187,24 @@ def render_script(figure: go.Figure, labels: PmcChartLabels) -> str:
         "filename": _EXPORT_FILE_STEM,
     }
     return f"ponosRender({json.dumps(payload, ensure_ascii=True, allow_nan=False)});"
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedChart:
+    """Un grafico pronto da mostrare: figura, chiamata JavaScript e colore di fondo."""
+
+    figure: PmcFigure
+    script: str
+    background: str
+
+
+def prepare_chart(
+    pmc: PmcSeries,
+    activities: Sequence[ChartActivity],
+    labels: PmcChartLabels,
+    tokens: ThemeTokens,
+) -> PreparedChart:
+    """Costruisce figura e JSON: lavoro puro e pesante (circa 100 ms al primo grafico), adatto
+    a un thread che non è quello della UI."""
+    figure = build_pmc_figure(pmc, activities, labels, tokens)
+    return PreparedChart(figure, render_script(figure, labels), tokens.background)

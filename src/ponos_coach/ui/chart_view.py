@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QBuffer, QIODevice, Qt, QUrl, Signal
@@ -28,7 +29,7 @@ from PySide6.QtWebEngineCore import (
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
-from ponos_coach.ui.pmc_figure import PmcChartLabels, PmcFigure, render_script
+from ponos_coach.ui.pmc_figure import PmcChartLabels, PmcFigure, PreparedChart, render_script
 from ponos_coach.ui.web_policy import APP_PAGE_URL, APP_SCHEME, is_request_allowed
 from ponos_coach.ui.web_resources import resource_for_path
 
@@ -98,8 +99,24 @@ def _harden(settings: QWebEngineSettings) -> None:
     settings.setAttribute(attribute.JavascriptEnabled, True)
 
 
+@dataclass(frozen=True, slots=True)
+class _Engine:
+    """Gli oggetti del motore web, creati insieme (i riferimenti li tengono vivi)."""
+
+    profile: QWebEngineProfile
+    interceptor: AppOnlyInterceptor
+    scheme_handler: AppSchemeHandler
+    page: _AppPage
+    view: QWebEngineView
+
+
 class PmcChartView(QWidget):
-    """Mostra il grafico PMC. `drawn` segnala che Plotly ha finito di disegnare."""
+    """Mostra il grafico PMC. `drawn` segnala che Plotly ha finito di disegnare.
+
+    Il motore web (profilo, pagina e vista) non si crea nel costruttore: costa circa 180 ms nel
+    thread della UI, che Chromium non permette di spostare. Lo avvia `start_engine`, che la
+    finestra chiama subito dopo il primo `show()`; chi disegna prima lo avvia da sé.
+    """
 
     drawn = Signal()
     load_failed = Signal()
@@ -113,54 +130,75 @@ class PmcChartView(QWidget):
         self._page_loaded = False
         self._pending_script: str | None = None
         self._disposed = False
+        self._engine: _Engine | None = None
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
 
-        self._profile = QWebEngineProfile(self)  # senza nome: nessun dato su disco
-        self._interceptor = AppOnlyInterceptor(self)
-        self._scheme_handler = AppSchemeHandler(self)
-        self._profile.setUrlRequestInterceptor(self._interceptor)
-        self._profile.installUrlSchemeHandler(APP_SCHEME.encode("ascii"), self._scheme_handler)
-        self._profile.downloadRequested.connect(self._on_download_requested)
-        _harden(self._profile.settings())
+    @property
+    def engine_started(self) -> bool:
+        """Vero se il motore web è stato creato."""
+        return self._engine is not None
 
-        self._page = _AppPage(self._profile, self)
-        self._page.loadFinished.connect(self._on_load_finished)
-        self._page.titleChanged.connect(self._on_title_changed)
-        self._view = QWebEngineView(self)
-        self._view.setPage(self._page)
-        self._view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
-        self._view.setAccessibleName(self.tr("Fitness and fatigue chart"))
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self._view)
-        self._view.setUrl(QUrl(APP_PAGE_URL))
+    def start_engine(self) -> None:
+        """Crea il motore web e carica la pagina; non fa nulla se già fatto o se si è chiusi."""
+        if self._engine is not None or self._disposed:
+            return
+        profile = QWebEngineProfile(self)  # senza nome: nessun dato su disco
+        interceptor = AppOnlyInterceptor(self)
+        scheme_handler = AppSchemeHandler(self)
+        profile.setUrlRequestInterceptor(interceptor)
+        profile.installUrlSchemeHandler(APP_SCHEME.encode("ascii"), scheme_handler)
+        profile.downloadRequested.connect(self._on_download_requested)
+        _harden(profile.settings())
+        page = _AppPage(profile, self)
+        page.loadFinished.connect(self._on_load_finished)
+        page.titleChanged.connect(self._on_title_changed)
+        view = QWebEngineView(self)
+        view.setPage(page)
+        view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+        view.setAccessibleName(self.tr("Fitness and fatigue chart"))
+        self._layout.addWidget(view)
+        self._engine = _Engine(profile, interceptor, scheme_handler, page, view)
+        view.setUrl(QUrl(APP_PAGE_URL))
 
     @property
     def current_figure(self) -> PmcFigure | None:
         """Ultima figura mostrata (o in attesa di essere mostrata)."""
         return self._current_figure
 
-    def show_figure(self, figure: PmcFigure, labels: PmcChartLabels, background: str) -> None:
-        """Disegna la figura (appena la pagina e pronta)."""
-        self._current_figure = figure
-        self._page.setBackgroundColor(QColor(background))
-        script = render_script(figure, labels)
+    def show_prepared(self, prepared: PreparedChart) -> None:
+        """Disegna un grafico già preparato (appena la pagina è pronta)."""
+        self._current_figure = prepared.figure
+        self.start_engine()
+        if self._engine is None:  # chiusa: niente da disegnare
+            return
+        self._engine.page.setBackgroundColor(QColor(prepared.background))
         if self._page_loaded:
-            self._page.runJavaScript(script)
+            self._engine.page.runJavaScript(prepared.script)
         else:
-            self._pending_script = script
+            self._pending_script = prepared.script
+
+    def show_figure(self, figure: PmcFigure, labels: PmcChartLabels, background: str) -> None:
+        """Prepara e disegna una figura (nel thread chiamante: per i test e gli usi semplici)."""
+        self.show_prepared(PreparedChart(figure, render_script(figure, labels), background))
 
     @property
     def page(self) -> QWebEnginePage:
-        """La pagina web (per diagnostica e test di integrazione)."""
-        return self._page
+        """La pagina web (per diagnostica e test di integrazione); avvia il motore se serve."""
+        self.start_engine()
+        if self._engine is None:
+            raise RuntimeError("the chart view was disposed")
+        return self._engine.page
 
     def dispose(self) -> None:
         """Distrugge la pagina prima del profilo (ordine richiesto dal motore web); idempotente."""
         if self._disposed:
             return
         self._disposed = True
-        self._view.setPage(None)  # type: ignore[arg-type]  # stub senza Optional; Qt accetta null
-        self._page.deleteLater()  # prima del profilo: il motore web vuole la pagina gia distrutta
+        if self._engine is None:
+            return
+        self._engine.view.setPage(None)  # type: ignore[arg-type]  # stub senza Optional
+        self._engine.page.deleteLater()  # prima del profilo: il motore la vuole già distrutta
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt
         """Chiudendo il widget si rilascia il motore web."""
@@ -173,9 +211,9 @@ class PmcChartView(QWidget):
             self.load_failed.emit()
             return
         self._page_loaded = True
-        if self._pending_script is not None:
+        if self._pending_script is not None and self._engine is not None:
             script, self._pending_script = self._pending_script, None
-            self._page.runJavaScript(script)
+            self._engine.page.runJavaScript(script)
 
     def _on_title_changed(self, title: str) -> None:
         if title.startswith("drawn-"):

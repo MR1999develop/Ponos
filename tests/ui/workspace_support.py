@@ -46,6 +46,7 @@ def compose(
     *,
     import_sources: ImportSources | None = None,
     gate: threading.Event | None = None,
+    log_dir: Path | None = None,
 ) -> MainWindow:
     """Finestra dal Composition Root, con configurazione e profili in `tmp_path`.
 
@@ -66,7 +67,14 @@ def compose(
         clock=lambda _zone: TODAY,
         import_sources=import_sources,
         decode=None if gate is None else gated_decode,
+        log_dir=tmp_path / "logs" if log_dir is None else log_dir,
     )
+
+
+def close_window(qtbot: QtBot, window: MainWindow) -> None:
+    """Chiude la finestra e attende la fine della chiusura in due tempi (profilo chiuso)."""
+    window.close()
+    qtbot.waitUntil(lambda: window.is_closed, timeout=WAIT_MS)
 
 
 def make_import_folder(tmp_path: Path) -> Path:

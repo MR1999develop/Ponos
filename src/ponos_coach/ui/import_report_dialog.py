@@ -120,6 +120,12 @@ class ImportReportDialog(QDialog):
         lines = [self.tr("%n activity(ies) imported", "", report.imported)]
         if report.already_present:
             lines.append(self.tr("%n already in the profile", "", report.already_present))
+        if report.repaired:
+            lines.append(
+                self.tr(
+                    "%n archived file(s) repaired from the imported original", "", report.repaired
+                )
+            )
         if report.ignored:
             lines.append(self.tr("%n file(s) ignored (not an activity)", "", report.ignored))
         if report.failed:

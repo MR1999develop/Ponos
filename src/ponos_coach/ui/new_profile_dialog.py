@@ -321,7 +321,14 @@ class NewProfileDialog(QDialog):
 
     def show_folder_check(self, check: FolderCheck) -> None:
         """Esito dell'esame di una cartella; si ignora se non è più quella scritta."""
-        if str(check.folder) != self._form.folder_text.strip() or check.inspection is None:
+        if str(check.folder) != self._form.folder_text.strip():
+            return
+        if check.inspection is None:
+            self._form.folder_state = None
+            self._folder_note.setText(
+                self.tr("This folder could not be examined. Check that you can read and write it.")
+            )
+            self._folder_note.setVisible(True)
             return
         self._form.folder_state = check.inspection.state
         notes = []

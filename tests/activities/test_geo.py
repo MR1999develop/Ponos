@@ -38,7 +38,7 @@ points = st.builds(GeoPoint, latitudes, longitudes)
 
 
 @pytest.mark.parametrize(
-    ("lat", "lon"), [(0.0, 0.0), (90.0, 180.0), (-90.0, -180.0), (45.5, -122.25)]
+    ("lat", "lon"), [(0.0, 0.0), (90.0, 180.0), (-90.0, -180.0), (-30.5, -20.25)]
 )
 def test_valid_points_are_accepted(lat: float, lon: float) -> None:
     assert GeoPoint(lat, lon).lat_deg == lat
@@ -132,7 +132,7 @@ def test_short_tracks_come_back_unchanged() -> None:
 
 def test_the_cap_limits_the_points_and_keeps_the_ends() -> None:
     rng = random.Random(7)
-    walk = [GeoPoint(45.0 + rng.uniform(-0.01, 0.01), 9.0 + i * 0.0001) for i in range(500)]
+    walk = [GeoPoint(-30.0 + rng.uniform(-0.01, 0.01), -20.0 + i * 0.0001) for i in range(500)]
 
     kept = simplify_track(walk, tolerance_m=0.0, max_points=20)
 
@@ -154,8 +154,8 @@ def test_cap_keeps_the_most_significant_points() -> None:
 def test_the_default_cap_is_the_project_cap() -> None:
     rng = random.Random(11)
     n = 20_000
-    lat = np.cumsum([rng.uniform(-1, 1) * 1e-4 for _ in range(n)]) + 45.0
-    lon = np.cumsum([rng.uniform(-1, 1) * 1e-4 for _ in range(n)]) + 9.0
+    lat = np.cumsum([rng.uniform(-1, 1) * 1e-4 for _ in range(n)]) + -30.0
+    lon = np.cumsum([rng.uniform(-1, 1) * 1e-4 for _ in range(n)]) + -20.0
 
     indices = simplify_indices(lat, lon, tolerance_m=0.0)
 
@@ -174,7 +174,7 @@ def test_a_track_crossing_the_antimeridian_is_still_a_straight_line() -> None:
 
 def test_simplification_is_deterministic() -> None:
     rng = random.Random(5)
-    track = [GeoPoint(rng.uniform(44.9, 45.1), rng.uniform(8.9, 9.1)) for _ in range(300)]
+    track = [GeoPoint(rng.uniform(-30.1, -29.9), rng.uniform(-20.1, -19.9)) for _ in range(300)]
 
     assert simplify_track(track, 50.0, 40) == simplify_track(track, 50.0, 40)
 
@@ -195,7 +195,7 @@ def test_mismatched_or_non_finite_columns_are_refused() -> None:
 
 
 @given(
-    st.lists(st.tuples(st.floats(44.9, 45.1), st.floats(8.9, 9.1)), min_size=0, max_size=60),
+    st.lists(st.tuples(st.floats(-30.1, -29.9), st.floats(-20.1, -19.9)), min_size=0, max_size=60),
     st.floats(0.5, 500.0),
 )
 def test_iterative_version_matches_the_naive_recursive_one(
@@ -214,7 +214,7 @@ def test_iterative_version_matches_the_naive_recursive_one(
 
 
 @given(
-    st.lists(st.tuples(st.floats(44.9, 45.1), st.floats(8.9, 9.1)), min_size=3, max_size=80),
+    st.lists(st.tuples(st.floats(-30.1, -29.9), st.floats(-20.1, -19.9)), min_size=3, max_size=80),
     st.floats(0.0, 300.0),
     st.integers(2, 30),
 )

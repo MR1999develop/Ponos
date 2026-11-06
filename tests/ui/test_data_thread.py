@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import threading
 
+import pytest
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.ui.data_thread import (
     DataThread,
+    DataThreadClosedError,
     JobCancelled,
     JobCancelledError,
     JobContext,
@@ -136,3 +138,58 @@ def test_shutdown_runs_the_exit_hook_in_the_data_thread(qtbot: QtBot) -> None:
 
 def test_shutdown_of_a_thread_never_started_is_harmless() -> None:
     assert DataThread(lambda: None).shutdown()
+
+
+def test_after_a_shutdown_request_no_job_is_accepted_and_the_thread_stops_by_itself(
+    qtbot: QtBot,
+) -> None:
+    exits: list[int] = []
+    thread = DataThread(lambda: exits.append(1))
+    recorder = Recorder(thread)
+    first = thread.submit(lambda _c: "done")
+    qtbot.waitUntil(lambda: first.job_id in recorder.outcomes, timeout=WAIT_MS)
+
+    thread.request_shutdown()
+    thread.request_shutdown()  # ripetibile
+
+    assert thread.is_closing
+    with pytest.raises(DataThreadClosedError):
+        thread.submit(lambda _c: "late")
+    qtbot.waitUntil(lambda: thread.has_stopped, timeout=WAIT_MS)  # senza attendere nessuno
+    assert exits == [1]  # il profilo si chiude una volta sola
+
+
+def test_a_shutdown_request_cancels_queued_jobs_without_blocking_the_caller(qtbot: QtBot) -> None:
+    thread = DataThread(lambda: None)
+    recorder = Recorder(thread)
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocker(context: JobContext) -> object:
+        started.set()
+        assert release.wait(timeout=20)
+        if context.is_cancelled():
+            raise JobCancelledError
+        return "finished"
+
+    running = thread.submit(blocker)
+    queued = thread.submit(lambda _c: "never")
+    assert started.wait(timeout=20)
+
+    thread.request_shutdown()  # ritorna subito anche se il lavoro e ancora in corso
+
+    assert not thread.has_stopped
+    release.set()
+    qtbot.waitUntil(lambda: thread.has_stopped, timeout=WAIT_MS)
+    assert recorder.outcomes[running.job_id] == JobCancelled()
+    assert recorder.outcomes[queued.job_id] == JobCancelled()
+
+
+def test_a_thread_never_started_has_stopped_and_refuses_jobs_after_the_request() -> None:
+    thread = DataThread(lambda: None)
+
+    thread.request_shutdown()
+
+    assert thread.has_stopped
+    with pytest.raises(DataThreadClosedError):
+        thread.submit(lambda _c: None)

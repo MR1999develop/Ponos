@@ -8,7 +8,9 @@ Compone la finestra come `main()` (Composition Root, Qt offscreen), crea un prof
 `quanti` FIT sintetici veri (nessun cancello) e aspetta la panoramica. Un timer da 10 ms misura,
 per fase, gli intervalli tra due scatti: il massimo e quanto il ciclo di eventi e rimasto fermo.
 Un processo per misura perche il primo disegno di un grafico in un processo (avvio del motore
-web) costa piu dei successivi. Ultima riga dell'output: un JSON `{fase: [intervalli in s]}`.
+web) costa piu dei successivi. Ultima riga dell'output: un JSON `{fase: [intervalli in s]}`; la
+chiave `avvio_motore` ha invece la durata (una sola) dell'avvio del motore web nel thread della UI,
+che la finestra fa subito dopo il primo `show()` e che non e riducibile (vedi `TIDY.md`).
 """
 
 from __future__ import annotations
@@ -125,6 +127,16 @@ def main(argv: list[str]) -> int:
         system_timezone_id="Europe/Rome",
         clock=lambda _zone: date(2026, 12, 31),
     )
+    engine_s: list[float] = []
+    chart = window.overview_page.chart
+    start_engine = chart.start_engine
+
+    def timed_start_engine() -> None:
+        started = time.perf_counter()
+        start_engine()
+        engine_s.append(time.perf_counter() - started)
+
+    chart.start_engine = timed_start_engine  # type: ignore[method-assign]  # solo la misura
     window.show()
     open_new_profile(app, window, root)
     source = root / "storico"
@@ -132,7 +144,9 @@ def main(argv: list[str]) -> int:
     for number in range(count):
         (source / f"a{number:05d}.fit").write_bytes(fit_run(number))
     gaps = measure(app, window, source, count)
+    gaps["avvio_motore"] = engine_s
     window.close()
+    wait_until(app, lambda: window.is_closed)  # il profilo si chiude nel thread dei dati
     print(json.dumps(gaps), flush=True)  # noqa: T201 - l'esito va al test su stdout
     return 0
 

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication
 
@@ -22,6 +24,7 @@ from ponos_coach.activities.ports import (
 from ponos_coach.load.domain import MissingPhysiologyError
 from ponos_coach.load.use_cases import ExclusionReason
 from ponos_coach.profiles.ports import (
+    FolderHasOtherContentError,
     FolderNotEmptyError,
     FolderUnavailableError,
     NotAProfileFolderError,
@@ -46,6 +49,27 @@ class ErrorMessage:
     remedy: str
 
 
+class RegistryProblem(Enum):
+    """Come è fallito l'elenco dei profili, se il Composition Root sa distinguerlo."""
+
+    TOO_NEW = "too_new"
+    BUSY = "busy"
+    CORRUPT = "corrupt"
+
+
+@dataclass(frozen=True, slots=True)
+class ErrorContext:
+    """Ciò che il testo di un errore chiede al Composition Root.
+
+    `registry_problem` riconosce le tre cause di un elenco dei profili inutilizzabile: i loro
+    tipi stanno nell'adattatore, che la ui non può importare. `config_folder` è dove sta il file
+    dell'elenco (una cartella dell'app, non un dato dell'utente).
+    """
+
+    registry_problem: Callable[[BaseException], RegistryProblem | None] = lambda _error: None
+    config_folder: Path | None = None
+
+
 def _in_use(_error: BaseException) -> ErrorMessage:
     return ErrorMessage(
         QCoreApplication.translate("Errors", "The profile is already open"),
@@ -63,6 +87,20 @@ def _not_empty(_error: BaseException) -> ErrorMessage:
             "Errors", "A new profile needs a folder that does not exist yet or is empty."
         ),
         QCoreApplication.translate("Errors", "Choose another folder, or a new name."),
+    )
+
+
+def _other_content(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The folder was not deleted"),
+        QCoreApplication.translate(
+            "Errors", "The folder contains files that do not belong to the profile."
+        ),
+        QCoreApplication.translate(
+            "Errors",
+            "Nothing was deleted. Move or delete those files yourself, then delete the "
+            "folder again, or remove the profile from the list.",
+        ),
     )
 
 
@@ -129,7 +167,68 @@ def _registry(_error: BaseException) -> ErrorMessage:
             "Errors", "Ponos Coach could not read or update its list of profiles."
         ),
         QCoreApplication.translate(
-            "Errors", "Try again. If the problem persists, check the application log."
+            "Errors", "Try again. If the problem persists, use Help > Open the log folder."
+        ),
+    )
+
+
+def _registry_too_new(_context: ErrorContext) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The list of profiles is from a newer version"),
+        QCoreApplication.translate(
+            "Errors", "The list of profiles was saved by a newer version of Ponos Coach."
+        ),
+        QCoreApplication.translate("Errors", "Update Ponos Coach, then open it again."),
+    )
+
+
+def _registry_busy(_context: ErrorContext) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The list of profiles is busy"),
+        QCoreApplication.translate(
+            "Errors", "Another window of Ponos Coach is updating the list of profiles."
+        ),
+        QCoreApplication.translate("Errors", "Try again in a few seconds."),
+    )
+
+
+def _registry_corrupt(context: ErrorContext) -> ErrorMessage:
+    what = QCoreApplication.translate("Errors", "The file with the list of profiles is damaged.")
+    if context.config_folder is not None:
+        # {folder}: the configuration folder of Ponos Coach, where profiles.json is.
+        what += " " + QCoreApplication.translate(
+            "Errors", "It is the file profiles.json in this folder: {folder}"
+        ).format(folder=context.config_folder)
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The list of profiles cannot be read"),
+        what,
+        QCoreApplication.translate(
+            "Errors",
+            "Close Ponos Coach, move profiles.json out of that folder and start again. "
+            "Your profile data is not in that file: open each profile folder with "
+            "File > Open profile from folder.",
+        ),
+    )
+
+
+_REGISTRY_BUILDERS: dict[RegistryProblem, Callable[[ErrorContext], ErrorMessage]] = {
+    RegistryProblem.TOO_NEW: _registry_too_new,
+    RegistryProblem.BUSY: _registry_busy,
+    RegistryProblem.CORRUPT: _registry_corrupt,
+}
+
+
+def unexpected_error_message() -> ErrorMessage:
+    """Messaggio generico del gestore di ultima istanza (il dettaglio è nel log)."""
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "Something unexpected happened"),
+        QCoreApplication.translate(
+            "Errors", "Ponos Coach hit a problem it did not expect. It was written to the log."
+        ),
+        QCoreApplication.translate(
+            "Errors",
+            "If something looks wrong, close Ponos Coach and open it again. To see the log, "
+            "use Help > Open the log folder.",
         ),
     )
 
@@ -183,7 +282,7 @@ def _generic(_error: BaseException) -> ErrorMessage:
         QCoreApplication.translate("Errors", "Something went wrong"),
         QCoreApplication.translate("Errors", "The operation could not be completed."),
         QCoreApplication.translate(
-            "Errors", "Try again. If the problem persists, check the application log."
+            "Errors", "Try again. If the problem persists, use Help > Open the log folder."
         ),
     )
 
@@ -192,6 +291,7 @@ def _generic(_error: BaseException) -> ErrorMessage:
 _BUILDERS: tuple[tuple[type[BaseException], Callable[[BaseException], ErrorMessage]], ...] = (
     (ProfileInUseError, _in_use),
     (FolderNotEmptyError, _not_empty),
+    (FolderHasOtherContentError, _other_content),  # prima della sua classe madre
     (FolderUnavailableError, _unavailable),
     (NotAProfileFolderError, _not_a_profile),
     (ProfileNotFoundError, _not_a_profile),
@@ -204,10 +304,14 @@ _BUILDERS: tuple[tuple[type[BaseException], Callable[[BaseException], ErrorMessa
 )
 
 
-def describe_error(error: BaseException) -> ErrorMessage:
+def describe_error(error: BaseException, context: ErrorContext | None = None) -> ErrorMessage:
     """Messaggio per l'utente di un'eccezione; mai il testo dell'eccezione."""
     if isinstance(error, ImportLimitExceededError):
         return _import_limit(error)
+    context = context or ErrorContext()
+    problem = context.registry_problem(error)
+    if problem is not None:
+        return _REGISTRY_BUILDERS[problem](context)
     for kind, build in _BUILDERS:
         if isinstance(error, kind):
             return build(error)

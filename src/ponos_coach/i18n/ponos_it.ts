@@ -121,6 +121,18 @@
         <translation>Scegli un&apos;altra cartella o un altro nome.</translation>
     </message>
     <message>
+        <source>The folder was not deleted</source>
+        <translation>La cartella non è stata eliminata</translation>
+    </message>
+    <message>
+        <source>The folder contains files that do not belong to the profile.</source>
+        <translation>La cartella contiene file che non appartengono al profilo.</translation>
+    </message>
+    <message>
+        <source>Nothing was deleted. Move or delete those files yourself, then delete the folder again, or remove the profile from the list.</source>
+        <translation>Non è stato eliminato nulla. Sposta o elimina tu quei file, poi elimina di nuovo la cartella, oppure rimuovi il profilo dall&apos;elenco.</translation>
+    </message>
+    <message>
         <source>The folder cannot be used</source>
         <translation>La cartella non può essere usata</translation>
     </message>
@@ -189,6 +201,62 @@
         <translation>Ponos Coach non è riuscito a leggere o aggiornare l&apos;elenco dei profili.</translation>
     </message>
     <message>
+        <source>Try again. If the problem persists, use Help &gt; Open the log folder.</source>
+        <translation>Riprova. Se il problema continua, usa Aiuto &gt; Apri la cartella dei log.</translation>
+    </message>
+    <message>
+        <source>The list of profiles is from a newer version</source>
+        <translation>L&apos;elenco dei profili è di una versione più recente</translation>
+    </message>
+    <message>
+        <source>The list of profiles was saved by a newer version of Ponos Coach.</source>
+        <translation>L&apos;elenco dei profili è stato salvato da una versione più recente di Ponos Coach.</translation>
+    </message>
+    <message>
+        <source>Update Ponos Coach, then open it again.</source>
+        <translation>Aggiorna Ponos Coach, poi riapri Ponos Coach.</translation>
+    </message>
+    <message>
+        <source>The list of profiles is busy</source>
+        <translation>L&apos;elenco dei profili è occupato</translation>
+    </message>
+    <message>
+        <source>Another window of Ponos Coach is updating the list of profiles.</source>
+        <translation>Un&apos;altra finestra di Ponos Coach sta aggiornando l&apos;elenco dei profili.</translation>
+    </message>
+    <message>
+        <source>Try again in a few seconds.</source>
+        <translation>Riprova tra qualche secondo.</translation>
+    </message>
+    <message>
+        <source>The file with the list of profiles is damaged.</source>
+        <translation>Il file con l&apos;elenco dei profili è danneggiato.</translation>
+    </message>
+    <message>
+        <source>It is the file profiles.json in this folder: {folder}</source>
+        <translation>È il file profiles.json in questa cartella: {folder}</translation>
+    </message>
+    <message>
+        <source>The list of profiles cannot be read</source>
+        <translation>L&apos;elenco dei profili non si può leggere</translation>
+    </message>
+    <message>
+        <source>Close Ponos Coach, move profiles.json out of that folder and start again. Your profile data is not in that file: open each profile folder with File &gt; Open profile from folder.</source>
+        <translation>Chiudi Ponos Coach, sposta profiles.json fuori da quella cartella e riapri Ponos Coach. I dati dei profili non sono in quel file: apri ogni cartella di profilo con File &gt; Apri profilo da cartella.</translation>
+    </message>
+    <message>
+        <source>Something unexpected happened</source>
+        <translation>Si è verificato un problema imprevisto</translation>
+    </message>
+    <message>
+        <source>Ponos Coach hit a problem it did not expect. It was written to the log.</source>
+        <translation>Ponos Coach ha incontrato un problema imprevisto. È stato scritto nel log.</translation>
+    </message>
+    <message>
+        <source>If something looks wrong, close Ponos Coach and open it again. To see the log, use Help &gt; Open the log folder.</source>
+        <translation>Se qualcosa non va, chiudi Ponos Coach e riaprilo. Per vedere il log, usa Aiuto &gt; Apri la cartella dei log.</translation>
+    </message>
+    <message>
         <source>The folder is too large to import at once</source>
         <translation>La cartella è troppo grande per importarla in una volta sola</translation>
     </message>
@@ -248,10 +316,6 @@
     <message>
         <source>The operation could not be completed.</source>
         <translation>Non è stato possibile completare l&apos;operazione.</translation>
-    </message>
-    <message>
-        <source>Try again. If the problem persists, check the application log.</source>
-        <translation>Riprova. Se il problema persiste, controlla il registro dell&apos;applicazione.</translation>
     </message>
 </context>
 <context>
@@ -385,6 +449,13 @@
         </translation>
     </message>
     <message numerus="yes">
+        <source>%n archived file(s) repaired from the imported original</source>
+        <translation>
+            <numerusform>%n file archiviato riparato dall&apos;originale importato</numerusform>
+            <numerusform>%n file archiviati riparati dall&apos;originale importato</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
         <source>%n file(s) ignored (not an activity)</source>
         <translation>
             <numerusform>%n file ignorato (non è un&apos;attività)</numerusform>
@@ -450,6 +521,14 @@
     <message>
         <source>About Ponos Coach</source>
         <translation>Informazioni su Ponos Coach</translation>
+    </message>
+    <message>
+        <source>Open the log folder</source>
+        <translation>Apri la cartella dei log</translation>
+    </message>
+    <message>
+        <source>The log folder is not known.</source>
+        <translation>La cartella dei log non è nota.</translation>
     </message>
     <message>
         <source>File</source>
@@ -593,6 +672,18 @@
         </translation>
     </message>
     <message>
+        <source>The log files are in: {folder}</source>
+        <translation>I file di log si trovano in: {folder}</translation>
+    </message>
+    <message>
+        <source>The log folder cannot be opened</source>
+        <translation>La cartella dei log non si può aprire</translation>
+    </message>
+    <message>
+        <source>Ponos Coach could not open the folder with the log files.</source>
+        <translation>Ponos Coach non è riuscito ad aprire la cartella con i file di log.</translation>
+    </message>
+    <message>
         <source>Wait for the current operation to finish, or stop it first.</source>
         <translation>Attendi la fine dell&apos;operazione in corso, oppure interrompila.</translation>
     </message>
@@ -610,6 +701,22 @@
             <numerusform>%n attività esclusa</numerusform>
             <numerusform>%n attività escluse</numerusform>
         </translation>
+    </message>
+    <message>
+        <source>Closing the profile...</source>
+        <translation>Chiusura del profilo in corso...</translation>
+    </message>
+    <message>
+        <source>Ponos Coach is still closing the profile</source>
+        <translation>Ponos Coach sta ancora chiudendo il profilo</translation>
+    </message>
+    <message>
+        <source>The profile is still being saved, so the window stays open to protect it.</source>
+        <translation>Il profilo è ancora in salvataggio, quindi la finestra resta aperta per proteggerlo.</translation>
+    </message>
+    <message>
+        <source>Wait a moment, then close the window again.</source>
+        <translation>Attendi un momento, poi chiudi di nuovo la finestra.</translation>
     </message>
     <message>
         <source>Version {version}</source>
@@ -743,6 +850,10 @@
     <message>
         <source>The threshold cannot be higher than the maximum.</source>
         <translation>La soglia non può essere superiore alla massima.</translation>
+    </message>
+    <message>
+        <source>This folder could not be examined. Check that you can read and write it.</source>
+        <translation>Non è stato possibile esaminare questa cartella. Controlla che tu possa leggerla e scriverla.</translation>
     </message>
     <message>
         <source>This is a network folder: the database may be slow or unreliable.</source>

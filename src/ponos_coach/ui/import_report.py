@@ -27,7 +27,8 @@ class ImportReport:
 
     `already_present` conta anche le attività già arrivate in un altro formato (stessa
     attività, non importata due volte). `cancelled` dice che l'import si è fermato prima della
-    fine: i file non trattati non compaiono.
+    fine: i file non trattati non compaiono. `repaired` conta le attività già presenti il cui
+    file in archivio mancava o era alterato e che l'originale importato ha riparato.
     """
 
     imported: int
@@ -36,11 +37,12 @@ class ImportReport:
     failed: int
     cancelled: bool
     not_imported: tuple[NotImported, ...]
+    repaired: int = 0
 
     @property
     def examined(self) -> int:
         """File trattati in tutto."""
-        return self.imported + self.already_present + self.ignored + self.failed
+        return self.imported + self.already_present + self.repaired + self.ignored + self.failed
 
     @classmethod
     def from_summary(cls, summary: ImportSummary) -> ImportReport:
@@ -58,4 +60,5 @@ class ImportReport:
             failed=summary.count(ImportStatus.FAILED),
             cancelled=summary.cancelled,
             not_imported=problems,
+            repaired=summary.count(ImportStatus.REPAIRED),
         )

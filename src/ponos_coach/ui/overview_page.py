@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QLocale, Qt, QTime, Signal
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
 from ponos_coach.load.use_cases import ProfileActivity
 from ponos_coach.ui.activity_text import sport_text
 from ponos_coach.ui.chart_view import ExportPathChooser, PmcChartView
+from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.overview_state import (
     Cancelled,
     Failed,
@@ -30,7 +32,7 @@ from ponos_coach.ui.overview_state import (
     page_of,
     primary_action_of,
 )
-from ponos_coach.ui.pmc_figure import ChartActivity, PmcChartLabels, build_pmc_figure
+from ponos_coach.ui.pmc_figure import ChartActivity, PmcChartLabels, PreparedChart, prepare_chart
 from ponos_coach.ui.state_page import StatePage
 from ponos_coach.ui.tokens import (
     SPACE_2,
@@ -40,6 +42,11 @@ from ponos_coach.ui.tokens import (
     Theme,
     tokens_for,
 )
+
+type ChartScheduler = Callable[
+    [Callable[[], object], Callable[[object], None], Callable[[ErrorMessage], None]], bool
+]
+"""Esegue un lavoro fuori dal thread della UI e ne consegna l'esito nel thread della UI."""
 
 
 def chart_activity_of(activity: ProfileActivity, zone: ZoneInfo) -> ChartActivity:
@@ -100,9 +107,14 @@ class OverviewPage(QWidget):
     cancel_requested = Signal()
 
     def __init__(
-        self, choose_export_path: ExportPathChooser, parent: QWidget | None = None
+        self,
+        choose_export_path: ExportPathChooser,
+        schedule_chart: ChartScheduler,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._schedule_chart = schedule_chart
+        self._chart_request = 0  # un esito di una richiesta superata si ignora
         self._page_action: PrimaryAction | None = None
         self._state_page = StatePage(self)
         self._state_page.action_requested.connect(self._on_state_action)
@@ -131,21 +143,46 @@ class OverviewPage(QWidget):
         return self._stack.currentWidget()
 
     def apply_state(self, state: OverviewState, theme: Theme, zone: ZoneInfo) -> None:
-        """Mostra la pagina decisa da `page_of` per lo stato; `zone` è il fuso del profilo."""
+        """Mostra la pagina decisa da `page_of` per lo stato; `zone` è il fuso del profilo.
+
+        La figura del grafico si costruisce fuori dal thread della UI: finché non è pronta resta
+        la pagina di prima (di solito l'avanzamento).
+        """
+        self._chart_request += 1
         page = page_of(state)
         self._page_action = primary_action_of(page)
         if page is Page.LOADING and isinstance(state, Loading):
             self._loading_page.show_progress(state.done, state.total)
             self._stack.setCurrentWidget(self._loading_page)
         elif page is Page.CHART and isinstance(state, Ready):
-            tokens = tokens_for(theme)
-            activities = [chart_activity_of(item, zone) for item in state.overview.activities]
-            figure = build_pmc_figure(state.overview.pmc, activities, self._chart_labels(), tokens)
-            self._chart.show_figure(figure, self._chart_labels(), tokens.background)
-            self._stack.setCurrentWidget(self._chart)
+            self._request_chart(state, theme, zone)
         else:
             self._show_state_page(state)
             self._stack.setCurrentWidget(self._state_page)
+
+    def _request_chart(self, state: Ready, theme: Theme, zone: ZoneInfo) -> None:
+        tokens = tokens_for(theme)
+        labels = self._chart_labels()
+        pmc = state.overview.pmc
+        activities = [chart_activity_of(item, zone) for item in state.overview.activities]
+        request = self._chart_request
+
+        def build() -> object:
+            return prepare_chart(pmc, activities, labels, tokens)
+
+        def show(prepared: object) -> None:
+            if request == self._chart_request and isinstance(prepared, PreparedChart):
+                self._chart.show_prepared(prepared)
+                self._stack.setCurrentWidget(self._chart)
+
+        def failed(message: ErrorMessage) -> None:
+            if request == self._chart_request:
+                self._page_action = primary_action_of(Page.ERROR)
+                self._show_state_page(Failed(message))
+                self._stack.setCurrentWidget(self._state_page)
+
+        if not self._schedule_chart(build, show, failed):
+            self._chart_request += 1  # si sta chiudendo: nessun disegno
 
     def _on_state_action(self) -> None:
         if self._page_action is not None:

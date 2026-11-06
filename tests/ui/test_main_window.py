@@ -38,6 +38,7 @@ from tests.ui.workspace_support import (
     DAYS_IN_CHART,
     FILES_IN_FIXTURE_FOLDER,
     WAIT_MS,
+    close_window,
     compose,
     create_profile,
     gated_sources,
@@ -118,7 +119,11 @@ def test_first_run_creates_a_profile_imports_a_folder_and_updates_table_and_over
         "0 excluded activity(ies)",
         f"{DAYS_IN_CHART} day(s) in the chart",
     )
-    figure = window.overview_page.chart.current_figure
+    chart = window.overview_page.chart
+    qtbot.waitUntil(
+        lambda: chart.current_figure is not None, timeout=WAIT_MS
+    )  # figura dal thread dei dati
+    figure = chart.current_figure
     assert figure is not None
     assert len(figure.data[0].x) == DAYS_IN_CHART
     assert page.current_widget() is page.chart
@@ -136,7 +141,7 @@ def test_the_last_profile_reopens_at_the_next_start(
     import_folder_and_wait(qtbot, first, make_import_folder(tmp_path))
     wait_ready(qtbot, first, FILES_IN_FIXTURE_FOLDER)
     first.resize(800, 580)
-    first.close()  # chiude il profilo nel thread dei dati: il lock si rilascia
+    close_window(qtbot, first)  # chiude il profilo nel thread dei dati: il lock si rilascia
 
     second = compose(tmp_path, settings)
     qtbot.addWidget(second)
@@ -428,8 +433,12 @@ def test_closing_the_window_waits_for_the_data_thread(
     release = threading.Timer(0.3, gate.set)
     release.start()
 
-    assert window.close()  # bloccato qui finché il thread non ha chiuso il profilo
+    start = time.monotonic()
+    window.close()
 
+    assert not window.is_closed  # primo tempo: la finestra non si blocca ad attendere il thread
+    assert time.monotonic() - start < 0.25
+    qtbot.waitUntil(lambda: window.is_closed, timeout=WAIT_MS)  # secondo tempo: thread finito
     release.join()
     again = compose(tmp_path, settings)
     qtbot.addWidget(again)
@@ -584,6 +593,7 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Import from folder...": QKeySequence("Ctrl+Shift+I").toString(),
         "Stop": QKeySequence("Esc").toString(),
         "Quit": QKeySequence("Ctrl+Q").toString(),
+        "Open the log folder": QKeySequence("Ctrl+Shift+L").toString(),
     }
 
 

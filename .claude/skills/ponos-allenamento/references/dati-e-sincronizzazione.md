@@ -15,7 +15,7 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
 <cartella del profilo>/
   ponos.sqlite3     database (WAL: anche -wal e -shm)
   archivio/<anno>/<sha256>.fit|.gpx
-  backup/           copie del database prima di ogni migrazione
+  backup/           ponos-v{da}-v{a}.sqlite3: copia prima di ogni migrazione
   ponos.lock        lock del sistema operativo sul file aperto
 ```
 
@@ -39,17 +39,30 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   esclusivo.
 - **Creazione:** cartella, lock, database, parametri iniziali e voce
   nell'elenco; se un passo fallisce, il rollback annulla solo ciò che ha
-  creato.
+  creato. Chi perde la gara con un'altra istanza sulla stessa cartella non
+  tocca il profilo del vincitore (T-DATI-06).
+- **Elenco:** `ProfileRegistry.upsert` porta l'elenco allo stato "questo
+  profilo sta in questa cartella" in una sola scrittura: sostituisce la voce
+  con lo stesso id, toglie ogni altra voce con la stessa cartella, aggiunge se
+  l'id non c'era; tutto o niente. Lo usano creazione e apertura da cartella.
 - **Apertura:** prima il lock, poi il database. Il formato più nuovo si
-  rifiuta; uno più vecchio si migra dopo una copia in `backup/` (il nome della
-  copia: **punto aperto**).
-- **Anteprima per l'eliminazione:** il database si apre in sola lettura, senza
-  migrarlo.
+  rifiuta; uno più vecchio si migra dopo una copia coerente in
+  `backup/ponos-v{da}-v{a}.sqlite3` (API di backup di SQLite dopo il
+  checkpoint del WAL, su temporaneo esclusivo poi rinominato). Senza la copia
+  non si migra; un database già aggiornato non ne fa. Un file che non ha le
+  tabelle di un profilo è danneggiato, qualunque sia il suo `user_version`.
+- **Anteprima (`peek`):** `ProfileStorage.peek` legge informazioni e numero di
+  attività in sola lettura: non migra, non scrive, non prende il lock, e non
+  crea `-wal` né `-shm` (database chiuso: `immutable=1`; con un `-wal`
+  presente, `mode=ro`). Si può usare su un profilo aperto altrove. Serve alla
+  conferma di eliminazione; se non legge, la conferma lo dice.
 - **Rimuovere** un profilo lo toglie solo dall'elenco. **Cancellare la
   cartella** è un comando a parte con conferma: solo per un profilo non
-  aperto, solo i nomi noti (database e file `-wal`/`-shm`, `archivio/`,
-  `backup/`, lock); rifiutata se c'è altro o un collegamento (`platform/tree.py`
-  non segue mai link né giunzioni).
+  aperto (il lock lo prende l'operazione) e solo i nomi che il profilo
+  possiede, `PROFILE_OWNED_NAMES` in `profiles/domain/layout.py` (database con
+  `-wal`, `-shm` e `-journal`, `archivio/`, `backup/`, lock). Se c'è altro
+  (`FolderHasOtherContentError`) o un collegamento, non si cancella nulla e il
+  messaggio lo dice; `platform/tree.py` non segue mai link né giunzioni.
 
 ## 2. SQLite
 
@@ -77,7 +90,10 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   entra in un nome); l'anno è quello dell'inizio in UTC. Salvare gli stessi
   byte due volte dà lo stesso riferimento e non riscrive nulla.
 - Se il file c'è ma i byte non corrispondono al nome, `store` lo sostituisce in
-  modo atomico con quelli giusti: è il caso "riparata" dell'import.
+  modo atomico con quelli giusti: è il caso "riparata" dell'import
+  (`ImportStatus.REPAIRED`). Si ripara solo se il file importato ha lo stesso
+  SHA-256 e la stessa dimensione registrati; con altri byte e la stessa
+  identità l'esito resta "già presente" e nulla si riscrive.
 - Leggere dall'archivio verifica sempre dimensione e SHA-256 (nessuna lettura
   non verificata) e rispetta un massimo di byte; `verify` controlla senza
   tenere il file in memoria. Nessun collegamento si segue.
@@ -85,7 +101,10 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   esclusivo, `fsync`, rinomina durevole (Windows `MoveFileExW` con
   write-through; POSIX `os.replace` e `fsync` della cartella); il record in
   SQLite si scrive dopo il file. La sostituzione durevole sta in un solo
-  modulo condiviso. Le scritture dell'archivio passano da `WriteOps`, che i
+  modulo condiviso, `ponos_coach.fsio` (`write_file_atomically`,
+  `replace_file`, `make_subdirectory`, `sync_directory`), senza dipendenze dal
+  progetto: lo usano archivio, copie di sicurezza ed elenco dei profili, che
+  restano indipendenti tra loro. Le scritture dell'archivio passano da `WriteOps`, che i
   test sostituiscono per far fallire l'N-esima operazione (T-DATI-02).
 - All'avvio: nessun record senza file, nessun temporaneo orfano
   (`remove_orphan_temporaries`).
@@ -94,9 +113,12 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   non si reimporta l'originale.
 - Limiti prima della lettura (default del progetto, costanti in
   `activities/domain/limits.py`, `FitLimits` e `GpxLimits`): dimensione
-  massima 50 MB, un milione di record o punti, durata massima 7 giorni. Gli
-  orari d'inizio fuori da [1990-01-01, 2100-01-01) UTC rendono il file
-  corrotto.
+  massima 50 MB, un milione di record o punti, durata massima 7 giorni.
+  Finestra degli orari plausibili: [1990-01-01, 2100-01-01) UTC
+  (`MIN_ACTIVITY_INSTANT` e `MAX_ACTIVITY_INSTANT` in `limits.py`,
+  `is_plausible_instant` e `is_plausible_span` in `domain/timing.py`). Se
+  l'inizio o la fine (inizio + tempo trascorso) ne esce, il file è corrotto;
+  una fine non rappresentabile conta come fuori.
 
 - Campioni di FC con timestamp ripetuto o non crescente: non rendono il file
   corrotto; si scartano in modo deterministico (vale il primo di una
@@ -223,9 +245,10 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
    Un solo errore, `ActivityFileError`, con un motivo enumerato.
 6. **Esiti per file** (`ImportStatus`): importata; già presente (stessa
    identità); duplicato di un altro formato; ignorata (il file non è
-   un'attività); fallita, con il motivo (`ImportIssue`). Esito "riparata":
+   un'attività); fallita, con il motivo (`ImportIssue`); riparata (`REPAIRED`):
    l'attività c'è già ma il suo file in archivio manca o è alterato, e la
-   reimportazione lo rimette a posto. Un errore imprevisto su un file è
+   reimportazione dello stesso originale lo rimette a posto (il riepilogo la
+   conta a parte, non come problema). Un errore imprevisto su un file è
    un esito fallito di quel file e l'import continua.
 7. Ogni file passa dagli stessi controlli dei FIT scaricati; il file si
    archivia e il record si scrive nella stessa transazione del controllo dei
@@ -251,7 +274,7 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
 
 ## 8. Test attesi
 
-`T-DATI-01…05`, `T-SYNC-01…06`, `T-IMP-01…04`, `T-GPX-01…02`, `T-SEC-02`,
+`T-DATI-01…06`, `T-SYNC-01…06`, `T-IMP-01…04`, `T-GPX-01…02`, `T-SEC-02`,
 `T-SEC-04`, `T-SEC-09` in `PLAN.md` sezione 7.
 
 ## 9. Porte della fase 1 e test di contratto

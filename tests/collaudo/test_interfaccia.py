@@ -30,14 +30,15 @@ from tests.fixtures.generators import gpx_writer as gw
 from tests.fixtures.generators import import_files as imp
 from tests.ui.workspace_support import (
     WAIT_MS,
+    close_window,
     compose,
     create_profile,
     make_settings,
     wait_ready,
 )
 
-SECRET_NAME = "Casa_Segreta_Via_Roma"  # noqa: S105 - nome inventato, non una password
-SECRET_LAT, SECRET_LON = 41.987654, 12.345678  # coordinate inventate, riconoscibili nei log
+SECRET_NAME = "Segreto_Con_Controllo_Log"  # noqa: S105 - nome inventato, non una password
+SECRET_LAT, SECRET_LON = -30.987654, -20.345678  # coordinate inventate, riconoscibili nei log
 
 
 @pytest.fixture
@@ -61,7 +62,7 @@ def import_and_wait(qtbot: QtBot, window: MainWindow, folder: Path) -> ImportRep
 
 
 def restart(qtbot: QtBot, window: MainWindow, tmp_path: Path, settings: QSettings) -> MainWindow:
-    window.close()  # chiude il profilo nel thread dei dati e rilascia il lock
+    close_window(qtbot, window)  # chiude il profilo nel thread dei dati e rilascia il lock
     return start(qtbot, tmp_path, settings)
 
 
@@ -175,7 +176,7 @@ def test_t_ui_01_a_database_replaced_by_a_foreign_file_gives_a_message_and_a_usa
     window = start(qtbot, tmp_path, settings)
     create_profile(qtbot, window, "Atleta di prova")
     profile_folder = tmp_path / "profiles" / "Atleta di prova"
-    window.close()
+    close_window(qtbot, window)
     database = profile_folder / PROFILE_DATABASE_NAME
     original = database.read_bytes()
     garbage = b"un altro programma ha scritto qui " * 100
@@ -189,23 +190,18 @@ def test_t_ui_01_a_database_replaced_by_a_foreign_file_gives_a_message_and_a_usa
     assert again.controller.profile is None
     assert again.new_profile_action.isEnabled()  # la finestra resta usabile
     assert database.read_bytes() == garbage  # e il file non e stato toccato
-    again.close()
+    close_window(qtbot, again)
     database.write_bytes(original)
     recovered = start(qtbot, tmp_path, settings)
     qtbot.waitUntil(lambda: recovered.controller.profile is not None, timeout=WAIT_MS)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F1-02: aprendo il profilo i temporanei orfani lasciati da un'interruzione non "
-    "si cancellano mai (remove_orphan_temporaries non e chiamato da nessuno)",
-)
 def test_d_f1_02_opening_a_profile_removes_the_orphan_temporaries_of_an_interrupted_write(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = start(qtbot, tmp_path, settings)
     create_profile(qtbot, window, "Atleta di prova")
-    window.close()
+    close_window(qtbot, window)
     year_folder = tmp_path / "profiles" / "Atleta di prova" / "archivio" / "2026"
     year_folder.mkdir(parents=True)
     orphan = year_folder / (".tmp-" + "0123456789abcdef" * 2)
@@ -213,7 +209,7 @@ def test_d_f1_02_opening_a_profile_removes_the_orphan_temporaries_of_an_interrup
 
     again = start(qtbot, tmp_path, settings)
     qtbot.waitUntil(lambda: again.controller.profile is not None, timeout=WAIT_MS)
-    again.close()  # chiude il profilo: tutto cio che l'apertura doveva fare e fatto
+    close_window(qtbot, again)  # chiude il profilo: tutto cio che l'apertura doveva fare e fatto
 
     assert not orphan.exists()
 
@@ -235,7 +231,7 @@ def test_t_ui_07_folders_are_on_disk_for_a_new_process_and_offered_by_the_dialog
     (files_folder / "b.fit").write_bytes(imp.fit_run(2))
     window.import_files([files_folder / "b.fit"])
     qtbot.waitUntil(lambda: window.controller.can_import, timeout=WAIT_MS)
-    window.close()
+    close_window(qtbot, window)
 
     other_process = QSettings(settings.fileName(), QSettings.Format.IniFormat)  # come al riavvio
     assert other_process.value("import/lastFolder", "", type=str) == str(source)
@@ -296,11 +292,6 @@ def test_t_ui_07_a_binary_geometry_that_cannot_be_restored_gives_the_default_win
     assert (window.width(), window.height()) == (1100, 720)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F1-09: se il valore salvato per la geometria non e un blocco di byte (impostazioni "
-    "modificate a mano o rovinate) restoreGeometry solleva TypeError e l'app non parte",
-)
 @pytest.mark.parametrize("garbage", ["testo", 42], ids=["testo", "numero"])
 def test_d_f1_09_a_geometry_of_the_wrong_type_gives_the_default_window_not_a_crash(
     qtbot: QtBot, tmp_path: Path, settings: QSettings, garbage: object
@@ -336,11 +327,6 @@ def test_t_ui_07_settings_with_wrong_types_for_the_folders_do_not_break_the_dial
     assert len(seen) == 2
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F1-08: T-UI-07 dice che l'app ricorda i pannelli, ma la sezione aperta nella "
-    "barra laterale (Panoramica o Attivita) non si salva",
-)
 def test_d_f1_08_the_open_section_is_remembered_at_the_next_start(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
@@ -349,7 +335,7 @@ def test_d_f1_08_the_open_section_is_remembered_at_the_next_start(
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
     sidebar.setCurrentRow(1)  # Attivita
-    window.close()
+    close_window(qtbot, window)
 
     again = start(qtbot, tmp_path, settings)
     qtbot.waitUntil(lambda: again.controller.profile is not None, timeout=WAIT_MS)
@@ -378,8 +364,8 @@ def secret_gpx() -> bytes:
 def assert_log_is_clean(text: str, tmp_path: Path) -> None:
     forbidden = [
         SECRET_NAME,
-        "41.9876",
-        "12.3456",
+        "30.9876",
+        "20.3456",
         str(tmp_path),
         tmp_path.name,
         Path.home().name,
@@ -409,16 +395,11 @@ def test_t_sec_08_import_open_and_overview_log_no_data_of_the_user(
     reopened = restart(qtbot, window, tmp_path, settings)
     qtbot.waitUntil(lambda: reopened.controller.profile is not None, timeout=WAIT_MS)
     wait_ready(qtbot, reopened, 5)
-    reopened.close()
+    close_window(qtbot, reopened)
 
     assert_log_is_clean(format_logs(all_logs.records), tmp_path)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F1-05: un lavoro fallito scrive nel log il traceback con il testo delle "
-    "eccezioni, che contiene il nome della cartella scelta dall'utente",
-)
 @pytest.mark.parametrize("operation", ["open_missing", "import_missing"])
 def test_d_f1_05_failures_do_not_write_the_folder_names_of_the_user_in_the_log(
     qtbot: QtBot,
@@ -439,11 +420,6 @@ def test_d_f1_05_failures_do_not_write_the_folder_names_of_the_user_in_the_log(
     assert_log_is_clean(format_logs(all_logs.records), tmp_path)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F1-05: il nome di una cartella con un a-capo arriva intero nel log e puo "
-    "fingere una riga di log (i caratteri di controllo non sono neutralizzati)",
-)
 def test_d_f1_05_control_characters_from_user_input_cannot_forge_a_log_line(
     qtbot: QtBot, tmp_path: Path, settings: QSettings, all_logs: pytest.LogCaptureFixture
 ) -> None:
