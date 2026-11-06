@@ -46,7 +46,7 @@ from tests.fixtures.generators import fit_writer as fw
 from tests.fixtures.generators import gpx_writer as gw
 from tests.fixtures.generators import import_files as imp
 from tests.fixtures.generators import zip_writer as zw
-from tests.platform.windows_dacl import dacl_sddl, trustees
+from tests.platform.windows_dacl import dacl_sddl, normalize_sid, trustees
 
 HOSTILE_FIT_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "data" / "fit-ostili"
 MIB = 1024 * 1024
@@ -577,7 +577,7 @@ def populated_profile_paths(tmp_path: Path, profile: RealProfile) -> tuple[list[
 
 def assert_private(paths: list[Path]) -> None:
     if sys.platform == "win32":
-        allowed = {windows_api.current_user_sid(), "SY"}
+        allowed = {normalize_sid(windows_api.current_user_sid()), normalize_sid("SY")}
         for path in paths:
             assert set(trustees(dacl_sddl(path))) <= allowed, (path.name, dacl_sddl(path))
     else:

@@ -42,6 +42,26 @@ if sys.platform == "win32":
         ctypes.c_void_p,
     ]
     _advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW.restype = wintypes.BOOL
+    _advapi32.ConvertStringSidToSidW.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_void_p)]
+    _advapi32.ConvertStringSidToSidW.restype = wintypes.BOOL
+    _advapi32.ConvertSidToStringSidW.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)]
+    _advapi32.ConvertSidToStringSidW.restype = wintypes.BOOL
+
+    def normalize_sid(text: str) -> str:
+        """Forma estesa `S-1-...` di un SID scritto come alias SDDL (`LA`, `SY`) o per esteso."""
+        sid = ctypes.c_void_p()
+        if not _advapi32.ConvertStringSidToSidW(text, ctypes.byref(sid)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        out = ctypes.c_void_p()
+        try:
+            if not _advapi32.ConvertSidToStringSidW(sid, ctypes.byref(out)):
+                raise ctypes.WinError(ctypes.get_last_error())
+            if out.value is None:
+                raise OSError("SID non disponibile")
+            return ctypes.wstring_at(out.value)
+        finally:
+            _kernel32.LocalFree(out)
+            _kernel32.LocalFree(sid)
 
     def dacl_sddl(path: Path) -> str:
         """DACL di `path` in forma SDDL, per esempio `D:P(A;OICI;FA;;;SY)`."""
@@ -77,13 +97,18 @@ else:
         """Solo Windows."""
         raise NotImplementedError
 
+    def normalize_sid(text: str) -> str:
+        """Solo Windows."""
+        raise NotImplementedError
+
 
 _ACE = re.compile(r"\(([^)]*)\)")
 
 
 def trustees(sddl: str) -> list[str]:
-    """Chi ha una voce nella DACL (ultimo campo di ogni ACE), nell'ordine in cui compaiono."""
-    return [ace.split(";")[5] for ace in _ACE.findall(sddl)]
+    """Chi ha una voce nella DACL, come SID in forma estesa (gli alias `LA`, `SY`... si
+    espandono), nell'ordine in cui compaiono. Si confrontano i SID, non le stringhe SDDL."""
+    return [normalize_sid(ace.split(";")[5]) for ace in _ACE.findall(sddl)]
 
 
 def is_protected(sddl: str) -> bool:

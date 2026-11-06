@@ -28,20 +28,18 @@ _WAIT_FOREVER_GUARD_MS = 60_000
 def wait_for_process_exit(pid: int) -> None:
     """Attende che il processo `pid` sia davvero terminato (su Windows `TerminateProcess` e
     asincrona: finche il processo esiste tiene ancora i suoi lock e i suoi file)."""
-    if not _IS_WINDOWS:
-        return
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.OpenProcess.restype = ctypes.c_void_p
-    kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
-    kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
-    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
-    handle = kernel32.OpenProcess(_SYNCHRONIZE, 0, pid)
-    if not handle:
-        return  # gia sparito
-    try:
-        kernel32.WaitForSingleObject(handle, _WAIT_FOREVER_GUARD_MS)
-    finally:
-        kernel32.CloseHandle(handle)
+    if sys.platform == "win32":
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.restype = ctypes.c_void_p
+        kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+        kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        handle = kernel32.OpenProcess(_SYNCHRONIZE, 0, pid)
+        if handle:  # altrimenti e gia sparito
+            try:
+                kernel32.WaitForSingleObject(handle, _WAIT_FOREVER_GUARD_MS)
+            finally:
+                kernel32.CloseHandle(handle)
 
 
 class Worker:

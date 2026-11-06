@@ -14,12 +14,21 @@ from ponos_coach.platform import windows_api
 from ponos_coach.platform.profile_folders import LocalProfileFolders
 from ponos_coach.profiles.domain import PROFILE_LOCK_NAME, FolderKind
 from ponos_coach.profiles.ports import FolderNotEmptyError, FolderUnavailableError
-from tests.platform.windows_dacl import dacl_sddl, is_protected, trustees
+from tests.platform.windows_dacl import dacl_sddl, is_protected, normalize_sid, trustees
 
 windows_only = pytest.mark.skipif(sys.platform != "win32", reason="permessi di Windows (DACL)")
 posix_only = pytest.mark.skipif(sys.platform == "win32", reason="permessi POSIX")
 
-_BROAD_TRUSTEES = {"WD", "BU", "AU", "IU", "NU", "AN", "LG"}  # Everyone, Users, Authenticated...
+_BROAD_ALIASES = (
+    "WD",
+    "BU",
+    "AU",
+    "IU",
+    "NU",
+    "AN",
+    "LG",
+    "BA",
+)  # Everyone, Users, Auth., Admins...
 
 
 @pytest.fixture
@@ -32,7 +41,11 @@ def _mode(path: Path) -> int:
 
 
 def _private_trustees() -> list[str]:
-    return sorted([windows_api.current_user_sid(), "SY"])
+    return sorted([normalize_sid(windows_api.current_user_sid()), normalize_sid("SY")])
+
+
+def _broad_trustees() -> set[str]:
+    return {normalize_sid(alias) for alias in _BROAD_ALIASES}
 
 
 @windows_only
@@ -46,7 +59,7 @@ def test_windows_folder_has_a_protected_dacl_for_the_current_user_and_system_onl
     sddl = dacl_sddl(folder)
     assert is_protected(sddl), sddl
     assert sorted(trustees(sddl)) == _private_trustees(), sddl
-    assert not _BROAD_TRUSTEES & set(trustees(sddl))
+    assert not _broad_trustees() & set(trustees(sddl))
 
 
 @windows_only

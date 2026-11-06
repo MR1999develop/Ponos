@@ -40,7 +40,6 @@ from tests.collaudo.support import (
 from tests.fixtures.generators.import_files import fit_run
 
 FILES = 4
-_IS_WINDOWS: bool = sys.platform == "win32"  # bool, non Literal: mypy non scarta un ramo
 
 
 def profile_with_runs(tmp_path: Path) -> tuple[RealProfile, Path]:
@@ -263,7 +262,7 @@ def test_t_dati_04_a_profile_held_by_another_process_cannot_be_opened_or_deleted
 @contextlib.contextmanager
 def unreadable(files: list[Path]) -> Iterator[None]:
     """Rende illeggibili i file: su Windows li tiene aperti senza condivisione, altrove 0o000."""
-    if _IS_WINDOWS:
+    if sys.platform == "win32":
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         kernel32.CreateFileW.restype = ctypes.c_void_p
         kernel32.CreateFileW.argtypes = [
@@ -284,15 +283,15 @@ def unreadable(files: list[Path]) -> Iterator[None]:
         finally:
             for handle in handles:
                 kernel32.CloseHandle(handle)
-        return
-    modes = {path: path.stat().st_mode & 0o777 for path in files}
-    for path in files:
-        path.chmod(0)
-    try:
-        yield
-    finally:
-        for path, mode in modes.items():
-            path.chmod(mode)
+    else:
+        modes = {path: path.stat().st_mode & 0o777 for path in files}
+        for path in files:
+            path.chmod(0)
+        try:
+            yield
+        finally:
+            for path, mode in modes.items():
+                path.chmod(mode)
 
 
 def test_the_archive_folder_deleted_while_open_excludes_the_activities_without_crashing(

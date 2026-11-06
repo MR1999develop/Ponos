@@ -26,15 +26,20 @@ _REPLACE_PAUSE_S: Final = 0.05
 _IS_WINDOWS: Final[bool] = sys.platform == "win32"  # bool, non Literal: mypy non scarta un ramo
 
 
-def _move_file_write_through(source: Path, destination: Path) -> None:
-    if sys.platform != "win32":  # pragma: no cover - solo per il type checker
-        raise NotImplementedError
-    move = ctypes.WinDLL("kernel32", use_last_error=True).MoveFileExW
-    move.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32]
-    move.restype = ctypes.c_int
-    flags = _MOVEFILE_REPLACE_EXISTING | _MOVEFILE_WRITE_THROUGH
-    if not move(str(source), str(destination), flags):
-        raise ctypes.WinError(ctypes.get_last_error())
+if sys.platform == "win32":
+
+    def _move_file_write_through(source: Path, destination: Path) -> None:
+        move = ctypes.WinDLL("kernel32", use_last_error=True).MoveFileExW
+        move.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32]
+        move.restype = ctypes.c_int
+        flags = _MOVEFILE_REPLACE_EXISTING | _MOVEFILE_WRITE_THROUGH
+        if not move(str(source), str(destination), flags):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+else:
+
+    def _move_file_write_through(source: Path, destination: Path) -> None:
+        raise NotImplementedError("solo Windows")
 
 
 def replace_file(source: Path, destination: Path) -> None:

@@ -63,6 +63,16 @@ def _reject_link(path: Path) -> None:
         raise _LinkFoundError("componente dell'archivio non regolare")
 
 
+def _reject_link_at_destination(path: Path) -> None:
+    """Se il nome di destinazione esiste, non deve essere un collegamento né un reparse point."""
+    try:
+        status = path.lstat()
+    except FileNotFoundError:
+        return
+    if _is_link(status):
+        raise _LinkFoundError("la destinazione è un collegamento")
+
+
 def _same_file(first: os.stat_result, second: os.stat_result) -> bool:
     return (first.st_ino, first.st_dev) == (second.st_ino, second.st_dev)
 
@@ -124,6 +134,7 @@ class FileArchive:
         created = [d for d in (self._root, directory) if self._ops.make_dir(d)]
         _reject_link(self._root)
         _reject_link(directory)
+        _reject_link_at_destination(final)
         temporary, descriptor = self._create_temporary(directory)
         try:
             self._fill(descriptor, content)

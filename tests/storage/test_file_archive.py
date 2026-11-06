@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
+import subprocess
 import sys
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
@@ -343,6 +344,24 @@ def test_a_link_in_place_of_the_year_folder_is_never_followed(tmp_path: Path) ->
     elsewhere = tmp_path / "altrove"
     elsewhere.mkdir()
     _make_symlink(root / "2026", elsewhere, directory=True)
+
+    with pytest.raises(ArchiveWriteError):
+        FileArchive(root).store(CONTENT, FileFormat.FIT, START)
+    assert list(elsewhere.iterdir()) == []
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="le giunzioni esistono solo su Windows")
+def test_a_junction_in_place_of_the_year_folder_is_never_followed(tmp_path: Path) -> None:
+    root = tmp_path / "archivio"
+    root.mkdir()
+    elsewhere = tmp_path / "altrove"
+    elsewhere.mkdir()
+    subprocess.run(  # noqa: S603 - comando fisso, percorsi creati dal test
+        [os.environ["COMSPEC"], "/c", "mklink", "/J", str(root / "2026"), str(elsewhere)],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
 
     with pytest.raises(ArchiveWriteError):
         FileArchive(root).store(CONTENT, FileFormat.FIT, START)
