@@ -179,7 +179,10 @@ src/ponos_coach/
 
 ### 4.4 Sincronizzazione riprendibile e import da cartella
 
-1. Token dal portachiavi; se mancano o sono scaduti, dialogo di login con MFA.
+1. Token dall'archivio dei segreti del sistema (sezione 4.9); se mancano o
+   sono scaduti, dialogo di login con MFA. La sincronizzazione gira in un
+   thread proprio con una sua connessione al database del profilo (WAL),
+   così import e panoramica restano disponibili mentre scarica.
    La password va solo a `garminconnect` e non si salva.
 2. Prima sincronizzazione del profilo: elenco di tutto lo storico, a pagine,
    con il punto raggiunto salvato nel giornale. Sincronizzazioni successive:
@@ -332,8 +335,11 @@ src/ponos_coach/
 - Pagina dei grafici: solo contenuto locale, accesso alla rete bloccato da
   un intercettore, dati passati come JSON codificato, nessun `QWebChannel`
   salvo necessità dichiarata.
-- Token nel Credential Manager (Windows) o Secret Service (Ubuntu), dichiarati
-  leggibili dai processi dell'utente. Log strutturati senza token, password né
+- Token protetti dal sistema, fuori dalla cartella del profilo: su Windows
+  con DPAPI (ambito utente) in un file della cartella dati locale dell'app,
+  perché il Credential Manager generico accetta al massimo 2560 byte e i
+  token di Garmin li superano; su Ubuntu nel Secret Service (`keyring`).
+  Dichiarati leggibili dai processi dell'utente (decisione del 2026-11-06). Log strutturati senza token, password né
   dati di salute.
 - Cartella del profilo scelta dall'utente: verificata scrivibile, file creati
   in modo esclusivo, lock contro due istanze; i token non stanno nella
