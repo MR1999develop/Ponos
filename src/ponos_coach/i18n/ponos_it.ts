@@ -395,6 +395,10 @@
         <translation>Interrompi sincronizzazione</translation>
     </message>
     <message>
+        <source>Synchronise when a profile opens</source>
+        <translation>Sincronizza all&apos;apertura del profilo</translation>
+    </message>
+    <message>
         <source>Garmin</source>
         <translation>Garmin</translation>
     </message>
@@ -1205,10 +1209,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>il pacchetto scaricato non è valido</translation>
     </message>
     <message>
-        <source>Garmin does not provide the original file</source>
-        <translation>Garmin non fornisce il file originale</translation>
-    </message>
-    <message>
         <source>it failed too many times</source>
         <translation>l&apos;attività è fallita troppe volte</translation>
     </message>
@@ -1231,10 +1231,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Garmin sent an answer that Ponos Coach cannot read.</source>
         <translation>Garmin ha inviato una risposta che Ponos Coach non sa leggere.</translation>
-    </message>
-    <message>
-        <source>The profile folder cannot be written. Check that the disk is not full.</source>
-        <translation>Non è possibile scrivere nella cartella del profilo. Controlla che il disco non sia pieno.</translation>
     </message>
     <message>
         <source>Garmin listed more activities than Ponos Coach accepts.</source>
@@ -1308,12 +1304,31 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>  {reason}: {count}</translation>
     </message>
     <message>
-        <source>The activities not downloaded stay in the list and are not lost.</source>
-        <translation>Le attività non scaricate restano nell&apos;elenco e non vanno perse.</translation>
+        <source>Garmin did not provide a valid original file for this activity</source>
+        <translation>Garmin non ha fornito un originale valido per questa attività</translation>
+    </message>
+    <message>
+        <source>The profile was busy with another task or could not be written. Try again; if it persists, check that the disk is not full.</source>
+        <translation>Il profilo era occupato da un altro lavoro oppure non si è potuto scrivere. Riprova; se il problema persiste, controlla che il disco non sia pieno.</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n activity(ies) were already in the profile</source>
+        <translation>
+            <numerusform>%n attività era già nel profilo</numerusform>
+            <numerusform>%n attività erano già nel profilo</numerusform>
+        </translation>
     </message>
     <message>
         <source>Synchronise again when you are ready: it resumes where it left off.</source>
         <translation>Sincronizza di nuovo quando vuoi: riprende da dove si era fermata.</translation>
+    </message>
+    <message>
+        <source>The activities that failed for a temporary reason stay in the list and are tried again next time.</source>
+        <translation>Le attività fallite per un motivo temporaneo restano nell&apos;elenco e si riprovano la prossima volta.</translation>
+    </message>
+    <message>
+        <source>The activities that failed for a lasting reason are not tried again.</source>
+        <translation>Le attività fallite per un motivo definitivo non si riprovano.</translation>
     </message>
     <message>
         <source>New activities from Garmin</source>
@@ -1334,6 +1349,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>The sign-in worked, but the system keychain could not keep it, so the account was not connected.</source>
         <translation>L&apos;accesso è riuscito, ma il portachiavi di sistema non è riuscito a conservarlo: l&apos;account non è stato collegato.</translation>
+    </message>
+    <message>
+        <source>Time ran out waiting for the verification code. Connect the account again.</source>
+        <translation>Tempo scaduto in attesa del codice di verifica. Collega di nuovo l&apos;account.</translation>
     </message>
     <message>
         <source>Something went wrong. Try again; if it persists, use Help &gt; Open the log folder.</source>

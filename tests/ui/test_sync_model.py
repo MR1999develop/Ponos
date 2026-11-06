@@ -22,6 +22,8 @@ from ponos_coach.ui.sync_model import (
     account_status_after,
     commands_for,
     failure_counts,
+    has_definitive_failures,
+    has_retryable_failures,
     needs_attention,
     needs_reconnect,
     new_activity_count,
@@ -34,9 +36,12 @@ def finished(
     stop: StopReason | None = None,
     downloaded: int = 0,
     matched: int = 0,
+    already_present: int = 0,
     failures: tuple[EntryFailure, ...] = (),
 ) -> SyncFinished:
-    outcome = SyncOutcome(ListingKind.FULL, stop, downloaded, downloaded, matched, failures, {})
+    outcome = SyncOutcome(
+        ListingKind.FULL, stop, downloaded, downloaded, matched, failures, {}, already_present
+    )
     return SyncFinished(outcome, SyncMode.SYNC, automatic=False)
 
 
@@ -220,3 +225,32 @@ def test_remaining_time_is_rounded_to_a_comfortable_unit(
 def test_remaining_time_must_be_finite_and_not_negative(seconds: float) -> None:
     with pytest.raises(ValueError, match="finito"):
         round_remaining(seconds)
+
+
+def test_files_already_in_the_profile_are_not_new_activities() -> None:
+    assert new_activity_count(finished(downloaded=2, matched=1, already_present=5)) == 2
+    assert new_activity_count(finished(already_present=5)) == 0
+
+
+def test_failures_split_into_temporary_and_lasting_ones() -> None:
+    temporary = finished(failures=(failure(1, FailureReason.TRANSIENT_ERROR),))
+    lasting = finished(failures=(failure(2, FailureReason.CORRUPT_FILE),))
+    both = finished(
+        failures=(failure(3, FailureReason.RATE_LIMITED), failure(4, FailureReason.CORRUPT_FILE))
+    )
+
+    assert (has_retryable_failures(temporary), has_definitive_failures(temporary)) == (True, False)
+    assert (has_retryable_failures(lasting), has_definitive_failures(lasting)) == (False, True)
+    assert (has_retryable_failures(both), has_definitive_failures(both)) == (True, True)
+    assert not has_retryable_failures(finished())
+    assert not has_definitive_failures(SyncNotStarted(SyncProblem.UNEXPECTED, SyncMode.SYNC, False))
+
+
+def test_the_auto_sync_switch_needs_a_profile_but_not_an_idle_account() -> None:
+    assert commands_for(inputs(operation=Operation.SYNC)).auto_sync.enabled
+    assert commands_for(inputs(AccountStatus.NOT_LINKED)).auto_sync.enabled
+    assert commands_for(inputs(profile_open=False)).auto_sync.reason is DisabledReason.NO_PROFILE
+    assert (
+        commands_for(inputs(AccountStatus.KEYCHAIN_UNAVAILABLE)).auto_sync.reason
+        is DisabledReason.KEYCHAIN_UNAVAILABLE
+    )

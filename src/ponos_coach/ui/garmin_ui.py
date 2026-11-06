@@ -100,12 +100,21 @@ class GarminUi(QObject):
         self._stop_action = self._action(
             self.tr("Stop synchronisation"), "Shift+F5", self._controller.cancel_sync
         )
+        self._auto_action = self._action(
+            self.tr("Synchronise when a profile opens"),
+            "Ctrl+Shift+A",
+            lambda: None,
+        )
+        self._auto_action.setCheckable(True)
+        # `triggered` porta lo stato scelto dall'utente; `setChecked` del programma non lo emette.
+        self._auto_action.triggered.connect(self._on_auto_sync_toggled)
         self._actions: tuple[tuple[QAction, Callable[[], Availability]], ...] = (
             (self._connect_action, lambda: self._controller.commands.connect),
             (self._disconnect_action, lambda: self._controller.commands.disconnect),
             (self._sync_action, lambda: self._controller.commands.sync),
             (self._verify_action, lambda: self._controller.commands.verify),
             (self._stop_action, lambda: self._controller.commands.stop),
+            (self._auto_action, lambda: self._controller.commands.auto_sync),
         )
 
     def build_menu(self, menu_bar: QMenuBar) -> None:
@@ -117,6 +126,8 @@ class GarminUi(QObject):
         menu.addAction(self._sync_action)
         menu.addAction(self._verify_action)
         menu.addAction(self._stop_action)
+        menu.addSeparator()
+        menu.addAction(self._auto_action)
         self._verify_action.setStatusTip(
             self.tr("List the whole Garmin history to find activities uploaded late.")
         )
@@ -168,6 +179,11 @@ class GarminUi(QObject):
         return self._stop_action
 
     @property
+    def auto_sync_action(self) -> QAction:
+        """Interruttore "Sincronizza all'apertura del profilo"."""
+        return self._auto_action
+
+    @property
     def stop_button(self) -> QPushButton:
         """Il bottone "Interrompi" della barra di stato."""
         return self._stop_button
@@ -198,11 +214,15 @@ class GarminUi(QObject):
                 "" if current.reason is None else disabled_reason_text(current.reason)
             )
         self._stop_button.setEnabled(self._controller.commands.stop.enabled)
+        self._auto_action.setChecked(self._controller.auto_sync_enabled)
         syncing = self._controller.is_syncing
         for widget in self._widgets:
             widget.setVisible(syncing)
         if syncing and self._controller.progress is None:
             self._show_progress(None)
+
+    def _on_auto_sync_toggled(self, checked: bool) -> None:
+        self._controller.set_auto_sync(enabled=checked)
 
     def _on_progress(self, progress: object) -> None:
         if isinstance(progress, SyncProgress):

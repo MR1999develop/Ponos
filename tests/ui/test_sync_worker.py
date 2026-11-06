@@ -25,7 +25,7 @@ from ponos_coach.activities.ports import (
 )
 from ponos_coach.activities.sync import StopReason, SyncMode, SyncProgress
 from ponos_coach.profiles.domain import ProfileId, ProfileName
-from ponos_coach.profiles.ports import ProfileNotFoundError
+from ponos_coach.profiles.ports import OpenProfile, ProfileNotFoundError
 from ponos_coach.ui.sync_model import (
     AccountStatus,
     LoginEnd,
@@ -446,3 +446,81 @@ def test_rate_limit_responses_are_the_account_not_a_crash() -> None:
 
     assert isinstance(result, SyncNotStarted)
     assert result.problem is SyncProblem.RATE_LIMITED
+
+
+def test_a_mailbox_that_gave_up_says_it_timed_out_unlike_a_cancelled_one() -> None:
+    expired = MfaMailbox(0.01)
+    expired.wait()
+    cancelled = MfaMailbox(5.0)
+    cancelled.cancel()
+    cancelled.wait()
+
+    assert expired.timed_out
+    assert not cancelled.timed_out
+    assert not MfaMailbox(1.0).timed_out
+
+
+def test_an_mfa_code_that_never_arrives_is_a_timeout_not_a_cancellation() -> None:
+    rig = Rig(tokens=False, mfa_required=True)
+    mailbox = MfaMailbox(0.01)
+
+    result = rig.worker.log_in(
+        PROFILE_ID,
+        Credentials(TEST_EMAIL, TEST_PASSWORD),
+        mailbox.wait,
+        threading.Event(),
+        mfa_timed_out=lambda: mailbox.timed_out,
+    )
+
+    assert result is LoginFailure.MFA_TIMED_OUT
+    assert rig.store.saved == {}
+
+
+def test_a_login_cancelled_by_the_user_stays_a_cancellation_even_if_the_wait_expired() -> None:
+    rig = Rig(tokens=False, mfa_required=True)
+    mailbox = MfaMailbox(0.01)
+    cancelled = threading.Event()
+    cancelled.set()
+
+    result = rig.worker.log_in(
+        PROFILE_ID,
+        Credentials(TEST_EMAIL, TEST_PASSWORD),
+        mailbox.wait,
+        cancelled,
+        mfa_timed_out=lambda: mailbox.timed_out,
+    )
+
+    assert result is LoginEnd.CANCELLED
+
+
+# --- Seconda connessione al database -----
+
+
+class _RecordingStorage(InMemoryProfileStorage):
+    """Ricorda con quali argomenti si apre il database."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.opened_with: list[bool] = []
+
+    def open(self, folder: Path, *, check_integrity: bool = True) -> OpenProfile:
+        self.opened_with.append(check_integrity)
+        return super().open(folder, check_integrity=check_integrity)
+
+
+def test_the_sync_thread_opens_its_connection_without_the_full_integrity_check() -> None:
+    rig = Rig()
+    storage = _RecordingStorage()
+    storage.create(FOLDER, PROFILE_ID, ProfileName.parse("Atleta di prova"), "UTC")
+    worker = SyncWorker(rig.services, storage, lambda _folder: rig.archive)
+
+    worker.synchronize(
+        PROFILE_ID,
+        FOLDER,
+        SyncMode.SYNC,
+        automatic=False,
+        cancelled=threading.Event(),
+        report=lambda _progress: None,
+    )
+
+    assert storage.opened_with == [False]

@@ -701,6 +701,7 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Synchronise": QKeySequence("F5").toString(),
         "Full check": QKeySequence("Ctrl+F5").toString(),
         "Stop synchronisation": QKeySequence("Shift+F5").toString(),
+        "Synchronise when a profile opens": QKeySequence("Ctrl+Shift+A").toString(),
     }
 
 

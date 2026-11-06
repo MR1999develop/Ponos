@@ -9,6 +9,7 @@ import logging
 import os
 import random
 import sys
+import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
@@ -24,8 +25,14 @@ from PySide6.QtWidgets import QApplication
 
 import ponos_coach
 from ponos_coach.activities.decoding import decode_stored_activity
-from ponos_coach.activities.domain import DEFAULT_POLICY, FailureReason, FileFormat, SyncPolicy
-from ponos_coach.activities.ports import GarminAccount
+from ponos_coach.activities.domain import (
+    DEFAULT_POLICY,
+    FailureReason,
+    FileFormat,
+    SessionTokens,
+    SyncPolicy,
+)
+from ponos_coach.activities.ports import GarminAccount, GarminSession
 from ponos_coach.activities.sync import ExtractedOriginal, OriginalExtractionError
 from ponos_coach.load.use_cases import Decoder
 from ponos_coach.platform.folder_kind import SystemFolderKindDetector
@@ -64,7 +71,8 @@ from ponos_coach.ui.main_window import (
     NewProfileDefaults,
     native_folder_picker,
 )
-from ponos_coach.ui.sync_worker import SyncServices, SystemNotifier
+from ponos_coach.ui.sync_preferences import QSettingsSyncPreferences
+from ponos_coach.ui.sync_worker import MFA_WAIT_S, SyncServices, SystemNotifier
 from ponos_coach.ui.translations import (
     Language,
     TranslationReport,
@@ -179,12 +187,41 @@ def extract_original_activity(content: bytes) -> ExtractedOriginal:
     return ExtractedOriginal(entry.content, FileFormat(entry.suffix.removeprefix(".")))
 
 
-def _default_garmin_account() -> GarminAccount:
-    """L'account vero, su `garminconnect`; l'import è qui perché pesa e serve solo al primo uso."""
-    from ponos_coach.garmin.account import GarminConnectAccount  # noqa: PLC0415
-    from ponos_coach.garmin.connect import ConnectClientFactory  # noqa: PLC0415
+class _LazyGarminAccount:
+    """L'account vero, su `garminconnect`, creato al primo uso.
 
-    return GarminConnectAccount(ConnectClientFactory())
+    `garminconnect` e `curl_cffi` pesano e servono solo a chi collega o sincronizza: l'avvio
+    dell'app non li importa. Le operazioni dell'account girano una alla volta; il lucchetto
+    protegge comunque la creazione.
+    """
+
+    def __init__(self) -> None:
+        self._account: GarminAccount | None = None
+        self._lock = threading.Lock()
+
+    def _real(self) -> GarminAccount:
+        with self._lock:
+            if self._account is None:
+                from ponos_coach.garmin.account import GarminConnectAccount  # noqa: PLC0415
+                from ponos_coach.garmin.connect import ConnectClientFactory  # noqa: PLC0415
+
+                self._account = GarminConnectAccount(ConnectClientFactory())
+            return self._account
+
+    def login(
+        self, email: str, password: str, prompt_mfa_code: Callable[[], str | None]
+    ) -> GarminSession:
+        """Vedi `GarminAccount.login`."""
+        return self._real().login(email, password, prompt_mfa_code)
+
+    def resume(self, tokens: SessionTokens) -> GarminSession:
+        """Vedi `GarminAccount.resume`."""
+        return self._real().resume(tokens)
+
+
+def _default_garmin_account() -> GarminAccount:
+    """L'account vero, che importa la libreria solo alla prima operazione."""
+    return _LazyGarminAccount()
 
 
 def _default_token_store(data_dir: Path) -> TokenStore | None:
@@ -234,6 +271,7 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
     notifier: SystemNotifier | None = None,
     sync_policy: SyncPolicy | None = None,
     data_dir: Path | None = None,
+    mfa_wait_s: float = MFA_WAIT_S,
 ) -> MainWindow:
     """Costruisce la finestra con tutte le dipendenze (richiede una `QApplication`).
 
@@ -244,8 +282,8 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
     dei log che il menu Aiuto apre. `garmin_account`, `token_store`, `notifier` e `sync_policy`
     sostituiscono Garmin, il portachiavi, la notifica di sistema e le pause della
     sincronizzazione (finti nei test); `data_dir` è la cartella dati locale dell'app, dove stanno
-    i token cifrati su Windows. Non apre nessun profilo: lo fa `MainWindow.start()`, dopo
-    `show()`.
+    i token cifrati su Windows; `mfa_wait_s` è quanto si aspetta il codice MFA. Non apre nessun
+    profilo: lo fa `MainWindow.start()`, dopo `show()`.
     """
     del command_line  # per ora nessuna opzione cambia la composizione
     if config_dir is None:
@@ -293,6 +331,8 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
             make_rng=random.Random,
             notifier=notifier or DesktopNotifier(APP_NAME),
             policy=sync_policy or DEFAULT_POLICY,
+            mfa_wait_s=mfa_wait_s,
+            preferences=QSettingsSyncPreferences(settings),
         ),
         errors=ErrorContext(_registry_problem, config_dir),
     )

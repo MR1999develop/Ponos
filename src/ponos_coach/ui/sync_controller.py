@@ -8,6 +8,11 @@ come segnali accodati. La sincronizzazione ha una sua connessione al database de
 (vedi `sync_worker`), quindi import e panoramica restano disponibili mentre scarica.
 L'annullamento è cooperativo (`threading.Event`); la chiusura della finestra lo chiede e poi
 attende che il thread finisca (`has_stopped`).
+
+I thread dell'account sono daemon: una chiamata della libreria Garmin non si può interrompere
+(fino a 30 s di timeout di rete). Alla chiusura, se un thread non finisce entro
+`abandon_after_s` dalla richiesta, lo si lascia terminare con l'uscita del processo: la
+sincronizzazione è riprendibile e la sua connessione SQLite in WAL resta coerente.
 """
 
 from __future__ import annotations
@@ -15,8 +20,10 @@ from __future__ import annotations
 import contextlib
 import logging
 import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import Final
 
 from PySide6.QtCore import QObject, Signal, SignalInstance, Slot
 
@@ -49,7 +56,11 @@ from ponos_coach.ui.sync_worker import (
 
 _LOG = logging.getLogger(__name__)
 
-__all__ = ["SyncController"]
+__all__ = ["ABANDON_AFTER_S", "SyncController"]
+
+ABANDON_AFTER_S: Final = (
+    3.0  # oltre, un thread di Garmin non interrompibile non trattiene la chiusura
+)
 
 
 def _post(signal: SignalInstance, *args: object) -> None:
@@ -101,6 +112,8 @@ class SyncController(QObject):
         self._progress: SyncProgress | None = None
         self._auto_pending = False
         self._closing = False
+        self._shutdown_at: float | None = None
+        self.abandon_after_s = ABANDON_AFTER_S
         self._checked.connect(self._on_checked)
         self._logged_in.connect(self._on_logged_in)
         self._logged_out.connect(self._on_logged_out)
@@ -144,13 +157,39 @@ class SyncController(QObject):
 
     @property
     def has_stopped(self) -> bool:
-        """Vero se nessun thread dell'account è più in esecuzione."""
-        return self._thread is None or not self._thread.is_alive()
+        """Vero se nessun thread dell'account è più in esecuzione o, a chiusura chiesta da più di
+        `abandon_after_s`, se quello rimasto non si può interrompere (resta a un'attesa di rete
+        e muore con il processo)."""
+        thread = self._thread
+        if thread is None or not thread.is_alive():
+            return True
+        return (
+            self._shutdown_at is not None
+            and time.monotonic() - self._shutdown_at >= self.abandon_after_s
+        )
+
+    @property
+    def auto_sync_enabled(self) -> bool:
+        """Vero se aprendo il profilo la sincronizzazione parte da sola (scelta per profilo)."""
+        profile_id = self._profile_id
+        return profile_id is None or self._services.preferences.auto_sync(profile_id)
+
+    def set_auto_sync(self, *, enabled: bool) -> None:
+        """Ricorda per il profilo aperto se la sincronizzazione parte da sola all'apertura.
+        Spegnerla ferma anche il giro automatico eventualmente ancora in attesa."""
+        profile_id = self._profile_id
+        if profile_id is None:
+            return
+        self._services.preferences.set_auto_sync(profile_id, enabled=enabled)
+        if not enabled:
+            self._auto_pending = False
+        self.state_changed.emit()
 
     # --- Profilo ----------------------------------------------------------------------------
 
     def profile_opened(self, profile_id: ProfileId, folder: Path) -> None:
-        """Un profilo si è aperto: si controlla il suo account e, se è collegato, si sincronizza.
+        """Un profilo si è aperto: si controlla il suo account e, se è collegato e l'utente non
+        ha spento la sincronizzazione all'apertura, si sincronizza.
 
         Il controllo parte appena nessun'altra operazione è in corso.
         """
@@ -163,7 +202,7 @@ class SyncController(QObject):
             self._auto_pending = False
         else:
             self._status = AccountStatus.UNKNOWN
-            self._auto_pending = True
+            self._auto_pending = self._services.preferences.auto_sync(profile_id)
         self.account_changed.emit(self._status)
         self.state_changed.emit()
         self._check_if_needed()
@@ -184,7 +223,11 @@ class SyncController(QObject):
 
         def work(serial: int, cancel: threading.Event) -> None:
             result = self._worker.log_in(
-                profile_id, credentials, lambda: self._ask_mfa(serial, mailbox), cancel
+                profile_id,
+                credentials,
+                lambda: self._ask_mfa(serial, mailbox, cancel),
+                cancel,
+                mfa_timed_out=lambda: mailbox.timed_out,
             )
             _post(self._logged_in, serial, result)
 
@@ -246,6 +289,8 @@ class SyncController(QObject):
         """Primo tempo della chiusura: ferma ciò che gira. Non attende: chi chiude guarda
         `has_stopped`. Da qui nessuna operazione parte più; si può ripetere."""
         self._closing = True
+        if self._shutdown_at is None:
+            self._shutdown_at = time.monotonic()
         self._cancel.set()
         if self._mailbox is not None:
             self._mailbox.cancel()
@@ -268,6 +313,7 @@ class SyncController(QObject):
             target=self._guarded,
             args=(work, serial, self._cancel),
             name=f"ponos-garmin-{operation.value}",
+            daemon=True,  # una chiamata di rete non interrompibile non trattiene l'uscita
         )
         self._thread = thread
         self.state_changed.emit()
@@ -283,8 +329,11 @@ class SyncController(QObject):
         except Exception as error:  # confine del thread; i lavori restituiscono già i loro esiti
             _LOG.error("Garmin: the worker failed: %s", exception_chain(error))
 
-    def _ask_mfa(self, serial: int, mailbox: MfaMailbox) -> str | None:
-        """Dal thread del login: chiede il codice alla UI e lo aspetta."""
+    def _ask_mfa(self, serial: int, mailbox: MfaMailbox, cancel: threading.Event) -> str | None:
+        """Dal thread del login: chiede il codice alla UI e lo aspetta. Se l'utente ha già
+        annullato il collegamento non si chiede nulla."""
+        if cancel.is_set():
+            return None
         _post(self._mfa_asked, serial)
         return mailbox.wait()
 
@@ -370,7 +419,12 @@ class SyncController(QObject):
 
     @Slot(int, object)
     def _on_mfa_asked(self, serial: int) -> None:
-        if serial == self._serial and self._operation is Operation.LOGIN and not self._closing:
+        if (
+            serial == self._serial
+            and self._operation is Operation.LOGIN
+            and not self._closing
+            and not self._cancel.is_set()  # già annullato: la richiesta in arrivo si ignora
+        ):
             self.mfa_requested.emit()
 
     @Slot(int, object)

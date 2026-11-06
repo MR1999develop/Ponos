@@ -31,6 +31,7 @@ from ponos_coach.storage.import_scan import FilesImportSource, FolderImportSourc
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
 from ponos_coach.ui.overview_state import Ready
+from ponos_coach.ui.sync_worker import MFA_WAIT_S
 from ponos_coach.ui.workspace import ImportSources
 from tests.fakes.garmin import FakeActivitySource, FakeGarminAccount
 from tests.fakes.notifier import RecordingNotifier
@@ -127,6 +128,7 @@ def compose(
     log_dir: Path | None = None,
     fakes: GarminFakes | None = None,
     default_token_store: bool = False,
+    mfa_wait_s: float = MFA_WAIT_S,
 ) -> MainWindow:
     """Finestra dal Composition Root, con configurazione e profili in `tmp_path`.
 
@@ -156,6 +158,7 @@ def compose(
         notifier=garmin.notifier,
         sync_policy=FAST_POLICY,
         data_dir=tmp_path / "data",
+        mfa_wait_s=mfa_wait_s,
     )
     _PICKERS[window] = picker
     _FAKES[window] = garmin

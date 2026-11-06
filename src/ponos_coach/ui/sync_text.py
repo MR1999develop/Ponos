@@ -26,6 +26,8 @@ from ponos_coach.ui.sync_model import (
     SyncProblem,
     SyncResult,
     failure_counts,
+    has_definitive_failures,
+    has_retryable_failures,
     new_activity_count,
     round_remaining,
 )
@@ -94,7 +96,7 @@ _FAILURE_REASONS: dict[FailureReason, Callable[[], str]] = {
         "Sync", "the downloaded package is not valid"
     ),
     FailureReason.REMOTE_REJECTED: lambda: QCoreApplication.translate(
-        "Sync", "Garmin does not provide the original file"
+        "Sync", "Garmin did not provide a valid original file for this activity"
     ),
     FailureReason.ATTEMPTS_EXHAUSTED: lambda: QCoreApplication.translate(
         "Sync", "it failed too many times"
@@ -124,7 +126,9 @@ _STOP_REASONS: dict[StopReason, Callable[[], str]] = {
         "Sync", "Garmin sent an answer that Ponos Coach cannot read."
     ),
     StopReason.STORAGE_ERROR: lambda: QCoreApplication.translate(
-        "Sync", "The profile folder cannot be written. Check that the disk is not full."
+        "Sync",
+        "The profile was busy with another task or could not be written. "
+        "Try again; if it persists, check that the disk is not full.",
     ),
     StopReason.LISTING_LIMIT: lambda: QCoreApplication.translate(
         "Sync", "Garmin listed more activities than Ponos Coach accepts."
@@ -206,6 +210,12 @@ def summary_lines(result: SyncResult) -> tuple[str, ...]:
                 "Sync", "%n activity(ies) matched with files you imported", "", outcome.matched
             )
         )
+    if outcome.already_present:
+        lines.append(
+            QCoreApplication.translate(
+                "Sync", "%n activity(ies) were already in the profile", "", outcome.already_present
+            )
+        )
     lines.extend(_failure_lines(result))
     if outcome.stop is not None:
         lines.append(stop_reason_text(outcome.stop))
@@ -232,15 +242,36 @@ def summary_message(result: SyncResult) -> ErrorMessage:
     """Titolo e righe del riepilogo con il suo rimedio, per la finestra del riepilogo."""
     lines = summary_lines(result)
     what = "\n".join(lines)
-    if isinstance(result, SyncFinished) and result.outcome.completed:
-        remedy = QCoreApplication.translate(
-            "Sync", "The activities not downloaded stay in the list and are not lost."
-        )
-    else:
-        remedy = QCoreApplication.translate(
-            "Sync", "Synchronise again when you are ready: it resumes where it left off."
-        )
+    remedy = "\n".join(_remedy_lines(result))
     return ErrorMessage(headline_text(result), what, remedy)
+
+
+def _remedy_lines(result: SyncResult) -> list[str]:
+    """Che cosa fare: riprendere il giro se si è fermato, e il destino delle voci fallite
+    (le transitorie restano in elenco, le definitive no)."""
+    remedies: list[str] = []
+    if not isinstance(result, SyncFinished) or not result.outcome.completed:
+        remedies.append(
+            QCoreApplication.translate(
+                "Sync", "Synchronise again when you are ready: it resumes where it left off."
+            )
+        )
+    if has_retryable_failures(result):
+        remedies.append(
+            QCoreApplication.translate(
+                "Sync",
+                "The activities that failed for a temporary reason stay in the list "
+                "and are tried again next time.",
+            )
+        )
+    if has_definitive_failures(result):
+        remedies.append(
+            QCoreApplication.translate(
+                "Sync",
+                "The activities that failed for a lasting reason are not tried again.",
+            )
+        )
+    return remedies
 
 
 def notification_texts(count: int) -> tuple[str, str]:
@@ -265,6 +296,9 @@ _LOGIN_FAILURES: dict[LoginFailure, Callable[[], str]] = {
         "Sync",
         "The sign-in worked, but the system keychain could not keep it, "
         "so the account was not connected.",
+    ),
+    LoginFailure.MFA_TIMED_OUT: lambda: QCoreApplication.translate(
+        "Sync", "Time ran out waiting for the verification code. Connect the account again."
     ),
     LoginFailure.OTHER: lambda: QCoreApplication.translate(
         "Sync", "Something went wrong. Try again; if it persists, use Help > Open the log folder."

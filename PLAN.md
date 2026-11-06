@@ -427,17 +427,24 @@ POSIX compresi; campagna di collaudo verde su Windows (esiti in
 
 - [ ] Adattatore `garmin` dietro la porta `ActivitySource`, con test di
       contratto su risposte registrate e anonimizzate e su un fake.
-- [ ] Dialogo di login con MFA, token nel portachiavi per profilo, logout.
-- [ ] Sincronizzazione riprendibile (sezione 4.4): prima tutto lo storico,
+      *Stato 2026-11-06: adattatore e contratti fatti su fixture SINTETICHE
+      ricavate dalla libreria; da sostituire con la struttura reale che lo
+      spike scrive in `experiments/garmin_spike_shapes.json`.*
+- [x] Dialogo di login con MFA, token protetti dal sistema per profilo
+      (DPAPI su Windows, Secret Service su Linux), logout.
+- [x] Sincronizzazione riprendibile (sezione 4.4): prima tutto lo storico,
       poi solo le attività mancanti, "Verifica completa"; giornale, pause,
       backoff, annullamento, ripresa dopo chiusura (test che interrompe a
       metà, sia durante l'elenco sia durante i download).
-- [ ] Originali GPX scaricati da Garmin (attività caricate come GPX) letti
+- [x] Originali GPX scaricati da Garmin (attività caricate come GPX) letti
       come quelli importati.
-- [ ] Abbinamento con le attività già importate da file, senza duplicati né
+- [x] Abbinamento con le attività già importate da file, senza duplicati né
       download inutili.
 - [ ] Sincronizzazione all'avvio e con F5; notifica di sistema e barra di
       stato.
+      *Stato 2026-11-06: fatto e provato con un notificatore finto; la
+      notifica reale su Windows e Ubuntu e il login reale restano per il
+      collaudo manuale.*
 
 ### Fase 3 — Carico e grafici
 

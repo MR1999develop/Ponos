@@ -42,9 +42,12 @@ def finished(
     stop: StopReason | None = None,
     downloaded: int = 0,
     matched: int = 0,
+    already_present: int = 0,
     failures: tuple[EntryFailure, ...] = (),
 ) -> SyncFinished:
-    outcome = SyncOutcome(ListingKind.FULL, stop, downloaded, downloaded, matched, failures, {})
+    outcome = SyncOutcome(
+        ListingKind.FULL, stop, downloaded, downloaded, matched, failures, {}, already_present
+    )
     return SyncFinished(outcome, SyncMode.SYNC, automatic=False)
 
 
@@ -152,3 +155,49 @@ def test_the_summary_message_never_carries_ids_or_internal_names() -> None:
 
     assert "123456789" not in f"{message.title}{message.what}{message.remedy}"
     assert "ARCHIVE" not in message.what
+
+
+def test_files_already_in_the_profile_are_said_apart_and_never_called_new() -> None:
+    result = finished(downloaded=1, already_present=4)
+
+    lines = summary_lines(result)
+
+    assert lines[0] == "1 new activity(ies) downloaded"
+    assert lines[1] == "4 activity(ies) were already in the profile"
+    assert headline_text(result) == "Synchronised: 1 new activity(ies)"
+    assert headline_text(finished(already_present=4)) == "Garmin is up to date"
+
+
+def test_a_rejected_original_covers_both_causes_in_one_sentence() -> None:
+    assert failure_reason_text(FailureReason.REMOTE_REJECTED) == (
+        "Garmin did not provide a valid original file for this activity"
+    )
+
+
+def test_a_storage_stop_says_the_profile_may_be_busy_and_to_try_again() -> None:
+    text = stop_reason_text(StopReason.STORAGE_ERROR)
+
+    assert "busy" in text
+    assert "Try again" in text
+
+
+def test_the_remedy_keeps_temporary_failures_apart_from_lasting_ones() -> None:
+    temporary = (EntryFailure(GarminActivityId(1), FailureReason.TRANSIENT_ERROR),)
+    lasting = (EntryFailure(GarminActivityId(2), FailureReason.CORRUPT_FILE),)
+
+    only_temporary = summary_message(finished(failures=temporary)).remedy
+    only_lasting = summary_message(finished(failures=lasting)).remedy
+    both = summary_message(finished(failures=temporary + lasting)).remedy
+
+    assert "tried again next time" in only_temporary
+    assert "not tried again" not in only_temporary
+    assert "not tried again" in only_lasting
+    assert "stay in the list" not in only_lasting
+    assert "tried again next time" in both
+    assert "not tried again" in both
+
+
+def test_a_stopped_round_also_says_it_resumes_where_it_left_off() -> None:
+    message = summary_message(finished(stop=StopReason.SERVICE_UNAVAILABLE))
+
+    assert "resumes where it left off" in message.remedy

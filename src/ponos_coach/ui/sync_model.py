@@ -13,7 +13,7 @@ import math
 from dataclasses import dataclass
 from enum import Enum
 
-from ponos_coach.activities.domain import FailureReason
+from ponos_coach.activities.domain import RETRYABLE_REASONS, FailureReason
 from ponos_coach.activities.sync import StopReason, SyncMode, SyncOutcome
 
 
@@ -43,6 +43,7 @@ class LoginFailure(Enum):
     RATE_LIMITED = "rate_limited"
     SERVICE_UNAVAILABLE = "service_unavailable"
     KEYCHAIN_UNAVAILABLE = "keychain_unavailable"
+    MFA_TIMED_OUT = "mfa_timed_out"  # il codice non è arrivato in tempo
     OTHER = "other"
 
 
@@ -136,6 +137,16 @@ def failure_counts(result: SyncResult) -> tuple[tuple[FailureReason, int], ...]:
     return tuple(sorted(counts.items(), key=lambda item: (-item[1], order[item[0]])))
 
 
+def has_retryable_failures(result: SyncResult) -> bool:
+    """Almeno una voce è fallita per una causa transitoria: resta in elenco e si ritenta."""
+    return any(reason in RETRYABLE_REASONS for reason, _ in failure_counts(result))
+
+
+def has_definitive_failures(result: SyncResult) -> bool:
+    """Almeno una voce è fallita per una causa definitiva: non si ritenta da sola."""
+    return any(reason not in RETRYABLE_REASONS for reason, _ in failure_counts(result))
+
+
 # --- Quali comandi si possono dare --------------------------------------------------------------
 
 
@@ -179,13 +190,14 @@ class CommandInputs:
 
 @dataclass(frozen=True, slots=True)
 class SyncCommands:
-    """Disponibilità dei cinque comandi del menu Garmin."""
+    """Disponibilità dei comandi del menu Garmin."""
 
     connect: Availability
     disconnect: Availability
     sync: Availability
     verify: Availability
     stop: Availability
+    auto_sync: Availability
 
 
 def _busy_reason(inputs: CommandInputs) -> DisabledReason | None:
@@ -231,6 +243,15 @@ def _sync_reason(inputs: CommandInputs) -> DisabledReason | None:
     return None if inputs.account is AccountStatus.LINKED else DisabledReason.NOT_LINKED
 
 
+def _auto_sync_reason(inputs: CommandInputs) -> DisabledReason | None:
+    """L'interruttore vale per il profilo aperto e non dipende dal lavoro in corso."""
+    if not inputs.profile_open:
+        return DisabledReason.NO_PROFILE
+    if inputs.account is AccountStatus.KEYCHAIN_UNAVAILABLE:
+        return DisabledReason.KEYCHAIN_UNAVAILABLE
+    return None
+
+
 def commands_for(inputs: CommandInputs) -> SyncCommands:
     """Quali comandi del menu Garmin sono disponibili e, per gli altri, perché no."""
     sync_reason = _sync_reason(inputs)
@@ -241,6 +262,7 @@ def commands_for(inputs: CommandInputs) -> SyncCommands:
         sync=Availability(sync_reason),
         verify=Availability(sync_reason),
         stop=_AVAILABLE if stoppable else Availability(DisabledReason.NOT_SYNCING),
+        auto_sync=Availability(_auto_sync_reason(inputs)),
     )
 
 

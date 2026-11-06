@@ -5,9 +5,18 @@ definitiva della voce del giornale."""
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
+
 import pytest
 
-from ponos_coach.__main__ import _FAILURE_BY_ZIP_REASON, extract_original_activity
+from ponos_coach.__main__ import (
+    _FAILURE_BY_ZIP_REASON,
+    _LazyGarminAccount,
+    extract_original_activity,
+)
 from ponos_coach.activities.domain import RETRYABLE_REASONS, FailureReason, FileFormat
 from ponos_coach.activities.sync import OriginalExtractionError
 from ponos_coach.zipread import ZipReason
@@ -47,3 +56,61 @@ def test_a_download_without_an_activity_file_fails_for_a_definitive_reason(
         extract_original_activity(original_zip(1, kind))
 
     assert error.value.reason is reason
+
+
+_STARTUP_SCRIPT = """
+import json, sys, tempfile
+from pathlib import Path
+from PySide6.QtCore import QSettings
+from PySide6.QtWidgets import QApplication
+from ponos_coach.__main__ import compose_main_window, parse_command_line
+
+class Quiet:
+    def notify(self, title, message):
+        pass
+
+app = QApplication([])
+with tempfile.TemporaryDirectory() as folder:
+    base = Path(folder)
+    window = compose_main_window(
+        parse_command_line([]),
+        settings=QSettings(str(base / "s.ini"), QSettings.Format.IniFormat),
+        config_dir=base / "config",
+        documents_dir=base / "docs",
+        system_timezone_id="UTC",
+        log_dir=base / "logs",
+        data_dir=base / "data",
+        notifier=Quiet(),
+    )
+    window.start()
+    app.processEvents()
+    heavy = ("garminconnect", "curl_cffi", "ponos_coach.garmin.connect")
+    print(json.dumps([name for name in heavy if name in sys.modules]), flush=True)
+    window.close()
+    while not window.is_closed:
+        app.processEvents()
+    window.deleteLater()
+    app.processEvents()
+"""
+
+
+def test_starting_the_app_does_not_import_the_garmin_libraries() -> None:
+    env = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
+
+    run = subprocess.run(  # noqa: S603 - interprete corrente, script fisso
+        [sys.executable, "-c", _STARTUP_SCRIPT],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+        check=False,
+    )
+
+    assert run.returncode == 0, run.stderr
+    assert json.loads(run.stdout.strip().splitlines()[-1]) == []
+
+
+def test_the_default_account_creates_the_real_one_only_when_used() -> None:
+    account = _LazyGarminAccount()
+
+    assert account._account is None

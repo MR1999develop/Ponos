@@ -62,6 +62,7 @@ from ponos_coach.ui.sync_model import (
     SyncProblem,
     SyncResult,
 )
+from ponos_coach.ui.sync_preferences import MemorySyncPreferences, SyncPreferences
 
 _LOG = logging.getLogger(__name__)
 
@@ -94,6 +95,7 @@ class SyncServices:
     notifier: SystemNotifier
     policy: SyncPolicy = DEFAULT_POLICY
     mfa_wait_s: float = MFA_WAIT_S
+    preferences: SyncPreferences = field(default_factory=MemorySyncPreferences)
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,11 +110,13 @@ class MfaMailbox:
     """Dove il thread del login aspetta il codice che la UI raccoglie.
 
     `answer(None)` (Annulla) e `cancel()` sbloccano l'attesa con "annullato"; l'attesa ha un
-    tetto (`wait_s`) oltre il quale vale come annullata.
+    tetto (`wait_s`) oltre il quale `wait` dà `None` e `timed_out` diventa vero: la scadenza si
+    distingue dall'annullamento.
     """
 
     def __init__(self, wait_s: float) -> None:
         self._wait_s = wait_s
+        self._timed_out = False
         self._answers: queue.Queue[str | None] = queue.Queue(maxsize=1)
 
     def answer(self, code: str | None) -> None:
@@ -124,11 +128,17 @@ class MfaMailbox:
         """Sblocca l'attesa come se l'utente avesse annullato."""
         self.answer(None)
 
+    @property
+    def timed_out(self) -> bool:
+        """Vero se l'attesa è finita perché il tempo è scaduto (nessuno ha risposto)."""
+        return self._timed_out
+
     def wait(self) -> str | None:
         """Il codice, o `None` se annullato o scaduto il tempo."""
         try:
             return self._answers.get(timeout=self._wait_s)
         except queue.Empty:
+            self._timed_out = True
             return None
 
 
@@ -185,9 +195,12 @@ class SyncWorker:
         credentials: Credentials,
         ask_mfa_code: Callable[[], str | None],
         cancelled: threading.Event,
+        *,
+        mfa_timed_out: Callable[[], bool] = lambda: False,
     ) -> LoginResult:
         """Accede a Garmin e salva i token del profilo. Se `cancelled` scatta durante l'accesso
-        la sessione si butta e non si salva nulla."""
+        la sessione si butta e non si salva nulla. Se il codice MFA non è arrivato in tempo
+        (`mfa_timed_out`) l'esito è `LoginFailure.MFA_TIMED_OUT`, non un annullamento."""
         store = self._services.tokens
         if store is None:
             return LoginFailure.KEYCHAIN_UNAVAILABLE
@@ -196,7 +209,8 @@ class SyncWorker:
                 credentials.email, credentials.password, ask_mfa_code
             )
         except Exception as error:  # confine del thread; i fallimenti attesi sono esiti
-            return _login_failure_for(error)
+            expired = mfa_timed_out() and not cancelled.is_set()
+            return _login_failure_for(error, mfa_timed_out=expired)
         if cancelled.is_set():
             return LoginEnd.CANCELLED
         try:
@@ -281,7 +295,8 @@ class SyncWorker:
         report: Callable[[SyncProgress], None],
     ) -> SyncResult:
         try:
-            opened = self._storage.open(folder)
+            # Seconda connessione a un profilo già aperto e verificato dal thread dei dati.
+            opened = self._storage.open(folder, check_integrity=False)
         except ProfileStorageError as error:
             raise _SkippedError(SyncProblem.PROFILE_UNAVAILABLE) from error
         services = self._services
@@ -314,10 +329,11 @@ class _SkippedError(Exception):
         self.problem = problem
 
 
-def _login_failure_for(error: Exception) -> LoginResult:
-    """L'esito di un accesso fallito, secondo come reagisce l'utente."""
+def _login_failure_for(error: Exception, *, mfa_timed_out: bool) -> LoginResult:
+    """L'esito di un accesso fallito, secondo come reagisce l'utente. Un codice MFA mai
+    arrivato (`mfa_timed_out`) non è un annullamento: l'utente deve saperlo."""
     if isinstance(error, MfaCancelledError):
-        return LoginEnd.CANCELLED
+        return LoginFailure.MFA_TIMED_OUT if mfa_timed_out else LoginEnd.CANCELLED
     if isinstance(error, InvalidCredentialsError):
         return LoginFailure.INVALID_CREDENTIALS
     if isinstance(error, RateLimitedError):

@@ -84,25 +84,121 @@ Poi parte la prima sincronizzazione di tutto lo storico.
 Stato della fase 1: il primo avvio apre il dialogo "Nuovo profilo" con nome,
 cartella, FC a riposo, massima e di soglia (stimata al 90% della massima
 finché l'utente non la fissa), sesso e fuso orario. I passi successivi
-arrivano con le loro fasi.
+arrivano con le loro fasi. Nella fase 2 il login Garmin non è un passo del
+dialogo: si fa da Garmin, Collega account Garmin… (sezione 3).
 
 ## 3. Sincronizzazione con Garmin
 
-- Parte all'avvio e con il pulsante Sincronizza (F5).
-- La prima sincronizzazione scarica tutto lo storico. Può durare a lungo:
-  l'app mostra avanzamento, tempo stimato e Annulla.
-- Le successive scaricano solo le attività mancanti.
-- Se l'app si chiude a metà, alla successiva sincronizzazione riprende da dove
-  era rimasta.
-- "Verifica completa" rielenca tutto lo storico, senza riscaricare, per
-  trovare attività caricate in ritardo con date vecchie.
-- Un'attività già importata da file non viene riscaricata né duplicata.
-- A fine sincronizzazione: notifica di sistema con il numero di attività
-  nuove e messaggio nella barra di stato. Non c'è area di notifica.
-- Se il login è scaduto o manca, si apre il dialogo di login con MFA. La
-  password non viene salvata.
-- Con errori temporanei di Garmin l'app aspetta e riprova poche volte, poi
-  mostra un errore comprensibile.
+Regole tecniche: [dati e sincronizzazione](../.claude/skills/ponos-allenamento/references/dati-e-sincronizzazione.md).
+Decisioni: [ADR 006](adr/006-token-e-sincronizzazione.md). L'accesso non è
+ufficiale (ADR 002): può smettere di funzionare, e l'import di file resta
+sempre disponibile.
+
+### Menu Garmin
+
+| Voce | Scorciatoia | Quando è disponibile |
+|---|---|---|
+| Collega account Garmin… | Ctrl+G | profilo aperto, nessun account collegato o accesso da rifare |
+| Scollega account Garmin | Ctrl+Maiusc+G | account collegato o da ricollegare |
+| Sincronizza | F5 | account collegato, nessun'altra operazione |
+| Verifica completa | Ctrl+F5 | come Sincronizza |
+| Interrompi sincronizzazione | Maiusc+F5 | solo durante una sincronizzazione |
+
+Una voce spenta dice il motivo nel suggerimento (nessun profilo, account non
+collegato, accesso da rifare, operazione in corso, portachiavi non
+disponibile).
+
+### Collegare e scollegare l'account
+
+- "Collega account Garmin…" apre un dialogo con email e password. Vanno solo a
+  Garmin e non si salvano. Se Garmin chiede la verifica in due passaggi,
+  compare un secondo dialogo per il codice.
+- Se l'attesa del codice scade (5 minuti) o l'utente annulla, il collegamento
+  finisce e non si salva nulla. Se l'attesa è scaduta, un messaggio lo dice.
+- Credenziali rifiutate, troppi tentativi, Garmin irraggiungibile e
+  portachiavi non disponibile hanno ciascuno il proprio messaggio nel dialogo,
+  in parole comuni.
+- A collegamento riuscito i token si salvano protetti dal sistema (Windows:
+  cifrati per l'utente; Ubuntu: Secret Service) e parte la prima
+  sincronizzazione. Se il sistema non ha un posto sicuro per i token
+  (su Ubuntu senza Secret Service) l'account non si collega e il messaggio lo
+  dice; l'import da file resta disponibile.
+- I token non stanno nella cartella del profilo: un profilo spostato su un
+  altro PC chiede un nuovo accesso.
+- "Scollega account Garmin" chiede conferma (bottone "Scollega", predefinito
+  Annulla), poi cancella i token. Le attività già scaricate restano. Se i
+  token non si cancellano, un messaggio lo dice.
+- Un solo account per profilo: per usarne un altro si scollega il primo.
+
+### Sincronizzare
+
+- Con un account collegato parte quando si apre il profilo, se l'interruttore
+  "Sincronizza all'apertura del profilo" (menu Garmin, Ctrl+Maiusc+A) è
+  attivo: è acceso di default e la scelta si ricorda per profilo. A mano si
+  sincronizza sempre con Sincronizza (F5).
+- La prima sincronizzazione elenca e scarica tutto lo storico. Può durare a
+  lungo: la barra di stato mostra la fase ("Elenco delle attività", poi
+  "Scaricamento dell'attività n di N"), una barra di avanzamento, il tempo stimato
+  (meno di un minuto, minuti, ore) e "Interrompi".
+- Le successive elencano dalle più recenti finché trovano una pagina di
+  attività già note, e scaricano solo quelle mancanti.
+- "Verifica completa" rielenca tutto lo storico, senza riscaricare ciò che c'è
+  già, per trovare attività caricate in ritardo con date vecchie. Ripropone
+  anche le attività rinunciate per troppi fallimenti.
+- Se l'app si chiude o si interrompe a metà, alla sincronizzazione successiva
+  riprende da dove era rimasta, senza perdere né duplicare attività. La
+  chiusura dell'app non resta bloccata da un accesso o da un download in
+  corso.
+- Mentre scarica, la finestra resta usabile; l'import di file continua a
+  funzionare.
+- Un'attività già importata da file (stessa ora d'inizio, stesso sport,
+  durata simile) non si riscarica né si duplica: si collega a quella che c'è
+  e il riepilogo la conta come "abbinata a file importati". Il file scaricato
+  deve poi essere davvero quello dell'attività elencata; se è un'altra
+  attività, quella voce fallisce e non si registra nulla.
+- Le attività già presenti non contano come nuove.
+
+### Cosa succede quando qualcosa non va
+
+- **Limite di frequenza di Garmin:** l'app aspetta, con attese crescenti e un
+  massimo di tentativi; se Garmin chiede un'attesa troppo lunga o i tentativi
+  finiscono, la sincronizzazione si ferma con il messaggio "Garmin sta limitando
+  le richieste. Riprova più tardi.". Nulla si perde e il giro successivo
+  riprende.
+- **Rete assente o Garmin che non risponde:** pochi tentativi con attese, poi
+  si ferma ("Garmin non risponde. Controlla la connessione e riprova"). Un giro
+  fermato così non conta come fallimento delle singole attività.
+- **Token scaduti o revocati:** la sincronizzazione si ferma e il riepilogo
+  offre "Collega account…". Finché non si rifà l'accesso, Sincronizza e
+  Verifica completa sono spente.
+- **File non utilizzabile** (formato non supportato come il TCX, danneggiato,
+  troppo grande, non è un'attività, originale non fornito da Garmin, pacchetto
+  non valido): quell'attività è segnata come non scaricata, col motivo, e la
+  sincronizzazione continua con le altre. Dopo 3 sincronizzazioni fallite per
+  cause passeggere l'attività è messa da parte; "Verifica completa" la
+  riprova.
+- **Disco pieno o cartella non scrivibile:** la sincronizzazione si ferma e lo
+  dice; l'attività in corso resta da scaricare.
+- **Risposta che l'app non sa leggere:** si ferma con un messaggio generico;
+  la libreria di accesso non è ufficiale e può smettere di funzionare quando
+  Garmin cambia.
+- Un errore imprevisto dà un messaggio generico e rimanda ad Aiuto, Apri la
+  cartella dei log. Nel log non ci sono password, token, nomi né dati di
+  salute.
+
+### Riepilogo e notifica
+
+- A fine sincronizzazione la barra di stato dice com'è andata ("Garmin è
+  aggiornato", "Sincronizzata: n nuove attività", "Sincronizzazione
+  interrotta").
+- Se qualcosa non è andato come previsto (voci non scaricate, arresto per un
+  motivo diverso dall'interruzione dell'utente, giro non partito) si apre un
+  riepilogo: quante attività nuove, quante abbinate, quante non scaricate per
+  ciascun motivo, perché si è fermata e che cosa fare. Un'interruzione
+  voluta non apre la finestra.
+- Se ci sono attività nuove, il sistema mostra una notifica ("Nuove attività da
+  Garmin") col numero. Se il sistema non supporta le notifiche non succede
+  nulla. Non c'è area di notifica.
 
 ## 4. Import di file, cartelle e ZIP
 

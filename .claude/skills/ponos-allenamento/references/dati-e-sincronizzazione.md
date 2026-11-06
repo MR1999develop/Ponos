@@ -4,7 +4,9 @@
 `activities` (import e sincronizzazione), `platform`, i test `T-DATI`, `T-SYNC`,
 `T-IMP`, `T-GPX`. Sezione 5 di `SKILL.md`. ADR: `docs/adr/003-formato-dati.md`
 e `docs/adr/005-schema-sqlite-e-archivio.md` (schema, archivio e identità:
-qui non si ripetono).
+qui non si ripetono) e `docs/adr/006-token-e-sincronizzazione.md` (perché i
+token, il thread, il giornale e la politica sono fatti così: qui ci sono le
+regole operative, non le motivazioni).
 
 ## 1. Cartella del profilo
 
@@ -19,8 +21,8 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   ponos.lock        lock del sistema operativo sul file aperto
 ```
 
-- I token Garmin non stanno qui: stanno nel portachiavi del sistema, legati
-  all'id del profilo.
+- I token Garmin non stanno qui né nel backup: vedi la sezione 5 ("Token"). Un
+  profilo spostato su un altro PC chiede un nuovo login.
 - **Elenco dei profili:** `profiles.json` nella cartella di configurazione
   (`platformdirs`), con id, cartella, nome in cache e ultimo uso. Formato
   versionato, tetto di 1 MiB, campi sconosciuti conservati, scrittura atomica
@@ -183,8 +185,8 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
 
 ## 5. Sincronizzazione riprendibile
 
-1. Token dal portachiavi; se mancano o sono scaduti, dialogo di login con MFA.
-   La password va solo a `garminconnect` e non si salva.
+1. Token dal loro archivio (sotto); se mancano o sono scaduti, dialogo di
+   login con MFA. La password va solo a `garminconnect` e non si salva.
 2. Prima sincronizzazione: elenco di tutto lo storico a pagine, con il punto
    raggiunto nel giornale. Successive: elenco dalle più recenti finché si
    trova una pagina di attività già note, più le voci in sospeso o fallite.
@@ -213,9 +215,15 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
    dell'elenco da 100 voci (massimo 1000); tetto dello ZIP scaricato 50 MB.
 7. Chiusura a metà: all'avvio successivo si riparte dalle voci in sospeso e si
    cancellano i temporanei orfani.
-8. Il lavoro gira in un worker con annullamento (si ferma entro 1 s); la UI
-   mostra avanzamento e Annulla. A fine: notifica di sistema, barra di stato,
-   PMC e piano aggiornati.
+8. Il lavoro gira in un thread proprio (`SyncController`, `SyncWorker` in
+   `ui/`) con una connessione propria al profilo, chiusa alla fine, e con
+   annullamento cooperativo (si ferma entro 1 s, salvo una richiesta già
+   partita: il timeout della libreria, 15 s, non si interrompe); la UI mostra
+   avanzamento e Interrompi. Il controller fa una operazione dell'account per
+   volta (controllo dei token, login, logout, sincronizzazione). A fine:
+   notifica di sistema (solo se ci sono attività nuove) e barra di stato.
+   `new_activity_count` conta solo le scaricate: né le abbinate né quelle già
+   presenti sono nuove.
 9. Abbinamento: prima di scaricare, un'attività dell'elenco Garmin con la
    stessa ora d'inizio e lo stesso sport di una già importata da file si
    abbina a quella senza riscaricarla. Regola (`find_matching_import`): il
@@ -225,6 +233,35 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
    candidati il più vicino nell'inizio, poi la chiave d'identità più piccola.
    L'abbinamento collega l'id con `ActivityIndex.link_garmin_id` e segna la
    voce `MATCHED`; l'origine del record resta `IMPORT`.
+
+### Token e login
+
+- Porta `TokenStore` (`profiles/ports.py`: `save`, `load`, `delete`, per id del
+  profilo); adattatori e scelta in `platform/token_store.py`
+  (`create_token_store`).
+- Windows: `DpapiTokenStore`, un file `secrets/<id>.bin` nella cartella dati
+  locale dell'app (fuori dal profilo), formato `PNSEC` + versione (1 byte) +
+  blob DPAPI con entropia legata all'app e all'id; lettura con tetto di
+  dimensione. Il Credential Manager generico non basta (2560 byte).
+- Ubuntu: `KeyringTokenStore` sul solo Secret Service (anche dentro un
+  `ChainerBackend`), valore con prefisso `v1:`. Backend assente, bloccato o in
+  chiaro: `TokenStoreUnavailableError`, mai un file.
+- File alterato o non riconosciuto: `TokenStoreCorruptError`, quindi stato
+  "da ricollegare" e nuovo login che lo sostituisce. Portachiavi non
+  utilizzabile: i comandi dell'account sono spenti con il motivo.
+- Ripresa (`GarminConnectAccount.resume`): solo token che sono un oggetto JSON;
+  se la libreria li ha rinnovati, il worker li risalva (un guasto qui non
+  ferma il giro).
+- Login: email e password vuote o oltre i tetti rifiutate prima di contattare
+  Garmin; codice MFA chiesto al più 3 volte, vuoto o oltre 32 caratteri non
+  inviato; l'attesa del codice nella UI ha un tetto di 300 s (`MFA_WAIT_S`) e
+  poi vale come annullata. Annullato o fallito: nulla si salva.
+- Errori della libreria tradotti in `garmin/errors.py` secondo come reagisce
+  chi chiama: 429 e 427 limite di frequenza (con `Retry-After` solo se fatto di
+  cifre ASCII, al più 3600 s), 401 e autenticazione rifiutata, rete e 5xx e 408
+  transitori, il resto definitivo. I logger di `garminconnect` stanno a livello
+  critico, quelli di rete ad avviso (a livello errore la libreria scrive id e
+  testi di Garmin).
 
 ### Giornale, stati e cursori
 
