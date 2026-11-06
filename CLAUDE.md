@@ -5,7 +5,8 @@ Solo ciò che è specifico di questo progetto. Le decisioni e le fasi stanno in
 
 ## Lingue
 
-- Interfaccia in italiano e inglese con il meccanismo di traduzione di Qt
+- Interfaccia in inglese (lingua predefinita) e italiano (scelto dal menu
+  Lingua e ricordato), con il meccanismo di traduzione di Qt
   (`self.tr()`, file `.ts` in `src/ponos_coach/i18n/`); testi sorgente in
   inglese nel codice.
 - Identificatori nel codice in inglese; commenti, documenti e messaggi di

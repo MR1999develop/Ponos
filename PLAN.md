@@ -35,7 +35,8 @@ completata e verificata.
 | Ricerca e mappa (fase 9) | Filtri delle attività per data, durata, distanza e dislivello; mappa zoomabile con le attività raggruppate in cerchi numerati che cambiano con lo zoom e, a destra, l'elenco delle attività visibili nell'area |
 | Sincronizzazione | All'avvio e con il pulsante Sincronizza; la prima scarica tutto lo storico, le successive solo le attività mancanti; riprende da dove era rimasta dopo una chiusura; notifica a fine sincronizzazione; niente area di notifica |
 | Calendario Garmin | In una fase successiva: invio degli allenamenti a scelta dell'utente ed eliminazione degli allenamenti futuri programmati |
-| Lingue | Italiano e inglese |
+| Lingue | Inglese come lingua predefinita, italiano scelto dal menu Lingua e ricordato (decisione del 2026-11-06; prima seguiva la lingua del sistema) |
+| Dati del profilo | Alla creazione: nome, cartella, altezza, peso, data di nascita, sesso, FC minima e massima, soglia. Poi si aggiornano con una data di validità peso, FC minima, FC massima e soglia; nome, altezza, data di nascita e sesso restano fissi (decisione del 2026-11-06) |
 | Piattaforme e repository | Windows e Ubuntu, GitHub con CI (repository pubblico); push automatico della sessione principale sul ramo di lavoro, su `main` solo con PR (dal 2026-11-06; prima lo faceva l'utente a mano) |
 
 ## 2. Decisioni di default (le ho fissate io: da confermare o correggere)
@@ -447,6 +448,13 @@ POSIX compresi; campagna di collaudo verde su Windows (esiti in
 
 ### Fase 3 — Carico e grafici
 
+- [ ] Lingua: inglese predefinito, menu Lingua con inglese e italiano,
+      scelta ricordata.
+- [ ] Dati del profilo: altezza, peso e data di nascita alla creazione;
+      "Modifica profilo" con misure datate (peso, FC minima, FC massima,
+      soglia) e il loro storico; campi fissi in sola lettura. Altezza,
+      peso e data di nascita sono dati personali: solo nel database del
+      profilo, mai nei log.
 - [ ] Parametri fisiologici con data di validità inseriti dall'utente (FC
       minima e massima, sesso, soglia; soglia in bici = corsa − 4 bpm);
       campioni fuori limiti scartati e contati.
@@ -454,7 +462,9 @@ POSIX compresi; campagna di collaudo verde su Windows (esiti in
       quando cambiano parametri o pesi.
 - [ ] PMC (ATL, CTL, TSB) con property test.
 - [ ] Grafici Plotly in `QWebEngineView` isolato: PMC, carico settimanale per
-      sport, zone, FC dell'attività; esportazione SVG e PNG.
+      sport, zone, FC dell'attività; esportazione SVG e PNG. Zone FC sulla
+      soglia secondo Friel, cinque zone (Z1 < 85%, Z2 85–89%, Z3 90–94%,
+      Z4 95–99%, Z5 ≥ 100%: default del progetto, rivisto in fase 4).
 
 ### Fase 4 — Test di valutazione
 
