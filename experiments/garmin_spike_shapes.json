@@ -1,0 +1,570 @@
+{
+  "note": "Struttura anonima delle risposte: nomi di chiavi, tipi, lunghezze, ordini di grandezza. Nessun valore.",
+  "shapes": {
+    "activity_list_item": {
+      "type": "object",
+      "keys": {
+        "activityId": {
+          "type": "integer",
+          "magnitude": "10^10"
+        },
+        "activityName": {
+          "type": "string",
+          "length": 25
+        },
+        "startTimeLocal": {
+          "type": "string",
+          "length": 19
+        },
+        "startTimeGMT": {
+          "type": "string",
+          "length": 19
+        },
+        "activityType": {
+          "type": "object",
+          "keys": {
+            "typeId": {
+              "type": "integer",
+              "magnitude": "10^0"
+            },
+            "typeKey": {
+              "type": "string",
+              "length": 7
+            },
+            "parentTypeId": {
+              "type": "integer",
+              "magnitude": "10^1"
+            },
+            "isHidden": {
+              "type": "boolean"
+            },
+            "restricted": {
+              "type": "boolean"
+            },
+            "trimmable": {
+              "type": "boolean"
+            }
+          }
+        },
+        "eventType": {
+          "type": "object",
+          "keys": {
+            "typeId": {
+              "type": "integer",
+              "magnitude": "10^0"
+            },
+            "typeKey": {
+              "type": "string",
+              "length": 13
+            },
+            "sortOrder": {
+              "type": "integer",
+              "magnitude": "10^1"
+            }
+          }
+        },
+        "isFavorite": {
+          "type": "boolean"
+        },
+        "isPR": {
+          "type": "boolean"
+        },
+        "isAutoCalcCalories": {
+          "type": "boolean"
+        },
+        "isParent": {
+          "type": "boolean"
+        },
+        "distance": {
+          "type": "number",
+          "magnitude": "10^3"
+        },
+        "duration": {
+          "type": "number",
+          "magnitude": "10^3"
+        },
+        "elapsedDuration": {
+          "type": "number",
+          "magnitude": "10^3"
+        },
+        "movingDuration": {
+          "type": "number",
+          "magnitude": "10^3"
+        },
+        "elevationGain": {
+          "type": "number",
+          "magnitude": "10^1"
+        },
+        "elevationLoss": {
+          "type": "number",
+          "magnitude": "10^1"
+        },
+        "averageSpeed": {
+          "type": "number",
+          "magnitude": "10^0"
+        },
+        "maxSpeed": {
+          "type": "number",
+          "magnitude": "10^0"
+        },
+        "startLatitude": {
+          "type": "number",
+          "magnitude": "10^1"
+        },
+        "startLongitude": {
+          "type": "number",
+          "magnitude": "10^1"
+        },
+        "hasPolyline": {
+          "type": "boolean"
+        },
+        "hasImages": {
+          "type": "boolean"
+        },
+        "ownerId": {
+          "type": "integer",
+          "magnitude": "10^6"
+        },
+        "ownerDisplayName": {
+          "type": "string",
+          "length": 13
+        },
+        "ownerFullName": {
+          "type": "string",
+          "length": 5
+        },
+        "ownerProfileImageUrlSmall": {
+          "type": "string",
+          "length": 105
+        },
+        "ownerProfileImageUrlMedium": {
+          "type": "string",
+          "length": 105
+        },
+        "ownerProfileImageUrlLarge": {
+          "type": "string",
+          "length": 105
+        },
+        "calories": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "bmrCalories": {
+          "type": "number",
+          "magnitude": "10^1"
+        },
+        "averageHR": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "maxHR": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "averageRunningCadenceInStepsPerMinute": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "maxRunningCadenceInStepsPerMinute": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "steps": {
+          "type": "integer",
+          "magnitude": "10^3"
+        },
+        "userRoles": {
+          "type": "array",
+          "length": 40,
+          "first": {
+            "type": "string",
+            "length": 14
+          }
+        },
+        "privacy": {
+          "type": "object",
+          "keys": {
+            "typeId": {
+              "type": "integer",
+              "magnitude": "10^0"
+            },
+            "typeKey": {
+              "type": "string",
+              "length": 7
+            }
+          }
+        },
+        "userPro": {
+          "type": "boolean"
+        },
+        "hasVideo": {
+          "type": "boolean"
+        },
+        "isPurposeful": {
+          "type": "boolean"
+        },
+        "timeZoneId": {
+          "type": "integer",
+          "magnitude": "10^2"
+        },
+        "beginTimestamp": {
+          "type": "integer",
+          "magnitude": "10^12"
+        },
+        "sportTypeId": {
+          "type": "integer",
+          "magnitude": "10^0"
+        },
+        "avgPower": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "maxPower": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "aerobicTrainingEffect": {
+          "type": "number",
+          "magnitude": "10^0"
+        },
+        "anaerobicTrainingEffect": {
+          "type": "number",
+          "magnitude": "0"
+        },
+        "normPower": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "avgVerticalOscillation": {
+          "type": "number",
+          "magnitude": "10^0"
+        },
+        "avgGroundContactTime": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "avgStrideLength": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "vO2MaxValue": {
+          "type": "number",
+          "magnitude": "10^1"
+        },
+        "avgVerticalRatio": {
+          "type": "number",
+          "magnitude": "10^0"
+        },
+        "deviceId": {
+          "type": "integer",
+          "magnitude": "10^9"
+        },
+        "minElevation": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "maxElevation": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "avgElevation": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "maxDoubleCadence": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "isElevationCorrected": {
+          "type": "boolean"
+        },
+        "isDecoDive": {
+          "type": "boolean"
+        },
+        "summarizedDiveInfo": {
+          "type": "object",
+          "keys": {
+            "summarizedDiveGases": {
+              "type": "array",
+              "length": 0,
+              "first": null
+            }
+          }
+        },
+        "maxVerticalSpeed": {
+          "type": "number",
+          "magnitude": "10^-1"
+        },
+        "manufacturer": {
+          "type": "string",
+          "length": 6
+        },
+        "locationName": {
+          "type": "string",
+          "length": 19
+        },
+        "lapCount": {
+          "type": "integer",
+          "magnitude": "10^0"
+        },
+        "endLatitude": {
+          "type": "number",
+          "magnitude": "10^1"
+        },
+        "endLongitude": {
+          "type": "number",
+          "magnitude": "10^1"
+        },
+        "isAtpActivity": {
+          "type": "boolean"
+        },
+        "waterEstimated": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "trainingEffectLabel": {
+          "type": "string",
+          "length": 17
+        },
+        "activityTrainingLoad": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "minActivityLapDuration": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "aerobicTrainingEffectMessage": {
+          "type": "string",
+          "length": 30
+        },
+        "anaerobicTrainingEffectMessage": {
+          "type": "string",
+          "length": 22
+        },
+        "splitSummaries": {
+          "type": "array",
+          "length": 2,
+          "first": {
+            "type": "object",
+            "keys": {
+              "noOfSplits": {
+                "type": "integer",
+                "magnitude": "10^0"
+              },
+              "totalAscent": {
+                "type": "number",
+                "magnitude": "10^1"
+              },
+              "duration": {
+                "type": "number",
+                "magnitude": "10^3"
+              },
+              "splitType": {
+                "type": "string",
+                "length": 15
+              },
+              "maxElevationGain": {
+                "type": "number",
+                "magnitude": "10^1"
+              },
+              "averageElevationGain": {
+                "type": "number",
+                "magnitude": "10^1"
+              },
+              "maxDistance": {
+                "type": "integer",
+                "magnitude": "10^3"
+              },
+              "maxDistanceWithPrecision": {
+                "type": "number",
+                "magnitude": "10^3"
+              },
+              "distance": {
+                "type": "number",
+                "magnitude": "10^3"
+              },
+              "averageSpeed": {
+                "type": "number",
+                "magnitude": "10^0"
+              },
+              "maxSpeed": {
+                "type": "number",
+                "magnitude": "10^0"
+              },
+              "elevationLoss": {
+                "type": "number",
+                "magnitude": "10^1"
+              },
+              "avgStepFrequency": {
+                "type": "number",
+                "magnitude": "10^2"
+              },
+              "avgStepLength": {
+                "type": "number",
+                "magnitude": "10^0"
+              },
+              "verticalRatio": {
+                "type": "number",
+                "magnitude": "10^0"
+              },
+              "verticalOscillation": {
+                "type": "number",
+                "magnitude": "10^0"
+              },
+              "avgGroundContactTime": {
+                "type": "number",
+                "magnitude": "10^2"
+              }
+            }
+          }
+        },
+        "hasSplits": {
+          "type": "boolean"
+        },
+        "hasIntensityIntervals": {
+          "type": "boolean"
+        },
+        "isManualActivity": {
+          "type": "boolean"
+        },
+        "moderateIntensityMinutes": {
+          "type": "integer",
+          "magnitude": "10^0"
+        },
+        "vigorousIntensityMinutes": {
+          "type": "integer",
+          "magnitude": "10^1"
+        },
+        "avgGradeAdjustedSpeed": {
+          "type": "number",
+          "magnitude": "10^0"
+        },
+        "differenceBodyBattery": {
+          "type": "integer",
+          "magnitude": "10^0",
+          "negative": true
+        },
+        "hasHeatMap": {
+          "type": "boolean"
+        },
+        "<id-key-1>": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "<id-key-2>": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "<id-key-3>": {
+          "type": "number",
+          "magnitude": "10^3"
+        },
+        "hrTimeInZone_1": {
+          "type": "number",
+          "magnitude": "0"
+        },
+        "hrTimeInZone_2": {
+          "type": "number",
+          "magnitude": "10^1"
+        },
+        "hrTimeInZone_3": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "hrTimeInZone_4": {
+          "type": "number",
+          "magnitude": "10^3"
+        },
+        "hrTimeInZone_5": {
+          "type": "number",
+          "magnitude": "0"
+        },
+        "powerTimeInZone_1": {
+          "type": "number",
+          "magnitude": "0"
+        },
+        "powerTimeInZone_2": {
+          "type": "number",
+          "magnitude": "10^1"
+        },
+        "powerTimeInZone_3": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "powerTimeInZone_4": {
+          "type": "number",
+          "magnitude": "10^3"
+        },
+        "powerTimeInZone_5": {
+          "type": "number",
+          "magnitude": "10^2"
+        },
+        "endTimeGMT": {
+          "type": "string",
+          "length": 19
+        },
+        "qualifyingDive": {
+          "type": "boolean"
+        },
+        "activityUUID": {
+          "type": "string",
+          "length": 36
+        },
+        "parent": {
+          "type": "boolean"
+        },
+        "decoDive": {
+          "type": "boolean"
+        },
+        "favorite": {
+          "type": "boolean"
+        },
+        "purposeful": {
+          "type": "boolean"
+        },
+        "manualActivity": {
+          "type": "boolean"
+        },
+        "pr": {
+          "type": "boolean"
+        },
+        "atpActivity": {
+          "type": "boolean"
+        },
+        "elevationCorrected": {
+          "type": "boolean"
+        },
+        "autoCalcCalories": {
+          "type": "boolean"
+        }
+      }
+    },
+    "count_activities_response": {
+      "type": "integer",
+      "magnitude": "10^3"
+    },
+    "scheduled_workouts_response": {
+      "type": "array",
+      "length": 0,
+      "first": null
+    },
+    "token_json": {
+      "type": "object",
+      "keys": {
+        "di_token": {
+          "type": "string",
+          "length": 2004
+        },
+        "di_refresh_token": {
+          "type": "string",
+          "length": 152
+        },
+        "di_client_id": {
+          "type": "string",
+          "length": 39
+        }
+      }
+    }
+  }
+}
