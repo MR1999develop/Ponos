@@ -4,12 +4,12 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 
-from ponos_coach.activities.domain import FileId, Sport
+from ponos_coach.activities.domain import ActivitySummary, FileId, FitIdentity, Sport
 from ponos_coach.load.domain import ActivityLoad, LoadSource, PmcSeries, compute_pmc
-from ponos_coach.load.use_cases import ActivityEntry
-from ponos_coach.ui.pmc_figure import PLOTLY_MODEBAR_KEYS, PmcChartLabels
+from ponos_coach.load.use_cases import ProfileActivity
+from ponos_coach.ui.pmc_figure import PLOTLY_MODEBAR_KEYS, ChartActivity, PmcChartLabels
 
 LABELS = PmcChartLabels(
     x_axis="Date",
@@ -27,16 +27,36 @@ LABELS = PmcChartLabels(
 FIRST_DAY = date(2026, 3, 2)
 
 
-def entry(day: date, load: float, name: str = "a.fit") -> ActivityEntry:
-    """Un'attivita di corsa con il carico dato, il giorno dato."""
-    start = datetime(day.year, day.month, day.day, 7, 0, tzinfo=UTC)
-    activity_load = ActivityLoad(load, load, load, 100, 0, 0.0, LoadSource.HEART_RATE)
-    return ActivityEntry(
-        name, FileId(1, 1, 1, start), Sport.RUNNING, start, day, 3600.0, 3600.0, activity_load
+def entry(day: date, load: float, name: str = "a.fit") -> ChartActivity:
+    """Un'attivita per il grafico, con il carico dato, il giorno dato."""
+    return ChartActivity(day, load, name)
+
+
+def profile_activity(
+    start: datetime,
+    *,
+    sport: Sport = Sport.RUNNING,
+    distance_m: float | None = 10_000.0,
+    ascent_m: float | None = 120.0,
+    load: float = 80.0,
+    source: LoadSource = LoadSource.HEART_RATE,
+    serial: int = 1,
+) -> ProfileActivity:
+    """Un'attivita del profilo con i valori dati (giorno locale = giorno UTC)."""
+    activity_load = ActivityLoad(load, load, load, 100, 0, 0.0, source)
+    return ProfileActivity(
+        FitIdentity(FileId(1, serial, 1, start)),
+        sport,
+        start,
+        start.date(),
+        3700.0,
+        3600.0,
+        ActivitySummary(distance_m=distance_m, ascent_m=ascent_m),
+        activity_load,
     )
 
 
-def small_history() -> tuple[PmcSeries, list[ActivityEntry]]:
+def small_history() -> tuple[PmcSeries, list[ChartActivity]]:
     """Dieci giorni di PMC con tre attivita (due nello stesso giorno)."""
     entries = [
         entry(FIRST_DAY, 50.0, "one.fit"),

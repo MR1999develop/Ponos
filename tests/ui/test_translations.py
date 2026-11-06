@@ -69,6 +69,8 @@ def window_action_texts(tmp_path: Path, qtbot: QtBot) -> set[str]:
     window = compose_main_window(
         parse_command_line([]),
         settings=settings,
+        config_dir=tmp_path / "config",
+        documents_dir=tmp_path / "documents",
         system_timezone_id="UTC",
         clock=lambda _zone: date(2026, 2, 1),
     )

@@ -8,6 +8,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "MR" }]
 requires-python = ">=3.13"
 dependencies = [
+    "defusedxml>=0.7.1",
     "desktop-notifier>=6.2.0",
     "fitdecode>=0.11.0",
     "garminconnect>=0.3.20",
@@ -36,6 +37,7 @@ dev = [
     "pytest>=9.2.0",
     "pytest-qt>=4.5.0",
     "ruff>=0.17.3",
+    "types-defusedxml>=0.7.0.20260504",
 ]
 
 [tool.uv]
@@ -66,9 +68,13 @@ max-args = 6
 
 [tool.ruff.lint.per-file-ignores]
 # I test usano assert, valori letterali, fixture senza annotazioni di ritorno complesse.
-"tests/**" = ["S101", "PLR2004", "PLR0913", "ANN401", "ARG001", "C901"]
+# DTZ001: alcuni test costruiscono apposta istanti senza fuso per provarne il rifiuto.
+# S311: i test usano random con seme fisso, mai per scopi crittografici.
+"tests/**" = ["S101", "PLR2004", "PLR0913", "ANN401", "ARG001", "C901", "DTZ001", "S311"]
 # I generatori di dati di prova usano random con seme fisso: nessun uso crittografico.
 "tests/fixtures/generators/**" = ["S311"]
+# Elenco di SHA-256 di 64 caratteri: righe più lunghe del limite, non spezzabili.
+"tests/fixtures/test_fixture_hashes.py" = ["E501"]
 "noxfile.py" = ["ANN401"]
 # Lo spike è uno script da terminale: stampa a schermo per scelta; random
 # serve solo al jitter dei ritentativi, senza uso crittografico.
@@ -147,11 +153,32 @@ forbidden_modules = ["ponos_coach.garmin", "ponos_coach.storage", "ponos_coach.p
 name = "Le funzionalita dipendono solo verso il basso (nessun ciclo)"
 type = "layers"
 layers = [
-    "ponos_coach.planning",
+    "ponos_coach.planning | ponos_coach.profiles",
     "ponos_coach.goals | ponos_coach.injury | ponos_coach.assessment",
     "ponos_coach.load",
     "ponos_coach.activities",
 ]
+
+[[tool.importlinter.contracts]]
+name = "fsio e di basso livello: non importa nulla del progetto"
+type = "forbidden"
+source_modules = ["ponos_coach.fsio"]
+forbidden_modules = [
+    "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.profiles", "ponos_coach.garmin", "ponos_coach.storage",
+    "ponos_coach.platform", "ponos_coach.ui", "ponos_coach.i18n", "ponos_coach.__main__",
+]
+
+[[tool.importlinter.contracts]]
+name = "Solo gli adattatori usano fsio (non funzionalita ne ui)"
+type = "forbidden"
+source_modules = [
+    "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.profiles", "ponos_coach.ui",
+]
+forbidden_modules = ["ponos_coach.fsio"]
 
 [[tool.importlinter.contracts]]
 name = "Gli adattatori sono indipendenti tra loro"

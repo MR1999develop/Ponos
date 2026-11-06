@@ -5,24 +5,55 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import platformdirs
 from PySide6.QtCore import QCoreApplication, QLocale, QSettings, QTimeZone
 from PySide6.QtWidgets import QApplication
 
 import ponos_coach
-from ponos_coach.activities.ports import FitFileSource
-from ponos_coach.load.domain import HeartRateLimits, Physiology, Sex, ThresholdHeartRate
-from ponos_coach.load.use_cases import FitnessParameters
-from ponos_coach.storage.fit_folder import FitFolder
+from ponos_coach.activities.decoding import decode_stored_activity
+from ponos_coach.load.use_cases import Decoder
+from ponos_coach.platform.folder_kind import SystemFolderKindDetector
+from ponos_coach.platform.profile_folders import LocalProfileFolders
+from ponos_coach.platform.profile_registry import (
+    JsonProfileRegistry,
+    RegistryBusyError,
+    RegistryCorruptError,
+    RegistryFormatTooNewError,
+)
+from ponos_coach.profiles.domain import ProfileId
+from ponos_coach.profiles.use_cases import (
+    CreateProfile,
+    DeleteProfileFolder,
+    ListProfiles,
+    OpenProfileFromFolder,
+    OpenRegisteredProfile,
+    PeekProfile,
+    ProfilePorts,
+    RemoveProfileFromList,
+)
+from ponos_coach.storage.file_archive import FileArchive
+from ponos_coach.storage.import_scan import FilesImportSource, FolderImportSource
+from ponos_coach.storage.sqlite_profile import SqliteProfileStorage
 from ponos_coach.ui.bootstrap import prepare_qt
-from ponos_coach.ui.main_window import APP_NAME, MainWindow
-from ponos_coach.ui.overview_controller import OverviewController
+from ponos_coach.ui.data_thread import DataThread
+from ponos_coach.ui.diagnostics import ErrorNotifier, configure_logging, install_exception_hooks
+from ponos_coach.ui.errors import ErrorContext, RegistryProblem
+from ponos_coach.ui.main_window import (
+    APP_NAME,
+    FolderPicker,
+    MainWindow,
+    NewProfileDefaults,
+    native_folder_picker,
+)
 from ponos_coach.ui.translations import (
     Language,
     TranslationReport,
@@ -31,32 +62,27 @@ from ponos_coach.ui.translations import (
     install_translators,
     qt_translations_dir,
 )
+from ponos_coach.ui.workspace import (
+    ImportSources,
+    ProfileUseCases,
+    WorkspaceController,
+    WorkspaceServices,
+)
 
 _ORGANIZATION = "PonosCoach"
 _FALLBACK_ZONE = ZoneInfo("UTC")
-
-# PROVVISORI dello scheletro (fase 0): in fase 1 li sostituisce il profilo dell'utente.
-PROVISIONAL_PHYSIOLOGY = Physiology(HeartRateLimits(50, 190), ThresholdHeartRate(165), Sex.MALE)
 
 
 @dataclass(frozen=True, slots=True)
 class CommandLine:
     """Opzioni della riga di comando."""
 
-    fit_folder: Path | None
     language: Language | None = None
 
 
 def parse_command_line(argv: Sequence[str]) -> CommandLine:
     """Legge le opzioni; un uso scorretto termina con `SystemExit(2)` (argparse)."""
     parser = argparse.ArgumentParser(prog="ponos-coach", description=ponos_coach.__doc__)
-    parser.add_argument(
-        "--fit-folder",
-        type=Path,
-        default=None,
-        metavar="PATH",
-        help="folder of FIT files to load at start (provisional, until profiles exist)",
-    )
     parser.add_argument(
         "--lang",
         choices=[language.value for language in Language],
@@ -67,7 +93,7 @@ def parse_command_line(argv: Sequence[str]) -> CommandLine:
         "--version", action="version", version=f"%(prog)s {ponos_coach.__version__}"
     )
     args = parser.parse_args(list(argv))
-    return CommandLine(args.fit_folder, None if args.lang is None else Language(args.lang))
+    return CommandLine(None if args.lang is None else Language(args.lang))
 
 
 def resolve_user_timezone(zone_id: str) -> tuple[ZoneInfo, bool]:
@@ -98,34 +124,98 @@ def setup_translations(
     )
 
 
-def _fit_folder_source(folder: Path) -> FitFileSource:
-    return FitFolder(folder)
+class _SystemClock:
+    """Orologio di produzione per `imported_at`: l'istante corrente in UTC."""
+
+    def now(self) -> datetime:
+        return datetime.now(UTC)
 
 
-def compose_main_window(
+def _registry_problem(error: BaseException) -> RegistryProblem | None:
+    """Quale guasto dell'elenco dei profili è (i suoi tipi sono dell'adattatore, non della ui)."""
+    if isinstance(error, RegistryFormatTooNewError):
+        return RegistryProblem.TOO_NEW
+    if isinstance(error, RegistryBusyError):
+        return RegistryProblem.BUSY
+    if isinstance(error, RegistryCorruptError):
+        return RegistryProblem.CORRUPT
+    return None
+
+
+def _default_log_dir() -> Path:
+    return Path(platformdirs.user_log_dir("PonosCoach", appauthor=False))
+
+
+def _default_import_sources() -> ImportSources:
+    return ImportSources(files=FilesImportSource, folder=FolderImportSource)
+
+
+def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza volatile iniettabile
     command_line: CommandLine,
     *,
     settings: QSettings,
+    config_dir: Path | None = None,
+    documents_dir: Path | None = None,
+    folder_picker: FolderPicker | None = None,
     system_timezone_id: str | None = None,
     clock: Callable[[ZoneInfo], date] | None = None,
+    now_utc: Callable[[], datetime] | None = None,
+    import_sources: ImportSources | None = None,
+    decode: Decoder | None = None,
+    log_dir: Path | None = None,
 ) -> MainWindow:
     """Costruisce la finestra con tutte le dipendenze (richiede una `QApplication`).
 
-    `system_timezone_id` e `clock` servono a rendere deterministico l'avvio nei test; in
-    produzione sono il fuso di sistema e la data di oggi in quel fuso.
+    `config_dir` (elenco dei profili) e `documents_dir` (punto di partenza del selettore di
+    cartella la prima volta) valgono i luoghi dell'utente se omessi; `folder_picker` è il selettore
+    di cartella (finto nei test); `system_timezone_id`, `clock`, `now_utc` e
+    `import_sources` e `decode` rendono deterministico l'avvio nei test; `log_dir` è la cartella
+    dei log che il menu Aiuto apre. Non apre nessun profilo:
+    lo fa `MainWindow.start()`, dopo `show()`.
     """
+    del command_line  # per ora nessuna opzione cambia la composizione
+    if config_dir is None:
+        config_dir = Path(platformdirs.user_config_dir("PonosCoach", appauthor=False))
+    if documents_dir is None:
+        documents_dir = Path(platformdirs.user_documents_dir())
+    if log_dir is None:
+        log_dir = _default_log_dir()
     if system_timezone_id is None:
         system_timezone_id = bytes(QTimeZone.systemTimeZoneId().data()).decode("ascii", "replace")
     zone, fell_back = resolve_user_timezone(system_timezone_id)
     today_in = clock or (lambda tz: datetime.now(tz).date())
-    parameters = FitnessParameters(PROVISIONAL_PHYSIOLOGY, zone)
-    controller = OverviewController(_fit_folder_source, parameters, lambda: today_in(zone))
-    notices = [QCoreApplication.translate("Main", "Provisional heart-rate settings")]
-    if fell_back:
-        notices.append(QCoreApplication.translate("Main", "Time zone not recognised: using UTC"))
-    window = MainWindow(controller, settings, notices)
-    if command_line.fit_folder is not None:
-        window.open_folder(command_line.fit_folder)
+    utc_now = now_utc or (lambda: datetime.now(UTC))
+
+    ports = ProfilePorts(
+        JsonProfileRegistry(config_dir),
+        LocalProfileFolders(SystemFolderKindDetector(os.environ)),
+        SqliteProfileStorage(),
+    )
+    use_cases = ProfileUseCases(
+        create=CreateProfile(ports, utc_now, lambda: ProfileId(uuid.uuid4())),
+        open_from_folder=OpenProfileFromFolder(ports, utc_now),
+        open_registered=OpenRegisteredProfile(ports, utc_now),
+        list_all=ListProfiles(ports),
+        remove=RemoveProfileFromList(ports),
+        delete=DeleteProfileFolder(ports),
+        peek=PeekProfile(ports),
+    )
+    services = WorkspaceServices(
+        ports=ports,
+        profiles=use_cases,
+        archive_for=FileArchive.in_profile_folder,
+        import_sources=import_sources or _default_import_sources(),
+        decode=decode or decode_stored_activity,
+        clock=_SystemClock(),
+        today=today_in,
+        errors=ErrorContext(_registry_problem, config_dir),
+    )
+    controller = WorkspaceController(services)
+    defaults = NewProfileDefaults(
+        documents_dir, folder_picker or native_folder_picker, zone.key, fell_back, today_in
+    )
+    window = MainWindow(controller, settings, defaults, log_folder=log_dir)
+    controller.setParent(window)
     return window
 
 
@@ -135,15 +225,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         command_line = parse_command_line(sys.argv[1:] if argv is None else argv)
     except SystemExit as exit_request:
         return exit_request.code if isinstance(exit_request.code, int) else 1
+    log_dir = _default_log_dir()
+    configure_logging(log_dir, version=ponos_coach.__version__)
     prepare_qt()
     app = QApplication([APP_NAME])
     app.setOrganizationName(_ORGANIZATION)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(ponos_coach.__version__)
     setup_translations(app, command_line)
-    window = compose_main_window(command_line, settings=QSettings())
+    notifier = ErrorNotifier(app)
+    install_exception_hooks(notifier.notify)
+    window = compose_main_window(command_line, settings=QSettings(), log_dir=log_dir)
+    notifier.occurred.connect(window.show_unexpected_error)
     window.show()
-    return app.exec()
+    window.start()
+    exit_code = app.exec()
+    # Se `exec` ritorna senza che la finestra abbia chiuso (sessione di sistema, `quit`), nessun
+    # thread dei dati deve restare in esecuzione: distruggerlo a processo in uscita abortisce.
+    DataThread.stop_all()
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -4,7 +4,10 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from collections.abc import Callable
+from zoneinfo import ZoneInfo
+
+from PySide6.QtCore import QLocale, Qt, QTime, Signal
 from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
@@ -14,72 +17,45 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ponos_coach.load.use_cases import ProfileActivity
+from ponos_coach.ui.activity_text import sport_text
 from ponos_coach.ui.chart_view import ExportPathChooser, PmcChartView
+from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.overview_state import (
     Cancelled,
     Failed,
     Loading,
     OverviewState,
     Page,
+    PrimaryAction,
     Ready,
     page_of,
+    primary_action_of,
 )
-from ponos_coach.ui.pmc_figure import PmcChartLabels, build_pmc_figure
+from ponos_coach.ui.pmc_figure import ChartActivity, PmcChartLabels, PreparedChart, prepare_chart
+from ponos_coach.ui.state_page import StatePage
 from ponos_coach.ui.tokens import (
     SPACE_2,
     SPACE_4,
     SPACE_6,
     STATE_PAGE_MAX_WIDTH,
-    TITLE_SCALE,
     Theme,
     tokens_for,
 )
 
+type ChartScheduler = Callable[
+    [Callable[[], object], Callable[[object], None], Callable[[ErrorMessage], None]], bool
+]
+"""Esegue un lavoro fuori dal thread della UI e ne consegna l'esito nel thread della UI."""
 
-class StatePage(QWidget):
-    """Pagina di stato: titolo, una riga di spiegazione e il bottone del primo passo."""
 
-    action_requested = Signal()
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._title = QLabel(self)
-        self._title.setTextFormat(Qt.TextFormat.PlainText)
-        self._title.setWordWrap(True)
-        font = self._title.font()
-        font.setPointSizeF(font.pointSizeF() * TITLE_SCALE)
-        font.setWeight(font.Weight.DemiBold)
-        self._title.setFont(font)
-        self._body = QLabel(self)
-        self._body.setTextFormat(Qt.TextFormat.PlainText)
-        self._body.setWordWrap(True)
-        self._button = QPushButton(self)
-        self._button.setDefault(True)
-        self._button.clicked.connect(self.action_requested)
-        column = QWidget(self)
-        column.setMaximumWidth(STATE_PAGE_MAX_WIDTH)
-        inner = QVBoxLayout(column)
-        inner.setSpacing(SPACE_2)
-        inner.setContentsMargins(SPACE_6, SPACE_6, SPACE_6, SPACE_6)
-        inner.addWidget(self._title)
-        inner.addWidget(self._body)
-        inner.addSpacing(SPACE_4)
-        inner.addWidget(self._button, alignment=Qt.AlignmentFlag.AlignLeft)
-        outer = QVBoxLayout(self)
-        outer.addStretch(1)
-        outer.addWidget(column, alignment=Qt.AlignmentFlag.AlignHCenter)
-        outer.addStretch(2)
-
-    def set_content(self, title: str, body: str, button_text: str) -> None:
-        """Imposta i testi (sempre testo semplice, mai HTML)."""
-        self._title.setText(title)
-        self._body.setText(body)
-        self._button.setText(button_text)
-
-    @property
-    def button(self) -> QPushButton:
-        """Il bottone del primo passo."""
-        return self._button
+def chart_activity_of(activity: ProfileActivity, zone: ZoneInfo) -> ChartActivity:
+    """Attività per il grafico: sport e ora locale come nome nel suggerimento di una barra."""
+    local = activity.start.astimezone(zone)
+    time_text = QLocale().toString(QTime(local.hour, local.minute), QLocale.FormatType.ShortFormat)
+    return ChartActivity(
+        activity.local_day, activity.load.load, f"{sport_text(activity.sport)} {time_text}"
+    )
 
 
 class LoadingPage(QWidget):
@@ -94,7 +70,7 @@ class LoadingPage(QWidget):
         self._bar = QProgressBar(self)
         self._bar.setTextVisible(False)
         self._bar.setMaximumWidth(STATE_PAGE_MAX_WIDTH)
-        self._cancel = QPushButton(self.tr("Stop loading"), self)
+        self._cancel = QPushButton(self.tr("Stop"), self)
         self._cancel.clicked.connect(self.cancel_requested)
         column = QWidget(self)
         column.setMaximumWidth(STATE_PAGE_MAX_WIDTH)
@@ -111,13 +87,15 @@ class LoadingPage(QWidget):
         outer.addStretch(2)
 
     def show_progress(self, done: int, total: int) -> None:
-        """Aggiorna testo e barra; con totale ignoto la barra e indeterminata."""
+        """Aggiorna testo e barra; con totale ignoto la barra è indeterminata."""
         if total <= 0:
-            self._label.setText(self.tr("Looking for FIT files..."))
+            self._label.setText(self.tr("Getting ready..."))
             self._bar.setRange(0, 0)
             return
-        # {done}: file already read; %n: number of files in the folder.
-        self._label.setText(self.tr("Read {done} of %n file(s)", "", total).format(done=done))
+        # {done}: activities already calculated; %n: number of activities in the profile.
+        self._label.setText(
+            self.tr("Calculated {done} of %n activity(ies)", "", total).format(done=done)
+        )
         self._bar.setRange(0, total)
         self._bar.setValue(done)
 
@@ -125,15 +103,21 @@ class LoadingPage(QWidget):
 class OverviewPage(QWidget):
     """Stack delle pagine della panoramica."""
 
-    open_folder_requested = Signal()
+    action_requested = Signal(object)  # PrimaryAction
     cancel_requested = Signal()
 
     def __init__(
-        self, choose_export_path: ExportPathChooser, parent: QWidget | None = None
+        self,
+        choose_export_path: ExportPathChooser,
+        schedule_chart: ChartScheduler,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._schedule_chart = schedule_chart
+        self._chart_request = 0  # un esito di una richiesta superata si ignora
+        self._page_action: PrimaryAction | None = None
         self._state_page = StatePage(self)
-        self._state_page.action_requested.connect(self.open_folder_requested)
+        self._state_page.action_requested.connect(self._on_state_action)
         self._loading_page = LoadingPage(self)
         self._loading_page.cancel_requested.connect(self.cancel_requested)
         self._chart = PmcChartView(choose_export_path, self)
@@ -151,56 +135,84 @@ class OverviewPage(QWidget):
 
     @property
     def state_page(self) -> StatePage:
-        """Pagina di stato (avvio, vuoto, annullato, errore)."""
+        """Pagina di stato (nessun profilo, vuoto, annullato, errore)."""
         return self._state_page
 
     def current_widget(self) -> QWidget | None:
         """Widget attualmente visibile nello stack."""
         return self._stack.currentWidget()
 
-    def apply_state(self, state: OverviewState, theme: Theme) -> None:
-        """Mostra la pagina decisa da `page_of` per lo stato."""
+    def apply_state(self, state: OverviewState, theme: Theme, zone: ZoneInfo) -> None:
+        """Mostra la pagina decisa da `page_of` per lo stato; `zone` è il fuso del profilo.
+
+        La figura del grafico si costruisce fuori dal thread della UI: finché non è pronta resta
+        la pagina di prima (di solito l'avanzamento).
+        """
+        self._chart_request += 1
         page = page_of(state)
+        self._page_action = primary_action_of(page)
         if page is Page.LOADING and isinstance(state, Loading):
             self._loading_page.show_progress(state.done, state.total)
             self._stack.setCurrentWidget(self._loading_page)
         elif page is Page.CHART and isinstance(state, Ready):
-            tokens = tokens_for(theme)
-            figure = build_pmc_figure(
-                state.overview.pmc, state.overview.activities, self._chart_labels(), tokens
-            )
-            self._chart.show_figure(figure, self._chart_labels(), tokens.background)
-            self._stack.setCurrentWidget(self._chart)
+            self._request_chart(state, theme, zone)
         else:
             self._show_state_page(state)
             self._stack.setCurrentWidget(self._state_page)
 
+    def _request_chart(self, state: Ready, theme: Theme, zone: ZoneInfo) -> None:
+        tokens = tokens_for(theme)
+        labels = self._chart_labels()
+        pmc = state.overview.pmc
+        activities = [chart_activity_of(item, zone) for item in state.overview.activities]
+        request = self._chart_request
+
+        def build() -> object:
+            return prepare_chart(pmc, activities, labels, tokens)
+
+        def show(prepared: object) -> None:
+            if request == self._chart_request and isinstance(prepared, PreparedChart):
+                self._chart.show_prepared(prepared)
+                self._stack.setCurrentWidget(self._chart)
+
+        def failed(message: ErrorMessage) -> None:
+            if request == self._chart_request:
+                self._page_action = primary_action_of(Page.ERROR)
+                self._show_state_page(Failed(message))
+                self._stack.setCurrentWidget(self._state_page)
+
+        if not self._schedule_chart(build, show, failed):
+            self._chart_request += 1  # si sta chiudendo: nessun disegno
+
+    def _on_state_action(self) -> None:
+        if self._page_action is not None:
+            self.action_requested.emit(self._page_action)
+
     def _show_state_page(self, state: OverviewState) -> None:
-        open_text = self.tr("Open FIT folder...")
         match state:
-            case Failed(_, message):
+            case Failed(message):
                 self._state_page.set_content(
-                    message.title, f"{message.what}\n\n{message.remedy}", open_text
+                    message.title,
+                    f"{message.what}\n\n{message.remedy}",
+                    self.tr("Calculate again"),
                 )
-            case Cancelled(folder):
+            case Cancelled():
                 self._state_page.set_content(
-                    self.tr("Loading stopped"),
-                    self.tr('Nothing was loaded from "{folder}".').format(folder=folder.name),
-                    open_text,
+                    self.tr("Calculation stopped"),
+                    self.tr("The overview was not calculated."),
+                    self.tr("Calculate again"),
                 )
-            case Ready(folder, _):
+            case Ready():
                 self._state_page.set_content(
-                    self.tr("No activities found"),
-                    self.tr('The folder "{folder}" has no usable FIT activities.').format(
-                        folder=folder.name
-                    ),
-                    self.tr("Open another folder..."),
+                    self.tr("No activities yet"),
+                    self.tr("To get started, import FIT, GPX or ZIP files."),
+                    self.tr("Import files..."),
                 )
             case _:
                 self._state_page.set_content(
-                    self.tr("No FIT files loaded"),
-                    self.tr("To get started, open a folder of FIT files."),
-                    open_text,
+                    self.tr("Welcome to Ponos Coach"),
+                    self.tr("To get started, create a profile for your training data."),
+                    self.tr("New profile..."),
                 )
 
     def _chart_labels(self) -> PmcChartLabels:

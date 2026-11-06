@@ -3,7 +3,8 @@
 """Crea una cartella dimostrativa di file FIT sintetici per provare l'app.
 
 Uso: `uv run --locked python -m tests.fixtures.generators.demo_history <cartella> [--days N]`.
-Stesso seme e stessa data di partenza, stessi file: lo storico finisce oggi.
+Stesso seme e stessa data di partenza, stessi file: lo storico finisce oggi. La cartella si
+carica in un profilo con "Importa da cartella" (`activities.use_cases.import_activities`).
 """
 
 from __future__ import annotations

@@ -26,6 +26,7 @@ Sei il collaudatore di Ponos Coach. Cerchi i difetti e le falle che chi ha scrit
 - Fuzzing e test lunghi vanno nella sessione `collaudo` di nox, non in quella di ogni modifica.
 - Un test che fallisce per un difetto del codice resta, marcato `xfail(strict=True)` con l'identificativo del difetto, e il difetto va nella risposta: non correggere il codice.
 - Ogni file `.py` nuovo inizia con `# SPDX-License-Identifier: GPL-3.0-only` e `# Copyright (C) 2026 MR`.
+- Nei dati di prova nessun dato personale: mai il nome dell'utente o di persone reali, né percorsi o coordinate reali; usa nomi neutri come "Atleta di prova".
 - Esegui i test scritti e, alla fine, `uv run --locked nox` (e `uv run --locked nox -s collaudo` se il prompt lo chiede).
 
 ## Commit

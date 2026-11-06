@@ -25,8 +25,9 @@ def lint(session: nox.Session) -> None:
 
 @nox.session(python=False)
 def types(session: nox.Session) -> None:
-    """mypy in modalità strict su src, tests e noxfile."""
-    session.run("uv", "run", "--locked", "mypy", external=True)
+    """mypy in modalità strict su src, tests e noxfile, per Windows e per Linux."""
+    for platform in ("win32", "linux"):
+        session.run("uv", "run", "--locked", "mypy", "--platform", platform, external=True)
 
 
 @nox.session(python=False)

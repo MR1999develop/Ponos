@@ -21,7 +21,6 @@ import plotly.io as pio
 from plotly.subplots import make_subplots
 
 from ponos_coach.load.domain import PmcSeries
-from ponos_coach.load.use_cases import ActivityEntry
 from ponos_coach.ui.tokens import ThemeTokens
 
 LOAD_UNIT = "hrTSS/day"  # unita del carico giornaliero e delle sue medie (CTL, ATL, TSB)
@@ -49,6 +48,15 @@ type PmcFigure = go.Figure
 
 
 @dataclass(frozen=True, slots=True)
+class ChartActivity:
+    """Ciò che il grafico sa di un'attività: giorno locale, carico e nome da mostrare."""
+
+    local_day: date
+    load: float
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
 class PmcChartLabels:
     """Testi del grafico, gia tradotti dalla vista.
 
@@ -71,19 +79,19 @@ class PmcChartLabels:
             raise ValueError("modebar must translate exactly the Plotly modebar titles")
 
 
-def daily_load_of(activities: Sequence[ActivityEntry], days: Sequence[date]) -> list[float]:
+def daily_load_of(activities: Sequence[ChartActivity], days: Sequence[date]) -> list[float]:
     """Carico (pesato) di ogni giorno della serie: somma delle attivita di quel giorno locale."""
     totals: dict[date, float] = defaultdict(float)
     for entry in activities:
-        totals[entry.local_day] += entry.load.load
+        totals[entry.local_day] += entry.load
     return [totals.get(day, 0.0) for day in days]
 
 
-def _day_hover_text(activities: Sequence[ActivityEntry], days: Sequence[date]) -> list[str]:
+def _day_hover_text(activities: Sequence[ChartActivity], days: Sequence[date]) -> list[str]:
     """Nomi dei file di ogni giorno come testo: le entita HTML neutralizzano `<` e `&`."""
     names: dict[date, list[str]] = defaultdict(list)
     for entry in activities:
-        names[entry.local_day].append(html.escape(entry.file_name, quote=True))
+        names[entry.local_day].append(html.escape(entry.name, quote=True))
     texts: list[str] = []
     for day in days:
         shown = names.get(day, [])
@@ -106,7 +114,7 @@ def _axis_style(tokens: ThemeTokens, title: str) -> dict[str, object]:
 
 def build_pmc_figure(
     pmc: PmcSeries,
-    activities: Sequence[ActivityEntry],
+    activities: Sequence[ChartActivity],
     labels: PmcChartLabels,
     tokens: ThemeTokens,
 ) -> go.Figure:
@@ -179,3 +187,24 @@ def render_script(figure: go.Figure, labels: PmcChartLabels) -> str:
         "filename": _EXPORT_FILE_STEM,
     }
     return f"ponosRender({json.dumps(payload, ensure_ascii=True, allow_nan=False)});"
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedChart:
+    """Un grafico pronto da mostrare: figura, chiamata JavaScript e colore di fondo."""
+
+    figure: PmcFigure
+    script: str
+    background: str
+
+
+def prepare_chart(
+    pmc: PmcSeries,
+    activities: Sequence[ChartActivity],
+    labels: PmcChartLabels,
+    tokens: ThemeTokens,
+) -> PreparedChart:
+    """Costruisce figura e JSON: lavoro puro e pesante (circa 100 ms al primo grafico), adatto
+    a un thread che non è quello della UI."""
+    figure = build_pmc_figure(pmc, activities, labels, tokens)
+    return PreparedChart(figure, render_script(figure, labels), tokens.background)

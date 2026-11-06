@@ -29,18 +29,20 @@ completata e verificata.
 | FC minima e massima | Inserite dall'utente; un valore di FC fuori da questi limiti è un errore |
 | Soglia in bici | FC di soglia della corsa − 4 bpm, finché non c'è un test in bici |
 | Tipologie di seduta | Scelte dall'utente; il piano programma solo quelle |
-| Import da cartella | Oltre alla sincronizzazione, su richiesta: si sceglie una cartella e si aggiungono i file FIT che contiene |
+| Import da cartella | Oltre alla sincronizzazione, su richiesta: si sceglie una cartella e si aggiungono i file FIT e GPX che contiene |
+| Formati dei file | FIT e GPX, anche dentro archivi ZIP (come quelli scaricati dal sito Garmin), sia nell'import sia nella sincronizzazione con Garmin |
 | Dati di salute sul disco | In chiaro nella cartella del profilo, protetti dai permessi del sistema (solo l'utente); il README consiglia la cifratura del disco; nessuna password dell'app |
 | Ricerca e mappa (fase 9) | Filtri delle attività per data, durata, distanza e dislivello; mappa zoomabile con le attività raggruppate in cerchi numerati che cambiano con lo zoom e, a destra, l'elenco delle attività visibili nell'area |
 | Sincronizzazione | All'avvio e con il pulsante Sincronizza; la prima scarica tutto lo storico, le successive solo le attività mancanti; riprende da dove era rimasta dopo una chiusura; notifica a fine sincronizzazione; niente area di notifica |
 | Calendario Garmin | In una fase successiva: invio degli allenamenti a scelta dell'utente ed eliminazione degli allenamenti futuri programmati |
 | Lingue | Italiano e inglese |
-| Piattaforme e repository | Windows e Ubuntu, GitHub con CI; **il push lo fa l'utente a mano** |
+| Piattaforme e repository | Windows e Ubuntu, GitHub con CI (repository pubblico); push automatico della sessione principale sul ramo di lavoro, su `main` solo con PR (dal 2026-11-06; prima lo faceva l'utente a mano) |
 
 ## 2. Decisioni di default (le ho fissate io: da confermare o correggere)
 
-1. **Cartella del profilo:** scelta alla creazione del profilo (proposta: la
-   cartella dati dell'utente) e autosufficiente: database, archivio FIT e
+1. **Cartella del profilo:** chiesta all'utente alla creazione del profilo,
+   senza proposte automatiche (decisione dell'utente del 2026-11-06), e
+   autosufficiente: database, archivio FIT e
    backup stanno lì, così si può spostare o aprire da un altro PC con "Apri
    profilo da cartella". Fanno eccezione i token Garmin, che restano nel
    portachiavi del sistema legati all'id del profilo. L'elenco dei profili e
@@ -73,14 +75,22 @@ completata e verificata.
    impostazioni); carichi e PMC derivati e rigenerabili.
 10. **Messaggio di responsabilità** nell'app e nel README: Ponos Coach non è un
     dispositivo medico.
-11. **Import da cartella:** solo file `.fit`, sottocartelle comprese; i file
+11. **Import da cartella:** file `.fit` e `.gpx`, anche dentro archivi
+    `.zip`, sottocartelle comprese; i file
     si copiano nell'archivio del profilo e la cartella d'origine non si
     tocca; i duplicati (già importati o già scaricati da Garmin) si saltano;
     alla fine un riepilogo. L'app ricorda l'ultima cartella usata. Tetti:
-    50.000 file FIT, 500.000 voci esaminate (file e cartelle di ogni tipo),
+    50.000 file di attività, 500.000 voci esaminate (file e cartelle di ogni tipo),
     32 livelli di sottocartelle, 50 MB per file. Il primo tetto è circa sette
     volte un decennio con due attività al giorno; gli altri impediscono di
     scandire per errore un disco intero.
+12. **File GPX:** si leggono traccia, orari, quota e FC dalle estensioni
+    Garmin (`gpxtpx:hr`); lo sport dal campo `type` se riconosciuto,
+    altrimenti "altro". Il GPX non ha pause: il tempo in movimento è la somma
+    degli intervalli tra punti fino a 30 s; distanza con la formula
+    dell'emisenoverso; dislivello positivo con una soglia di 3 m contro il
+    rumore della quota. Un GPX senza orari non è un'attività e si rifiuta. I
+    TCX non sono supportati: rifiutati con il motivo.
 
 ## 3. Rischi principali
 
@@ -104,7 +114,7 @@ Ogni dipendenza diretta si valida e si registra in `docs/dipendenze.md`
   PySide6 e `garminconnect` lo supportano), `uv` con `uv.lock`.
 - Esecuzione: `PySide6` con `PySide6-Addons` per QtWebEngine (LGPL-3.0),
   `plotly` (MIT, anche per il `plotly.js` incluso), `garminconnect` (MIT),
-  `fitdecode` (MIT), `numpy` (BSD), `keyring` (MIT), `desktop-notifier`
+  `fitdecode` (MIT), `defusedxml` (PSF, per i GPX), `numpy` (BSD), `keyring` (MIT), `desktop-notifier`
   (MIT), `platformdirs` (MIT).
 - Sviluppo: `pytest`, `pytest-qt`, `hypothesis`, `ruff`, `mypy --strict`,
   `import-linter`, `pip-audit`, `nox`, `pyinstaller` (`.spec` versionato).
@@ -142,7 +152,8 @@ src/ponos_coach/
 - Cartella del profilo, scelta dall'utente: `ponos.sqlite3` (WAL,
   `foreign_keys = ON`, parametri `?`, schema con `user_version` e migrazioni
   versionate; contiene id del profilo e versione del formato),
-  `fit/<anno>/<id_attività>.fit`, `backup/`, `ponos.lock` (creato in modo
+  `archivio/<anno>/<sha256>.fit` o `.gpx` (file originali, con il nome
+  dato dal loro SHA-256), `backup/`, `ponos.lock` (creato in modo
   esclusivo: un solo processo per profilo).
 - Configurazione dell'app (`platformdirs`): elenco dei profili con le loro
   cartelle e ultimo profilo usato.
@@ -152,6 +163,11 @@ src/ponos_coach/
   ora di creazione), uguale per lo stesso file scaricato da Garmin o copiato
   dall'orologio; l'id Garmin si aggiunge quando è noto. Così la stessa
   attività non entra due volte, qualunque sia la sua origine.
+- Un GPX non ha `file_id`: la sua identità è lo SHA-256 del file. La stessa
+  attività arrivata come FIT e come GPX si riconosce come duplicato se
+  l'inizio dista al massimo 60 s e la durata al massimo il 5% (default del
+  progetto); si tiene la prima arrivata. Il formato si riconosce dal
+  contenuto e deve coincidere con l'estensione.
 - Dal FIT si ricavano anche distanza, dislivello positivo, tempo in
   movimento, punto di partenza e una traccia semplificata (per la mappa),
   salvati nell'indice SQLite e rigenerabili dal FIT. Le posizioni GPS sono
@@ -173,7 +189,7 @@ src/ponos_coach/
    comando "Verifica completa" rielenca tutto lo storico (solo l'elenco,
    senza riscaricare) per trovare attività caricate su Garmin in ritardo con
    date vecchie.
-3. Per ogni voce: download del FIT originale (zip), controlli dei limiti,
+3. Per ogni voce: download del file originale (zip con un FIT o un GPX), controlli dei limiti,
    scrittura durevole nell'archivio, lettura, calcolo del carico; una sola
    transazione segna la voce come completata.
 4. Pausa tra le richieste con jitter; su 429 o errori transitori backoff
@@ -190,9 +206,9 @@ src/ponos_coach/
 **Import da cartella** (comando "Importa da cartella…", su richiesta):
 
 1. Si sceglie una cartella e la si esamina prima di importare (solo nomi e
-   dimensioni): file `.fit` anche nelle sottocartelle, solo file regolari
+   dimensioni): file `.fit`, `.gpx` e `.zip` anche nelle sottocartelle, solo file regolari
    che stanno davvero dentro la cartella (niente collegamenti o reparse
-   point che portano fuori). Tetti: 50.000 file FIT, 500.000 voci
+   point che portano fuori). Tetti: 50.000 file di attività, 500.000 voci
    esaminate, 32 livelli, 50 MB per file (i file più grandi sono segnalati
    e saltati). Se un tetto dei primi tre si supera, l'esame si ferma, non si
    importa nulla e l'app chiede di scegliere una sottocartella: niente
@@ -204,6 +220,9 @@ src/ponos_coach/
 4. Worker con avanzamento e Annulla; alla fine un riepilogo (importate, già
    presenti, ignorate, con errore e motivo per ogni file), PMC e piano
    aggiornati.
+5. ZIP (anche da "Importa file"): si leggono solo le voci `.fit` e `.gpx`,
+   che contano nei tetti come file; nell'archivio del profilo va il file
+   estratto, non lo ZIP. Limiti in sezione 4.9.
 
 ### 4.5 Modello di carico
 
@@ -319,6 +338,15 @@ src/ponos_coach/
 - Cartella del profilo scelta dall'utente: verificata scrivibile, file creati
   in modo esclusivo, lock contro due istanze; i token non stanno nella
   cartella, che contiene invece dati di salute (va protetta come tale).
+- GPX: XML non fidato letto con `defusedxml`, senza DTD né entità, con
+  limiti di dimensione (50 MB), profondità, numero di punti (1.000.000) e
+  lunghezza dei testi, controllati prima e durante la lettura.
+- ZIP: voci e dimensioni dichiarate controllate prima di estrarre (al
+  massimo 50.000 voci, 50 MB per voce, 5 GB in tutto, rapporto di
+  compressione al massimo 100:1), estrazione in memoria a blocchi con la
+  dimensione reale ricontrollata, nomi delle voci mai usati come percorsi,
+  ZIP annidati e voci cifrate rifiutati, CRC verificato (default del
+  progetto).
 - Pagina della mappa (fase 9): unica eccezione al blocco della rete, solo
   HTTPS verso l'host delle mappe scelto, con un User-Agent generico dell'app
   e l'attribuzione richiesta; cache delle tile con tetto di dimensione e
@@ -346,10 +374,10 @@ src/ponos_coach/
       `.gitattributes`.
 - [x] `pyproject.toml` (`src/`, `authors = ["MR"]`), `uv.lock`, `noxfile.py`
       con tutti i controlli, regole di `import-linter`.
-- [ ] CI su Windows e Ubuntu (permessi minimi, action fissate a SHA), che
+- [x] CI su Windows e Ubuntu (permessi minimi, action fissate a SHA), che
       esegue esattamente `uv run --locked nox`.
-      *Stato 2026-11-05: `ci.yml` scritto e rivisto; da verificare al primo
-      push (pacchetti di sistema di Ubuntu per QtWebEngine non provati).*
+      *Verificata il 2026-11-06 sulla PR #1: verde su `windows-latest` e
+      `ubuntu-latest`, test POSIX compresi.*
 - [x] ADR: 001 stack, 002 accesso a Garmin, 003 formato dei dati, 004 modello
       di carico. `docs/specifica.md`, `docs/threat-model.md`,
       `docs/dipendenze.md`.
@@ -365,21 +393,29 @@ Agenti: `generatore-fixture`, `sviluppatore-nucleo`, `sviluppatore-interfaccia`,
 
 ### Fase 1 — Profili, archivio e import FIT
 
-- [ ] Profili: creazione con scelta della cartella, apertura da cartella,
+- [x] Profili: creazione con scelta della cartella, apertura da cartella,
       cambio, rimozione dall'elenco, cancellazione della cartella con
       conferma; lock contro due istanze; avviso per cartelle di rete o
       sincronizzate.
-- [ ] Schema SQLite v1 e migrazioni; archivio FIT con scrittura durevole e
+- [x] Schema SQLite v1 e migrazioni; archivio FIT con scrittura durevole e
       SHA-256.
-- [ ] Lettore FIT con limiti, tipi di dominio (attività, sport, tracciato FC)
+- [x] Lettore FIT con limiti, tipi di dominio (attività, sport, tracciato FC)
       e test di fuzzing.
-- [ ] Casi d'uso "Importa file FIT" (menu e trascinamento) e "Importa da
+- [x] Lettore GPX (sezione 2 punto 12, sezione 4.9) con lo stesso tipo
+      d'errore e gli stessi tipi di dominio del lettore FIT; riconoscimento
+      del formato dal contenuto; duplicati tra FIT e GPX.
+- [x] Casi d'uso "Importa file" FIT, GPX e ZIP (menu e trascinamento) e "Importa da
       cartella" (sottocartelle, duplicati saltati per `file_id`, riepilogo
       finale), tabella delle attività con ordinamento (i filtri sono della
       fase 9).
-- [ ] Dal FIT anche distanza, dislivello positivo, tempo in movimento,
+- [x] Dal FIT anche distanza, dislivello positivo, tempo in movimento,
       punto di partenza e traccia semplificata, salvati nell'indice: la fase
       9 non dovrà rileggere l'archivio né migrare lo schema per averli.
+
+*Stato 2026-11-06: fase completata sul ramo `fase-1-profili-archivio`
+(PR #1); controlli verdi in locale e nella CI su Windows e Ubuntu, test
+POSIX compresi; campagna di collaudo verde su Windows (esiti in
+`docs/collaudo.md`).*
 
 ### Fase 2 — Sincronizzazione Garmin
 
@@ -390,6 +426,8 @@ Agenti: `generatore-fixture`, `sviluppatore-nucleo`, `sviluppatore-interfaccia`,
       poi solo le attività mancanti, "Verifica completa"; giornale, pause,
       backoff, annullamento, ripresa dopo chiusura (test che interrompe a
       metà, sia durante l'elenco sia durante i download).
+- [ ] Originali GPX scaricati da Garmin (attività caricate come GPX) letti
+      come quelli importati.
 - [ ] Abbinamento con le attività già importate da file, senza duplicati né
       download inutili.
 - [ ] Sincronizzazione all'avvio e con F5; notifica di sistema e barra di
@@ -459,7 +497,7 @@ Agenti: `generatore-fixture`, `sviluppatore-nucleo`, `sviluppatore-interfaccia`,
 
 ### Fase 9 — Ricerca e mappa delle attività (dopo il primo rilascio)
 
-- [ ] ADR 005, dopo un prototipo misurato con 50.000 attività: sorgente
+- [ ] ADR della mappa, dopo un prototipo misurato con 50.000 attività: sorgente
       della mappa (tile raster OpenStreetMap online, mappa vettoriale
       offline di una regione scaricata una volta, fornitore configurabile) e
       libreria (Leaflet con il raggruppamento dei marcatori, oppure MapLibre
@@ -605,6 +643,9 @@ model e gli esiti del collaudo possono citarlo.
   messaggio; lock rimasto da un crash riconosciuto e superato.
 - **T-DATI-05** Backup e ripristino in una cartella nuova: profilo identico
   (attività, parametri, obiettivi, piano, infortuni).
+- **T-DATI-06** Creazione del profilo interrotta in ogni passo, anche in gara
+  con un'altra istanza sulla stessa cartella: si annulla solo ciò che ha creato
+  quell'istanza, mai il profilo dell'altra.
 - **T-SYNC-01** Prima sincronizzazione completa e poi incrementale, con il
   fake di Garmin e uno storico di 5.000 attività.
 - **T-SYNC-02** Processo terminato davvero (kill di un sottoprocesso) durante
@@ -621,10 +662,19 @@ model e gli esiti del collaudo possono citarlo.
   stato coerente.
 - **T-IMP-01** Albero con sottocartelle, duplicati, file non FIT e FIT
   rovinati: riepilogo esatto, file per file.
-- **T-IMP-02** Tetti: 50.000 file FIT, 500.000 voci e 32 livelli, ciascuno
+- **T-IMP-02** Tetti: 50.000 file di attività, 500.000 voci e 32 livelli, ciascuno
   provato al limite e un passo oltre (nessun import, messaggio); file oltre
   50 MB saltato e segnalato.
 - **T-IMP-03** Idempotenza: import ripetuto → nessun cambiamento.
+- **T-IMP-04** ZIP: archivio con un solo FIT (come dal sito Garmin), con
+  molte attività FIT e GPX, con voci di altri tipi ignorate; le voci contano
+  nei tetti; nell'archivio del profilo finisce il file estratto.
+- **T-GPX-01** GPX validi: un segmento e più segmenti, con e senza FC
+  (estensioni Garmin), con e senza quota, senza orari (rifiutato: non è
+  un'attività), tipo di sport noto e ignoto; distanza, dislivello e tempo in
+  movimento confrontati con valori calcolati a mano.
+- **T-GPX-02** Stessa attività come FIT e come GPX: la seconda è riconosciuta
+  come duplicato, in qualunque ordine arrivi.
 
 ### 7.6 Interfaccia (T-UI)
 
@@ -657,7 +707,13 @@ model e gli esiti del collaudo possono citarlo.
   test normale.
 - **T-SEC-02** FIT ostili: dimensioni dichiarate enormi, record senza fine,
   file oltre 50 MB, estensione `.fit` con altro contenuto → rifiutati prima
-  di allocare.
+  di allocare. GPX ostili: DTD ed entità (anche esterne ed espansione
+  esponenziale), annidamento profondo, milioni di punti, testo enorme,
+  estensione `.gpx` con altro contenuto → rifiutati con limiti, senza
+  risolvere entità. ZIP ostili: bomba di decompressione, rapporto oltre
+  100:1, troppe voci, dimensione dichiarata falsa, ZIP annidati, voci
+  cifrate, CRC sbagliato, nomi con `../` o percorsi assoluti → rifiutati
+  senza scrivere nulla fuori dall'archivio del profilo.
 - **T-SEC-03** Risposte Garmin ostili: JSON enormi o annidati in profondità,
   tipi sbagliati, id non numerici o con percorsi (`../`), nomi di attività
   con HTML o script → rifiutati o trattati come testo.

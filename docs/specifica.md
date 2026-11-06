@@ -11,22 +11,61 @@ Ponos Coach non è un dispositivo medico e non fa diagnosi.
 ## 1. Profili e cartella
 
 - Un profilo è una persona che usa l'app. Si possono avere più profili.
+- Al primo avvio, senza profili, si apre il dialogo "Nuovo profilo".
 - Alla creazione l'utente sceglie la cartella del profilo. Lì stanno tutti i
-  suoi dati: database, file FIT, backup.
+  suoi dati: database, archivio dei file originali (FIT e GPX), backup.
+- Nessuna cartella è proposta: il campo parte vuoto e "Crea profilo" resta
+  disabilitato finché l'utente non sceglie una cartella con "Sfoglia…" o la
+  scrive. Il selettore parte dall'ultima cartella usata per i profili, la
+  prima volta da Documenti. Se la cartella scelta è vuota o non esiste, è la
+  cartella del profilo; se contiene altri file, il profilo va in una
+  sottocartella con il suo nome, e il dialogo mostra dove andranno i dati.
+  L'app crea la cartella leggibile solo dall'utente. Le cartelle sincronizzate
+  (OneDrive, spesso anche Documenti su Windows) sono sconsigliate.
 - La cartella si può spostare o aprire da un altro PC con "Apri profilo da
   cartella".
-- Se la cartella è su un disco di rete o sincronizzato, l'app avverte del
-  rischio di dati rovinati.
+- Se la cartella è su un disco di rete o in una cartella sincronizzata
+  (OneDrive, Dropbox, Google Drive…), l'app avverte nel dialogo e, a profilo
+  aperto, nella barra di stato: il database può essere lento o rovinarsi.
+  L'avviso non blocca. Se non riesce a capire dove sta la cartella, non
+  avverte.
 - Un profilo si apre in una sola istanza alla volta. Una seconda istanza è
   rifiutata con un messaggio.
-- Menu File: Nuovo profilo, Apri profilo da cartella, Cambia profilo, Rimuovi
-  profilo dall'elenco. Il nome del profilo attivo sta nel titolo della finestra.
+- Un profilo salvato da una versione più nuova dell'app non si apre: il
+  messaggio invita ad aggiornare. Prima di portare un profilo vecchio alla
+  versione attuale, l'app ne copia il database in `backup/`
+  (`ponos-v{da}-v{a}.sqlite3`); se la copia non riesce, non migra.
+- Menu File: Nuovo profilo (Ctrl+N), Apri profilo da cartella (Ctrl+O), Cambia
+  profilo, Rimuovi profilo dall'elenco, Elimina cartella del profilo. Il nome
+  del profilo attivo sta nel titolo della finestra. Mentre un'operazione è in
+  corso i comandi sono disabilitati, con il motivo nel suggerimento.
+- Menu Aiuto: "Apri la cartella dei log" (Ctrl+Maiusc+L) apre con il gestore
+  di file del sistema la cartella dove l'app scrive i suoi log; se non
+  riesce a aprirla, dice dov'è. Il log contiene eventi e tipi di errore, mai
+  dati personali, di salute, nomi di file o percorsi. È un file con rotazione
+  (circa 4 MB al massimo).
+- Chiusura della finestra: se un lavoro è in corso (per esempio un import)
+  l'app lo interrompe, aspetta che finisca e intanto scrive "Chiusura del
+  profilo in corso..." nella barra di stato; la finestra non si blocca. Se il
+  lavoro non finisce entro 10 secondi, la finestra resta aperta e un
+  messaggio ("Ponos Coach sta ancora chiudendo il profilo") invita ad
+  attendere e a chiuderla di nuovo.
 - "Rimuovi" toglie il profilo solo dall'elenco. Cancellare la cartella è un
-  comando a parte, con conferma che mostra cartella e contenuto.
+  comando a parte e non vale per il profilo aperto.
+- La conferma dell'eliminazione mostra il nome del profilo, la cartella e il
+  numero di attività (letto senza modificare il database; se non si legge, lo
+  dice). Il bottone dice "Elimina cartella", il predefinito è Annulla.
+- L'eliminazione cancella solo ciò che l'app ha creato: il database, i suoi
+  file `-wal`, `-shm` e `-journal`, `archivio/`, `backup/` e il file di
+  blocco. Se nella cartella c'è altro (per esempio file dell'utente), o un
+  collegamento, è rifiutata: il messaggio "La cartella non è stata eliminata"
+  dice che non è stato eliminato nulla e chiede di spostare o eliminare a mano
+  quei file, poi riprovare, oppure di rimuovere il profilo dall'elenco.
 - I dati di salute restano in locale. Le credenziali Garmin non stanno nella
   cartella.
 
 Regole tecniche: [dati e sincronizzazione](../.claude/skills/ponos-allenamento/references/dati-e-sincronizzazione.md).
+Formato su disco: [ADR 005](adr/005-schema-sqlite-e-archivio.md).
 
 ## 2. Primo avvio guidato
 
@@ -41,6 +80,11 @@ Si ripete per ogni nuovo profilo. I passi:
 7. Proposta del test di soglia.
 
 Poi parte la prima sincronizzazione di tutto lo storico.
+
+Stato della fase 1: il primo avvio apre il dialogo "Nuovo profilo" con nome,
+cartella, FC a riposo, massima e di soglia (stimata al 90% della massima
+finché l'utente non la fissa), sesso e fuso orario. I passi successivi
+arrivano con le loro fasi.
 
 ## 3. Sincronizzazione con Garmin
 
@@ -60,20 +104,54 @@ Poi parte la prima sincronizzazione di tutto lo storico.
 - Con errori temporanei di Garmin l'app aspetta e riprova poche volte, poi
   mostra un errore comprensibile.
 
-## 4. Import da cartella
+## 4. Import di file, cartelle e ZIP
 
-- Comando "Importa da cartella…", su richiesta. Si sceglie una cartella.
-- L'app la esamina prima di importare: file `.fit` anche nelle sottocartelle.
-- Tetti: 50.000 file FIT, 500.000 voci esaminate, 32 livelli di
-  sottocartelle, 50 MB per file. Se si supera uno dei primi tre, non si
-  importa nulla e l'app chiede di scegliere una sottocartella. I file oltre
-  50 MB sono segnalati e saltati.
-- I file si copiano nell'archivio del profilo. La cartella d'origine non
-  viene mai modificata.
-- I duplicati si saltano. Rilanciare l'import non cambia nulla.
-- Alla fine un riepilogo: importate, già presenti, ignorate, con errore e
-  motivo per ogni file.
-- L'app ricorda l'ultima cartella usata.
+- Tre modi, tutti su richiesta e solo con un profilo aperto:
+  - "Importa file…" (Ctrl+I): si scelgono uno o più file `.fit`, `.gpx` o
+    `.zip`;
+  - "Importa da cartella…" (Ctrl+Maiusc+I): si sceglie una cartella;
+  - trascinando file o una cartella sulla finestra.
+- Formati: FIT e GPX, anche dentro file ZIP (come quelli scaricati dal sito
+  Garmin). Del GPX si leggono traccia, orari, quota e FC; un GPX senza orari
+  non è un'attività. I TCX non sono supportati e vengono rifiutati con il
+  motivo. Il formato si riconosce dal contenuto e deve coincidere con
+  l'estensione.
+- Un'attività con l'inizio o la fine fuori dal periodo 1990–2099 (UTC) è
+  rifiutata come file danneggiato.
+- Con una cartella, l'app la esamina prima di importare (nomi e dimensioni,
+  sottocartelle comprese). Salta, segnalandoli, i collegamenti simbolici, le
+  giunzioni e i file speciali, i nomi non ammessi su Windows e i percorsi
+  troppo lunghi.
+- Degli ZIP si leggono solo le voci `.fit` e `.gpx`. Si rifiutano, col
+  motivo, gli archivi danneggiati, troppo grandi o troppo pieni, le voci con
+  nomi non sicuri, i file protetti da password e gli ZIP dentro gli ZIP.
+- Tetti: 50.000 file di attività (le voci degli ZIP contano), 500.000 voci
+  esaminate, 32 livelli di sottocartelle, 50 MB per file. Se si supera uno dei
+  primi tre, non si importa nulla e l'app chiede di scegliere una
+  sottocartella. I file oltre 50 MB sono segnalati e saltati. Limiti degli
+  ZIP: 50.000 voci, 5 GB in tutto, compressione al massimo 100:1.
+- I file si copiano nell'archivio del profilo. La cartella o il file d'origine
+  non vengono mai modificati.
+- I duplicati si saltano. Rilanciare l'import non cambia nulla. La stessa
+  attività arrivata come FIT e come GPX conta una volta sola: si tiene la
+  prima.
+- L'import non blocca la finestra. La barra di stato mostra l'avanzamento e
+  "Interrompi" (Esc). Un import interrotto si riprende rilanciandolo.
+- Esito per file:
+  - importata;
+  - già presente (anche se arrivata in un altro formato);
+  - riparata: l'attività c'era già, ma il suo file nell'archivio mancava o
+    era alterato; reimportando lo stesso file originale, l'app lo rimette a
+    posto. Il riepilogo la conta a parte ("n file archiviati riparati
+    dall'originale importato"), non come problema;
+  - ignorata: il file non è un'attività;
+  - con errore, col motivo (danneggiato, troppo grande, non leggibile, non
+    salvato…).
+- Un errore imprevisto su un file lo segna come fallito. L'import continua con
+  gli altri.
+- Alla fine un riepilogo: i conteggi per esito e, per ogni file non
+  importato, il nome e il motivo in parole comuni.
+- L'app ricorda l'ultima cartella usata per i file e per le cartelle.
 
 ## 5. Parametri fisiologici
 
@@ -99,9 +177,34 @@ Formule e valori: [modello di carico](../.claude/skills/ponos-allenamento/refere
 - Altri grafici: carico settimanale per sport, tempo nelle zone, FC
   dell'attività.
 - Assi con nome e unità, tema chiaro e scuro, esportazione in SVG e PNG.
-- La tabella delle attività si ordina e si filtra; il dettaglio mostra FC e
-  zone.
 - I grafici non accedono alla rete.
+
+### Panoramica
+
+- Senza profilo, la Panoramica invita a creare il primo profilo. Con un
+  profilo senza attività, invita a importare file.
+- Mentre il profilo si apre e si calcola il carico, mostra l'avanzamento con
+  Annulla. Se il calcolo è annullato o fallisce, un bottone lo ripete.
+- La barra di stato mostra il numero di attività, il numero di attività
+  escluse e i giorni del grafico.
+- Un'attività è esclusa dal calcolo quando il suo file nell'archivio manca, è
+  stato alterato dopo il salvataggio, è troppo grande, non si legge o non è più
+  valido. Il suggerimento sul conteggio delle escluse dice i motivi, col numero
+  per ciascuno. Un file alterato non si usa mai in silenzio; per rimetterlo a
+  posto si reimporta il file originale (esito "riparata").
+
+### Tabella delle attività
+
+- Una riga per attività, ordinata per data, dalla più recente. Si riordina
+  cliccando l'intestazione di una colonna.
+- Colonne: data e ora (nel fuso del profilo), sport, tempo in movimento
+  (h:mm:ss), distanza (km), dislivello positivo (m), carico (hrTSS), origine
+  del carico (frequenza cardiaca o stima) e formato del file (FIT o GPX).
+- Numeri allineati a destra, unità nell'intestazione, niente linee. La cella è
+  vuota dove il dato manca (per esempio la distanza di una seduta indoor).
+- Senza attività, la pagina invita a importare file.
+- I filtri (data, durata, distanza, dislivello, sport) arrivano con la fase 9.
+- Il dettaglio dell'attività, con FC e zone, arriva con i grafici (fase 3).
 
 ## 7. Test di soglia
 
@@ -176,7 +279,11 @@ Regole: [infortuni](../.claude/skills/ponos-allenamento/references/infortuni.md)
 - Interfaccia in italiano e inglese.
 - Menu completi con scorciatoie; tutto usabile da tastiera.
 - Annulla e ripeti per obiettivi e calendario.
-- L'app ricorda finestra, pannelli, ultimo profilo e ultime cartelle.
+- L'app ricorda finestra, pannelli, ultimo profilo e ultime cartelle. Nella
+  fase 1: dimensioni e posizione della finestra, la sezione aperta (si salva
+  appena cambia; un valore non valido apre la Panoramica; una geometria
+  illeggibile dà la finestra predefinita), le cartelle degli import, della
+  scelta del profilo e dell'esportazione dei grafici, l'ultimo profilo.
 - Le operazioni lunghe non bloccano la finestra e si possono annullare.
 - Un errore imprevisto mostra un messaggio generico; il dettaglio va nel log,
   senza dati di salute.
