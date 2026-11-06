@@ -22,10 +22,46 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # la radice, per `tests.*`
 
-from ponos_coach.platform.token_store import create_token_store
+from keyring.backend import KeyringBackend
+from keyring.errors import PasswordDeleteError
+
+from ponos_coach.platform.token_store import KeyringTokenStore, create_token_store
+from ponos_coach.profiles.ports import TokenStore, TokenStoreUnavailableError
 from ponos_coach.ui.sync_worker import Credentials
 from tests.collaudo.fase2_support import EMAIL, MFA_CODE, PASSWORD, build_stack, scripted_client
 from tests.garmin.scripted import ScriptedClient
+
+
+class _MemoryKeyring(KeyringBackend):
+    """Portachiavi in memoria del processo: lo usa il worker dove manca il Secret Service."""
+
+    priority = 1
+
+    def __init__(self) -> None:
+        self.items: dict[tuple[str, str], str] = {}
+
+    def set_password(self, service: str, username: str, password: str) -> None:
+        self.items[(service, username)] = password
+
+    def get_password(self, service: str, username: str) -> str | None:
+        return self.items.get((service, username))
+
+    def delete_password(self, service: str, username: str) -> None:
+        if (service, username) not in self.items:
+            raise PasswordDeleteError("assente")
+        del self.items[(service, username)]
+
+
+def _token_store(base: Path) -> TokenStore:
+    """L'archivio reale (DPAPI su Windows, Secret Service su Linux) se il sistema lo offre.
+
+    Sui runner senza Secret Service (CI su Ubuntu) un portachiavi in memoria: il test
+    verifica comunque che nessun segreto finisca su disco.
+    """
+    try:
+        return create_token_store(base)
+    except TokenStoreUnavailableError:
+        return KeyringTokenStore(_MemoryKeyring())
 
 
 class _DyingClient(ScriptedClient):
@@ -46,7 +82,7 @@ def main(argv: list[str]) -> int:
     stack = build_stack(
         base,
         _DyingClient(die_at),
-        tokens=create_token_store(base / "dati"),
+        tokens=_token_store(base / "dati"),
         linked=False,
         folder_name="profilo",
     )
