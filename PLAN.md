@@ -792,7 +792,9 @@ Budget iniziali, da confermare con le prime misure della fase 3; si
 riportano p50, p95 e massimo, mai la sola media, con l'ambiente di misura.
 
 - **T-PERF-01** Profilo sintetico di 10 anni (5.000 attività): finestra
-  usabile entro 2 s dall'avvio, ricalcolo completo del PMC < 1 s, ricalcolo
+  usabile entro 2 s dall'avvio, ricalcolo completo del PMC dai carichi in
+  cache < 1 s (il ricalcolo da zero dopo un cambio di parametri rilegge
+  tutti i file: lavoro lungo con avanzamento e Interrompi), ricalcolo
   del piano < 0,5 s, grafico PMC interattivo < 0,4 s, import di 1.000 FIT
   < 2 minuti.
 - **T-PERF-02** Memoria sotto un tetto dichiarato durante l'import al limite
