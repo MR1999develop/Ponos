@@ -160,6 +160,27 @@ layers = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "fsio e di basso livello: non importa nulla del progetto"
+type = "forbidden"
+source_modules = ["ponos_coach.fsio"]
+forbidden_modules = [
+    "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.profiles", "ponos_coach.garmin", "ponos_coach.storage",
+    "ponos_coach.platform", "ponos_coach.ui", "ponos_coach.i18n", "ponos_coach.__main__",
+]
+
+[[tool.importlinter.contracts]]
+name = "Solo gli adattatori usano fsio (non funzionalita ne ui)"
+type = "forbidden"
+source_modules = [
+    "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.profiles", "ponos_coach.ui",
+]
+forbidden_modules = ["ponos_coach.fsio"]
+
+[[tool.importlinter.contracts]]
 name = "Gli adattatori sono indipendenti tra loro"
 type = "independence"
 modules = ["ponos_coach.garmin", "ponos_coach.storage", "ponos_coach.platform"]

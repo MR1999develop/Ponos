@@ -11,7 +11,11 @@ from ponos_coach.activities.domain.heart_rate_series import HeartRateSeries
 from ponos_coach.activities.domain.identity import ActivityIdentity, FileFormat, format_of
 from ponos_coach.activities.domain.sport import Sport
 from ponos_coach.activities.domain.summary import ActivitySummary
-from ponos_coach.activities.domain.timing import check_durations, check_utc
+from ponos_coach.activities.domain.timing import (
+    check_durations,
+    check_utc,
+    is_plausible_span,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,7 +27,7 @@ class Activity:
     progetto: chi legge il file porta al trascorso uno scarto fino a 1 s e rifiuta il resto).
     `file_format` deve essere quello dell'identità. La serie di FC ha i secondi dal primo
     record; `discarded_hr_samples` conta i campioni di FC scartati perché con timestamp
-    ripetuto o non crescente.
+    ripetuto o non crescente. Inizio e fine stanno in [1990-01-01, 2100-01-01) UTC.
     """
 
     identity: ActivityIdentity
@@ -41,5 +45,7 @@ class Activity:
             raise ValueError("il formato non corrisponde all'identità")
         check_utc(self.start)
         check_durations(self.elapsed_s, self.timer_s)
+        if not is_plausible_span(self.start, self.elapsed_s):
+            raise ValueError("inizio o fine fuori dalla finestra degli orari ammessi")
         if self.discarded_hr_samples < 0:
             raise ValueError("i campioni scartati non possono essere negativi")

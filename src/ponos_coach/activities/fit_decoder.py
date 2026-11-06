@@ -33,6 +33,8 @@ from ponos_coach.activities.domain import (
     HeartRateSeries,
     Sport,
     encode_polyline,
+    is_plausible_instant,
+    is_plausible_span,
     simplify_indices,
     truncate_to_millisecond,
 )
@@ -143,7 +145,13 @@ def _value(frame: fitdecode.FitDataMessage, name: str, *, raw: bool = False) -> 
 
 
 def _as_datetime(value: object) -> datetime | None:
-    return value.astimezone(UTC) if isinstance(value, datetime) and value.tzinfo else None
+    """Istante UTC, o None se manca il fuso o la conversione non è rappresentabile."""
+    if not isinstance(value, datetime) or value.tzinfo is None:
+        return None
+    try:
+        return value.astimezone(UTC)
+    except (OverflowError, ValueError):
+        return None
 
 
 def _as_int(value: object) -> int | None:
@@ -357,6 +365,16 @@ def _summary(parsed: _Parsed) -> ActivitySummary:
     )
 
 
+def _require_plausible_times(parsed: _Parsed, start: datetime, elapsed_s: float) -> None:
+    """Inizio, fine e orari dei record dentro la finestra ammessa, altrimenti `CORRUPT`."""
+    times = parsed.record_times
+    stamps = [start, *(s.start for s in parsed.sessions if s.start is not None)]
+    if times:
+        stamps += [min(times), max(times)]
+    if not (is_plausible_span(start, elapsed_s) and all(map(is_plausible_instant, stamps))):
+        raise FitDecodeError(FitDecodeReason.CORRUPT)
+
+
 def _build(parsed: _Parsed, limits: FitLimits) -> Activity:
     file_id = _file_id(parsed)
     start, elapsed_s, timer_s = _timing(parsed)
@@ -365,6 +383,7 @@ def _build(parsed: _Parsed, limits: FitLimits) -> Activity:
         raise FitDecodeError(FitDecodeReason.CORRUPT)
     if elapsed_s > limits.max_duration_s:
         raise FitDecodeError(FitDecodeReason.TOO_LONG)
+    _require_plausible_times(parsed, start, elapsed_s)
     timer_s = _moving_time(elapsed_s, timer_s)
     session = parsed.sessions[0] if parsed.sessions else None
     sport = map_sport(session.sport, session.sub_sport) if session else Sport.OTHER

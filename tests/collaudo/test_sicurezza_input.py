@@ -593,14 +593,6 @@ def test_t_sec_09_folder_lock_and_database_files_are_private_to_the_user(
     assert_private(database_side)
 
 
-@pytest.mark.xfail(
-    sys.platform == "win32",
-    strict=True,
-    reason="D-F1-06: su Windows la cartella dell'archivio e il suo contenuto (FIT e GPX "
-    "originali, con FC e posizioni) hanno una DACL protetta con SYSTEM, Administrators e "
-    "Owner Rights, non solo utente e SYSTEM come il database: mkdir(mode=0o700) di "
-    "Python 3.13 sostituisce la DACL privata ereditata dalla cartella del profilo",
-)
 def test_d_f1_06_the_archive_folder_and_the_original_files_are_private_to_the_user(
     tmp_path: Path, profile: RealProfile
 ) -> None:

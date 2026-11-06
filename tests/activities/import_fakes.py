@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -22,6 +22,7 @@ from ponos_coach.activities.ports import (
     ImportIssue,
     ImportLimitExceededError,
     ImportScan,
+    ImportScanCancelledError,
     SkippedEntry,
 )
 from ponos_coach.profiles.domain import ProfileId, ProfileName
@@ -34,7 +35,8 @@ class InMemoryImportSource:
     """Sorgente di `ImportSource` con file in un dizionario.
 
     `failing` associa il nome di un file all'errore di lettura; `skipped` sono i file che la
-    sorgente dichiara saltati; `scan_error` fa fallire l'esame (tetto superato).
+    sorgente dichiara saltati; `scan_error` fa fallire l'esame (tetto superato); `cancel_scan` lo
+    fa annullare.
     """
 
     def __init__(
@@ -44,16 +46,22 @@ class InMemoryImportSource:
         failing: Mapping[str, ImportIssue] | None = None,
         skipped: Sequence[SkippedEntry] = (),
         scan_error: ImportLimitExceededError | None = None,
+        cancel_scan: bool = False,
     ) -> None:
         self._files = dict(files)
         self._failing = dict(failing or {})
         self._skipped = tuple(skipped)
         self._scan_error = scan_error
+        self._cancel_scan = cancel_scan
+        self.scan_cancellation: Callable[[], bool] | None = None
         self._names: dict[int, str] = {}
         self.reads: list[str] = []
         self.closed = False
 
-    def scan(self) -> ImportScan:
+    def scan(self, is_cancelled: Callable[[], bool] | None = None) -> ImportScan:
+        self.scan_cancellation = is_cancelled  # per vedere che il caso d'uso lo passa
+        if self._cancel_scan:
+            raise ImportScanCancelledError
         if self._scan_error is not None:
             raise self._scan_error
         names = sorted(self._files)

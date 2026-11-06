@@ -437,3 +437,19 @@ def test_store_then_read_round_trips_and_is_idempotent(
     assert first.sha256_hex == hashlib.sha256(content).hexdigest()
     assert archive.read(first, len(content)) == content
     assert archive.list_orphan_temporaries() == []
+
+
+def test_an_io_error_on_the_file_already_in_the_archive_is_an_archive_write_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive = FileArchive(tmp_path / "archivio")
+    start = datetime(2026, 3, 2, 7, 0, tzinfo=UTC)
+    archive.store(b"contenuto", FileFormat.FIT, start)
+
+    def broken(*_args: object, **_kwargs: object) -> int:
+        raise PermissionError("negato")
+
+    monkeypatch.setattr(os, "open", broken)
+
+    with pytest.raises(ArchiveWriteError):
+        archive.store(b"contenuto", FileFormat.FIT, start)

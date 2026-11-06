@@ -7,6 +7,8 @@ from __future__ import annotations
 import math
 from datetime import datetime, timedelta
 
+from ponos_coach.activities.domain.limits import MAX_ACTIVITY_INSTANT, MIN_ACTIVITY_INSTANT
+
 
 def check_utc(moment: datetime) -> None:
     """Rifiuta un istante senza fuso o con un fuso diverso da UTC."""
@@ -30,3 +32,20 @@ def check_durations(elapsed_s: float, timer_s: float) -> None:
             raise ValueError("le durate devono essere finite e positive")
     if timer_s > elapsed_s:
         raise ValueError("il tempo in movimento non può superare il trascorso")
+
+
+def is_plausible_instant(moment: datetime) -> bool:
+    """Vero se l'istante (con fuso) sta nella finestra [1990-01-01, 2100-01-01) UTC."""
+    return MIN_ACTIVITY_INSTANT <= moment < MAX_ACTIVITY_INSTANT
+
+
+def is_plausible_span(start: datetime, elapsed_s: float) -> bool:
+    """Vero se inizio e fine (`start` + `elapsed_s`) stanno nella finestra degli orari ammessi.
+
+    Falso anche se la fine non è rappresentabile (`OverflowError` diventa un no).
+    """
+    try:
+        end = start + timedelta(seconds=elapsed_s)
+    except OverflowError:
+        return False
+    return is_plausible_instant(start) and is_plausible_instant(end)

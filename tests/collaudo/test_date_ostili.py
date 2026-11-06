@@ -38,11 +38,6 @@ def test_a_plausible_old_clock_gives_a_bounded_series(tmp_path: Path, profile: R
     assert len(profile.overview().pmc) < MAX_PLAUSIBLE_DAYS
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F1-04: un GPX datato 0001-01-01 si importa e il PMC copre 740.000 giorni; la "
-    "figura impiega circa 20 s nel thread della UI e la pagina riceve circa 70 MB",
-)
 def test_d_f1_04_a_gpx_dated_year_1_is_refused_or_does_not_make_the_series_span_centuries(
     tmp_path: Path, profile: RealProfile
 ) -> None:

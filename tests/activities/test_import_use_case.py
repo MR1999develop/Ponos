@@ -7,17 +7,20 @@ T-IMP-01 (esiti per file), T-IMP-03 (idempotenza), T-GPX-02 (stessa attività in
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from ponos_coach.activities import use_cases
 from ponos_coach.activities.decoding import decode_activity_file
 from ponos_coach.activities.domain import ActivityOrigin, FileFormat, FitIdentity, GpxIdentity
 from ponos_coach.activities.ports import (
     ArchiveWriteError,
     DuplicateActivityError,
+    ImportEntry,
     ImportIssue,
     ImportLimit,
     ImportLimitExceededError,
@@ -394,3 +397,151 @@ def test_imported_at_is_truncated_to_the_millisecond() -> None:
     assert setup.index.list_by_start()[0].imported_at == datetime(
         2030, 1, 2, 3, 4, 5, 678000, tzinfo=UTC
     )
+
+
+# --- Riparazione dell'archivio (D-F1-03) ------------------------------------------------------
+
+
+def _flip_first_byte(archive: InMemoryActivityArchive) -> None:
+    [path] = archive.files
+    data = bytearray(archive.files[path])
+    data[0] ^= 0xFF
+    archive.files[path] = bytes(data)
+
+
+@pytest.mark.parametrize("damage", ["alterato", "mancante"])
+def test_importing_the_original_again_repairs_a_missing_or_altered_archived_file(
+    damage: str,
+) -> None:
+    setup = Setup()
+    files = {"a.fit": imp.fit_run(1)}
+    setup.run(InMemoryImportSource(files))
+    [record] = setup.index.list_by_start()
+    if damage == "mancante":
+        setup.archive.files.clear()
+    else:
+        _flip_first_byte(setup.archive)
+
+    again = setup.run(InMemoryImportSource(files))
+
+    [result] = again.results
+    assert result.status is ImportStatus.REPAIRED
+    assert result.matches == record.identity
+    setup.archive.verify(record.archived)  # l'archivio è tornato integro
+    assert setup.index.list_by_start() == [record]  # e l'indice è lo stesso
+
+
+def test_a_sound_archived_file_is_never_rewritten_by_a_second_import() -> None:
+    setup = Setup()
+    files = {"a.fit": imp.fit_run(1)}
+    setup.run(InMemoryImportSource(files))
+    stored = dict(setup.archive.files)
+
+    again = setup.run(InMemoryImportSource(files))
+
+    assert set(statuses(again).values()) == {ImportStatus.ALREADY_PRESENT}
+    assert setup.archive.files == stored
+
+
+def test_a_repaired_result_needs_the_identity_it_matches() -> None:
+    with pytest.raises(ValueError, match="coerenti"):
+        FileImportResult("a.fit", ImportStatus.REPAIRED)
+
+
+# --- Errori imprevisti su un solo file (R1) ---------------------------------------------------
+
+
+class _Exploding(InMemoryImportSource):
+    """Sorgente che solleva un errore imprevisto leggendo un file."""
+
+    def read(self, entry: ImportEntry, max_bytes: int) -> bytes:
+        if self._names[entry.entry_id] == "b.fit":
+            raise RuntimeError("percorso segreto /home/atleta")
+        return super().read(entry, max_bytes)
+
+
+def test_an_unexpected_error_reading_one_file_fails_only_that_file(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    files = {"a.fit": imp.fit_run(1), "b.fit": imp.fit_run(2), "c.fit": imp.fit_run(3)}
+    setup = Setup()
+
+    with caplog.at_level(logging.ERROR):
+        summary = setup.run(_Exploding(files))
+
+    assert statuses(summary) == {
+        "a.fit": ImportStatus.IMPORTED,
+        "b.fit": ImportStatus.FAILED,
+        "c.fit": ImportStatus.IMPORTED,
+    }
+    assert summary.results[1].issue is ImportIssue.UNREADABLE
+    [record] = caplog.records  # registrato una volta, col solo tipo dell'eccezione
+    assert "RuntimeError" in record.getMessage()
+    assert "segreto" not in caplog.text
+
+
+def test_an_unexpected_error_decoding_one_file_fails_only_that_file(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    real = decode_activity_file
+
+    def exploding(data: bytes, name: str) -> object:
+        if name == "b.fit":
+            raise OverflowError("date value out of range")
+        return real(data, name)
+
+    monkeypatch.setattr(use_cases, "decode_activity_file", exploding)
+    files = {"a.fit": imp.fit_run(1), "b.fit": imp.fit_run(2), "c.fit": imp.fit_run(3)}
+
+    with caplog.at_level(logging.ERROR):
+        summary = Setup().run(InMemoryImportSource(files))
+
+    assert [(r.name, r.status) for r in summary.results] == [
+        ("a.fit", ImportStatus.IMPORTED),
+        ("b.fit", ImportStatus.FAILED),
+        ("c.fit", ImportStatus.IMPORTED),
+    ]
+    assert summary.results[1].issue is ImportIssue.CORRUPT
+    assert [r.getMessage() for r in caplog.records].count(
+        "import: errore imprevisto su un file (OverflowError)"
+    ) == 1
+
+
+def test_an_unexpected_error_storing_one_file_fails_only_that_file() -> None:
+    log = OrderLog()
+    archive = ObservedArchive(InMemoryActivityArchive(), log, fail_with=RuntimeError("boom"))
+
+    summary = import_activities(
+        InMemoryImportSource({"a.fit": imp.fit_run(1), "b.fit": imp.fit_run(2)}),
+        archive,
+        new_index(),
+        FixedClock(),
+    )
+
+    assert [(r.status, r.issue) for r in summary.results] == [
+        (ImportStatus.FAILED, ImportIssue.STORAGE_FAILED)
+    ] * 2
+    assert log.events == ["store", "store"]
+
+
+# --- Annullamento dell'esame (R6) ----------------------------------------------------------
+
+
+def test_the_cancellation_check_reaches_the_scan() -> None:
+    source = InMemoryImportSource({"a.fit": imp.fit_run(1)})
+
+    def never() -> bool:
+        return False
+
+    Setup().run(source, is_cancelled=never)
+
+    assert source.scan_cancellation is never
+
+
+def test_a_scan_cancelled_by_the_source_gives_an_empty_cancelled_summary() -> None:
+    setup = Setup()
+
+    summary = setup.run(InMemoryImportSource({"a.fit": imp.fit_run(1)}, cancel_scan=True))
+
+    assert summary == ImportSummary((), cancelled=True)
+    assert not setup.index.list_by_start()

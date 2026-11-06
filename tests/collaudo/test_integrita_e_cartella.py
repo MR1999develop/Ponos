@@ -168,11 +168,6 @@ def test_t_dati_03_a_file_altered_to_a_different_valid_activity_never_counts_for
         profile.close()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F1-03: importare di nuovo l'originale di un'attivita il cui file in archivio e "
-    "alterato o mancante dice 'gia presente' e non lo ripara (store non viene chiamato)",
-)
 @pytest.mark.parametrize("alter", [flip_a_byte, lambda p: p.unlink()], ids=["alterato", "mancante"])
 def test_d_f1_03_importing_the_original_again_repairs_a_bad_archived_file(
     tmp_path: Path, alter: Callable[[Path], None]
@@ -316,7 +311,7 @@ def test_the_archive_folder_deleted_while_open_excludes_the_activities_without_c
 
         again = profile.import_folder(source)  # l'archivio si ricrea da solo
 
-        assert {r.status for r in again.results} == {ImportStatus.ALREADY_PRESENT}
+        assert {r.status for r in again.results} == {ImportStatus.REPAIRED}  # D-F1-03
     finally:
         profile.close()
 

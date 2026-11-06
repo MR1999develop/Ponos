@@ -173,6 +173,73 @@ def test_failed_migration_changes_nothing(tmp_path: Path, monkeypatch: pytest.Mo
         assert raw.execute("SELECT name FROM sqlite_master WHERE name='a'").fetchone() is None
 
 
+def _backups(folder: Path) -> list[Path]:
+    return sorted((folder / "backup").glob("*"))
+
+
+def test_failed_migration_leaves_the_original_intact_and_a_coherent_copy_in_backup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    profile = SqliteProfileStorage().create(tmp_path, PROFILE_ID, NAME, "UTC")
+    profile.activities.add(make_record())
+    profile.close()
+    before = _db_path(tmp_path).read_bytes()
+    half_done = ("CREATE TABLE a (x INTEGER) STRICT", "NON E SQL")
+    monkeypatch.setattr(sqlite_database, "MIGRATIONS", (*sqlite_schema.MIGRATIONS, half_done))
+    monkeypatch.setattr(sqlite_database, "SCHEMA_VERSION", SCHEMA_VERSION + 1)
+
+    with pytest.raises(ProfileStorageError):
+        SqliteProfileStorage().open(tmp_path)
+
+    assert _db_path(tmp_path).read_bytes() == before  # il database di prima, byte per byte
+    [copy] = _backups(tmp_path)
+    assert copy.name == f"ponos-v{SCHEMA_VERSION}-v{SCHEMA_VERSION + 1}.sqlite3"
+    with closing(sqlite3.connect(copy)) as raw:
+        assert raw.execute("PRAGMA user_version").fetchone() == (SCHEMA_VERSION,)
+        assert raw.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert raw.execute("SELECT count(*) FROM activities").fetchone() == (1,)
+
+
+def test_a_successful_migration_also_leaves_the_copy_of_the_old_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _create(tmp_path)
+    v2 = ("CREATE TABLE note (id INTEGER PRIMARY KEY, text TEXT NOT NULL) STRICT",)
+    monkeypatch.setattr(sqlite_database, "MIGRATIONS", (*sqlite_schema.MIGRATIONS, v2))
+    monkeypatch.setattr(sqlite_database, "SCHEMA_VERSION", SCHEMA_VERSION + 1)
+
+    SqliteProfileStorage().open(tmp_path).close()
+
+    [copy] = _backups(tmp_path)
+    with closing(sqlite3.connect(copy)) as raw:
+        assert raw.execute("PRAGMA user_version").fetchone() == (SCHEMA_VERSION,)
+        assert raw.execute("SELECT name FROM sqlite_master WHERE name='note'").fetchone() is None
+
+
+def test_opening_an_up_to_date_database_makes_no_backup(tmp_path: Path) -> None:
+    _create(tmp_path)
+
+    SqliteProfileStorage().open(tmp_path).close()
+
+    assert not (tmp_path / "backup").exists()
+
+
+def test_a_missing_backup_folder_blocks_the_migration_instead_of_skipping_the_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _create(tmp_path)
+    (tmp_path / "backup").write_bytes(b"un file, non una cartella")
+    v2 = ("CREATE TABLE note (id INTEGER PRIMARY KEY) STRICT",)
+    monkeypatch.setattr(sqlite_database, "MIGRATIONS", (*sqlite_schema.MIGRATIONS, v2))
+    monkeypatch.setattr(sqlite_database, "SCHEMA_VERSION", SCHEMA_VERSION + 1)
+
+    with pytest.raises(ProfileStorageError):
+        SqliteProfileStorage().open(tmp_path)
+
+    with closing(sqlite3.connect(_db_path(tmp_path))) as raw:
+        assert raw.execute("PRAGMA user_version").fetchone() == (SCHEMA_VERSION,)
+
+
 def test_future_version_is_refused_and_the_file_is_untouched(tmp_path: Path) -> None:
     _create(tmp_path)
     with closing(sqlite3.connect(_db_path(tmp_path))) as raw:
@@ -547,3 +614,72 @@ def test_possible_duplicates_window_is_not_narrower_than_the_rule(tmp_path: Path
         ) == [record]
     finally:
         profile.close()
+
+
+# --- Lettura in sola lettura (peek) --------------------------------------------------------------
+
+
+def test_peek_of_a_closed_database_writes_nothing_and_creates_no_side_files(
+    tmp_path: Path,
+) -> None:
+    profile = SqliteProfileStorage().create(tmp_path, PROFILE_ID, NAME, "UTC")
+    profile.activities.add(make_record())
+    profile.close()
+    before = _db_path(tmp_path).read_bytes()
+
+    peeked = SqliteProfileStorage().peek(tmp_path)
+
+    assert peeked.activity_count == 1
+    assert _db_path(tmp_path).read_bytes() == before
+    assert sorted(p.name for p in tmp_path.iterdir()) == [PROFILE_DATABASE_NAME]
+
+
+def test_peek_of_an_older_database_reads_it_without_migrating(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _create(tmp_path)
+    v2 = ("CREATE TABLE note (id INTEGER PRIMARY KEY) STRICT",)
+    monkeypatch.setattr(sqlite_database, "MIGRATIONS", (*sqlite_schema.MIGRATIONS, v2))
+    monkeypatch.setattr(sqlite_database, "SCHEMA_VERSION", SCHEMA_VERSION + 1)
+
+    peeked = SqliteProfileStorage().peek(tmp_path)
+
+    assert peeked.info.format_version == SCHEMA_VERSION
+    assert not (tmp_path / "backup").exists()
+    with closing(sqlite3.connect(_db_path(tmp_path))) as raw:
+        assert raw.execute("PRAGMA user_version").fetchone() == (SCHEMA_VERSION,)
+
+
+def test_peek_refuses_a_future_version_a_foreign_file_and_garbage(tmp_path: Path) -> None:
+    folder = tmp_path / "futuro"
+    folder.mkdir()
+    _create(folder)
+    with closing(sqlite3.connect(_db_path(folder))) as raw:
+        raw.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 1}")
+    with pytest.raises(ProfileFormatTooNewError):
+        SqliteProfileStorage().peek(folder)
+
+    foreign = tmp_path / "estraneo"
+    foreign.mkdir()
+    with closing(sqlite3.connect(_db_path(foreign))) as raw:
+        raw.execute("CREATE TABLE altro (a INTEGER)")
+        raw.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    with pytest.raises(ProfileCorruptError):
+        SqliteProfileStorage().peek(foreign)
+
+    garbage = tmp_path / "rumore"
+    garbage.mkdir()
+    _db_path(garbage).write_bytes(b"questo non e un database " * 100)
+    with pytest.raises(ProfileCorruptError):
+        SqliteProfileStorage().peek(garbage)
+
+
+def test_a_foreign_sqlite_file_with_a_meta_table_but_no_activity_tables_is_corrupt(
+    tmp_path: Path,
+) -> None:
+    with closing(sqlite3.connect(_db_path(tmp_path))) as raw:
+        raw.execute("CREATE TABLE meta (key TEXT, value TEXT)")
+        raw.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+
+    with pytest.raises(ProfileCorruptError):
+        SqliteProfileStorage().open(tmp_path)

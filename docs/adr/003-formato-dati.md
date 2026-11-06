@@ -1,6 +1,7 @@
 # 003. Formato dei dati su disco
 
-- Stato: Accettato
+- Stato: Accettato; percorso dell'archivio e identità dei GPX sostituiti
+  dall'ADR 005
 - Data: 2026-11-05
 
 ## Contesto

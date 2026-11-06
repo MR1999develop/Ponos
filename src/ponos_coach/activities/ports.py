@@ -8,7 +8,7 @@ contratto in `tests/`. Nessuna porta registra dati di posizione o di salute.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
@@ -250,6 +250,10 @@ class ImportLimitExceededError(ImportSourceError):
         self.maximum = maximum
 
 
+class ImportScanCancelledError(ImportSourceError):
+    """L'esame è stato annullato da chi lo ha richiesto: nulla è stato importato."""
+
+
 class ImportSourceUnreadableError(ImportSourceError):
     """La cartella o l'elenco di file della sorgente non si può leggere."""
 
@@ -271,10 +275,14 @@ class ImportSource(Protocol):
     chiude con `close()`. Non modifica mai i file d'origine.
     """
 
-    def scan(self) -> ImportScan:
+    def scan(self, is_cancelled: Callable[[], bool] | None = None) -> ImportScan:
         """Esamina la sorgente.
 
+        `is_cancelled`, se dato, si interroga di continuo durante l'esame (anche dentro una
+        cartella enorme o uno ZIP con molte voci); appena è vero l'esame si ferma.
+
         Raises:
+            ImportScanCancelledError: `is_cancelled` è diventato vero.
             ImportLimitExceededError: oltre 50.000 file di attività, 500.000 voci esaminate o
                 32 livelli di sottocartelle.
             ImportSourceUnreadableError: la cartella non si legge.

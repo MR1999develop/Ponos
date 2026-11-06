@@ -5,16 +5,26 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Mapping
 from pathlib import Path
 
 from ponos_coach.activities.ports import ActivityIndex
 from ponos_coach.load.ports import LoadCache, PhysiologyStore
-from ponos_coach.profiles.domain import PROFILE_DATABASE_NAME, ProfileId, ProfileInfo, ProfileName
+from ponos_coach.profiles.domain import (
+    PROFILE_DATABASE_NAME,
+    ProfileId,
+    ProfileInfo,
+    ProfileName,
+    ProfilePeek,
+)
 from ponos_coach.profiles.ports import OpenProfile, ProfileCorruptError, ProfileStorageError
+from ponos_coach.profiles.timezones import require_known_timezone
 from ponos_coach.storage.sqlite_database import (
     SqliteDatabase,
     create_database,
+    is_corruption,
     open_database,
+    peek_database,
     read_meta,
 )
 from ponos_coach.storage.sqlite_stores import (
@@ -28,18 +38,29 @@ _META_NAME = "name"
 _META_TIMEZONE = "timezone"
 
 
-def _read_info(db: SqliteDatabase) -> ProfileInfo:
-    """Informazioni del profilo dal database; mancanti o non valide → `ProfileCorruptError`."""
+def _info_from(meta: Mapping[str, str], format_version: int) -> ProfileInfo:
+    """Informazioni del profilo da `meta`; mancanti o non valide → `ProfileCorruptError`."""
     try:
-        meta = read_meta(db)
+        timezone_name = meta[_META_TIMEZONE]
+        require_known_timezone(timezone_name)
         return ProfileInfo(
             ProfileId.parse(meta[_META_ID]),
             ProfileName(meta[_META_NAME]),
-            meta[_META_TIMEZONE],
-            db.user_version(),
+            timezone_name,
+            format_version,
         )
     except (KeyError, ValueError) as exc:
         raise ProfileCorruptError("informazioni del profilo mancanti o non valide") from exc
+
+
+def _read_info(db: SqliteDatabase) -> ProfileInfo:
+    """Informazioni del profilo dal database aperto."""
+    try:
+        return _info_from(read_meta(db), db.user_version())
+    except sqlite3.Error as exc:
+        if is_corruption(exc):
+            raise ProfileCorruptError("il file non è un database integro") from exc
+        raise ProfileStorageError("lettura delle informazioni del profilo non riuscita") from exc
 
 
 class SqliteOpenProfile:
@@ -102,7 +123,8 @@ class SqliteProfileStorage:
             ProfileStorageError: creazione non riuscita; il file creato si toglie.
             ValueError: `timezone_name` sconosciuto (nulla viene scritto).
         """
-        info = ProfileInfo(profile_id, name, timezone_name, 1)  # valida il fuso prima del disco
+        require_known_timezone(timezone_name)  # prima di scrivere sul disco
+        info = ProfileInfo(profile_id, name, timezone_name, 1)
         db = create_database(
             folder / PROFILE_DATABASE_NAME,
             {
@@ -117,13 +139,26 @@ class SqliteProfileStorage:
             db.close()
             raise
 
+    def peek(self, folder: Path) -> ProfilePeek:
+        """Informazioni e numero di attività in sola lettura; vedi `ProfileStorage.peek`.
+
+        Raises:
+            ProfileNotFoundError: manca il database.
+            ProfileFormatTooNewError: versione più nuova di quella nota.
+            ProfileCorruptError: database illeggibile o non di un profilo.
+            ProfileStorageError: altro guasto.
+        """
+        peeked = peek_database(folder / PROFILE_DATABASE_NAME)
+        return ProfilePeek(_info_from(peeked.meta, peeked.user_version), peeked.activity_count)
+
     def open(self, folder: Path) -> OpenProfile:
-        """Apre il database, migrandolo se è più vecchio.
+        """Apre il database, migrandolo se è più vecchio (con copia di sicurezza in `backup/`).
 
         Raises:
             ProfileNotFoundError: manca il database.
             ProfileFormatTooNewError: versione più nuova di quella nota; non si tocca.
-            ProfileCorruptError: database illeggibile o non integro.
+            ProfileCorruptError: database illeggibile, non integro o non di un profilo.
+            ProfileStorageError: altro guasto o migrazione fallita (il database resta com'era).
         """
         db = open_database(folder / PROFILE_DATABASE_NAME)
         try:

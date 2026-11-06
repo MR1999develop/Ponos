@@ -7,6 +7,7 @@ from ponos_coach.profiles.domain.layout import (
     PROFILE_BACKUP_DIR,
     PROFILE_DATABASE_NAME,
     PROFILE_LOCK_NAME,
+    PROFILE_OWNED_NAMES,
 )
 from ponos_coach.profiles.domain.profile import (
     NAME_MAX_CHARS,
@@ -17,6 +18,7 @@ from ponos_coach.profiles.domain.profile import (
     ProfileId,
     ProfileInfo,
     ProfileName,
+    ProfilePeek,
     RegistryEntry,
 )
 
@@ -26,6 +28,7 @@ __all__ = [
     "PROFILE_BACKUP_DIR",
     "PROFILE_DATABASE_NAME",
     "PROFILE_LOCK_NAME",
+    "PROFILE_OWNED_NAMES",
     "FolderInspection",
     "FolderKind",
     "FolderState",
@@ -33,5 +36,6 @@ __all__ = [
     "ProfileId",
     "ProfileInfo",
     "ProfileName",
+    "ProfilePeek",
     "RegistryEntry",
 ]

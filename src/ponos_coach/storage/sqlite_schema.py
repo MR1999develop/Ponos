@@ -36,6 +36,9 @@ V1_ORIGINS: Final = frozenset(_ORIGINS.replace("'", "").split(","))
 V1_SEXES: Final = frozenset(_SEXES.replace("'", "").split(","))
 V1_LOAD_SOURCES: Final = frozenset(_LOAD_SOURCES.replace("'", "").split(","))
 
+# Le tabelle che ogni database di profilo ha dalla v1: senza, il file non è di un profilo.
+V1_TABLES: Final = frozenset({"meta", "activities", "physiology", "load_cache"})
+
 _V1_META = """
 CREATE TABLE meta (
     key   TEXT NOT NULL PRIMARY KEY CHECK (length(key) BETWEEN 1 AND 64),

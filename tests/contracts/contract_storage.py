@@ -81,6 +81,38 @@ class ProfileStorageContract:
         with pytest.raises(ProfileNotFoundError):
             harness.storage.open(harness.new_folder())
 
+    def test_peek_reports_info_and_activity_count_without_opening(
+        self, harness: StorageHarness
+    ) -> None:
+        folder = harness.new_folder()
+        with closing(harness.storage.create(folder, PROFILE_ID, NAME, "Europe/Rome")) as profile:
+            profile.activities.add(make_record())
+            profile.activities.add(make_record(gpx_identity()))
+
+        peeked = harness.storage.peek(folder)
+
+        assert peeked.info.profile_id == PROFILE_ID
+        assert peeked.info.name == NAME
+        assert peeked.info.timezone_name == "Europe/Rome"
+        assert peeked.activity_count == 2
+
+    def test_peek_of_a_new_profile_counts_zero_activities(self, harness: StorageHarness) -> None:
+        folder = harness.new_folder()
+        harness.storage.create(folder, PROFILE_ID, NAME, "UTC").close()
+
+        assert harness.storage.peek(folder).activity_count == 0
+
+    def test_peek_works_while_the_profile_is_open(self, harness: StorageHarness) -> None:
+        folder = harness.new_folder()
+        with closing(harness.storage.create(folder, PROFILE_ID, NAME, "UTC")) as profile:
+            profile.activities.add(make_record())
+
+            assert harness.storage.peek(folder).activity_count == 1
+
+    def test_peek_in_a_folder_without_database_fails(self, harness: StorageHarness) -> None:
+        with pytest.raises(ProfileNotFoundError):
+            harness.storage.peek(harness.new_folder())
+
     def test_unknown_timezone_is_refused(self, harness: StorageHarness) -> None:
         with pytest.raises(ValueError, match="fuso"):
             harness.storage.create(harness.new_folder(), PROFILE_ID, NAME, "Mars/Olympus")

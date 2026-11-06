@@ -637,6 +637,9 @@ model e gli esiti del collaudo possono citarlo.
   messaggio; lock rimasto da un crash riconosciuto e superato.
 - **T-DATI-05** Backup e ripristino in una cartella nuova: profilo identico
   (attività, parametri, obiettivi, piano, infortuni).
+- **T-DATI-06** Creazione del profilo interrotta in ogni passo, anche in gara
+  con un'altra istanza sulla stessa cartella: si annulla solo ciò che ha creato
+  quell'istanza, mai il profilo dell'altra.
 - **T-SYNC-01** Prima sincronizzazione completa e poi incrementale, con il
   fake di Garmin e uno storico di 5.000 attività.
 - **T-SYNC-02** Processo terminato davvero (kill di un sottoprocesso) durante

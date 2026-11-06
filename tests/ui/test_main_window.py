@@ -8,6 +8,7 @@ import threading
 import time
 import uuid
 import warnings
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -439,7 +440,7 @@ def test_closing_the_window_waits_for_the_data_thread(
 class LimitSource:
     """Sorgente che supera un tetto all'esame."""
 
-    def scan(self) -> ImportScan:
+    def scan(self, is_cancelled: Callable[[], bool] | None = None) -> ImportScan:  # noqa: ARG002
         raise ImportLimitExceededError(ImportLimit.ACTIVITY_FILES, 50_000)
 
     def read(self, entry: ImportEntry, max_bytes: int) -> bytes:  # noqa: ARG002

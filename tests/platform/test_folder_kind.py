@@ -10,7 +10,8 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
 
-from ponos_coach.platform import windows_api
+from ponos_coach.platform import folder_kind, windows_api
+from ponos_coach.platform.atomic_file import FileTooLargeError
 from ponos_coach.platform.folder_kind import (
     SystemFolderKindDetector,
     cloud_roots,
@@ -149,3 +150,16 @@ def test_the_system_detector_answers_for_existing_and_missing_folders(tmp_path: 
 
     assert isinstance(detector(tmp_path), FolderKind)
     assert detector(tmp_path / "nuova" / "cartella") is detector(tmp_path)
+
+
+@pytest.mark.parametrize("failure", [FileTooLargeError("mountinfo"), OSError("negato")])
+def test_the_system_detector_never_raises_even_when_the_probes_do(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: Exception
+) -> None:
+    def broken(*_args: object) -> bytes:
+        raise failure
+
+    monkeypatch.setattr(folder_kind, "read_limited", broken)
+    monkeypatch.setattr(folder_kind, "_read_dropbox_info", broken)
+
+    assert SystemFolderKindDetector(os.environ)(tmp_path) in set(FolderKind)

@@ -27,6 +27,7 @@ from ponos_coach.activities.ports import (
     ImportLimit,
     ImportLimitExceededError,
     ImportScan,
+    ImportScanCancelledError,
     ImportSource,
     ImportSourceUnreadableError,
 )
@@ -958,3 +959,64 @@ def test_sizes_are_the_declared_ones(root: Path) -> None:
     write(root, {"run.fit": fit, "pack.zip": zw.build_zip([("a.fit", fit * 2)])})
 
     assert sorted(iter_sizes(folder(root).scan())) == [len(fit), 2 * len(fit)]
+
+
+# --- Conteggio mentre si legge e annullamento (R6) --------------------------------------------
+
+
+class _CountingListing:
+    """Elenco di una cartella che conta le voci consegnate al chiamante."""
+
+    def __init__(self, inner: object, consumed: list[int]) -> None:
+        self._inner = inner
+        self._consumed = consumed
+
+    def __enter__(self) -> _CountingListing:
+        self._inner.__enter__()  # type: ignore[attr-defined]
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self._inner.__exit__(*args)  # type: ignore[attr-defined]
+
+    def __iter__(self) -> _CountingListing:
+        return self
+
+    def __next__(self) -> os.DirEntry[str]:
+        entry: os.DirEntry[str] = next(self._inner)  # type: ignore[call-overload]
+        self._consumed[0] += 1
+        return entry
+
+
+def test_the_examined_cap_stops_a_single_huge_folder_before_reading_it_all(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write(root, {f"f{n:03d}.fit": b"x" for n in range(40)})
+    consumed = [0]
+    real = os.scandir
+    monkeypatch.setattr(os, "scandir", lambda p: _CountingListing(real(p), consumed))
+
+    with pytest.raises(ImportLimitExceededError) as caught:
+        folder(root, max_examined_entries=5).scan()
+
+    assert caught.value.limit is ImportLimit.EXAMINED_ENTRIES
+    assert consumed[0] == 6  # il tetto più una: non le 40 voci
+
+
+def test_a_scan_can_be_cancelled_between_entries(root: Path) -> None:
+    write(root, {f"f{n:02d}.fit": imp.fit_run(n) for n in range(1, 11)})
+    calls = [0]
+
+    def cancel_after_three() -> bool:
+        calls[0] += 1
+        return calls[0] > 3
+
+    with pytest.raises(ImportScanCancelledError):
+        folder(root).scan(cancel_after_three)
+
+    assert calls[0] == 4  # si è fermata alla prima richiesta di annullare
+
+
+def test_a_scan_without_cancellation_is_unchanged(root: Path) -> None:
+    write(root, {"a.fit": imp.fit_run(1)})
+
+    assert len(folder(root).scan(lambda: False).entries) == 1

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
@@ -118,8 +119,8 @@ class GatedSource:
         self._inner = inner
         self._gate = gate
 
-    def scan(self) -> ImportScan:
-        return self._inner.scan()
+    def scan(self, is_cancelled: Callable[[], bool] | None = None) -> ImportScan:
+        return self._inner.scan(is_cancelled)
 
     def read(self, entry: ImportEntry, max_bytes: int) -> bytes:
         if not self._gate.wait(timeout=30):

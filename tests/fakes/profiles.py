@@ -12,12 +12,14 @@ from pathlib import Path
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
     PROFILE_LOCK_NAME,
+    PROFILE_OWNED_NAMES,
     FolderInspection,
     FolderState,
     ProfileId,
     RegistryEntry,
 )
 from ponos_coach.profiles.ports import (
+    FolderHasOtherContentError,
     FolderNotEmptyError,
     FolderUnavailableError,
     NotAProfileFolderError,
@@ -45,6 +47,15 @@ class InMemoryProfileRegistry:
         same_folder = any(e.folder == entry.folder for e in self._entries.values())
         if entry.profile_id in self._entries or same_folder:
             raise ProfileAlreadyRegisteredError(str(entry.profile_id))
+        self._entries[entry.profile_id] = entry
+
+    def upsert(self, entry: RegistryEntry) -> None:
+        """Vedi `ProfileRegistry.upsert`."""
+        self._entries = {
+            pid: e
+            for pid, e in self._entries.items()
+            if pid == entry.profile_id or e.folder != entry.folder
+        }
         self._entries[entry.profile_id] = entry
 
     def remove(self, profile_id: ProfileId) -> None:
@@ -108,6 +119,8 @@ class InMemoryProfileFolders:
             raise NotAProfileFolderError(folder.name)
         if folder in self.disk.locks:
             raise ProfileInUseError(folder.name)
+        if self.disk.folders[folder] - PROFILE_OWNED_NAMES:
+            raise FolderHasOtherContentError(folder.name)
         del self.disk.folders[folder]
         self.disk.databases.pop(folder, None)
 

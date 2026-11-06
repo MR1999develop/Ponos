@@ -100,12 +100,6 @@ class _RacingStorage(SqliteProfileStorage):
         return super().create(folder, profile_id, name, timezone_name)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F1-07: se la creazione perde la gara (un altro processo ha messo un database "
-    "nella cartella tra il controllo e la creazione) l'annullamento cancella tutta la cartella, "
-    "compreso il profilo del vincitore",
-)
 def test_d_f1_07_losing_a_creation_race_never_deletes_the_winners_profile(tmp_path: Path) -> None:
     ports = real_ports(tmp_path / "config")
     racing = ProfilePorts(ports.registry, ports.folders, _RacingStorage())

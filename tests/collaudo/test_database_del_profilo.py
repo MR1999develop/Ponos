@@ -243,11 +243,6 @@ def test_a_sqlite_file_of_another_program_without_the_schema_is_corrupt_and_unto
     assert sorted(p.name for p in tmp_path.iterdir()) == [PROFILE_DATABASE_NAME]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F1-01: un file SQLite estraneo con user_version = 1 e senza tabella meta "
-    "solleva sqlite3.OperationalError grezzo, non ProfileCorruptError",
-)
 def test_d_f1_01_a_foreign_sqlite_file_with_user_version_1_is_reported_as_corrupt(
     tmp_path: Path,
 ) -> None:

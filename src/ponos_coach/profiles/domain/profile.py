@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 NAME_MAX_CHARS = 60
 _NAME_MAX_INPUT_CHARS = 1000  # tetto prima di normalizzare: la lunghezza si controlla subito
@@ -144,8 +143,9 @@ class RegistryEntry:
 class ProfileInfo:
     """Ciò che il database dichiara del profilo: id, nome, fuso orario e versione del formato.
 
-    `timezone_name` è un nome IANA noto (es. `Europe/Rome`); `format_version` è la versione
-    dello schema, 1 o più.
+    `timezone_name` è un nome IANA (es. `Europe/Rome`) di al più 64 caratteri: che esista davvero
+    lo verificano i confini (`profiles.timezones`), perché cercarlo richiede di leggere i dati
+    dei fusi e il dominio resta senza I/O. `format_version` è la versione dello schema, 1 o più.
     """
 
     profile_id: ProfileId
@@ -156,9 +156,18 @@ class ProfileInfo:
     def __post_init__(self) -> None:
         if not 0 < len(self.timezone_name) <= _TIMEZONE_MAX_CHARS:
             raise ValueError("nome del fuso orario vuoto o troppo lungo")
-        try:
-            ZoneInfo(self.timezone_name)  # ricerca nei dati di `tzdata`, senza rete
-        except (ZoneInfoNotFoundError, ValueError, OSError) as exc:
-            raise ValueError("fuso orario sconosciuto") from exc
         if self.format_version < 1:
             raise ValueError("la versione del formato parte da 1")
+
+
+@dataclass(frozen=True, slots=True)
+class ProfilePeek:
+    """Sguardo in sola lettura a un profilo, senza aprirlo né migrarlo: informazioni e numero
+    di attività."""
+
+    info: ProfileInfo
+    activity_count: int
+
+    def __post_init__(self) -> None:
+        if self.activity_count < 0:
+            raise ValueError("il numero di attività non può essere negativo")

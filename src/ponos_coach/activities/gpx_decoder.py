@@ -45,6 +45,7 @@ from ponos_coach.activities.domain import (
     HeartRateSeries,
     Sport,
     encode_polyline,
+    is_plausible_instant,
     simplify_indices,
     truncate_to_millisecond,
 )
@@ -71,9 +72,11 @@ _US = timedelta(microseconds=1)
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _MAX_ATTRIBUTE_CHARS = 32
 
-_TIME = re.compile(r"(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})")
-_DECIMAL = re.compile(r"[+-]?\d{1,9}(?:\.\d{1,15})?")
-_HEART_RATE = re.compile(r"\d{1,3}")
+_TIME = re.compile(
+    r"(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})", re.ASCII
+)
+_DECIMAL = re.compile(r"[+-]?\d{1,9}(?:\.\d{1,15})?", re.ASCII)
+_HEART_RATE = re.compile(r"\d{1,3}", re.ASCII)
 
 # Valori del campo `type` (minuscolo, spazi e trattini come `_`) → sport.
 _SPORT_BY_TYPE = {
@@ -197,9 +200,11 @@ def _parse_time_us(text: str) -> int:
     micro = (fraction or "").ljust(6, "0")[:6]
     try:
         moment = datetime.fromisoformat(f"{day}T{clock}.{micro}{zone}")
-    except ValueError as exc:
+        if not is_plausible_instant(moment):
+            raise _corrupt()
+        return (moment - _EPOCH) // _US
+    except (ValueError, OverflowError) as exc:
         raise _corrupt() from exc
-    return (moment - _EPOCH) // _US
 
 
 def _parse_decimal(text: str) -> float:

@@ -206,12 +206,12 @@ class SystemFolderKindDetector:
 
     def __call__(self, folder: Path) -> FolderKind:
         """Tipo della cartella o del suo antenato esistente più vicino."""
-        existing = nearest_existing(folder.absolute())
         try:
+            existing = nearest_existing(folder.absolute())
             if _IS_WINDOWS:
                 return self._windows(existing)
             return self._posix(existing)
-        except (OSError, ValueError):
+        except (OSError, ValueError, RuntimeError, FileTooLargeError):
             return FolderKind.UNKNOWN
 
     def _windows(self, path: Path) -> FolderKind:

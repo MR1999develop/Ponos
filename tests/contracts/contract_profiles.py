@@ -10,6 +10,7 @@ import pytest
 
 from ponos_coach.profiles.domain import FolderState
 from ponos_coach.profiles.ports import (
+    FolderHasOtherContentError,
     FolderNotEmptyError,
     FolderUnavailableError,
     NotAProfileFolderError,
@@ -54,6 +55,48 @@ class ProfileRegistryContract:
             harness.registry.add(registry_entry(2, folder=entry.folder))
 
         assert harness.registry.list_entries() == [entry]
+
+    def test_upsert_of_an_unknown_profile_adds_it(self, harness: RegistryHarness) -> None:
+        entry = registry_entry(1)
+
+        harness.registry.upsert(entry)
+
+        assert harness.registry.list_entries() == [entry]
+
+    def test_upsert_replaces_the_entry_with_the_same_id_even_in_another_folder(
+        self, harness: RegistryHarness
+    ) -> None:
+        harness.registry.add(registry_entry(1))
+        moved = registry_entry(1, folder=absolute_path("spostata"), last_used=IMPORTED_AT)
+
+        harness.registry.upsert(moved)
+
+        assert harness.registry.list_entries() == [moved]
+
+    def test_upsert_drops_the_other_profile_that_had_the_same_folder(
+        self, harness: RegistryHarness
+    ) -> None:
+        other, bystander = registry_entry(2), registry_entry(3)
+        harness.registry.add(other)
+        harness.registry.add(bystander)
+
+        harness.registry.upsert(registry_entry(1, folder=other.folder))
+
+        listed = harness.registry.list_entries()
+        assert sorted(str(e.profile_id) for e in listed) == sorted(
+            [str(registry_entry(1).profile_id), str(bystander.profile_id)]
+        )
+
+    def test_upsert_replacing_both_the_same_id_and_the_same_folder_leaves_one_entry(
+        self, harness: RegistryHarness
+    ) -> None:
+        mine, theirs = registry_entry(1), registry_entry(2)
+        harness.registry.add(mine)
+        harness.registry.add(theirs)
+
+        harness.registry.upsert(registry_entry(1, folder=theirs.folder))
+
+        assert [e.profile_id for e in harness.registry.list_entries()] == [mine.profile_id]
 
     def test_remove_drops_only_that_entry(self, harness: RegistryHarness) -> None:
         keep, drop = registry_entry(1), registry_entry(2)
@@ -183,11 +226,27 @@ class ProfileFoldersContract:
         folder = harness.root / "profilo"
         harness.folders.create_private_folder(folder)
         harness.make_profile_folder(folder)
-        harness.put_file(folder, "altro.dat")
+        harness.put_file(folder, "ponos.sqlite3-wal")
+        harness.put_file(folder, "ponos.sqlite3-shm")
 
         harness.folders.delete_folder(folder)
 
         assert harness.folders.inspect(folder).state is FolderState.MISSING
+
+    def test_delete_refuses_a_profile_folder_that_holds_anything_the_app_did_not_create(
+        self, harness: FoldersHarness
+    ) -> None:
+        folder = harness.root / "profilo"
+        harness.folders.create_private_folder(folder)
+        harness.make_profile_folder(folder)
+        harness.put_file(folder, "tesi.docx")
+
+        with pytest.raises(FolderHasOtherContentError):
+            harness.folders.delete_folder(folder)
+
+        state = harness.folders.inspect(folder)
+        assert state.state is FolderState.NOT_EMPTY
+        assert state.has_profile_database  # nulla è stato cancellato, nemmeno il database
 
     def test_delete_refuses_a_folder_that_is_not_a_profile(self, harness: FoldersHarness) -> None:
         folder = harness.root / "documenti"

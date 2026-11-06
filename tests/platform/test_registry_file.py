@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from ponos_coach.platform import profile_registry
+from ponos_coach.platform.atomic_file import write_atomic
 from ponos_coach.platform.profile_registry import (
     REGISTRY_FILE_NAME,
     REGISTRY_LOCK_NAME,
@@ -163,3 +165,63 @@ def test_an_unreadable_config_path_is_a_registry_error(tmp_path: Path) -> None:
 
     with pytest.raises(ProfileRegistryError):
         JsonProfileRegistry(tmp_path).list_entries()
+
+
+def test_upsert_keeps_the_unknown_fields_of_the_replaced_entry_and_writes_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / "config"
+    registry = JsonProfileRegistry(config)
+    registry.add(registry_entry(1))
+    registry.add(registry_entry(2))
+    document = _document(config)
+    profiles = document["profiles"]
+    assert isinstance(profiles, list)
+    profiles[0]["color"] = "blue"
+    _config_file(config).write_text(json.dumps(document), encoding="utf-8")
+    writes: list[Path] = []
+    real = write_atomic
+
+    def counting(path: Path, data: bytes) -> None:
+        writes.append(path)
+        real(path, data)
+
+    monkeypatch.setattr(profile_registry, "write_atomic", counting)
+    moved = registry_entry(1, folder=registry_entry(2).folder)
+
+    registry.upsert(moved)  # stessa id di 1 e stessa cartella di 2: una scrittura sola
+
+    assert len(writes) == 1
+    saved_profiles = _document(config)["profiles"]
+    assert isinstance(saved_profiles, list)
+    [saved] = saved_profiles
+    assert saved["color"] == "blue"
+    assert registry.list_entries() == [moved]
+
+
+def test_orphan_temporaries_are_removed_when_the_registry_opens(tmp_path: Path) -> None:
+    config = tmp_path / "config"
+    JsonProfileRegistry(config).add(registry_entry(1))
+    orphan = config / "profiles.json.ab12_xyz.tmp"
+    orphan.write_bytes(b"{ a meta")
+    unrelated = config / "altro.tmp"
+    unrelated.write_bytes(b"non mio")
+
+    reopened = JsonProfileRegistry(config)
+
+    assert not orphan.exists()
+    assert unrelated.read_bytes() == b"non mio"
+    assert reopened.list_entries() == [registry_entry(1)]
+
+
+def test_orphan_temporaries_stay_when_another_instance_holds_the_lock(tmp_path: Path) -> None:
+    config = tmp_path / "config"
+    JsonProfileRegistry(config).add(registry_entry(1))
+    holder = JsonProfileRegistry(config)
+    orphan = config / "profiles.json.ab12_xyz.tmp"
+    orphan.write_bytes(b"x")
+
+    with holder._exclusive():
+        JsonProfileRegistry(config, lock_timeout_s=0.1)
+
+    assert orphan.exists()  # niente è stato tolto mentre qualcun altro scriveva

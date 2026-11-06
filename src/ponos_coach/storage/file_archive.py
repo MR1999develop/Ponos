@@ -94,7 +94,8 @@ class FileArchive:
 
         Raises:
             ArchiveTooLargeError: più di `MAX_ACTIVITY_FILE_BYTES` byte.
-            ArchiveWriteError: scrittura non riuscita (anche un collegamento nel percorso).
+            ArchiveWriteError: scrittura non riuscita (anche un collegamento nel percorso, o un
+                errore d'I/O nel leggere il file già presente).
             ValueError: `start` non è un istante UTC con fuso.
         """
         if len(content) > MAX_ACTIVITY_FILE_BYTES:
@@ -108,7 +109,7 @@ class FileArchive:
         try:
             if not self._already_stored(archived):
                 self._write(self._root / relative.parent, self._root / relative, content)
-        except OSError as exc:
+        except (OSError, ArchiveError) as exc:  # anche l'I/O sul file già presente (verifica)
             raise ArchiveWriteError("scrittura nell'archivio non riuscita") from exc
         return archived
 

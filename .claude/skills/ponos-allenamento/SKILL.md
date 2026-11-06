@@ -57,9 +57,11 @@ Dettagli: `references/infortuni.md`.
 
 ## 5. Dati e sincronizzazione
 
-Cartella del profilo, SQLite, archivio FIT, identità `file_id`, giornale
-della sincronizzazione, abbinamento, backoff, import da cartella con i tetti,
-lock. Dettagli: `references/dati-e-sincronizzazione.md`.
+Cartella del profilo e elenco dei profili, SQLite, archivio dei file
+originali (FIT e GPX), identità (`file_id` o SHA-256), giornale della
+sincronizzazione, abbinamento, backoff, import di file, cartelle e ZIP con i
+tetti, esiti dell'import, lock. Dettagli: `references/dati-e-sincronizzazione.md`;
+schema e archivio: `docs/adr/005-schema-sqlite-e-archivio.md`.
 
 ## Checklist di revisione
 
@@ -76,8 +78,10 @@ lock. Dettagli: `references/dati-e-sincronizzazione.md`.
   tipologie scelte dall'utente.
 - Con un segnale d'allarme la zona si ferma: nessuna eccezione.
 - Dati di salute mai nei log.
-- Un FIT si scrive su temporaneo, flush, rinomina; il record SQLite dopo il
-  file; il token non sta mai nella cartella del profilo.
+- Un file originale (FIT o GPX) si scrive su temporaneo, flush, rinomina; il
+  record SQLite dopo il file; il token non sta mai nella cartella del profilo.
+- La cancellazione di una cartella di profilo tocca solo i nomi noti e mai un
+  profilo aperto.
 - Ogni limite (dimensione, record, tetti di import) viene prima della lettura
   e vive in un solo modulo.
 - Ogni valore scelto dal progetto è marcato "default del progetto".

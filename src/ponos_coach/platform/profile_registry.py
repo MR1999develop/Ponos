@@ -17,8 +17,10 @@ versione futura è un errore esplicito e non si sovrascrive mai.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import re
 import time
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -43,6 +45,7 @@ REGISTRY_MAX_BYTES = 1024 * 1024
 REGISTRY_LOCK_NAME = REGISTRY_FILE_NAME + ".lock"
 REGISTRY_LOCK_TIMEOUT_S = 2.0  # attesa massima del lock di un'altra istanza
 _LOCK_RETRY_INTERVAL_S = 0.05
+_ORPHAN_TEMPORARY = re.compile(re.escape(REGISTRY_FILE_NAME) + r"\.[A-Za-z0-9_]+\.tmp", re.ASCII)
 
 type _Raw = dict[str, Any]
 
@@ -153,7 +156,9 @@ class JsonProfileRegistry:
     Le scritture prendono prima il lock del sistema operativo su `profiles.json.lock`, attendendo
     al più `lock_timeout_s` secondi (poi `RegistryBusyError`); la lettura non lo prende, perché
     il file si sostituisce in modo atomico. Il file di lock resta sul disco: il lock è del
-    sistema, e si libera da solo anche se l'istanza muore.
+    sistema, e si libera da solo anche se l'istanza muore. All'apertura i temporanei lasciati da
+    una scrittura interrotta si tolgono (sotto lock, così non si tocca quello di un'altra
+    istanza che sta scrivendo); se il lock è occupato si rimanda alla prossima apertura.
     """
 
     def __init__(self, config_dir: Path, lock_timeout_s: float = REGISTRY_LOCK_TIMEOUT_S) -> None:
@@ -162,6 +167,7 @@ class JsonProfileRegistry:
         self._path = config_dir / REGISTRY_FILE_NAME
         self._lock_path = config_dir / REGISTRY_LOCK_NAME
         self._lock_timeout_s = lock_timeout_s
+        self._remove_orphan_temporaries()
 
     def list_entries(self) -> Sequence[RegistryEntry]:
         """Vedi `ProfileRegistry.list_entries`."""
@@ -179,6 +185,30 @@ class JsonProfileRegistry:
                 ):
                     raise ProfileAlreadyRegisteredError(str(entry.profile_id))
             document.raw_entries.append(_raw_from_entry(entry))
+            self._save(document)
+
+    def upsert(self, entry: RegistryEntry) -> None:
+        """Vedi `ProfileRegistry.upsert`.
+
+        La voce con lo stesso id si aggiorna sul posto, così i suoi campi sconosciuti restano.
+        """
+        with self._exclusive():
+            document = self._load()
+            folder_key = _same_folder_key(entry.folder)
+            kept = [
+                raw
+                for raw, existing in zip(document.raw_entries, document.entries, strict=True)
+                if existing.profile_id == entry.profile_id
+                or _same_folder_key(existing.folder) != folder_key
+            ]
+            current = _raw_from_entry(entry)
+            for raw in kept:
+                if raw["id"] == current["id"]:
+                    raw.update(current)
+                    break
+            else:
+                kept.append(current)
+            document.raw_entries[:] = kept
             self._save(document)
 
     def remove(self, profile_id: ProfileId) -> None:
@@ -202,6 +232,28 @@ class JsonProfileRegistry:
             # Si cambia solo il campo: gli altri, anche quelli sconosciuti, restano com'erano.
             document.raw_entries[index]["last_used_utc"] = _raw_from_entry(updated)["last_used_utc"]
             self._save(document)
+
+    def _remove_orphan_temporaries(self) -> None:
+        """Toglie i `profiles.json.*.tmp` rimasti; un guasto qui non impedisce di usare l'elenco."""
+        try:
+            with os.scandir(self._path.parent) as listing:
+                orphans = [
+                    entry.name
+                    for entry in listing
+                    if _ORPHAN_TEMPORARY.fullmatch(entry.name)
+                    and entry.is_file(follow_symlinks=False)
+                ]
+        except OSError:
+            return
+        if not orphans:
+            return
+        try:
+            with self._exclusive():
+                for name in orphans:
+                    with contextlib.suppress(OSError):
+                        (self._path.parent / name).unlink()
+        except ProfileRegistryError:
+            return  # lock occupato o cartella non scrivibile: ci riprova la prossima apertura
 
     @contextmanager
     def _exclusive(self) -> Iterator[None]:

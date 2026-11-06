@@ -30,21 +30,29 @@ from ponos_coach.activities.domain.identity import (
 )
 from ponos_coach.activities.domain.limits import (
     MAX_ACTIVITY_FILE_BYTES,
+    MAX_ACTIVITY_INSTANT,
     MAX_TRACK_POINTS,
+    MIN_ACTIVITY_INSTANT,
     TRACK_TOLERANCE_M,
 )
 from ponos_coach.activities.domain.record import ActivityOrigin, ActivityRecord, ArchivedFile
 from ponos_coach.activities.domain.sport import Sport
 from ponos_coach.activities.domain.summary import ActivitySummary
-from ponos_coach.activities.domain.timing import truncate_to_millisecond
+from ponos_coach.activities.domain.timing import (
+    is_plausible_instant,
+    is_plausible_span,
+    truncate_to_millisecond,
+)
 
 __all__ = [
     "DUPLICATE_DURATION_TOLERANCE_PERCENT",
     "DUPLICATE_START_TOLERANCE",
     "EARTH_RADIUS_M",
     "MAX_ACTIVITY_FILE_BYTES",
+    "MAX_ACTIVITY_INSTANT",
     "MAX_POLYLINE_CHARS",
     "MAX_TRACK_POINTS",
+    "MIN_ACTIVITY_INSTANT",
     "TRACK_TOLERANCE_M",
     "Activity",
     "ActivityIdentity",
@@ -64,6 +72,8 @@ __all__ = [
     "format_of",
     "identity_from_key",
     "identity_key",
+    "is_plausible_instant",
+    "is_plausible_span",
     "is_possible_duplicate",
     "simplify_indices",
     "simplify_track",

@@ -20,6 +20,7 @@ from ponos_coach.profiles.domain import (
     ProfileId,
     ProfileInfo,
     ProfileName,
+    ProfilePeek,
     RegistryEntry,
 )
 
@@ -53,6 +54,15 @@ class ProfileRegistry(Protocol):
         """
         ...
 
+    def upsert(self, entry: RegistryEntry) -> None:
+        """Porta l'elenco allo stato "questo profilo sta in questa cartella", in una sola scrittura.
+
+        Sostituisce la voce con lo stesso id (qualunque fosse la sua cartella), toglie ogni altra
+        voce con la stessa cartella e, se non c'era nessuna voce con quell'id, aggiunge la nuova.
+        Tutto o niente: se la scrittura fallisce l'elenco resta com'era.
+        """
+        ...
+
     def remove(self, profile_id: ProfileId) -> None:
         """Toglie la voce dall'elenco. La cartella e i dati del profilo non si toccano.
 
@@ -79,6 +89,14 @@ class ProfileFolderError(Exception):
 
 class FolderUnavailableError(ProfileFolderError):
     """La cartella non si può leggere o scrivere (permessi, I/O, percorso non valido)."""
+
+
+class FolderHasOtherContentError(FolderUnavailableError):
+    """La cartella del profilo contiene file o cartelle che l'app non ha creato: non si cancella.
+
+    È una `FolderUnavailableError`: chi non distingue il caso lo tratta come una cancellazione
+    non riuscita; chi lo distingue può dire all'utente di toglierli a mano.
+    """
 
 
 class FolderNotEmptyError(ProfileFolderError):
@@ -151,10 +169,14 @@ class ProfileFolders(Protocol):
 
         Solo se contiene il database di un profilo e se nessuna istanza la tiene aperta; il
         lock lo prende l'operazione stessa, quindi chi chiama deve aver rilasciato il suo.
+        Si cancellano soltanto i nomi che l'app mette in una cartella di profilo (database con i
+        file `-wal`, `-shm` e `-journal`, `archivio/`, `backup/`, lock): se c'è altro non si
+        tocca nulla.
 
         Raises:
             NotAProfileFolderError: manca il database del profilo (anche cartella inesistente).
             ProfileInUseError: il profilo è aperto.
+            FolderHasOtherContentError: nella cartella c'è altro; nulla è stato cancellato.
             FolderUnavailableError: cancellazione non riuscita.
         """
         ...
@@ -232,12 +254,31 @@ class ProfileStorage(Protocol):
         """
         ...
 
+    def peek(self, folder: Path) -> ProfilePeek:
+        """Legge informazioni e numero di attività senza aprire il profilo: sola lettura.
+
+        Non migra, non scrive e non prende il lock: un profilo aperto altrove si può guardare.
+        Un database di una versione precedente si legge com'è (`info.format_version` la dice).
+
+        Raises:
+            ProfileNotFoundError: manca il database.
+            ProfileFormatTooNewError: versione più nuova di quella nota.
+            ProfileCorruptError: database illeggibile o non di un profilo.
+            ProfileStorageError: altro guasto (I/O, lock).
+        """
+        ...
+
     def open(self, folder: Path) -> OpenProfile:
         """Apre il database, portandolo alla versione più recente se è più vecchio.
+
+        Prima di migrare mette una copia coerente del database in `backup/`, con le versioni di
+        partenza e di arrivo nel nome.
 
         Raises:
             ProfileNotFoundError: manca il database.
             ProfileFormatTooNewError: versione più nuova di quella nota; non si tocca.
-            ProfileCorruptError: database illeggibile o non integro.
+            ProfileCorruptError: database illeggibile, non integro o non di un profilo.
+            ProfileStorageError: altro guasto; se la migrazione fallisce il database resta
+                com'era e la copia di sicurezza è al suo posto.
         """
         ...

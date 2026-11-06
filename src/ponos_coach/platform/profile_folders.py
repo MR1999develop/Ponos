@@ -14,11 +14,13 @@ from ponos_coach.platform.tree import LinkInTreeError, check_no_links, is_link, 
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
     PROFILE_LOCK_NAME,
+    PROFILE_OWNED_NAMES,
     FolderInspection,
     FolderKind,
     FolderState,
 )
 from ponos_coach.profiles.ports import (
+    FolderHasOtherContentError,
     FolderNotEmptyError,
     FolderUnavailableError,
     NotAProfileFolderError,
@@ -52,6 +54,14 @@ def _only_lock_inside(folder: Path) -> bool:
     if not names:
         return True
     return names == [PROFILE_LOCK_NAME] and not is_link(folder / PROFILE_LOCK_NAME)
+
+
+def _require_only_owned_names(folder: Path) -> None:
+    """La cartella contiene solo nomi che l'app mette in un profilo (`PROFILE_OWNED_NAMES`)."""
+    with os.scandir(folder) as entries:
+        foreign = [entry.name for entry in entries if entry.name not in PROFILE_OWNED_NAMES]
+    if foreign:
+        raise FolderHasOtherContentError(f"{folder.name} contiene altri file")
 
 
 class LocalProfileFolders:
@@ -138,8 +148,9 @@ class LocalProfileFolders:
         """Vedi `ProfileFolders.delete_folder`.
 
         Cancella prima tutto tranne il file di lock, poi il database per ultimo, infine rilascia
-        il lock e toglie il file di lock e la cartella. Un link o una giunzione nell'albero
-        blocca l'operazione prima di cancellare qualunque cosa.
+        il lock e toglie il file di lock e la cartella. Un link o una giunzione nell'albero, o
+        un nome che l'app non mette in una cartella di profilo, blocca l'operazione prima di
+        cancellare qualunque cosa.
         """
         _require_absolute(folder)
         if folder.exists() and is_link(folder):
@@ -161,6 +172,7 @@ class LocalProfileFolders:
 
     def _delete_locked(self, folder: Path, lock: OsFileLock) -> None:
         check_no_links(folder)
+        _require_only_owned_names(folder)
         remove_children(
             folder, keep={PROFILE_LOCK_NAME}, last=(PROFILE_DATABASE_NAME,)
         )  # -wal e -shm iniziano come il database

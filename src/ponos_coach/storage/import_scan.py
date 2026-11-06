@@ -29,7 +29,7 @@ import unicodedata
 import zipfile
 import zlib
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -44,6 +44,7 @@ from ponos_coach.activities.ports import (
     ImportLimit,
     ImportLimitExceededError,
     ImportScan,
+    ImportScanCancelledError,
     ImportSourceUnreadableError,
     SkippedEntry,
 )
@@ -394,12 +395,17 @@ class _OpenZip:
 # --- Sorgenti ----------------------------------------------------------------------------------
 
 
+def _never_cancelled() -> bool:
+    return False
+
+
 class _PathSource(ABC):
     """Parte comune: contatori e tetti, elenco e saltati, lettura di file e voci di ZIP."""
 
     def __init__(self, limits: ImportLimits | None) -> None:
         self._limits = limits or ImportLimits()
         self._cached_zip: _OpenZip | None = None
+        self._is_cancelled: Callable[[], bool] = _never_cancelled
         self._reset()
 
     def _reset(self) -> None:
@@ -429,8 +435,13 @@ class _PathSource(ABC):
 
     # -- esame --
 
-    def scan(self) -> ImportScan:
-        """Vedi `ImportSource.scan`. Si può richiamare: riparte da zero."""
+    def scan(self, is_cancelled: Callable[[], bool] | None = None) -> ImportScan:
+        """Vedi `ImportSource.scan`. Si può richiamare: riparte da zero.
+
+        L'annullamento si controlla a ogni voce esaminata, quindi anche dentro una cartella
+        enorme; le voci si contano mentre si leggono, e il tetto vale subito.
+        """
+        self._is_cancelled = is_cancelled or _never_cancelled
         self._reset()
         self._discover()
         found = sorted(self._found, key=lambda item: item[0])
@@ -446,6 +457,8 @@ class _PathSource(ABC):
         """Riempie `_found` e `_skipped` rispettando i tetti."""
 
     def _examine(self, count: int = 1) -> None:
+        if self._is_cancelled():
+            raise ImportScanCancelledError
         self._examined += count
         if self._examined > self._limits.max_examined_entries:
             raise ImportLimitExceededError(
@@ -583,7 +596,7 @@ class FolderImportSource(_PathSource):
     ) -> None:
         try:
             with os.scandir(root.joinpath(*parts)) as listing:
-                entries = sorted(listing, key=lambda item: item.name)
+                entries = self._read_listing(listing)
         except OSError as exc:
             if not parts:
                 raise ImportSourceUnreadableError(self._folder.name) from exc
@@ -592,6 +605,16 @@ class FolderImportSource(_PathSource):
         for entry in entries:
             self._visit(root, parts, entry, pending)
 
+    def _read_listing(self, listing: Iterator[os.DirEntry[str]]) -> list[os.DirEntry[str]]:
+        """Voci di una cartella in ordine di nome, contate mentre si leggono: il tetto delle voci
+        esaminate vale anche per una sola cartella enorme, che non si carica per intero."""
+        entries: list[os.DirEntry[str]] = []
+        for entry in listing:
+            self._examine()
+            entries.append(entry)
+        entries.sort(key=lambda item: item.name)
+        return entries
+
     def _visit(
         self,
         root: Path,
@@ -599,7 +622,6 @@ class FolderImportSource(_PathSource):
         entry: os.DirEntry[str],
         pending: list[tuple[str, ...]],
     ) -> None:
-        self._examine()
         display = _display("/".join((*parts, entry.name)))
         kind, size = _classify_entry(entry)
         if kind is _Kind.DIRECTORY:

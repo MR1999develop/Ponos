@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Casi d'uso dei profili: crea, apri (da cartella o dall'elenco), elenca, rimuovi dall'elenco,
-cancella la cartella.
+"""Casi d'uso dei profili: crea, apri (da cartella o dall'elenco), elenca, guarda (`peek`),
+rimuovi dall'elenco, cancella la cartella.
 
 È l'API che usa l'interfaccia. Ogni caso d'uso riceve le porte (`ProfilePorts`) e, se serve,
 l'orologio nel costruttore; non fa I/O diretto. Un profilo aperto è una `ProfileSession`: tiene
@@ -31,6 +31,7 @@ from ponos_coach.profiles.domain import (
     ProfileId,
     ProfileInfo,
     ProfileName,
+    ProfilePeek,
     RegistryEntry,
 )
 from ponos_coach.profiles.ports import (
@@ -45,6 +46,7 @@ from ponos_coach.profiles.ports import (
     ProfileRegistry,
     ProfileStorage,
 )
+from ponos_coach.profiles.timezones import require_known_timezone
 
 
 class FolderWarning(Enum):
@@ -185,10 +187,12 @@ class NewProfileRequest:
 class CreateProfile:
     """Crea un profilo: cartella privata, lock, database, parametri iniziali, voce nell'elenco.
 
-    Se un passo fallisce non resta nessuna voce nell'elenco, il lock è rilasciato e la cartella
-    è tolta: con il database già creato si cancella con tutto il contenuto, altrimenti (se
-    fallisce la creazione del database stesso) si toglie se è vuota a parte il file di lock.
-    I genitori creati lungo il percorso restano.
+    Se un passo fallisce non resta nessuna voce nell'elenco, il lock è rilasciato e si annulla
+    solo ciò che ha fatto questa operazione. Se ha creato il database (la creazione è
+    esclusiva: chi la perde non lo ha creato), si cancella la cartella con tutto il contenuto;
+    altrimenti si toglie la cartella solo se è vuota a parte il file di lock. Un database o
+    una cartella messi lì nel frattempo da un'altra istanza non si toccano mai. I genitori
+    creati lungo il percorso restano.
     """
 
     def __init__(
@@ -208,44 +212,71 @@ class CreateProfile:
             FolderNotEmptyError: la cartella esiste e non è vuota; nulla è stato creato.
             FolderUnavailableError: cartella non creabile o non scrivibile.
             ProfileInUseError: lock non ottenuto.
+            ProfileAlreadyExistsError: un'altra istanza ha messo un database nella cartella
+                prima di noi; il suo profilo non si tocca.
             ProfileStorageError: database non creato.
             ProfileRegistryError: elenco dei profili non scrivibile.
-            ValueError: fuso orario sconosciuto.
+            ValueError: fuso orario sconosciuto (prima di toccare il disco).
         """
+        require_known_timezone(request.timezone_name)
         ports = self._ports
         inspection = ports.folders.inspect(request.folder)
         if inspection.state is FolderState.NOT_EMPTY:
             raise FolderNotEmptyError(request.folder.name)
-        undo = _Undo()
+        trace = _CreationTrace(ports.folders, request.folder)
         try:
-            session = self._create(request, inspection.kind, undo)
+            session = self._create(request, inspection.kind, trace)
         except BaseException as failure:
-            undo.run(failure)
+            trace.roll_back(failure)
             raise
         return session
 
-    def _create(self, request: NewProfileRequest, kind: FolderKind, undo: _Undo) -> ProfileSession:
+    def _create(
+        self, request: NewProfileRequest, kind: FolderKind, trace: _CreationTrace
+    ) -> ProfileSession:
         ports = self._ports
         folder = request.folder
         ports.folders.create_private_folder(folder)
-        undo.add(lambda: _remove_created_folder(ports.folders, folder))
+        trace.folder_made = True
         lock = ports.folders.acquire_lock(folder)
-        undo.add(lock.release)
+        trace.lock = lock
         profile_id = self._new_profile_id()
         opened = ports.storage.create(folder, profile_id, request.name, request.timezone_name)
-        undo.add(opened.close)
+        trace.opened = opened
+        trace.database_created = True
         opened.physiology.put(PhysiologyEntry(request.today, request.physiology))
         ports.registry.add(RegistryEntry(profile_id, folder, request.name, self._now_utc()))
         return ProfileSession(opened, lock, folder, warnings_for(kind))
 
 
-def _remove_created_folder(folders: ProfileFolders, folder: Path) -> None:
-    """Toglie la cartella appena creata: con il database la cancella, altrimenti la toglie se
-    è rimasta vuota (a parte il file di lock)."""
-    try:
-        folders.delete_folder(folder)
-    except NotAProfileFolderError:
-        folders.remove_if_empty(folder)
+class _CreationTrace:
+    """Ciò che `CreateProfile` ha fatto finora, per annullare solo quello se qualcosa fallisce."""
+
+    def __init__(self, folders: ProfileFolders, folder: Path) -> None:
+        self._folders = folders
+        self._folder = folder
+        self.folder_made = False
+        self.lock: ProfileLock | None = None
+        self.opened: OpenProfile | None = None
+        self.database_created = False
+
+    def roll_back(self, failure: BaseException) -> None:
+        """Annulla in ordine inverso: chiude il database, rilascia il lock, poi toglie la
+        cartella. Un annullamento che fallisce si aggiunge come nota a `failure`."""
+        steps: list[Callable[[], object]] = []
+        if self.opened is not None:
+            steps.append(self.opened.close)
+        if self.lock is not None:
+            steps.append(self.lock.release)  # prima della cancellazione, che prende il suo lock
+        if self.database_created:
+            steps.append(lambda: self._folders.delete_folder(self._folder))
+        elif self.folder_made:
+            steps.append(lambda: self._folders.remove_if_empty(self._folder))
+        for step in steps:
+            try:
+                step()
+            except Exception as exc:
+                failure.add_note(f"annullamento non riuscito: {type(exc).__name__}")
 
 
 # --- Apri ----------------------------------------------------------------------------------
@@ -338,32 +369,10 @@ def _check_expected(info: ProfileInfo, expected_id: ProfileId | None) -> None:
 def _register_opened(
     registry: ProfileRegistry, info: ProfileInfo, folder: Path, now: datetime
 ) -> None:
-    """Porta l'elenco allo stato "questo profilo sta in questa cartella, usato adesso"."""
-    current = RegistryEntry(info.profile_id, folder, info.name, now)
-    entries = registry.list_entries()
-    same_id = next((e for e in entries if e.profile_id == info.profile_id), None)
-    same_folder = next((e for e in entries if e.folder == folder), None)
-    if same_id is not None and same_id.folder == folder and same_id.cached_name == info.name:
-        registry.mark_used(info.profile_id, now)
-        return
-    for stale in {e.profile_id: e for e in (same_id, same_folder) if e is not None}.values():
-        registry.remove(stale.profile_id)
-    try:
-        registry.add(current)
-    except Exception as failure:
-        _restore(registry, [e for e in (same_id, same_folder) if e is not None], failure)
-        raise
-
-
-def _restore(
-    registry: ProfileRegistry, entries: Sequence[RegistryEntry], failure: BaseException
-) -> None:
-    """Rimette le voci tolte se la sostituzione fallisce: meglio una voce vecchia che nessuna."""
-    for entry in entries:
-        try:
-            registry.add(entry)
-        except Exception as exc:
-            failure.add_note(f"ripristino della voce non riuscito: {type(exc).__name__}")
+    """Porta l'elenco allo stato "questo profilo sta in questa cartella, usato adesso", con il
+    nome letto dal database, in una sola scrittura (un profilo spostato o una cartella
+    sostituita si riallineano insieme)."""
+    registry.upsert(RegistryEntry(info.profile_id, folder, info.name, now))
 
 
 # --- Elenco, rimozione, cancellazione ------------------------------------------------------
@@ -382,6 +391,32 @@ class ListProfiles:
             ProfileRegistryError: elenco illeggibile o di una versione futura.
         """
         return self._registry.list_entries()
+
+
+class PeekProfile:
+    """Legge in sola lettura le informazioni e il numero di attività di un profilo dell'elenco.
+
+    Serve all'elenco dei profili: non apre il profilo, non prende il lock, non migra e non
+    scrive nulla (nemmeno l'ultimo uso), quindi funziona anche se il profilo è aperto altrove.
+    """
+
+    def __init__(self, ports: ProfilePorts) -> None:
+        self._registry = ports.registry
+        self._storage = ports.storage
+
+    def __call__(self, profile_id: ProfileId) -> ProfilePeek:
+        """Informazioni del profilo `profile_id` e numero delle sue attività.
+
+        Raises:
+            ProfileNotRegisteredError: id assente dall'elenco.
+            ProfileNotFoundError: la cartella registrata non ha più il database.
+            ProfileFormatTooNewError, ProfileCorruptError, ProfileStorageError: database non
+                leggibile.
+        """
+        for entry in self._registry.list_entries():
+            if entry.profile_id == profile_id:
+                return self._storage.peek(entry.folder)
+        raise ProfileNotRegisteredError(str(profile_id))
 
 
 class RemoveProfileFromList:
@@ -416,6 +451,8 @@ class DeleteProfileFolder:
             ProfileInUseError: il profilo è aperto (anche da questa istanza): chiudilo prima.
             NotAProfileFolderError: la cartella non ha il database di un profilo; la voce
                 resta (si può togliere dall'elenco).
+            FolderHasOtherContentError: nella cartella c'è altro oltre ai dati del profilo;
+                non si cancella nulla e la voce resta.
             FolderUnavailableError: cancellazione non riuscita o link nella cartella.
         """
         entry = next((e for e in self._registry.list_entries() if e.profile_id == profile_id), None)
@@ -433,6 +470,7 @@ __all__ = [
     "NewProfileRequest",
     "OpenProfileFromFolder",
     "OpenRegisteredProfile",
+    "PeekProfile",
     "ProfileMismatchError",
     "ProfilePorts",
     "ProfileSession",

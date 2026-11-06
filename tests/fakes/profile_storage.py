@@ -35,12 +35,14 @@ from ponos_coach.profiles.domain import (
     ProfileId,
     ProfileInfo,
     ProfileName,
+    ProfilePeek,
 )
 from ponos_coach.profiles.ports import (
     OpenProfile,
     ProfileAlreadyExistsError,
     ProfileNotFoundError,
 )
+from ponos_coach.profiles.timezones import require_known_timezone
 
 FORMAT_VERSION = 1
 
@@ -196,11 +198,19 @@ class InMemoryProfileStorage:
         """Vedi `ProfileStorage.create`."""
         if folder in self.disk.databases:
             raise ProfileAlreadyExistsError(folder.name)
+        require_known_timezone(timezone_name)
         info = ProfileInfo(profile_id, name, timezone_name, FORMAT_VERSION)
         database = _Database(info)
         self.disk.databases[folder] = database
         self.disk.folders.setdefault(folder, set()).add(PROFILE_DATABASE_NAME)
         return _OpenProfile(database)
+
+    def peek(self, folder: Path) -> ProfilePeek:
+        """Vedi `ProfileStorage.peek`."""
+        database = self.disk.databases.get(folder)
+        if database is None:
+            raise ProfileNotFoundError(folder.name)
+        return ProfilePeek(database.info, len(database.records))
 
     def open(self, folder: Path) -> OpenProfile:
         """Vedi `ProfileStorage.open`."""

@@ -28,6 +28,7 @@ from ponos_coach.profiles.ports import (
     FolderUnavailableError,
     NotAProfileFolderError,
     OpenProfile,
+    ProfileAlreadyExistsError,
     ProfileInUseError,
     ProfileNotFoundError,
     ProfileNotRegisteredError,
@@ -42,6 +43,7 @@ from ponos_coach.profiles.use_cases import (
     NewProfileRequest,
     OpenProfileFromFolder,
     OpenRegisteredProfile,
+    PeekProfile,
     ProfileMismatchError,
     ProfilePorts,
     ProfileSession,
@@ -60,6 +62,9 @@ class _FailingRegistry(InMemoryProfileRegistry):
     """Elenco che non riesce a scrivere nuove voci."""
 
     def add(self, entry: RegistryEntry) -> None:  # noqa: ARG002
+        raise ProfileRegistryError("disco pieno")
+
+    def upsert(self, entry: RegistryEntry) -> None:  # noqa: ARG002
         raise ProfileRegistryError("disco pieno")
 
 
@@ -266,13 +271,39 @@ def test_create_failing_on_the_database_leaves_no_entry_and_no_lock(world: World
     assert folder not in world.disk.folders  # anche la cartella vuota creata prima è tolta
 
 
-def test_create_with_an_unknown_timezone_cleans_up(world: World) -> None:
+def test_create_with_an_unknown_timezone_is_refused_before_touching_the_disk(
+    world: World,
+) -> None:
     folder = absolute_path("profili", "atleta")
     bad = NewProfileRequest(NAME, folder, "Marte/Olympus", physiology(), TODAY)
 
     with pytest.raises(ValueError, match="fuso"):
         world.create()(bad)
 
+    assert world.registry.list_entries() == []
+    assert folder not in world.disk.folders
+
+
+class _LosingTheRace(InMemoryProfileStorage):
+    """Un'altra istanza mette il suo database nella cartella un attimo prima del nostro."""
+
+    def create(
+        self, folder: Path, profile_id: ProfileId, name: ProfileName, timezone_name: str
+    ) -> OpenProfile:
+        InMemoryProfileStorage(self.disk).create(
+            folder, ProfileId.parse("99999999-9999-4999-8999-999999999999"), NAME, "UTC"
+        ).close()
+        return super().create(folder, profile_id, name, timezone_name)
+
+
+def test_losing_the_creation_race_never_deletes_the_winners_database(world: World) -> None:
+    folder = absolute_path("profili", "atleta")
+
+    with pytest.raises(ProfileAlreadyExistsError):
+        world.create(world.ports(_LosingTheRace(world.disk)))(request(folder))
+
+    assert folder in world.disk.databases  # il profilo del vincitore e salvo
+    assert PROFILE_DATABASE_NAME in world.disk.folders[folder]
     assert world.registry.list_entries() == []
     assert folder not in world.disk.locks
 
@@ -498,6 +529,22 @@ def test_open_failing_on_the_registry_closes_everything() -> None:
     assert disk.locks == set()
 
 
+def test_open_failing_on_the_registry_leaves_the_old_entries_as_they_were() -> None:
+    disk = InMemoryDisk()
+    registry = _FailingRegistry()
+    world = World(disk=disk, registry=registry)
+    folder = absolute_path("profili", "atleta")
+    profile_id = _created(World(disk=disk), folder)
+    old = RegistryEntry(profile_id, absolute_path("profili", "vecchia-posizione"), NAME, NOW)
+    InMemoryProfileRegistry.add(registry, old)
+
+    with pytest.raises(ProfileRegistryError):
+        _open_from_folder(world)(folder)
+
+    assert registry.list_entries() == [old]
+    assert disk.locks == set()
+
+
 def test_a_relative_folder_is_refused(world: World) -> None:
     with pytest.raises(FolderUnavailableError):
         _open_from_folder(world)(Path("relativa"))
@@ -606,3 +653,39 @@ def test_delete_folder_that_is_not_a_profile_keeps_the_entry_and_the_files(world
 
     assert world.disk.folders[entry.folder] == {"tesi.docx"}
     assert world.registry.list_entries() == [entry]
+
+
+# --- Guarda (sola lettura) -----------------------------------------------------------------
+
+
+def test_peek_reports_the_info_and_the_count_without_locking_or_marking_use(world: World) -> None:
+    folder = absolute_path("profili", "atleta")
+    profile_id = _created(world, folder)
+    before = world.registry.list_entries()
+
+    peeked = PeekProfile(world.ports())(profile_id)
+
+    assert peeked.info.profile_id == profile_id
+    assert peeked.info.name == NAME
+    assert peeked.activity_count == 0
+    assert world.registry.list_entries() == before
+    assert world.disk.locks == set()
+
+
+def test_peek_works_on_a_profile_that_is_open(world: World) -> None:
+    profile_id = _created(world)
+    with _open_registered(world)(profile_id):
+        assert PeekProfile(world.ports())(profile_id).info.profile_id == profile_id
+
+
+def test_peek_of_an_unknown_profile_fails(world: World) -> None:
+    with pytest.raises(ProfileNotRegisteredError):
+        PeekProfile(world.ports())(registry_entry(7).profile_id)
+
+
+def test_peek_of_a_vanished_folder_fails(world: World) -> None:
+    entry = registry_entry(1)
+    world.registry.add(entry)
+
+    with pytest.raises(ProfileNotFoundError):
+        PeekProfile(world.ports())(entry.profile_id)
