@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Contratti di `ProfileStorage` e dei tre store sulla stessa connessione.
+"""Contratti di `ProfileStorage` e dei quattro store sulla stessa connessione.
 
-`ActivityIndex`, `PhysiologyStore` e `LoadCache` si provano attraverso un profilo creato dal
-`ProfileStorage` della fixture `harness`.
+`ActivityIndex`, `SyncJournal`, `PhysiologyStore` e `LoadCache` si provano attraverso un profilo
+creato dal `ProfileStorage` della fixture `harness`.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import pytest
 from ponos_coach.activities.domain import (
     ActivityOrigin,
     ActivitySummary,
+    GarminActivityId,
     GeoPoint,
     Sport,
     encode_polyline,
@@ -35,7 +36,15 @@ from ponos_coach.profiles.ports import (
     ProfileAlreadyExistsError,
     ProfileNotFoundError,
 )
-from tests.builders import T0, fit_identity, gpx_identity, make_record, physiology_entry
+from tests.builders import (
+    IMPORTED_AT,
+    T0,
+    fit_identity,
+    gpx_identity,
+    make_record,
+    physiology_entry,
+    remote_activity,
+)
 from tests.contracts.harness import StorageHarness
 
 PROFILE_ID = ProfileId.parse("11111111-1111-4111-8111-111111111111")
@@ -123,16 +132,18 @@ class ProfileStorageContract:
         profile.close()
         profile.close()
 
-    def test_one_transaction_covers_all_three_stores(self, harness: StorageHarness) -> None:
+    def test_one_transaction_covers_all_four_stores(self, harness: StorageHarness) -> None:
         with closing(create(harness)) as profile:
             record = make_record()
             with pytest.raises(RuntimeError, match="boom"), profile.activities.transaction():
                 profile.activities.add(record)
+                profile.sync_journal.add_pending([remote_activity(1)], IMPORTED_AT)
                 profile.physiology.put(physiology_entry(date(2026, 1, 1)))
                 profile.load_cache.put(record.identity, FINGERPRINT, LOAD)
                 raise RuntimeError("boom")
 
             assert profile.activities.list_by_start() == []
+            assert profile.sync_journal.get(GarminActivityId(1001)) is None
             assert profile.physiology.list_entries() == []
             assert profile.load_cache.get(record.identity, FINGERPRINT) is None
 

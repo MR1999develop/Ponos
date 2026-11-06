@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from ponos_coach.activities.ports import TransactionStateError
+from ponos_coach.activities.ports import StorageBusyError, TransactionStateError
 from ponos_coach.fsio import make_subdirectory, replace_file, sync_directory
 from ponos_coach.profiles.domain import PROFILE_BACKUP_DIR, PROFILE_DATABASE_NAME
 from ponos_coach.profiles.ports import (
@@ -39,6 +39,7 @@ _REPARSE_POINT: Final = 0x400  # FILE_ATTRIBUTE_REPARSE_POINT
 _FILE_MODE: Final = 0o600
 _CORRUPTION_CODES: Final = (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB)
 _PRIMARY_CODE_MASK: Final = 0xFF
+_BUSY_CODES: Final = (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED)
 _SIDE_FILE_SUFFIXES: Final = ("-wal", "-shm", "-journal")
 _BACKUP_EXTENSION: Final = ".sqlite3"
 
@@ -72,10 +73,18 @@ class SqliteDatabase:
 
         Raises:
             TransactionStateError: una transazione è già aperta su questa connessione.
+            StorageBusyError: un altro processo tiene il database oltre `BUSY_TIMEOUT_MS`; la
+                transazione non è cominciata.
         """
         if self._in_transaction:
             raise TransactionStateError("transazione già aperta")
-        self._connection.execute("BEGIN IMMEDIATE")
+        try:
+            self._connection.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as exc:
+            code = getattr(exc, "sqlite_errorcode", None)
+            if isinstance(code, int) and (code & _PRIMARY_CODE_MASK) in _BUSY_CODES:
+                raise StorageBusyError("database occupato") from exc
+            raise
         self._in_transaction = True
         try:
             yield
@@ -86,6 +95,19 @@ class SqliteDatabase:
             raise
         finally:
             self._in_transaction = False
+
+    @contextmanager
+    def atomic(self) -> Iterator[None]:
+        """Dentro una transazione aperta ne fa parte; altrimenti ne apre una per il blocco.
+
+        Serve alle operazioni di uno store che fanno più scritture e valgono tutte o nessuna
+        anche fuori da `transaction()`.
+        """
+        if self._in_transaction:
+            yield
+        else:
+            with self.transaction():
+                yield
 
     def close(self) -> None:
         """Checkpoint del WAL e chiusura; la connessione si chiude anche se il checkpoint fallisce.
@@ -162,7 +184,7 @@ def create_database(path: Path, initial_meta: Mapping[str, str]) -> SqliteDataba
         except BaseException:
             connection.close()
             raise
-    except sqlite3.Error as exc:
+    except (sqlite3.Error, StorageBusyError) as exc:
         _remove_files(path)
         raise ProfileStorageError("creazione del database non riuscita") from exc
     except BaseException:
@@ -240,11 +262,12 @@ def _back_up_before_migration(db: SqliteDatabase, folder: Path, from_version: in
         raise ProfileStorageError("copia di sicurezza prima della migrazione non riuscita") from exc
 
 
-def _prepare_existing(db: SqliteDatabase, folder: Path) -> None:
+def _prepare_existing(db: SqliteDatabase, folder: Path, *, check_integrity: bool) -> None:
     version = db.user_version()
     _check_version(version)
     _require_profile_schema(db.connection)
-    _check_integrity(db.connection)
+    if check_integrity or version < SCHEMA_VERSION:  # prima di migrare si controlla sempre
+        _check_integrity(db.connection)
     if version < SCHEMA_VERSION:
         # Prima di passare a WAL: un checkpoint subito dopo il cambio di modalità dà "table is
         # locked". Il file è quello di prima, intatto, e l'API di backup lo copia coerente.
@@ -254,11 +277,16 @@ def _prepare_existing(db: SqliteDatabase, folder: Path) -> None:
         _migrate(db, version, {})
 
 
-def open_database(path: Path) -> SqliteDatabase:
+def open_database(path: Path, *, check_integrity: bool = True) -> SqliteDatabase:
     """Apre il database di un profilo, portandolo alla versione più recente se è più vecchio.
 
     Prima di migrare mette in `backup/` una copia coerente (nome con le versioni di partenza e
     di arrivo). La migrazione è una sola transazione: se fallisce il database resta com'era.
+
+    `check_integrity=False` salta `quick_check` e `foreign_key_check` (leggono tutto il file):
+    serve solo a una seconda connessione allo stesso profilo già verificato dall'apertura
+    normale. Versione, schema e modalità WAL si controllano comunque, e un database da
+    migrare si controlla sempre.
 
     Raises:
         ProfileNotFoundError: il file manca.
@@ -272,10 +300,12 @@ def open_database(path: Path) -> SqliteDatabase:
         connection = _connect(path)
         db = SqliteDatabase(connection)
         try:
-            _prepare_existing(db, path.parent)
+            _prepare_existing(db, path.parent, check_integrity=check_integrity)
         except BaseException:
             connection.close()
             raise
+    except StorageBusyError as exc:
+        raise ProfileStorageError("database occupato da un altro processo") from exc
     except sqlite3.Error as exc:
         if is_corruption(exc):
             raise ProfileCorruptError("il file non è un database integro") from exc

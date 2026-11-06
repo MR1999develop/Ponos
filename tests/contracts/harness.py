@@ -14,8 +14,8 @@ from typing import Protocol
 
 from ponos_coach.activities.domain import ArchivedFile
 from ponos_coach.activities.ports import ActivityArchive
-from ponos_coach.profiles.domain import FolderKind
-from ponos_coach.profiles.ports import ProfileFolders, ProfileRegistry, ProfileStorage
+from ponos_coach.profiles.domain import FolderKind, ProfileId
+from ponos_coach.profiles.ports import ProfileFolders, ProfileRegistry, ProfileStorage, TokenStore
 
 
 class ArchiveHarness(Protocol):
@@ -89,4 +89,21 @@ class StorageHarness(Protocol):
 
     def new_folder(self) -> Path:
         """Una cartella nuova, esistente e vuota, assoluta e distinta a ogni chiamata."""
+        ...
+
+
+class TokenStoreHarness(Protocol):
+    """Un archivio di token vuoto e i modi per guastarlo."""
+
+    @property
+    def store(self) -> TokenStore:
+        """L'archivio sotto prova."""
+        ...
+
+    def reopen(self) -> TokenStore:
+        """Un nuovo oggetto sullo stesso supporto (come dopo un riavvio dell'app)."""
+        ...
+
+    def corrupt(self, profile_id: ProfileId) -> None:
+        """Rende illeggibile il contenuto salvato per il profilo (che deve averne uno)."""
         ...

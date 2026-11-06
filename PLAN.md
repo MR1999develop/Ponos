@@ -179,7 +179,10 @@ src/ponos_coach/
 
 ### 4.4 Sincronizzazione riprendibile e import da cartella
 
-1. Token dal portachiavi; se mancano o sono scaduti, dialogo di login con MFA.
+1. Token dall'archivio dei segreti del sistema (sezione 4.9); se mancano o
+   sono scaduti, dialogo di login con MFA. La sincronizzazione gira in un
+   thread proprio con una sua connessione al database del profilo (WAL),
+   così import e panoramica restano disponibili mentre scarica.
    La password va solo a `garminconnect` e non si salva.
 2. Prima sincronizzazione del profilo: elenco di tutto lo storico, a pagine,
    con il punto raggiunto salvato nel giornale. Sincronizzazioni successive:
@@ -332,8 +335,11 @@ src/ponos_coach/
 - Pagina dei grafici: solo contenuto locale, accesso alla rete bloccato da
   un intercettore, dati passati come JSON codificato, nessun `QWebChannel`
   salvo necessità dichiarata.
-- Token nel Credential Manager (Windows) o Secret Service (Ubuntu), dichiarati
-  leggibili dai processi dell'utente. Log strutturati senza token, password né
+- Token protetti dal sistema, fuori dalla cartella del profilo: su Windows
+  con DPAPI (ambito utente) in un file della cartella dati locale dell'app,
+  perché il Credential Manager generico accetta al massimo 2560 byte e i
+  token di Garmin li superano; su Ubuntu nel Secret Service (`keyring`).
+  Dichiarati leggibili dai processi dell'utente (decisione del 2026-11-06). Log strutturati senza token, password né
   dati di salute.
 - Cartella del profilo scelta dall'utente: verificata scrivibile, file creati
   in modo esclusivo, lock contro due istanze; i token non stanno nella
@@ -419,19 +425,25 @@ POSIX compresi; campagna di collaudo verde su Windows (esiti in
 
 ### Fase 2 — Sincronizzazione Garmin
 
-- [ ] Adattatore `garmin` dietro la porta `ActivitySource`, con test di
+- [x] Adattatore `garmin` dietro la porta `ActivitySource`, con test di
       contratto su risposte registrate e anonimizzate e su un fake.
-- [ ] Dialogo di login con MFA, token nel portachiavi per profilo, logout.
-- [ ] Sincronizzazione riprendibile (sezione 4.4): prima tutto lo storico,
+      *Stato 2026-11-06: fixture sulla struttura reale registrata dallo
+      spike del 2026-11-06 (valori inventati).*
+- [x] Dialogo di login con MFA, token protetti dal sistema per profilo
+      (DPAPI su Windows, Secret Service su Linux), logout.
+- [x] Sincronizzazione riprendibile (sezione 4.4): prima tutto lo storico,
       poi solo le attività mancanti, "Verifica completa"; giornale, pause,
       backoff, annullamento, ripresa dopo chiusura (test che interrompe a
       metà, sia durante l'elenco sia durante i download).
-- [ ] Originali GPX scaricati da Garmin (attività caricate come GPX) letti
+- [x] Originali GPX scaricati da Garmin (attività caricate come GPX) letti
       come quelli importati.
-- [ ] Abbinamento con le attività già importate da file, senza duplicati né
+- [x] Abbinamento con le attività già importate da file, senza duplicati né
       download inutili.
 - [ ] Sincronizzazione all'avvio e con F5; notifica di sistema e barra di
       stato.
+      *Stato 2026-11-06: fatto e provato con un notificatore finto; la
+      notifica reale su Windows e Ubuntu e il login reale restano per il
+      collaudo manuale.*
 
 ### Fase 3 — Carico e grafici
 

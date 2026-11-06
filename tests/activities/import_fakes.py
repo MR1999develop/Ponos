@@ -14,6 +14,7 @@ from ponos_coach.activities.domain import (
     ActivityRecord,
     ArchivedFile,
     FileFormat,
+    GarminActivityId,
 )
 from ponos_coach.activities.ports import (
     ActivityIndex,
@@ -172,6 +173,12 @@ class ObservedIndex:
 
     def list_by_start(self) -> Sequence[ActivityRecord]:
         return self._inner.list_by_start()
+
+    def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
+        return self._inner.find_by_garmin_id(garmin_id)
+
+    def link_garmin_id(self, identity: ActivityIdentity, garmin_id: GarminActivityId) -> None:
+        self._inner.link_garmin_id(identity, garmin_id)
 
 
 class _Logged(AbstractContextManager[None]):

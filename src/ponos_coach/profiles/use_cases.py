@@ -22,7 +22,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
-from ponos_coach.activities.ports import ActivityIndex
+from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.load.domain import Physiology, PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore
 from ponos_coach.profiles.domain import (
@@ -107,6 +107,11 @@ class ProfileSession:
     def activities(self) -> ActivityIndex:
         """Indice delle attività (valido finché il profilo è aperto)."""
         return self._opened.activities
+
+    @property
+    def sync_journal(self) -> SyncJournal:
+        """Giornale della sincronizzazione (stessa connessione e transazione dell'indice)."""
+        return self._opened.sync_journal
 
     @property
     def physiology(self) -> PhysiologyStore:

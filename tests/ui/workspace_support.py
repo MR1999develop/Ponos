@@ -7,6 +7,7 @@ from __future__ import annotations
 import threading
 import weakref
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -17,8 +18,9 @@ from pytestqt.qtbot import QtBot
 
 from ponos_coach.__main__ import compose_main_window, parse_command_line
 from ponos_coach.activities.decoding import decode_stored_activity
-from ponos_coach.activities.domain import Activity, FileFormat
+from ponos_coach.activities.domain import Activity, FileFormat, SyncPolicy
 from ponos_coach.activities.ports import (
+    ActivitySource,
     ImportEntry,
     ImportEntryError,
     ImportIssue,
@@ -29,7 +31,11 @@ from ponos_coach.storage.import_scan import FilesImportSource, FolderImportSourc
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
 from ponos_coach.ui.overview_state import Ready
+from ponos_coach.ui.sync_worker import MFA_WAIT_S
 from ponos_coach.ui.workspace import ImportSources
+from tests.fakes.garmin import FakeActivitySource, FakeGarminAccount
+from tests.fakes.notifier import RecordingNotifier
+from tests.fakes.tokens import InMemoryTokenStore
 from tests.fixtures.generators.import_files import fit_run, gpx_run
 from tests.fixtures.generators.zip_writer import garmin_download
 
@@ -37,6 +43,49 @@ TODAY = date(2026, 6, 30)
 WAIT_MS = 60_000
 FILES_IN_FIXTURE_FOLDER = 8  # 5 FIT, 1 GPX, 1 ZIP, 1 FIT in una sottocartella
 DAYS_IN_CHART = 61  # dal 1 maggio al 30 giugno 2026
+
+
+# Pause e attese di Garmin quasi nulle: i test non devono aspettare secondi per ogni attività.
+FAST_POLICY = SyncPolicy(
+    min_pause_s=0.001, max_jitter_s=0.0, backoff_base_s=0.01, backoff_cap_s=0.05
+)
+
+
+@dataclass(frozen=True, slots=True)
+class GarminFakes:
+    """Garmin, portachiavi e notifica finti con cui `compose` costruisce la finestra."""
+
+    source: FakeActivitySource
+    account: FakeGarminAccount
+    tokens: InMemoryTokenStore
+    notifier: RecordingNotifier
+
+
+def make_fakes(
+    *,
+    mfa_required: bool = True,
+    source: FakeActivitySource | None = None,
+    served: ActivitySource | None = None,
+) -> GarminFakes:
+    """Fake nuovi: nessun'attività su Garmin, nessun token, nessuna notifica.
+
+    `served` è ciò che l'account dà alla sincronizzazione al posto di `source` (per esempio un
+    decoratore con un cancello)."""
+    garmin = source or FakeActivitySource([])
+    return GarminFakes(
+        garmin,
+        FakeGarminAccount(served or garmin, mfa_required=mfa_required),
+        InMemoryTokenStore(),
+        RecordingNotifier(),
+    )
+
+
+_FAKES: weakref.WeakKeyDictionary[MainWindow, GarminFakes] = weakref.WeakKeyDictionary()
+
+
+def fakes_of(window: MainWindow) -> GarminFakes:
+    """I fake con cui `compose` ha costruito la finestra."""
+    return _FAKES[window]
 
 
 def make_settings(tmp_path: Path) -> QSettings:
@@ -77,6 +126,9 @@ def compose(
     import_sources: ImportSources | None = None,
     gate: threading.Event | None = None,
     log_dir: Path | None = None,
+    fakes: GarminFakes | None = None,
+    default_token_store: bool = False,
+    mfa_wait_s: float = MFA_WAIT_S,
 ) -> MainWindow:
     """Finestra dal Composition Root, con configurazione e profili in `tmp_path`.
 
@@ -89,6 +141,7 @@ def compose(
         return decode_stored_activity(data, file_format)
 
     picker = FakeFolderPicker(tmp_path / "profiles")
+    garmin = fakes or make_fakes()
     window = compose_main_window(
         parse_command_line([]),
         settings=settings,
@@ -100,8 +153,15 @@ def compose(
         import_sources=import_sources,
         decode=None if gate is None else gated_decode,
         log_dir=tmp_path / "logs" if log_dir is None else log_dir,
+        garmin_account=garmin.account,
+        token_store=None if default_token_store else garmin.tokens,
+        notifier=garmin.notifier,
+        sync_policy=FAST_POLICY,
+        data_dir=tmp_path / "data",
+        mfa_wait_s=mfa_wait_s,
     )
     _PICKERS[window] = picker
+    _FAKES[window] = garmin
     return window
 
 

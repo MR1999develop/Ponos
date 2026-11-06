@@ -135,9 +135,10 @@ Registro delle dipendenze dirette di `pyproject.toml`: esecuzione, gruppo
 
 - Versione bloccata: **25.7.0** (release 2025-11-16).
 - Licenza: **MIT** (metadati installati).
-- Scopo: token Garmin nel portachiavi del sistema (Credential Manager su
-  Windows, Secret Service su Ubuntu), legati all'id del profilo, mai nella
-  cartella dei dati (CLAUDE.md, ADR 003).
+- Scopo: token Garmin nel Secret Service su Ubuntu, legati all'id del
+  profilo, mai nella cartella dei dati (CLAUDE.md, ADR 003, ADR 006). Su
+  Windows i token non passano da `keyring`: sono cifrati con DPAPI
+  (ADR 006).
 - Ultima release: 25.7.0 (2025-11-16); repository `jaraco/keyring` con push
   del 2026-10-29, non archiviato.
 - Alternative: chiamate dirette alle API del sistema (`ctypes` su Windows,

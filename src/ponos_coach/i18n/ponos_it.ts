@@ -342,6 +342,124 @@
     </message>
 </context>
 <context>
+    <name>GarminLoginDialog</name>
+    <message>
+        <source>Connect Garmin account</source>
+        <translation>Collega account Garmin</translation>
+    </message>
+    <message>
+        <source>Your password goes only to Garmin and is never saved. Ponos Coach keeps just the sign-in tokens, protected by your system.</source>
+        <translation>La password va solo a Garmin e non viene mai salvata. Ponos Coach conserva soltanto i token di accesso, protetti dal sistema.</translation>
+    </message>
+    <message>
+        <source>Signing in to Garmin...</source>
+        <translation>Accesso a Garmin in corso...</translation>
+    </message>
+    <message>
+        <source>Email</source>
+        <translation>Email</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>Password</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Collega</translation>
+    </message>
+    <message>
+        <source>Enter your email and password.</source>
+        <translation>Inserisci email e password.</translation>
+    </message>
+</context>
+<context>
+    <name>GarminUi</name>
+    <message>
+        <source>Connect Garmin account...</source>
+        <translation>Collega account Garmin...</translation>
+    </message>
+    <message>
+        <source>Disconnect Garmin account</source>
+        <translation>Scollega account Garmin</translation>
+    </message>
+    <message>
+        <source>Synchronise</source>
+        <translation>Sincronizza</translation>
+    </message>
+    <message>
+        <source>Full check</source>
+        <translation>Verifica completa</translation>
+    </message>
+    <message>
+        <source>Stop synchronisation</source>
+        <translation>Interrompi sincronizzazione</translation>
+    </message>
+    <message>
+        <source>Synchronise when a profile opens</source>
+        <translation>Sincronizza all&apos;apertura del profilo</translation>
+    </message>
+    <message>
+        <source>Garmin</source>
+        <translation>Garmin</translation>
+    </message>
+    <message>
+        <source>List the whole Garmin history to find activities uploaded late.</source>
+        <translation>Elenca tutto lo storico Garmin per trovare le attività caricate in ritardo.</translation>
+    </message>
+    <message>
+        <source>Synchronisation progress</source>
+        <translation>Avanzamento della sincronizzazione</translation>
+    </message>
+    <message>
+        <source>Stop sync</source>
+        <translation>Interrompi</translation>
+    </message>
+    <message>
+        <source>Starting synchronisation...</source>
+        <translation>Avvio della sincronizzazione...</translation>
+    </message>
+    <message>
+        <source>Garmin account connected</source>
+        <translation>Account Garmin collegato</translation>
+    </message>
+    <message>
+        <source>Disconnect the Garmin account from this profile?</source>
+        <translation>Scollegare l&apos;account Garmin da questo profilo?</translation>
+    </message>
+    <message>
+        <source>The sign-in is deleted from this computer. Activities already downloaded stay in the profile. You can connect again at any time.</source>
+        <translation>L&apos;accesso viene eliminato da questo computer. Le attività già scaricate restano nel profilo. Puoi collegare di nuovo l&apos;account in qualsiasi momento.</translation>
+    </message>
+    <message>
+        <source>Disconnect</source>
+        <translation>Scollega</translation>
+    </message>
+    <message>
+        <source>Garmin account disconnected</source>
+        <translation>Account Garmin scollegato</translation>
+    </message>
+    <message>
+        <source>The account was not disconnected</source>
+        <translation>L&apos;account non è stato scollegato</translation>
+    </message>
+    <message>
+        <source>The sign-in could not be deleted from the system keychain.
+
+Check that the keychain is unlocked, then try again.</source>
+        <translation>Non è stato possibile eliminare l&apos;accesso dal portachiavi di sistema.
+
+Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
+    </message>
+    <message>
+        <source>Garmin synchronisation</source>
+        <translation>Sincronizzazione Garmin</translation>
+    </message>
+    <message>
+        <source>Connect account...</source>
+        <translation>Collega account...</translation>
+    </message>
+</context>
+<context>
     <name>ImportIssues</name>
     <message>
         <source>The file is empty.</source>
@@ -754,6 +872,29 @@
     </message>
 </context>
 <context>
+    <name>MfaCodeDialog</name>
+    <message>
+        <source>Garmin verification code</source>
+        <translation>Codice di verifica Garmin</translation>
+    </message>
+    <message>
+        <source>Garmin sent you a verification code. Enter it to finish connecting.</source>
+        <translation>Garmin ti ha inviato un codice di verifica. Inseriscilo per completare il collegamento.</translation>
+    </message>
+    <message>
+        <source>Verification code</source>
+        <translation>Codice di verifica</translation>
+    </message>
+    <message>
+        <source>Verify</source>
+        <translation>Verifica</translation>
+    </message>
+    <message>
+        <source>Enter the code from Garmin.</source>
+        <translation>Inserisci il codice ricevuto da Garmin.</translation>
+    </message>
+</context>
+<context>
     <name>NewProfileDialog</name>
     <message>
         <source>New profile</source>
@@ -995,6 +1136,259 @@
     <message>
         <source>Fitness and fatigue chart</source>
         <translation>Grafico di condizione e fatica</translation>
+    </message>
+</context>
+<context>
+    <name>Sync</name>
+    <message>
+        <source>less than a minute left</source>
+        <translation>meno di un minuto rimanente</translation>
+    </message>
+    <message numerus="yes">
+        <source>about %n minute(s) left</source>
+        <translation>
+            <numerusform>circa %n minuto rimanente</numerusform>
+            <numerusform>circa %n minuti rimanenti</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>about %n hour(s) left</source>
+        <translation>
+            <numerusform>circa %n ora rimanente</numerusform>
+            <numerusform>circa %n ore rimanenti</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Listing activities: {done} of %n</source>
+        <translation>
+            <numerusform>Elenco dell&apos;attività: {done} di %n</numerusform>
+            <numerusform>Elenco delle attività: {done} di %n</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Listing activities: {done}</source>
+        <translation>Elenco delle attività: {done}</translation>
+    </message>
+    <message numerus="yes">
+        <source>Downloading activity {step} of %n</source>
+        <translation>
+            <numerusform>Scaricamento dell&apos;attività {step} di %n</numerusform>
+            <numerusform>Scaricamento dell&apos;attività {step} di %n</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>{progress} - {time}</source>
+        <translation>{progress} - {time}</translation>
+    </message>
+    <message>
+        <source>Garmin did not answer; it will be tried again.</source>
+        <translation>Garmin non ha risposto; l&apos;operazione verrà ritentata.</translation>
+    </message>
+    <message>
+        <source>Garmin asked to slow down; it will be tried again.</source>
+        <translation>Garmin ha chiesto di rallentare; l&apos;operazione verrà ritentata.</translation>
+    </message>
+    <message>
+        <source>the file format is not supported (for example TCX)</source>
+        <translation>il formato del file non è supportato (per esempio TCX)</translation>
+    </message>
+    <message>
+        <source>the file is damaged</source>
+        <translation>il file è danneggiato</translation>
+    </message>
+    <message>
+        <source>the file is too large</source>
+        <translation>il file è troppo grande</translation>
+    </message>
+    <message>
+        <source>the file is not an activity</source>
+        <translation>il file non è un&apos;attività</translation>
+    </message>
+    <message>
+        <source>the downloaded package is not valid</source>
+        <translation>il pacchetto scaricato non è valido</translation>
+    </message>
+    <message>
+        <source>it failed too many times</source>
+        <translation>l&apos;attività è fallita troppe volte</translation>
+    </message>
+    <message>
+        <source>Synchronisation stopped. Nothing is lost: it resumes where it left off.</source>
+        <translation>Sincronizzazione interrotta. Non si perde nulla: riprende da dove si era fermata.</translation>
+    </message>
+    <message>
+        <source>Garmin needs you to sign in again.</source>
+        <translation>Garmin chiede di accedere di nuovo.</translation>
+    </message>
+    <message>
+        <source>Garmin is limiting requests. Try again in a while.</source>
+        <translation>Garmin sta limitando le richieste. Riprova più tardi.</translation>
+    </message>
+    <message>
+        <source>Garmin is not answering. Check your connection and try again.</source>
+        <translation>Garmin non risponde. Controlla la connessione e riprova.</translation>
+    </message>
+    <message>
+        <source>Garmin sent an answer that Ponos Coach cannot read.</source>
+        <translation>Garmin ha inviato una risposta che Ponos Coach non sa leggere.</translation>
+    </message>
+    <message>
+        <source>Garmin listed more activities than Ponos Coach accepts.</source>
+        <translation>Garmin ha elencato più attività di quante Ponos Coach ne accetti.</translation>
+    </message>
+    <message>
+        <source>No Garmin account is connected to this profile.</source>
+        <translation>Nessun account Garmin è collegato a questo profilo.</translation>
+    </message>
+    <message>
+        <source>The system keychain is not available, so the saved sign-in cannot be read.</source>
+        <translation>Il portachiavi di sistema non è disponibile, quindi l&apos;accesso salvato non può essere letto.</translation>
+    </message>
+    <message>
+        <source>The profile data could not be opened for synchronisation.</source>
+        <translation>Non è stato possibile aprire i dati del profilo per la sincronizzazione.</translation>
+    </message>
+    <message>
+        <source>Something went wrong. If it persists, use Help &gt; Open the log folder.</source>
+        <translation>Qualcosa è andato storto. Se il problema persiste, usa Aiuto &gt; Apri la cartella dei log.</translation>
+    </message>
+    <message>
+        <source>Synchronisation did not start</source>
+        <translation>La sincronizzazione non è partita</translation>
+    </message>
+    <message>
+        <source>Synchronisation stopped</source>
+        <translation>Sincronizzazione interrotta</translation>
+    </message>
+    <message>
+        <source>Garmin is up to date</source>
+        <translation>Garmin è aggiornato</translation>
+    </message>
+    <message numerus="yes">
+        <source>Synchronised: %n new activity(ies)</source>
+        <translation>
+            <numerusform>Sincronizzata: %n nuova attività</numerusform>
+            <numerusform>Sincronizzate: %n nuove attività</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Synchronised: %n new activity(ies), {matched} matched with imported files</source>
+        <translation>
+            <numerusform>Sincronizzata: %n nuova attività. Abbinate a file importati: {matched}</numerusform>
+            <numerusform>Sincronizzate: %n nuove attività. Abbinate a file importati: {matched}</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n new activity(ies) downloaded</source>
+        <translation>
+            <numerusform>%n nuova attività scaricata</numerusform>
+            <numerusform>%n nuove attività scaricate</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n activity(ies) matched with files you imported</source>
+        <translation>
+            <numerusform>%n attività abbinata a un file importato</numerusform>
+            <numerusform>%n attività abbinate a file importati</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n activity(ies) not downloaded:</source>
+        <translation>
+            <numerusform>%n attività non scaricata:</numerusform>
+            <numerusform>%n attività non scaricate:</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>  {reason}: {count}</source>
+        <translation>  {reason}: {count}</translation>
+    </message>
+    <message>
+        <source>Garmin did not provide a valid original file for this activity</source>
+        <translation>Garmin non ha fornito un originale valido per questa attività</translation>
+    </message>
+    <message>
+        <source>The profile was busy with another task or could not be written. Try again; if it persists, check that the disk is not full.</source>
+        <translation>Il profilo era occupato da un altro lavoro oppure non si è potuto scrivere. Riprova; se il problema persiste, controlla che il disco non sia pieno.</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n activity(ies) were already in the profile</source>
+        <translation>
+            <numerusform>%n attività era già nel profilo</numerusform>
+            <numerusform>%n attività erano già nel profilo</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Synchronise again when you are ready: it resumes where it left off.</source>
+        <translation>Sincronizza di nuovo quando vuoi: riprende da dove si era fermata.</translation>
+    </message>
+    <message>
+        <source>The activities that failed for a temporary reason stay in the list and are tried again next time.</source>
+        <translation>Le attività fallite per un motivo temporaneo restano nell&apos;elenco e si riprovano la prossima volta.</translation>
+    </message>
+    <message>
+        <source>The activities that failed for a lasting reason are not tried again.</source>
+        <translation>Le attività fallite per un motivo definitivo non si riprovano.</translation>
+    </message>
+    <message>
+        <source>New activities from Garmin</source>
+        <translation>Nuove attività da Garmin</translation>
+    </message>
+    <message>
+        <source>Garmin did not accept the email, password or code. Check them and try again.</source>
+        <translation>Garmin non ha accettato email, password o codice. Controllali e riprova.</translation>
+    </message>
+    <message>
+        <source>Garmin is limiting sign-in attempts. Wait a few minutes, then try again.</source>
+        <translation>Garmin sta limitando i tentativi di accesso. Attendi qualche minuto, poi riprova.</translation>
+    </message>
+    <message>
+        <source>Ponos Coach could not reach Garmin. Check your connection and try again.</source>
+        <translation>Ponos Coach non è riuscito a raggiungere Garmin. Controlla la connessione e riprova.</translation>
+    </message>
+    <message>
+        <source>The sign-in worked, but the system keychain could not keep it, so the account was not connected.</source>
+        <translation>L&apos;accesso è riuscito, ma il portachiavi di sistema non è riuscito a conservarlo: l&apos;account non è stato collegato.</translation>
+    </message>
+    <message>
+        <source>Time ran out waiting for the verification code. Connect the account again.</source>
+        <translation>Tempo scaduto in attesa del codice di verifica. Collega di nuovo l&apos;account.</translation>
+    </message>
+    <message>
+        <source>Something went wrong. Try again; if it persists, use Help &gt; Open the log folder.</source>
+        <translation>Qualcosa è andato storto. Riprova; se il problema persiste, usa Aiuto &gt; Apri la cartella dei log.</translation>
+    </message>
+    <message>
+        <source>Create or open a profile first.</source>
+        <translation>Crea o apri prima un profilo.</translation>
+    </message>
+    <message>
+        <source>The system keychain is not available, so a Garmin account cannot be connected. You can still import files.</source>
+        <translation>Il portachiavi di sistema non è disponibile, quindi non si può collegare un account Garmin. Puoi comunque importare i file.</translation>
+    </message>
+    <message>
+        <source>Ponos Coach is checking the Garmin account.</source>
+        <translation>Ponos Coach sta verificando l&apos;account Garmin.</translation>
+    </message>
+    <message>
+        <source>A Garmin account is already connected. Disconnect it to use another.</source>
+        <translation>Un account Garmin è già collegato. Scollegalo per usarne un altro.</translation>
+    </message>
+    <message>
+        <source>Connect a Garmin account first.</source>
+        <translation>Collega prima un account Garmin.</translation>
+    </message>
+    <message>
+        <source>Garmin needs you to sign in again. Use Garmin &gt; Connect Garmin account.</source>
+        <translation>Garmin chiede di accedere di nuovo. Usa Garmin &gt; Collega account Garmin.</translation>
+    </message>
+    <message>
+        <source>Wait for the current operation to finish, or stop it first.</source>
+        <translation>Attendi la fine dell&apos;operazione in corso, oppure interrompila.</translation>
+    </message>
+    <message>
+        <source>No synchronisation is running.</source>
+        <translation>Nessuna sincronizzazione è in corso.</translation>
     </message>
 </context>
 </TS>

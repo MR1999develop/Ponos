@@ -17,7 +17,9 @@ from ponos_coach.activities.domain import (
     ArchivedFile,
     FileId,
     FitIdentity,
+    GarminActivityId,
     GpxIdentity,
+    RemoteActivity,
     Sport,
     format_of,
 )
@@ -104,4 +106,18 @@ def registry_entry(
         folder or absolute_path(f"profile-{number}"),
         ProfileName.parse(f"Profilo {number}"),
         last_used,
+    )
+
+
+def remote_activity(
+    number: int = 1,
+    *,
+    start: datetime = T0,
+    duration_s: float = 3600.0,
+    sport_key: str = "running",
+    has_heart_rate: bool | None = True,
+) -> RemoteActivity:
+    """Attività dell'elenco remoto con id Garmin `1000 + number` (distinto per ogni `number`)."""
+    return RemoteActivity(
+        GarminActivityId(1000 + number), start, duration_s, sport_key, has_heart_rate
     )

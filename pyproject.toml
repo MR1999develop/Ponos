@@ -171,6 +171,39 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "zipread e di basso livello: non importa nulla del progetto"
+type = "forbidden"
+source_modules = ["ponos_coach.zipread"]
+forbidden_modules = [
+    "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.profiles", "ponos_coach.garmin", "ponos_coach.storage",
+    "ponos_coach.platform", "ponos_coach.ui", "ponos_coach.i18n", "ponos_coach.fsio",
+    "ponos_coach.__main__",
+]
+
+[[tool.importlinter.contracts]]
+name = "Solo ponos_coach.garmin importa garminconnect"
+type = "forbidden"
+source_modules = [
+    "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.profiles", "ponos_coach.storage", "ponos_coach.platform",
+    "ponos_coach.ui", "ponos_coach.fsio", "ponos_coach.zipread",
+]
+forbidden_modules = ["garminconnect"]
+
+[[tool.importlinter.contracts]]
+name = "Nel pacchetto garmin solo connect ed errors importano la libreria"
+type = "forbidden"
+source_modules = [
+    "ponos_coach.garmin.client", "ponos_coach.garmin.listing",
+    "ponos_coach.garmin.source", "ponos_coach.garmin.account",
+]
+forbidden_modules = ["garminconnect"]
+allow_indirect_imports = true  # errors.py importa le eccezioni della libreria, ed e ammesso
+
+[[tool.importlinter.contracts]]
 name = "Solo gli adattatori usano fsio (non funzionalita ne ui)"
 type = "forbidden"
 source_modules = [

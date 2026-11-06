@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from ponos_coach.activities.ports import ActivityIndex
+from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.load.domain import PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore
 from ponos_coach.profiles.domain import (
@@ -95,8 +95,8 @@ class _CountingStorage(InMemoryProfileStorage):
     ) -> OpenProfile:
         return self._counted(super().create(folder, profile_id, name, timezone_name))
 
-    def open(self, folder: Path) -> OpenProfile:
-        return self._counted(super().open(folder))
+    def open(self, folder: Path, *, check_integrity: bool = True) -> OpenProfile:
+        return self._counted(super().open(folder, check_integrity=check_integrity))
 
     def _counted(self, opened: OpenProfile) -> OpenProfile:
         self.opened += 1
@@ -115,6 +115,10 @@ class _CountingProfile:
     @property
     def activities(self) -> ActivityIndex:
         return self._inner.activities
+
+    @property
+    def sync_journal(self) -> SyncJournal:
+        return self._inner.sync_journal
 
     @property
     def physiology(self) -> PhysiologyStore:

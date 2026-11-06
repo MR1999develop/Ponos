@@ -6,8 +6,9 @@ cardiaca e mostra la forma (ATL, CTL, TSB). Genera un piano di allenamento
 adattivo verso uno o più obiettivi nel calendario e guida il recupero dagli
 infortuni.
 
-**Stato:** in sviluppo, fase 1 (profili, archivio e import). Non ci sono
-ancora versioni distribuite: si avvia da sorgente.
+**Stato:** in sviluppo, fase 2 (sincronizzazione con Garmin, su profili,
+archivio e import). Non ci sono ancora versioni distribuite: si avvia da
+sorgente.
 
 ## Avviso: non è un dispositivo medico
 
@@ -72,6 +73,50 @@ finisca; se non riesce entro 10 secondi lascia la finestra aperta e avvisa, e
 basta chiuderla di nuovo. L'app ricorda la sezione aperta, la finestra e le
 ultime cartelle usate.
 
+## Collegare l'account Garmin
+
+Serve un profilo aperto. Il collegamento è facoltativo: l'import di file
+funziona sempre.
+
+1. Menu Garmin, Collega account Garmin… (Ctrl+G).
+2. Scrivi email e password di Garmin Connect. Vanno solo a Garmin e l'app non
+   le salva.
+3. Se il tuo account usa la verifica in due passaggi, scrivi il codice che
+   Garmin ti manda. Hai 5 minuti; se scadono o annulli, non si salva nulla.
+
+L'accesso non è ufficiale (vedi l'avviso sopra): se Garmin lo cambia, la
+sincronizzazione può smettere di funzionare. Un solo account per profilo; per
+usarne un altro, Garmin, Scollega account Garmin (Ctrl+Maiusc+G).
+
+**Prima sincronizzazione.** Dopo il collegamento parte da sola e scarica tutto
+lo storico, con i file originali. Può durare a lungo (circa una pausa di un
+secondo per attività, più il tempo di scaricamento): la barra di stato mostra
+l'avanzamento e il tempo stimato, e "Interrompi sincronizzazione" (Maiusc+F5)
+ferma tutto senza perdere nulla, perché la volta dopo riprende da dove si era
+fermata. Intanto puoi usare l'app. Se Garmin limita le richieste o non
+risponde, l'app aspetta e riprova poche volte, poi si ferma con un messaggio.
+
+Le volte successive: Sincronizza (F5) scarica solo le attività mancanti.
+Verifica completa (Ctrl+F5) rielenca tutto lo storico, per trovare attività
+caricate in ritardo con date vecchie. Le attività che avevi già importato da
+file non si riscaricano né si duplicano. A fine giro, la barra di stato e una
+notifica del sistema dicono quante attività nuove sono entrate.
+
+**Dove stanno i token.** I token di accesso non stanno mai nella cartella del
+profilo né nei backup. Su Windows sono un file cifrato con DPAPI, per il tuo
+utente, in `secrets/` nella cartella dati locale dell'app. Su Ubuntu stanno nel
+Secret Service (per esempio GNOME Keyring o KeePassXC); se non c'è, l'app non
+collega l'account e non ripiega su un file in chiaro. Altri programmi che
+girano con il tuo utente possono leggerli. Un profilo portato su un altro PC
+chiede di nuovo l'accesso.
+
+**Spike opzionale.** `experiments/garmin_spike.py` prova dal vivo l'accesso a
+Garmin e scrive la struttura (senza valori) delle risposte reali, utile per
+aggiornare le fixture dei test. Non serve per usare l'app: vedi
+`experiments/README.md`. Chiede email, password e codice nel tuo terminale, e
+lascia in `experiments/spike-data/` file con frequenza cardiaca e GPS in
+chiaro: cancellali con `--logout` a fine prova.
+
 ## Importare le attività
 
 Serve un profilo aperto. Si possono importare file FIT e GPX, anche dentro file
@@ -106,7 +151,8 @@ Tutti i dati di un profilo stanno nella cartella scelta alla creazione:
 
 Non spostare né modificare a mano questi file mentre l'app è aperta. L'elenco
 dei profili è nella cartella di configurazione dell'app (`profiles.json`). I
-token Garmin non stanno mai nella cartella del profilo.
+token Garmin non stanno mai nella cartella del profilo (vedi "Collegare
+l'account Garmin").
 
 ## Dati e privacy
 

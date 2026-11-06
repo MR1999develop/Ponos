@@ -4,7 +4,9 @@
 `activities` (import e sincronizzazione), `platform`, i test `T-DATI`, `T-SYNC`,
 `T-IMP`, `T-GPX`. Sezione 5 di `SKILL.md`. ADR: `docs/adr/003-formato-dati.md`
 e `docs/adr/005-schema-sqlite-e-archivio.md` (schema, archivio e identità:
-qui non si ripetono).
+qui non si ripetono) e `docs/adr/006-token-e-sincronizzazione.md` (perché i
+token, il thread, il giornale e la politica sono fatti così: qui ci sono le
+regole operative, non le motivazioni).
 
 ## 1. Cartella del profilo
 
@@ -19,8 +21,8 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   ponos.lock        lock del sistema operativo sul file aperto
 ```
 
-- I token Garmin non stanno qui: stanno nel portachiavi del sistema, legati
-  all'id del profilo.
+- I token Garmin non stanno qui né nel backup: vedi la sezione 5 ("Token"). Un
+  profilo spostato su un altro PC chiede un nuovo login.
 - **Elenco dei profili:** `profiles.json` nella cartella di configurazione
   (`platformdirs`), con id, cartella, nome in cache e ultimo uso. Formato
   versionato, tetto di 1 MiB, campi sconosciuti conservati, scrittura atomica
@@ -72,10 +74,17 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   istruzioni in una transazione, mai `executescript`; una migrazione
   rilasciata non si modifica.
 - Tempi in millisecondi UTC interi; durate misurate in secondi.
-- Contiene l'indice delle attività, i parametri fisiologici e la cache dei
-  carichi; obiettivi, piani, infortuni, impostazioni e giornale della
-  sincronizzazione arrivano con le loro fasi, con nuove migrazioni. Carichi e
-  PMC sono derivati e rigenerabili.
+- Contiene l'indice delle attività, i parametri fisiologici, la cache dei
+  carichi e (dalla v2) il giornale della sincronizzazione; obiettivi, piani,
+  infortuni e impostazioni arrivano con le loro fasi, con nuove migrazioni.
+  Carichi e PMC sono derivati e rigenerabili.
+- **Schema v2** (`sync_journal`, `sync_cursor`, `sync_state`, tutte `STRICT`,
+  tempi in millisecondi UTC): vedi la sezione 5. La migrazione v1 → v2 passa
+  dalla copia `backup/ponos-v1-v2.sqlite3` come ogni migrazione (T-DATI-01
+  prova un database v1 congelato scritto a mano in
+  `tests/collaudo/test_database_del_profilo.py`, insieme alle due migrazioni
+  congelate). Gli insiemi chiusi della v2 (stati, cause, elenchi) hanno un test
+  che li confronta con gli enum del dominio.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.
@@ -176,31 +185,130 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
 
 ## 5. Sincronizzazione riprendibile
 
-1. Token dal portachiavi; se mancano o sono scaduti, dialogo di login con MFA.
-   La password va solo a `garminconnect` e non si salva.
+1. Token dal loro archivio (sotto); se mancano o sono scaduti, dialogo di
+   login con MFA. La password va solo a `garminconnect` e non si salva.
 2. Prima sincronizzazione: elenco di tutto lo storico a pagine, con il punto
    raggiunto nel giornale. Successive: elenco dalle più recenti finché si
    trova una pagina di attività già note, più le voci in sospeso o fallite.
 3. Ogni id nuovo diventa una voce "da scaricare" nel giornale (idempotente
    per id Garmin).
+   L'elenco finisce con una pagina corta o vuota, mai al totale dichiarato
+   (Garmin può ricevere attività nuove durante l'elenco): il totale serve
+   solo all'avanzamento.
 4. "Verifica completa": rielenca tutto lo storico senza riscaricare, per
-   trovare attività con date vecchie caricate in ritardo.
+   trovare attività con date vecchie caricate in ritardo; riarma anche le voci
+   fallite per `ATTEMPTS_EXHAUSTED` (`rearm_exhausted`: tornano `PENDING`).
 5. Per ogni voce: download del FIT originale (zip), controlli dei limiti,
    scrittura durevole, lettura, calcolo del carico; una transazione segna la
    voce completata.
 6. Pause tra le richieste con jitter; su 429 o errori transitori, backoff
    esponenziale con tetto e numero massimo di tentativi; poi errore chiaro.
-   Valori di pausa, tetto e tentativi: **punti aperti** (costanti in un solo
-   posto, da fissare con lo spike della fase 0).
+   Valori (default del progetto, in `SyncPolicy`, `activities/domain/
+   sync_policy.py`, da rivedere con l'esito dello spike): pausa minima 1 s più
+   jitter fino a 0,75 s; backoff da 5 s che raddoppia, più il jitter, con
+   tetto 120 s; al massimo 5 tentativi per la stessa richiesta (il quinto
+   fallimento ferma i tentativi); 3 sincronizzazioni fallite per la stessa
+   attività prima di "fallita definitiva". Un'attesa suggerita da Garmin
+   (`Retry-After`) alza il minimo dell'attesa; se supera il tetto non si
+   aspetta, si ferma con un errore chiaro. Il jitter viene da una sorgente
+   casuale iniettata (`RandomSource`, `random.Random` la soddisfa). Pagine
+   dell'elenco da 100 voci (massimo 1000); tetto dello ZIP scaricato 50 MB.
 7. Chiusura a metà: all'avvio successivo si riparte dalle voci in sospeso e si
    cancellano i temporanei orfani.
-8. Il lavoro gira in un worker con annullamento (si ferma entro 1 s); la UI
-   mostra avanzamento e Annulla. A fine: notifica di sistema, barra di stato,
-   PMC e piano aggiornati.
+8. Il lavoro gira in un thread proprio (`SyncController`, `SyncWorker` in
+   `ui/`) con una connessione propria al profilo, chiusa alla fine, e con
+   annullamento cooperativo (si ferma entro 1 s, salvo una richiesta già
+   partita: il timeout della libreria, 15 s, non si interrompe); la UI mostra
+   avanzamento e Interrompi. Il controller fa una operazione dell'account per
+   volta (controllo dei token, login, logout, sincronizzazione). A fine:
+   notifica di sistema (solo se ci sono attività nuove) e barra di stato.
+   `new_activity_count` conta solo le scaricate: né le abbinate né quelle già
+   presenti sono nuove.
 9. Abbinamento: prima di scaricare, un'attività dell'elenco Garmin con la
    stessa ora d'inizio e lo stesso sport di una già importata da file si
-   abbina a quella senza riscaricarla. Tolleranza sull'ora d'inizio:
-   **punto aperto**.
+   abbina a quella senza riscaricarla. Regola (`find_matching_import`): il
+   record non ha ancora un id Garmin, lo sport coincide (`sport_from_garmin_key`
+   mappa le chiavi di Garmin sugli sport dell'app, il resto è `OTHER`) e vale
+   `is_possible_duplicate` (inizi entro 60 s, durate entro il 5%); con più
+   candidati il più vicino nell'inizio, poi la chiave d'identità più piccola.
+   L'abbinamento collega l'id con `ActivityIndex.link_garmin_id` e segna la
+   voce `MATCHED`; l'origine del record resta `IMPORT`.
+
+### Token e login
+
+- Porta `TokenStore` (`profiles/ports.py`: `save`, `load`, `delete`, per id del
+  profilo); adattatori e scelta in `platform/token_store.py`
+  (`create_token_store`).
+- Windows: `DpapiTokenStore`, un file `secrets/<id>.bin` nella cartella dati
+  locale dell'app (fuori dal profilo), formato `PNSEC` + versione (1 byte) +
+  blob DPAPI con entropia legata all'app e all'id; lettura con tetto di
+  dimensione. Il Credential Manager generico non basta (2560 byte).
+- Ubuntu: `KeyringTokenStore` sul solo Secret Service (anche dentro un
+  `ChainerBackend`), valore con prefisso `v1:`. Backend assente, bloccato o in
+  chiaro: `TokenStoreUnavailableError`, mai un file.
+- File alterato o non riconosciuto: `TokenStoreCorruptError`, quindi stato
+  "da ricollegare" e nuovo login che lo sostituisce. Portachiavi non
+  utilizzabile: i comandi dell'account sono spenti con il motivo.
+- Ripresa (`GarminConnectAccount.resume`): solo token che sono un oggetto JSON;
+  se la libreria li ha rinnovati, il worker li risalva (un guasto qui non
+  ferma il giro).
+- Login: email e password vuote o oltre i tetti rifiutate prima di contattare
+  Garmin; codice MFA chiesto al più 3 volte, vuoto o oltre 32 caratteri non
+  inviato; l'attesa del codice nella UI ha un tetto di 300 s (`MFA_WAIT_S`) e
+  poi vale come annullata. Annullato o fallito: nulla si salva.
+- Errori della libreria tradotti in `garmin/errors.py` secondo come reagisce
+  chi chiama: 429 e 427 limite di frequenza (con `Retry-After` solo se fatto di
+  cifre ASCII, al più 3600 s), 401 e autenticazione rifiutata, rete e 5xx e 408
+  transitori, il resto definitivo. I logger di `garminconnect` stanno a livello
+  critico, quelli di rete ad avviso (a livello errore la libreria scrive id e
+  testi di Garmin).
+
+### Giornale, stati e cursori
+
+- Ogni attività remota è una voce di `sync_journal` (chiave primaria l'id
+  Garmin), con il riepilogo dell'elenco (`RemoteActivity`: inizio, durata,
+  chiave dello sport, FC nota; nessun testo libero di Garmin), lo stato, i
+  tentativi falliti e la causa. Id, inizio e durata sono validati al confine
+  (`GarminActivityId.parse`, `RemoteActivity`, `ActivityPage`); una voce
+  malformata si scarta e conta in `raw_count`.
+- Stati (`SyncStatus`): `PENDING` (da scaricare), `DOWNLOADED`, `MATCHED`,
+  `RETRYABLE` (fallita per una causa transitoria), `FAILED` (definitiva). Non
+  c'è uno stato "in corso": download, archivio e conferma stanno in una sola
+  transazione, quindi un'interruzione lascia la voce `PENDING`. Da `PENDING` e
+  `RETRYABLE` si va in tutti gli altri (anche `RETRYABLE` → `RETRYABLE`);
+  `DOWNLOADED` e `MATCHED` non si muovono, `FAILED` solo verso `PENDING` e solo
+  per `rearm_exhausted` (`can_transition`, `InvalidTransitionError`),
+  e il database rifiuta le combinazioni incoerenti con i CHECK.
+- Cause (`FailureReason`): ritentabili `TRANSIENT_ERROR` e `RATE_LIMITED`;
+  definitive `UNSUPPORTED_FORMAT` (per esempio un TCX), `CORRUPT_FILE`,
+  `FILE_TOO_LARGE`, `NOT_AN_ACTIVITY`, `ARCHIVE_INVALID`, `REMOTE_REJECTED`
+  (originale assente o rifiutato) e `ATTEMPTS_EXHAUSTED`. `mark_failed`:
+  causa definitiva → `FAILED`; causa ritentabile → `RETRYABLE` fino al terzo
+  fallimento (`max_syncs_per_activity`), poi `FAILED` con
+  `ATTEMPTS_EXHAUSTED`. Un errore di scrittura locale (disco pieno) non è
+  della voce: ferma la sincronizzazione, non si registra sulla voce. Neppure
+  un giro fermato da limite di frequenza o servizio irraggiungibile consuma
+  tentativi: i fallimenti di rete si scrivono solo se Garmin risponde per una
+  voce successiva. Il file scaricato deve coincidere con la voce (inizio e
+  durata, regola dei duplicati); se no `REMOTE_REJECTED`, mai registrato.
+  `SyncOutcome.downloaded` conta solo le attività nuove, `matched` i gemelli
+  in un altro formato, `already_present` i file già nel profilo.
+- Lavoro: `next_to_process(limit)` dà `PENDING` e `RETRYABLE` dalla più
+  recente (a parità, id decrescente); `add_pending` è idempotente per id e non
+  tocca le voci esistenti.
+- Cursori (`ListingKind`): `FULL` (prima sincronizzazione), `VERIFY` ("Verifica
+  completa") e `INCREMENTAL`. `ListingCursor` (prossima posizione, totale
+  dichiarato, completato) avanza con `advance_cursor` e si salva a ogni
+  pagina, dopo aver aggiunto le voci della pagina nella stessa transazione.
+  L'elenco finisce con una pagina corta, al raggiungimento del totale o, solo
+  per `INCREMENTAL`, con una pagina intera di id già noti (`is_known_page`). Il
+  cursore incrementale si salva anche lui, così un'interruzione a metà non
+  fa perdere le pagine non ancora lette. Un elenco completato riparte da
+  `ListingCursor.start()`.
+- `sync_state` ricorda la fine dell'ultima sincronizzazione
+  (`record_completed`, per la barra di stato).
+- Stima del tempo restante: media mobile delle ultime 20 durate per voce
+  (pause comprese) per le voci rimaste (`estimate_remaining_s`).
 
 ## 6. Import di file, cartelle e ZIP
 
@@ -279,6 +387,22 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
 
 ## 9. Porte della fase 1 e test di contratto
 
+- Porte della fase 2: `ActivitySource` (pagina dell'elenco, download dello ZIP
+  con tetto di byte), `GarminAccount` (`login` con funzione per il codice MFA,
+  `resume` da token; entrambi dànno una `GarminSession` con sorgente e token da
+  salvare), `SyncJournal` (stessa connessione e transazione dell'indice),
+  `ActivityIndex.find_by_garmin_id` e `link_garmin_id`, e in
+  `profiles/ports.py` `TokenStore` (token per profilo: `save`, `load`,
+  `delete`). I token sono `SessionTokens`, una stringa opaca il cui `repr`
+  non mostra mai il contenuto. Errori di Garmin, distinti dove cambia la
+  reazione: `AuthenticationRequiredError`, `RateLimitedError`
+  (`retry_after_s`), `TransientSourceError` (`ServiceUnavailableError`),
+  `DefinitiveSourceError` (`DownloadTooLargeError`), `InvalidCredentialsError`
+  e `MfaCancelledError`; `TokenStoreUnavailableError` e
+  `TokenStoreCorruptError` per il portachiavi. Fake in `tests/fakes/garmin.py`
+  (`FakeActivitySource` con guasti per chiamata o per attività e risposta
+  lenta, `FakeGarminAccount`) e `tests/fakes/tokens.py`; contratti in
+  `tests/contracts/contract_sync.py` e `contract_tokens.py`.
 - Porte: `ActivityArchive` e `ActivityIndex` (`activities/ports.py`),
   `PhysiologyStore` e `LoadCache` (`load/ports.py`), `ProfileRegistry`,
   `ProfileFolders` e `ProfileStorage` (`profiles/ports.py`). `ProfileStorage`

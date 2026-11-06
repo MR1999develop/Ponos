@@ -8,7 +8,7 @@ import sqlite3
 from collections.abc import Mapping
 from pathlib import Path
 
-from ponos_coach.activities.ports import ActivityIndex
+from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.load.ports import LoadCache, PhysiologyStore
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
@@ -32,6 +32,7 @@ from ponos_coach.storage.sqlite_stores import (
     SqliteLoadCache,
     SqlitePhysiologyStore,
 )
+from ponos_coach.storage.sqlite_sync import SqliteSyncJournal
 
 _META_ID = "profile_id"
 _META_NAME = "name"
@@ -64,12 +65,13 @@ def _read_info(db: SqliteDatabase) -> ProfileInfo:
 
 
 class SqliteOpenProfile:
-    """Un profilo aperto: i tre store condividono la connessione di `SqliteDatabase`."""
+    """Un profilo aperto: i quattro store condividono la connessione di `SqliteDatabase`."""
 
     def __init__(self, database: SqliteDatabase, info: ProfileInfo) -> None:
         self._db = database
         self._info = info
         self._activities = SqliteActivityIndex(database)
+        self._sync_journal = SqliteSyncJournal(database)
         self._physiology = SqlitePhysiologyStore(database)
         self._load_cache = SqliteLoadCache(database)
         self._closed = False
@@ -83,6 +85,11 @@ class SqliteOpenProfile:
     def activities(self) -> ActivityIndex:
         """Indice delle attività."""
         return self._activities
+
+    @property
+    def sync_journal(self) -> SyncJournal:
+        """Giornale della sincronizzazione."""
+        return self._sync_journal
 
     @property
     def physiology(self) -> PhysiologyStore:
@@ -151,8 +158,11 @@ class SqliteProfileStorage:
         peeked = peek_database(folder / PROFILE_DATABASE_NAME)
         return ProfilePeek(_info_from(peeked.meta, peeked.user_version), peeked.activity_count)
 
-    def open(self, folder: Path) -> OpenProfile:
+    def open(self, folder: Path, *, check_integrity: bool = True) -> OpenProfile:
         """Apre il database, migrandolo se è più vecchio (con copia di sicurezza in `backup/`).
+
+        `check_integrity=False` salta i controlli di integrità completi: solo per una seconda
+        connessione a un profilo già aperto e verificato (la sincronizzazione).
 
         Raises:
             ProfileNotFoundError: manca il database.
@@ -160,7 +170,7 @@ class SqliteProfileStorage:
             ProfileCorruptError: database illeggibile, non integro o non di un profilo.
             ProfileStorageError: altro guasto o migrazione fallita (il database resta com'era).
         """
-        db = open_database(folder / PROFILE_DATABASE_NAME)
+        db = open_database(folder / PROFILE_DATABASE_NAME, check_integrity=check_integrity)
         try:
             return SqliteOpenProfile(db, _read_info(db))
         except BaseException:

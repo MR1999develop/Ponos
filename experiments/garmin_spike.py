@@ -9,7 +9,8 @@ Si lancia a mano dall'utente nel proprio terminale:
 
 Non e' codice di produzione: serve a misurare (login con MFA, dimensione dei
 token e portachiavi, tempi dello storico, download FIT, differenza d'orario,
-funzioni del calendario) e a scrivere `garmin_spike.md` con soli dati non
+funzioni del calendario) e a scrivere `garmin_spike.md` e `garmin_spike_shapes.json`
+(strutture anonime delle risposte) con soli dati non
 personali. Password, token, id e nomi non vengono mai stampati ne' salvati
 nel rapporto.
 """
@@ -21,6 +22,7 @@ import getpass
 import importlib.metadata
 import inspect
 import io
+import json
 import logging
 import os
 import platform
@@ -46,6 +48,7 @@ from garminconnect import (
     GarminConnectConnectionError,
     GarminConnectTooManyRequestsError,
 )
+from spike_shapes import shape_of
 
 # --- Costanti (un solo posto) ------------------------------------------------
 
@@ -54,6 +57,7 @@ KEYRING_USER = "tokens"
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "spike-data"
 REPORT_PATH = BASE_DIR / "garmin_spike.md"
+SHAPES_PATH = BASE_DIR / "garmin_spike_shapes.json"
 ZIP_NAME = "original.zip"
 FIT_NAME = "activity.fit"
 
@@ -125,6 +129,7 @@ class State:
     list_seconds_per_page: float | None = None
     download_seconds: list[float] = field(default_factory=list)
     offsets_s: list[float] = field(default_factory=list)
+    shapes: dict[str, object] = field(default_factory=dict)
 
 
 def describe_error(exc: BaseException) -> str:
@@ -208,6 +213,7 @@ def step_login(state: State) -> None:
         state.report.fact("MFA richiesta", "si" if mfa_used else "no")
     state.garmin = garmin
     state.token_json = garmin.client.dumps()
+    record_token_shape(state)
     state.report.fact("Login", "riuscito")
 
 
@@ -219,6 +225,12 @@ def step_keyring_roundtrip(state: State) -> None:
     report = state.report
     report.fact("Dimensione token serializzati (byte UTF-8)", size_bytes)
     report.fact("Dimensione token serializzati (caratteri)", len(state.token_json))
+    utf16_bytes = len(state.token_json.encode("utf-16-le"))
+    report.fact("Dimensione token serializzati (byte UTF-16)", utf16_bytes)
+    report.fact(
+        "Token oltre il limite del Credential Manager (UTF-16)",
+        yes_no(utf16_bytes > WINDOWS_CRED_LIMIT_BYTES),
+    )
     report.fact("Limite Credential Manager generico (byte)", WINDOWS_CRED_LIMIT_BYTES)
     report.fact("Backend portachiavi", type(keyring.get_keyring()).__name__)
     try:
@@ -255,6 +267,8 @@ def step_list_recent(state: State) -> None:
         has_hr = "si" if item.get("averageHR") else "no"
         print(f"  {kind:<20} {start}  {minutes:6.1f} min  FC: {has_hr}")
     remember_candidates(state, items)
+    if items:
+        state.shapes["activity_list_item"] = shape_of(items[0])
     state.report.fact("Ultime attivita' elencate", len(items))
 
 
@@ -293,13 +307,15 @@ def step_count_history(state: State) -> None:
     state.total_activities = total
     if failure is not None:
         raise failure
-    _report_declared_total(throttle, report, garmin)
+    _report_declared_total(throttle, state, garmin)
 
 
-def _report_declared_total(throttle: Throttle, report: Report, garmin: Garmin) -> None:
+def _report_declared_total(throttle: Throttle, state: State, garmin: Garmin) -> None:
     """Riporta il totale dichiarato da Garmin; un errore qui non ferma lo spike."""
+    report = state.report
     try:
         declared = throttle.call(garmin.count_activities)
+        state.shapes["count_activities_response"] = shape_of(declared)
         report.fact("Totale dichiarato da count_activities", declared)
     except Exception as exc:
         report.fact(
@@ -368,6 +384,7 @@ def step_calendar_readonly(state: State) -> None:
     scheduled: object = throttle.call(
         lambda: garmin.get_scheduled_workouts_by_period(today.isoformat(), end.isoformat())
     )
+    state.shapes["scheduled_workouts_response"] = shape_of(scheduled)
     count = len(scheduled) if isinstance(scheduled, list) else -1
     report.fact(f"Allenamenti programmati nei prossimi {CALENDAR_DAYS} giorni", count)
     for group, names in workout_methods(garmin).items():
@@ -381,6 +398,32 @@ def require_garmin(state: State) -> Garmin:
     if state.garmin is None:
         raise SpikeError("client non autenticato (login non riuscito)")
     return state.garmin
+
+
+def record_token_shape(state: State) -> None:
+    """Salva solo la struttura anonima del JSON dei token (mai i valori)."""
+    try:
+        parsed: object = json.loads(state.token_json or "")
+    except ValueError:
+        state.shapes["token_json"] = {"type": "non-json"}
+        return
+    state.shapes["token_json"] = shape_of(parsed)
+
+
+def write_shapes(state: State) -> None:
+    """Scrive `garmin_spike_shapes.json`: solo strutture, nessun valore."""
+    names = (
+        "activity_list_item",
+        "count_activities_response",
+        "scheduled_workouts_response",
+        "token_json",
+    )
+    document = {
+        "note": "Struttura anonima delle risposte: nomi di chiavi, tipi, lunghezze, "
+        "ordini di grandezza. Nessun valore.",
+        "shapes": {name: state.shapes.get(name) for name in names},
+    }
+    SHAPES_PATH.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
 
 def yes_no(value: bool) -> str:
@@ -703,7 +746,8 @@ def main(argv: list[str] | None = None) -> int:
     if "login" in state.report.steps_failed:
         state.report.fact("Login", "FALLITO")
     write_report(state)
-    print(f"Rapporto scritto in {REPORT_PATH.name}.")
+    write_shapes(state)
+    print(f"Rapporto scritto in {REPORT_PATH.name}, strutture in {SHAPES_PATH.name}.")
     return 1 if state.report.steps_failed else 0
 
 

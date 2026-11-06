@@ -43,8 +43,9 @@ Pacchetti per funzionalità in `src/ponos_coach/` (`activities`, `load`,
 (`garmin`, `storage`, `platform`), `ui`, Composition Root in `__main__.py`.
 
 - Ogni profilo ha una cartella scelta dall'utente con tutti i suoi dati
-  (database, archivio FIT, backup); i token Garmin stanno nel portachiavi
-  del sistema, legati all'id del profilo, mai nella cartella.
+  (database, archivio FIT, backup). I token Garmin, legati all'id del
+  profilo, sono protetti dal sistema (DPAPI su Windows, Secret Service su
+  Linux) e non stanno mai nella cartella.
 
 - Dipendenze in una sola direzione: `ui → casi d'uso → dominio`; gli
   adattatori implementano porte definite nelle funzionalità.
@@ -114,7 +115,7 @@ parallelo sul codice nel suo worktree.
    - Motivo: Garmin non ha un'API ufficiale per i privati; l'unico accesso è
      il login non ufficiale usato da `garminconnect`.
    - Compensazione: la password si inserisce in un dialogo dell'app, va solo
-     a `garminconnect` e non si salva; token nel portachiavi del sistema;
+     a `garminconnect` e non si salva; token protetti dal sistema (DPAPI su Windows, Secret Service su Linux);
      MFA supportato; adattatore isolato dietro una porta; import FIT manuale
      sempre disponibile.
 2. **Firma degli eseguibili** (permanente).

@@ -24,13 +24,18 @@ from ponos_coach.activities.domain import (
     ActivitySummary,
     ArchivedFile,
     FileFormat,
+    GarminActivityId,
     GeoPoint,
     Sport,
     identity_from_key,
     identity_key,
     is_possible_duplicate,
 )
-from ponos_coach.activities.ports import ActivityIndexError, DuplicateActivityError
+from ponos_coach.activities.ports import (
+    ActivityIndexError,
+    ActivityNotFoundError,
+    DuplicateActivityError,
+)
 from ponos_coach.load.domain import (
     ActivityLoad,
     HeartRateLimits,
@@ -209,6 +214,34 @@ class SqliteActivityIndex:
                 _SELECT_ACTIVITIES + "ORDER BY start_ms, identity_key"
             ).fetchall()
         return _records(rows)
+
+    def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
+        """Il record con questo id Garmin, o None."""
+        with _translating(ActivityIndexError):
+            row = self._db.connection.execute(
+                _SELECT_ACTIVITIES + "WHERE garmin_activity_id = ?", (garmin_id.value,)
+            ).fetchone()
+        return None if row is None else _records([row])[0]
+
+    def link_garmin_id(self, identity: ActivityIdentity, garmin_id: GarminActivityId) -> None:
+        """Collega l'id Garmin a un record che non ne ha ancora uno (idempotente)."""
+        key = identity_key(identity)
+        try:
+            cursor = self._db.connection.execute(
+                "UPDATE activities SET garmin_activity_id = ? WHERE identity_key = ? "
+                "AND (garmin_activity_id IS NULL OR garmin_activity_id = ?)",
+                (garmin_id.value, key, garmin_id.value),
+            )
+        except sqlite3.IntegrityError as exc:
+            if _is_unique_violation(exc):
+                raise DuplicateActivityError("id Garmin già assegnato") from exc
+            raise ActivityIndexError("record rifiutato dai vincoli del database") from exc
+        except sqlite3.Error as exc:
+            raise ActivityIndexError("operazione sul database non riuscita") from exc
+        if cursor.rowcount == 0:
+            if not self.exists(identity):
+                raise ActivityNotFoundError("attività non presente nell'indice")
+            raise DuplicateActivityError("l'attività ha già un altro id Garmin")
 
 
 class SqlitePhysiologyStore:

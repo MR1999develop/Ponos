@@ -1,7 +1,9 @@
 # Threat model
 
-Versione della fase 1 (2026-11-05, aggiornata il 2026-11-06 con i difetti del
-collaudo e il confine dei log), sulla base di quella della fase 0. Da
+Versione della fase 2 (2026-11-06): aggiunge il login nell'app, l'archivio dei
+token, le risposte e i download di Garmin, i log della libreria e le notifiche.
+Sulla base di quella della fase 1 (2026-11-05, aggiornata il 2026-11-06 con i
+difetti del collaudo e il confine dei log) e della fase 0. Da
 riaggiornare nella stessa modifica di ogni funzione che tocca un confine di
 fiducia. Gli identificativi dei test (`T-SEC-04`…) sono quelli della sezione 7
 di `PLAN.md`.
@@ -57,20 +59,22 @@ Confini:
 
 | Id | Confine | Dati che lo attraversano |
 |---|---|---|
-| B1 | Garmin Connect → app | risposte JSON, FIT scaricati (zip), codici di errore, MFA |
+| B1 | Garmin Connect → app | risposte JSON, FIT scaricati (zip), codici di errore, intestazione `Retry-After`, richiesta del codice MFA |
 | B2 | File FIT, GPX e ZIP importati a mano, trascinati o da una cartella → app | file, nomi, percorsi, collegamenti, voci di archivio |
 | B3 | App ↔ cartella del profilo | database, archivio, backup, lock, permessi |
 | B4 | App → pagina web dei grafici | dati dei grafici come JSON, nomi di attività |
-| B5 | App ↔ portachiavi del sistema | token Garmin |
+| B5 | App ↔ archivio dei token (Windows: file cifrato con DPAPI in `secrets/` nella cartella dati locale dell'app; Ubuntu: Secret Service) | token Garmin, per id del profilo |
 | B6 | App → file di log nella cartella dei log dell'utente (`ponos-coach.log`) | eventi, tipi delle eccezioni |
 | B7 | Sviluppo → utente | eseguibile, dipendenze, workflow di rilascio |
 | B8 | App ↔ cartella di configurazione | elenco dei profili (id, cartella, nome, ultimo uso), lock dell'elenco |
+| B9 | Utente → dialogo di login → libreria `garminconnect` | email, password, codice MFA (solo in memoria, nel thread del login) |
+| B10 | App → notifiche del sistema | titolo fisso e numero di attività nuove |
 
 ### Asset
 
 | Asset | Perché conta |
 |---|---|
-| Credenziali e token Garmin | accesso all'account dell'utente |
+| Credenziali e token Garmin | accesso all'account dell'utente; la password e il codice MFA vivono solo nel thread del login, i token nel loro archivio |
 | Account Garmin dell'utente | blocco (429) o segnalazione per uso anomalo; calendario modificabile |
 | Dati di salute: FC, infortuni, dolore, note del medico | riservatezza |
 | Posizioni GPS delle attività | rivelano casa e abitudini |
@@ -83,8 +87,9 @@ Confini:
 ### Assunzioni
 
 - La macchina e l'account dell'utente non sono compromessi.
-- Credential Manager (Windows) e Secret Service (Ubuntu) sono leggibili da
-  ogni processo dell'utente: il token non è protetto da altre sue applicazioni.
+- DPAPI (Windows, ambito utente) e Secret Service (Ubuntu) rendono il token
+  leggibile da ogni processo dell'utente: non è protetto da altre sue
+  applicazioni. Il Credential Manager non si usa (limite di 2560 byte, ADR 006).
 - Garmin, Qt e le dipendenze non sono malevoli, ma le risposte e i file che
   arrivano da fuori non sono fidati.
 - L'utente sceglie cartelle e file da importare; non tutti i file in una
@@ -104,8 +109,20 @@ servizio, E elevazione dei privilegi.
 | B1 | Nomi di attività con HTML o script arrivano alla pagina o ai log | T, E | T-SEC-03, T-SEC-06, T-SEC-08 |
 | B1 | Server falso o intercettazione della rete | S, I | TLS con verifica completa (T-SEC-11 per la configurazione) |
 | B1 | 429, 5xx, timeout, risposte troncate: ritentativi senza fine, account bloccato | D | T-SYNC-03 |
+| B1 | `Retry-After` ostile (negativo, NaN, enorme, cifre non ASCII) che fa sollevare il caso d'uso o dormire a lungo | D | T-SYNC-03, D-F2-01, D-F2-02 |
 | B1 | Token scaduto o revocato; login fallito che salva uno stato parziale | S | T-SYNC-04 |
 | B1 | FIT scaricato rovinato o ostile | T, D | T-SEC-01, T-SEC-02 |
+| B1 | ZIP scaricato ostile (bomba, nessuna voce, due file, nomi con `../`) | T, D | T-SEC-02, T-SEC-03, T-SYNC-03 |
+| B1 | Download che è un'altra attività rispetto all'id elencato, registrato sotto l'id sbagliato | T | T-SYNC-05, D-F2-03 |
+| B1 | Elenco che scivola durante la prima sincronizzazione e fa perdere attività vecchie | T | T-SYNC-01, D-F2-04 |
+| B1 | Risposta o download enormi letti per intero in memoria dalla libreria prima del tetto | D | rischio accettato (sezione 5) |
+| B1 | Elenco senza fine (oltre 1.000.000 di voci) | D | nessun test: punto aperto |
+| B1 | Il testo di un errore della libreria (con id o frammenti di risposta) arriva ai log o all'utente | I | T-SEC-08 |
+| B1 | Una richiesta bloccata non si può annullare: sincronizzazione che non si ferma | D | T-SYNC-06; timeout non interrompibili: rischio accettato |
+| B9 | Password o codice MFA salvati, registrati o mostrati (`repr`, log, eccezioni) | I | T-SEC-07, T-SEC-08 |
+| B9 | Login annullato o fallito che lascia token parziali; attesa del codice senza fine | T, D | T-SEC-07, T-SYNC-04 |
+| B9 | Codice MFA vuoto o enorme inviato a Garmin; tentativi di codice illimitati | D | T-SYNC-04 (`tests/garmin/test_account.py`) |
+| B9 | Email o password vuote o enormi inviate alla libreria | D | T-SYNC-04 (`tests/garmin/test_account.py`) |
 | B2 | FIT con dimensioni dichiarate enormi, record senza fine, estensione falsa | D | T-SEC-01, T-SEC-02 |
 | B2 | FIT o GPX con inizio o fine assurdi (fuori da 1990–2099 UTC) che sporcano archivio, tabella e calcoli | T | T-SEC-02, T-GPX-01 |
 | B2 | GPX con DTD o entità (anche esterne), espansione esponenziale (XXE, billion laughs) | I, D | T-SEC-02, T-GPX-01 |
@@ -135,9 +152,14 @@ servizio, E elevazione dei privilegi.
 | B4 | La pagina fa richieste di rete o carica immagini remote | I | T-SEC-06 |
 | B4 | Script nei dati eseguito nella pagina; ponte verso il codice dell'app | E | T-SEC-06 |
 | B4 | Esportazione SVG/PNG con contenuto non voluto | I | T-UI-04 |
-| B5 | Token nella cartella, nella configurazione, nei log, nei temporanei | I | T-SEC-07 |
+| B5 | Token nella cartella, nella configurazione, nei log, nei temporanei, nei backup | I | T-SEC-07 |
 | B5 | Token non cancellato dopo il logout | I | T-SEC-07 |
 | B5 | Altro processo dell'utente legge il token | I | rischio accettato (assunzioni) |
+| B5 | Il file di un profilo copiato in un altro si decifra o i token di un profilo si usano per un altro | S, I | T-SYNC-04 |
+| B5 | File dei token alterato, troncato, enorme o di formato sconosciuto | T, D | T-SYNC-04 |
+| B5 | Ripiego silenzioso su un file in chiaro quando manca il Secret Service | I | T-SEC-07 (contratto `TokenStore`) |
+| B5 | Token che non sono un oggetto JSON letti dalla libreria come percorso di un file | T, E | T-SYNC-04 |
+| B10 | Dati personali nel testo della notifica; notifica che blocca la UI o fa cadere la sincronizzazione | I, D | T-SEC-08, `tests/platform/test_notifier.py` |
 | B6 | Dati di salute, password o input non controllato nei log | I | T-SEC-08 |
 | B6 | Percorsi, nomi di file o posizioni GPS nei log | I | T-SEC-08 |
 | B6 | Iniezione di righe di log con caratteri di controllo | T, R | T-SEC-08 |
@@ -221,10 +243,44 @@ servizio, E elevazione dei privilegi.
   (T-DATI-06).
 - Pagina dei grafici: solo contenuto locale, rete bloccata da un intercettore,
   dati come JSON codificato, nessun `QWebChannel`.
-- Token nel portachiavi del sistema, legati all'id del profilo; la password va
-  solo a `garminconnect` e non si salva.
+- Login Garmin nell'app (eccezione scritta in `CLAUDE.md`, ADR 002). La
+  password e il codice MFA passano solo a `garminconnect`, non si salvano e non
+  compaiono in `repr`, messaggi o log; email e password vuote o enormi sono
+  rifiutate prima di contattare Garmin; il codice MFA vuoto o enorme non si
+  invia, i tentativi di codice sono al più 3 e l'attesa del codice ha un tetto
+  di 5 minuti. Un login annullato o fallito non salva nulla.
+- Token (ADR 006): su Windows un file per profilo cifrato con DPAPI (ambito
+  utente) in una cartella privata fuori dal profilo, con entropia legata
+  all'app e all'id del profilo, formato versionato e lettura con un tetto di
+  dimensione; su Ubuntu il Secret Service, e nessun ripiego in chiaro se manca.
+  Mai nella cartella del profilo né nel backup. Un file illeggibile o alterato
+  chiede un nuovo login. Il logout cancella i token. Alla ripresa, token che non
+  sono un oggetto JSON non arrivano alla libreria (potrebbe leggerli come un
+  percorso). I token rinnovati dalla libreria si risalvano.
+- Risposte di Garmin (B1): l'elenco diventa tipi di dominio al confine (id
+  numerici semplici, orari e durate plausibili, chiave dello sport semplice);
+  una voce malformata si scarta, una pagina oltre il tetto o non interpretabile
+  è un errore definitivo; nessun testo libero di Garmin (nomi, descrizioni)
+  entra nel dominio. Il totale dichiarato serve solo all'avanzamento.
+- Download di Garmin: tetto di 50 MB sullo ZIP; l'originale si estrae con i
+  limiti dell'adattatore ZIP e passa dagli stessi controlli dei file importati;
+  deve coincidere con la voce elencata (inizio, durata) o la voce fallisce e
+  non si registra. L'archivio si scrive prima della transazione del record.
 - Poche richieste a Garmin, pause con jitter, backoff con tetto e numero
-  massimo di tentativi.
+  massimo di tentativi; la libreria ritenta zero volte. `Retry-After` si legge
+  solo se è un numero con cifre ASCII; un valore illeggibile è ignorato, uno
+  implausibile ferma la sincronizzazione. Dopo 3 voci di fila con Garmin
+  irraggiungibile ci si ferma senza consumare i tentativi delle voci.
+- Log della libreria: `garminconnect` a livello critico (a livello errore
+  registra il percorso della richiesta, con l'id dell'attività, e il testo
+  degli errori); `requests`, `urllib3`, `curl_cffi` ad avviso. Nei nostri
+  log degli errori della sincronizzazione solo il tipo.
+- Notifiche: titolo fisso e numero di attività nuove, mai nomi né dati; partono
+  in un thread proprio, una per volta, e se falliscono resta un record col solo
+  tipo.
+- Sincronizzazione su un thread con una connessione propria; annullamento
+  cooperativo controllato prima di ogni richiesta, voce e pagina, con pause
+  interrompibili.
 - Log nel solo guscio (`ui/diagnostics.py`, configurato dal Composition
   Root). Mai dati di salute, token, password, percorsi, nomi di file o
   posizioni GPS. I messaggi per l'utente nascono in un solo punto e non
@@ -270,13 +326,13 @@ servizio, E elevazione dei privilegi.
 | GPX ostili (XXE, espansione, profondità, punti) | T-SEC-02, T-GPX-01 |
 | ZIP ostili (bomba, voci, nomi, cifrati, annidati) | T-SEC-02, T-IMP-04 |
 | Orari fuori da 1990–2099 | T-SEC-02, T-GPX-01 |
-| JSON ostili di Garmin | T-SEC-03 |
+| JSON, ZIP e `Retry-After` ostili di Garmin | T-SEC-03, T-SYNC-03 |
 | Percorsi, link, reparse point, nomi riservati, scansione di cartelle | T-SEC-04 |
 | Cancellazione della cartella di un profilo | T-SEC-04, T-DATI-04, T-UI-03 |
 | SQL | T-SEC-05 |
 | Pagina dei grafici | T-SEC-06, T-UI-04 |
-| Segreti | T-SEC-07 |
-| Log (salute, percorsi, nomi, posizioni, controlli, rotazione, gestore di ultima istanza) | T-SEC-08 |
+| Segreti (password, codice MFA, token; login, sincronizzazione, kill, logout) | T-SEC-07 |
+| Log (salute, percorsi, nomi, posizioni, controlli, rotazione, gestore di ultima istanza, sincronizzazione intera) | T-SEC-08 |
 | Creazione di un profilo interrotta o in gara | T-DATI-06 |
 | Cartella del profilo, permessi e archivio | T-SEC-09 |
 | Lock del profilo e dell'elenco | T-DATI-04 |
@@ -286,6 +342,10 @@ servizio, E elevazione dei privilegi.
 | Pacchetto | T-SEC-12 |
 | Revisione finale | T-SEC-13 |
 | Sincronizzazione ostile o interrotta | T-SYNC-02, T-SYNC-03, T-SYNC-04, T-SYNC-06 |
+| Elenco completo e incrementale, elenco che scivola | T-SYNC-01, D-F2-04 |
+| Abbinamento con gli import, download di un'altra attività | T-SYNC-05, D-F2-03 |
+| Token, login e MFA | T-SYNC-04, T-SEC-07 |
+| Notifiche | T-SEC-08 (`tests/platform/test_notifier.py`) |
 | Import di file, cartelle e ZIP | T-IMP-01, T-IMP-02, T-IMP-03, T-IMP-04 |
 | Duplicati tra FIT e GPX | T-GPX-02 |
 | Integrità e crash | T-DATI-01, T-DATI-02, T-DATI-03, T-DATI-05 |
@@ -312,6 +372,19 @@ difetto non si considera chiuso senza. I test dei difetti hanno l'id nel nome
 | D-F1-09 | Una geometria salvata di tipo sbagliato bloccava l'apertura della finestra | Finestra di dimensioni predefinite | T-UI-07 | `tests/collaudo/test_interfaccia.py`, `tests/ui/test_window_lifecycle.py` |
 | D-F1-10 | Il primo disegno del grafico teneva fermo il ciclo degli eventi oltre 100 ms | Figura e JSON si costruiscono nel thread dei dati; il motore web parte dopo il primo `show()` | T-UI-02 | `tests/collaudo/test_prestazioni.py`, `tests/ui/test_window_lifecycle.py` |
 
+### Casi chiusi dal collaudo della fase 2 (D-F2)
+
+Difetti trovati dalla revisione e dal collaudo della sincronizzazione
+(D-F2-01…04, citati nei test) e comportamento che li chiude. I test dei
+difetti hanno l'id nel nome (`test_d_f2_NN_…`) o in un commento.
+
+| Id | Difetto | Comportamento | Test (piano) | Test (file) |
+|---|---|---|---|---|
+| D-F2-01 | `Retry-After` con una cifra che `float()` non legge (per esempio un apice) faceva sollevare l'adattatore | Si accettano solo cifre ASCII, intere o decimali; altrimenti nessuna attesa suggerita e vale il solo backoff | T-SYNC-03 | `tests/collaudo/test_fase2_garmin_ostile.py`, `tests/garmin/test_errors.py` |
+| D-F2-02 | Un'attesa suggerita negativa, NaN o infinita faceva sollevare il caso d'uso invece di dare un esito | `RateLimitedError` porta un valore implausibile; la sincronizzazione si ferma con "limite di frequenza", senza dormire | T-SYNC-03 | `tests/collaudo/test_fase2_garmin_ostile.py` |
+| D-F2-03 | Un download che era un'altra attività rispetto all'id elencato si registrava sotto quell'id | Il file deve coincidere con la voce (inizio e durata, regola dei duplicati); se no la voce fallisce in modo definitivo (`REMOTE_REJECTED`) e non si registra nulla | T-SYNC-05 | `tests/collaudo/test_fase2_sincronizzazione.py`, `tests/activities/test_sync_errors.py` |
+| D-F2-04 | Se Garmin riceveva un'attività nuova durante la prima sincronizzazione, la più vecchia scivolava oltre il totale dichiarato e non si elencava | L'elenco finisce con una pagina corta o vuota, mai al totale dichiarato; il totale serve solo all'avanzamento; la verifica completa recupera ciò che fosse sfuggito | T-SYNC-01 | `tests/collaudo/test_fase2_sincronizzazione.py`, `tests/activities/test_sync_volume.py`, `tests/activities/test_sync_domain.py` |
+
 Casi chiusi dalla revisione e dalla correzione del nucleo (gli id `R` sono
 quelli citati nei test):
 
@@ -333,7 +406,11 @@ quelli citati nei test):
 |---|---|
 | API Garmin non ufficiale: può rompersi, può violare i termini d'uso, può portare al blocco dell'account | Non esiste un accesso ufficiale per i privati (ADR 002). Compensazioni: adattatore isolato, poche richieste, import FIT sempre disponibile. |
 | Eseguibili non firmati | Progetto personale senza certificato di firma. Compensazione: `SHA256SUMS`, README con verifica dell'hash e avviso di SmartScreen. |
-| Token leggibili da ogni processo dell'utente | Limite del Credential Manager e del Secret Service; la macchina è assunta non compromessa. |
+| Token leggibili da ogni processo dell'utente | DPAPI in ambito utente e il Secret Service proteggono dagli altri utenti, non dagli altri processi dello stesso utente. Il Credential Manager, scartato perché non contiene i token (2560 byte), avrebbe avuto lo stesso limite. Una password che l'utente deve digitare a ogni avvio andrebbe contro l'uso quotidiano. La macchina è assunta non compromessa. Compensazione: il logout cancella i token. |
+| Timeout della libreria non interrompibili | Il timeout è della libreria (15 s per richiesta, 30 s per passo di login) e non si configura senza toccare parti interne. L'annullamento vale dalla richiesta successiva: una richiesta già partita finisce o scade da sola. Compensazione: il giornale rende la ripresa sicura in ogni punto. |
+| Risposta o download letti per intero in memoria dalla libreria prima del tetto | Il tetto di 50 MB si applica dopo la lettura. Compensazione: il timeout di 15 s e i limiti dello ZIP a valle (T-SEC-02). |
+| Entropia di DPAPI non segreta | Il codice è pubblico; l'entropia lega il file all'app e al profilo, non protegge dall'utente stesso. |
+| Abbinamento sbagliato tra due attività quasi uguali (60 s, 5%, stesso sport) | Il file originale importato resta; l'altra attività non si scarica. Come per i duplicati tra FIT e GPX, meglio non perdere dati. |
 | Dati di salute in chiaro nella cartella del profilo, protetti solo dai permessi del sistema | Semplicità e apertura con altri strumenti; cifrare richiede gestione di una password e di una chiave di recupero. Accettato dall'utente il 2026-11-05. Compensazione: permessi della cartella solo per l'utente (T-SEC-09); il README consiglia la cifratura del disco (BitLocker su Windows, LUKS su Ubuntu). |
 | Copie del database in `backup/` e file dell'archivio con gli stessi dati di salute | Stesso rischio e stessa compensazione della cartella del profilo: stessi permessi privati. |
 | Cartella del profilo su rete o in una cartella sincronizzata | L'app avverte ma non vieta: l'utente può avere un NAS affidabile. Su questi posti il lock e il WAL di SQLite non sono garantiti; un database rovinato si segnala all'apertura. |
@@ -347,5 +424,13 @@ quelli citati nei test):
 
 - Il backup contiene dati di salute: formato e protezione da decidere in
   fase 8.
-- I difetti D-F1 non sono ancora registrati in `docs/collaudo.md`: lo fa la
-  sessione principale.
+- Nessun test copre il tetto di 1.000.000 di voci elencate
+  (`MAX_LISTED_ACTIVITIES`).
+- La forma reale delle risposte di Garmin (chiavi dello sport, campi
+  dell'elenco) è verificata solo sulle fixture: manca lo spike dal vivo della
+  fase 0, che lancia l'utente (`experiments/README.md`). I valori di
+  `SyncPolicy` vanno rivisti con il suo esito.
+- Il comportamento della chiusura durante un login o un download è in
+  evoluzione nella fase 2; da rileggere con la versione finale.
+- I difetti D-F1 e D-F2 non sono ancora registrati in `docs/collaudo.md`: lo
+  fa la sessione principale.

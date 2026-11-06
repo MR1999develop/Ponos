@@ -17,9 +17,14 @@ from pathlib import Path
 
 import pytest
 
+from ponos_coach.activities.domain import GarminActivityId, ListingKind, SyncStatus
 from ponos_coach.load.domain import Sex
 from ponos_coach.profiles.domain import PROFILE_DATABASE_NAME, ProfileId
-from ponos_coach.profiles.ports import ProfileCorruptError, ProfileFormatTooNewError
+from ponos_coach.profiles.ports import (
+    ProfileCorruptError,
+    ProfileFormatTooNewError,
+    ProfileStorageError,
+)
 from ponos_coach.storage import sqlite_database, sqlite_schema
 from ponos_coach.storage.sqlite_profile import SqliteProfileStorage
 from tests.collaudo.support import (
@@ -85,6 +90,41 @@ FROZEN_V1 = (
         source TEXT NOT NULL CHECK (source IN ('heart_rate','estimate'))
     ) STRICT""",
 )
+# Migrazione v2 (sincronizzazione Garmin) come fu rilasciata. Non si cambia, come la v1.
+FROZEN_V2 = (
+    """CREATE TABLE sync_journal (
+        garmin_id INTEGER NOT NULL PRIMARY KEY CHECK (garmin_id > 0),
+        start_ms INTEGER NOT NULL,
+        duration_s REAL NOT NULL CHECK (duration_s > 0),
+        sport_key TEXT NOT NULL CHECK (length(sport_key) BETWEEN 1 AND 64),
+        has_heart_rate INTEGER CHECK (has_heart_rate IS NULL OR has_heart_rate IN (0, 1)),
+        status TEXT NOT NULL CHECK (status IN
+            ('pending','downloaded','matched','retryable','failed')),
+        failed_attempts INTEGER NOT NULL CHECK (failed_attempts >= 0),
+        failure TEXT CHECK (failure IS NULL OR failure IN
+            ('transient_error','rate_limited','unsupported_format','corrupt_file',
+             'file_too_large','not_an_activity','archive_invalid','remote_rejected',
+             'attempts_exhausted')),
+        updated_ms INTEGER NOT NULL,
+        CHECK ((status IN ('retryable', 'failed')) = (failure IS NOT NULL)),
+        CHECK (status <> 'pending' OR failed_attempts = 0),
+        CHECK (status NOT IN ('retryable', 'failed') OR failed_attempts >= 1),
+        CHECK (status <> 'retryable' OR failure IN ('transient_error','rate_limited')),
+        CHECK (status <> 'failed' OR failure NOT IN ('transient_error','rate_limited'))
+    ) STRICT""",
+    """CREATE INDEX sync_journal_to_do ON sync_journal (start_ms DESC, garmin_id DESC)
+        WHERE status IN ('pending', 'retryable')""",
+    """CREATE TABLE sync_cursor (
+        kind TEXT NOT NULL PRIMARY KEY CHECK (kind IN ('full','verify','incremental')),
+        next_offset INTEGER NOT NULL CHECK (next_offset >= 0),
+        declared_total INTEGER CHECK (declared_total IS NULL OR declared_total >= 0),
+        completed INTEGER NOT NULL CHECK (completed IN (0, 1))
+    ) STRICT""",
+    """CREATE TABLE sync_state (
+        id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+        last_completed_ms INTEGER NOT NULL
+    ) STRICT""",
+)
 START = datetime(2026, 3, 2, 7, 0, tzinfo=UTC)
 START_MS = int(START.timestamp()) * 1000
 ARCHIVE_PATH = "2026/" + "ab" * 32 + ".fit"
@@ -143,6 +183,88 @@ def test_t_dati_01_the_released_v1_migration_has_not_changed() -> None:
     assert released == tuple(squash(statement) for statement in FROZEN_V1)
 
 
+def test_t_dati_01_the_released_v2_migration_has_not_changed() -> None:
+    released = tuple(squash(statement) for statement in sqlite_schema.MIGRATIONS[1])
+
+    assert released == tuple(squash(statement) for statement in FROZEN_V2)
+
+
+def test_t_dati_01_a_frozen_v1_database_is_migrated_to_v2_with_data_intact_and_a_copy(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / PROFILE_DATABASE_NAME
+    write_frozen_v1(path)
+    tables = ("meta", "activities", "physiology", "load_cache")
+    before = {table: rows(path, table) for table in tables}
+
+    opened = SqliteProfileStorage().open(tmp_path)
+    try:
+        assert opened.info.format_version == 2
+        assert opened.sync_journal.counts()[SyncStatus.PENDING] == 0
+        assert opened.sync_journal.load_cursor(ListingKind.FULL) is None
+        (record,) = opened.activities.list_by_start()
+        opened.activities.link_garmin_id(record.identity, GarminActivityId(42))
+    finally:
+        opened.close()
+
+    after = {table: rows(path, table) for table in tables}
+    assert after["meta"] == before["meta"]  # compreso 'futuro'
+    assert after["physiology"] == before["physiology"]
+    assert after["load_cache"] == before["load_cache"]
+    assert [row[:-1] for row in after["activities"]] == [row[:-1] for row in before["activities"]]
+    [copy] = sorted((tmp_path / "backup").glob("*"))
+    assert copy.name == "ponos-v1-v2.sqlite3"
+    assert {table: rows(copy, table) for table in tables} == before
+    with closing(sqlite3.connect(copy)) as raw:
+        assert raw.execute("PRAGMA user_version").fetchone() == (1,)
+        names = {r[0] for r in raw.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert names == set(tables)
+
+
+def test_t_dati_01_a_frozen_v1_database_gets_exactly_the_v2_tables(tmp_path: Path) -> None:
+    path = tmp_path / PROFILE_DATABASE_NAME
+    write_frozen_v1(path)
+
+    SqliteProfileStorage().open(tmp_path).close()
+
+    with closing(sqlite3.connect(path)) as raw:
+        assert raw.execute("PRAGMA user_version").fetchone() == (2,)
+        names = {r[0] for r in raw.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert names == {
+        "meta",
+        "activities",
+        "physiology",
+        "load_cache",
+        "sync_journal",
+        "sync_cursor",
+        "sync_state",
+    }
+
+
+def test_t_dati_01_a_frozen_v1_database_opened_twice_migrates_once(tmp_path: Path) -> None:
+    path = tmp_path / PROFILE_DATABASE_NAME
+    write_frozen_v1(path)
+
+    SqliteProfileStorage().open(tmp_path).close()
+    SqliteProfileStorage().open(tmp_path).close()
+
+    assert len(list((tmp_path / "backup").glob("*"))) == 1
+
+
+def test_t_dati_01_a_frozen_v1_database_that_cannot_be_copied_is_not_migrated(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / PROFILE_DATABASE_NAME
+    write_frozen_v1(path)
+    (tmp_path / "backup").write_bytes(b"un file, non una cartella")
+
+    with pytest.raises(ProfileStorageError):
+        SqliteProfileStorage().open(tmp_path)
+
+    with closing(sqlite3.connect(path)) as raw:
+        assert raw.execute("PRAGMA user_version").fetchone() == (1,)
+
+
 def test_t_dati_01_a_frozen_v1_database_is_read_by_the_current_code(tmp_path: Path) -> None:
     write_frozen_v1(tmp_path / PROFILE_DATABASE_NAME)
 
@@ -185,7 +307,7 @@ def test_t_dati_01_a_future_migration_keeps_every_v1_row_and_the_unknown_keys(
     assert rows(path, "physiology") == before["physiology"]
     assert rows(path, "load_cache") == before_cache
     with closing(sqlite3.connect(path)) as raw:
-        assert raw.execute("PRAGMA user_version").fetchone() == (2,)
+        assert raw.execute("PRAGMA user_version").fetchone() == (sqlite_schema.SCHEMA_VERSION + 1,)
 
 
 def test_t_dati_01_migrating_twice_is_the_same_as_once(

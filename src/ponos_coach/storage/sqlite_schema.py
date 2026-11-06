@@ -17,6 +17,16 @@ Colonne di v1 (tutte `STRICT`, tempi in millisecondi UTC interi):
 - `physiology`: parametri validi da `valid_from` (data ISO, chiave primaria).
 - `load_cache`: un carico per attività (chiave esterna con `ON DELETE CASCADE`), con l'impronta
   dei parametri; derivato e rigenerabile.
+
+Colonne di v2 (sincronizzazione Garmin, tutte `STRICT`):
+
+- `sync_journal`: una riga per attività remota (`garmin_id` chiave primaria) con il riepilogo
+  remoto (inizio in millisecondi UTC, durata, chiave dello sport, FC nota), lo stato su insieme
+  chiuso, i tentativi falliti e la causa; i CHECK impongono le stesse coerenze di
+  `JournalEntry`. Nessuna chiave esterna: una voce abbinata o scaricata sopravvive alla
+  cancellazione dell'attività.
+- `sync_cursor`: il punto raggiunto in ciascun elenco remoto (`full`, `verify`, `incremental`).
+- `sync_state`: una sola riga (`id = 1`) con la fine dell'ultima sincronizzazione.
 """
 
 from __future__ import annotations
@@ -36,8 +46,23 @@ V1_ORIGINS: Final = frozenset(_ORIGINS.replace("'", "").split(","))
 V1_SEXES: Final = frozenset(_SEXES.replace("'", "").split(","))
 V1_LOAD_SOURCES: Final = frozenset(_LOAD_SOURCES.replace("'", "").split(","))
 
+# Insiemi chiusi della v2 (valori stabili dei dati salvati); congelati qui apposta.
+_SYNC_STATUSES = "'pending','downloaded','matched','retryable','failed'"
+_RETRYABLE_FAILURES = "'transient_error','rate_limited'"
+_FAILURES = (
+    _RETRYABLE_FAILURES + ",'unsupported_format','corrupt_file','file_too_large',"
+    "'not_an_activity','archive_invalid','remote_rejected','attempts_exhausted'"
+)
+_LISTING_KINDS = "'full','verify','incremental'"
+
+V2_SYNC_STATUSES: Final = frozenset(_SYNC_STATUSES.replace("'", "").split(","))
+V2_FAILURES: Final = frozenset(_FAILURES.replace("'", "").split(","))
+V2_RETRYABLE_FAILURES: Final = frozenset(_RETRYABLE_FAILURES.replace("'", "").split(","))
+V2_LISTING_KINDS: Final = frozenset(_LISTING_KINDS.replace("'", "").split(","))
+
 # Le tabelle che ogni database di profilo ha dalla v1: senza, il file non è di un profilo.
 V1_TABLES: Final = frozenset({"meta", "activities", "physiology", "load_cache"})
+V2_TABLES: Final = frozenset({"sync_journal", "sync_cursor", "sync_state"})
 
 _V1_META = """
 CREATE TABLE meta (
@@ -104,9 +129,51 @@ CREATE TABLE load_cache (
 ) STRICT
 """
 
+_V2_SYNC_JOURNAL = f"""
+CREATE TABLE sync_journal (
+    garmin_id       INTEGER NOT NULL PRIMARY KEY CHECK (garmin_id > 0),
+    start_ms        INTEGER NOT NULL,
+    duration_s      REAL    NOT NULL CHECK (duration_s > 0),
+    sport_key       TEXT    NOT NULL CHECK (length(sport_key) BETWEEN 1 AND 64),
+    has_heart_rate  INTEGER CHECK (has_heart_rate IS NULL OR has_heart_rate IN (0, 1)),
+    status          TEXT    NOT NULL CHECK (status IN ({_SYNC_STATUSES})),
+    failed_attempts INTEGER NOT NULL CHECK (failed_attempts >= 0),
+    failure         TEXT    CHECK (failure IS NULL OR failure IN ({_FAILURES})),
+    updated_ms      INTEGER NOT NULL,
+    CHECK ((status IN ('retryable', 'failed')) = (failure IS NOT NULL)),
+    CHECK (status <> 'pending' OR failed_attempts = 0),
+    CHECK (status NOT IN ('retryable', 'failed') OR failed_attempts >= 1),
+    CHECK (status <> 'retryable' OR failure IN ({_RETRYABLE_FAILURES})),
+    CHECK (status <> 'failed' OR failure NOT IN ({_RETRYABLE_FAILURES}))
+) STRICT
+"""
+
+# Indice parziale: solo le voci da lavorare, nell'ordine in cui si lavorano.
+_V2_SYNC_JOURNAL_TO_DO_INDEX = (
+    "CREATE INDEX sync_journal_to_do ON sync_journal (start_ms DESC, garmin_id DESC) "
+    "WHERE status IN ('pending', 'retryable')"
+)
+
+_V2_SYNC_CURSOR = f"""
+CREATE TABLE sync_cursor (
+    kind           TEXT    NOT NULL PRIMARY KEY CHECK (kind IN ({_LISTING_KINDS})),
+    next_offset    INTEGER NOT NULL CHECK (next_offset >= 0),
+    declared_total INTEGER CHECK (declared_total IS NULL OR declared_total >= 0),
+    completed      INTEGER NOT NULL CHECK (completed IN (0, 1))
+) STRICT
+"""
+
+_V2_SYNC_STATE = """
+CREATE TABLE sync_state (
+    id                INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    last_completed_ms INTEGER NOT NULL
+) STRICT
+"""
+
 # Migrazione i (indice i-1): porta lo schema dalla versione i-1 alla i.
 MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     (_V1_META, _V1_ACTIVITIES, _V1_ACTIVITIES_START_INDEX, _V1_PHYSIOLOGY, _V1_LOAD_CACHE),
+    (_V2_SYNC_JOURNAL, _V2_SYNC_JOURNAL_TO_DO_INDEX, _V2_SYNC_CURSOR, _V2_SYNC_STATE),
 )
 
 SCHEMA_VERSION: Final = len(MIGRATIONS)

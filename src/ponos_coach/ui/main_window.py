@@ -51,6 +51,7 @@ from ponos_coach.profiles.use_cases import FolderWarning, NewProfileRequest
 from ponos_coach.ui.activity_table import ActivitiesPage
 from ponos_coach.ui.data_thread import SHUTDOWN_WAIT_MS
 from ponos_coach.ui.errors import ErrorMessage, exclusion_reason_text, unexpected_error_message
+from ponos_coach.ui.garmin_ui import GarminUi
 from ponos_coach.ui.import_report import ImportReport
 from ponos_coach.ui.import_report_dialog import ImportReportDialog
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
@@ -160,6 +161,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
         self.setAcceptDrops(True)
         self._build_actions()
+        self._garmin = GarminUi(self, controller.sync, system_theme, self._remember)
         self._build_menus()
         self._build_content()
         self._build_status_bar()
@@ -213,6 +215,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self._stop_action)
         file_menu.addSeparator()
         file_menu.addAction(self._quit_action)
+        self._garmin.build_menu(self.menuBar())
         help_menu = self.menuBar().addMenu(self.tr("Help"))
         help_menu.addAction(self._log_action)
         help_menu.addSeparator()
@@ -303,6 +306,11 @@ class MainWindow(QMainWindow):
         controller.busy_changed.connect(self._update_actions)
 
     # --- Accessori per i test e il Composition Root -------------------------------------
+
+    @property
+    def garmin(self) -> GarminUi:
+        """Il menu, la barra di stato e i dialoghi dell'account Garmin."""
+        return self._garmin
 
     @property
     def overview_page(self) -> OverviewPage:

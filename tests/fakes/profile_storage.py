@@ -10,22 +10,35 @@ termina con un'eccezione.
 from __future__ import annotations
 
 import copy
-from collections.abc import Iterator, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from pathlib import Path
 
 from ponos_coach.activities.domain import (
     ActivityIdentity,
     ActivityRecord,
+    FailureReason,
+    GarminActivityId,
+    InvalidTransitionError,
+    JournalEntry,
+    ListingCursor,
+    ListingKind,
+    RemoteActivity,
+    SyncStatus,
+    can_transition,
     identity_key,
     is_possible_duplicate,
+    pending_entry,
 )
 from ponos_coach.activities.ports import (
     ActivityIndex,
+    ActivityNotFoundError,
     DuplicateActivityError,
+    SyncJournal,
     TransactionStateError,
+    UnknownJournalEntryError,
 )
 from ponos_coach.load.domain import ActivityLoad, LoadFingerprint, PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, UnknownActivityError
@@ -44,7 +57,7 @@ from ponos_coach.profiles.ports import (
 )
 from ponos_coach.profiles.timezones import require_known_timezone
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 
 
 @dataclass
@@ -56,7 +69,36 @@ class _Database:
     garmin_ids: set[int] = field(default_factory=set)
     physiology: dict[date, PhysiologyEntry] = field(default_factory=dict)
     loads: dict[str, tuple[LoadFingerprint, ActivityLoad]] = field(default_factory=dict)
+    cursors: dict[ListingKind, ListingCursor] = field(default_factory=dict)
+    journal: dict[GarminActivityId, JournalEntry] = field(default_factory=dict)
+    last_completed: datetime | None = None
     in_transaction: bool = False
+
+    def snapshot(self) -> tuple[object, ...]:
+        """Copia dei dati modificabili da una transazione (tipi immutabili: basta la copia)."""
+        return copy.deepcopy(
+            (
+                self.records,
+                self.garmin_ids,
+                self.physiology,
+                self.loads,
+                self.cursors,
+                self.journal,
+                self.last_completed,
+            )
+        )
+
+    def restore(self, snapshot: tuple[object, ...]) -> None:
+        """Rimette i dati com'erano nella copia."""
+        (
+            self.records,
+            self.garmin_ids,
+            self.physiology,
+            self.loads,
+            self.cursors,
+            self.journal,
+            self.last_completed,
+        ) = snapshot  # type: ignore[assignment]
 
 
 @dataclass
@@ -85,14 +127,12 @@ class _Index:
         db = self._db
         if db.in_transaction:
             raise TransactionStateError("transazione annidata")
-        snapshot = copy.deepcopy(
-            (db.records, db.garmin_ids, db.physiology, db.loads)
-        )  # tipi immutabili: la copia profonda basta
+        snapshot = db.snapshot()
         db.in_transaction = True
         try:
             yield
         except BaseException:
-            db.records, db.garmin_ids, db.physiology, db.loads = snapshot
+            db.restore(snapshot)
             raise
         finally:
             db.in_transaction = False
@@ -123,6 +163,93 @@ class _Index:
 
     def list_by_start(self) -> Sequence[ActivityRecord]:
         return sorted(self._db.records.values(), key=lambda r: (r.start, identity_key(r.identity)))
+
+    def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
+        for record in self._db.records.values():
+            if record.garmin_activity_id == garmin_id.value:
+                return record
+        return None
+
+    def link_garmin_id(self, identity: ActivityIdentity, garmin_id: GarminActivityId) -> None:
+        key = identity_key(identity)
+        record = self._db.records.get(key)
+        if record is None:
+            raise ActivityNotFoundError(key)
+        if record.garmin_activity_id == garmin_id.value:
+            return
+        if record.garmin_activity_id is not None or garmin_id.value in self._db.garmin_ids:
+            raise DuplicateActivityError(key)
+        self._db.records[key] = replace(record, garmin_activity_id=garmin_id.value)
+        self._db.garmin_ids.add(garmin_id.value)
+
+
+class _Journal:
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def load_cursor(self, kind: ListingKind) -> ListingCursor | None:
+        return self._db.cursors.get(kind)
+
+    def save_cursor(self, kind: ListingKind, cursor: ListingCursor) -> None:
+        self._db.cursors[kind] = cursor
+
+    def known_ids(self, ids: Collection[GarminActivityId]) -> frozenset[GarminActivityId]:
+        return frozenset(i for i in ids if i in self._db.journal)
+
+    def add_pending(self, items: Sequence[RemoteActivity], now: datetime) -> int:
+        added = 0
+        for item in items:
+            if item.garmin_id not in self._db.journal:
+                self._db.journal[item.garmin_id] = pending_entry(item, now)
+                added += 1
+        return added
+
+    def next_to_process(self, limit: int) -> Sequence[JournalEntry]:
+        if limit < 1:
+            raise ValueError("il limite deve essere almeno 1")
+        todo = [
+            e
+            for e in self._db.journal.values()
+            if e.status in (SyncStatus.PENDING, SyncStatus.RETRYABLE)
+        ]
+        todo.sort(key=lambda e: (e.remote.start, e.garmin_id.value), reverse=True)
+        return todo[:limit]
+
+    def next_exhausted(self, limit: int) -> Sequence[JournalEntry]:
+        if limit < 1:
+            raise ValueError("il limite deve essere almeno 1")
+        exhausted = [
+            e
+            for e in self._db.journal.values()
+            if e.status is SyncStatus.FAILED and e.failure is FailureReason.ATTEMPTS_EXHAUSTED
+        ]
+        exhausted.sort(key=lambda e: (e.remote.start, e.garmin_id.value), reverse=True)
+        return exhausted[:limit]
+
+    def get(self, garmin_id: GarminActivityId) -> JournalEntry | None:
+        return self._db.journal.get(garmin_id)
+
+    def update(self, entry: JournalEntry) -> None:
+        stored = self._db.journal.get(entry.garmin_id)
+        if stored is None:
+            raise UnknownJournalEntryError(str(entry.garmin_id))
+        if not can_transition(stored.status, entry.status):
+            raise InvalidTransitionError(f"{stored.status.value} -> {entry.status.value}")
+        self._db.journal[entry.garmin_id] = JournalEntry(
+            stored.remote, entry.status, entry.updated_at, entry.failed_attempts, entry.failure
+        )
+
+    def counts(self) -> Mapping[SyncStatus, int]:
+        counts = dict.fromkeys(SyncStatus, 0)
+        for entry in self._db.journal.values():
+            counts[entry.status] += 1
+        return counts
+
+    def last_completed_at(self) -> datetime | None:
+        return self._db.last_completed
+
+    def record_completed(self, when: datetime) -> None:
+        self._db.last_completed = when
 
 
 class _Physiology:
@@ -163,6 +290,7 @@ class _OpenProfile:
     def __init__(self, database: _Database) -> None:
         self._db = database
         self._index = _Index(database)
+        self._journal = _Journal(database)
         self._physiology = _Physiology(database)
         self._cache = _Cache(database)
 
@@ -173,6 +301,10 @@ class _OpenProfile:
     @property
     def activities(self) -> ActivityIndex:
         return self._index
+
+    @property
+    def sync_journal(self) -> SyncJournal:
+        return self._journal
 
     @property
     def physiology(self) -> PhysiologyStore:
@@ -212,8 +344,9 @@ class InMemoryProfileStorage:
             raise ProfileNotFoundError(folder.name)
         return ProfilePeek(database.info, len(database.records))
 
-    def open(self, folder: Path) -> OpenProfile:
-        """Vedi `ProfileStorage.open`."""
+    def open(self, folder: Path, *, check_integrity: bool = True) -> OpenProfile:
+        """Vedi `ProfileStorage.open` (i controlli di integrità non hanno senso in memoria)."""
+        del check_integrity
         database = self.disk.databases.get(folder)
         if database is None:
             raise ProfileNotFoundError(folder.name)
