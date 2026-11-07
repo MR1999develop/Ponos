@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Finestra principale: barra laterale, menu, barra di stato e pagine.
+"""Main window: sidebar, menus, status bar and pages.
 
-Vista umile: lo stato e le decisioni stanno in `WorkspaceController` e nei modelli di
-presentazione; qui ci sono solo widget, comandi e dialoghi.
+Humble view: state and decisions live in `WorkspaceController` and in the
+presentation models; here there are only widgets, commands and dialogs.
 """
 
 from __future__ import annotations
@@ -103,19 +103,19 @@ _SHUTDOWN_POLL_MS = 20
 
 
 FolderPicker = Callable[[QWidget, str, str], str]
-"""Selettore di cartella: (madre, titolo, partenza) -> cartella scelta ("" se annulla)."""
+"""Folder picker: (parent, title, start) -> chosen folder ("" if cancelled)."""
 
 
 def native_folder_picker(parent: QWidget, title: str, start: str) -> str:
-    """Selettore di cartella del sistema."""
+    """The system folder picker."""
     return QFileDialog.getExistingDirectory(parent, title, start)
 
 
 @dataclass(frozen=True, slots=True)
 class NewProfileDefaults:
-    """Dipendenze del modulo "Nuovo profilo", decise dal Composition Root.
+    """Dependencies of the "New profile" module, decided by the Composition Root.
 
-    `documents_folder` è solo il punto di partenza del selettore la prima volta, non una proposta.
+    `documents_folder` is only the picker's starting point the first time, not a suggestion.
     """
 
     documents_folder: Path
@@ -126,13 +126,13 @@ class NewProfileDefaults:
 
 
 def system_theme() -> Theme:
-    """Tema chiaro o scuro secondo lo schema di colori del sistema (chiaro se ignoto)."""
+    """Light or dark theme according to the system colour scheme (light if unknown)."""
     scheme = QGuiApplication.styleHints().colorScheme()
     return Theme.DARK if scheme == Qt.ColorScheme.Dark else Theme.LIGHT
 
 
 class MainWindow(QMainWindow):
-    """Finestra principale. Non decide nulla: mostra lo stato del controller."""
+    """Main window. It decides nothing: it shows the controller's state."""
 
     def __init__(
         self,
@@ -150,7 +150,7 @@ class MainWindow(QMainWindow):
         self._settings = settings
         self._defaults = defaults
         self._log_folder = log_folder
-        self.shutdown_wait_ms = SHUTDOWN_WAIT_MS  # tetto dell'attesa alla chiusura
+        self.shutdown_wait_ms = SHUTDOWN_WAIT_MS  # cap on the wait at close
         self._shutdown_deadline = 0.0
         self._closed = False
         self._engine_requested = False
@@ -246,13 +246,14 @@ class MainWindow(QMainWindow):
         help_menu.addAction(self._about_action)
 
     def _build_language_menu(self) -> None:
-        """Menu "Lingua": inglese e italiano, con la scelta ricordata per i prossimi avvii."""
+        """Menu "Language": English and Italian, with the choice remembered for the next
+        launches."""
         menu = self.menuBar().addMenu(self.tr("Language"))
         group = QActionGroup(self)
         group.setExclusive(True)
         self._language_actions: dict[Language, QAction] = {}
         for language in (Language.ENGLISH, Language.ITALIAN):
-            # Il nome di una lingua nella lingua stessa non si traduce: serve a riconoscerla.
+            # A language's name in the language itself is not translated: it serves to recognise it.
             action = QAction(language.native_name, self)
             action.setCheckable(True)
             action.setChecked(language is self._language)
@@ -304,7 +305,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
     def _build_dialogs(self) -> None:
-        """Modifica profilo, pesi degli sport e dettaglio: lavorano nel thread dei dati."""
+        """Edit profile, sport weights and detail: they work on the data thread."""
         self._editor = ProfileEditor(self._controller, self)
         self._detail_loader = ActivityDetailLoader(self._controller, self)
         self._dialogs = ProfileDialogs(
@@ -369,56 +370,56 @@ class MainWindow(QMainWindow):
         controller.first_run_requested.connect(self.show_new_profile)
         controller.busy_changed.connect(self._update_actions)
 
-    # --- Accessori per i test e il Composition Root -------------------------------------
+    # --- Accessors for tests and the Composition Root -------------------------------------
 
     @property
     def garmin(self) -> GarminUi:
-        """Il menu, la barra di stato e i dialoghi dell'account Garmin."""
+        """The menu, the status bar and the Garmin account dialogs."""
         return self._garmin
 
     @property
     def overview_page(self) -> OverviewPage:
-        """La pagina Panoramica."""
+        """The Overview page."""
         return self._overview
 
     @property
     def activities_page(self) -> ActivitiesPage:
-        """La pagina Attività."""
+        """The Activities page."""
         return self._activities
 
     @property
     def profile_dialogs(self) -> ProfileDialogs:
-        """I dialoghi dei dati del profilo (modifica, pesi, dettaglio)."""
+        """The profile data dialogs (edit, weights, detail)."""
         return self._dialogs
 
     @property
     def language_actions(self) -> dict[Language, QAction]:
-        """Le voci del menu Lingua."""
+        """The Language menu entries."""
         return self._language_actions
 
     @property
     def edit_profile_action(self) -> QAction:
-        """Azione "Modifica profilo..."."""
+        """Action "Edit profile..."."""
         return self._edit_profile_action
 
     @property
     def sport_weights_action(self) -> QAction:
-        """Azione "Pesi degli sport..."."""
+        """Action "Sport weights..."."""
         return self._sport_weights_action
 
     @property
     def detail_action(self) -> QAction:
-        """Azione "Dettaglio attività..."."""
+        """Action "Activity detail..."."""
         return self._detail_action
 
     @property
     def controller(self) -> WorkspaceController:
-        """Il controller dell'area di lavoro."""
+        """The workspace controller."""
         return self._controller
 
     @property
     def status_texts(self) -> tuple[str, str, str]:
-        """Testi di attività, escluse e giorni nella barra di stato."""
+        """Texts of activities, excluded ones and days in the status bar."""
         return (
             self._activities_label.text(),
             self._excluded_label.text(),
@@ -427,80 +428,81 @@ class MainWindow(QMainWindow):
 
     @property
     def import_status_text(self) -> str:
-        """Testo dell'avanzamento dell'import nella barra di stato."""
+        """Import progress text in the status bar."""
         return self._import_label.text()
 
     @property
     def folder_warning_text(self) -> str:
-        """Avviso sulla cartella del profilo aperto (vuoto se non ce n'è)."""
+        """Warning about the open profile's folder (empty if there is none)."""
         return self._warning_label.text()
 
     @property
     def log_action(self) -> QAction:
-        """Azione "Apri la cartella dei log"."""
+        """Action "Open the log folder"."""
         return self._log_action
 
     @property
     def is_closed(self) -> bool:
-        """Vero quando la chiusura è finita (il profilo è chiuso e il motore web rilasciato)."""
+        """True when closing is done (the profile is closed and the web engine released)."""
         return self._closed
 
     @property
     def new_profile_action(self) -> QAction:
-        """Azione "Nuovo profilo..."."""
+        """Action "New profile..."."""
         return self._new_action
 
     @property
     def import_files_action(self) -> QAction:
-        """Azione "Importa file..."."""
+        """Action "Import files..."."""
         return self._import_files_action
 
     @property
     def import_folder_action(self) -> QAction:
-        """Azione "Importa da cartella..."."""
+        """Action "Import from folder..."."""
         return self._import_folder_action
 
     @property
     def stop_action(self) -> QAction:
-        """Azione "Interrompi"."""
+        """Action "Stop"."""
         return self._stop_action
 
     @property
     def switch_menu(self) -> QMenu:
-        """Menu "Cambia profilo"."""
+        """Menu "Switch profile"."""
         return self._switch_menu
 
     @property
     def remove_menu(self) -> QMenu:
-        """Menu "Rimuovi profilo dall'elenco"."""
+        """Menu "Remove profile from list"."""
         return self._remove_menu
 
     @property
     def delete_menu(self) -> QMenu:
-        """Menu "Elimina cartella del profilo"."""
+        """Menu "Delete profile folder"."""
         return self._delete_menu
 
     @property
     def new_profile_dialog(self) -> NewProfileDialog | None:
-        """Il dialogo "Nuovo profilo" aperto, se c'è."""
+        """The open "New profile" dialog, if any."""
         return self._new_dialog
 
     @property
     def open_boxes(self) -> list[QMessageBox | ImportReportDialog]:
-        """Finestre di messaggio e riepilogo aperte (le più recenti in fondo)."""
+        """Open message and summary windows (the most recent last)."""
         return [box for box in self._boxes if box.isVisible()]
 
     # --- Avvio ---------------------------------------------------------------------------
 
     def start(self) -> None:
-        """Avvia l'area di lavoro: apre l'ultimo profilo o chiede il primo avvio guidato."""
+        """Start the workspace: open the last profile or ask for the guided first start."""
         self._controller.start()
 
     # --- Lingua ----------------------------------------------------------------------------
 
     def _on_language_chosen(self, language: Language) -> None:
-        """Ricorda la lingua scelta. Si applica al prossimo avvio: ritradurre ogni finestra, menu
-        e grafico a caldo duplicherebbe ogni testo, per un cambio che si fa una volta."""
+        """Remember the chosen language. It applies at the next launch: retranslating every window,
+        menu
+        and chart live would duplicate every text, for a change made once."""
         save_language(self._settings, language)
         if language is self._language:
             return
@@ -513,26 +515,26 @@ class MainWindow(QMainWindow):
         self._remember(box)
         box.open()
 
-    # --- Dati del profilo ------------------------------------------------------------------
+    # --- Profile data ------------------------------------------------------------------
 
     def edit_profile(self) -> None:
-        """Apre "Modifica profilo" (nessun effetto se ora non si può)."""
+        """Open "Edit profile" (no effect if it cannot be done now)."""
         if self._controller.can_edit_profile:
             self._dialogs.edit_profile()
 
     def edit_sport_weights(self) -> None:
-        """Apre "Pesi degli sport" (nessun effetto se ora non si può)."""
+        """Open "Sport weights" (no effect if it cannot be done now)."""
         if self._controller.can_edit_profile:
             self._dialogs.edit_sport_weights()
 
     def show_selected_activity_detail(self) -> None:
-        """Apre il dettaglio dell'attività selezionata nella tabella."""
+        """Open the detail of the activity selected in the table."""
         self._activities.request_detail()
 
     # --- Profili -------------------------------------------------------------------------
 
     def show_new_profile(self, form: NewProfileForm | None = None) -> None:
-        """Apre il dialogo "Nuovo profilo" (nessun effetto se ne è già aperto uno)."""
+        """Open the "New profile" dialog (no effect if one is already open)."""
         if self._new_dialog is not None or not self._controller.can_change_profile:
             return
         if form is None:
@@ -560,7 +562,7 @@ class MainWindow(QMainWindow):
         self._new_dialog = None
 
     def _choose_new_profile_folder(self) -> str:
-        """Chiede la cartella del profilo partendo dall'ultima usata (o da Documenti)."""
+        """Ask for the profile folder, starting from the last one used (or from Documents)."""
         start = str(self._settings.value(_KEY_LAST_PROFILE_FOLDER, "", type=str))
         if not start:
             start = str(self._defaults.documents_folder)
@@ -570,14 +572,14 @@ class MainWindow(QMainWindow):
         return chosen
 
     def choose_profile_folder(self) -> None:
-        """Chiede una cartella con un profilo e lo apre."""
+        """Ask for a folder with a profile and open it."""
         start = str(self._settings.value(_KEY_LAST_PROFILE_FOLDER, "", type=str))
         chosen = QFileDialog.getExistingDirectory(self, self.tr("Open profile from folder"), start)
         if chosen:
             self.open_profile_folder(Path(chosen))
 
     def open_profile_folder(self, folder: Path) -> None:
-        """Ricorda la cartella e apre il profilo che contiene."""
+        """Remember the folder and open the profile it contains."""
         self._settings.setValue(_KEY_LAST_PROFILE_FOLDER, str(folder.parent))
         self._controller.open_profile_folder(folder)
 
@@ -668,7 +670,7 @@ class MainWindow(QMainWindow):
     # --- Import --------------------------------------------------------------------------
 
     def choose_import_files(self) -> None:
-        """Chiede i file da importare (parte dall'ultima cartella usata)."""
+        """Ask for the files to import (starting from the last folder used)."""
         start = str(self._settings.value(_KEY_LAST_FILES_FOLDER, "", type=str))
         activity_files = self.tr("Activity files (*.fit *.gpx *.zip)")
         all_files = self.tr("All files (*)")
@@ -679,31 +681,31 @@ class MainWindow(QMainWindow):
             self.import_files([Path(name) for name in chosen])
 
     def choose_import_folder(self) -> None:
-        """Chiede la cartella da importare (parte dall'ultima usata)."""
+        """Ask for the folder to import (starting from the last one used)."""
         start = str(self._settings.value(_KEY_LAST_FOLDER, "", type=str))
         chosen = QFileDialog.getExistingDirectory(self, self.tr("Import from folder"), start)
         if chosen:
             self.import_folder(Path(chosen))
 
     def import_files(self, paths: Sequence[Path]) -> None:
-        """Importa i file e ricorda la loro cartella."""
+        """Import the files and remember their folder."""
         if paths and self._controller.import_files(paths):
             self._settings.setValue(_KEY_LAST_FILES_FOLDER, str(paths[0].parent))
 
     def import_folder(self, folder: Path) -> None:
-        """Importa la cartella e la ricorda."""
+        """Import the folder and remember it."""
         if self._controller.import_folder(folder):
             self._settings.setValue(_KEY_LAST_FOLDER, str(folder))
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802 - Qt
-        """Accetta file trascinati solo se un import è possibile."""
+        """Accept dragged files only if an import is possible."""
         if self._controller.can_import and event.mimeData().hasUrls():
             event.acceptProposedAction()
         else:
             event.ignore()
 
     def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802 - Qt
-        """Importa i file (o la cartella) lasciati sulla finestra."""
+        """Import the files (or the folder) dropped on the window."""
         paths = [Path(url.toLocalFile()) for url in event.mimeData().urls() if url.isLocalFile()]
         if not paths or not self._controller.can_import:
             event.ignore()
@@ -739,7 +741,7 @@ class MainWindow(QMainWindow):
         self._remember(dialog)
         dialog.open()
 
-    # --- Errori e messaggi ---------------------------------------------------------------
+    # --- Errors and messages ---------------------------------------------------------------
 
     def _show_error(self, message: ErrorMessage, name: str = "errorMessage") -> None:
         box = QMessageBox(self)
@@ -754,13 +756,13 @@ class MainWindow(QMainWindow):
         box.open()
 
     def show_unexpected_error(self) -> None:
-        """Messaggio generico del gestore di ultima istanza (uno solo alla volta)."""
+        """Generic message of the last-resort handler (only one at a time)."""
         if any(b.objectName() == "unexpectedError" and b.isVisible() for b in self._boxes):
             return
         self._show_error(unexpected_error_message(), "unexpectedError")
 
     def open_log_folder(self) -> None:
-        """Apre la cartella dei log con il gestore di file del sistema."""
+        """Open the log folder with the system file manager."""
         folder = self._log_folder
         if folder is None:
             return
@@ -785,14 +787,14 @@ class MainWindow(QMainWindow):
         self._show_error(message)
         if self._creating_form is not None:
             form, self._creating_form = self._creating_form, None
-            self.show_new_profile(form)  # i dati scritti non si perdono
+            self.show_new_profile(form)  # the typed data is not lost
 
     def _remember(self, box: QMessageBox | ImportReportDialog) -> None:
         self._boxes = [item for item in self._boxes if item.isVisible()]
         self._boxes.append(box)
 
     def show_about(self) -> None:
-        """Informazioni: versione, licenza e avviso che non è un dispositivo medico."""
+        """About: version, licence and notice that it is not a medical device."""
         text = "\n\n".join(
             (
                 self.tr("Version {version}").format(version=ponos_coach.__version__),
@@ -830,7 +832,7 @@ class MainWindow(QMainWindow):
             self._settings.setValue(_KEY_SECTION, row)
 
     def _restore_section(self) -> None:
-        """Riapre la sezione dell'ultima volta; un valore salvato non valido vale la prima."""
+        """Reopen the section of last time; an invalid saved value means the first one."""
         try:
             row = int(str(self._settings.value(_KEY_SECTION)))
         except ValueError:
@@ -857,7 +859,7 @@ class MainWindow(QMainWindow):
         self._overview.apply_state(self._controller.overview_state, system_theme(), self._zone)
 
     def _unavailable_reason(self, allowed: bool) -> str:
-        """Il motivo, per il tooltip, per cui un comando sul profilo ora non si può dare."""
+        """The reason, for the tooltip, why a command on the profile cannot be given now."""
         if allowed:
             return ""
         if self._controller.profile is None:
@@ -881,7 +883,7 @@ class MainWindow(QMainWindow):
         )
 
     def _update_profile_data_actions(self) -> None:
-        """Importa, modifica profilo, pesi e dettaglio: ognuno con il suo motivo se non si può."""
+        """Import, edit profile, weights and detail: each with its reason if it cannot be done."""
         controller = self._controller
         for action, allowed in (
             (self._import_files_action, controller.can_import),
@@ -911,7 +913,7 @@ class MainWindow(QMainWindow):
         self._excluded_label.setToolTip(self._excluded_tooltip(state.overview))
 
     def _excluded_tooltip(self, overview: ProfileOverview) -> str:
-        """Perché le attività sono escluse: un motivo per riga, con il conteggio."""
+        """Why activities are excluded: one reason per line, with the count."""
         counts = Counter(item.reason for item in overview.excluded)
         lines = [
             f"{html.escape(exclusion_reason_text(reason))}: {count}"
@@ -922,43 +924,45 @@ class MainWindow(QMainWindow):
     # --- Chiusura ------------------------------------------------------------------------
 
     def _restore_geometry(self) -> None:
-        """Ripristina la geometria salvata; un valore che non è un blocco di byte valido vale
-        la dimensione predefinita (impostazioni modificate a mano o rovinate)."""
+        """Restore the saved geometry; a value that is not a valid byte block means
+        the default size (settings edited by hand or damaged)."""
         saved = self._settings.value(_KEY_GEOMETRY)
         if isinstance(saved, QByteArray | bytes | bytearray) and self.restoreGeometry(saved):
             return
         self.resize(*_DEFAULT_SIZE)
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt
-        """Dopo il primo `show()` avvia il motore web: la finestra compare prima."""
+        """After the first `show()` start the web engine: the window appears first."""
         super().showEvent(event)
         if not self._engine_requested:
             self._engine_requested = True
             self._engine_timer.start(0)
 
     def _start_web_engine(self) -> None:
-        """Avvia le tre pagine web subito dopo il primo `show()`, non "al primo bisogno".
+        """Start the three web pages right after the first `show()`, not "on first need".
 
-        Misura (offscreen, Chromium a freddo): il primo avvio costa circa 185 ms nel thread della
-        UI, ogni vista in più circa 3 ms. Rimandarlo al primo disegno o all'inizio del calcolo
-        sposterebbe 185 ms dentro l'importazione e il disegno, oltre il limite di 100 ms per
-        evento (T-UI-02); rimandare solo le due viste secondarie ne risparmia 6. Qui l'utente non
-        ha ancora un'azione in corso.
+        Measured (offscreen, cold Chromium): the first start costs about 185 ms on the
+        UI thread, each additional view about 3 ms. Deferring it to the first draw or to the start
+        of the
+        computation would move 185 ms into the import and the drawing, beyond the 100 ms limit per
+        event (T-UI-02); deferring only the two secondary views saves 6. Here the user does not
+        have an action in progress yet.
         """
         self._overview.start_engines()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt
-        """Chiusura in due tempi, senza bloccare il thread della UI.
+        """Two-step close, without blocking the UI thread.
 
-        Il primo tempo annulla i lavori e chiede al thread dei dati di chiudere il profilo; la
-        finestra resta aperta e un timer controlla se il thread ha finito. Al secondo tempo
-        (thread finito) si chiude davvero. Oltre il tetto di attesa avvisa e lascia la finestra
-        aperta: un thread in esecuzione non si distrugge mai.
+        The first step cancels the jobs and asks the data thread to close the profile; the
+        window stays open and a timer checks whether the thread has finished. At the second step
+        (thread finished) it really closes. Beyond the wait cap it warns and leaves the window
+        open: a running thread is never destroyed.
 
-        I dialoghi e il motore web (pagine, poi profilo) si rilasciano già al primo tempo, subito:
-        la finestra può essere distrutta in qualunque momento dopo il primo `close()` (lo fa
-        anche `qtbot`), e Qt distrugge i figli nell'ordine in cui sono nati, non quello che
-        serve al motore web. Se l'attesa scade i grafici restano vuoti.
+        Dialogs and the web engine (pages, then profile) are released already at the first step, at
+        once:
+        the window can be destroyed at any time after the first `close()` (`qtbot` does
+        so too), and Qt destroys children in the order they were born, not the one that
+        the web engine needs. If the wait expires the charts stay empty.
         """
         if not self._closed:
             self._remember_window_state()
@@ -987,7 +991,7 @@ class MainWindow(QMainWindow):
         if self._controller.has_stopped:
             self._shutdown_timer.stop()
             self._finish_closing()
-            self.close()  # ora la chiusura è completa
+            self.close()  # now closing is complete
         elif time.monotonic() >= self._shutdown_deadline:
             self._shutdown_timer.stop()
             self.statusBar().clearMessage()
@@ -1001,8 +1005,8 @@ class MainWindow(QMainWindow):
         )
 
     def release_web_engine(self) -> None:
-        """Distrugge pagine e profilo del motore web (idempotente): alla chiusura della finestra
-        e da `aboutToQuit`, prima che Qt distrugga gli oggetti."""
+        """Destroy the web engine's pages and profile (idempotent): when the window closes
+        and from `aboutToQuit`, before Qt destroys the objects."""
         self._engine.dispose()
 
     def _finish_closing(self) -> None:

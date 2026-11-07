@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Composizione dell'estrattore dello ZIP scaricato: ogni causa di `zipread` diventa una causa
-definitiva della voce del giornale."""
+"""Composition of the downloaded ZIP extractor: each `zipread` cause becomes a definitive
+cause of the journal entry."""
 
 from __future__ import annotations
 
@@ -97,7 +97,7 @@ with tempfile.TemporaryDirectory() as folder:
 def test_starting_the_app_does_not_import_the_garmin_libraries() -> None:
     env = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
 
-    run = subprocess.run(  # noqa: S603 - interprete corrente, script fisso
+    run = subprocess.run(  # noqa: S603 - current interpreter, fixed script
         [sys.executable, "-c", _STARTUP_SCRIPT],
         capture_output=True,
         text=True,

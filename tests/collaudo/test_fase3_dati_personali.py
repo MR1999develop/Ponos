@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-QUAL-02 e T-DATI-01 della fase 3: partizioni e confini dei dati personali, migrazione.
+"""T-QUAL-02 and T-DATI-01 of phase 3: partitions and boundaries of personal data, migration.
 
-Altezza, peso, data di nascita, FC, soglia, pesi degli sport e giorno di validità: ogni valore si
-prova nelle partizioni della specifica e ai confini (valore al limite e appena oltre), dal testo
-dell'utente fino alla riga nel database. In più la migrazione v1/v2 -> v3 uccisa a ogni istruzione
-con un processo vero, il profilo v2 aperto da due istanze e i dati fissi completati due volte
-insieme.
+Height, weight, date of birth, HR, threshold, sport weights and day of validity: every value is
+exercised in the specification partitions and at the boundaries (value at the limit and just
+beyond), from the
+user's text down to the row in the database. In addition the v1/v2 -> v3 migration killed at every
+statement
+with a real process, the v2 profile opened by two instances and the fixed data completed twice
+at the same time.
 """
 
 from __future__ import annotations
@@ -78,7 +80,7 @@ WORKER = (
 TODAY = date(2026, 7, 1)
 
 
-# --- Peso: partizioni e confini ---------------------------------------------------------------
+# --- Weight: partitions and boundaries ------------------------------------------------------------
 
 VALID_WEIGHTS = [
     ("20", 200), ("20.0", 200), ("20,0", 200), ("20.1", 201), ("20,1", 201), ("70.5", 705),
@@ -106,7 +108,7 @@ def test_t_qual_02_weight_text_valid_partitions_and_limits(text: str, tenths: in
 
 @pytest.mark.parametrize("text", INVALID_WEIGHTS)
 def test_t_qual_02_weight_text_invalid_partitions_and_just_beyond_the_limits(text: str) -> None:
-    with pytest.raises(ValueError, match="peso"):
+    with pytest.raises(ValueError, match="weight"):
         Weight.parse(text)
     expected = BodyProblem.WEIGHT_EMPTY if not text.strip() else BodyProblem.WEIGHT_INVALID
     assert read_weight(text) is expected
@@ -116,7 +118,7 @@ def test_t_qual_02_weight_text_invalid_partitions_and_just_beyond_the_limits(tex
 def test_t_qual_02_weight_text_with_hostile_numerals_is_refused_not_reinterpreted(
     text: str,
 ) -> None:
-    with pytest.raises(ValueError, match="peso"):
+    with pytest.raises(ValueError, match="weight"):
         Weight.parse(text)
 
 
@@ -129,11 +131,11 @@ def test_t_qual_02_weight_in_tenths_follows_the_limits_exactly(kg: Decimal) -> N
         assert Weight.from_kg(kg) == Weight(tenths)
         assert Weight.parse(format(kg, "f")) == Weight(tenths)
     else:
-        with pytest.raises(ValueError, match="peso"):
+        with pytest.raises(ValueError, match="weight"):
             Weight.from_kg(kg)
 
 
-# --- Altezza ----------------------------------------------------------------------------------
+# --- Height ----------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -167,15 +169,15 @@ def test_t_qual_02_height_type_limits_on_and_off_point(centimetres: int, valid: 
     if valid:
         assert Height(centimetres).cm == centimetres
     else:
-        with pytest.raises(ValueError, match="altezza"):
+        with pytest.raises(ValueError, match="height"):
             Height(centimetres)
 
 
-# --- Data di nascita --------------------------------------------------------------------------
+# --- Date of birth --------------------------------------------------------------------------
 
 
 def five_years_before(today: date) -> date:
-    """Oracolo: lo stesso giorno cinque anni prima (il 29 febbraio diventa il 28)."""
+    """Oracle: the same day five years earlier (29 February becomes 28)."""
     day = 28 if (today.month, today.day) == (2, 29) else today.day
     return date(today.year - 5, today.month, day)
 
@@ -192,7 +194,7 @@ def test_t_qual_02_birth_date_is_valid_exactly_between_1900_and_five_years_ago(
     if valid:
         assert BirthDate.on(value, today).value == value
     else:
-        with pytest.raises(ValueError, match="data di nascita"):
+        with pytest.raises(ValueError, match="date of birth"):
             BirthDate.on(value, today)
 
 
@@ -208,7 +210,7 @@ def test_t_qual_02_the_latest_birth_date_is_the_on_point_and_the_next_day_is_the
 
     assert latest == five_years_before(today)
     assert BirthDate.on(latest, today).value == latest
-    with pytest.raises(ValueError, match="data di nascita"):
+    with pytest.raises(ValueError, match="date of birth"):
         BirthDate.on(latest + timedelta(days=1), today)
 
 
@@ -221,14 +223,15 @@ def test_t_qual_02_the_birth_date_control_stops_exactly_at_the_domain_limit(qtbo
         assert edit.maximumDate() == QDate(limit.year, limit.month, limit.day)
 
 
-# --- FC, soglia -------------------------------------------------------------------------------
+# --- HR, threshold -------------------------------------------------------------------------------
 
 EDGE_BPM = (18, 19, 20, 21, 38, 39, 40, 41, 49, 50, 51, 169, 170, 171, 189, 190, 191,
             248, 249, 250, 251, 252)  # fmt: skip
 
 
 def physiology_is_valid(minimum: int, maximum: int, threshold: int) -> bool:
-    """Oracolo dalla specifica: 20 <= min < max <= 250, 40 <= soglia <= 250, min < soglia <= max."""
+    """Oracle from the specification: 20 <= min < max <= 250, 40 <= threshold <= 250, min <
+    threshold <= max."""
     return (
         20 <= minimum < maximum <= 250 and 40 <= threshold <= 250 and minimum < threshold <= maximum
     )
@@ -248,7 +251,7 @@ def test_t_qual_02_heart_rate_triples_are_valid_exactly_as_the_specification_say
                 except ValueError:
                     built = False
                 assert built is expected, (minimum, maximum, threshold)
-                if expected:  # il modulo non deve rifiutare ciò che il dominio accetta
+                if expected:  # the form must not refuse what the domain accepts
                     assert heart_rate_problems(minimum, maximum, threshold) == ()
                 checked += 1
     assert checked == len(EDGE_BPM) ** 3
@@ -260,17 +263,17 @@ def test_t_qual_02_the_ranges_of_the_controls_are_those_of_the_domain() -> None:
     ThresholdHeartRate(MIN_THRESHOLD_BPM)
     ThresholdHeartRate(MAX_ALLOWED_BPM)
     for bad in (MIN_ALLOWED_BPM - 1,):
-        with pytest.raises(ValueError, match="FC"):
+        with pytest.raises(ValueError, match="HR"):
             HeartRateLimits(bad, 190)
-    with pytest.raises(ValueError, match="FC"):
+    with pytest.raises(ValueError, match="HR"):
         HeartRateLimits(50, MAX_ALLOWED_BPM + 1)
-    with pytest.raises(ValueError, match="FC"):
+    with pytest.raises(ValueError, match="HR"):
         ThresholdHeartRate(MIN_THRESHOLD_BPM - 1)
-    with pytest.raises(ValueError, match="FC"):
+    with pytest.raises(ValueError, match="HR"):
         ThresholdHeartRate(MAX_ALLOWED_BPM + 1)
 
 
-# --- Pesi degli sport -------------------------------------------------------------------------
+# --- Sport weights -------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -283,7 +286,7 @@ def test_t_qual_02_sport_weight_partitions_and_limits(value: float, valid: bool)
     if valid:
         assert SportWeight(value).value == value
     else:
-        with pytest.raises(ValueError, match="peso"):
+        with pytest.raises(ValueError, match="weight"):
             SportWeight(value)
 
 
@@ -346,7 +349,7 @@ def test_t_qual_02_saved_weights_keep_only_what_differs_from_the_default_and_sur
         profile.close()
 
 
-# --- Giorno di validità -----------------------------------------------------------------------
+# --- Day of validity --------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -390,7 +393,7 @@ def test_t_qual_02_validity_day_partitions_and_limits_through_the_use_case_and_t
         profile.close()
 
 
-# --- T-DATI-01: migrazione uccisa a ogni istruzione --------------------------------------------
+# --- T-DATI-01: migration killed at every statement -------------------------------------------
 
 
 def statements_from(version: int) -> int:
@@ -407,7 +410,7 @@ def run_worker_until_death(folder: Path, kill_at: int) -> int:
 
 
 V1_TABLES_ONLY = {"meta", "activities", "physiology", "load_cache"}
-_V1_TOTAL = statements_from(1)  # istruzioni da eseguire partendo da un database v1
+_V1_TOTAL = statements_from(1)  # statements to run starting from a v1 database
 V1_KILL_POINTS = sorted({1, 2, 3, 5, _V1_TOTAL // 2, statements_from(2), statements_from(2) + 1,
                          _V1_TOTAL - 1, _V1_TOTAL})  # fmt: skip
 
@@ -423,10 +426,10 @@ def test_t_dati_01_a_v2_database_killed_at_every_migration_statement_is_still_v2
 
     assert run_worker_until_death(tmp_path, kill_at) == DIED
 
-    assert user_version(path) == 2  # la transazione non è stata confermata
+    assert user_version(path) == 2  # the transaction was not committed
     assert "profile_body" not in table_names(path)
-    assert {table: rows(path, table) for table in tables} == before  # nemmeno la cache svuotata
-    opened = SqliteProfileStorage().open(tmp_path)  # il giro buono riesce da dove era
+    assert {table: rows(path, table) for table in tables} == before  # not even the emptied cache
+    opened = SqliteProfileStorage().open(tmp_path)  # the good round succeeds from where it was
     try:
         assert opened.info.format_version == SCHEMA_VERSION
         assert opened.fixed_data.get() is None
@@ -448,7 +451,7 @@ def test_t_dati_01_a_v1_database_killed_midway_through_the_whole_chain_stays_v1(
 
     assert run_worker_until_death(tmp_path, kill_at) == DIED
 
-    assert user_version(path) == 1  # né v2 né v3 a metà: la catena è una sola transazione
+    assert user_version(path) == 1  # neither v2 nor v3 halfway: the chain is a single transaction
     assert table_names(path) == V1_TABLES_ONLY
     assert {table: rows(path, table) for table in tables} == before
     SqliteProfileStorage().open(tmp_path).close()
@@ -456,7 +459,7 @@ def test_t_dati_01_a_v1_database_killed_midway_through_the_whole_chain_stays_v1(
     assert [row for row in rows(path, "meta") if row[0] == "futuro"] == [("futuro", "conservami")]
 
 
-# --- Profilo v2 aperto da due istanze, dati fissi completati insieme -------------------------
+# --- v2 profile opened by two instances, fixed data completed together ------------------------
 
 
 def real_ports(config_dir: Path) -> ProfilePorts:
@@ -490,7 +493,7 @@ def test_t_dati_01_two_instances_opening_one_v2_profile_at_once_migrate_once_and
             outcomes.append(result)
         stored.release()
         if not isinstance(result, Exception):
-            released.wait(timeout=30)  # tiene il profilo aperto finché l'altra ha finito
+            released.wait(timeout=30)  # keeps the profile open until the other has finished
             result.close()  # type: ignore[attr-defined]
 
     threads = [threading.Thread(target=instance, args=(n,)) for n in (1, 2)]
@@ -530,7 +533,7 @@ def test_t_dati_01_fixed_data_completed_twice_at_once_has_one_winner_and_a_clean
     guard = threading.Lock()
 
     def complete(number: int) -> None:
-        opened = SqliteProfileStorage().open(tmp_path)  # una connessione per thread
+        opened = SqliteProfileStorage().open(tmp_path)  # one connection per thread
         error: BaseException | None = None
         try:
             barrier.wait()

@@ -1,64 +1,64 @@
-# 004. Modello di carico
+# 004. Load model
 
-- Stato: Accettato
-- Data: 2026-11-05
+- Status: Accepted
+- Date: 2026-11-05
 
-## Contesto
+## Context
 
-L'app calcola il carico di ogni attività dalla frequenza cardiaca, senza
-potenza né ritmo, e ne ricava ATL, CTL e TSB. Il piano si adatta solo a
-questi valori. La formula determina tutti i numeri mostrati e tutte le
-decisioni del piano. Cambiarla dopo il rilascio obbliga a ricalcolare lo
-storico.
+The app computes the load of each activity from heart rate, without power or
+pace, and derives ATL, CTL and TSB from it. The plan adapts only to these
+values. The formula determines all the numbers shown and all the decisions of
+the plan. Changing it after release forces the history to be recalculated.
 
-## Opzioni
+## Options
 
-1. **hrTSS da TRIMP di Banister sul tracciato FC.**
-   - Pro: usa ogni campione (non zone), continuo, scala come il TSS (100 =
-     un'ora alla soglia), nota in letteratura.
-   - Contro: richiede FC minima, massima e soglia affidabili; il coefficiente
-     dipende dal sesso; sottostima il carico della forza e delle attività con
-     FC poco rappresentativa.
-2. **TRIMP di Edwards a zone.**
-   - Pro: più semplice da spiegare.
-   - Contro: a gradini (effetti di soglia tra zone), meno sensibile.
-3. **Entrambe selezionabili.**
-   - Pro: confronto tra metodi.
-   - Contro: due serie di carichi e PMC da ricalcolare, spiegare e testare.
-4. **Carico calcolato da Garmin.**
-   - Pro: nessun calcolo.
-   - Contro: formula opaca e non sempre disponibile; può cambiare senza
-     avviso; non copre i FIT importati da altre fonti.
+1. **hrTSS from Banister's TRIMP on the HR trace.**
+   - Pro: uses every sample (not zones), continuous, scales like TSS (100 = one
+     hour at threshold), well known in the literature.
+   - Con: needs reliable minimum, maximum and threshold HR; the coefficient
+     depends on sex; underestimates the load of strength work and of
+     activities with unrepresentative HR.
+2. **Edwards' zone-based TRIMP.**
+   - Pro: simpler to explain.
+   - Con: stepwise (threshold effects between zones), less sensitive.
+3. **Both selectable.**
+   - Pro: comparison between methods.
+   - Con: two series of loads and PMC to recalculate, explain and test.
+4. **Load computed by Garmin.**
+   - Pro: no calculation.
+   - Con: opaque formula and not always available; may change without notice;
+     does not cover the FIT files imported from other sources.
 
-## Decisione
+## Decision
 
-Opzione 1. Il carico è l'hrTSS moltiplicato per il peso dello sport. Le
-opzioni 2 e 3 restano possibili come aggiunta futura, con un nuovo ADR.
+Option 1. The load is the hrTSS multiplied by the weight of the sport.
+Options 2 and 3 remain possible as a future addition, with a new ADR.
 
-Parametri:
+Parameters:
 
-- FC minima e massima inserite dall'utente, con data di validità; un
-  campione fuori da questi limiti è un errore e si scarta (si conta);
-- soglia in bici = FC di soglia della corsa − 4 bpm, finché non c'è un test
-  in bici;
-- pesi per sport (valori provvisori, da tarare in fase 3);
-- attività senza FC o con troppi campioni scartati: carico stimato e marcato.
+- minimum and maximum HR entered by the user, with a validity date; a sample
+  outside these limits is an error and is discarded (and counted);
+- threshold on the bike = running threshold HR − 4 bpm, until there is a bike
+  test;
+- weights per sport (provisional values, to be tuned in phase 3);
+- activities without HR or with too many discarded samples: estimated, marked
+  load.
 
-Formule, unità ed esempi: skill `ponos-allenamento`, file
+Formulas, units and examples: skill `ponos-allenamento`, file
 `references/modello-carico.md`.
 
-## Conseguenze
+## Consequences
 
-- Il cambio di un parametro ricalcola i carichi derivati.
-- Dati sbagliati dell'utente (FC massima troppo bassa) producono scarti:
-  l'app li segnala e propone di rivedere il valore.
-- I pesi degli sport sono scelte del progetto, non della letteratura, e
-  vanno dichiarati tali.
-- Le formule stanno in un solo modulo del dominio.
+- Changing a parameter recalculates the derived loads.
+- Wrong user data (maximum HR too low) produces discards: the app reports them
+  and suggests reviewing the value.
+- The sport weights are project choices, not from the literature, and must be
+  declared as such.
+- The formulas are in a single domain module.
 
-## Come se ne verifica il rispetto
+## How compliance is verified
 
-- T-CALC-01 (valori a mano), T-CALC-02 (vettoriale contro ingenua),
-  T-CALC-03 (invarianti), T-CALC-04 (PMC), T-CALC-05 (data di validità),
-  T-CALC-06 (soglia bici e stime), T-CALC-07 (casi limite).
-- Test di mutazione T-QUAL-01 su `load`.
+- T-CALC-01 (hand-computed values), T-CALC-02 (vectorised against naive),
+  T-CALC-03 (invariants), T-CALC-04 (PMC), T-CALC-05 (validity date),
+  T-CALC-06 (bike threshold and estimates), T-CALC-07 (edge cases).
+- Mutation test T-QUAL-01 on `load`.

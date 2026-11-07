@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Pesi degli sport salvati nel profilo: default, casi d'uso, effetto sulla panoramica."""
+"""Sport weights saved in the profile: defaults, use cases, effect on the overview."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from ponos_coach.load.use_cases import GetSportWeights, SetSportWeights
 from tests.builders import physiology_entry
 from tests.load.test_profile_overview import FIRST_PARAMS_DAY, TODAY, World, two_runs
 
-# Default di PLAN.md sezione 2 punto 7.
+# PLAN.md default, section 2 point 7.
 PLAN_DEFAULTS = {
     Sport.RUNNING: 1.0,
     Sport.TRAIL: 1.1,
@@ -107,7 +107,9 @@ def test_the_overview_uses_the_saved_weights() -> None:
 
     for before, after in zip(plain.activities, heavier.activities, strict=True):
         assert after.load.load == pytest.approx(before.load.load * 1.2)
-        assert after.load.hr_tss == pytest.approx(before.load.hr_tss)  # il peso non tocca l'hrTSS
+        assert after.load.hr_tss == pytest.approx(
+            before.load.hr_tss
+        )  # the weight does not touch the hrTSS
 
 
 def test_changing_the_weight_of_a_sport_recalculates_only_that_sport() -> None:
@@ -118,13 +120,13 @@ def test_changing_the_weight_of_a_sport_recalculates_only_that_sport() -> None:
     reads = world.archive.reads
     _, set_ = use_cases(world)
 
-    set_({Sport.CYCLING: SportWeight(0.5)})  # nessuna bici nel profilo
+    set_({Sport.CYCLING: SportWeight(0.5)})  # no bike in the profile
     world.overview()
-    assert world.archive.reads == reads  # le corse restano in cache
+    assert world.archive.reads == reads  # the runs stay in cache
 
     set_({Sport.CYCLING: SportWeight(0.5), Sport.RUNNING: SportWeight(1.1)})
     world.overview()
-    assert world.archive.reads == reads + 2  # le due corse si ricalcolano
+    assert world.archive.reads == reads + 2  # the two runs are recomputed
 
 
 def test_going_back_to_the_default_weight_gives_the_original_load() -> None:
@@ -154,29 +156,29 @@ def test_a_failed_save_leaves_the_previous_weights() -> None:
 
         def replace(self, weights: object) -> None:
             del weights
-            raise RuntimeError("scrittura non riuscita")
+            raise RuntimeError("write failed")
 
     failing = SetSportWeights(world.profile.activities, Failing())  # type: ignore[arg-type]
-    with pytest.raises(RuntimeError, match="scrittura"):
+    with pytest.raises(RuntimeError, match="write"):
         failing({Sport.CYCLING: SportWeight(2.0)})
 
     assert dict(store.load()) == {Sport.RUNNING: SportWeight(1.2)}
 
 
-# --- Aggregazioni dalla panoramica ------------------------------------------------------------
+# --- Aggregations from the overview ------------------------------------------------------------
 
 
 def test_the_overview_gives_the_weekly_load_and_zone_seconds() -> None:
     world = World()
     world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
-    before, after = two_runs(world)  # 15 gennaio e 10 febbraio, 30 minuti a 150 bpm (Z2)
+    before, after = two_runs(world)  # 15 January and 10 February, 30 minutes at 150 bpm (Z2)
     overview = world.overview()
 
     weekly = overview.weekly_load(TODAY)
     zones = overview.weekly_zones(TODAY)
 
-    assert weekly.weeks[0] == date(2026, 1, 12)  # il lunedì della settimana del 15 gennaio
-    assert weekly.weeks[-1] == date(2026, 2, 23)  # la settimana di oggi (1 marzo è domenica)
+    assert weekly.weeks[0] == date(2026, 1, 12)  # the Monday of the week of 15 January
+    assert weekly.weeks[-1] == date(2026, 2, 23)  # today's week (1 March is a Sunday)
     assert weekly.sports == (Sport.RUNNING,)
     assert float(weekly.load.sum()) == pytest.approx(sum(a.load.load for a in overview.activities))
     assert weekly.total_by_week[0] == pytest.approx(overview.activities[0].load.load)

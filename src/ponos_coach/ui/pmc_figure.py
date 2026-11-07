@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Figura Plotly del PMC: funzione pura da `PmcSeries` e attivita a `go.Figure`.
+"""Plotly PMC figure: pure function from `PmcSeries` and activities to `go.Figure`.
 
-Due pannelli con lo stesso asse delle date: in alto CTL, ATL e carico giornaliero (barre da
-zero), in basso la forma (TSB), che puo essere negativa. La legenda segue l'ordine delle serie.
-CTL e ATL si distinguono anche senza il colore: ATL e tratteggiata e ogni linea porta il suo nome
-accanto all'ultimo punto.
-Il payload per la pagina e un JSON prodotto da `json.dumps` (`render_script`).
+Two panels with the same date axis: on top CTL, ATL and daily load (bars from
+zero), below the form (TSB), which can be negative. The legend follows the series order.
+CTL and ATL are told apart even without colour: ATL is dashed and each line carries its name
+next to the last point.
+The page payload is a JSON produced by `json.dumps` (`render_script`).
 """
 
 from __future__ import annotations
@@ -31,18 +31,18 @@ from ponos_coach.ui.chart_payload import (
 )
 from ponos_coach.ui.tokens import ThemeTokens
 
-LOAD_UNIT = "hrTSS per day"  # unita del carico giornaliero e delle sue medie (CTL, ATL, TSB)
-MAX_NAMES_PER_DAY = 5  # nomi di attivita mostrati nel suggerimento di una barra
+LOAD_UNIT = "hrTSS per day"  # unit of the daily load and its averages (CTL, ATL, TSB)
+MAX_NAMES_PER_DAY = 5  # activity names shown in a bar's hint
 _LINE_WIDTH = 2
-_ATL_DASH = "dash"  # ATL e tratteggiata: CTL e ATL differiscono anche senza il colore
-_END_LABEL_SHIFT = 4  # pixel tra l'ultimo punto e il nome della linea
+_ATL_DASH = "dash"  # ATL is dashed: CTL and ATL differ even without colour
+_END_LABEL_SHIFT = 4  # pixels between the last point and the line's name
 _TOP_ROW_SHARE = 0.68
 EXPORT_FILE_STEM = "ponos-coach-pmc"
 
 
 @dataclass(frozen=True, slots=True)
 class ChartActivity:
-    """Ciò che il grafico sa di un'attività: giorno locale, carico e nome da mostrare."""
+    """What the chart knows about an activity: local day, load and name to show."""
 
     local_day: date
     load: float
@@ -51,7 +51,7 @@ class ChartActivity:
 
 @dataclass(frozen=True, slots=True)
 class PmcChartLabels:
-    """Testi del grafico, già tradotti dalla vista."""
+    """Chart texts, already translated by the view."""
 
     x_axis: str
     load_axis: str
@@ -61,11 +61,11 @@ class PmcChartLabels:
     tsb: str
     daily_load: str
     chrome: ChartChrome
-    load_unit: str = LOAD_UNIT  # "hrTSS per day", tradotto come frase intera
+    load_unit: str = LOAD_UNIT  # "hrTSS per day", translated as a whole sentence
 
 
 def daily_load_of(activities: Sequence[ChartActivity], days: Sequence[date]) -> list[float]:
-    """Carico (pesato) di ogni giorno della serie: somma delle attivita di quel giorno locale."""
+    """(Weighted) load of each day of the series: sum of that local day's activities."""
     totals: dict[date, float] = defaultdict(float)
     for entry in activities:
         totals[entry.local_day] += entry.load
@@ -73,7 +73,7 @@ def daily_load_of(activities: Sequence[ChartActivity], days: Sequence[date]) -> 
 
 
 def _day_hover_text(activities: Sequence[ChartActivity], days: Sequence[date]) -> list[str]:
-    """Nomi dei file di ogni giorno come testo: le entita HTML neutralizzano `<` e `&`."""
+    """File names of each day as text: HTML entities neutralise `<` and `&`."""
     names: dict[date, list[str]] = defaultdict(list)
     for entry in activities:
         names[entry.local_day].append(html.escape(entry.name, quote=True))
@@ -92,7 +92,7 @@ def build_pmc_figure(
     labels: PmcChartLabels,
     tokens: ThemeTokens,
 ) -> go.Figure:
-    """Figura del PMC. Serie, in quest'ordine: CTL, ATL, TSB (linee), carico giornaliero (barre)."""
+    """PMC figure. Series, in this order: CTL, ATL, TSB (lines), daily load (bars)."""
     days = pmc.days
     figure = make_subplots(
         rows=2,
@@ -133,7 +133,7 @@ def build_pmc_figure(
     figure.update_xaxes(axis_style(tokens, labels.x_axis), type="date", row=2, col=1)
     figure.update_yaxes(
         axis_style(tokens, f"{labels.load_axis} ({unit})"),
-        rangemode="tozero",  # le barre partono da zero
+        rangemode="tozero",  # bars start at zero
         row=1,
         col=1,
     )
@@ -154,8 +154,8 @@ def build_pmc_figure(
 def _end_labels(
     pmc: PmcSeries, labels: PmcChartLabels, tokens: ThemeTokens
 ) -> list[dict[str, object]]:
-    """Il nome di CTL e di ATL accanto all'ultimo punto: la linea più alta ha il nome sopra, l'altra
-    sotto, così i due nomi non si sovrappongono; il colore del testo è quello del tema."""
+    """The name of CTL and ATL next to the last point: the higher line has its name above, the other
+    below, so the two names do not overlap; the text colour is the theme's."""
     if len(pmc) == 0:
         return []
     last_day = pmc.days[-1]
@@ -184,7 +184,7 @@ def prepare_chart(
     labels: PmcChartLabels,
     tokens: ThemeTokens,
 ) -> PreparedChart:
-    """Costruisce figura e JSON: lavoro puro e pesante (circa 100 ms al primo grafico), adatto
-    a un thread che non è quello della UI."""
+    """Build figure and JSON: pure, heavy work (about 100 ms for the first chart), suited
+    to a thread other than the UI."""
     figure = build_pmc_figure(pmc, activities, labels, tokens)
     return prepare_figure(figure, labels.chrome, EXPORT_FILE_STEM, tokens)

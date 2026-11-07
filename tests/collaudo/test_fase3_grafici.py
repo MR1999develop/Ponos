@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-UI-04 e il contrasto di T-UI-05 per i grafici della fase 3, in entrambi i temi.
+"""T-UI-04 and the contrast of T-UI-05 for the phase 3 charts, in both themes.
 
-Le figure sono controllate in due modi: sulla struttura (serie, assi con unità, barre da zero,
-colori del tema, valori confrontati con una somma scritta qui senza le funzioni sotto prova) e nel
-motore web vero, dove si esportano in SVG e in PNG e si controllano i file (XML ben formato, PNG con
-CRC e dimensioni, colore di fondo del tema nei pixel).
+The figures are checked in two ways: on the structure (series, axes with units, bars from zero,
+theme colours, values compared with a sum written here without the functions under test) and in the
+real web engine, where they are exported to SVG and PNG and the files are checked (well-formed XML,
+PNG with
+CRC and dimensions, theme background colour in the pixels).
 """
 
 from __future__ import annotations
@@ -71,14 +72,14 @@ LOAD_LABELS = WeeklyLoadLabels("Week", "Load", SPORT_NAMES, CHROME)
 ZONES_LABELS = WeeklyZonesLabels("Week", "Time in zone", "Zone", CHROME)
 HR_LABELS = HeartRateLabels("Time", "Heart rate", "Heart rate", "Discarded", CHROME)
 LIMITS = HeartRateLimits(50, 190)
-THROUGH = date(2026, 6, 28)  # una domenica
+THROUGH = date(2026, 6, 28)  # a Sunday
 
 
-# --- Dati e costruttori ------------------------------------------------------------------------
+# --- Data and builders -------------------------------------------------------------------------
 
 
 def sample_day_loads(weeks: int = 40) -> list[DayLoad]:
-    """Tre sport su `weeks` settimane, con una settimana vuota in mezzo."""
+    """Three sports over `weeks` weeks, with an empty week in the middle."""
     rng = np.random.default_rng(2026)
     items: list[DayLoad] = []
     for week in range(weeks):
@@ -99,11 +100,11 @@ def sample_day_loads(weeks: int = 40) -> list[DayLoad]:
 
 
 def hr_trace() -> HeartRateTrace:
-    """Un tracciato di 40 minuti con picchi e un tratto sotto la FC minima (campioni scartati)."""
+    """A 40-minute track with peaks and a stretch below the minimum HR (discarded samples)."""
     seconds = np.arange(0, 2400, 2.0)
     bpm = 120.0 + 60.0 * np.sin(seconds / 300.0)
-    bpm[100:120] = 40.0  # sotto la minima
-    bpm[300:305] = 200.0  # sopra la massima
+    bpm[100:120] = 40.0  # below the minimum
+    bpm[300:305] = 200.0  # above the maximum
     return HeartRateTrace.of(HeartRateSeries(seconds, bpm), LIMITS)
 
 
@@ -142,7 +143,7 @@ EXPORT_STEMS = {
 }
 
 
-# --- Struttura delle figure --------------------------------------------------------------------
+# --- Structure of the figures ------------------------------------------------------------------
 
 
 def axes_of(figure: go.Figure) -> list[tuple[str, go.layout.XAxis | go.layout.YAxis]]:
@@ -174,7 +175,7 @@ def test_t_ui_04_every_figure_carries_the_theme_and_serialises_to_strict_ascii_j
 
 
 def _refuse_constant(name: str) -> object:
-    raise AssertionError(f"il JSON contiene {name}: la pagina non lo leggerebbe")
+    raise AssertionError(f"the JSON contains {name}: the page would not read it")
 
 
 @pytest.mark.parametrize("theme", THEMES)
@@ -189,9 +190,9 @@ def test_t_ui_04_every_value_axis_names_what_it_measures_with_its_unit(
     value_axes = [(n, t) for n, t in titled if n.startswith("yaxis")]
     assert value_axes, kind
     for name, title in value_axes:
-        assert re.search(r"\([^()]+\)$", title), (kind, name, title)  # "Nome (unità)"
+        assert re.search(r"\([^()]+\)$", title), (kind, name, title)  # "Name (unit)"
     x_axes = [t for n, t in titled if n.startswith("xaxis")]
-    assert x_axes, kind  # l'asse dei tempi ha un nome
+    assert x_axes, kind  # the time axis has a name
     if kind == "hr":
         assert x_axes == ["Time (min)"]
 
@@ -204,12 +205,12 @@ def test_t_ui_04_bar_charts_start_at_zero_stack_and_never_go_negative(theme: The
         assert figure.layout.yaxis.rangemode == "tozero"
         for trace in figure.data:
             assert trace.type == "bar"
-            assert trace.base is None  # nessuno scostamento: l'altezza è il valore
+            assert trace.base is None  # no offset: the height is the value
             assert (np.asarray(trace.y) >= 0).all()
     pmc = CHARTS["pmc"](tokens).figure
     (bars,) = [t for t in pmc.data if t.type == "bar"]
     assert (np.asarray(bars.y) >= 0).all()
-    assert pmc.layout.yaxis.rangemode == "tozero"  # il pannello delle barre
+    assert pmc.layout.yaxis.rangemode == "tozero"  # the bar panel
 
 
 @pytest.mark.parametrize("theme", THEMES)
@@ -256,14 +257,14 @@ def test_t_ui_04_empty_data_gives_a_valid_figure_for_every_chart(theme: Theme) -
         assert "NaN" not in prepared.script
         assert prepared.figure.layout.paper_bgcolor == tokens.background
     assert len(empty_load.figure.data) == 0
-    assert len(empty_zones.figure.data) == 5  # le cinque zone ci sono sempre, a zero
+    assert len(empty_zones.figure.data) == 5  # the five zones are always there, at zero
     assert all((np.asarray(t.y) == 0).all() for t in empty_zones.figure.data)
 
 
 def manual_weekly(
     items: list[DayLoad], through: date
 ) -> tuple[dict[tuple[date, Sport], float], dict[tuple[date, int], float]]:
-    """Somme per lunedì ISO scritte con i dizionari (oracolo indipendente dall'aggregatore)."""
+    """Sums per ISO Monday written with dictionaries (oracle independent of the aggregator)."""
     load: dict[tuple[date, Sport], float] = defaultdict(float)
     zones: dict[tuple[date, int], float] = defaultdict(float)
     for item in items:
@@ -281,7 +282,7 @@ def activities(draw: st.DrawFn) -> list[DayLoad]:
     count = draw(st.integers(0, 25))
     items: list[DayLoad] = []
     for _ in range(count):
-        day = date(2025, 1, 1) + timedelta(days=draw(st.integers(0, 600)))  # anche dopo THROUGH
+        day = date(2025, 1, 1) + timedelta(days=draw(st.integers(0, 600)))  # even after THROUGH
         sport = draw(st.sampled_from(list(Sport)))
         zone_values = tuple(draw(st.integers(0, 4000)) / 2.0 for _ in range(5))
         load = draw(st.integers(0, 3000)) / 10.0
@@ -312,8 +313,8 @@ def test_t_ui_04_the_bars_hold_the_weekly_sums_of_the_last_26_weeks_only(
         for sport in Sport
     }
     with_load = [sport for sport in Sport if totals[sport] > 0]
-    # Al più cinque serie (R4): oltre, restano i quattro sport con più carico (a parità vale
-    # l'ordine di `Sport`) e tutti gli altri, con "Altro", si sommano in "Altro".
+    # At most five series (R4): beyond that, the four sports with the most load remain (on a tie the
+    # order of `Sport` counts) and all the others, with "Other", are summed into "Other".
     members: dict[Sport, list[Sport]] = {sport: [sport] for sport in with_load}
     if len(with_load) > MAX_SPORT_SERIES:
         named = [sport for sport in with_load if sport is not Sport.OTHER]
@@ -353,15 +354,15 @@ def test_t_ui_04_the_heart_rate_curve_keeps_every_discarded_sample_marked_with_a
     curve, marks = figure.data
     assert curve.mode == "lines"
     assert marks.mode == "markers"
-    assert marks.marker.symbol == "x"  # non solo il colore
+    assert marks.marker.symbol == "x"  # not only colour
     assert len(marks.x) == trace.discarded_count == 25
     assert set(np.asarray(marks.y)) == {40.0, 200.0}
-    assert list(figure.layout.yaxis.range) == [35.0, 205.0]  # limiti allargati ai campioni
+    assert list(figure.layout.yaxis.range) == [35.0, 205.0]  # limits widened to the samples
     assert len(figure.layout.shapes) == 5
     assert [a.text for a in figure.layout.annotations] == [zone_label(i) for i in range(5)]
 
 
-# --- Contrasto dei colori (T-UI-05) ------------------------------------------------------------
+# --- Colour contrast (T-UI-05) -----------------------------------------------------------------
 
 
 def _luminance(color: str) -> float:
@@ -376,7 +377,7 @@ def contrast(first: str, second: str) -> float:
 
 
 def blend(foreground: str, background: str, alpha: float) -> str:
-    """Colore visibile di `foreground` con opacità `alpha` sopra `background`."""
+    """Visible colour of `foreground` with opacity `alpha` over `background`."""
     mixed = [
         round(alpha * int(foreground[i : i + 2], 16) + (1 - alpha) * int(background[i : i + 2], 16))
         for i in (1, 3, 5)
@@ -459,11 +460,11 @@ def test_t_ui_05_the_two_load_lines_of_the_pmc_differ_by_more_than_the_colour() 
     assert len({(t.line.dash, t.line.width) for t in lines}) == len(lines)
 
 
-# --- Esportazione nel motore web vero ----------------------------------------------------------
+# --- Export in the real web engine -------------------------------------------------------------
 
 
 def png_size(data: bytes) -> tuple[int, int]:
-    """Controlla firma, CRC, IHDR, IDAT decomprimibili e IEND; dà larghezza e altezza."""
+    """Checks signature, CRC, IHDR, decompressible IDAT and IEND; gives width and height."""
     assert data[:8] == b"\x89PNG\r\n\x1a\n"
     position, kinds, idat, header = 8, [], b"", b""
     while position < len(data):
@@ -489,7 +490,7 @@ def png_size(data: bytes) -> tuple[int, int]:
 def draw_and_export(
     qtbot: QtBot, tmp_path: Path, prepared: PreparedChart
 ) -> tuple[dict[str, Path], list[str]]:
-    """Disegna la figura nel motore web e preme "Save as SVG" e "Save as PNG"."""
+    """Draws the figure in the web engine and presses "Save as SVG" and "Save as PNG"."""
     asked: list[str] = []
     targets: dict[str, Path] = {}
 
@@ -508,7 +509,7 @@ def draw_and_export(
     with qtbot.waitSignal(view.drawn, timeout=WAIT_MS):
         view.show_prepared(prepared)
     downloads: list[QWebEngineDownloadRequest] = []
-    view.page.profile().downloadRequested.connect(downloads.append)  # oltre al gestore dell'app
+    view.page.profile().downloadRequested.connect(downloads.append)  # besides the app's handler
     for title in ("Save as SVG", "Save as PNG"):
         done: list[object] = []
         view.page.runJavaScript(
@@ -519,7 +520,7 @@ def draw_and_export(
         qtbot.waitUntil(partial(_target_finished, targets, suffix), timeout=WAIT_MS)
     qtbot.waitUntil(
         lambda: len(downloads) == 2 and all(d.isFinished() for d in downloads), timeout=WAIT_MS
-    )  # il file è definitivo solo a download concluso
+    )  # the file is final only when the download has finished
     assert {d.state() for d in downloads} == {
         QWebEngineDownloadRequest.DownloadState.DownloadCompleted
     }
@@ -555,7 +556,7 @@ def test_t_ui_04_each_chart_exports_a_valid_svg_and_png_in_both_themes(
 
     assert sorted(asked) == sorted(f"{EXPORT_STEMS[kind]}.{ext}" for ext in ("svg", "png"))
     svg_text = targets[".svg"].read_text(encoding="utf-8")
-    root = ElementTree.fromstring(svg_text)  # noqa: S314 - file prodotto dal motore locale
+    root = ElementTree.fromstring(svg_text)  # noqa: S314 - file produced by the local engine
     assert root.tag == "{http://www.w3.org/2000/svg}svg"
     assert float(str(root.get("width")).removesuffix("px")) > 0
     assert float(str(root.get("height")).removesuffix("px")) > 0
@@ -565,13 +566,13 @@ def test_t_ui_04_each_chart_exports_a_valid_svg_and_png_in_both_themes(
         "".join(node.itertext()) for node in root.iter("{http://www.w3.org/2000/svg}text")
     )
     first_axis = next(a.title.text for n, a in axes_of(CHARTS[kind](tokens).figure) if a.title.text)
-    assert first_axis in texts or kind == "hr"  # il titolo dell'asse è nel file
+    assert first_axis in texts or kind == "hr"  # the axis title is in the file
     width, height = png_size(targets[".png"].read_bytes())
     assert width >= 800
     assert height >= 500
     image = QImage.fromData(targets[".png"].read_bytes())
     assert (image.width(), image.height()) == (width, height)
-    assert image.pixelColor(2, 2).name() == tokens.background.lower()  # il fondo del tema
+    assert image.pixelColor(2, 2).name() == tokens.background.lower()  # the theme background
 
 
 def test_t_ui_04_a_hostile_label_is_drawn_as_text_and_runs_nothing(

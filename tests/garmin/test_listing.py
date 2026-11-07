@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dall'elenco JSON di Garmin ai tipi di dominio, voci ostili comprese (T-SEC-03)."""
+"""From the Garmin JSON listing to domain types, hostile entries included (T-SEC-03)."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ class TestRecordedLookingPage:
 
         first = items[0]
         assert first.start == datetime(2026, 5, 6, 7, 0, tzinfo=UTC)
-        assert first.duration_s == 1800.4  # elapsedDuration, non duration
+        assert first.duration_s == 1800.4  # elapsedDuration, not duration
         assert first.sport_key == "running"
         assert first.sport is Sport.RUNNING
         assert first.has_heart_rate is True

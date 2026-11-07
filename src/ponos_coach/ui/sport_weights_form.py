@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Modulo "Pesi degli sport": valori e regole, testabili senza finestra.
+"""Form "Sport weights": values and rules, testable without a window.
 
-Un peso va da 0 a `SportWeight.MAX` con due decimali; fuori intervallo si riporta al limite.
-"Ripristina predefiniti" rimette i pesi di default del dominio. Il modulo non conosce widget né
-testi.
+A weight ranges from 0 to `SportWeight.MAX` with two decimals; out of range it is clamped to the
+limit.
+"Restore defaults" puts back the domain's default weights. The form knows neither widgets nor
+texts.
 """
 
 from __future__ import annotations
@@ -24,36 +25,37 @@ def _clamped(value: float) -> float:
 
 
 class SportWeightsForm:
-    """Un peso per ogni sport, partendo da quelli in vigore."""
+    """One weight for each sport, starting from those in force."""
 
     def __init__(self, current: Mapping[Sport, SportWeight]) -> None:
         self._initial = {sport: _clamped(current[sport].value) for sport in Sport}
         self._values = dict(self._initial)
 
     def value(self, sport: Sport) -> float:
-        """Il peso mostrato per lo sport."""
+        """The weight shown for the sport."""
         return self._values[sport]
 
     def set_value(self, sport: Sport, value: float) -> None:
-        """L'utente cambia un peso; fuori intervallo si porta al limite più vicino. Un valore non
-        numerico (NaN) non cambia nulla: azzerare il peso toglierebbe lo sport dal carico."""
+        """The user changes a weight; out of range it goes to the nearest limit. A non-numeric
+        value (NaN) changes nothing: zeroing the weight would remove the sport from the load."""
         if not math.isnan(value):
             self._values[sport] = _clamped(value)
 
     def restore_defaults(self) -> None:
-        """Rimette i pesi di default di tutti gli sport."""
+        """Put back the default weights of all sports."""
         self._values = {sport: _clamped(default_weight(sport).value) for sport in Sport}
 
     @property
     def is_default(self) -> bool:
-        """Vero se tutti i pesi sono quelli di default."""
+        """True if all weights are the default ones."""
         return all(self._values[sport] == default_weight(sport).value for sport in Sport)
 
     @property
     def has_changes(self) -> bool:
-        """Vero se almeno un peso è diverso da quello in vigore all'apertura."""
+        """True if at least one weight differs from the one in force at opening."""
         return self._values != self._initial
 
     def build(self) -> dict[Sport, SportWeight]:
-        """I pesi da salvare: uno per sport (il caso d'uso tiene solo i diversi dal default)."""
+        """The weights to save: one per sport (the use case keeps only those different from the
+        default)."""
         return {sport: SportWeight(value) for sport, value in self._values.items()}

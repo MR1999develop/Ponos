@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Righe dei moduli: l'etichetta punta al campo, non al contenitore che lo avvolge.
+"""Form rows: the label points to the field, not to the container that wraps it.
 
-Con `QFormLayout.addRow(testo, contenitore)` Qt collega l'etichetta al contenitore (campo più
-messaggi), e il campo resta senza nome per i lettori di schermo. Qui l'etichetta è creata a mano,
-ha il campo come "buddy" e gli dà il suo testo come nome accessibile, se non ne ha già uno.
+With `QFormLayout.addRow(text, container)` Qt links the label to the container (field plus
+messages), and the field stays nameless for screen readers. Here the label is created by hand,
+has the field as "buddy" and gives it its text as accessible name, if it does not already have one.
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ from PySide6.QtWidgets import QFormLayout, QLabel, QWidget
 def add_field_row(
     layout: QFormLayout, text: str, field: QWidget, container: QWidget | None = None
 ) -> None:
-    """Aggiunge una riga con l'etichetta `text` per `field`; `container` (campo più note e
-    messaggi) è ciò che sta nella colonna dei campi, `field` stesso se omesso."""
+    """Add a row with the label `text` for `field`; `container` (field plus notes and
+    messages) is what goes in the field column, `field` itself if omitted."""
     label = QLabel(text)
     label.setBuddy(field)
     if not field.accessibleName():

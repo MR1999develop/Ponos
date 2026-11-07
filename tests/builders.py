@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Costruttori di valori di dominio per i test (attività, record, parametri, profili)."""
+"""Builders of domain values for the tests (activities, records, parameters, profiles)."""
 
 from __future__ import annotations
 
@@ -37,17 +37,17 @@ IMPORTED_AT = datetime(2026, 4, 1, 12, 0, tzinfo=UTC)
 
 
 def fit_identity(number: int = 1) -> FitIdentity:
-    """Identità FIT distinta per ogni `number` (numero di serie)."""
+    """Distinct FIT identity for each `number` (serial number)."""
     return FitIdentity(FileId(255, 1, number, T0))
 
 
 def gpx_identity(number: int = 1) -> GpxIdentity:
-    """Identità GPX distinta per ogni `number` (SHA-256 di un testo)."""
+    """Distinct GPX identity for each `number` (SHA-256 of a text)."""
     return GpxIdentity(hashlib.sha256(f"gpx-{number}".encode()).hexdigest())
 
 
 def archived_file(identity: ActivityIdentity) -> ArchivedFile:
-    """Riferimento d'archivio plausibile per l'identità (non c'è nessun file reale)."""
+    """Plausible archive reference for the identity (there is no real file)."""
     digest = hashlib.sha256(f"file-{identity}".encode()).hexdigest()
     extension = format_of(identity).value
     return ArchivedFile(PurePosixPath("2026") / f"{digest}.{extension}", digest, 1234)
@@ -64,7 +64,7 @@ def make_record(
     origin: ActivityOrigin = ActivityOrigin.IMPORT,
     garmin_activity_id: int | None = None,
 ) -> ActivityRecord:
-    """Record dell'indice con valori di default; ogni argomento si può cambiare."""
+    """Index record with default values; every argument can be changed."""
     identity = identity or fit_identity()
     return ActivityRecord(
         identity=identity,
@@ -82,24 +82,24 @@ def make_record(
 
 
 def physiology(threshold_bpm: int = 170) -> Physiology:
-    """Parametri di esempio: FC 50-190, soglia variabile, uomo."""
+    """Example parameters: HR 50-190, variable threshold, male."""
     return Physiology(HeartRateLimits(50, 190), ThresholdHeartRate(threshold_bpm), Sex.MALE)
 
 
 def physiology_entry(valid_from: date, threshold_bpm: int = 170) -> PhysiologyEntry:
-    """Voce dei parametri fisiologici valida da una data."""
+    """Valid physiological parameters entry from a date."""
     return PhysiologyEntry(valid_from, physiology(threshold_bpm))
 
 
 def absolute_path(*parts: str) -> Path:
-    """Percorso assoluto sotto la cartella temporanea, senza toccare il disco."""
+    """Absolute path under the temporary folder, without touching the disk."""
     return Path(tempfile.gettempdir(), "ponos-test-paths", *parts)
 
 
 def registry_entry(
     number: int = 1, *, last_used: datetime = IMPORTED_AT, folder: Path | None = None
 ) -> RegistryEntry:
-    """Voce del registro con id (UUID4 fisso dal numero), nome e cartella derivati."""
+    """Registry entry with id (UUID4 fixed from the number), name and folder derived."""
     profile_id = ProfileId.parse(f"00000000-0000-4000-8000-{number:012d}")
     return RegistryEntry(
         profile_id,
@@ -117,7 +117,7 @@ def remote_activity(
     sport_key: str = "running",
     has_heart_rate: bool | None = True,
 ) -> RemoteActivity:
-    """Attività dell'elenco remoto con id Garmin `1000 + number` (distinto per ogni `number`)."""
+    """Remote listing activity with Garmin id `1000 + number` (distinct for each `number`)."""
     return RemoteActivity(
         GarminActivityId(1000 + number), start, duration_s, sport_key, has_heart_rate
     )

@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Garmin finto: elenco e originali (`ActivitySource`) e account con MFA (`GarminAccount`).
+"""Fake Garmin: listing and originals (`ActivitySource`) and account with MFA (`GarminAccount`).
 
-Nessuna rete e nessun dato reale: le attività sono generate (una corsa al giorno, con FIT o GPX
-sintetici dello stesso inizio e della stessa durata dell'elenco). I guasti si iniettano per
-numero di chiamata o per attività; la risposta lenta fa avanzare un orologio finto, senza
+No network and no real data: the activities are generated (one run per day, with synthetic FIT or
+GPX of the same start and duration as the listing). Failures are injected by
+call number or by activity; the slow response advances a fake clock, without
 `sleep`.
 """
 
@@ -44,22 +44,22 @@ _TCX = (
     b'<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">'
     b"</TrainingCenterDatabase>"
 )
-PLACEHOLDER_TOKEN = "TOKEN-SEGNAPOSTO-0123456789abcdef"  # noqa: S105 - segnaposto
+PLACEHOLDER_TOKEN = "TOKEN-SEGNAPOSTO-0123456789abcdef"  # noqa: S105 - placeholder
 TEST_EMAIL = "atleta@example.invalid"
-TEST_PASSWORD = "password-di-prova"  # noqa: S105 - segnaposto
+TEST_PASSWORD = "password-di-prova"  # noqa: S105 - placeholder
 TEST_MFA_CODE = "123456"
 
 
 class OriginalKind(Enum):
-    """Che cosa c'è nello ZIP scaricato per un'attività."""
+    """What is in the ZIP downloaded for an activity."""
 
-    FIT = "fit"  # come dal sito Garmin: `<id>_ACTIVITY.fit`
-    GPX = "gpx"  # attività caricata come GPX
-    TCX = "tcx"  # formato non supportato
-    CORRUPT_FIT = "corrupt_fit"  # ZIP valido, `.fit` con byte a caso
-    TRUNCATED_ZIP = "truncated_zip"  # ZIP troncato: non si apre
-    NOT_A_ZIP = "not_a_zip"  # byte che non sono uno ZIP
-    EMPTY_ZIP = "empty_zip"  # ZIP senza voci
+    FIT = "fit"  # as from the Garmin site: `<id>_ACTIVITY.fit`
+    GPX = "gpx"  # activity uploaded as GPX
+    TCX = "tcx"  # unsupported format
+    CORRUPT_FIT = "corrupt_fit"  # valid ZIP, `.fit` with random bytes
+    TRUNCATED_ZIP = "truncated_zip"  # truncated ZIP: does not open
+    NOT_A_ZIP = "not_a_zip"  # bytes that are not a ZIP
+    EMPTY_ZIP = "empty_zip"  # ZIP without entries
 
 
 def _empty_zip() -> bytes:
@@ -70,7 +70,7 @@ def _empty_zip() -> bytes:
 
 
 def original_zip(number: int, kind: OriginalKind = OriginalKind.FIT) -> bytes:
-    """Lo ZIP dell'originale della corsa `number` (la stessa di `make_remote_history`)."""
+    """The ZIP of the original of run `number` (the same as in `make_remote_history`)."""
     activity_id = FIRST_ACTIVITY_ID + number
     name = f"{activity_id}_ACTIVITY"
     builders: dict[OriginalKind, Callable[[], bytes]] = {
@@ -88,8 +88,8 @@ def original_zip(number: int, kind: OriginalKind = OriginalKind.FIT) -> bytes:
 def make_remote_history(
     count: int, *, sport_key: str = "running", has_heart_rate: bool | None = True
 ) -> list[RemoteActivity]:
-    """`count` corse, una al giorno, la numero `n` con id `FIRST_ACTIVITY_ID + n` e inizio
-    `run_start(n)`: più `n` è grande, più è recente. Ordine crescente di `n`."""
+    """`count` runs, one per day, number `n` with id `FIRST_ACTIVITY_ID + n` and start
+    `run_start(n)`: the larger `n`, the more recent. Increasing order of `n`."""
     return [
         RemoteActivity(
             GarminActivityId(FIRST_ACTIVITY_ID + number),
@@ -107,7 +107,7 @@ def _number_of(activity: RemoteActivity) -> int:
 
 
 class Call(Enum):
-    """Le due chiamate di `ActivitySource`, per iniettare guasti."""
+    """The two calls of `ActivitySource`, to inject failures."""
 
     LIST_PAGE = "list_page"
     DOWNLOAD = "download"
@@ -115,7 +115,7 @@ class Call(Enum):
 
 @dataclass(frozen=True, slots=True)
 class RecordedCall:
-    """Una chiamata ricevuta: quale, e la posizione (elenco) o l'id (download)."""
+    """A call received: which one, and the position (listing) or the id (download)."""
 
     call: Call
     offset: int | None = None
@@ -124,16 +124,16 @@ class RecordedCall:
 
 
 class FakeActivitySource:
-    """`ActivitySource` su un elenco in memoria, newest first, con guasti iniettabili.
+    """`ActivitySource` on an in-memory listing, newest first, with injectable failures.
 
-    - `fail_call(Call, n, error)`: la n-esima chiamata (da 1) di quel tipo solleva `error`.
-    - `fail_download_of(id, error, times=None)`: i download di quell'attività falliscono
-      `times` volte (sempre se None).
-    - `set_original(id, bytes)` / `set_kind(id, OriginalKind)`: cambia ciò che si scarica.
-    - `malformed(ids)`: quelle voci compaiono nell'elenco come scartate (contano in `raw_count`).
-    - `latency_s` e `on_latency`: ogni chiamata invoca `on_latency(latency_s)` (per far avanzare
-      un orologio finto) prima di rispondere.
-    - `calls`, `call_count(Call)`, `downloads` registrano ciò che è successo.
+    - `fail_call(Call, n, error)`: the n-th call (from 1) of that kind raises `error`.
+    - `fail_download_of(id, error, times=None)`: downloads of that activity fail
+      `times` times (always if None).
+    - `set_original(id, bytes)` / `set_kind(id, OriginalKind)`: change what gets downloaded.
+    - `malformed(ids)`: those entries appear in the listing as discarded (count in `raw_count`).
+    - `latency_s` and `on_latency`: each call invokes `on_latency(latency_s)` (to advance
+      a fake clock) before answering.
+    - `calls`, `call_count(Call)`, `downloads` record what happened.
     """
 
     def __init__(
@@ -159,53 +159,53 @@ class FakeActivitySource:
         self.calls: list[RecordedCall] = []
         self.downloads: list[GarminActivityId] = []
 
-    # --- Regia del test ------------------------------------------------------------------
+    # --- Test direction ------------------------------------------------------------------
 
     def add_activity(self, activity: RemoteActivity) -> None:
-        """Un'attività nuova compare nell'elenco (per esempio caricata in ritardo)."""
+        """A new activity appears in the listing (for example uploaded late)."""
         self._activities[activity.garmin_id] = activity
 
     def remove_activity(self, garmin_id: GarminActivityId) -> None:
-        """L'attività sparisce dall'elenco e dai download."""
+        """The activity disappears from the listing and from the downloads."""
         self._activities.pop(garmin_id, None)
 
     def set_original(self, garmin_id: GarminActivityId, content: bytes) -> None:
-        """Sostituisce i byte scaricati per l'attività."""
+        """Replace the bytes downloaded for the activity."""
         self._originals[garmin_id] = content
 
     def set_kind(self, garmin_id: GarminActivityId, kind: OriginalKind) -> None:
-        """Lo ZIP dell'attività contiene questo tipo di originale."""
+        """The activity's ZIP contains this kind of original."""
         self._kinds[garmin_id] = kind
 
     def malformed(self, ids: Sequence[GarminActivityId]) -> None:
-        """Queste voci arrivano nell'elenco ma l'adattatore le scarta."""
+        """These entries arrive in the listing but the adapter discards them."""
         self._malformed = frozenset(ids)
 
     def fail_call(self, call: Call, number: int, error: Exception) -> None:
-        """La `number`-esima chiamata (da 1) di quel tipo solleva `error`, una volta."""
+        """The `number`-th call (from 1) of that kind raises `error`, once."""
         self._failures[(call, number)] = error
 
     def fail_download_of(
         self, garmin_id: GarminActivityId, error: Exception, *, times: int | None = None
     ) -> None:
-        """I download di quell'attività falliscono `times` volte, o sempre se `times` è None."""
+        """Downloads of that activity fail `times` times, or always if `times` is None."""
         self._download_failures[garmin_id] = (error, times)
 
     def call_count(self, call: Call) -> int:
-        """Quante chiamate di quel tipo sono arrivate."""
+        """How many calls of that kind arrived."""
         return self._counts[call]
 
     @property
     def activities(self) -> Mapping[GarminActivityId, RemoteActivity]:
-        """Le attività oggi presenti sul finto Garmin."""
+        """The activities currently present on the fake Garmin."""
         return dict(self._activities)
 
-    # --- Porta -----------------------------------------------------------------------------
+    # --- Port -----------------------------------------------------------------------------
 
     def list_page(self, offset: int, limit: int) -> ActivityPage:
-        """Vedi `ActivitySource.list_page`."""
+        """See `ActivitySource.list_page`."""
         if offset < 0 or not 1 <= limit <= MAX_PAGE_SIZE:
-            raise ValueError("posizione o limite non validi")
+            raise ValueError("invalid position or limit")
         self._enter(Call.LIST_PAGE, RecordedCall(Call.LIST_PAGE, offset=offset, limit=limit))
         ordered = sorted(self._activities.values(), key=lambda a: (a.start, a.garmin_id.value))
         ordered.reverse()
@@ -215,7 +215,7 @@ class FakeActivitySource:
         return ActivityPage(offset, items, len(window), total)
 
     def download_original(self, activity_id: GarminActivityId, max_bytes: int) -> bytes:
-        """Vedi `ActivitySource.download_original`."""
+        """See `ActivitySource.download_original`."""
         self._enter(Call.DOWNLOAD, RecordedCall(Call.DOWNLOAD, activity_id=activity_id))
         self.downloads.append(activity_id)
         self._raise_download_failure(activity_id)
@@ -228,10 +228,10 @@ class FakeActivitySource:
                 _number_of(activity), self._kinds.get(activity_id, OriginalKind.FIT)
             )
         if len(content) > max_bytes:
-            raise DownloadTooLargeError("download troppo grande")
+            raise DownloadTooLargeError("download too large")
         return content
 
-    # --- Interni -----------------------------------------------------------------------------
+    # --- Internals -----------------------------------------------------------------------------
 
     def _enter(self, call: Call, recorded: RecordedCall) -> None:
         self._counts[call] += 1
@@ -256,12 +256,12 @@ class FakeActivitySource:
 
 
 class FakeGarminAccount:
-    """`GarminAccount` finto con MFA opzionale e token segnaposto riconoscibili.
+    """Fake `GarminAccount` with optional MFA and recognizable placeholder tokens.
 
-    Il login riesce con `TEST_EMAIL` e `TEST_PASSWORD` (e `TEST_MFA_CODE` se `mfa_required`) e
-    dà una sessione sulla `ActivitySource` data. I token emessi sono validi finché non si chiama
-    `revoke_tokens()`. `login_calls`, `resume_calls` e `mfa_prompts` contano le chiamate; la
-    password non si conserva da nessuna parte.
+    Login succeeds with `TEST_EMAIL` and `TEST_PASSWORD` (and `TEST_MFA_CODE` if `mfa_required`) and
+    gives a session on the given `ActivitySource`. The issued tokens are valid until
+    `revoke_tokens()` is called. `login_calls`, `resume_calls` and `mfa_prompts` count the calls;
+    the password is not kept anywhere.
     """
 
     def __init__(
@@ -282,31 +282,31 @@ class FakeGarminAccount:
         self.mfa_prompts = 0
 
     def fail_login_with(self, error: Exception | None) -> None:
-        """Il prossimo login (e i successivi, finché non si passa None) solleva `error`."""
+        """The next login (and the following ones, until None is passed) raises `error`."""
         self._login_error = error
 
     def fail_resume_with(self, error: Exception | None) -> None:
-        """Come `fail_login_with`, per `resume`."""
+        """Like `fail_login_with`, for `resume`."""
         self._resume_error = error
 
     def revoke_tokens(self) -> None:
-        """Tutti i token emessi smettono di valere: `resume` dà `AuthenticationRequiredError`."""
+        """All issued tokens stop being valid: `resume` gives `AuthenticationRequiredError`."""
         self._valid.clear()
 
     def rate_limit(self, retry_after_s: float | None = None) -> None:
-        """Il login e la ripresa danno 429 finché non si chiama `fail_login_with(None)`."""
+        """Login and resume give 429 until `fail_login_with(None)` is called."""
         self._login_error = RateLimitedError(retry_after_s)
         self._resume_error = RateLimitedError(retry_after_s)
 
     def go_offline(self) -> None:
-        """Il login e la ripresa danno `ServiceUnavailableError`."""
+        """Login and resume give `ServiceUnavailableError`."""
         self._login_error = ServiceUnavailableError("non disponibile")
         self._resume_error = ServiceUnavailableError("non disponibile")
 
     def login(
         self, email: str, password: str, prompt_mfa_code: Callable[[], str | None]
     ) -> GarminSession:
-        """Vedi `GarminAccount.login`."""
+        """See `GarminAccount.login`."""
         self.login_calls += 1
         if self._login_error is not None:
             raise self._login_error
@@ -318,15 +318,15 @@ class FakeGarminAccount:
             if code is None:
                 raise MfaCancelledError("MFA annullato")
             if code != TEST_MFA_CODE:
-                raise InvalidCredentialsError("codice rifiutato")
+                raise InvalidCredentialsError("code rejected")
         self._valid.add(self._token_value)
         return GarminSession(self._source, SessionTokens(self._token_value))
 
     def resume(self, tokens: SessionTokens) -> GarminSession:
-        """Vedi `GarminAccount.resume`."""
+        """See `GarminAccount.resume`."""
         self.resume_calls += 1
         if self._resume_error is not None:
             raise self._resume_error
         if tokens.reveal() not in self._valid:
-            raise AuthenticationRequiredError("token non validi")
+            raise AuthenticationRequiredError("invalid tokens")
         return GarminSession(self._source, tokens)

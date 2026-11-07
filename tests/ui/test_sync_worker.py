@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Il lavoro dell'account Garmin senza finestra: token, accesso, uscita e un giro.
+"""The Garmin account work without a window: tokens, login, logout and one round.
 
-Fake in memoria per Garmin, portachiavi, database del profilo e archivio; nessuna rete.
+In-memory fakes for Garmin, keyring, profile database and archive; no network.
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ FAST = SyncPolicy(min_pause_s=0.001, max_jitter_s=0.0, backoff_base_s=0.01, back
 
 
 class Rig:
-    """Un worker con fake: Garmin, account, portachiavi, database e archivio in memoria."""
+    """A worker with fakes: Garmin, account, keyring, database and archive in memory."""
 
     def __init__(
         self,
@@ -88,7 +88,7 @@ class Rig:
             self.link()
 
     def link(self) -> None:
-        """Collega l'account come farebbe l'utente (i token sono quelli che Garmin riconosce)."""
+        """Connect the account as the user would (the tokens are the ones Garmin recognizes)."""
         result = self.worker.log_in(
             PROFILE_ID,
             Credentials(TEST_EMAIL, TEST_PASSWORD),
@@ -112,7 +112,7 @@ class Rig:
         return result, seen
 
 
-# --- Controllo dei token -----
+# --- Token check -----
 
 
 def test_check_reads_the_saved_tokens_of_the_profile() -> None:
@@ -166,7 +166,7 @@ def test_log_out_deletes_the_tokens_and_a_keychain_failure_is_reported() -> None
     assert not rig.worker.log_out(PROFILE_ID)
 
 
-# --- Accesso -----
+# --- Login -----
 
 
 def test_login_without_mfa_saves_the_tokens_for_the_profile() -> None:
@@ -279,10 +279,10 @@ def test_the_password_is_not_in_the_credentials_repr_nor_in_the_logs(
     assert TEST_PASSWORD not in repr(credentials)
     assert TEST_PASSWORD not in caplog.text
     assert TEST_EMAIL not in caplog.text
-    assert "RuntimeError" in caplog.text  # del guasto si scrive il tipo
+    assert "RuntimeError" in caplog.text  # the failure's type is written
 
 
-# --- Attesa del codice MFA -----
+# --- Waiting for the MFA code -----
 
 
 def test_the_mailbox_hands_over_the_first_answer_only() -> None:
@@ -307,7 +307,7 @@ def test_an_unanswered_mailbox_gives_up_after_its_limit() -> None:
     assert MfaMailbox(0.01).wait() is None
 
 
-# --- Sincronizzazione -----
+# --- Synchronization -----
 
 
 def test_a_round_downloads_everything_with_its_own_connection_and_reports_progress() -> None:
@@ -374,7 +374,7 @@ def test_a_round_that_cannot_start_says_why(setup: str, problem: SyncProblem) ->
     result, _ = rig.synchronize()
 
     assert result == SyncNotStarted(problem, SyncMode.SYNC, False)
-    assert rig.source.calls == []  # nessuna richiesta a Garmin
+    assert rig.source.calls == []  # no request to Garmin
 
 
 def test_a_profile_that_cannot_be_opened_is_a_problem_not_a_crash() -> None:
@@ -389,14 +389,14 @@ def test_a_profile_that_cannot_be_opened_is_a_problem_not_a_crash() -> None:
 
 
 class ExplodingAccount(FakeGarminAccount):
-    """Un account che fallisce in modo imprevisto, con un testo che contiene un segreto."""
+    """An account that fails unexpectedly, with a text that contains a secret."""
 
     def resume(self, tokens: SessionTokens) -> GarminSession:  # noqa: ARG002
         raise RuntimeError(f"segreto {PLACEHOLDER_TOKEN}")
 
 
 class RenewingAccount(FakeGarminAccount):
-    """Un account la cui ripresa rinnova i token, come può fare la libreria."""
+    """An account whose resume renews the tokens, as the library may do."""
 
     def resume(self, tokens: SessionTokens) -> GarminSession:
         session = super().resume(tokens)
@@ -493,11 +493,11 @@ def test_a_login_cancelled_by_the_user_stays_a_cancellation_even_if_the_wait_exp
     assert result is LoginEnd.CANCELLED
 
 
-# --- Seconda connessione al database -----
+# --- Second database connection -----
 
 
 class _RecordingStorage(InMemoryProfileStorage):
-    """Ricorda con quali argomenti si apre il database."""
+    """Remember with which arguments the database is opened."""
 
     def __init__(self) -> None:
         super().__init__()

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Risorse locali servite alla pagina dei grafici: elenco chiuso, nessun percorso dall'esterno."""
+"""Local resources served to the charts page: closed list, no path from outside."""
 
 from __future__ import annotations
 
@@ -11,14 +11,14 @@ from importlib import resources
 
 @dataclass(frozen=True, slots=True)
 class WebResource:
-    """Un contenuto servito: byte e tipo MIME."""
+    """A served content: bytes and MIME type."""
 
     content: bytes
     mime_type: str
 
 
 def _read_plotly_js() -> bytes:
-    """`plotly.min.js` dal pacchetto `plotly` installato (mai da una CDN)."""
+    """`plotly.min.js` from the installed `plotly` package (never from a CDN)."""
     return (resources.files("plotly") / "package_data" / "plotly.min.js").read_bytes()
 
 
@@ -46,7 +46,7 @@ _cache: dict[str, WebResource] = {}
 
 
 def resource_for_path(path: str) -> WebResource | None:
-    """La risorsa di un percorso URL (`/chart.html`...), `None` se non e nell'elenco."""
+    """The resource of a URL path (`/chart.html`...), `None` if it is not in the list."""
     loader = _LOADERS.get(path)
     if loader is None:
         return None

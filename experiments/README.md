@@ -1,26 +1,26 @@
-# Esperimenti
+# Experiments
 
-`garmin_spike.py` e' lo spike della fase 0: verifica dal vivo l'accesso a Garmin
-Connect con `garminconnect` (login con MFA, token nel portachiavi, ultime
-attivita', conteggio e tempi dello storico, un download FIT originale con
-lettura del tracciato, allenamenti programmati in sola lettura).
+`garmin_spike.py` is the phase 0 spike: it checks live access to Garmin
+Connect with `garminconnect` (login with MFA, tokens in the keyring, latest
+activities, count and timings of the history, one original FIT download with
+track reading, scheduled workouts read-only).
 
-- Lancio, nel proprio terminale (chiede email, password ed eventuale codice
-  MFA; nessuno dei tre viene salvato): `uv run --locked python experiments/garmin_spike.py`.
-  `--downloads N` scarica fino a 5 file per la statistica d'orario.
-- Scrive `experiments/garmin_spike.md` (solo dati non personali),
-  `experiments/garmin_spike_shapes.json` (struttura anonima delle risposte reali:
-  un elemento dell'elenco attivita', risposta del conteggio, allenamenti
-  programmati, JSON dei token; solo nomi di chiavi, tipi, lunghezze e ordini di
-  grandezza, mai valori; serve a scrivere fixture per i test di contratto) e, in
-  `experiments/spike-data/` (ignorata da git), lo zip e il FIT scaricati.
-  Nel portachiavi mette la voce `PonosCoach-spike`.
-- Attenzione: `experiments/spike-data/` contiene FC e GPS in chiaro; a fine prova
-  va cancellata con `--logout`.
-- Pulizia: `uv run --locked python experiments/garmin_spike.py --logout` cancella la voce del
-  portachiavi e i file di `spike-data/`.
-- Esce con 0 se tutti i passi riescono, con 1 se qualcuno fallisce.
-- Il rapporto indica anche la dimensione dei token in byte UTF-8, caratteri e byte
-  UTF-16 e se supera 2560 byte (limite del Credential Manager generico).
-- `spike_shapes.py` contiene `shape_of`, la funzione pura che anonimizza; e' testata
+- Launch, in your own terminal (it asks for email, password and possibly the MFA
+  code; none of the three is saved): `uv run --locked python experiments/garmin_spike.py`.
+  `--downloads N` downloads up to 5 files for the time statistic.
+- It writes `experiments/garmin_spike.md` (non-personal data only),
+  `experiments/garmin_spike_shapes.json` (anonymous structure of the real responses:
+  one element of the activity list, count response, scheduled
+  workouts, tokens JSON; only key names, types, lengths and orders of
+  magnitude, never values; it serves to write fixtures for the contract tests) and, in
+  `experiments/spike-data/` (ignored by git), the downloaded zip and FIT.
+  In the keyring it puts the `PonosCoach-spike` entry.
+- Warning: `experiments/spike-data/` contains HR and GPS in the clear; at the end of the test
+  it must be deleted with `--logout`.
+- Cleanup: `uv run --locked python experiments/garmin_spike.py --logout` deletes the keyring
+  entry and the files in `spike-data/`.
+- Exits with 0 if all the steps succeed, with 1 if any fails.
+- The report also gives the token size in UTF-8 bytes, characters and UTF-16
+  bytes and whether it exceeds 2560 bytes (limit of the generic Credential Manager).
+- `spike_shapes.py` contains `shape_of`, the pure function that anonymises; it is tested
   in `tests/experiments/test_spike_shapes.py`.

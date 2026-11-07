@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Controlli sul catalogo di traduzione (`.ts` di Qt Linguist), senza Qt.
+"""Checks on the translation catalog (Qt Linguist `.ts`), without Qt.
 
-La sessione `i18n` di nox genera con `pyside6-lupdate` un catalogo "fresco" dai sorgenti e lo
-confronta con quello versionato: `find_problems` dice cosa manca, cosa e obsoleto, cosa non e
-tradotto e quali segnaposto (`{nome}`, `%n`) non coincidono tra sorgente e traduzione.
+The nox `i18n` session generates a "fresh" catalog from the sources with `pyside6-lupdate` and
+compares it with the versioned one: `find_problems` says what is missing, what is obsolete, what is
+not
+translated and which placeholders (`{name}`, `%n`) do not match between source and translation.
 
-Uso da riga di comando: `python -m ponos_coach.i18n.catalog FRESCO.ts VERSIONATO.ts`
-(uscita 0 se tutto coincide, 1 se ci sono problemi, 2 per un uso scorretto).
+Command-line use: `python -m ponos_coach.i18n.catalog FRESH.ts VERSIONED.ts`
+(exit 0 if everything matches, 1 if there are problems, 2 for incorrect usage).
 """
 
 from __future__ import annotations
@@ -26,11 +27,11 @@ _PLACEHOLDER = re.compile(r"\{\w*\}|%n")
 
 
 class CatalogError(ValueError):
-    """Il file non e un catalogo `.ts` leggibile entro i limiti."""
+    """The file is not a readable `.ts` catalog within the limits."""
 
 
 class MessageStatus(StrEnum):
-    """Stato di una voce, come lo scrive Linguist."""
+    """State of an entry, as Linguist writes it."""
 
     FINISHED = "finished"
     UNFINISHED = "unfinished"
@@ -39,7 +40,7 @@ class MessageStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Message:
-    """Una voce del catalogo; `forms` ha una sola traduzione, o una per forma plurale."""
+    """An entry of the catalog; `forms` has a single translation, or one per plural form."""
 
     context: str
     source: str
@@ -50,15 +51,15 @@ class Message:
 
     @property
     def key(self) -> tuple[str, str, str]:
-        """Identita della voce: contesto, testo sorgente e commento di disambiguazione."""
+        """Identity of the entry: context, source text and disambiguation comment."""
         return (self.context, self.source, self.comment)
 
 
 class ProblemKind(StrEnum):
-    """Che cosa non va in una voce."""
+    """What is wrong with an entry."""
 
-    MISSING = "missing"  # nei sorgenti ma non nel catalogo versionato
-    OBSOLETE = "obsolete"  # nel catalogo versionato ma non piu nei sorgenti
+    MISSING = "missing"  # in the sources but not in the versioned catalog
+    OBSOLETE = "obsolete"  # in the versioned catalog but no longer in the sources
     UNFINISHED = "unfinished"
     EMPTY = "empty"
     PLACEHOLDERS = "placeholders"
@@ -66,7 +67,7 @@ class ProblemKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Problem:
-    """Un problema del catalogo, riferito a una voce."""
+    """A catalog problem, referring to an entry."""
 
     kind: ProblemKind
     context: str
@@ -77,13 +78,13 @@ class Problem:
 
 
 def parse_catalog(data: bytes) -> tuple[Message, ...]:
-    """Legge un `.ts`. Rifiuta file troppo grandi e dichiarazioni di entita (nessuna espansione)."""
+    """Reads a `.ts`. Rejects files that are too large and entity declarations (no expansion)."""
     if len(data) > MAX_CATALOG_BYTES:
         raise CatalogError("catalog too large")
     if b"<!ENTITY" in data:
         raise CatalogError("entity declarations are not allowed")
     try:
-        root = ET.fromstring(data)  # noqa: S314 - dimensione limitata e niente entita
+        root = ET.fromstring(data)  # noqa: S314 - bounded size and no entities
     except ET.ParseError as error:
         raise CatalogError("catalog is not well-formed XML") from error
     if root.tag != "TS":
@@ -121,14 +122,14 @@ def _message_of(context: str, element: ET.Element) -> Message:
 
 
 def placeholders_of(text: str) -> frozenset[str]:
-    """Segnaposto con nome (`{name}`) e `%n` presenti in un testo."""
+    """Named placeholders (`{name}`) and `%n` present in a text."""
     return frozenset(_PLACEHOLDER.findall(text))
 
 
 def find_problems(current: Sequence[Message], versioned: Sequence[Message]) -> list[Problem]:
-    """Confronta i testi attuali dei sorgenti con il catalogo versionato.
+    """Compares the current texts of the sources with the versioned catalog.
 
-    In ogni forma plurale `%n` e i segnaposto con nome devono comparire come nel sorgente.
+    In every plural form `%n` and the named placeholders must appear as in the source.
     """
     current_keys = {message.key for message in current}
     live = {m.key: m for m in versioned if m.status is not MessageStatus.OBSOLETE}
@@ -167,7 +168,7 @@ def _read(path: Path) -> tuple[Message, ...]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Confronta due cataloghi; i problemi vanno su stderr, uno per riga."""
+    """Compares two catalogs; problems go to stderr, one per line."""
     parser = argparse.ArgumentParser(prog="python -m ponos_coach.i18n.catalog")
     parser.add_argument("fresh", type=Path, help=".ts generated from the sources")
     parser.add_argument("versioned", type=Path, help=".ts kept in the repository")

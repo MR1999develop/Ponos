@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Nomi dei file e delle cartelle dentro la cartella di un profilo (una sola definizione)."""
+"""Names of the files and folders inside a profile's folder (one single definition)."""
 
 PROFILE_DATABASE_NAME = "ponos.sqlite3"
 PROFILE_LOCK_NAME = "ponos.lock"
 PROFILE_ARCHIVE_DIR = "archivio"
 PROFILE_BACKUP_DIR = "backup"
 
-# Gli unici nomi che l'app mette nella cartella di un profilo: il database con i file che SQLite
-# gli affianca, il lock, l'archivio e le copie di sicurezza. Cancellare una cartella di profilo
-# è permesso solo se contiene soltanto questi nomi.
+# The only names the app puts in a profile's folder: the database with the files SQLite
+# places next to it, the lock, the archive and the backups. Deleting a profile folder
+# is allowed only if it contains just these names.
 PROFILE_OWNED_NAMES = frozenset(
     {
         PROFILE_DATABASE_NAME,

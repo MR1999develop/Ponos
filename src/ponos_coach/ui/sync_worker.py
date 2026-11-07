@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Il lavoro dell'account Garmin, senza Qt: controllo dei token, collegamento, scollegamento e
-sincronizzazione. Gira in un thread proprio, avviato da `SyncController`.
+"""The Garmin account work, without Qt: token check, connection, disconnection and
+synchronisation. Runs on its own thread, started by `SyncController`.
 
-La sincronizzazione apre una sua connessione al database del profilo (`ProfileStorage.open`
-sulla stessa cartella) e la chiude alla fine: non tocca mai quella del thread dei dati. La
-password e il codice MFA passano solo a `GarminAccount`; qui non si conservano né si registrano
-(nei log solo il tipo degli errori).
+Synchronisation opens its own connection to the profile database (`ProfileStorage.open`
+on the same folder) and closes it at the end: it never touches the data thread's one. The
+password and the MFA code go only to `GarminAccount`; here they are neither kept nor logged
+(in the logs only the type of the errors).
 """
 
 from __future__ import annotations
@@ -66,24 +66,24 @@ from ponos_coach.ui.sync_preferences import MemorySyncPreferences, SyncPreferenc
 
 _LOG = logging.getLogger(__name__)
 
-MFA_WAIT_S: Final = 300.0  # quanto si aspetta il codice che l'utente sta ricevendo
-_PROGRESS_INTERVAL_S: Final = 0.05  # al massimo 20 aggiornamenti al secondo
+MFA_WAIT_S: Final = 300.0  # how long to wait for the code the user is receiving
+_PROGRESS_INTERVAL_S: Final = 0.05  # at most 20 updates per second
 
 
 class SystemNotifier(Protocol):
-    """Notifica di sistema: non blocca mai e non solleva mai (se fallisce non succede nulla)."""
+    """System notification: never blocks and never raises (if it fails nothing happens)."""
 
     def notify(self, title: str, message: str) -> None:
-        """Mostra la notifica, se il sistema la supporta."""
+        """Show the notification, if the system supports it."""
         ...
 
 
 @dataclass(frozen=True, slots=True)
 class SyncServices:
-    """Tutto ciò che la sincronizzazione riceve dal Composition Root.
+    """Everything the synchronisation receives from the Composition Root.
 
-    `tokens` è `None` se il portachiavi del sistema non si può usare: nessun account si può
-    collegare, l'import da file resta disponibile.
+    `tokens` is `None` if the system keychain cannot be used: no account can be
+    connected, file import stays available.
     """
 
     account: GarminAccount
@@ -100,18 +100,18 @@ class SyncServices:
 
 @dataclass(frozen=True, slots=True)
 class Credentials:
-    """Email e password digitate; la password non compare mai in `repr`."""
+    """Email and password typed; the password never appears in `repr`."""
 
     email: str
     password: str = field(repr=False)
 
 
 class MfaMailbox:
-    """Dove il thread del login aspetta il codice che la UI raccoglie.
+    """Where the login thread waits for the code that the UI collects.
 
-    `answer(None)` (Annulla) e `cancel()` sbloccano l'attesa con "annullato"; l'attesa ha un
-    tetto (`wait_s`) oltre il quale `wait` dà `None` e `timed_out` diventa vero: la scadenza si
-    distingue dall'annullamento.
+    `answer(None)` (Cancel) and `cancel()` unblock the wait with "cancelled"; the wait has a
+    cap (`wait_s`) beyond which `wait` returns `None` and `timed_out` becomes true: the timeout is
+    told apart from a cancellation.
     """
 
     def __init__(self, wait_s: float) -> None:
@@ -120,21 +120,23 @@ class MfaMailbox:
         self._answers: queue.Queue[str | None] = queue.Queue(maxsize=1)
 
     def answer(self, code: str | None) -> None:
-        """Consegna il codice (o `None` se l'utente annulla). Una sola risposta per richiesta."""
-        with contextlib.suppress(queue.Full):  # già risposto o annullato: la seconda non conta
+        """Deliver the code (or `None` if the user cancels). One answer per request."""
+        with contextlib.suppress(
+            queue.Full
+        ):  # already answered or cancelled: the second does not count
             self._answers.put_nowait(code)
 
     def cancel(self) -> None:
-        """Sblocca l'attesa come se l'utente avesse annullato."""
+        """Unblock the wait as if the user had cancelled."""
         self.answer(None)
 
     @property
     def timed_out(self) -> bool:
-        """Vero se l'attesa è finita perché il tempo è scaduto (nessuno ha risposto)."""
+        """True if the wait ended because time ran out (nobody answered)."""
         return self._timed_out
 
     def wait(self) -> str | None:
-        """Il codice, o `None` se annullato o scaduto il tempo."""
+        """The code, or `None` if cancelled or timed out."""
         try:
             return self._answers.get(timeout=self._wait_s)
         except queue.Empty:
@@ -143,7 +145,7 @@ class MfaMailbox:
 
 
 class SyncWorker:
-    """Le quattro operazioni dell'account; ognuna restituisce un valore, non solleva."""
+    """The account's four operations; each returns a value, none raises."""
 
     def __init__(
         self,
@@ -158,7 +160,7 @@ class SyncWorker:
     # --- Token ---------------------------------------------------------------------------
 
     def check(self, profile_id: ProfileId) -> AccountStatus:
-        """Che cosa dicono i token salvati del profilo."""
+        """What the profile's saved tokens say."""
         store = self._services.tokens
         if store is None:
             return AccountStatus.KEYCHAIN_UNAVAILABLE
@@ -168,13 +170,13 @@ class SyncWorker:
             return AccountStatus.NEEDS_RECONNECT
         except TokenStoreUnavailableError:
             return AccountStatus.KEYCHAIN_UNAVAILABLE
-        except Exception as error:  # confine del thread: un guasto imprevisto non lo abbatte
+        except Exception as error:  # thread boundary: an unexpected failure does not bring it down
             _log_unexpected("token check", error)
             return AccountStatus.KEYCHAIN_UNAVAILABLE
         return AccountStatus.NOT_LINKED if tokens is None else AccountStatus.LINKED
 
     def log_out(self, profile_id: ProfileId) -> bool:
-        """Cancella i token del profilo. Falso se il portachiavi non l'ha fatto."""
+        """Delete the profile's tokens. False if the keychain did not do it."""
         store = self._services.tokens
         if store is None:
             return False
@@ -198,9 +200,9 @@ class SyncWorker:
         *,
         mfa_timed_out: Callable[[], bool] = lambda: False,
     ) -> LoginResult:
-        """Accede a Garmin e salva i token del profilo. Se `cancelled` scatta durante l'accesso
-        la sessione si butta e non si salva nulla. Se il codice MFA non è arrivato in tempo
-        (`mfa_timed_out`) l'esito è `LoginFailure.MFA_TIMED_OUT`, non un annullamento."""
+        """Log in to Garmin and save the profile's tokens. If `cancelled` fires during the login
+        the session is discarded and nothing is saved. If the MFA code did not arrive in time
+        (`mfa_timed_out`) the outcome is `LoginFailure.MFA_TIMED_OUT`, not a cancellation."""
         store = self._services.tokens
         if store is None:
             return LoginFailure.KEYCHAIN_UNAVAILABLE
@@ -208,7 +210,7 @@ class SyncWorker:
             session = self._services.account.login(
                 credentials.email, credentials.password, ask_mfa_code
             )
-        except Exception as error:  # confine del thread; i fallimenti attesi sono esiti
+        except Exception as error:  # thread boundary; expected failures are outcomes
             expired = mfa_timed_out() and not cancelled.is_set()
             return _login_failure_for(error, mfa_timed_out=expired)
         if cancelled.is_set():
@@ -234,13 +236,13 @@ class SyncWorker:
         cancelled: threading.Event,
         report: Callable[[SyncProgress], None],
     ) -> SyncResult:
-        """Un giro di sincronizzazione del profilo, con la connessione e l'archivio suoi."""
+        """One synchronisation round of the profile, with its own connection and archive."""
         try:
             session = self._resume(profile_id)
             return self._run(session, folder, mode, automatic, cancelled, report)
         except _SkippedError as skipped:
             return SyncNotStarted(skipped.problem, mode, automatic)
-        except Exception as error:  # confine del thread: l'errore va alla UI come "imprevisto"
+        except Exception as error:  # thread boundary: the error goes to the UI as "unexpected"
             _log_unexpected("synchronisation", error)
             return SyncNotStarted(SyncProblem.UNEXPECTED, mode, automatic)
 
@@ -277,7 +279,8 @@ class SyncWorker:
     def _save_renewed(
         store: TokenStore, profile_id: ProfileId, old: SessionTokens, session: GarminSession
     ) -> None:
-        """Se la libreria ha rinnovato i token, si salvano; un guasto qui non ferma il giro."""
+        """If the library renewed the tokens, they are saved; a failure here does not stop the
+        round."""
         if session.tokens == old:
             return
         try:
@@ -295,7 +298,7 @@ class SyncWorker:
         report: Callable[[SyncProgress], None],
     ) -> SyncResult:
         try:
-            # Seconda connessione a un profilo già aperto e verificato dal thread dei dati.
+            # Second connection to a profile already opened and verified by the data thread.
             opened = self._storage.open(folder, check_integrity=False)
         except ProfileStorageError as error:
             raise _SkippedError(SyncProblem.PROFILE_UNAVAILABLE) from error
@@ -322,7 +325,7 @@ class SyncWorker:
 
 
 class _SkippedError(Exception):
-    """Il giro non può partire (o proseguire): `problem` dice perché."""
+    """The round cannot start (or continue): `problem` says why."""
 
     def __init__(self, problem: SyncProblem) -> None:
         super().__init__(problem.value)
@@ -330,8 +333,8 @@ class _SkippedError(Exception):
 
 
 def _login_failure_for(error: Exception, *, mfa_timed_out: bool) -> LoginResult:
-    """L'esito di un accesso fallito, secondo come reagisce l'utente. Un codice MFA mai
-    arrivato (`mfa_timed_out`) non è un annullamento: l'utente deve saperlo."""
+    """The outcome of a failed login, according to how the user reacts. An MFA code that never
+    arrived (`mfa_timed_out`) is not a cancellation: the user must know."""
     if isinstance(error, MfaCancelledError):
         return LoginFailure.MFA_TIMED_OUT if mfa_timed_out else LoginEnd.CANCELLED
     if isinstance(error, InvalidCredentialsError):
@@ -345,7 +348,7 @@ def _login_failure_for(error: Exception, *, mfa_timed_out: bool) -> LoginResult:
 
 
 def _throttled(report: Callable[[SyncProgress], None]) -> Callable[[SyncProgress], None]:
-    """Al massimo 20 aggiornamenti al secondo; il cambio di fase e l'ultimo passo passano sempre."""
+    """At most 20 updates per second; the phase change and the last step always go through."""
     last_at = 0.0
     last_phase: SyncPhase | None = None
 
@@ -364,10 +367,10 @@ def _throttled(report: Callable[[SyncProgress], None]) -> Callable[[SyncProgress
 def _close_quietly(close: Callable[[], None]) -> None:
     try:
         close()
-    except Exception as error:  # la chiusura non cambia l'esito del giro
+    except Exception as error:  # closing does not change the round's outcome
         _log_unexpected("closing the profile connection", error)
 
 
 def _log_unexpected(step: str, error: BaseException) -> None:
-    """Un solo record per errore imprevisto, col solo tipo: il testo può contenere dati."""
+    """A single record per unexpected error, with the type only: the text may contain data."""
     _LOG.error("Garmin: unexpected error in %s: %s", step, exception_chain(error))

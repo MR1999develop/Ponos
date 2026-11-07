@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dettaglio di un'attività dalla tabella e grafici della panoramica, nella finestra vera.
+"""Activity detail from the table and overview charts, in the real window.
 
-Si parte dalla finestra composta come fa `main()`; i dati sono le otto corse sintetiche della
-cartella di prova (nessuna persona reale). T-UI-02 vale anche mentre si costruiscono i grafici.
+We start from the window composed as `main()` does; the data are the eight synthetic runs of the
+test folder (no real person). T-UI-02 also holds while the charts are being built.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ def latency_of_one_event(qtbot: QtBot) -> float:
 
 
 def show_activities_section(window: MainWindow) -> None:
-    """Porta in primo piano la pagina Attività (la tabella è nascosta nella Panoramica)."""
+    """Bring the Activities page to the front (the table is hidden in the Overview)."""
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
     sidebar.setCurrentRow(1)
@@ -92,7 +92,7 @@ def first_row_index(window: MainWindow) -> QModelIndex:
     return table.model().index(0, 0)
 
 
-# --- Grafici della panoramica ------------------------------------------------------------------
+# --- Overview charts ------------------------------------------------------------------
 
 
 def test_the_overview_shows_three_charts_pmc_weekly_load_and_zones(
@@ -144,14 +144,14 @@ def test_t_ui_02_the_ui_stays_responsive_while_the_charts_are_built(
     qtbot.waitUntil(lambda: bool(threads), timeout=WAIT_MS)
 
     assert isinstance(window.controller.overview_state, Ready)
-    assert page.current_widget() is not page.charts_widget  # i grafici non sono ancora pronti
+    assert page.current_widget() is not page.charts_widget  # the charts are not ready yet
     assert latency_of_one_event(qtbot) < 0.1  # T-UI-02
-    assert threading.get_ident() not in threads  # fuori dal thread della UI
+    assert threading.get_ident() not in threads  # outside the UI thread
     release.set()
     qtbot.waitUntil(lambda: page.current_widget() is page.charts_widget, timeout=WAIT_MS)
 
 
-# --- Dettaglio di un'attività ------------------------------------------------------------------
+# --- Activity detail ------------------------------------------------------------------
 
 
 def test_double_click_opens_the_detail_with_summary_chart_and_time_in_zones(
@@ -175,11 +175,11 @@ def test_double_click_opens_the_detail_with_summary_chart_and_time_in_zones(
     assert dialog.summary_text("limits") == "50 to 190"
     assert dialog.zone_model.rowCount() == 5
     zone_times = [dialog.zone_model.data(dialog.zone_model.index(r, 1)) for r in range(5)]
-    assert sum(_seconds(text) for text in zone_times) > 1500  # quasi tutti i 1800 s contati
+    assert sum(_seconds(text) for text in zone_times) > 1500  # almost all of the 1800 s counted
     figure = dialog.chart.current_figure
     assert figure is not None
     assert figure.data[0].name == "Heart rate"
-    assert len(figure.layout.shapes) == 5  # le bande delle zone
+    assert len(figure.layout.shapes) == 5  # the zone bands
     assert figure.layout.xaxis.title.text == "Time (min)"
     assert figure.layout.yaxis.title.text == "Heart rate (bpm)"
 
@@ -208,7 +208,7 @@ def test_enter_in_the_table_opens_the_detail_and_the_command_is_in_the_menu(
     qtbot.waitUntil(dialog.shows_chart, timeout=WAIT_MS)
     dialog.close()
     qtbot.waitUntil(lambda: window.profile_dialogs.detail_dialog is None, timeout=WAIT_MS)
-    window.detail_action.trigger()  # anche dal menu, con la riga ancora selezionata
+    window.detail_action.trigger()  # also from the menu, with the row still selected
     again = open_detail(qtbot, window)
     qtbot.waitUntil(again.shows_chart, timeout=WAIT_MS)
 
@@ -234,7 +234,7 @@ def test_a_missing_file_gives_a_clear_message_instead_of_a_chart(
     assert "no longer in the archive" in page.body_text
     assert "Import the original file again" in page.body_text
     assert not dialog.shows_chart()
-    assert dialog.title_text == ""  # niente riepilogo di un'attività che non si legge
+    assert dialog.title_text == ""  # no summary of an activity that cannot be read
 
 
 def test_the_detail_figure_is_built_outside_the_ui_thread(
@@ -283,7 +283,7 @@ def test_closing_a_window_with_several_charts_and_details_open_destroys_every_pa
     window.detail_action.trigger()
     first = open_detail(qtbot, window)
     qtbot.waitUntil(first.shows_chart, timeout=WAIT_MS)
-    first.close()  # un dettaglio già chiuso e uno ancora aperto alla chiusura della finestra
+    first.close()  # one detail already closed and one still open when the window closes
     qtbot.waitUntil(lambda: window.profile_dialogs.detail_dialog is None, timeout=WAIT_MS)
     window.detail_action.trigger()
     second = open_detail(qtbot, window)
@@ -295,7 +295,7 @@ def test_closing_a_window_with_several_charts_and_details_open_destroys_every_pa
     close_window(qtbot, window)
 
     assert window.is_closed
-    assert not any(isValid(web_page) for web_page in pages)  # distrutte subito, non in coda
+    assert not any(isValid(web_page) for web_page in pages)  # destroyed immediately, not queued
     assert not any(view.engine_started for view in views if isValid(view))
 
 
@@ -306,12 +306,12 @@ def test_releasing_the_web_engine_twice_is_harmless_and_after_it_no_page_is_crea
     view = window.overview_page.chart
     web_page = view.page
 
-    window.release_web_engine()  # come da `aboutToQuit`
+    window.release_web_engine()  # as from `aboutToQuit`
     window.release_web_engine()
 
     assert not isValid(web_page)
     assert not view.engine_started
-    view.start_engine()  # il motore non c'è più: nessuna pagina nuova
+    view.start_engine()  # the engine is gone: no new page
     assert not view.engine_started
 
 
@@ -320,9 +320,9 @@ def test_without_heart_rate_the_detail_hides_the_table_of_the_zones(qtbot: QtBot
     qtbot.addWidget(dialog)
     dialog.show()
 
-    dialog.show_outcome(DetailReady(detail_with(ZoneSeconds.ZERO), None))  # senza FC: stimato
+    dialog.show_outcome(DetailReady(detail_with(ZoneSeconds.ZERO), None))  # without HR: estimated
 
     table = dialog.findChild(QTableView, "detailZones")
     assert table is not None
-    assert not table.isVisibleTo(dialog)  # cinque righe a 0:00:00 direbbero il falso
+    assert not table.isVisibleTo(dialog)  # five rows at 0:00:00 would be lying
     assert dialog.message_page.title_text == "No heart-rate data"

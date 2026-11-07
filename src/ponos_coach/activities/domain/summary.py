@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Riepilogo di un'attività ricavato dal file: distanza, dislivello, partenza e traccia."""
+"""Summary of an activity derived from the file: distance, ascent, start and track."""
 
 from __future__ import annotations
 
@@ -15,17 +15,17 @@ _POLYLINE_LAST_CHAR = 126  # '~'
 
 def _check_non_negative(name: str, value: float | None) -> None:
     if value is not None and not (math.isfinite(value) and value >= 0.0):
-        raise ValueError(f"{name} deve essere finito e non negativo")
+        raise ValueError(f"{name} must be finite and non-negative")
 
 
 @dataclass(frozen=True, slots=True)
 class ActivitySummary:
-    """Ciò che si ricava dal file oltre al tempo e alla FC; ogni voce può mancare.
+    """What is derived from the file besides time and HR; each item may be missing.
 
-    `distance_m` e `ascent_m` (dislivello positivo) sono in metri, finiti e non negativi.
-    `start_point` è la posizione di partenza e `track_polyline` la traccia semplificata
-    codificata (polyline a 1e-5 gradi, al massimo `MAX_POLYLINE_CHARS` caratteri). Sono dati
-    di posizione: mai nei log. Un'attività indoor ha solo distanza e dislivello, o nulla.
+    `distance_m` and `ascent_m` (positive elevation gain) are in meters, finite and non-negative.
+    `start_point` is the starting position and `track_polyline` the simplified track
+    encoded (polyline at 1e-5 degrees, at most `MAX_POLYLINE_CHARS` characters). They are
+    position data: never in logs. An indoor activity has only distance and ascent, or nothing.
     """
 
     distance_m: float | None = None
@@ -34,12 +34,12 @@ class ActivitySummary:
     track_polyline: str | None = None
 
     def __post_init__(self) -> None:
-        _check_non_negative("la distanza", self.distance_m)
-        _check_non_negative("il dislivello", self.ascent_m)
+        _check_non_negative("distance", self.distance_m)
+        _check_non_negative("ascent", self.ascent_m)
         track = self.track_polyline
         if track is None:
             return
         if not track or len(track) > MAX_POLYLINE_CHARS:
-            raise ValueError("traccia vuota o troppo lunga")
+            raise ValueError("empty or too long track")
         if not all(_POLYLINE_FIRST_CHAR <= ord(c) <= _POLYLINE_LAST_CHAR for c in track):
-            raise ValueError("la traccia contiene caratteri non validi per un polyline")
+            raise ValueError("the track contains characters not valid for a polyline")

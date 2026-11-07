@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-UI-01, T-UI-02, T-UI-03, T-UI-07: dal Composition Root, profili, import e panoramica."""
+"""T-UI-01, T-UI-02, T-UI-03, T-UI-07: from the Composition Root, profiles, import and overview."""
 
 from __future__ import annotations
 
@@ -88,7 +88,7 @@ def click(box: QMessageBox, text: str) -> None:
     next(button for button in box.buttons() if button.text() == text).click()
 
 
-# --- Primo avvio, creazione, import, tabella e panoramica -------------------------------------
+# --- First start, creation, import, table and overview -------------------------------------
 
 
 def test_first_run_creates_a_profile_imports_a_folder_and_updates_table_and_overview(
@@ -128,7 +128,7 @@ def test_first_run_creates_a_profile_imports_a_folder_and_updates_table_and_over
     chart = window.overview_page.chart
     qtbot.waitUntil(
         lambda: chart.current_figure is not None, timeout=WAIT_MS
-    )  # figura dal thread dei dati
+    )  # figure from the data thread
     figure = chart.current_figure
     assert figure is not None
     assert len(figure.data[0].x) == DAYS_IN_CHART
@@ -154,7 +154,7 @@ def test_the_last_profile_reopens_at_the_next_start(
     import_folder_and_wait(qtbot, first, make_import_folder(tmp_path))
     wait_ready(qtbot, first, FILES_IN_FIXTURE_FOLDER)
     first.resize(800, 580)
-    close_window(qtbot, first)  # chiude il profilo nel thread dei dati: il lock si rilascia
+    close_window(qtbot, first)  # closes the profile in the data thread: the lock is released
 
     second = compose(tmp_path, settings)
     qtbot.addWidget(second)
@@ -163,7 +163,7 @@ def test_the_last_profile_reopens_at_the_next_start(
     qtbot.waitUntil(lambda: second.controller.profile is not None, timeout=WAIT_MS)
     wait_ready(qtbot, second, FILES_IN_FIXTURE_FOLDER)
     assert second.windowTitle() == "Ada - Ponos Coach"
-    assert second.new_profile_dialog is None  # niente primo avvio: un profilo c'è
+    assert second.new_profile_dialog is None  # no first start: a profile exists
     assert second.activities_page.model.rowCount() == FILES_IN_FIXTURE_FOLDER
     assert (second.width(), second.height()) == (800, 580)
 
@@ -183,13 +183,13 @@ def test_a_profile_open_in_another_window_gives_an_understandable_message(
     box = open_message_box(qtbot, second, "errorMessage")
     assert box.text() == "The profile is already open"
     assert "another window" in box.informativeText()
-    assert str(tmp_path) not in box.informativeText()  # mai percorsi nei messaggi
+    assert str(tmp_path) not in box.informativeText()  # never paths in the messages
     assert second.controller.profile is None
     assert isinstance(second.controller.overview_state, Idle)
     assert second.overview_page.current_widget() is second.overview_page.state_page
 
 
-# --- Più profili: cambio, rimozione dall'elenco, eliminazione ----------------------------------
+# --- Several profiles: switching, removal from the list, deletion ---------------------------------
 
 
 def two_profiles(qtbot: QtBot, window: MainWindow) -> None:
@@ -249,7 +249,7 @@ def test_deleting_a_profile_folder_asks_with_friction_and_only_then_deletes(
     two_profiles(qtbot, window)
     folder = tmp_path / "profiles" / "One"
 
-    # Il profilo aperto non si può eliminare.
+    # The open profile cannot be deleted.
     assert menu_texts(window.delete_menu.actions()) == [("Two", False), ("One", True)]
     window.delete_menu.actions()[1].trigger()
     box = open_message_box(qtbot, window, "deleteConfirmation")
@@ -257,7 +257,7 @@ def test_deleting_a_profile_folder_asks_with_friction_and_only_then_deletes(
     assert 'profile "One"' in box.text()
     assert str(folder) in box.informativeText()
     assert "Activities that will be deleted: 8." in box.informativeText()
-    assert box.defaultButton().text() == "Cancel"  # il bottone sicuro è quello predefinito
+    assert box.defaultButton().text() == "Cancel"  # the safe button is the default
     assert box.escapeButton().text() == "Cancel"
     click(box, "Cancel")
     qtbot.waitUntil(lambda: not box.isVisible(), timeout=WAIT_MS)
@@ -272,7 +272,7 @@ def test_deleting_a_profile_folder_asks_with_friction_and_only_then_deletes(
     assert [a.text() for a in window.switch_menu.actions()] == ["Two"]
 
 
-# --- Dialogo "Nuovo profilo" -------------------------------------------------------------------
+# --- "New profile" dialog -------------------------------------------------------------------
 
 
 def open_first_run_dialog(qtbot: QtBot, window: MainWindow) -> NewProfileDialog:
@@ -289,9 +289,9 @@ def test_the_new_profile_form_validates_in_place_and_estimates_the_threshold(
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
     dialog = open_first_run_dialog(qtbot, window)
-    assert dialog.threshold_note_text.startswith("Estimated at 90%")  # da confermare col test
-    assert dialog.error_text(Field.NAME) == ""  # nessun errore prima del primo invio
-    assert dialog.folder_edit.text() == ""  # nessuna proposta: la cartella si chiede
+    assert dialog.threshold_note_text.startswith("Estimated at 90%")  # to be confirmed by the test
+    assert dialog.error_text(Field.NAME) == ""  # no error before the first submit
+    assert dialog.folder_edit.text() == ""  # no suggestion: the folder is asked for
 
     pick_profile_folder(window, dialog, tmp_path / "profiles" / "A")
     QTest.mouseClick(dialog.create_button, Qt.MouseButton.LeftButton)
@@ -299,7 +299,7 @@ def test_the_new_profile_form_validates_in_place_and_estimates_the_threshold(
     assert dialog.error_text(Field.NAME) == "Enter a name for the profile."
     assert window.controller.profile is None
     QTest.keyClicks(dialog.name_edit, "A")
-    assert dialog.error_text(Field.NAME) == ""  # poi si aggiorna mentre si scrive
+    assert dialog.error_text(Field.NAME) == ""  # then it updates while typing
 
 
 def test_the_folder_field_starts_empty_and_creation_waits_for_a_folder(
@@ -363,7 +363,7 @@ def test_a_folder_with_files_gets_a_subfolder_named_after_the_profile(
     qtbot.waitUntil(lambda: window.controller.profile is not None, timeout=WAIT_MS)
     assert window.controller.profile is not None
     assert window.controller.profile.folder == busy / "Ada"
-    assert (busy / "something.txt").is_file()  # il contenuto esistente non si tocca
+    assert (busy / "something.txt").is_file()  # existing content is not touched
 
 
 def test_changing_the_name_updates_the_destination_subfolder(
@@ -396,14 +396,14 @@ def test_the_last_profile_folder_is_remembered_as_the_start_of_the_picker(
 
     pick_profile_folder(window, dialog, tmp_path / "somewhere" / "mine")
 
-    assert picker.starts == [str(tmp_path / "documents")]  # la prima volta: Documenti
+    assert picker.starts == [str(tmp_path / "documents")]  # the first time: Documents
     dialog.reject()
     qtbot.waitUntil(lambda: window.new_profile_dialog is None, timeout=WAIT_MS)
     window.show_new_profile()
     reopened = window.new_profile_dialog
     assert reopened is not None
     pick_profile_folder(window, reopened, tmp_path / "other")
-    assert picker.starts[-1] == str(tmp_path / "somewhere")  # poi l'ultima usata
+    assert picker.starts[-1] == str(tmp_path / "somewhere")  # then the last used
 
 
 def test_a_failed_creation_reopens_the_form_with_the_data_already_typed(
@@ -415,9 +415,9 @@ def test_a_failed_creation_reopens_the_form_with_the_data_already_typed(
     QTest.keyClicks(dialog.name_edit, "Ada")
     fill_body_data(dialog)
     folder = tmp_path / "profiles" / "Ada"
-    QTest.keyClicks(dialog.folder_edit, str(folder))  # scritta a mano: nessun esame prima
+    QTest.keyClicks(dialog.folder_edit, str(folder))  # typed by hand: no check beforehand
     folder.mkdir(parents=True)
-    (folder / "late.txt").write_text("x", encoding="utf-8")  # compare dopo l'esame del modulo
+    (folder / "late.txt").write_text("x", encoding="utf-8")  # appears after the form check
     QTest.mouseClick(dialog.create_button, Qt.MouseButton.LeftButton)
 
     box = open_message_box(qtbot, window, "errorMessage")
@@ -427,7 +427,7 @@ def test_a_failed_creation_reopens_the_form_with_the_data_already_typed(
     reopened = window.new_profile_dialog
     assert reopened is not None
     assert reopened.name_edit.text() == "Ada"
-    assert reopened.height_edit.text() == "170"  # anche altezza, peso e data di nascita
+    assert reopened.height_edit.text() == "170"  # also height, weight and date of birth
     assert reopened.weight_edit.text() == "65,5"
     assert reopened.birth_edit.selected_date() == date(1995, 4, 2)
 
@@ -448,10 +448,10 @@ def test_folder_warnings_are_shown_without_blocking(
     window.controller.profile_changed.emit(view)
 
     assert window.folder_warning_text.startswith("Network folder")
-    assert window.controller.can_change_profile  # l'avviso non blocca nulla
+    assert window.controller.can_change_profile  # the warning blocks nothing
 
 
-# --- Reattività, annullamento, chiusura --------------------------------------------------------
+# --- Responsiveness, cancellation, closing --------------------------------------------------------
 
 
 def latency_of_one_event(qtbot: QtBot) -> float:
@@ -482,7 +482,7 @@ def test_ui_stays_responsive_during_import_and_stop_cancels_it_then_import_resum
     )
 
     assert not window.import_files_action.isEnabled()
-    assert window.import_files_action.toolTip()  # il motivo
+    assert window.import_files_action.toolTip()  # the reason
     assert not window.new_profile_action.isEnabled()
     assert window.stop_action.isEnabled()
     assert "Files imported:" in window.import_status_text and "of 9" in window.import_status_text
@@ -497,7 +497,7 @@ def test_ui_stays_responsive_during_import_and_stop_cancels_it_then_import_resum
     assert cancelled.examined < 9
     qtbot.waitUntil(lambda: window.controller.can_import, timeout=WAIT_MS)
 
-    resumed = import_folder_and_wait(qtbot, window, folder)  # riprende senza duplicati
+    resumed = import_folder_and_wait(qtbot, window, folder)  # resumes without duplicates
     assert not resumed.cancelled
     assert cancelled.imported + resumed.imported == FILES_IN_FIXTURE_FOLDER
     wait_ready(qtbot, window, FILES_IN_FIXTURE_FOLDER)
@@ -553,18 +553,18 @@ def test_closing_the_window_waits_for_the_data_thread(
     start = time.monotonic()
     window.close()
 
-    assert not window.is_closed  # primo tempo: la finestra non si blocca ad attendere il thread
+    assert not window.is_closed  # first phase: the window does not block waiting for the thread
     assert time.monotonic() - start < 0.25
-    qtbot.waitUntil(lambda: window.is_closed, timeout=WAIT_MS)  # secondo tempo: thread finito
+    qtbot.waitUntil(lambda: window.is_closed, timeout=WAIT_MS)  # second phase: thread finished
     release.join()
     again = compose(tmp_path, settings)
     qtbot.addWidget(again)
     again.start()
-    qtbot.waitUntil(lambda: again.controller.profile is not None, timeout=WAIT_MS)  # lock libero
+    qtbot.waitUntil(lambda: again.controller.profile is not None, timeout=WAIT_MS)  # lock free
 
 
 class LimitSource:
-    """Sorgente che supera un tetto all'esame."""
+    """Source that exceeds a cap during the scan."""
 
     def scan(self, is_cancelled: Callable[[], bool] | None = None) -> ImportScan:  # noqa: ARG002
         raise ImportLimitExceededError(ImportLimit.ACTIVITY_FILES, 50_000)
@@ -595,7 +595,7 @@ def test_exceeding_a_limit_invites_to_choose_a_subfolder_and_imports_nothing(
     assert window.activities_page.model.rowCount() == 0
 
 
-# --- Trascinamento --------------------------------------------------------------------------
+# --- Drag and drop --------------------------------------------------------------------------
 
 
 def mime_of(paths: list[Path]) -> QMimeData:
@@ -605,7 +605,7 @@ def mime_of(paths: list[Path]) -> QMimeData:
 
 
 def drag_enter_event(mime: QMimeData) -> QDragEnterEvent:
-    """Evento di ingresso del trascinamento (il costruttore di Qt 6 è deprecato, non ha ersatz)."""
+    """Drag-enter event (the Qt 6 constructor is deprecated, with no replacement)."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         return QDragEnterEvent(
@@ -627,7 +627,7 @@ def test_dropping_files_on_the_window_imports_them(
     mime = mime_of([tmp_path])
     refused = drag_enter_event(mime)
     window.dragEnterEvent(refused)
-    assert not refused.isAccepted()  # senza profilo non si importa
+    assert not refused.isAccepted()  # without a profile nothing is imported
     dialog = window.new_profile_dialog
     assert dialog is not None
     fill_new_profile(window, dialog, "Ada")
@@ -661,7 +661,7 @@ def test_dropping_files_on_the_window_imports_them(
     assert settings.value("import/lastFilesFolder", "", type=str) == str(tmp_path)
 
 
-# --- Barra laterale, menu, fuso, riga di comando ----------------------------------------------
+# --- Sidebar, menus, time zone, command line ----------------------------------------------
 
 
 def test_sidebar_has_overview_and_activities_enabled_and_the_rest_with_a_reason(
@@ -750,4 +750,4 @@ def test_command_line_exit_codes(capsys: pytest.CaptureFixture[str]) -> None:
     assert capsys.readouterr().out.startswith("ponos-coach ")
     assert main(["--no-such-option"]) == 2
     assert "usage:" in capsys.readouterr().err
-    assert main(["--fit-folder", "x"]) == 2  # l'opzione provvisoria non esiste più
+    assert main(["--fit-folder", "x"]) == 2  # the temporary option no longer exists

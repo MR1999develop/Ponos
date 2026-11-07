@@ -2,9 +2,9 @@
 // Copyright (C) 2026 MR
 "use strict";
 
-// Disegna una figura Plotly. L'unico ingresso e `ponosRender(payload)`, dove `payload` e
-// un oggetto JSON prodotto da Python con json.dumps: { figure, labels, locale, filename }.
-// Nessun dato entra come HTML: Plotly riceve solo oggetti.
+// Draws a Plotly figure. The only entry point is `ponosRender(payload)`, where `payload` is
+// a JSON object produced by Python with json.dumps: { figure, labels, locale, filename }.
+// No data enters as HTML: Plotly receives only objects.
 (function () {
   var host = document.getElementById("chart");
   var drawCount = 0;
@@ -22,7 +22,7 @@
 
   window.ponosRender = function (payload) {
     var labels = payload.labels;
-    // Titoli della barra tradotti da Python: dizionario di lingua di Plotly, senza testi in JS.
+    // Toolbar titles translated by Python: Plotly language dictionary, no texts in JS.
     Plotly.register({
       moduleType: "locale",
       name: payload.locale.name,
@@ -41,7 +41,7 @@
     };
     document.body.style.background = payload.figure.layout.paper_bgcolor;
     Plotly.react(host, payload.figure.data, payload.figure.layout, config).then(function (gd) {
-      // Segnale verso Python senza canali: il titolo della pagina cambia a ogni disegno.
+      // Signal to Python without channels: the page title changes at every draw.
       drawCount += 1;
       document.title = "drawn-" + drawCount;
       return gd;

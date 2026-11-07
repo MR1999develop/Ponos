@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Politica di rete della pagina dei grafici: solo lo schema dell'app, nient'altro.
+"""Network policy of the charts page: only the app's scheme, nothing else.
 
-La decisione e una funzione pura (`is_request_allowed`); `register_app_scheme` va chiamata
-prima di creare la `QApplication`.
+The decision is a pure function (`is_request_allowed`); `register_app_scheme` must be called
+before creating the `QApplication`.
 """
 
 from __future__ import annotations
@@ -19,13 +19,14 @@ _registered = False
 
 
 def is_request_allowed(url: QUrl) -> bool:
-    """Vero solo per `ponos://app/...`: http, https, file, data, blob e ogni altro sono vietati."""
+    """True only for `ponos://app/...`: http, https, file, data, blob and every other are
+    forbidden."""
     return url.scheme() == APP_SCHEME and url.host() == APP_HOST
 
 
 def register_app_scheme() -> None:
-    """Registra lo schema dell'app (una volta per processo, prima della `QApplication`)."""
-    global _registered  # noqa: PLW0603 - la registrazione dello schema e per processo
+    """Register the app's scheme (once per process, before the `QApplication`)."""
+    global _registered  # noqa: PLW0603 - scheme registration is per process
     if _registered:
         return
     scheme = QWebEngineUrlScheme(APP_SCHEME.encode("ascii"))

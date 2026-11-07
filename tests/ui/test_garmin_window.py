@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Account Garmin e sincronizzazione nella finestra, dal Composition Root (fase 2).
+"""Garmin account and synchronization in the window, from the Composition Root (phase 2).
 
-Garmin, portachiavi e notifica sono i finti di `tests/fakes/`: nessuna rete, nessun login
-reale. I test coprono T-UI-02 (finestra reattiva mentre scarica) e T-SEC-07 (la password non
-compare nei log).
+Garmin, keyring and notification are the fakes of `tests/fakes/`: no network, no real
+login. The tests cover T-UI-02 (responsive window while downloading) and T-SEC-07 (the
+password does not appear in the logs).
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ def window_with_profile(
     *,
     mfa_wait_s: float = MFA_WAIT_S,
 ) -> MainWindow:
-    """Finestra con un profilo nuovo aperto e senza account (il controllo è finito)."""
+    """Window with a new profile open and no account (the check has finished)."""
     window = compose(tmp_path, settings, fakes=fakes, mfa_wait_s=mfa_wait_s)
     qtbot.addWidget(window)
     window.start()
@@ -91,7 +91,7 @@ def window_with_profile(
 def linked_window(
     qtbot: QtBot, tmp_path: Path, settings: QSettings, fakes: GarminFakes, *, mfa: bool = False
 ) -> MainWindow:
-    """Finestra con l'account collegato e il primo giro di sincronizzazione finito."""
+    """Window with the account connected and the first sync round finished."""
     window = window_with_profile(qtbot, tmp_path, settings, fakes)
     link_account(qtbot, window, mfa=mfa)
     return window
@@ -103,7 +103,7 @@ def history(count: int, *, mfa_required: bool = False) -> GarminFakes:
     )
 
 
-# --- Comandi e motivi -----
+# --- Commands and reasons -----
 
 
 def test_without_a_profile_the_garmin_commands_are_off_and_say_why(
@@ -153,7 +153,7 @@ def test_a_new_profile_without_an_account_offers_only_to_connect(
     assert window.import_files_action.isEnabled()
 
 
-# --- Collegare l'account -----
+# --- Connecting the account -----
 
 
 def test_connecting_without_mfa_saves_the_tokens_and_downloads_the_whole_history(
@@ -172,7 +172,7 @@ def test_connecting_without_mfa_saves_the_tokens_and_downloads_the_whole_history
     wait_activities(qtbot, window, 4)
     assert window.activities_page.model.rowCount() == 4
     assert fakes.account.mfa_prompts == 0
-    assert window.garmin.connect_action.isEnabled() is False  # già collegato
+    assert window.garmin.connect_action.isEnabled() is False  # already connected
     assert window.garmin.disconnect_action.isEnabled()
     assert window.garmin.sync_action.isEnabled()
 
@@ -260,7 +260,7 @@ def test_the_password_is_wiped_from_the_dialog_and_never_reaches_the_logs(
             submit_login(qtbot, window)
             dialog = window.garmin.login_dialog
             assert dialog is not None
-            assert dialog.password_edit.text() == ""  # svuotato appena letto
+            assert dialog.password_edit.text() == ""  # emptied right after being read
             answer_mfa_dialog(qtbot, window)
         wait_activities(qtbot, window, 2)
 
@@ -305,7 +305,7 @@ def test_a_keychain_that_stops_answering_disables_the_commands_with_the_reason(
     assert "keychain" in window.garmin.connect_action.toolTip()
 
 
-# --- Scollegare -----
+# --- Disconnecting -----
 
 
 def test_disconnecting_asks_with_the_verb_and_deletes_only_the_tokens(
@@ -323,7 +323,7 @@ def test_disconnecting_asks_with_the_verb_and_deletes_only_the_tokens(
 
     wait_account(qtbot, window, AccountStatus.NOT_LINKED)
     assert fakes.tokens.saved == {}
-    assert activity_count(window) == 3  # le attività scaricate restano
+    assert activity_count(window) == 3  # the downloaded activities stay
     assert window.garmin.connect_action.isEnabled()
 
 
@@ -354,7 +354,7 @@ def test_a_keychain_that_cannot_delete_the_tokens_is_reported(
     assert "keychain" in box.informativeText()
 
 
-# --- Sincronizzazione -----
+# --- Synchronization -----
 
 
 def test_opening_a_linked_profile_synchronises_by_itself_and_only_fetches_the_new(
@@ -408,7 +408,7 @@ def test_the_full_check_lists_everything_again_and_downloads_nothing_already_kno
 
     assert fakes.source.call_count(Call.LIST_PAGE) > lists_before
     assert len(fakes.source.downloads) == downloads_before
-    assert len(fakes.notifier.calls) == 1  # nulla di nuovo: nessuna seconda notifica
+    assert len(fakes.notifier.calls) == 1  # nothing new: no second notification
 
 
 def test_the_notification_is_sent_once_with_the_number_of_new_activities(
@@ -421,7 +421,7 @@ def test_the_notification_is_sent_once_with_the_number_of_new_activities(
     title, message = fakes.notifier.calls[0]
     assert title == "New activities from Garmin"
     assert message == "New activities downloaded: 4"
-    sync_and_wait(qtbot, window)  # niente di nuovo
+    sync_and_wait(qtbot, window)  # nothing new
     assert len(fakes.notifier.calls) == 1
 
 
@@ -438,7 +438,7 @@ def test_a_notification_that_fails_changes_nothing_for_the_user(
 
     assert len(fakes.notifier.calls) == 1
     assert window.open_boxes == []
-    assert "utente" not in caplog.text  # del guasto si scrive solo il tipo
+    assert "utente" not in caplog.text  # only the type of the failure is written
     assert "RuntimeError" in caplog.text
     assert window.garmin.sync_action.isEnabled()
 
@@ -461,7 +461,7 @@ def test_the_summary_names_what_was_not_downloaded_in_plain_words(
     wait_activities(qtbot, window, 2)
 
 
-# --- Reattività, Interrompi, chiusura -----
+# --- Responsiveness, Interrupt, closing -----
 
 
 def gated_window(
@@ -472,7 +472,7 @@ def gated_window(
     *,
     activities: int = 3,
 ) -> tuple[MainWindow, GatedGarmin, GarminFakes]:
-    """Finestra con l'account collegato e una sincronizzazione ferma al primo download."""
+    """Window with the account connected and a sync stopped at the first download."""
     inner = FakeActivitySource(make_remote_history(activities))
     gated = GatedGarmin(inner, gate)
     fakes = make_fakes(mfa_required=False, source=inner, served=gated)
@@ -492,15 +492,15 @@ def test_the_window_stays_responsive_and_shows_progress_while_downloading(
     timer.timeout.connect(lambda: ticks.append(1))
     timer.start(10)
 
-    qtbot.wait(300)  # il thread della UI gira mentre il thread di Garmin è fermo al cancello
+    qtbot.wait(300)  # the UI thread runs while the Garmin thread is stopped at the gate
 
     assert len(ticks) >= 5
     assert sync_of(window).is_syncing
     assert window.garmin.status_text.startswith("Downloading activity 1 of 3")
     assert not window.garmin.stop_button.isHidden()
     assert window.garmin.stop_button.isEnabled()
-    assert window.import_files_action.isEnabled()  # si può importare mentre scarica
-    assert not window.new_profile_action.isEnabled()  # ma non cambiare profilo
+    assert window.import_files_action.isEnabled()  # you can import while it downloads
+    assert not window.new_profile_action.isEnabled()  # but not change profile
     assert "Wait for the current operation" in window.new_profile_action.toolTip()
     assert not window.garmin.sync_action.isEnabled()
     assert window.garmin.stop_action.isEnabled()
@@ -522,9 +522,9 @@ def test_stop_ends_the_round_keeps_what_was_downloaded_and_resumes_later(
     result = blocker.args[0] if blocker.args else None
     assert result is not None
     assert result.outcome.cancelled
-    assert window.open_boxes == []  # fermarsi non è un problema: basta la barra di stato
+    assert window.open_boxes == []  # stopping is not a problem: the status bar is enough
     assert window.statusBar().currentMessage() == "Synchronisation stopped"
-    assert len(fakes.tokens.saved) == 1  # l'account resta collegato
+    assert len(fakes.tokens.saved) == 1  # the account stays connected
 
     sync_and_wait(qtbot, window)
 
@@ -546,7 +546,7 @@ def test_authentication_lost_midway_keeps_the_downloads_and_invites_to_connect_a
     assert sync_of(window).account_status is AccountStatus.NEEDS_RECONNECT
     assert not window.garmin.sync_action.isEnabled()
     assert "sign in again" in window.garmin.sync_action.toolTip()
-    wait_activities(qtbot, window, 1)  # ciò che era arrivato non si perde
+    wait_activities(qtbot, window, 1)  # what had arrived is not lost
 
     with qtbot.waitSignal(sync_of(window).sync_finished, timeout=WAIT_MS):
         click_button(box, "Connect account...")
@@ -574,7 +574,7 @@ def test_revoked_tokens_at_opening_say_so_and_lose_nothing(
     box = open_box(qtbot, second, "syncSummary")
     assert "sign in again" in box.informativeText()
     assert sync_of(second).account_status is AccountStatus.NEEDS_RECONNECT
-    wait_activities(qtbot, second, 2)  # le attività già scaricate sono lì
+    wait_activities(qtbot, second, 2)  # the already downloaded activities are there
 
 
 def test_closing_the_window_during_a_sync_waits_for_the_thread_and_then_closes(
@@ -584,7 +584,7 @@ def test_closing_the_window_during_a_sync_waits_for_the_thread_and_then_closes(
 
     window.close()
 
-    assert not window.is_closed  # il thread di Garmin è ancora al cancello
+    assert not window.is_closed  # the Garmin thread is still at the gate
     gate.set()
     qtbot.waitUntil(lambda: window.is_closed, timeout=WAIT_MS)
     assert sync_of(window).has_stopped
@@ -608,7 +608,7 @@ def test_importing_files_while_synchronising_works_and_leaves_no_database_error(
         qtbot.waitUntil(gated.entered.is_set, timeout=WAIT_MS)
         with qtbot.waitSignal(window.controller.import_finished, timeout=WAIT_MS):
             window.import_folder(folder)
-        assert sync_of(window).is_syncing  # l'import è finito mentre Garmin era fermo
+        assert sync_of(window).is_syncing  # the import finished while Garmin was stopped
         with qtbot.waitSignal(sync_of(window).sync_finished, timeout=WAIT_MS):
             gate.set()
         wait_activities(qtbot, window, FILES_IN_FIXTURE_FOLDER + 3)
@@ -632,16 +632,16 @@ def test_a_remote_activity_already_imported_from_a_file_is_matched_not_downloade
 
     link_account(qtbot, window, mfa=False)
 
-    assert fakes.source.downloads == []  # abbinate senza riscaricare
+    assert fakes.source.downloads == []  # matched without downloading again
     assert activity_count(window) == FILES_IN_FIXTURE_FOLDER
-    assert fakes.notifier.calls == []  # niente di nuovo: nessuna notifica
+    assert fakes.notifier.calls == []  # nothing new: no notification
 
 
-# --- Chiusura con un thread di Garmin che non si interrompe -----
+# --- Closing with a Garmin thread that does not stop -----
 
 
 class _BlockedLoginAccount(FakeGarminAccount):
-    """Un login che resta dentro la libreria (rete lenta) finché il test non apre il cancello."""
+    """A login that stays inside the library (slow network) until the test opens the gate."""
 
     def __init__(self, source: FakeActivitySource, gate: threading.Event) -> None:
         super().__init__(source, mfa_required=False)
@@ -669,9 +669,9 @@ def test_closing_does_not_wait_for_a_sync_call_that_cannot_be_interrupted(
     window.close()
     qtbot.waitUntil(lambda: window.is_closed, timeout=WAIT_MS)
 
-    assert window.open_boxes == []  # nessun avviso "ancora in chiusura"
+    assert window.open_boxes == []  # no "still closing" warning
     thread = _garmin_thread("sync")
-    assert thread.is_alive()  # ancora dentro la chiamata: muore con il processo
+    assert thread.is_alive()  # still inside the call: dies with the process
     assert thread.daemon
     assert sync_of(window).has_stopped
 
@@ -709,7 +709,7 @@ def test_a_sync_thread_that_stops_by_itself_is_not_abandoned_early(
     qtbot.waitUntil(lambda: window.is_closed, timeout=WAIT_MS)
 
 
-# --- Sincronizzazione all'apertura del profilo -----
+# --- Synchronization on opening the profile -----
 
 
 def test_the_auto_sync_switch_is_on_by_default_and_off_without_a_profile(
@@ -745,9 +745,9 @@ def test_with_the_switch_off_opening_the_profile_does_not_synchronise_but_f5_sti
     second.start()
     wait_account(qtbot, second, AccountStatus.LINKED)
 
-    assert sync_of(second).operation is None  # nessun giro automatico
+    assert sync_of(second).operation is None  # no automatic round
     assert fakes.account.resume_calls == resumes_before
-    assert not second.garmin.auto_sync_action.isChecked()  # la scelta è stata ricordata
+    assert not second.garmin.auto_sync_action.isChecked()  # the choice was remembered
     assert second.garmin.sync_action.isEnabled()
     sync_and_wait(qtbot, second)
     wait_activities(qtbot, second, 4)
@@ -769,7 +769,7 @@ def test_turning_the_switch_back_on_restores_the_automatic_round(
         second.start()
 
 
-# --- Codice MFA scaduto o già annullato -----
+# --- Expired or already cancelled MFA code -----
 
 
 def test_an_mfa_code_that_does_not_arrive_in_time_says_so_in_the_dialog(
@@ -778,7 +778,7 @@ def test_an_mfa_code_that_does_not_arrive_in_time_says_so_in_the_dialog(
     fakes = history(2, mfa_required=True)
     window = window_with_profile(qtbot, tmp_path, settings, fakes, mfa_wait_s=0.3)
 
-    submit_login(qtbot, window)  # il codice non si digita
+    submit_login(qtbot, window)  # the code is not typed
     dialog = window.garmin.login_dialog
     assert dialog is not None
     qtbot.waitUntil(lambda: dialog.message_text != "", timeout=WAIT_MS)
@@ -790,11 +790,11 @@ def test_an_mfa_code_that_does_not_arrive_in_time_says_so_in_the_dialog(
     assert fakes.tokens.saved == {}
     assert sync_of(window).account_status is AccountStatus.NOT_LINKED
     qtbot.waitUntil(lambda: sync_of(window).operation is None, timeout=WAIT_MS)
-    assert not dialog.connect_button.isEnabled()  # la password va riscritta
+    assert not dialog.connect_button.isEnabled()  # the password must be retyped
 
 
 class _LateMfaAccount(FakeGarminAccount):
-    """Chiede il codice MFA solo dopo che il test ha dato il via (l'utente ha già annullato)."""
+    """Ask for the MFA code only after the test gives the go-ahead (the user has cancelled)."""
 
     def __init__(self, source: FakeActivitySource, proceed: threading.Event) -> None:
         super().__init__(source, mfa_required=True)
@@ -827,12 +827,12 @@ def test_an_mfa_request_arriving_after_the_user_cancelled_opens_no_dialog(
     qtbot.waitUntil(account.entered.is_set, timeout=WAIT_MS)
     dialog = window.garmin.login_dialog
     assert dialog is not None
-    dialog.reject()  # l'utente annulla mentre Garmin sta ancora rispondendo
+    dialog.reject()  # the user cancels while Garmin is still answering
 
     with qtbot.assertNotEmitted(sync_of(window).mfa_requested):
         with qtbot.waitSignal(sync_of(window).login_finished, timeout=WAIT_MS):
-            gate.set()  # ora la libreria chiede il codice
-        qtbot.wait(50)  # lascia arrivare un eventuale segnale tardivo
+            gate.set()  # now the library asks for the code
+        qtbot.wait(50)  # let a possible late signal arrive
 
     assert window.garmin.mfa_dialog is None
     assert window.open_boxes == []
@@ -849,7 +849,7 @@ def test_a_late_mfa_signal_after_cancelling_is_ignored_by_the_controller(
     controller.cancel_connect()
 
     with qtbot.assertNotEmitted(controller.mfa_requested):
-        # La corsa che il thread non riproduce: il segnale tardivo arriva a cancellazione fatta.
+        # The run the thread does not reproduce: the late signal arrives after the cancel.
         controller._mfa_asked.emit(controller._serial)
         qtbot.wait(50)
     gate.set()

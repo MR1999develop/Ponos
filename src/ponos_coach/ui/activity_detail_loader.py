@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Caricamento del dettaglio di un'attività nel thread dei dati.
+"""Loading an activity's detail on the data thread.
 
-Il lavoro legge il file originale dall'archivio, lo decodifica, calcola zone e carico con i
-parametri validi quel giorno e costruisce la figura della FC: tutto fuori dal thread della UI.
-Una richiesta superata da un'altra non consegna nulla.
+The job reads the original file from the archive, decodes it, computes zones and load with the
+parameters valid on that day and builds the HR figure: all off the UI thread.
+A request superseded by another delivers nothing.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def _detail_of(
     tokens: ThemeTokens,
     access: ProfileAccess,
 ) -> DetailOutcome:
-    """Il lavoro del thread dei dati: caso d'uso e figura della FC."""
+    """The data thread job: use case and HR figure."""
     session = access.session
     result = GetActivityDetail(
         session.activities,
@@ -50,7 +50,7 @@ def _detail_of(
 
 
 class ActivityDetailLoader(QObject):
-    """Carica il dettaglio di un'attività alla volta; l'ultima richiesta vince."""
+    """Load one activity's detail at a time; the latest request wins."""
 
     loaded = Signal(object)  # DetailOutcome
     failed = Signal(object)  # ErrorMessage
@@ -63,7 +63,7 @@ class ActivityDetailLoader(QObject):
     def load(
         self, identity: ActivityIdentity, labels: HeartRateLabels, tokens: ThemeTokens
     ) -> bool:
-        """Avvia il caricamento. Falso se non c'è un profilo aperto o l'app si chiude."""
+        """Start loading. False if no profile is open or the app is closing."""
         self._request += 1
         request = self._request
 
@@ -82,5 +82,5 @@ class ActivityDetailLoader(QObject):
         return self._controller.run_on_profile(work, done)
 
     def cancel(self) -> None:
-        """Il dialogo si è chiuso: l'esito in arrivo non interessa più."""
+        """The dialog was closed: the incoming outcome no longer matters."""
         self._request += 1

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Verifica dei nomi dei fusi orari IANA: l'unico punto che legge i dati dei fusi.
+"""Verification of IANA time zone names: the only point that reads the time zone data.
 
-Sta fuori dal dominio puro perché la ricerca (`ZoneInfo`) legge i file di `tzdata` dal disco.
-La usano il caso d'uso che crea un profilo e l'adattatore del database.
+It lives outside the pure domain because the lookup (`ZoneInfo`) reads the `tzdata` files from disk.
+It is used by the use case that creates a profile and by the database adapter.
 """
 
 from __future__ import annotations
@@ -14,14 +14,14 @@ _TIMEZONE_MAX_CHARS = 64
 
 
 def require_known_timezone(name: str) -> None:
-    """Controlla che `name` sia un fuso IANA noto (ricerca nei dati di `tzdata`, senza rete).
+    """Checks that `name` is a known IANA time zone (lookup in the `tzdata` data, no network).
 
     Raises:
-        ValueError: nome vuoto, più lungo di 64 caratteri, non valido o sconosciuto.
+        ValueError: empty name, longer than 64 characters, invalid or unknown.
     """
     if not 0 < len(name) <= _TIMEZONE_MAX_CHARS:
-        raise ValueError("nome del fuso orario vuoto o troppo lungo")
+        raise ValueError("time zone name empty or too long")
     try:
         ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError, OSError) as exc:
-        raise ValueError("fuso orario sconosciuto") from exc
+        raise ValueError("unknown time zone") from exc

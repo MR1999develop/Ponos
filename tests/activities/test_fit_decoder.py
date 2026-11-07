@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Confine FIT: file validi, file ostili, limiti, mappatura degli sport."""
+"""FIT boundary: valid files, hostile files, limits, sport mapping."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def reason_of(data: bytes, limits: FitLimits | None = None) -> FitDecodeReason:
     return caught.value.reason
 
 
-# --- File validi -------------------------------------------------------------
+# --- Valid files -------------------------------------------------------------
 
 
 def test_valid_run_becomes_an_activity() -> None:
@@ -162,15 +162,15 @@ def test_clean_heart_rate_has_no_discarded_samples() -> None:
 
 def test_a_programming_error_is_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
     def broken(*_args: object) -> None:
-        raise RuntimeError("bug nostro")
+        raise RuntimeError("our bug")
 
     monkeypatch.setattr("ponos_coach.activities.fit_decoder._build", broken)
 
-    with pytest.raises(RuntimeError, match="bug nostro"):
+    with pytest.raises(RuntimeError, match="our bug"):
         decode_activity(valid_bytes())
 
 
-# --- File ostili -------------------------------------------------------------
+# --- Hostile files -------------------------------------------------------------
 
 HOSTILE_FILES = sorted(HOSTILE_DIR.glob("*.fit"))
 
@@ -196,12 +196,12 @@ def test_garbage_is_corrupt() -> None:
 
 def test_file_that_is_not_an_activity() -> None:
     body = bytearray(fw.build_body(small_activity()))
-    body[22] = 5  # tipo del file_id: 4 = attività
+    body[22] = 5  # file_id type: 4 = activity
     assert reason_of(fw.wrap_body(bytes(body))) is FitDecodeReason.NOT_AN_ACTIVITY
 
 
 def test_file_with_only_file_id_is_not_an_activity() -> None:
-    body = fw.build_body(small_activity())[:35]  # definizione + dati del file_id
+    body = fw.build_body(small_activity())[:35]  # definition + file_id data
     assert reason_of(fw.wrap_body(body)) is FitDecodeReason.NOT_AN_ACTIVITY
 
 
@@ -226,11 +226,11 @@ def test_random_bytes_never_raise_other_exceptions(blob: bytes) -> None:
         decode_activity(blob)
 
 
-# --- Limiti ------------------------------------------------------------------
+# --- Limits ------------------------------------------------------------------
 
 
 def test_size_is_checked_before_decoding() -> None:
-    # Byte non FIT: se si provasse a decodificarli il motivo sarebbe CORRUPT.
+    # Non-FIT bytes: if decoding were attempted, the reason would be CORRUPT.
     assert reason_of(b"x" * 11, FitLimits(max_bytes=10)) is FitDecodeReason.TOO_LARGE
 
 
@@ -267,7 +267,7 @@ def test_total_messages_are_capped_even_when_they_are_not_records() -> None:
     one_record = fw.ActivitySpec(
         start, fw.Sport.RUNNING, fw.SubSport.GENERIC, [fw.Sample(fw.datetime_to_fit(start), 120)]
     )
-    extra_laps = (b"\x02" + struct.pack("<IIII", 0, 0, 1000, 1000)) * 10  # lap con definizione 2
+    extra_laps = (b"\x02" + struct.pack("<IIII", 0, 0, 1000, 1000)) * 10  # lap with definition 2
     data = fw.wrap_body(fw.build_body(one_record) + extra_laps)
 
     assert decode_activity(data).elapsed_s == 1.0
@@ -279,11 +279,11 @@ def test_total_messages_are_capped_even_when_they_are_not_records() -> None:
     [(0, 1, 1.0), (1, 0, 1.0), (1, 1, 0.0), (1, 1, float("inf")), (-1, 1, 1.0)],
 )
 def test_invalid_limits_are_rejected(max_bytes: int, max_records: int, max_duration: float) -> None:
-    with pytest.raises(ValueError, match=r"limiti|durata"):
+    with pytest.raises(ValueError, match=r"limits|duration"):
         FitLimits(max_bytes, max_records, max_duration)
 
 
-# --- Mappatura degli sport ---------------------------------------------------
+# --- Sport mapping ---------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -307,19 +307,19 @@ def test_sport_mapping(sport: int | None, sub_sport: int | None, expected: Sport
 
 
 def test_header_with_correct_sizes_is_what_the_hostile_files_break() -> None:
-    # Sanità del generatore: il file valido da cui derivano gli ostili si decodifica.
+    # Generator sanity: the valid file the hostile ones derive from decodes.
     valid = fw.build_activity(small_activity())
     assert decode_activity(valid).elapsed_s == 5.0
     assert struct.unpack_from("<I", valid, 4)[0] == len(valid) - fw.HEADER_SIZE - 2
 
 
-# --- Riepilogo: distanza, dislivello, partenza e traccia ------------------------------------
+# --- Summary: distance, ascent, start and track ------------------------------------
 
-SEA = (-30.0, -20.0)  # coordinate inventate, in mare aperto
+SEA = (-30.0, -20.0)  # made-up coordinates, in the open sea
 
 
 def gps_activity(start_position: tuple[float, float] | None = None) -> fw.ActivitySpec:
-    """Attività di 5 campioni con posizioni lungo un parallelo, a 3 m/s."""
+    """Activity of 5 samples with positions along a parallel, at 3 m/s."""
     spec = small_activity()
     samples = [
         replace(s, lat_deg=SEA[0], lon_deg=SEA[1] + i * 3.0 / 96_300.0, distance_m=i * 3.0)
@@ -339,7 +339,7 @@ def test_run_with_gps_has_distance_ascent_start_and_track() -> None:
     assert summary.start_point.lon_deg == pytest.approx(-19.9969, abs=1e-4)
     assert summary.track_polyline is not None
     track = decode_polyline(summary.track_polyline)
-    assert 10 < len(track) < 1200  # semplificata: molto meno dei 1200 record
+    assert 10 < len(track) < 1200  # simplified: far fewer than the 1200 records
     assert track[0].lat_deg == pytest.approx(summary.start_point.lat_deg, abs=1e-5)
 
 
@@ -364,10 +364,10 @@ def test_start_point_is_the_first_valid_record_when_the_session_has_none() -> No
     activity = decode_activity(valid_bytes("run_gps_invalid_positions.fit"))
 
     assert activity.summary.start_point is not None
-    # Le prime 30 posizioni sono non valide: la partenza è il record 30, a 75 m dall'origine.
+    # The first 30 positions are invalid: the start is record 30, 75 m from the origin.
     assert activity.summary.start_point.lon_deg == pytest.approx(-20.0 + 75.0 / 96_300.0, abs=1e-5)
     assert activity.summary.track_polyline is not None
-    assert len(decode_polyline(activity.summary.track_polyline)) == 2  # linea retta
+    assert len(decode_polyline(activity.summary.track_polyline)) == 2  # straight line
 
 
 def test_session_start_position_wins_over_the_records() -> None:
@@ -390,7 +390,9 @@ def test_semicircles_convert_to_degrees_at_the_extremes() -> None:
 
 def test_positions_outside_the_globe_are_ignored_not_repaired() -> None:
     spec = small_activity()
-    samples = [replace(s, lat_deg=91.0, lon_deg=10.0) for s in spec.samples]  # 91° di latitudine
+    samples = [
+        replace(s, lat_deg=91.0, lon_deg=10.0) for s in spec.samples
+    ]  # 91 degrees of latitude
 
     summary = decode_activity(fw.build_activity(replace(spec, samples=samples))).summary
 
@@ -408,7 +410,7 @@ def test_a_record_with_only_one_valid_coordinate_is_ignored() -> None:
 
 
 def test_invalid_session_distance_and_ascent_are_ignored() -> None:
-    # 0xFFFFFFFF (distanza, scala 100) e 0xFFFF (dislivello) sono i valori "non validi" FIT.
+    # 0xFFFFFFFF (distance, scale 100) and 0xFFFF (ascent) are the FIT "invalid" values.
     spec = replace(small_activity(), total_distance_m=42_949_672.95, total_ascent_m=0xFFFF)
 
     summary = decode_activity(fw.build_activity(spec)).summary
@@ -432,7 +434,7 @@ def test_a_long_track_is_capped_at_the_project_limit() -> None:
     assert len(decode_polyline(polyline)) <= MAX_TRACK_POINTS
 
 
-# --- Regola del tempo in movimento ----------------------------------------------------------
+# --- Moving time rule ----------------------------------------------------------
 
 
 def test_timer_up_to_one_second_above_elapsed_is_brought_to_elapsed() -> None:

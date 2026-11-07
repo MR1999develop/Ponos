@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-SEC-07 (segreti) e T-SEC-08 (log) per la fase 2, sulla pila vera senza rete.
+"""T-SEC-07 (secrets) and T-SEC-08 (logs) for phase 2, on the real stack without network.
 
-Token, password, email e codice MFA sono segnaposto noti. Dopo login, sincronizzazione, errori
-con i segreti dentro i messaggi, crash (anche un `os._exit` vero) e logout, non devono comparire
-nella cartella del profilo, nei temporanei, nella configurazione, nei log né negli oggetti
-mostrabili. Sulle piattaforme con DPAPI si usa il portachiavi vero (file cifrato sotto `dati`).
+Tokens, password, email and MFA code are known placeholders. After login, synchronisation, errors
+with the secrets inside the messages, crashes (even a real `os._exit`) and logout, they must not
+appear
+in the profile folder, in the temporary files, in the configuration, in the logs or in the objects
+that can be shown. On platforms with DPAPI the real keyring is used (encrypted file under `dati`).
 """
 
 from __future__ import annotations
@@ -46,23 +47,23 @@ from tests.garmin.scripted import (
 
 TOKEN_MARKER = "TOKEN-SEGNAPOSTO-0123456789abcdef"  # noqa: S105 - segnaposto
 MARKERS = (TOKEN_MARKER, PASSWORD, EMAIL, MFA_CODE)
-LEAKY = f"fallito per {EMAIL} con {PASSWORD} codice {MFA_CODE} token {TOKEN_MARKER}"
+LEAKY = f"failed for {EMAIL} with {PASSWORD} code {MFA_CODE} token {TOKEN_MARKER}"
 WORKER = (
     Path(__file__).resolve().parents[1] / "fixtures" / "generators" / "collaudo_fase2_worker.py"
 )
-_IS_WINDOWS: bool = sys.platform == "win32"  # bool, non Literal: mypy non scarta un ramo
+_IS_WINDOWS: bool = sys.platform == "win32"  # bool, not Literal: mypy does not discard a branch
 windows_only = pytest.mark.skipif(not _IS_WINDOWS, reason="DPAPI di Windows")
 
 
 def make_token_store(base: Path) -> TokenStore:
-    """Il portachiavi vero dove c'è (DPAPI su Windows), altrimenti uno in memoria."""
+    """The real keyring where there is one (DPAPI on Windows), otherwise an in-memory one."""
     if _IS_WINDOWS:
         return DpapiTokenStore(base / "dati")
     return InMemoryTokenStore()
 
 
 def files_with_secrets(root: Path, markers: tuple[str, ...] = MARKERS) -> list[str]:
-    """I file sotto `root` che contengono un segnaposto, in UTF-8 o UTF-16 (LE)."""
+    """The files under `root` that contain a placeholder, in UTF-8 or UTF-16 (LE)."""
     found: list[str] = []
     needles = [m.encode(enc) for m in markers for enc in ("utf-8", "utf-16-le")]
     for path in root.rglob("*"):
@@ -70,7 +71,7 @@ def files_with_secrets(root: Path, markers: tuple[str, ...] = MARKERS) -> list[s
             continue
         try:
             data = path.read_bytes()
-        except PermissionError:  # il file del lock, tenuto aperto in esclusiva dal profilo
+        except PermissionError:  # the lock file, held open exclusively by the profile
             continue
         if any(needle in data for needle in needles):
             found.append(str(path.relative_to(root)))
@@ -79,7 +80,7 @@ def files_with_secrets(root: Path, markers: tuple[str, ...] = MARKERS) -> list[s
 
 @pytest.fixture
 def isolated_temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """I temporanei del processo finiscono in una cartella del test, che poi si scandisce."""
+    """The process temporary files end up in a test folder, which is then scanned."""
     temp = tmp_path / "temp"
     temp.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(temp))
@@ -88,7 +89,7 @@ def isolated_temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def file_log(tmp_path: Path) -> Iterator[Path]:
-    """Il log di `ponos_coach` su file, come nell'app, tolto alla fine."""
+    """The `ponos_coach` log on file, as in the app, removed at the end."""
     log_file = configure_logging(tmp_path / "logs", version="test")
     assert log_file is not None
     yield log_file
@@ -99,7 +100,7 @@ def file_log(tmp_path: Path) -> Iterator[Path]:
 
 
 def logged_text(log_file: Path, caplog: pytest.LogCaptureFixture) -> str:
-    """Tutto ciò che un log può mostrare: il file, i record (con eccezioni) e il formattato."""
+    """Everything a log can show: the file, the records (with exceptions) and the formatted text."""
     formatter = logging.Formatter("%(levelname)s %(name)s %(message)s")
     lines = [formatter.format(record) for record in caplog.records]
     return log_file.read_text(encoding="utf-8") + "\n".join(lines)
@@ -135,7 +136,7 @@ def test_t_sec_07_after_login_sync_and_logout_no_secret_is_on_disk_or_in_the_log
         first = stack.sync()
         assert isinstance(first, SyncFinished) and first.outcome.completed
         assert stack.tokens.load(stack.profile_id) is not None
-        # con il token ancora nel portachiavi: non nella cartella del profilo né nei temporanei
+        # with the token still in the keyring: not in the profile folder nor in the temporary files
         assert files_with_secrets(stack.folder) == []
         assert files_with_secrets(isolated_temp) == []
         assert files_with_secrets(tmp_path / "logs") == []
@@ -145,7 +146,7 @@ def test_t_sec_07_after_login_sync_and_logout_no_secret_is_on_disk_or_in_the_log
         stack.close()
 
     out, err = capfd.readouterr()
-    assert files_with_secrets(tmp_path) == []  # nemmeno il portachiavi su disco, dopo il logout
+    assert files_with_secrets(tmp_path) == []  # not even the on-disk keyring, after logout
     assert not [m for m in MARKERS if m in logged_text(file_log, caplog) + out + err]
 
 
@@ -159,7 +160,7 @@ def test_t_sec_07_the_keychain_file_is_encrypted_outside_the_profile_and_logout_
         secrets = list((tmp_path / "dati").rglob("*.bin"))
 
         assert len(secrets) == 1 and stack.folder not in secrets[0].parents
-        assert files_with_secrets(tmp_path) == []  # cifrato: il segnaposto non e' in chiaro
+        assert files_with_secrets(tmp_path) == []  # encrypted: the placeholder is not in the clear
         stack.worker.log_out(stack.profile_id)
         assert not list((tmp_path / "dati").rglob("*.bin"))
     finally:
@@ -219,7 +220,7 @@ def test_t_sec_07_a_token_dump_that_fails_with_the_secrets_in_its_text_is_not_lo
             stack.profile_id, Credentials(EMAIL, PASSWORD), lambda: MFA_CODE, threading.Event()
         )
         assert result is not LoginEnd.CONNECTED
-        assert stack.tokens.load(stack.profile_id) is None  # un login fallito non salva nulla
+        assert stack.tokens.load(stack.profile_id) is None  # a failed login saves nothing
     finally:
         stack.close()
 
@@ -331,7 +332,7 @@ def test_t_sec_07_a_cancelled_login_saves_nothing(tmp_path: Path) -> None:
         stack.close()
 
 
-# --- Token corrotto o di un altro profilo -----------------------------------------------------
+# --- Corrupted token or one from another profile --------------------------------------------------
 
 
 def test_t_sync_04_tokens_that_are_not_a_json_object_never_reach_the_library(
@@ -366,7 +367,9 @@ def test_t_sync_04_the_tokens_of_another_profile_are_never_used(tmp_path: Path) 
     first = build_stack(tmp_path / "a", scripted_client(2), tokens=store)
     second = build_stack(tmp_path / "b", scripted_client(2), tokens=store, linked=False)
     try:
-        result = second.sync()  # il secondo profilo non e collegato: i token del primo non contano
+        result = (
+            second.sync()
+        )  # the second profile is not linked: the first one's tokens do not count
 
         assert isinstance(result, SyncNotStarted) and result.problem is SyncProblem.NOT_LINKED
         assert second.factory.resume_calls == []
@@ -421,13 +424,13 @@ def test_t_sync_04_a_damaged_secret_file_asks_for_a_new_login_and_is_replaced(
         result = stack.sync()
 
         assert isinstance(result, SyncNotStarted) and result.problem is SyncProblem.AUTH_REQUIRED
-        stack.link()  # un nuovo collegamento sostituisce il file rovinato
+        stack.link()  # a new link replaces the damaged file
         assert isinstance(stack.sync(SyncMode.SYNC), SyncFinished)
     finally:
         stack.close()
 
 
-# --- T-SEC-08: log della sincronizzazione --------------------------------------------------------
+# --- T-SEC-08: synchronisation logs --------------------------------------------------------------
 
 
 def test_t_sec_08_a_whole_sync_logs_nothing_of_the_user_data(

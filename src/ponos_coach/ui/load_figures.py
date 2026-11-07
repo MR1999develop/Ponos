@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Figure Plotly del carico settimanale per sport e del tempo nelle zone di FC.
+"""Plotly figures of weekly load per sport and time in HR zones.
 
-Funzioni pure da `WeeklyLoad` e `WeeklyZones` (già aggregati dal dominio) a `go.Figure`. Barre
-impilate che partono da zero, ultime 26 settimane (si ingrandisce con la barra del grafico). Il
-colore di uno sport è sempre lo stesso e non è mai rosso né arancio (riservati a errori e avvisi);
-le serie sono al massimo cinque: gli sport con meno carico si raggruppano in "Altro". Le zone usano
-una scala sequenziale a luminosità crescente, quindi l'ordine si legge anche senza i colori
-(legenda e suggerimenti dicono il nome).
+Pure functions from `WeeklyLoad` and `WeeklyZones` (already aggregated by the domain) to
+`go.Figure`. Stacked
+bars starting at zero, last 26 weeks (zoom with the chart toolbar). A
+sport's colour is always the same and never red or orange (reserved for errors and warnings);
+there are at most five series: sports with less load are grouped into "Other". Zones use
+a sequential scale of increasing lightness, so the order reads even without the colours
+(legend and hints give the name).
 """
 
 from __future__ import annotations
@@ -31,20 +32,22 @@ from ponos_coach.ui.chart_payload import (
 )
 from ponos_coach.ui.tokens import ThemeTokens
 
-CHART_WEEKS = 26  # settimane mostrate: circa sei mesi
-WEEKLY_LOAD_UNIT = "hrTSS per week"  # frasi intere: le traduce la vista (`unit` delle etichette)
+CHART_WEEKS = 26  # weeks shown: about six months
+WEEKLY_LOAD_UNIT = (
+    "hrTSS per week"  # whole sentences: the view translates them (`unit` of the labels)
+)
 ZONES_AXIS_UNIT = "hours per week"
-ZONE_TIME_UNIT = "h"  # nel suggerimento di una barra: il simbolo è uguale in ogni lingua
-MAX_SPORT_SERIES = 5  # oltre, gli sport con meno carico si raggruppano in "Altro"
+ZONE_TIME_UNIT = "h"  # in a bar's hint: the symbol is the same in every language
+MAX_SPORT_SERIES = 5  # beyond that, sports with less load are grouped into "Other"
 LOAD_EXPORT_STEM = "ponos-coach-weekly-load"
 ZONES_EXPORT_STEM = "ponos-coach-zones"
 _SECONDS_PER_HOUR = 3600.0
 _BAR_GAP = 0.15
-_SEPARATOR_WIDTH = 1  # linea del colore di fondo tra segmenti: separa anche senza colore
+_SEPARATOR_WIDTH = 1  # background-colour line between segments: separates even without colour
 _LAST_ZONE_INDEX = ZONE_COUNT - 1
 
-# Posto di ogni sport nei sette colori di categoria dei token: lo sport tiene sempre il suo. Gli
-# sport vicini nell'ordine di `Sport` (e quindi vicini nella pila) hanno tinte lontane.
+# Place of each sport among the token's seven category colours: a sport always keeps its own.
+# Sports adjacent in the `Sport` order (hence adjacent in the stack) get distant hues.
 SPORT_COLOR_SLOT: Mapping[Sport, int] = {
     Sport.RUNNING: 0,
     Sport.TRAIL: 1,
@@ -58,28 +61,28 @@ SPORT_COLOR_SLOT: Mapping[Sport, int] = {
 
 @dataclass(frozen=True, slots=True)
 class WeeklyLoadLabels:
-    """Testi del grafico del carico settimanale, già tradotti dalla vista."""
+    """Texts of the weekly load chart, already translated by the view."""
 
     x_axis: str
     y_axis: str
     sports: Mapping[Sport, str]
     chrome: ChartChrome
-    unit: str = WEEKLY_LOAD_UNIT  # "hrTSS per week", tradotto come frase intera
+    unit: str = WEEKLY_LOAD_UNIT  # "hrTSS per week", translated as a whole sentence
 
 
 @dataclass(frozen=True, slots=True)
 class WeeklyZonesLabels:
-    """Testi del grafico del tempo nelle zone, già tradotti dalla vista."""
+    """Texts of the time-in-zones chart, already translated by the view."""
 
     x_axis: str
     y_axis: str
     legend_title: str
     chrome: ChartChrome
-    unit: str = ZONES_AXIS_UNIT  # "hours per week", tradotto come frase intera
+    unit: str = ZONES_AXIS_UNIT  # "hours per week", translated as a whole sentence
 
 
 def sport_color(sport: Sport, tokens: ThemeTokens) -> str:
-    """Colore di categoria di uno sport nel tema."""
+    """Category colour of a sport in the theme."""
     return tokens.categories[SPORT_COLOR_SLOT[sport]]
 
 
@@ -88,12 +91,14 @@ def _percent_text(value: float) -> str:
 
 
 def zone_label(index: int, starts: Sequence[float] = ZONE_STARTS_PERCENT) -> str:
-    """Nome breve di una zona con i suoi confini in percentuale della soglia (indice da 0).
+    """Short name of a zone with its bounds as a percentage of the threshold (index from 0).
 
-    `Z1 <85%`, `Z2 85-89%`, ..., `Z5 ≥100%`. I confini vengono da `ZONE_STARTS_PERCENT`, la sola
-    fonte; sigle e simboli sono uguali in ogni lingua. Con confini interi una zona di mezzo finisce
-    un punto prima del confine successivo; con confini non interi (87,5) dice "da 85 a meno di 90"
-    (`Z2 85-<90%`), perché "un punto prima" sarebbe sbagliato.
+    `Z1 <85%`, `Z2 85-89%`, ..., `Z5 ≥100%`. The bounds come from `ZONE_STARTS_PERCENT`, the only
+    source; acronyms and symbols are the same in every language. With integer bounds a middle zone
+    ends
+    one point before the next bound; with non-integer bounds (87.5) it says "from 85 to less than
+    90"
+    (`Z2 85-<90%`), because "one point before" would be wrong.
     """
     name = f"Z{index + 1}"
     if index == 0:
@@ -110,7 +115,7 @@ def _style_weekly_layout(
     figure: go.Figure, tokens: ThemeTokens, x_title: str, y_title: str, legend_title: str = ""
 ) -> None:
     figure.update_xaxes(axis_style(tokens, x_title), type="date", hoverformat="%Y-%m-%d")
-    figure.update_yaxes(axis_style(tokens, y_title), rangemode="tozero")  # barre da zero
+    figure.update_yaxes(axis_style(tokens, y_title), rangemode="tozero")  # bars from zero
     figure.update_layout(
         **base_layout(tokens),
         barmode="stack",
@@ -130,11 +135,13 @@ def _style_weekly_layout(
 def sport_series(
     sports: Sequence[Sport], load: NDArray[np.float64]
 ) -> list[tuple[Sport, NDArray[np.float64]]]:
-    """Le serie da disegnare: gli sport con carico nella finestra, nell'ordine di `Sport`.
+    """The series to draw: sports with load in the window, in `Sport` order.
 
-    Con più di `MAX_SPORT_SERIES` sport, restano quelli con più carico (uno in meno del tetto) e
-    tutti gli altri, insieme a `Sport.OTHER`, si sommano in `Sport.OTHER`, che chiude la pila. A
-    parità di carico vale l'ordine di `Sport`.
+    With more than `MAX_SPORT_SERIES` sports, those with the most load remain (one fewer than the
+    cap) and
+    all the others, together with `Sport.OTHER`, are summed into `Sport.OTHER`, which closes the
+    stack. On
+    a load tie the `Sport` order applies.
     """
     present = [
         (sport, load[:, column])
@@ -144,7 +151,7 @@ def sport_series(
     if len(present) <= MAX_SPORT_SERIES:
         return present
     named = [item for item in present if item[0] is not Sport.OTHER]
-    ranked = sorted(named, key=lambda item: -float(item[1].sum()))  # stabile: parità per ordine
+    ranked = sorted(named, key=lambda item: -float(item[1].sum()))  # stable: ties by order
     kept = {sport for sport, _ in ranked[: MAX_SPORT_SERIES - 1]}
     merged = np.zeros(load.shape[0], dtype=np.float64)
     for sport, values in present:
@@ -156,8 +163,8 @@ def sport_series(
 def build_weekly_load_figure(
     weekly: WeeklyLoad, labels: WeeklyLoadLabels, tokens: ThemeTokens
 ) -> go.Figure:
-    """Carico per settimana, un segmento per sport presente nelle ultime `CHART_WEEKS` settimane
-    (al massimo `MAX_SPORT_SERIES`: vedi `sport_series`), nell'ordine di `Sport`."""
+    """Load per week, one segment per sport present in the last `CHART_WEEKS` weeks
+    (at most `MAX_SPORT_SERIES`: see `sport_series`), in `Sport` order."""
     weeks = weekly.weeks[-CHART_WEEKS:]
     load = weekly.load[-CHART_WEEKS:, :]
     figure = go.Figure()
@@ -182,7 +189,7 @@ def build_weekly_load_figure(
 def build_weekly_zones_figure(
     weekly: WeeklyZones, labels: WeeklyZonesLabels, tokens: ThemeTokens
 ) -> go.Figure:
-    """Ore per zona e settimana (Z1 in basso, Z5 in alto), ultime `CHART_WEEKS` settimane."""
+    """Hours per zone and week (Z1 at the bottom, Z5 at the top), last `CHART_WEEKS` weeks."""
     weeks = weekly.weeks[-CHART_WEEKS:]
     hours = weekly.seconds[-CHART_WEEKS:, :] / _SECONDS_PER_HOUR
     figure = go.Figure()
@@ -213,7 +220,7 @@ def build_weekly_zones_figure(
 def prepare_weekly_load_chart(
     weekly: WeeklyLoad, labels: WeeklyLoadLabels, tokens: ThemeTokens
 ) -> PreparedChart:
-    """Figura e JSON del carico settimanale (lavoro puro, adatto a un thread che non è la UI)."""
+    """Figure and JSON of the weekly load (pure work, suited to a non-UI thread)."""
     figure = build_weekly_load_figure(weekly, labels, tokens)
     return prepare_figure(figure, labels.chrome, LOAD_EXPORT_STEM, tokens)
 
@@ -221,6 +228,6 @@ def prepare_weekly_load_chart(
 def prepare_weekly_zones_chart(
     weekly: WeeklyZones, labels: WeeklyZonesLabels, tokens: ThemeTokens
 ) -> PreparedChart:
-    """Figura e JSON del tempo nelle zone (lavoro puro, adatto a un thread che non è la UI)."""
+    """Time-in-zones figure and JSON (pure work, suited to a non-UI thread)."""
     figure = build_weekly_zones_figure(weekly, labels, tokens)
     return prepare_figure(figure, labels.chrome, ZONES_EXPORT_STEM, tokens)

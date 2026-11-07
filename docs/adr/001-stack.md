@@ -1,57 +1,57 @@
-# 001. Stack: Python, PySide6 e Plotly
+# 001. Stack: Python, PySide6 and Plotly
 
-- Stato: Accettato
-- Data: 2026-11-05
+- Status: Accepted
+- Date: 2026-11-05
 
-## Contesto
+## Context
 
-Ponos Coach è un'app desktop per Windows e Ubuntu con tabelle di attività,
-grafici interattivi del carico (PMC, zone, FC) e un adattatore verso Garmin
-Connect. Il cambio di stack dopo l'inizio è costoso. I grafici e le tabelle
-sono il cuore dell'interfaccia; l'accesso a Garmin dipende da una libreria
-esistente.
+Ponos Coach is a desktop app for Windows and Ubuntu with activity tables,
+interactive load charts (PMC, zones, HR) and an adapter to Garmin Connect.
+Changing the stack after the start is costly. Charts and tables are the heart
+of the interface; access to Garmin depends on an existing library.
 
-## Opzioni
+## Options
 
 1. **Python + PySide6 + pyqtgraph.**
-   - Pro: pacchetto leggero, grafici nativi veloci.
-   - Contro: grafici meno curati e meno interattivi (legende, tooltip,
-     esportazione vettoriale, temi) da costruire a mano.
+   - Pro: light package, fast native charts.
+   - Con: less polished and less interactive charts (legends, tooltips, vector
+     export, themes) to build by hand.
 2. **Python + PySide6 + Plotly in `QWebEngineView`.**
-   - Pro: grafici migliori e interattivi, esportazione SVG e PNG, stesso
-     linguaggio della libreria Garmin.
-   - Contro: pacchetto più pesante (circa 250 MB); un motore web dentro l'app,
-     da isolare (nessuna rete, nessun ponte verso il codice); dati dei grafici
-     da passare come JSON.
+   - Pro: better and interactive charts, SVG and PNG export, same language as
+     the Garmin library.
+   - Con: heavier package (about 250 MB); a web engine inside the app, to be
+     isolated (no network, no bridge to the code); chart data to be passed as
+     JSON.
 3. **Rust + egui.**
-   - Pro: è lo stack usuale dei progetti desktop, un solo eseguibile leggero.
-   - Contro: il login Garmin va riscritto da zero; grafici e tabelle più
-     spartani; più lavoro per le stesse funzioni.
+   - Pro: it is the usual stack of desktop projects, a single light
+     executable.
+   - Con: the Garmin login must be rewritten from scratch; plainer charts and
+     tables; more work for the same functions.
 4. **Tauri (Rust) + TypeScript + ECharts.**
-   - Pro: grafici ricchi, pacchetto più leggero di Qt WebEngine.
-   - Contro: due linguaggi e due toolchain; nessuna skill per il frontend; il
-     login Garmin va comunque riscritto.
+   - Pro: rich charts, lighter package than Qt WebEngine.
+   - Con: two languages and two toolchains; no skill for the frontend; the
+     Garmin login must be rewritten anyway.
 
-## Decisione
+## Decision
 
-Opzione 2: Python 3.13, PySide6 (Qt 6), grafici Plotly in un `QWebEngineView`
-con `plotly.js` incluso. Scelta dell'utente: grafici migliori contro un
-pacchetto più pesante. Il resto dello stack è in `PLAN.md` sezione 4.1.
+Option 2: Python 3.13, PySide6 (Qt 6), Plotly charts in a `QWebEngineView`
+with `plotly.js` included. Choice of the user: better charts against a heavier
+package. The rest of the stack is in `PLAN.md` section 4.1.
 
-## Conseguenze
+## Consequences
 
-- Il pacchetto pesa circa 250 MB: il valore va misurato in fase 8.
-- La pagina dei grafici è un confine di fiducia: solo contenuto locale,
-  richieste di rete bloccate, dati come JSON codificato, nessun `QWebChannel`
-  salvo necessità dichiarata (vedi `docs/threat-model.md`).
-- Il dominio resta puro e indipendente da Qt: se lo stack va cambiato, si
-  riscrivono interfaccia e adattatori, non il dominio.
-- Le dipendenze dirette si validano e si registrano in `docs/dipendenze.md`.
+- The package weighs about 250 MB: the value must be measured in phase 8.
+- The charts page is a trust boundary: only local content, network requests
+  blocked, data as encoded JSON, no `QWebChannel` unless a need is declared
+  (see `docs/threat-model.md`).
+- The domain stays pure and independent of Qt: if the stack has to change,
+  interface and adapters are rewritten, not the domain.
+- Direct dependencies are validated and recorded in `docs/dipendenze.md`.
 
-## Come se ne verifica il rispetto
+## How compliance is verified
 
-- `lint-imports` in `uv run --locked nox`: il dominio non importa Qt, rete o I/O; le
-  dipendenze vanno solo `ui → casi d'uso → dominio`.
-- Test T-SEC-06 sulla pagina dei grafici; T-UI-04 sui grafici.
-- Fase 8: dimensione del pacchetto misurata e registrata.
-- Un cambio di stack richiede un nuovo ADR che sostituisce questo.
+- `lint-imports` in `uv run --locked nox`: the domain does not import Qt,
+  network or I/O; dependencies go only `ui → use cases → domain`.
+- Test T-SEC-06 on the charts page; T-UI-04 on the charts.
+- Phase 8: package size measured and recorded.
+- A change of stack requires a new ADR that replaces this one.

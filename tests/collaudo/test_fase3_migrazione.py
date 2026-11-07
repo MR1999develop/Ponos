@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-DATI-01 per la fase 3: dal database v2 congelato alla v3 (dati personali, pesi, zone).
+"""T-DATI-01 for phase 3: from the frozen v2 database to v3 (personal data, weights, zones).
 
-Il database v2 qui sotto è scritto a mano, indipendente dal codice (le due migrazioni rilasciate
-stanno in `test_database_del_profilo.py`). Si prova che la v3 non cambia dopo il rilascio, che un
-profilo v2 migra senza perdere nulla (tranne la cache dei carichi, derivata, che si svuota), che
-resta valido senza altezza e data di nascita e che le completa una volta sola.
+The v2 database below is written by hand, independent of the code (the two released migrations
+are in `test_database_del_profilo.py`). It is shown that v3 does not change after release, that a
+v2 profile migrates without losing anything (except the load cache, which is derived and gets
+emptied), that it
+stays valid without height and date of birth and that it completes them only once.
 """
 
 from __future__ import annotations
@@ -41,7 +42,7 @@ from tests.collaudo.test_database_del_profilo import (
     write_frozen_v1,
 )
 
-# Migrazione v3 come fu rilasciata. Non si cambia, come la v1 e la v2.
+# Migration v3 as it was released. It does not change, like v1 and v2.
 FROZEN_V3 = (
     """CREATE TABLE profile_body (
         id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
@@ -79,7 +80,7 @@ V2_TABLES = ("meta", "activities", "physiology", "load_cache", "sync_journal", "
 
 
 def write_frozen_v2(path: Path) -> None:
-    """Un database v2 come lo scriveva l'app della fase 2 (senza usare `src`)."""
+    """A v2 database as the phase 2 app wrote it (without using `src`)."""
     write_frozen_v1(path)
     with closing(sqlite3.connect(path)) as raw:
         for statement in FROZEN_V2:
@@ -130,13 +131,13 @@ def test_t_dati_01_a_frozen_v2_database_is_migrated_to_v3_with_data_intact_and_a
     finally:
         opened.close()
 
-    assert {table: rows(path, table) for table in kept} == before  # compreso 'futuro'
-    assert rows(path, "load_cache") == []  # derivata: si ricalcola dai file
+    assert {table: rows(path, table) for table in kept} == before  # including 'future'
+    assert rows(path, "load_cache") == []  # derived: recalculated from the files
     [copy] = sorted((tmp_path / "backup").glob("*"))
     assert copy.name == "ponos-v2-v3.sqlite3"
     assert user_version(copy) == 2
     assert {table: rows(copy, table) for table in kept} == before
-    assert rows(copy, "load_cache") != []  # la copia ha ancora il carico v2
+    assert rows(copy, "load_cache") != []  # the copy still has the v2 load
     assert {"profile_body", "weight", "sport_weights"}.isdisjoint(table_names(copy))
 
 
@@ -148,7 +149,7 @@ def test_t_dati_01_a_v2_profile_stays_valid_without_the_personal_data(tmp_path: 
         assert opened.fixed_data.get() is None
         assert opened.weights.list_entries() == []
         assert opened.sport_weights.load() == {}
-        (entry,) = opened.physiology.list_entries()  # i parametri di prima ci sono
+        (entry,) = opened.physiology.list_entries()  # the previous parameters are there
         assert entry.valid_from == date(2026, 1, 1)
     finally:
         opened.close()
@@ -166,7 +167,7 @@ def test_t_dati_01_a_v2_profile_completes_height_and_birth_date_once(tmp_path: P
 
     reopened = SqliteProfileStorage().open(tmp_path)
     try:
-        assert reopened.fixed_data.get() == FIXED  # la seconda scrittura non ha cambiato nulla
+        assert reopened.fixed_data.get() == FIXED  # the second write changed nothing
     finally:
         reopened.close()
 
@@ -195,9 +196,9 @@ def test_t_dati_01_a_v3_migration_that_fails_halfway_leaves_the_v2_database_as_i
     tables_before = table_names(path)
     cache_before = rows(path, "load_cache")
     broken_v3 = (
-        sqlite_schema.MIGRATIONS[2][0],  # una tabella nuova che va a buon fine...
-        sqlite_schema.MIGRATIONS[2][4],  # ...la cache svuotata...
-        "CREATE TABLE questa_no (",  # ...poi un errore di sintassi
+        sqlite_schema.MIGRATIONS[2][0],  # a new table that succeeds...
+        sqlite_schema.MIGRATIONS[2][4],  # ...the emptied cache...
+        "CREATE TABLE questa_no (",  # ...then a syntax error
     )
     monkeypatch.setattr(sqlite_database, "MIGRATIONS", (*sqlite_schema.MIGRATIONS[:2], broken_v3))
 
@@ -205,10 +206,10 @@ def test_t_dati_01_a_v3_migration_that_fails_halfway_leaves_the_v2_database_as_i
         SqliteProfileStorage().open(tmp_path)
 
     assert user_version(path) == 2
-    assert table_names(path) == tables_before  # nessuna tabella a metà
-    assert rows(path, "load_cache") == cache_before  # e la cache non è stata svuotata
+    assert table_names(path) == tables_before  # no half table
+    assert rows(path, "load_cache") == cache_before  # and the cache was not emptied
     monkeypatch.undo()
-    SqliteProfileStorage().open(tmp_path).close()  # il giro buono riesce
+    SqliteProfileStorage().open(tmp_path).close()  # the good round succeeds
     assert user_version(path) == 3
 
 
@@ -240,22 +241,22 @@ def test_the_database_refuses_to_delete_the_fixed_data_even_with_a_direct_delete
 @pytest.mark.parametrize(
     "statement",
     [
-        "INSERT INTO profile_body VALUES (1, 99, '1990-05-17')",  # off point: 100 è il minimo
-        "INSERT INTO profile_body VALUES (1, 251, '1990-05-17')",  # off point: 250 è il massimo
-        "INSERT INTO profile_body VALUES (1, 172, '1899-12-31')",  # prima del 1900-01-01
-        "INSERT INTO profile_body VALUES (2, 172, '1990-05-17')",  # una sola riga
-        "INSERT INTO profile_body VALUES (1, 172, '1990-02-30')",  # giorno inesistente
-        "INSERT INTO profile_body VALUES (1, 172, '1990-13-01')",  # mese inesistente
-        "INSERT INTO profile_body VALUES (1, 172, 'abcdefghij')",  # lunghezza giusta, non una data
-        "INSERT INTO profile_body VALUES (1, 172, '1990-5-17-0')",  # lunghezza giusta, non ISO
-        "INSERT INTO weight VALUES ('2026-02-30', 700)",  # giorno inesistente
-        "INSERT INTO weight VALUES ('xxxxxxxxxx', 700)",  # lunghezza giusta, non una data
-        "INSERT INTO weight VALUES ('1899-12-31', 700)",  # prima del 1900-01-01
-        "INSERT INTO weight VALUES ('2026-01-01', 199)",  # sotto 20,0 kg
-        "INSERT INTO weight VALUES ('2026-01-01', 3001)",  # sopra 300,0 kg
-        "INSERT INTO sport_weights VALUES ('curling', 1.0)",  # sport sconosciuto
-        "INSERT INTO sport_weights VALUES ('running', 5.1)",  # peso oltre il massimo
-        "INSERT INTO sport_weights VALUES ('running', -0.1)",  # peso negativo
+        "INSERT INTO profile_body VALUES (1, 99, '1990-05-17')",  # off point: 100 is the minimum
+        "INSERT INTO profile_body VALUES (1, 251, '1990-05-17')",  # off point: 250 is the maximum
+        "INSERT INTO profile_body VALUES (1, 172, '1899-12-31')",  # before 1900-01-01
+        "INSERT INTO profile_body VALUES (2, 172, '1990-05-17')",  # a single row
+        "INSERT INTO profile_body VALUES (1, 172, '1990-02-30')",  # non-existent day
+        "INSERT INTO profile_body VALUES (1, 172, '1990-13-01')",  # non-existent month
+        "INSERT INTO profile_body VALUES (1, 172, 'abcdefghij')",  # right length, not a date
+        "INSERT INTO profile_body VALUES (1, 172, '1990-5-17-0')",  # right length, not ISO
+        "INSERT INTO weight VALUES ('2026-02-30', 700)",  # non-existent day
+        "INSERT INTO weight VALUES ('xxxxxxxxxx', 700)",  # right length, not a date
+        "INSERT INTO weight VALUES ('1899-12-31', 700)",  # before 1900-01-01
+        "INSERT INTO weight VALUES ('2026-01-01', 199)",  # below 20.0 kg
+        "INSERT INTO weight VALUES ('2026-01-01', 3001)",  # above 300.0 kg
+        "INSERT INTO sport_weights VALUES ('curling', 1.0)",  # unknown sport
+        "INSERT INTO sport_weights VALUES ('running', 5.1)",  # weight above the maximum
+        "INSERT INTO sport_weights VALUES ('running', -0.1)",  # negative weight
     ],
 )
 def test_the_database_refuses_personal_data_outside_the_domain_limits(
@@ -275,9 +276,9 @@ def test_the_database_refuses_personal_data_outside_the_domain_limits(
     [
         "INSERT INTO profile_body VALUES (1, 100, '1900-01-01')",  # on point: minimi ammessi
         "INSERT INTO profile_body VALUES (1, 250, '2020-02-29')",  # on point: massimo
-        "INSERT INTO weight VALUES ('1900-01-01', 700)",  # prima data ammessa
-        "INSERT INTO weight VALUES ('2026-01-01', 200)",  # 20,0 kg
-        "INSERT INTO weight VALUES ('2026-01-01', 3000)",  # 300,0 kg
+        "INSERT INTO weight VALUES ('1900-01-01', 700)",  # first allowed date
+        "INSERT INTO weight VALUES ('2026-01-01', 200)",  # 20.0 kg
+        "INSERT INTO weight VALUES ('2026-01-01', 3000)",  # 300.0 kg
         "INSERT INTO sport_weights VALUES ('running', 0.0)",
         "INSERT INTO sport_weights VALUES ('running', 5.0)",
     ],
@@ -306,7 +307,8 @@ def test_weight_entry_round_trips_through_a_migrated_database(tmp_path: Path) ->
 
 
 class _UncheckedDatabase:
-    """Un database senza vincoli CHECK (il file vero rifiuta già di aprirsi con date non valide)."""
+    """A database without CHECK constraints (the real file already refuses to open with invalid
+    dates)."""
 
     def __init__(self, statement: str) -> None:
         self.connection = sqlite3.connect(":memory:")
@@ -337,7 +339,7 @@ def test_a_stored_date_that_cannot_be_read_is_reported_without_the_text_that_was
     }
 
     try:
-        with pytest.raises(Exception, match=r"non valid") as error:
+        with pytest.raises(Exception, match=r"invalid") as error:
             readers[read]()
     finally:
         db.connection.close()

@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Tabella dello storico delle misure: una riga per data, in sola lettura.
+"""Measurement history table: one row per date, read-only.
 
-Peso e parametri di FC hanno date proprie: una cella è vuota se quel giorno quella misura non è
-stata registrata. I numeri stanno a destra, le unità nell'intestazione; l'ordinamento per colonna
-usa chiavi numeriche. Peso e FC sono dati di salute, solo in locale.
+Weight and HR parameters have their own dates: a cell is empty if that measurement was not
+recorded that day. Numbers sit on the right, units are in the header; per-column sorting
+uses numeric keys. Weight and HR are health data, local only.
 """
 
 from __future__ import annotations
@@ -31,12 +31,12 @@ from ponos_coach.profiles.measurements import MeasurementHistory
 SORT_ROLE = Qt.ItemDataRole.UserRole
 _ALIGN_RIGHT = int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 _ALIGN_LEFT = int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-_MISSING_SORT_KEY = -1.0  # una cella vuota viene prima di ogni valore, in ordine crescente
+_MISSING_SORT_KEY = -1.0  # an empty cell comes before every value, in ascending order
 _WEIGHT_DECIMALS = 1
 
 
 class Column(IntEnum):
-    """Colonne della tabella, nell'ordine in cui compaiono."""
+    """Table columns, in display order."""
 
     DATE = 0
     WEIGHT = 1
@@ -47,7 +47,7 @@ class Column(IntEnum):
 
 @dataclass(frozen=True, slots=True)
 class HistoryRow:
-    """Le misure registrate in un giorno; `None` dove quel giorno non c'è una voce."""
+    """The measurements recorded on a day; `None` where that day has no entry."""
 
     day: date
     weight: Weight | None
@@ -55,7 +55,7 @@ class HistoryRow:
 
 
 def history_rows(history: MeasurementHistory) -> tuple[HistoryRow, ...]:
-    """Una riga per data in cui c'è almeno una voce, per data crescente."""
+    """One row per date that has at least one entry, in ascending date order."""
     weights = {entry.valid_from: entry.weight for entry in history.weights}
     physiology = {entry.valid_from: entry.physiology for entry in history.physiology}
     days = sorted(weights.keys() | physiology.keys())
@@ -63,19 +63,19 @@ def history_rows(history: MeasurementHistory) -> tuple[HistoryRow, ...]:
 
 
 def weight_text(weight: Weight) -> str:
-    """Il peso come testo nel formato del luogo, con una cifra decimale."""
+    """The weight as text in the locale's format, with one decimal digit."""
     return QLocale().toString(float(weight.kg), "f", _WEIGHT_DECIMALS)
 
 
 class MeasurementHistoryModel(QAbstractTableModel):
-    """Le righe dello storico di un profilo."""
+    """The rows of a profile's history."""
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._rows: tuple[HistoryRow, ...] = ()
 
     def set_history(self, history: MeasurementHistory) -> None:
-        """Sostituisce le righe."""
+        """Replace the rows."""
         self.beginResetModel()
         self._rows = history_rows(history)
         self.endResetModel()
@@ -83,7 +83,7 @@ class MeasurementHistoryModel(QAbstractTableModel):
     def rowCount(  # noqa: N802 - Qt
         self, parent: QModelIndex | QPersistentModelIndex | None = None
     ) -> int:
-        """Numero di date."""
+        """Number of dates."""
         if parent is not None and parent.isValid():
             return 0
         return len(self._rows)
@@ -91,7 +91,7 @@ class MeasurementHistoryModel(QAbstractTableModel):
     def columnCount(  # noqa: N802 - Qt
         self, parent: QModelIndex | QPersistentModelIndex | None = None
     ) -> int:
-        """Numero di colonne."""
+        """Number of columns."""
         if parent is not None and parent.isValid():
             return 0
         return len(Column)
@@ -102,7 +102,7 @@ class MeasurementHistoryModel(QAbstractTableModel):
         orientation: Qt.Orientation,
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> object:
-        """Intestazioni, con l'unità di misura."""
+        """Headers, with the unit of measure."""
         if orientation != Qt.Orientation.Horizontal or not 0 <= section < len(Column):
             return None
         if role == Qt.ItemDataRole.DisplayRole:
@@ -116,7 +116,7 @@ class MeasurementHistoryModel(QAbstractTableModel):
         index: QModelIndex | QPersistentModelIndex,
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> object:
-        """Testo, allineamento e chiave di ordinamento di una cella."""
+        """Text, alignment and sort key of a cell."""
         if not index.isValid() or not 0 <= index.row() < len(self._rows):
             return None
         column = Column(index.column())
@@ -173,7 +173,7 @@ def _sort_key(row: HistoryRow, column: Column) -> float:
 def sorted_history_model(
     model: MeasurementHistoryModel, parent: QObject | None = None
 ) -> QSortFilterProxyModel:
-    """Proxy che ordina per colonna con le chiavi del modello (date più recenti prima)."""
+    """Proxy that sorts by column using the model's keys (most recent dates first)."""
     proxy = QSortFilterProxyModel(parent)
     proxy.setSourceModel(model)
     proxy.setSortRole(SORT_ROLE)

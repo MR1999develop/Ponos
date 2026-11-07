@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""I contratti di `ProfileRegistry` e `ProfileFolders` applicati agli adattatori reali."""
+"""The `ProfileRegistry` and `ProfileFolders` contracts applied to the real adapters."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ class _RealFoldersHarness:
     def __init__(self, root: Path) -> None:
         root.mkdir()
         self._root = root
-        # Tipo fisso: la rilevazione vera dipende dalla macchina e ha i suoi test.
+        # Fixed kind: real detection depends on the machine and has its own tests.
         self._folders = LocalProfileFolders(lambda _folder: FolderKind.LOCAL)
 
     @property

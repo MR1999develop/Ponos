@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Regole dei tre valori di FC (minima, massima, soglia) che i moduli controllano sul posto.
+"""Rules for the three HR values (minimum, maximum, threshold) that forms check in place.
 
-Una sola fonte per "Nuovo profilo" e "Modifica profilo": il dominio le impone comunque (un test
-verifica che gli intervalli coincidano), qui si dice solo quale regola è violata, in categorie.
+A single source for "New profile" and "Edit profile": the domain enforces them anyway (a test
+checks that the ranges match); here we only say which rule is violated, in categories.
 """
 
 from __future__ import annotations
@@ -12,14 +12,14 @@ from enum import Enum
 
 from PySide6.QtCore import QCoreApplication
 
-# Intervalli dei controlli; il dominio li impone (un test verifica che coincidano).
+# Control ranges; the domain enforces them (a test checks that they match).
 MIN_ALLOWED_BPM = 20
 MAX_ALLOWED_BPM = 250
 MIN_THRESHOLD_BPM = 40
 
 
 class HeartRateProblem(Enum):
-    """Quale regola sui tre valori di FC è violata."""
+    """Which rule on the three HR values is violated."""
 
     MIN_NOT_BELOW_MAX = "min_not_below_max"
     THRESHOLD_NOT_ABOVE_MIN = "threshold_not_above_min"
@@ -29,7 +29,8 @@ class HeartRateProblem(Enum):
 def heart_rate_problems(
     min_bpm: int, max_bpm: int, threshold_bpm: int
 ) -> tuple[HeartRateProblem, ...]:
-    """Regole violate da FC minima, massima e soglia (vuoto se i tre valori sono coerenti)."""
+    """Rules violated by minimum, maximum and threshold HR (empty if the three values are
+    consistent)."""
     found: list[HeartRateProblem] = []
     if min_bpm >= max_bpm:
         found.append(HeartRateProblem.MIN_NOT_BELOW_MAX)
@@ -41,7 +42,7 @@ def heart_rate_problems(
 
 
 def heart_rate_problem_text(problem: HeartRateProblem) -> str:
-    """Messaggio sotto il campo: quale regola non torna e come rimediare."""
+    """Message under the field: which rule fails and how to fix it."""
     texts = {
         HeartRateProblem.MIN_NOT_BELOW_MAX: QCoreApplication.translate(
             "HeartRate", "The resting heart rate must be lower than the maximum."

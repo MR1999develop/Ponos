@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Pagina "Panoramica": vista umile che mostra lo stato deciso da `overview_state`.
+"""Page "Overview": humble view that shows the state decided by `overview_state`.
 
-Quando il calcolo è pronto mostra tre grafici uno sotto l'altro: PMC, carico settimanale per
-sport e tempo nelle zone. Le tre figure (e i loro JSON) si costruiscono insieme fuori dal thread
-della UI.
+When the computation is ready it shows three charts one below the other: PMC, weekly load per
+sport and time in zones. The three figures (and their JSON) are built together off the
+UI thread.
 """
 
 from __future__ import annotations
@@ -64,16 +64,16 @@ from ponos_coach.ui.tokens import (
 type ChartScheduler = Callable[
     [Callable[[], object], Callable[[object], None], Callable[[ErrorMessage], None]], bool
 ]
-"""Esegue un lavoro fuori dal thread della UI e ne consegna l'esito nel thread della UI."""
+"""Run a job off the UI thread and deliver its outcome on the UI thread."""
 
 
-# Altezze relative dei tre grafici: il PMC ha due pannelli, gli altri uno.
+# Relative heights of the three charts: the PMC has two panels, the others one.
 _CHART_STRETCH = (4, 3, 3)
 
 
 @dataclass(frozen=True, slots=True)
 class OverviewCharts:
-    """I tre grafici della panoramica, pronti da mostrare."""
+    """The overview's three charts, ready to show."""
 
     pmc: PreparedChart
     weekly_load: PreparedChart
@@ -81,12 +81,12 @@ class OverviewCharts:
 
 
 def last_day_of(pmc: PmcSeries) -> date:
-    """L'ultimo giorno della serie PMC (di norma oggi); il primo se è vuota."""
+    """The last day of the PMC series (normally today); the first if it is empty."""
     return pmc.first_day + timedelta(days=max(len(pmc) - 1, 0))
 
 
 def chart_activity_of(activity: ProfileActivity, zone: ZoneInfo) -> ChartActivity:
-    """Attività per il grafico: sport e ora locale come nome nel suggerimento di una barra."""
+    """Activities for the chart: sport and local time as the name in a bar's hint."""
     local = activity.start.astimezone(zone)
     time_text = QLocale().toString(QTime(local.hour, local.minute), QLocale.FormatType.ShortFormat)
     return ChartActivity(
@@ -95,7 +95,7 @@ def chart_activity_of(activity: ProfileActivity, zone: ZoneInfo) -> ChartActivit
 
 
 class LoadingPage(QWidget):
-    """Avanzamento del calcolo, con Annulla."""
+    """Progress of the computation, with Cancel."""
 
     cancel_requested = Signal()
 
@@ -123,7 +123,7 @@ class LoadingPage(QWidget):
         outer.addStretch(2)
 
     def show_progress(self, done: int, total: int) -> None:
-        """Aggiorna testo e barra; con totale ignoto la barra è indeterminata."""
+        """Update text and bar; with unknown total the bar is indeterminate."""
         if total <= 0:
             self._label.setText(self.tr("Getting ready..."))
             self._bar.setRange(0, 0)
@@ -137,7 +137,7 @@ class LoadingPage(QWidget):
 
 
 class OverviewPage(QWidget):
-    """Stack delle pagine della panoramica."""
+    """Stack of the overview pages."""
 
     action_requested = Signal(object)  # PrimaryAction
     cancel_requested = Signal()
@@ -150,7 +150,7 @@ class OverviewPage(QWidget):
     ) -> None:
         super().__init__(parent)
         self._schedule_chart = schedule_chart
-        self._chart_request = 0  # un esito di una richiesta superata si ignora
+        self._chart_request = 0  # an outcome of a superseded request is ignored
         self._page_action: PrimaryAction | None = None
         self._state_page = StatePage(self)
         self._state_page.action_requested.connect(self._on_state_action)
@@ -173,26 +173,26 @@ class OverviewPage(QWidget):
 
     @property
     def chart(self) -> ChartView:
-        """Vista del grafico PMC."""
+        """The PMC chart view."""
         return self._chart
 
     @property
     def load_chart(self) -> ChartView:
-        """Vista del carico settimanale per sport."""
+        """The weekly load per sport view."""
         return self._load_chart
 
     @property
     def zones_chart(self) -> ChartView:
-        """Vista del tempo nelle zone di FC."""
+        """The time in HR zones view."""
         return self._zones_chart
 
     @property
     def charts_widget(self) -> QWidget:
-        """Il pannello con i tre grafici (la pagina mostrata a calcolo pronto)."""
+        """The panel with the three charts (the page shown when the computation is ready)."""
         return self._charts
 
     def start_engines(self) -> None:
-        """Avvia le pagine web dei tre grafici (dopo il primo `show()` della finestra)."""
+        """Start the three charts' web pages (after the window's first `show()`)."""
         for view in self._views():
             view.start_engine()
 
@@ -201,18 +201,18 @@ class OverviewPage(QWidget):
 
     @property
     def state_page(self) -> StatePage:
-        """Pagina di stato (nessun profilo, vuoto, annullato, errore)."""
+        """State page (no profile, empty, cancelled, error)."""
         return self._state_page
 
     def current_widget(self) -> QWidget | None:
-        """Widget attualmente visibile nello stack."""
+        """Widget currently visible in the stack."""
         return self._stack.currentWidget()
 
     def apply_state(self, state: OverviewState, theme: Theme, zone: ZoneInfo) -> None:
-        """Mostra la pagina decisa da `page_of` per lo stato; `zone` è il fuso del profilo.
+        """Show the page decided by `page_of` for the state; `zone` is the profile's time zone.
 
-        La figura del grafico si costruisce fuori dal thread della UI: finché non è pronta resta
-        la pagina di prima (di solito l'avanzamento).
+        The chart figure is built off the UI thread: until it is ready the previous
+        page stays (usually the progress).
         """
         self._chart_request += 1
         page = page_of(state)
@@ -259,7 +259,7 @@ class OverviewPage(QWidget):
                 self._stack.setCurrentWidget(self._state_page)
 
         if not self._schedule_chart(build, show, failed):
-            self._chart_request += 1  # si sta chiudendo: nessun disegno
+            self._chart_request += 1  # closing: no drawing
 
     def _on_state_action(self) -> None:
         if self._page_action is not None:

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-UI-04 e T-SEC-06 (parziali): la pagina Plotly nel motore web reale (QtWebEngine).
+"""T-UI-04 and T-SEC-06 (partial): the Plotly page in the real web engine (QtWebEngine).
 
-Questi test avviano Chromium: se in un ambiente senza schermo fossero instabili vanno isolati
-qui, senza toccare i test puri della figura e dell'intercettore.
+These tests start Chromium: if unstable in a screenless environment they must be isolated
+here, without touching the pure tests of the figure and the interceptor.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ WAIT_MS = 60_000
 
 
 def evaluate(qtbot: QtBot, view: ChartView, expression: str) -> object:
-    """Valuta un'espressione nella pagina e ne attende il risultato (senza sleep)."""
+    """Evaluate an expression in the page and wait for its result (without sleep)."""
     box: list[str] = []
     view.page.runJavaScript(f"JSON.stringify(({expression}))", box.append)
     qtbot.waitUntil(lambda: bool(box), timeout=WAIT_MS)
@@ -35,7 +35,7 @@ def evaluate(qtbot: QtBot, view: ChartView, expression: str) -> object:
 
 
 def execute(qtbot: QtBot, view: ChartView, statements: str) -> None:
-    """Esegue istruzioni nella pagina e attende che siano finite."""
+    """Run statements in the page and wait until they are done."""
     done: list[object] = []
     view.page.runJavaScript(f"{statements}\n1", done.append)
     qtbot.waitUntil(lambda: bool(done), timeout=WAIT_MS)
@@ -44,7 +44,7 @@ def execute(qtbot: QtBot, view: ChartView, statements: str) -> None:
 def drawn_view(qtbot: QtBot, export_to: Path | None = None) -> ChartView:
     engine = ChartEngine(lambda _name: export_to)
     view = ChartView(engine, "Test chart")
-    engine.setParent(view)  # il profilo del motore vive quanto la vista
+    engine.setParent(view)  # the engine's profile lives as long as the view
     qtbot.addWidget(view)
     view.resize(900, 560)
     view.show()
@@ -104,10 +104,10 @@ def test_modebar_buttons_carry_the_titles_from_the_configuration(qtbot: QtBot) -
 
     assert isinstance(titles, list)
     assert {"Zoom (test)", "Pan (test)", "Autoscale (test)", "Reset axes (test)"} <= set(titles)
-    assert not {"Zoom", "Pan", "Autoscale", "Reset axes"} & set(titles)  # niente inglese di Plotly
+    assert not {"Zoom", "Pan", "Autoscale", "Reset axes"} & set(titles)  # no Plotly English
     assert isinstance(ticks, list)
     assert ticks
-    assert all(isinstance(tick, str) and tick for tick in ticks)  # le date si formattano ancora
+    assert all(isinstance(tick, str) and tick for tick in ticks)  # dates are still formatted
 
 
 @pytest.mark.parametrize(("title", "suffix"), [("Save as SVG", ".svg"), ("Save as PNG", ".png")])
@@ -146,14 +146,14 @@ def test_disposing_the_engine_destroys_every_registered_page_and_then_the_profil
 
     engine.dispose()
 
-    assert not any(isValid(page) for page in pages)  # subito, non in coda di distruzione
+    assert not any(isValid(page) for page in pages)  # immediately, not in the destruction queue
     assert not isValid(profile)
     assert engine.disposed
     assert not engine.started
     assert not any(view.engine_started for view in views)
-    views[0].start_engine()  # dopo lo smontaggio nessuna pagina nasce
+    views[0].start_engine()  # after teardown no page is born
     assert not views[0].engine_started
-    engine.dispose()  # idempotente
+    engine.dispose()  # idempotent
 
 
 def test_a_view_closed_earlier_has_already_destroyed_its_page_and_the_engine_skips_it(
@@ -166,10 +166,10 @@ def test_a_view_closed_earlier_has_already_destroyed_its_page_and_the_engine_ski
     late = ChartView(engine, "Late", host)
     early_page, late_page = early.page, late.page
 
-    early.dispose()  # per esempio un dialogo chiuso
+    early.dispose()  # for example a closed dialog
     assert not isValid(early_page)
     early.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-    engine.dispose()  # la vista distrutta non si tocca; l'altra sì
+    engine.dispose()  # the destroyed view is not touched; the other is
 
     assert not isValid(late_page)

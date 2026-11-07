@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Finestra degli orari ammessi [1990-01-01, 2100-01-01) UTC (D-F1-04, R1, R11)."""
+"""Window of allowed times [1990-01-01, 2100-01-01) UTC (D-F1-04, R1, R11)."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def fit_at(start: datetime, seconds: int = 60) -> bytes:
     return fw.build_activity(spec)
 
 
-# --- dominio: on e off point ---------------------------------------------------------------
+# --- domain: on and off points ---------------------------------------------------------------
 
 
 def test_the_window_is_closed_at_the_start_and_open_at_the_end() -> None:
@@ -83,9 +83,9 @@ def test_an_activity_outside_the_window_cannot_exist() -> None:
         )
 
     make(MIN_ACTIVITY_INSTANT)
-    with pytest.raises(ValueError, match="finestra"):
+    with pytest.raises(ValueError, match="window"):
         make(datetime(1, 1, 1, tzinfo=UTC))
-    with pytest.raises(ValueError, match="finestra"):
+    with pytest.raises(ValueError, match="window"):
         make(LAST_SECOND, 5.0)
 
 
@@ -106,7 +106,7 @@ def test_gpx_starting_before_the_window_is_corrupt(start: datetime) -> None:
 
 def test_gpx_ending_after_the_window_is_corrupt_but_one_ending_inside_is_valid() -> None:
     with pytest.raises(GpxDecodeError):
-        decode_gpx(gpx_at(LAST_SECOND - timedelta(seconds=20), count=5))  # finisce nel 2100
+        decode_gpx(gpx_at(LAST_SECOND - timedelta(seconds=20), count=5))  # ends in 2100
 
     assert decode_gpx(gpx_at(LAST_SECOND - timedelta(seconds=100), count=5)).start.year == 2099
     assert decode_gpx(gpx_at(MIN_ACTIVITY_INSTANT)).start == MIN_ACTIVITY_INSTANT
@@ -150,8 +150,8 @@ def test_fit_outside_the_window_is_corrupt(start: datetime) -> None:
 
 
 def test_fit_at_the_edges_of_the_window_is_valid() -> None:
-    # Sotto 0x10000000 s (luglio 2010) un timestamp FIT non è una data (tempo di sistema):
-    # il bordo basso della finestra vale per il GPX, qui basta un inizio vicino ad esso.
+    # Below 0x10000000 s (July 2010) a FIT timestamp is not a date (system time):
+    # the lower edge of the window holds for GPX; here a start close to it is enough.
     early = datetime(2010, 7, 6, tzinfo=UTC)
     assert decode_activity(fit_at(early)).start == early
     assert decode_activity(fit_at(LAST_SECOND - timedelta(seconds=100))).start.year == 2099

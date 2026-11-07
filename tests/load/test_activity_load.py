@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Carico di una attività: esempi a mano, confronto con l'implementazione ingenua, invarianti.
+"""Load of one activity: hand examples, comparison with the naive implementation, invariants.
 
-T-CALC-01, T-CALC-02, T-CALC-03, T-CALC-06 e T-CALC-07 (parte del dominio).
+T-CALC-01, T-CALC-02, T-CALC-03, T-CALC-06 and T-CALC-07 (domain part).
 """
 
 from __future__ import annotations
@@ -27,25 +27,25 @@ from ponos_coach.load.domain import (
 )
 from tests.load.helpers import PHYSIOLOGY, WEIGHT_ONE
 
-# Tolleranza dichiarata dei confronti (T-CALC-01/02): errore relativo di arrotondamento
-# della somma in virgola mobile, molto sotto la precisione degli esempi a mano.
+# Declared comparison tolerance (T-CALC-01/02): relative rounding error
+# of the floating-point sum, far below the precision of the hand examples.
 REL_TOL = 1e-9
-HAND_TOL = 0.01  # gli esempi di modello-carico.md sono scritti con 2 decimali
+HAND_TOL = 0.01  # the examples in modello-carico.md are written with 2 decimals
 
 
 def constant(bpm: float, seconds: int) -> HeartRateSeries:
-    """Un campione al secondo a FC costante."""
+    """One sample per second at constant HR."""
     return HeartRateSeries(np.arange(seconds, dtype=float), np.full(seconds, float(bpm)))
 
 
-# --- T-CALC-01: valori calcolati a mano --------------------------------------
+# --- T-CALC-01: hand-computed values --------------------------------------
 
 
 def test_t_calc_01_one_hour_at_threshold_is_hrtss_100() -> None:
     result = compute_activity_load(Sport.RUNNING, 3600, constant(170, 3600), PHYSIOLOGY, WEIGHT_ONE)
 
     assert result.hr_tss == pytest.approx(100.0, rel=REL_TOL)
-    assert result.trimp == pytest.approx(170.65, abs=HAND_TOL * 10)  # Esempio A
+    assert result.trimp == pytest.approx(170.65, abs=HAND_TOL * 10)  # Example A
     assert result.source is LoadSource.HEART_RATE
 
 
@@ -73,7 +73,7 @@ def test_t_calc_01_heart_rate_equal_to_minimum_gives_zero() -> None:
     assert result.source is LoadSource.HEART_RATE
 
 
-# --- T-CALC-02: vettoriale contro ingenuo ------------------------------------
+# --- T-CALC-02: vectorized vs naive ------------------------------------
 
 
 def naive_load(
@@ -83,7 +83,7 @@ def naive_load(
     physiology: Physiology,
     weight: SportWeight,
 ) -> ActivityLoad:
-    """Implementazione ingenua, un ciclo per campione, scritta dalla specifica."""
+    """Naive implementation, one loop per sample, written from the spec."""
     seconds = [float(x) for x in series.seconds]
     bpm = [float(x) for x in series.bpm]
     count = len(seconds)
@@ -109,7 +109,7 @@ def naive_load(
             trimp += validity[i] / 60 * hrr * 0.64 * math.exp(k * hrr)
             counted_s += validity[i]
             used += 1
-    if round(counted_s * 1000) * 100 < 70 * round(moving_time_s * 1000):  # millisecondi interi
+    if round(counted_s * 1000) * 100 < 70 * round(moving_time_s * 1000):  # whole milliseconds
         hr_tss = moving_time_s / 3600 * 100 * typical_intensity(sport) ** 2
         return ActivityLoad(
             hr_tss / 100 * one_hour, hr_tss, hr_tss * weight.value, 0, discarded, excluded,
@@ -157,7 +157,7 @@ def test_t_calc_02_vectorised_equals_naive(
     assert fast.load == pytest.approx(slow.load, rel=REL_TOL, abs=1e-9)
 
 
-# --- T-CALC-03: invarianti ---------------------------------------------------
+# --- T-CALC-03: invariants ---------------------------------------------------
 
 
 @given(random_activities())
@@ -229,11 +229,11 @@ def test_t_calc_03_weight_zero_gives_zero_load(
 
 @pytest.mark.parametrize("duration", [0.0, -1.0, float("nan"), float("inf")])
 def test_invalid_duration_is_rejected(duration: float) -> None:
-    with pytest.raises(ValueError, match="durata"):
+    with pytest.raises(ValueError, match="duration"):
         compute_activity_load(Sport.RUNNING, duration, None, PHYSIOLOGY, WEIGHT_ONE)
 
 
-# --- Regole: intervalli, scarti, stima ---------------------------------------
+# --- Rules: intervals, discards, estimate ---------------------------------------
 
 
 def test_each_sample_is_valid_until_the_next_and_last_takes_the_median() -> None:
@@ -241,7 +241,7 @@ def test_each_sample_is_valid_until_the_next_and_last_takes_the_median() -> None
 
     result = compute_activity_load(Sport.RUNNING, 4.0, series, PHYSIOLOGY, WEIGHT_ONE)
 
-    # Intervalli 1, 2, 1 e ultimo = mediana 1: 5 s a soglia.
+    # Intervals 1, 2, 1 and last = median 1: 5 s at threshold.
     assert result.trimp == pytest.approx(5 / 60 * 2.8442, abs=1e-3)
     assert result.used_samples == 4
 
@@ -306,10 +306,10 @@ def test_more_than_thirty_percent_discarded_is_an_estimate() -> None:
 
 
 def test_t_calc_07_seventy_percent_boundary_is_compared_in_integer_milliseconds() -> None:
-    # 20 campioni a passo 0,35 s sommano 7 s, ma in virgola mobile 6,999999999999999: sul
-    # limite del 70% di 10 s il carico resta misurato.
+    # 20 samples at a 0.35 s step add up to 7 s, but in floating point 6.999999999999999: on
+    # the 70% limit of 10 s the load remains measured.
     series = HeartRateSeries(np.arange(20, dtype=np.float64) * 0.35, np.full(20, 150.0))
-    assert float(np.sum(np.append(np.diff(series.seconds), 0.35))) < 7.0  # il trabocchetto
+    assert float(np.sum(np.append(np.diff(series.seconds), 0.35))) < 7.0  # the trap
 
     result = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY, WEIGHT_ONE)
 

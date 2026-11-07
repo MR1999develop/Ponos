@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-SEC-09: la cartella del profilo è privata (descrittore esplicito su Windows, 0700 su POSIX)."""
+"""T-SEC-09: the profile folder is private (explicit descriptor on Windows, 0700 on POSIX)."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from ponos_coach.profiles.domain import PROFILE_LOCK_NAME, FolderKind
 from ponos_coach.profiles.ports import FolderNotEmptyError, FolderUnavailableError
 from tests.platform.windows_dacl import dacl_sddl, is_protected, normalize_sid, trustees
 
-windows_only = pytest.mark.skipif(sys.platform != "win32", reason="permessi di Windows (DACL)")
-posix_only = pytest.mark.skipif(sys.platform == "win32", reason="permessi POSIX")
+windows_only = pytest.mark.skipif(sys.platform != "win32", reason="Windows permissions (DACL)")
+posix_only = pytest.mark.skipif(sys.platform == "win32", reason="POSIX permissions")
 
 _BROAD_ALIASES = (
     "WD",

@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Parti comuni a tutti i grafici Plotly: stile degli assi, testi della barra, payload.
+"""Parts common to all Plotly charts: axis style, toolbar texts, payload.
 
-Ogni figura è una funzione pura da dati, testi già tradotti e token a `go.Figure`. Alla pagina web
-la figura arriva come un solo JSON prodotto da `json.dumps` (`render_script`): nessun dato entra
-come HTML e nessun testo si compone in JavaScript.
+Each figure is a pure function from data, already translated texts and tokens to `go.Figure`. To
+the web page
+the figure arrives as a single JSON produced by `json.dumps` (`render_script`): no data enters
+as HTML and no text is composed in JavaScript.
 """
 
 from __future__ import annotations
@@ -18,8 +19,8 @@ import plotly.io as pio
 
 from ponos_coach.ui.tokens import ThemeTokens
 
-# Titoli dei bottoni della barra di Plotly: sono le chiavi del suo dizionario di lingua (il
-# testo inglese che Plotly cerca), non testi mostrati. La vista le traduce con `tr()`.
+# Titles of the Plotly toolbar buttons: they are the keys of its language dictionary (the English
+# text Plotly looks up), not displayed texts. The view translates them with `tr()`.
 PLOTLY_MODEBAR_KEYS: tuple[str, ...] = (
     "Zoom",
     "Pan",
@@ -32,14 +33,14 @@ PLOTLY_MODEBAR_KEYS: tuple[str, ...] = (
     "Compare data on hover",
 )
 PLOTLY_LOCALE_NAME = "ponos"
-LEGEND_Y = 1.08  # la legenda orizzontale sta sopra l'area del grafico
+LEGEND_Y = 1.08  # the horizontal legend sits above the chart area
 
 
 @dataclass(frozen=True, slots=True)
 class ChartChrome:
-    """Testi della barra di ogni grafico, già tradotti dalla vista.
+    """Toolbar texts of every chart, already translated by the view.
 
-    `modebar` traduce i bottoni della barra di Plotly: una voce per ogni `PLOTLY_MODEBAR_KEYS`.
+    `modebar` translates the Plotly toolbar buttons: one entry for each `PLOTLY_MODEBAR_KEYS`.
     """
 
     export_png: str
@@ -53,7 +54,7 @@ class ChartChrome:
 
 @dataclass(frozen=True, slots=True)
 class PreparedChart:
-    """Un grafico pronto da mostrare: figura, chiamata JavaScript e colore di fondo."""
+    """A chart ready to show: figure, JavaScript call and background colour."""
 
     figure: go.Figure
     script: str
@@ -61,7 +62,7 @@ class PreparedChart:
 
 
 def axis_style(tokens: ThemeTokens, title: str) -> dict[str, object]:
-    """Stile di un asse dai token del tema: titolo, griglia, linea e tacche."""
+    """Style of an axis from the theme tokens: title, grid, line and ticks."""
     return {
         "title": {"text": title},
         "gridcolor": tokens.grid,
@@ -73,7 +74,7 @@ def axis_style(tokens: ThemeTokens, title: str) -> dict[str, object]:
 
 
 def base_layout(tokens: ThemeTokens) -> dict[str, object]:
-    """Fondo e carattere dei token, uguali in ogni figura."""
+    """Background and font from the tokens, the same in every figure."""
     return {
         "paper_bgcolor": tokens.background,
         "plot_bgcolor": tokens.background,
@@ -82,11 +83,11 @@ def base_layout(tokens: ThemeTokens) -> dict[str, object]:
 
 
 def render_script(figure: go.Figure, chrome: ChartChrome, filename: str) -> str:
-    """Chiamata JavaScript che disegna la figura: l'argomento è un solo JSON (`json.dumps`)."""
+    """JavaScript call that draws the figure: the argument is a single JSON (`json.dumps`)."""
     payload = {
         "figure": json.loads(pio.to_json(figure)),
         "labels": {"png": chrome.export_png, "svg": chrome.export_svg},
-        # Dizionario di lingua di Plotly: la pagina lo registra, nessun testo si compone in JS.
+        # Plotly language dictionary: the page registers it, no text is composed in JS.
         "locale": {"name": PLOTLY_LOCALE_NAME, "dictionary": dict(chrome.modebar)},
         "filename": filename,
     }
@@ -96,5 +97,5 @@ def render_script(figure: go.Figure, chrome: ChartChrome, filename: str) -> str:
 def prepare_figure(
     figure: go.Figure, chrome: ChartChrome, filename: str, tokens: ThemeTokens
 ) -> PreparedChart:
-    """Figura, JSON e fondo insieme: lavoro puro e pesante, adatto a un thread che non è la UI."""
+    """Figure, JSON and background together: pure, heavy work, suited to a non-UI thread."""
     return PreparedChart(figure, render_script(figure, chrome, filename), tokens.background)

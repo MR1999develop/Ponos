@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Porte della funzionalità profili: elenco, cartelle con lock, database del profilo.
+"""Ports of the profiles feature: list, folders with lock, profile database.
 
-Le implementazioni reali stanno negli adattatori (`platform` per registro e cartelle,
-`storage` per il database); i fake in memoria e i test di contratto in `tests/`.
+The real implementations live in the adapters (`platform` for registry and folders,
+`storage` for the database); in-memory fakes and contract tests are in `tests/`.
 """
 
 from __future__ import annotations
@@ -27,387 +27,389 @@ from ponos_coach.profiles.domain import (
     WeightEntry,
 )
 
-# --- Elenco dei profili --------------------------------------------------------------------
+# --- Profile list --------------------------------------------------------------------
 
 
 class ProfileRegistryError(Exception):
-    """Radice degli errori dell'elenco dei profili (configurazione illeggibile o corrotta)."""
+    """Root of the profile list errors (unreadable or corrupt configuration)."""
 
 
 class ProfileAlreadyRegisteredError(ProfileRegistryError):
-    """Un profilo con lo stesso id o la stessa cartella è già nell'elenco."""
+    """A profile with the same id or the same folder is already in the list."""
 
 
 class ProfileNotRegisteredError(ProfileRegistryError):
-    """Il profilo non è nell'elenco."""
+    """The profile is not in the list."""
 
 
 class ProfileRegistry(Protocol):
-    """Elenco dei profili noti all'app e dell'ultimo usato (configurazione dell'app)."""
+    """List of the profiles known to the app and of the last used one (app configuration)."""
 
     def list_entries(self) -> Sequence[RegistryEntry]:
-        """Voci dalla più recentemente usata; a parità, per id."""
+        """Entries from the most recently used; ties by id."""
         ...
 
     def add(self, entry: RegistryEntry) -> None:
-        """Aggiunge una voce.
+        """Adds an entry.
 
         Raises:
-            ProfileAlreadyRegisteredError: id o cartella già presenti; nulla cambia.
+            ProfileAlreadyRegisteredError: id or folder already present; nothing changes.
         """
         ...
 
     def upsert(self, entry: RegistryEntry) -> None:
-        """Porta l'elenco allo stato "questo profilo sta in questa cartella", in una sola scrittura.
+        """Brings the list to the state "this profile is in this folder", in a single write.
 
-        Sostituisce la voce con lo stesso id (qualunque fosse la sua cartella), toglie ogni altra
-        voce con la stessa cartella e, se non c'era nessuna voce con quell'id, aggiunge la nuova.
-        Tutto o niente: se la scrittura fallisce l'elenco resta com'era.
+        Replaces the entry with the same id (whatever its folder was), removes every other
+        entry with the same folder and, if there was no entry with that id, adds the new one.
+        All or nothing: if the write fails the list stays as it was.
         """
         ...
 
     def remove(self, profile_id: ProfileId) -> None:
-        """Toglie la voce dall'elenco. La cartella e i dati del profilo non si toccano.
+        """Removes the entry from the list. The folder and the profile's data are not touched.
 
         Raises:
-            ProfileNotRegisteredError: id assente.
+            ProfileNotRegisteredError: id not present.
         """
         ...
 
     def mark_used(self, profile_id: ProfileId, when_utc: datetime) -> None:
-        """Segna l'ultimo uso (UTC) del profilo.
+        """Marks the profile's last use (UTC).
 
         Raises:
-            ProfileNotRegisteredError: id assente.
+            ProfileNotRegisteredError: id not present.
         """
         ...
 
 
-# --- Cartelle e lock -----------------------------------------------------------------------
+# --- Folders and lock -----------------------------------------------------------------------
 
 
 class ProfileFolderError(Exception):
-    """Radice degli errori sulle cartelle dei profili."""
+    """Root of the errors about profile folders."""
 
 
 class FolderUnavailableError(ProfileFolderError):
-    """La cartella non si può leggere o scrivere (permessi, I/O, percorso non valido)."""
+    """The folder cannot be read or written (permissions, I/O, invalid path)."""
 
 
 class FolderHasOtherContentError(FolderUnavailableError):
-    """La cartella del profilo contiene file o cartelle che l'app non ha creato: non si cancella.
+    """The profile folder contains files or folders that the app did not create: it is not deleted.
 
-    È una `FolderUnavailableError`: chi non distingue il caso lo tratta come una cancellazione
-    non riuscita; chi lo distingue può dire all'utente di toglierli a mano.
+    It is a `FolderUnavailableError`: whoever does not distinguish the case treats it as a failed
+    deletion; whoever distinguishes it can tell the user to remove them by hand.
     """
 
 
 class FolderNotEmptyError(ProfileFolderError):
-    """La cartella da creare esiste già e contiene qualcosa."""
+    """The folder to create already exists and contains something."""
 
 
 class NotAProfileFolderError(ProfileFolderError):
-    """La cartella non contiene il database di un profilo: non si cancella."""
+    """The folder does not contain a profile's database: it is not deleted."""
 
 
 class ProfileInUseError(ProfileFolderError):
-    """Il profilo è già aperto da un'altra istanza (lock preso)."""
+    """The profile is already open in another instance (lock taken)."""
 
 
 class ProfileLock(Protocol):
-    """Lock esclusivo di un profilo, tenuto finché non si rilascia."""
+    """Exclusive lock of a profile, held until released."""
 
     def release(self) -> None:
-        """Rilascia il lock; chiamarlo di nuovo non ha effetti."""
+        """Releases the lock; calling it again has no effect."""
         ...
 
 
 class ProfileFolders(Protocol):
-    """Cartelle dei profili: ispezione, creazione privata, lock esclusivo, cancellazione."""
+    """Profile folders: inspection, private creation, exclusive lock, deletion."""
 
     def inspect(self, folder: Path) -> FolderInspection:
-        """Stato (mancante, vuota, non vuota), tipo (locale, di rete, sincronizzata, ignoto) e
-        se contiene il database di un profilo.
+        """State (missing, empty, not empty), kind (local, network, synchronized, unknown) and
+        whether it contains a profile's database.
 
         Raises:
-            FolderUnavailableError: la cartella esiste ma non si può leggere.
+            FolderUnavailableError: the folder exists but cannot be read.
         """
         ...
 
     def create_private_folder(self, folder: Path) -> None:
-        """Crea la cartella (e i genitori mancanti) leggibile e scrivibile solo dall'utente.
+        """Creates the folder (and the missing parents) readable and writable only by the user.
 
-        Se esiste ed è vuota la riusa, restringendone i permessi.
+        If it exists and is empty it reuses it, restricting its permissions.
 
         Raises:
-            FolderNotEmptyError: esiste e non è vuota; nulla cambia.
-            FolderUnavailableError: creazione o permessi non riusciti.
+            FolderNotEmptyError: it exists and is not empty; nothing changes.
+            FolderUnavailableError: creation or permissions failed.
         """
         ...
 
     def acquire_lock(self, folder: Path) -> ProfileLock:
-        """Prende il lock esclusivo del profilo in `folder`, senza attese.
+        """Takes the profile's exclusive lock in `folder`, without waiting.
 
-        Un lock rimasto da un processo morto si riconosce e si supera.
+        A lock left by a dead process is recognized and overcome.
 
         Raises:
-            ProfileInUseError: il lock è tenuto da un'altra istanza (o da chi chiama).
-            FolderUnavailableError: la cartella non esiste o non è scrivibile.
+            ProfileInUseError: the lock is held by another instance (or by the caller).
+            FolderUnavailableError: the folder does not exist or is not writable.
         """
         ...
 
     def remove_if_empty(self, folder: Path) -> bool:
-        """Toglie la cartella se è vuota a parte il file di lock dell'app; non segue i link.
+        """Removes the folder if it is empty apart from the app's lock file; does not follow links.
 
-        Serve ad annullare una creazione fallita. Non tocca nulla (e dà `False`) se la cartella
-        manca, è un link, contiene altro oltre al file di lock o è bloccata da un'altra istanza.
+        Used to undo a failed creation. It touches nothing (and gives `False`) if the folder
+        is missing, is a link, contains anything besides the lock file or is locked by another
+        instance.
 
         Raises:
-            FolderUnavailableError: cartella non leggibile o rimozione non riuscita.
+            FolderUnavailableError: folder not readable or removal failed.
         """
         ...
 
     def delete_folder(self, folder: Path) -> None:
-        """Cancella la cartella di un profilo con tutto il contenuto.
+        """Deletes a profile's folder with all its content.
 
-        Solo se contiene il database di un profilo e se nessuna istanza la tiene aperta; il
-        lock lo prende l'operazione stessa, quindi chi chiama deve aver rilasciato il suo.
-        Si cancellano soltanto i nomi che l'app mette in una cartella di profilo (database con i
-        file `-wal`, `-shm` e `-journal`, `archivio/`, `backup/`, lock): se c'è altro non si
-        tocca nulla.
+        Only if it contains a profile's database and if no instance holds it open; the
+        lock is taken by the operation itself, so the caller must have released their own.
+        Only the names the app puts in a profile folder are deleted (database with the
+        `-wal`, `-shm` and `-journal` files, `archivio/`, `backup/`, lock): if there is anything
+        else it is not
+        touched.
 
         Raises:
-            NotAProfileFolderError: manca il database del profilo (anche cartella inesistente).
-            ProfileInUseError: il profilo è aperto.
-            FolderHasOtherContentError: nella cartella c'è altro; nulla è stato cancellato.
-            FolderUnavailableError: cancellazione non riuscita.
+            NotAProfileFolderError: the profile database is missing (even a nonexistent folder).
+            ProfileInUseError: the profile is open.
+            FolderHasOtherContentError: there is something else in the folder; nothing was deleted.
+            FolderUnavailableError: deletion failed.
         """
         ...
 
 
-# --- Token di Garmin -----------------------------------------------------------------------
+# --- Garmin tokens -------------------------------------------------------------------------
 
 
 class TokenStoreError(Exception):
-    """Radice degli errori dell'archivio dei token. Mai token nei messaggi."""
+    """Root of the token store errors. Never tokens in messages."""
 
 
 class TokenStoreUnavailableError(TokenStoreError):
-    """Il portachiavi non si può usare (bloccato, assente, permessi, I/O)."""
+    """The keyring cannot be used (locked, absent, permissions, I/O)."""
 
 
 class TokenStoreCorruptError(TokenStoreError):
-    """C'è un contenuto per il profilo ma non è leggibile (alterato, di un altro utente o di una
-    versione sconosciuta): chi chiama lo tratta come "nessun token" e chiede il login."""
+    """There is content for the profile but it is not readable (altered, from another user or of an
+    unknown version): the caller treats it as "no token" and asks for login."""
 
 
 class TokenStore(Protocol):
-    """Token di Garmin per profilo, nel portachiavi del sistema (mai nella cartella del profilo).
+    """Garmin tokens per profile, in the system keyring (never in the profile folder).
 
-    Ogni profilo ha i suoi token, legati al suo id: quelli di un profilo non si leggono con l'id
-    di un altro. I token si proteggono con il sistema (DPAPI su Windows, Secret Service su
-    Ubuntu) e non compaiono in log né messaggi.
+    Each profile has its own tokens, tied to its id: those of one profile cannot be read with the id
+    of another. Tokens are protected by the system (DPAPI on Windows, Secret Service on
+    Ubuntu) and do not appear in logs or messages.
     """
 
     def save(self, profile_id: ProfileId, tokens: SessionTokens) -> None:
-        """Salva i token del profilo, sostituendo quelli che c'erano (tutto o niente).
+        """Saves the profile's tokens, replacing those that were there (all or nothing).
 
         Raises:
-            TokenStoreUnavailableError: salvataggio non riuscito; i token di prima restano.
+            TokenStoreUnavailableError: save failed; the previous tokens stay.
         """
         ...
 
     def load(self, profile_id: ProfileId) -> SessionTokens | None:
-        """I token del profilo, o None se non ce ne sono.
+        """The profile's tokens, or None if there are none.
 
         Raises:
-            TokenStoreCorruptError: il contenuto c'è ma non si legge.
-            TokenStoreUnavailableError: il portachiavi non risponde.
+            TokenStoreCorruptError: the content is there but cannot be read.
+            TokenStoreUnavailableError: the keyring does not respond.
         """
         ...
 
     def delete(self, profile_id: ProfileId) -> None:
-        """Cancella i token del profilo (logout). Idempotente: nessun errore se non ci sono.
+        """Deletes the profile's tokens (logout). Idempotent: no error if there are none.
 
         Raises:
-            TokenStoreUnavailableError: cancellazione non riuscita.
+            TokenStoreUnavailableError: deletion failed.
         """
         ...
 
 
-# --- Database del profilo ------------------------------------------------------------------
+# --- Profile database ------------------------------------------------------------------
 
 
 class ProfileStorageError(Exception):
-    """Radice degli errori del database di un profilo."""
+    """Root of the errors of a profile's database."""
 
 
 class ProfileAlreadyExistsError(ProfileStorageError):
-    """La cartella ha già il database di un profilo: `create` non lo sovrascrive mai."""
+    """The folder already has a profile's database: `create` never overwrites it."""
 
 
 class ProfileNotFoundError(ProfileStorageError):
-    """La cartella non ha il database di un profilo."""
+    """The folder does not have a profile's database."""
 
 
 class ProfileFormatTooNewError(ProfileStorageError):
-    """Il database è di una versione più nuova di quella che questa app conosce."""
+    """The database is of a newer version than the one this app knows."""
 
 
 class ProfileCorruptError(ProfileStorageError):
-    """Il database non si apre o non supera i controlli di integrità."""
+    """The database cannot be opened or does not pass the integrity checks."""
 
 
 class ProfileDataError(ProfileStorageError):
-    """Lettura o scrittura dei dati personali del profilo non riuscita. Mai valori nei messaggi."""
+    """Reading or writing the profile's personal data failed. Never values in messages."""
 
 
 class FixedDataAlreadySetError(ProfileDataError):
-    """Altezza e data di nascita sono già impostate: sono fisse e non si cambiano."""
+    """Height and date of birth are already set: they are fixed and are not changed."""
 
 
 class FixedDataStore(Protocol):
-    """Altezza e data di nascita: si impostano una volta sola, alla creazione del profilo o,
-    per un profilo che non le ha (creato prima che esistessero), una volta più tardi."""
+    """Height and date of birth: set only once, at profile creation or,
+    for a profile that lacks them (created before they existed), once later."""
 
     def get(self) -> FixedProfileData | None:
-        """I dati fissi, o None se il profilo non li ha ancora.
+        """The fixed data, or None if the profile does not have them yet.
 
         Raises:
-            ProfileDataError: dati illeggibili o non validi.
+            ProfileDataError: unreadable or invalid data.
         """
         ...
 
     def set_once(self, data: FixedProfileData) -> None:
-        """Imposta i dati fissi.
+        """Sets the fixed data.
 
         Raises:
-            FixedDataAlreadySetError: ci sono già; nulla cambia.
-            ProfileDataError: scrittura non riuscita.
+            FixedDataAlreadySetError: they are already there; nothing changes.
+            ProfileDataError: write failed.
         """
         ...
 
 
 class WeightStore(Protocol):
-    """Serie del peso con data di validità."""
+    """Weight series with validity date."""
 
     def put(self, entry: WeightEntry) -> None:
-        """Salva il peso valido da `entry.valid_from`; la stessa data sostituisce la voce.
+        """Saves the weight valid from `entry.valid_from`; the same date replaces the entry.
 
         Raises:
-            ProfileDataError: scrittura non riuscita.
+            ProfileDataError: write failed.
         """
         ...
 
     def list_entries(self) -> Sequence[WeightEntry]:
-        """Tutte le voci per data di validità crescente (una sola per data).
+        """All the entries by ascending validity date (only one per date).
 
         Raises:
-            ProfileDataError: dati illeggibili o non validi.
+            ProfileDataError: unreadable or invalid data.
         """
         ...
 
 
 class OpenProfile(Protocol):
-    """Un profilo aperto: le sue informazioni e gli store che condividono una connessione.
+    """An open profile: its information and the stores that share a connection.
 
-    Le transazioni di `activities.transaction()` coprono anche `sync_journal`, `physiology`,
+    The transactions of `activities.transaction()` also cover `sync_journal`, `physiology`,
     `weights`, `fixed_data`, `sport_weights` e `load_cache`.
-    Va chiuso con `close()`; dopo la chiusura gli store non si usano più.
+    It must be closed with `close()`; after closing the stores are no longer used.
     """
 
     @property
     def info(self) -> ProfileInfo:
-        """Informazioni del profilo lette dal database."""
+        """Profile information read from the database."""
         ...
 
     @property
     def activities(self) -> ActivityIndex:
-        """Indice delle attività."""
+        """Activity index."""
         ...
 
     @property
     def sync_journal(self) -> SyncJournal:
-        """Giornale della sincronizzazione (stessa connessione e transazione dell'indice)."""
+        """Synchronization journal (same connection and transaction as the index)."""
         ...
 
     @property
     def physiology(self) -> PhysiologyStore:
-        """Parametri fisiologici con data di validità."""
+        """Physiological parameters with validity date."""
         ...
 
     @property
     def weights(self) -> WeightStore:
-        """Serie del peso con data di validità."""
+        """Weight series with validity date."""
         ...
 
     @property
     def fixed_data(self) -> FixedDataStore:
-        """Altezza e data di nascita (fisse)."""
+        """Fixed height and date of birth."""
         ...
 
     @property
     def sport_weights(self) -> SportWeightStore:
-        """Pesi degli sport scelti dall'utente."""
+        """Weight chosen by the user per sport."""
         ...
 
     @property
     def load_cache(self) -> LoadCache:
-        """Cache dei carichi."""
+        """Load cache."""
         ...
 
     def close(self) -> None:
-        """Chiude la connessione (checkpoint compreso); chiamarlo di nuovo non ha effetti."""
+        """Closes the connection (checkpoint included); calling it again has no effect."""
         ...
 
 
 class ProfileStorage(Protocol):
-    """Crea o apre il database di un profilo in una cartella."""
+    """Creates or opens a profile's database in a folder."""
 
     def create(
         self, folder: Path, profile_id: ProfileId, name: ProfileName, timezone_name: str
     ) -> OpenProfile:
-        """Crea il database del profilo con lo schema più recente.
+        """Creates the profile's database with the latest schema.
 
-        La cartella esiste già (la crea `ProfileFolders`).
+        The folder already exists (`ProfileFolders` creates it).
 
         Raises:
-            ProfileAlreadyExistsError: c'è già un database; non si tocca.
-            ProfileStorageError: creazione non riuscita; non resta nulla a metà.
-            ValueError: `timezone_name` sconosciuto.
+            ProfileAlreadyExistsError: there is already a database; it is not touched.
+            ProfileStorageError: creation failed; nothing is left half-done.
+            ValueError: unknown `timezone_name`.
         """
         ...
 
     def peek(self, folder: Path) -> ProfilePeek:
-        """Legge informazioni e numero di attività senza aprire il profilo: sola lettura.
+        """Reads information and number of activities without opening the profile: read-only.
 
-        Non migra, non scrive e non prende il lock: un profilo aperto altrove si può guardare.
-        Un database di una versione precedente si legge com'è (`info.format_version` la dice).
+        It does not migrate, write or take the lock: a profile open elsewhere can be looked at.
+        A database of an earlier version is read as it is (`info.format_version` says so).
 
         Raises:
-            ProfileNotFoundError: manca il database.
-            ProfileFormatTooNewError: versione più nuova di quella nota.
-            ProfileCorruptError: database illeggibile o non di un profilo.
-            ProfileStorageError: altro guasto (I/O, lock).
+            ProfileNotFoundError: the database is missing.
+            ProfileFormatTooNewError: version newer than the known one.
+            ProfileCorruptError: database unreadable or not a profile's.
+            ProfileStorageError: other failure (I/O, lock).
         """
         ...
 
     def open(self, folder: Path, *, check_integrity: bool = True) -> OpenProfile:
-        """Apre il database, portandolo alla versione più recente se è più vecchio.
+        """Opens the database, bringing it to the latest version if it is older.
 
-        `check_integrity=False` salta i controlli di integrità completi (leggono tutto il
-        file): solo per una seconda connessione allo stesso profilo già aperto e verificato,
-        come quella del thread di sincronizzazione. L'apertura normale li fa sempre; un
-        database da migrare si controlla comunque.
+        `check_integrity=False` skips the full integrity checks (they read the whole
+        file): only for a second connection to the same already open and verified profile,
+        like that of the synchronization thread. Normal opening always does them; a
+        database to migrate is checked anyway.
 
-        Prima di migrare mette una copia coerente del database in `backup/`, con le versioni di
-        partenza e di arrivo nel nome.
+        Before migrating it puts a consistent copy of the database in `backup/`, with the starting
+        and target versions in the name.
 
         Raises:
-            ProfileNotFoundError: manca il database.
-            ProfileFormatTooNewError: versione più nuova di quella nota; non si tocca.
-            ProfileCorruptError: database illeggibile, non integro o non di un profilo.
-            ProfileStorageError: altro guasto; se la migrazione fallisce il database resta
-                com'era e la copia di sicurezza è al suo posto.
+            ProfileNotFoundError: the database is missing.
+            ProfileFormatTooNewError: version newer than the known one; it is not touched.
+            ProfileCorruptError: database unreadable, not intact or not a profile's.
+            ProfileStorageError: other failure; if the migration fails the database stays
+                as it was and the backup copy is in place.
         """
         ...

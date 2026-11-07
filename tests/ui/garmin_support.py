@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Gesti comuni ai test dell'account Garmin e della sincronizzazione nella finestra."""
+"""Gestures common to the Garmin account and window synchronization tests."""
 
 from __future__ import annotations
 
@@ -29,12 +29,12 @@ PROFILE_NAME = "Atleta di prova"
 
 
 def sync_of(window: MainWindow) -> SyncController:
-    """Il controller della sincronizzazione della finestra."""
+    """The window's synchronization controller."""
     return window.controller.sync
 
 
 def remote_runs(*numbers: int) -> list[RemoteActivity]:
-    """Corse di Garmin con i numeri dati (la corsa `n` è la stessa di `fit_run(n)`)."""
+    """Garmin runs with the given numbers (run `n` is the same as `fit_run(n)`)."""
     return [
         RemoteActivity(
             GarminActivityId(FIRST_ACTIVITY_ID + number),
@@ -48,9 +48,9 @@ def remote_runs(*numbers: int) -> list[RemoteActivity]:
 
 
 class GatedGarmin:
-    """Decoratore di `ActivitySource`: ogni download attende un cancello, con scadenza.
+    """`ActivitySource` decorator: each download waits at a gate, with a deadline.
 
-    `entered` scatta quando un download è arrivato al cancello (la sincronizzazione è lì).
+    `entered` fires when a download has reached the gate (the sync is there).
     """
 
     def __init__(self, inner: FakeActivitySource, gate: threading.Event) -> None:
@@ -69,12 +69,12 @@ class GatedGarmin:
 
 
 def wait_account(qtbot: QtBot, window: MainWindow, status: object) -> None:
-    """Attende che l'account del profilo aperto sia in questo stato."""
+    """Wait until the open profile's account is in this state."""
     qtbot.waitUntil(lambda: sync_of(window).account_status is status, timeout=WAIT_MS)
 
 
 def open_login_dialog(qtbot: QtBot, window: MainWindow) -> None:
-    """Sceglie "Collega account Garmin..." e attende il dialogo."""
+    """Choose "Connect Garmin account..." and wait for the dialog."""
     window.garmin.connect_action.trigger()
     qtbot.waitUntil(lambda: window.garmin.login_dialog is not None, timeout=WAIT_MS)
 
@@ -85,7 +85,7 @@ def submit_login(
     email: str = TEST_EMAIL,
     password: str = TEST_PASSWORD,
 ) -> None:
-    """Scrive email e password nel dialogo (aprendolo se serve) e preme "Connect"."""
+    """Write email and password in the dialog (opening it if needed) and press "Connect"."""
     if window.garmin.login_dialog is None:
         open_login_dialog(qtbot, window)
     dialog = window.garmin.login_dialog
@@ -97,7 +97,7 @@ def submit_login(
 
 
 def answer_mfa_dialog(qtbot: QtBot, window: MainWindow, code: str | None = TEST_MFA_CODE) -> None:
-    """Attende il dialogo del codice e lo compila (o lo annulla se `code` è `None`)."""
+    """Wait for the code dialog and fill it in (or cancel it if `code` is `None`)."""
     qtbot.waitUntil(lambda: window.garmin.mfa_dialog is not None, timeout=WAIT_MS)
     dialog = window.garmin.mfa_dialog
     assert dialog is not None
@@ -109,7 +109,7 @@ def answer_mfa_dialog(qtbot: QtBot, window: MainWindow, code: str | None = TEST_
 
 
 def link_account(qtbot: QtBot, window: MainWindow, *, mfa: bool) -> None:
-    """Collega l'account dal dialogo e attende la fine del primo giro di sincronizzazione."""
+    """Connect the account from the dialog and wait for the end of the first sync round."""
     with qtbot.waitSignal(sync_of(window).sync_finished, timeout=WAIT_MS):
         submit_login(qtbot, window)
         if mfa:
@@ -117,7 +117,7 @@ def link_account(qtbot: QtBot, window: MainWindow, *, mfa: bool) -> None:
 
 
 def sync_and_wait(qtbot: QtBot, window: MainWindow, *, verify: bool = False) -> None:
-    """Dà il comando "Sincronizza" (o "Verifica completa") e attende la fine del giro."""
+    """Give the "Synchronise" command (or "Full check") and wait for the end of the round."""
     action = window.garmin.verify_action if verify else window.garmin.sync_action
     assert action.isEnabled()
     with qtbot.waitSignal(sync_of(window).sync_finished, timeout=WAIT_MS):
@@ -125,7 +125,7 @@ def sync_and_wait(qtbot: QtBot, window: MainWindow, *, verify: bool = False) -> 
 
 
 def open_box(qtbot: QtBot, window: MainWindow, name: str) -> QMessageBox:
-    """Attende e restituisce il messaggio con questo nome."""
+    """Wait for and return the message with this name."""
 
     def find() -> QMessageBox | None:
         return next(
@@ -144,16 +144,16 @@ def open_box(qtbot: QtBot, window: MainWindow, name: str) -> QMessageBox:
 
 
 def click_button(box: QMessageBox, text: str) -> None:
-    """Preme il bottone con questo testo."""
+    """Press the button with this text."""
     next(button for button in box.buttons() if button.text() == text).click()
 
 
 def activity_count(window: MainWindow) -> int:
-    """Quante attività mostra la panoramica (0 se non è pronta)."""
+    """How many activities the overview shows (0 if it is not ready)."""
     state = window.controller.overview_state
     return len(state.overview.activities) if isinstance(state, Ready) else 0
 
 
 def wait_activities(qtbot: QtBot, window: MainWindow, count: int) -> None:
-    """Attende che la panoramica sia pronta con questo numero di attività."""
+    """Wait until the overview is ready with this number of activities."""
     qtbot.waitUntil(lambda: activity_count(window) == count, timeout=WAIT_MS)

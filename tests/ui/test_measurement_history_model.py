@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Tabella dello storico delle misure: righe per data, allineamento, ordinamento e celle vuote."""
+"""Measurement history table: rows by date, alignment, sorting and empty cells."""
 
 from __future__ import annotations
 
@@ -102,12 +102,12 @@ def test_the_view_orders_by_date_most_recent_first_and_by_any_column(qtbot: QtBo
             for row in range(proxy.rowCount())
         ]
 
-    assert days() == ["165", "", "171"]  # 10 maggio, 1 marzo, 1 gennaio
+    assert days() == ["165", "", "171"]  # 10 May, 1 March, 1 January
 
     proxy.sort(Column.DATE, Qt.SortOrder.AscendingOrder)
     assert days() == ["171", "", "165"]
     proxy.sort(Column.THRESHOLD, Qt.SortOrder.AscendingOrder)
-    assert days() == ["", "165", "171"]  # la cella vuota viene prima
+    assert days() == ["", "165", "171"]  # the empty cell comes first
 
 
 def test_an_empty_history_has_no_rows_and_no_child_rows() -> None:

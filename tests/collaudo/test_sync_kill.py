@@ -1,19 +1,20 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-SYNC-02: un vero kill durante l'elenco e durante i download, poi la ripresa.
+"""T-SYNC-02: a real kill during the list and during the downloads, then the resume.
 
-Un sottoprocesso apre il profilo (lock, SQLite e archivio veri) e sincronizza con un Garmin finto
-(FIT veri in ZIP); il test lo uccide, senza pulizia, in un punto preciso (prima di una pagina
-dell'elenco, a metà della scrittura di una pagina e del suo cursore, prima di un download, tra
-l'archivio e il record, con il record scritto e la transazione aperta) o in un istante qualsiasi
-dopo N voci, e poi riapre il profilo come farebbe l'app al riavvio.
+A subprocess opens the profile (real lock, SQLite and archive) and synchronises with a fake Garmin
+(real FIT in ZIP); the test kills it, without cleanup, at a precise point (before a list
+page, halfway through writing a page and its cursor, before a download, between the
+archive and the record, with the record written and the transaction open) or at an arbitrary instant
+after N entries, and then reopens the profile as the app would on restart.
 
-Oracoli dopo il kill: lock libero; database integro; giornale e indice concordano (ogni record ha
-una voce `DOWNLOADED` e viceversa), le voci del giornale sono esattamente quelle delle pagine con
-il cursore confermato (pagina e cursore sono una transazione); ogni record ha il suo file in
-archivio con SHA-256 giusto; al più un file senza record e un temporaneo (quello in volo).
-Dopo la ripresa: tutte le attività presenti una volta sola, nessun download ripetuto di ciò che
-era confermato, nessun file orfano né temporaneo, un secondo giro non cambia nulla.
+Oracles after the kill: lock free; database intact; journal and index agree (every record has
+a `DOWNLOADED` entry and vice versa), the journal entries are exactly those of the pages with
+the confirmed cursor (page and cursor are one transaction); every record has its file in the
+archive with the right SHA-256; at most one file without a record and one temporary (the one in
+flight).
+After the resume: all the activities present exactly once, no repeated download of what
+was confirmed, no orphan or temporary file, a second round changes nothing.
 """
 
 from __future__ import annotations
@@ -49,7 +50,7 @@ SYNC_WORKER = (
     Path(__file__).resolve().parents[1] / "fixtures" / "generators" / ("collaudo_sync_worker.py")
 )
 COUNT = 10
-PAGE = 3  # quattro pagine: 3 + 3 + 3 + 1
+PAGE = 3  # four pages: 3 + 3 + 3 + 1
 LIST_CALLS = 4
 
 DEFAULT_POINTS = (
@@ -73,7 +74,7 @@ ALL_POINTS = (
 
 
 class SyncWorker(Worker):
-    """Come `Worker`, ma avvia `collaudo_sync_worker.py` (che `Worker` non conosce)."""
+    """Like `Worker`, but starts `collaudo_sync_worker.py` (which `Worker` does not know)."""
 
     def __init__(self, *arguments: str | Path | int) -> None:
         self._process = subprocess.Popen(  # noqa: S603 - interprete e script fissi
@@ -88,7 +89,7 @@ class SyncWorker(Worker):
 
 
 def kill_at(profile_folder: Path, point: str) -> None:
-    """Avvia la sincronizzazione, la lascia fermare al punto dato e la uccide."""
+    """Starts the synchronisation, lets it stop at the given point and kills it."""
     with SyncWorker("sync", profile_folder, COUNT, PAGE, point) as worker:
         worker.expect_ready()
         worker.read_until("blocked")
@@ -102,10 +103,10 @@ def _wait_without_sleeping(clock: FakeSyncClock, seconds: float) -> bool:
 
 @contextmanager
 def opened_profile(profile_folder: Path) -> Iterator[SyncPorts]:
-    """Il profilo come lo apre l'app al riavvio, con Garmin finto nuovo e archivio vero."""
+    """The profile as the app opens it on restart, with a new fake Garmin and the real archive."""
     folders = LocalProfileFolders(lambda _folder: FolderKind.LOCAL)
-    lock = folders.acquire_lock(profile_folder)  # T-DATI-04: il lock del morto e libero
-    opened = SqliteProfileStorage().open(profile_folder)  # WAL recuperato, integrita verificata
+    lock = folders.acquire_lock(profile_folder)  # T-DATI-04: the dead process's lock is free
+    opened = SqliteProfileStorage().open(profile_folder)  # WAL recovered, integrity verified
     clock = FakeSyncClock()
     fake = FakeActivitySource(make_remote_history(COUNT))
     try:
@@ -127,29 +128,30 @@ def opened_profile(profile_folder: Path) -> Iterator[SyncPorts]:
 
 
 def check_after_crash(profile_folder: Path) -> int:
-    """Verifica la coerenza dopo il kill; restituisce quante attività erano confermate."""
+    """Checks consistency after the kill; returns how many activities were confirmed."""
     with opened_profile(profile_folder) as ports:
         records = list(ports.index.list_by_start())
         counts = ports.journal.counts()
         cursor = ports.journal.load_cursor(ListingKind.FULL)
         archive = ports.archive
         for record in records:
-            archive.verify(record.archived)  # nessun record senza file, nessun file alterato
+            archive.verify(record.archived)  # no record without a file, no altered file
         done = len(records)
-        # Indice e giornale sono una sola transazione: concordano sempre.
+        # Index and journal are a single transaction: they always agree.
         assert counts[SyncStatus.DOWNLOADED] == done
         assert counts[SyncStatus.PENDING] == sum(counts.values()) - done
-        # Le voci sono esattamente quelle delle pagine con il cursore confermato.
+        # The entries are exactly those of the pages with the confirmed cursor.
         assert sum(counts.values()) == (0 if cursor is None else cursor.next_offset)
     referenced = {profile_folder / "archivio" / r.archived.relative_path for r in records}
     assert referenced <= set(stored_files(profile_folder))
-    assert len(set(stored_files(profile_folder)) - referenced) <= 1  # al piu quello in volo
+    assert len(set(stored_files(profile_folder)) - referenced) <= 1  # at most the one in flight
     assert len(temporaries(profile_folder)) <= 1
     return done
 
 
 def resume(profile_folder: Path, done: int) -> SyncOutcome:
-    """Riprende come l'app: ripulisce i temporanei, sincronizza, controlla che sia tutto."""
+    """Resumes like the app: cleans the temporary files, synchronises, checks that everything is
+    there."""
     FileArchive.in_profile_folder(profile_folder).remove_orphan_temporaries()
     with opened_profile(profile_folder) as ports:
         outcome = synchronize_activities(ports)
@@ -161,14 +163,14 @@ def resume(profile_folder: Path, done: int) -> SyncOutcome:
         assert outcome.status_counts[SyncStatus.PENDING] == 0
         records = ports.index.list_by_start()
         assert len(records) == COUNT
-        assert len({r.identity for r in records}) == COUNT  # nessun duplicato
+        assert len({r.identity for r in records}) == COUNT  # no duplicate
         assert {r.garmin_activity_id for r in records} == {f.value for f in fake.activities}
-        # Si scarica solo ciò che non era confermato, e una volta sola.
+        # Only what was not confirmed is downloaded, and only once.
         assert len(fake.downloads) == COUNT - done
         assert all(times == 1 for times in Counter(fake.downloads).values())
         for record in records:
             ports.archive.verify(record.archived)
-    assert len(stored_files(profile_folder)) == COUNT  # nessun file orfano, nessun doppione
+    assert len(stored_files(profile_folder)) == COUNT  # no orphan file, no duplicate
     assert temporaries(profile_folder) == []
     return outcome
 
@@ -210,9 +212,9 @@ def test_t_sync_02_kill_at_a_precise_point_then_resume(tmp_path: Path, point: st
 
     kind, _, number = point.partition(":")
     if kind in ("list", "cursor"):
-        assert done == 0  # prima dell'elenco completo non si scarica nulla
+        assert done == 0  # nothing is downloaded before the complete list
     elif kind in ("download", "before_add", "after_add", "update"):
-        assert done == int(number) - 1  # la voce in volo non e confermata, le prime si'
+        assert done == int(number) - 1  # the in-flight entry is not confirmed, the first ones are
 
 
 def test_t_sync_02_kill_after_some_entries_at_an_arbitrary_instant_then_resume(
@@ -225,7 +227,7 @@ def test_t_sync_02_kill_after_some_entries_at_an_arbitrary_instant_then_resume(
     with SyncWorker("sync", profile_folder, COUNT, PAGE, "none") as worker:
         worker.expect_ready()
         worker.read_until("progress 2")
-        worker.kill()  # il processo continua a sincronizzare finche non muore
+        worker.kill()  # the process keeps synchronising until it dies
 
     done = check_after_crash(profile_folder)
     assert done >= 2
@@ -237,7 +239,7 @@ def test_t_sync_02_a_kill_while_listing_resumes_from_the_saved_cursor(tmp_path: 
     profile = create_profile(tmp_path)
     profile_folder = profile.folder
     profile.close()
-    kill_at(profile_folder, "list:3")  # due pagine confermate (6 voci), la terza non risponde
+    kill_at(profile_folder, "list:3")  # two pages confirmed (6 entries), the third does not answer
 
     with opened_profile(profile_folder) as ports:
         cursor = ports.journal.load_cursor(ListingKind.FULL)
@@ -248,7 +250,7 @@ def test_t_sync_02_a_kill_while_listing_resumes_from_the_saved_cursor(tmp_path: 
         fake = ports.source
         assert isinstance(fake, FakeActivitySource)
         first_page = next(call for call in fake.calls if call.limit is not None)
-        assert first_page.offset == 2 * PAGE  # riparte dal cursore, non da capo
+        assert first_page.offset == 2 * PAGE  # restarts from the cursor, not from the beginning
         assert (outcome.completed, outcome.new_entries, outcome.downloaded) == (True, 4, COUNT)
     assert len(stored_files(profile_folder)) == COUNT
 
@@ -288,7 +290,7 @@ def test_t_sync_02_collaudo_two_kills_in_a_row_then_resume(tmp_path: Path) -> No
 
     kill_at(profile_folder, first)
     check_after_crash(profile_folder)
-    kill_at(profile_folder, "after_add:1")  # sempre raggiunto: resta almeno una voce da scaricare
+    kill_at(profile_folder, "after_add:1")  # always reached: at least one entry is left to download
     done = check_after_crash(profile_folder)
     resume(profile_folder, done)
     assert_second_round_changes_nothing(profile_folder)

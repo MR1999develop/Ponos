@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-DATI-01 e database ostili: schema v1 congelato, file che non sono il database del profilo.
+"""T-DATI-01 and hostile databases: frozen v1 schema, files that are not the profile database.
 
-La riga di difesa di T-DATI-01 e che una migrazione gia rilasciata non si modifica mai: qui lo
-schema v1 e copiato a mano, indipendente dal codice, e i dati scritti con esso devono restare
-leggibili da ogni versione futura dell'app.
+The defence line of T-DATI-01 is that an already released migration is never modified: here the
+v1 schema is copied by hand, independent of the code, and the data written with it must stay
+readable by every future version of the app.
 """
 
 from __future__ import annotations
@@ -35,8 +35,8 @@ from tests.collaudo.support import (
 )
 from tests.fixtures.generators.import_files import fit_run
 
-# Schema v1 come fu rilasciato (PLAN.md 4.3). Non si cambia: per cambiare lo schema si aggiunge
-# la migrazione successiva e un nuovo database congelato qui sotto.
+# Schema v1 as it was released (PLAN.md 4.3). It does not change: to change the schema the next
+# migration is added and a new database is frozen below.
 FROZEN_V1 = (
     """CREATE TABLE meta (
         key TEXT NOT NULL PRIMARY KEY CHECK (length(key) BETWEEN 1 AND 64),
@@ -90,7 +90,7 @@ FROZEN_V1 = (
         source TEXT NOT NULL CHECK (source IN ('heart_rate','estimate'))
     ) STRICT""",
 )
-# Migrazione v2 (sincronizzazione Garmin) come fu rilasciata. Non si cambia, come la v1.
+# Migration v2 (Garmin synchronisation) as it was released. It does not change, like v1.
 FROZEN_V2 = (
     """CREATE TABLE sync_journal (
         garmin_id INTEGER NOT NULL PRIMARY KEY CHECK (garmin_id > 0),
@@ -138,7 +138,7 @@ def squash(text: str) -> str:
 
 
 def write_frozen_v1(path: Path) -> None:
-    """Un database v1 come lo avrebbe scritto la prima versione dell'app (senza usare `src`)."""
+    """A v1 database as the first version of the app would have written it (without using `src`)."""
     with closing(sqlite3.connect(path)) as raw:
         for statement in FROZEN_V1:
             raw.execute(statement)
@@ -171,7 +171,7 @@ def write_frozen_v1(path: Path) -> None:
 
 def rows(path: Path, table: str) -> list[tuple[object, ...]]:
     with closing(sqlite3.connect(path)) as raw:
-        return raw.execute(f"SELECT * FROM {table}").fetchall()  # noqa: S608 - nomi fissi
+        return raw.execute(f"SELECT * FROM {table}").fetchall()  # noqa: S608 - fixed names
 
 
 # --- T-DATI-01 -----------------------------------------------------------------------------------
@@ -208,9 +208,9 @@ def test_t_dati_01_a_frozen_v1_database_is_migrated_with_data_intact_and_a_copy(
         opened.close()
 
     after = {table: rows(path, table) for table in tables}
-    assert after["meta"] == before["meta"]  # compreso 'futuro'
+    assert after["meta"] == before["meta"]  # including 'future'
     assert after["physiology"] == before["physiology"]
-    assert after["load_cache"] == []  # derivata: la v3 la svuota, i carichi si ricalcolano
+    assert after["load_cache"] == []  # derived: v3 empties it, the loads are recalculated
     assert [row[:-1] for row in after["activities"]] == [row[:-1] for row in before["activities"]]
     [copy] = sorted((tmp_path / "backup").glob("*"))
     assert copy.name == f"ponos-v1-v{sqlite_schema.SCHEMA_VERSION}.sqlite3"
@@ -304,10 +304,10 @@ def test_t_dati_01_a_future_migration_keeps_every_v1_row_and_the_unknown_keys(
     SqliteProfileStorage().open(tmp_path).close()
 
     after_meta = rows(path, "meta")
-    assert after_meta == before["meta"]  # compreso 'futuro'
+    assert after_meta == before["meta"]  # including 'future'
     assert [row[:-1] for row in rows(path, "activities")] == before["activities"]
     assert rows(path, "physiology") == before["physiology"]
-    assert rows(path, "load_cache") == []  # derivata: la migrazione v3 la svuota
+    assert rows(path, "load_cache") == []  # derived: the v3 migration empties it
     with closing(sqlite3.connect(path)) as raw:
         assert raw.execute("PRAGMA user_version").fetchone() == (sqlite_schema.SCHEMA_VERSION + 1,)
 
@@ -342,7 +342,7 @@ def test_t_dati_01_a_database_from_a_newer_app_is_refused_and_left_alone(tmp_pat
     assert sorted(p.name for p in tmp_path.iterdir()) == [PROFILE_DATABASE_NAME]
 
 
-# --- Database che non e un database di profilo ---------------------------------------------------
+# --- Database that is not a profile database -----------------------------------------------------
 
 
 def foreign_database(path: Path, user_version: int) -> None:
@@ -441,11 +441,11 @@ def test_the_database_replaced_by_garbage_fails_the_open_cleanly_and_the_old_one
     with pytest.raises(ProfileCorruptError):
         open_registered(ports, profile_id)
 
-    assert path.read_bytes() == garbage  # il file non si ripara e non si cancella
+    assert path.read_bytes() == garbage  # the file is neither repaired nor deleted
     assert [
         (e.profile_id, e.folder, e.last_used_utc) for e in ports.registry.list_entries()
     ] == registry_before
-    ports.folders.acquire_lock(folder).release()  # il lock preso per aprire e stato rilasciato
+    ports.folders.acquire_lock(folder).release()  # the lock taken to open has been released
     path.write_bytes(original)
     reopened = open_registered(real_ports(tmp_path / "config"), profile_id)
     try:

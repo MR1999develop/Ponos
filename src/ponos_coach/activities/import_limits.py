@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Tetti dell'import di file, cartelle e archivi ZIP (PLAN.md 2.11, 4.4, 4.9): un solo posto.
+"""Caps for importing files, folders and ZIP archives (PLAN.md 2.11, 4.4, 4.9): one place.
 
-I valori di default sono quelli del progetto; i test e gli adattatori possono passarne di più
-piccoli. L'interfaccia li legge da qui per i suoi messaggi.
+The default values are the project's; tests and adapters may pass smaller
+ones. The interface reads them from here for its messages.
 """
 
 from __future__ import annotations
@@ -18,25 +18,25 @@ _GIB = 1024 * _MIB
 
 @dataclass(frozen=True, slots=True)
 class ImportLimits:
-    """Tetti dell'esame e dell'estrazione; tutti positivi.
+    """Caps for examination and extraction; all positive.
 
-    I primi tre (`max_activity_files`, `max_examined_entries`, `max_depth`) fermano l'esame
-    di una sorgente prima di importare qualsiasi cosa. `max_file_bytes` salta il singolo file
-    (o la singola voce di uno ZIP). I tetti `max_zip_*` rifiutano l'archivio o la voce
-    prima di estrarre.
+    The first three (`max_activity_files`, `max_examined_entries`, `max_depth`) stop the examination
+    of a source before importing anything. `max_file_bytes` skips the single file
+    (or the single entry of a ZIP). The `max_zip_*` caps reject the archive or the entry
+    before extracting.
     """
 
-    max_activity_files: int = 50_000  # file .fit e .gpx, comprese le voci degli ZIP
-    max_examined_entries: int = 500_000  # file e cartelle di ogni tipo, voci degli ZIP comprese
-    max_depth: int = 32  # livelli di sottocartelle
+    max_activity_files: int = 50_000  # .fit and .gpx files, including ZIP entries
+    max_examined_entries: int = 500_000  # files and folders of every kind, ZIP entries included
+    max_depth: int = 32  # levels of subfolders
     max_file_bytes: int = MAX_ACTIVITY_FILE_BYTES
-    max_path_chars: int = 2048  # percorso relativo mostrato: oltre, il file si segnala e si salta
-    max_zip_entries: int = 50_000  # voci di un solo ZIP
-    max_zip_total_bytes: int = 5 * _GIB  # somma delle dimensioni dichiarate di uno ZIP
-    max_zip_ratio: int = 100  # dimensione dichiarata / dimensione compressa, per voce
-    max_zip_directory_bytes: int = 32 * _MIB  # directory centrale dello ZIP, letta in memoria
+    max_path_chars: int = 2048  # relative path shown: beyond this, the file is reported and skipped
+    max_zip_entries: int = 50_000  # entries of a single ZIP
+    max_zip_total_bytes: int = 5 * _GIB  # sum of the declared sizes of a ZIP
+    max_zip_ratio: int = 100  # declared size / compressed size, per entry
+    max_zip_directory_bytes: int = 32 * _MIB  # central directory of the ZIP, read into memory
 
     def __post_init__(self) -> None:
         for item in fields(self):
             if getattr(self, item.name) <= 0:
-                raise ValueError(f"il limite {item.name} deve essere positivo")
+                raise ValueError(f"the limit {item.name} must be positive")

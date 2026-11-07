@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dialogo "Pesi degli sport": un valore per sport, vista umile su `SportWeightsForm`.
+"""Dialog "Sport weights": one value per sport, humble view on `SportWeightsForm`.
 
-Il dialogo modifica una copia: "Annulla" non cambia nulla. Il salvataggio parte con
-`save_requested`; chiude la finestra quando il caso d'uso ha finito.
+The dialog edits a copy: "Cancel" changes nothing. Saving starts with
+`save_requested`; it closes the window when the use case has finished.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from ponos_coach.ui.tokens import DIALOG_MIN_WIDTH, SPACE_2, SPACE_4
 
 
 class SportWeightsDialog(QDialog):
-    """Un peso da 0 a 5 per ogni sport, con "Ripristina predefiniti"."""
+    """A weight from 0 to 5 for each sport, with "Restore defaults"."""
 
     save_requested = Signal(object)  # dict[Sport, SportWeight]
 
@@ -82,28 +82,28 @@ class SportWeightsDialog(QDialog):
         outer.addLayout(layout)
         outer.addWidget(self._buttons)
 
-    # --- Accessori per i test ---------------------------------------------------------
+    # --- Test accessors ---------------------------------------------------------
 
     @property
     def form(self) -> SportWeightsForm:
-        """Il modello del modulo."""
+        """The form model."""
         return self._form
 
     def box(self, sport: Sport) -> QDoubleSpinBox:
-        """Il controllo del peso di uno sport."""
+        """The weight control of a sport."""
         return self._boxes[sport]
 
     @property
     def restore_button(self) -> QPushButton:
-        """Bottone "Ripristina predefiniti"."""
+        """Button "Restore defaults"."""
         return self._restore
 
     @property
     def save_button(self) -> QWidget:
-        """Bottone "Salva pesi"."""
+        """Button "Save weights"."""
         return self._save
 
-    # --- Modello e vista --------------------------------------------------------------
+    # --- Model and view --------------------------------------------------------------
 
     def _show_values(self) -> None:
         for sport, box in self._boxes.items():
@@ -112,7 +112,8 @@ class SportWeightsDialog(QDialog):
             box.blockSignals(False)
 
     def _update_buttons(self) -> None:
-        """ "Salva pesi" è disabilitato senza modifiche; "Ripristina" se sono già i predefiniti."""
+        """ "Save weights" is disabled without changes; "Restore defaults" if they already are the
+        defaults."""
         changed = self._form.has_changes
         self._save.setEnabled(changed)
         self._save.setToolTip("" if changed else self.tr("Change at least one weight first."))
@@ -136,7 +137,7 @@ class SportWeightsDialog(QDialog):
         self.save_requested.emit(self._form.build())
 
     def set_busy(self, busy: bool) -> None:
-        """Mentre il salvataggio è in corso il dialogo non accetta altre modifiche."""
+        """While saving is in progress the dialog accepts no other edits."""
         self._save.setEnabled(not busy and self._form.has_changes)
         self._restore.setEnabled(not busy and not self._form.is_default)
         for box in self._boxes.values():

@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Preferenze della sincronizzazione, ricordate per profilo.
+"""Synchronisation preferences, remembered per profile.
 
-Oggi una sola: se all'apertura del profilo parte da sola la sincronizzazione (predefinito:
-sì). La porta `SyncPreferences` la usa il controller; l'implementazione su `QSettings` la
-compone `__main__`, quella in memoria serve ai test e ai casi senza impostazioni.
+Today just one: whether synchronisation starts by itself when the profile opens (default:
+yes). The controller uses the `SyncPreferences` port; `__main__` composes the
+`QSettings` implementation, the in-memory one serves tests and cases without settings.
 """
 
 from __future__ import annotations
@@ -22,35 +22,35 @@ _FALSE_TEXTS: Final = frozenset({"false", "0"})
 
 
 class SyncPreferences(Protocol):
-    """Le scelte dell'utente sulla sincronizzazione, una per profilo."""
+    """The user's choices about synchronisation, one per profile."""
 
     def auto_sync(self, profile_id: ProfileId) -> bool:
-        """Vero se aprendo il profilo la sincronizzazione parte da sola."""
+        """True if synchronisation starts by itself when the profile opens."""
         ...
 
     def set_auto_sync(self, profile_id: ProfileId, *, enabled: bool) -> None:
-        """Ricorda la scelta per il profilo."""
+        """Remember the choice for the profile."""
         ...
 
 
 class MemorySyncPreferences:
-    """Preferenze che non sopravvivono al processo."""
+    """Preferences that do not survive the process."""
 
     def __init__(self) -> None:
         self._auto: dict[ProfileId, bool] = {}
 
     def auto_sync(self, profile_id: ProfileId) -> bool:
-        """Vedi `SyncPreferences.auto_sync`."""
+        """See `SyncPreferences.auto_sync`."""
         return self._auto.get(profile_id, AUTO_SYNC_DEFAULT)
 
     def set_auto_sync(self, profile_id: ProfileId, *, enabled: bool) -> None:
-        """Vedi `SyncPreferences.set_auto_sync`."""
+        """See `SyncPreferences.set_auto_sync`."""
         self._auto[profile_id] = enabled
 
 
 def parse_stored_flag(raw: object, *, default: bool) -> bool:
-    """Il valore letto da `QSettings` (bool, "true"/"false" o altro): ciò che non si capisce
-    vale il predefinito, mai un errore."""
+    """The value read from `QSettings` (bool, "true"/"false" or other): what is not understood
+    gets the default, never an error."""
     if isinstance(raw, bool):
         return raw
     if isinstance(raw, str):
@@ -63,17 +63,17 @@ def parse_stored_flag(raw: object, *, default: bool) -> bool:
 
 
 class QSettingsSyncPreferences:
-    """Preferenze nelle impostazioni dell'app, con una chiave per profilo."""
+    """Preferences in the app's settings, with one key per profile."""
 
     def __init__(self, settings: QSettings) -> None:
         self._settings = settings
 
     def auto_sync(self, profile_id: ProfileId) -> bool:
-        """Vedi `SyncPreferences.auto_sync`; un valore illeggibile vale il predefinito."""
+        """See `SyncPreferences.auto_sync`; an unreadable value gets the default."""
         return parse_stored_flag(
             self._settings.value(_KEY_PREFIX + str(profile_id)), default=AUTO_SYNC_DEFAULT
         )
 
     def set_auto_sync(self, profile_id: ProfileId, *, enabled: bool) -> None:
-        """Vedi `SyncPreferences.set_auto_sync`."""
+        """See `SyncPreferences.set_auto_sync`."""
         self._settings.setValue(_KEY_PREFIX + str(profile_id), enabled)

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-SEC-06 (parte pura): solo lo schema dell'app e ammesso; risorse in elenco chiuso."""
+"""T-SEC-06 (pure part): only the app scheme is allowed; resources in a closed list."""
 
 from __future__ import annotations
 

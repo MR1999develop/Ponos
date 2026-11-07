@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Estrazione sicura di una voce di attività da uno ZIP dato come byte (T-SEC-02, T-IMP-04)."""
+"""Safe extraction of an activity entry from a ZIP given as bytes (T-SEC-02, T-IMP-04)."""
 
 from __future__ import annotations
 

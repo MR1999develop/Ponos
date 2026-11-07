@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Altezza, peso e data di nascita scritti dall'utente: lettura e messaggi dei moduli.
+"""Height, weight and birth date typed by the user: reading and form messages.
 
-Altezza, peso e data di nascita sono dati di salute: il valore scritto non compare mai in un
-messaggio, in un log né in un'eccezione. Il dominio decide cosa è valido (`Height`, `Weight`,
-`BirthDate.on`); qui si traduce il testo in quei tipi, o in una categoria di problema.
+Height, weight and birth date are health data: the typed value never appears in a
+message, a log or an exception. The domain decides what is valid (`Height`, `Weight`,
+`BirthDate.on`); here the text is turned into those types, or into a problem category.
 """
 
 from __future__ import annotations
@@ -26,12 +26,12 @@ from ponos_coach.profiles.domain import (
     Weight,
 )
 
-_HEIGHT_TEXT_MAX_CHARS = 3  # la lunghezza si controlla prima di leggere il numero
+_HEIGHT_TEXT_MAX_CHARS = 3  # the length is checked before reading the number
 _TENTHS_PER_KG = 10
 
 
 class BodyProblem(Enum):
-    """Che cosa non va in un valore del corpo scritto dall'utente."""
+    """What is wrong with a body value typed by the user."""
 
     HEIGHT_EMPTY = "height_empty"
     HEIGHT_INVALID = "height_invalid"
@@ -42,7 +42,7 @@ class BodyProblem(Enum):
 
 
 def read_height(text: str) -> Height | BodyProblem:
-    """Altezza da un testo di cifre (centimetri interi); mai un valore a metà."""
+    """Height from a text of digits (whole centimetres); never a half value."""
     stripped = text.strip()
     if not stripped:
         return BodyProblem.HEIGHT_EMPTY
@@ -55,7 +55,7 @@ def read_height(text: str) -> Height | BodyProblem:
 
 
 def read_weight(text: str) -> Weight | BodyProblem:
-    """Peso da un testo con virgola o punto decimale."""
+    """Weight from a text with a comma or a decimal point."""
     if not text.strip():
         return BodyProblem.WEIGHT_EMPTY
     try:
@@ -65,7 +65,7 @@ def read_weight(text: str) -> Weight | BodyProblem:
 
 
 def read_birth_date(value: date | None, today: date) -> BirthDate | BodyProblem:
-    """Data di nascita inserita oggi (almeno cinque anni fa, non prima del 1900)."""
+    """Birth date entered today (at least five years ago, not before 1900)."""
     if value is None:
         return BodyProblem.BIRTH_EMPTY
     try:
@@ -75,12 +75,12 @@ def read_birth_date(value: date | None, today: date) -> BirthDate | BodyProblem:
 
 
 def latest_birth_date(today: date) -> date:
-    """L'ultima data di nascita ammessa oggi, secondo il dominio (per il limite del selettore)."""
+    """The latest birth date allowed today, per the domain (for the picker limit)."""
     return BirthDate.latest(today)
 
 
 def body_problem_text(problem: BodyProblem) -> str:
-    """Messaggio sotto il campo: cosa scrivere, senza ripetere ciò che era scritto."""
+    """Message under the field: what to type, without repeating what was typed."""
     texts = {
         BodyProblem.HEIGHT_EMPTY: QCoreApplication.translate(
             "BodyInput", "Enter the height in centimetres."

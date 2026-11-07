@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Database del profilo su SQLite: contratti, migrazioni (T-DATI-01), vincoli, guasti."""
+"""Profile database on SQLite: contracts, migrations (T-DATI-01), constraints, failures."""
 
 from __future__ import annotations
 
@@ -135,7 +135,7 @@ def _db_path(folder: Path) -> Path:
     return folder / PROFILE_DATABASE_NAME
 
 
-# --- Migrazioni (T-DATI-01) ----------------------------------------------------------------------
+# --- Migrations (T-DATI-01) ----------------------------------------------------------------------
 
 
 def test_new_database_has_the_latest_schema_and_the_expected_tables(tmp_path: Path) -> None:
@@ -171,7 +171,7 @@ def test_closed_database_leaves_a_single_file_after_the_checkpoint(tmp_path: Pat
 
 
 def test_closed_sets_of_schema_v1_match_the_domain_enums() -> None:
-    """Un valore nuovo in un enum obbliga a scrivere una migrazione dello schema."""
+    """A new value in an enum forces writing a schema migration."""
     assert {s.value for s in Sport} == sqlite_schema.V1_SPORTS
     assert {f.value for f in FileFormat} == sqlite_schema.V1_FORMATS
     assert {o.value for o in ActivityOrigin} == sqlite_schema.V1_ORIGINS
@@ -180,7 +180,7 @@ def test_closed_sets_of_schema_v1_match_the_domain_enums() -> None:
 
 
 def test_closed_sets_of_schema_v2_match_the_domain_enums() -> None:
-    """Un valore nuovo in un enum della sincronizzazione obbliga a scrivere una migrazione."""
+    """A new value in a sync enum forces writing a migration."""
     assert {s.value for s in SyncStatus} == sqlite_schema.V2_SYNC_STATUSES
     assert {f.value for f in FailureReason} == sqlite_schema.V2_FAILURES
     assert {f.value for f in RETRYABLE_REASONS} == sqlite_schema.V2_RETRYABLE_FAILURES
@@ -252,7 +252,7 @@ def test_failed_migration_leaves_the_original_intact_and_a_coherent_copy_in_back
     with pytest.raises(ProfileStorageError):
         SqliteProfileStorage().open(tmp_path)
 
-    assert _db_path(tmp_path).read_bytes() == before  # il database di prima, byte per byte
+    assert _db_path(tmp_path).read_bytes() == before  # the previous database, byte for byte
     [copy] = _backups(tmp_path)
     assert copy.name == f"ponos-v{SCHEMA_VERSION}-v{SCHEMA_VERSION + 1}.sqlite3"
     with closing(sqlite3.connect(copy)) as raw:
@@ -314,7 +314,7 @@ def test_future_version_is_refused_and_the_file_is_untouched(tmp_path: Path) -> 
     assert sorted(p.name for p in tmp_path.iterdir()) == [PROFILE_DATABASE_NAME]
 
 
-# --- File non validi -----------------------------------------------------------------------------
+# --- Invalid files -----------------------------------------------------------------------------
 
 
 def test_file_that_is_not_sqlite_is_corrupt(tmp_path: Path) -> None:
@@ -369,7 +369,7 @@ def test_open_in_a_folder_without_database_creates_nothing(tmp_path: Path) -> No
 
 
 def test_unknown_timezone_creates_nothing(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="fuso"):
+    with pytest.raises(ValueError, match="time zone"):
         SqliteProfileStorage().create(tmp_path, PROFILE_ID, NAME, "Mars/Olympus")
 
     assert list(tmp_path.iterdir()) == []
@@ -395,7 +395,7 @@ def test_name_with_quotes_and_unicode_round_trips(tmp_path: Path) -> None:
         assert profile.info.name == name
 
 
-# --- Connessione e vincoli ---------------------------------------------------------------------
+# --- Connection and constraints -------------------------------------------------------------------
 
 
 def _pragmas(db: sqlite_database.SqliteDatabase) -> dict[str, object]:
@@ -464,12 +464,12 @@ def test_the_valid_baseline_row_is_accepted(raw_db: sqlite_database.SqliteDataba
         {"timer_s": 61.0},
         {"distance_m": -1.0},
         {"start_lat": 91.0, "start_lon": 0.0},
-        {"start_lat": 10.0},  # una sola coordinata
+        {"start_lat": 10.0},  # a single coordinate
         {"archive_sha256": "abc"},
         {"archive_size_bytes": -1},
-        {"origin": "garmin"},  # senza id Garmin
+        {"origin": "garmin"},  # no Garmin id
         {"garmin_activity_id": 0},
-        {"identity_key": "gpx:" + "a" * 64},  # prefisso diverso dal formato
+        {"identity_key": "gpx:" + "a" * 64},  # prefix different from the format
         {"track_polyline": ""},
     ],
     ids=lambda c: next(iter(c)),
@@ -508,14 +508,14 @@ def test_database_accepts_the_coherent_journal_rows(
 @pytest.mark.parametrize(
     "row",
     [
-        ("sconosciuto", 0, None),  # stato fuori dall'insieme chiuso
-        ("pending", 1, None),  # da scaricare ma con tentativi falliti
-        ("pending", 0, "corrupt_file"),  # causa senza fallimento
+        ("sconosciuto", 0, None),  # state outside the closed set
+        ("pending", 1, None),  # to download but with failed attempts
+        ("pending", 0, "corrupt_file"),  # cause without failure
         ("downloaded", 0, "corrupt_file"),
-        ("retryable", 1, None),  # fallimento senza causa
-        ("retryable", 0, "rate_limited"),  # nessun tentativo fallito
-        ("retryable", 1, "corrupt_file"),  # ritentabile con causa definitiva
-        ("failed", 1, "rate_limited"),  # definitiva con causa ritentabile
+        ("retryable", 1, None),  # failure without cause
+        ("retryable", 0, "rate_limited"),  # no failed attempt
+        ("retryable", 1, "corrupt_file"),  # retryable with definitive cause
+        ("failed", 1, "rate_limited"),  # definitive with retryable cause
         ("failed", 0, "corrupt_file"),
         ("failed", 1, "causa inventata"),
         ("failed", -1, "corrupt_file"),
@@ -536,7 +536,7 @@ def test_database_refuses_bad_journal_keys_and_cursors(
         with pytest.raises(sqlite3.IntegrityError):
             raw_db.connection.execute(_JOURNAL_INSERT, (bad_id, "pending", 0, None))
     raw_db.connection.execute(_JOURNAL_INSERT, (1, "pending", 0, None))
-    with pytest.raises(sqlite3.IntegrityError):  # stesso id Garmin: chiave primaria
+    with pytest.raises(sqlite3.IntegrityError):  # same Garmin id: primary key
         raw_db.connection.execute(_JOURNAL_INSERT, (1, "pending", 0, None))
     cursor = "INSERT INTO sync_cursor VALUES (?, ?, ?, ?)"
     for bad in (
@@ -547,7 +547,7 @@ def test_database_refuses_bad_journal_keys_and_cursors(
     ):
         with pytest.raises(sqlite3.IntegrityError):
             raw_db.connection.execute(cursor, bad)
-    with pytest.raises(sqlite3.IntegrityError):  # una sola riga di stato
+    with pytest.raises(sqlite3.IntegrityError):  # a single state row
         raw_db.connection.execute("INSERT INTO sync_state VALUES (2, 0)")
 
 
@@ -555,11 +555,11 @@ def test_database_refuses_inconsistent_physiology(raw_db: sqlite_database.Sqlite
     insert = "INSERT INTO physiology VALUES (?, ?, ?, ?, ?)"
     raw_db.connection.execute(insert, ("2026-01-01", 50, 190, 170, "male"))
     for bad in (
-        ("2026-01-02", 190, 190, 170, "male"),  # minima non sotto la massima
-        ("2026-01-03", 50, 190, 50, "male"),  # soglia non sopra la minima
-        ("2026-01-04", 50, 190, 191, "male"),  # soglia sopra la massima
+        ("2026-01-02", 190, 190, 170, "male"),  # minimum not below maximum
+        ("2026-01-03", 50, 190, 50, "male"),  # threshold not above minimum
+        ("2026-01-04", 50, 190, 191, "male"),  # threshold above maximum
         ("2026-01-05", 50, 190, 170, "other"),
-        ("2026-01-01", 50, 190, 170, "male"),  # stessa data: chiave primaria
+        ("2026-01-01", 50, 190, 170, "male"),  # same date: primary key
     ):
         with pytest.raises(sqlite3.IntegrityError):
             raw_db.connection.execute(insert, bad)
@@ -603,7 +603,7 @@ def test_sql_in_an_identity_or_a_path_is_data_not_code(tmp_path: Path) -> None:
         profile.close()
 
 
-# --- Transazioni, chiusura, riapertura ------------------------------------------------------------
+# --- Transactions, closing, reopening ------------------------------------------------------------
 
 
 def test_cancelled_transaction_leaves_the_database_as_it_was_and_the_next_one_works(
@@ -611,9 +611,9 @@ def test_cancelled_transaction_leaves_the_database_as_it_was_and_the_next_one_wo
 ) -> None:
     profile = SqliteProfileStorage().create(tmp_path, PROFILE_ID, NAME, "UTC")
     try:
-        with pytest.raises(RuntimeError, match="annullata"), profile.activities.transaction():
+        with pytest.raises(RuntimeError, match="cancelled"), profile.activities.transaction():
             profile.activities.add(make_record(fit_identity(1)))
-            raise RuntimeError("annullata")
+            raise RuntimeError("cancelled")
         with profile.activities.transaction():
             profile.activities.add(make_record(fit_identity(2)))
 
@@ -640,7 +640,7 @@ def test_failed_transaction_does_not_block_a_later_nesting_check(tmp_path: Path)
 def test_committed_data_survives_a_connection_closed_and_reopened_without_a_checkpoint(
     tmp_path: Path,
 ) -> None:
-    """Il commit è nel WAL: una seconda connessione lo vede anche prima della chiusura."""
+    """The commit is in the WAL: a second connection sees it even before closing."""
     profile = SqliteProfileStorage().create(tmp_path, PROFILE_ID, NAME, "UTC")
     try:
         profile.activities.add(make_record())
@@ -661,7 +661,7 @@ def test_using_the_stores_after_close_fails_with_the_port_error(tmp_path: Path) 
 def test_instants_below_the_millisecond_are_refused_not_rounded(tmp_path: Path) -> None:
     profile = SqliteProfileStorage().create(tmp_path, PROFILE_ID, NAME, "UTC")
     try:
-        with pytest.raises(ValueError, match="millisecondo"):
+        with pytest.raises(ValueError, match="millisecond"):
             profile.activities.add(make_record(start=T0 + timedelta(microseconds=1)))
         assert profile.activities.list_by_start() == []
     finally:
@@ -676,7 +676,7 @@ def test_profile_id_is_stored_in_canonical_form(tmp_path: Path) -> None:
         assert profile.info.profile_id == other
 
 
-# --- Possibili duplicati: SQL largo, poi la regola del dominio ----------------------------------
+# --- Possible duplicates: wide SQL, then the domain rule ----------------------------------
 
 
 @pytest.fixture(scope="module")
@@ -687,7 +687,7 @@ def shared_profile(tmp_path_factory: pytest.TempPathFactory) -> Iterator[OpenPro
     profile.close()
 
 
-class _Rollback(Exception):  # noqa: N818 - segnale interno del test
+class _Rollback(Exception):  # noqa: N818 - internal signal of the test
     pass
 
 
@@ -734,7 +734,7 @@ def test_possible_duplicates_match_the_naive_domain_rule(
 
 
 def test_possible_duplicates_window_is_not_narrower_than_the_rule(tmp_path: Path) -> None:
-    """Sub-millisecondo nella query: il prefiltro largo non perde il caso al limite."""
+    """Sub-millisecond in the query: the wide prefilter does not lose the boundary case."""
     profile = SqliteProfileStorage().create(tmp_path, PROFILE_ID, NAME, "UTC")
     try:
         record = make_record(gpx_identity(), start=T0, elapsed_s=1000.0)
@@ -750,7 +750,7 @@ def test_possible_duplicates_window_is_not_narrower_than_the_rule(tmp_path: Path
         profile.close()
 
 
-# --- Lettura in sola lettura (peek) --------------------------------------------------------------
+# --- Read-only reading (peek) --------------------------------------------------------------
 
 
 def test_peek_of_a_closed_database_writes_nothing_and_creates_no_side_files(
@@ -819,7 +819,7 @@ def test_a_foreign_sqlite_file_with_a_meta_table_but_no_activity_tables_is_corru
         SqliteProfileStorage().open(tmp_path)
 
 
-# --- R2: database occupato all'apertura della transazione -------------------------------------
+# --- R2: busy database when opening the transaction -------------------------------------
 
 
 def test_r2_a_database_held_by_another_connection_gives_a_port_error_not_a_raw_one(
@@ -829,14 +829,14 @@ def test_r2_a_database_held_by_another_connection_gives_a_port_error_not_a_raw_o
     holder = open_database(_db_path(tmp_path))
     waiter = open_database(_db_path(tmp_path))
     try:
-        waiter.connection.execute("PRAGMA busy_timeout = 20")  # il test non aspetta 5 s
+        waiter.connection.execute("PRAGMA busy_timeout = 20")  # the test does not wait 5 s
         with holder.transaction():
             with pytest.raises(StorageBusyError) as caught, waiter.transaction():
-                pytest.fail("la transazione non doveva cominciare")
+                pytest.fail("the transaction must not start")
             assert isinstance(caught.value, ActivityIndexError)
             assert isinstance(caught.value, SyncJournalError)
             assert isinstance(caught.value.__cause__, sqlite3.OperationalError)
-        with waiter.transaction():  # libero: ora si apre, e la connessione non è rimasta storta
+        with waiter.transaction():  # free: now it opens, and the connection was not left crooked
             waiter.connection.execute("SELECT 1")
     finally:
         holder.close()
@@ -853,7 +853,7 @@ def _spy_on_integrity_checks(monkeypatch: pytest.MonkeyPatch, calls: list[str]) 
     monkeypatch.setattr(sqlite_database, "_check_integrity", spy)
 
 
-# --- R15: la seconda connessione può saltare i controlli di integrità -------------------------
+# --- R15: the second connection may skip the integrity checks -----------------------------
 
 
 def test_r15_an_extra_connection_can_skip_the_integrity_checks_but_a_normal_open_runs_them(

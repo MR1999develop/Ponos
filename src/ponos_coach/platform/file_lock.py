@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Lock esclusivo del sistema operativo su un file, tenuto aperto per tutta la vita del profilo.
+"""Exclusive operating-system lock on a file, kept open for the whole life of the profile.
 
-Il lock è dell'handle aperto, non l'esistenza del file: se il processo muore (anche per un
-crash o un kill) il sistema lo rilascia da solo e il file rimasto non blocca nessuno. Due
-aperture nello stesso processo si escludono a vicenda (lock per handle, non per processo).
+The lock belongs to the open handle, not to the file's existence: if the process dies (even by a
+crash or a kill) the system releases it on its own and the leftover file blocks no one. Two
+openings in the same process exclude each other (lock per handle, not per process).
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ if sys.platform == "win32":
     import msvcrt
 
     def _try_lock(fd: int) -> None:
-        """Blocca il byte 0 senza attendere; `OSError` se è già bloccato."""
+        """Locks byte 0 without waiting; `OSError` if it is already locked."""
         os.lseek(fd, 0, os.SEEK_SET)
         msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
 
@@ -35,7 +35,7 @@ else:
     import fcntl
 
     def _try_lock(fd: int) -> None:
-        """Lock esclusivo non bloccante; `OSError` se è già preso."""
+        """Exclusive non-blocking lock; `OSError` if it is already taken."""
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     def _unlock(fd: int) -> None:
@@ -48,13 +48,13 @@ _LOCK_FILE_MODE = 0o600
 
 
 class OsFileLock:
-    """Lock tenuto da un descrittore aperto. `release` lo rilascia; ripeterlo non fa nulla."""
+    """Lock held by an open descriptor. `release` releases it; repeating it does nothing."""
 
     def __init__(self, fd: int) -> None:
         self._fd: int | None = fd
 
     def release(self) -> None:
-        """Rilascia il lock e chiude il file (il file resta sul disco)."""
+        """Releases the lock and closes the file (the file stays on disk)."""
         fd, self._fd = self._fd, None
         if fd is None:
             return
@@ -65,23 +65,23 @@ class OsFileLock:
 
 
 def acquire_file_lock(lock_path: Path) -> OsFileLock:
-    """Crea se serve il file e prende il lock esclusivo, senza attese.
+    """Creates the file if needed and takes the exclusive lock, without waiting.
 
     Raises:
-        ProfileInUseError: il lock è già preso (da un altro processo o da questo).
-        FolderUnavailableError: file non apribile (cartella mancante, permessi, link).
+        ProfileInUseError: the lock is already taken (by another process or by this one).
+        FolderUnavailableError: file cannot be opened (missing folder, permissions, link).
     """
     try:
         if lock_path.exists() and is_link(lock_path):
-            raise FolderUnavailableError("il file di lock è un link")
+            raise FolderUnavailableError("the lock file is a link")
         fd = os.open(lock_path, _OPEN_FLAGS, _LOCK_FILE_MODE)
     except OSError as exc:
-        raise FolderUnavailableError("file di lock non apribile") from exc
+        raise FolderUnavailableError("lock file cannot be opened") from exc
     try:
         _try_lock(fd)
     except OSError as exc:
         os.close(fd)
         if exc.errno in _BUSY_ERRNOS:
-            raise ProfileInUseError("profilo già aperto da un'altra istanza") from exc
-        raise FolderUnavailableError("lock non ottenibile") from exc
+            raise ProfileInUseError("profile already open in another instance") from exc
+        raise FolderUnavailableError("lock cannot be obtained") from exc
     return OsFileLock(fd)

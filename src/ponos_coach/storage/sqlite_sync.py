@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Giornale della sincronizzazione su SQLite (porta `SyncJournal`), tabelle dello schema v2.
+"""Synchronization journal on SQLite (`SyncJournal` port), tables of schema v2.
 
-Sulla stessa `SqliteDatabase` dell'indice: la transazione di `SqliteActivityIndex` copre anche il
-giornale. Solo parametri `?`; nessun testo del database finisce nei messaggi d'errore.
+On the same `SqliteDatabase` as the index: the transaction of `SqliteActivityIndex` also covers the
+journal. Only `?` parameters; no text from the database ends up in the error messages.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ _JOURNAL_COLUMNS: Final = (
     "garmin_id, start_ms, duration_s, sport_key, has_heart_rate, status, failed_attempts, "
     "failure, updated_ms"
 )
-# Solo costanti del modulo nelle query composte: nessun dato esterno (S608).
+# Only module constants in the composed queries: no external data (S608).
 _SELECT_ENTRIES: Final = "SELECT " + _JOURNAL_COLUMNS + " FROM sync_journal "  # noqa: S608
 _TO_DO_ORDER: Final = (
     "WHERE status IN ('pending', 'retryable') ORDER BY start_ms DESC, garmin_id DESC LIMIT ?"
@@ -47,16 +47,16 @@ _EXHAUSTED_ORDER: Final = (
 
 @contextmanager
 def _translating() -> Iterator[None]:
-    """Gli errori di SQLite diventano `SyncJournalError`, con la causa ma senza dati."""
+    """SQLite errors become `SyncJournalError`, with the cause but without data."""
     try:
         yield
     except sqlite3.Error as exc:
-        raise SyncJournalError("operazione sul giornale non riuscita") from exc
+        raise SyncJournalError("journal operation failed") from exc
 
 
 def _utc_ms(moment: datetime) -> int:
     if moment.utcoffset() != timedelta(0):
-        raise ValueError("gli istanti devono essere UTC con fuso")
+        raise ValueError("instants must be UTC with time zone")
     return to_ms(moment)
 
 
@@ -76,17 +76,17 @@ def _entries(rows: Sequence[Sequence[Any]]) -> list[JournalEntry]:
     try:
         return [_entry_from_row(row) for row in rows]
     except ValueError as exc:
-        raise SyncJournalError("riga del giornale non valida") from exc
+        raise SyncJournalError("invalid journal row") from exc
 
 
 class SqliteSyncJournal:
-    """Giornale della sincronizzazione (porta `SyncJournal`) su SQLite."""
+    """Synchronization journal (`SyncJournal` port) on SQLite."""
 
     def __init__(self, database: SqliteDatabase) -> None:
         self._db = database
 
     def load_cursor(self, kind: ListingKind) -> ListingCursor | None:
-        """Il cursore salvato per l'elenco, o None."""
+        """The saved cursor for the list, or None."""
         with _translating():
             row = self._db.connection.execute(
                 "SELECT next_offset, declared_total, completed FROM sync_cursor WHERE kind = ?",
@@ -97,10 +97,10 @@ class SqliteSyncJournal:
         try:
             return ListingCursor(row[0], row[1], bool(row[2]))
         except ValueError as exc:
-            raise SyncJournalError("cursore non valido") from exc
+            raise SyncJournalError("invalid cursor") from exc
 
     def save_cursor(self, kind: ListingKind, cursor: ListingCursor) -> None:
-        """Salva o sostituisce il cursore dell'elenco."""
+        """Saves or replaces the list cursor."""
         with _translating():
             self._db.connection.execute(
                 "INSERT INTO sync_cursor (kind, next_offset, declared_total, completed) "
@@ -111,10 +111,10 @@ class SqliteSyncJournal:
             )
 
     def known_ids(self, ids: Collection[GarminActivityId]) -> frozenset[GarminActivityId]:
-        """Gli id tra `ids` che hanno una voce.
+        """The ids among `ids` that have an entry.
 
-        Gli id viaggiano come un solo parametro (un array JSON di interi, letto da `json_each`):
-        niente SQL composto e nessun limite sul numero di parametri.
+        The ids travel as a single parameter (a JSON array of integers, read by `json_each`):
+        no composed SQL and no limit on the number of parameters.
         """
         values = sorted({item.value for item in ids})
         if not values:
@@ -128,7 +128,7 @@ class SqliteSyncJournal:
         return frozenset(GarminActivityId(row[0]) for row in rows)
 
     def add_pending(self, items: Sequence[RemoteActivity], now: datetime) -> int:
-        """Aggiunge le voci nuove come `PENDING`; quelle già note non cambiano."""
+        """Adds the new entries as `PENDING`; those already known do not change."""
         updated = _utc_ms(now)
         added = 0
         with _translating(), self._db.atomic():
@@ -149,17 +149,17 @@ class SqliteSyncJournal:
         return added
 
     def next_to_process(self, limit: int) -> Sequence[JournalEntry]:
-        """Le prime `limit` voci da lavorare, dalla più recente."""
+        """The first `limit` entries to process, from the most recent."""
         if limit < 1:
-            raise ValueError("il limite deve essere almeno 1")
+            raise ValueError("the limit must be at least 1")
         with _translating():
             rows = self._db.connection.execute(_SELECT_ENTRIES + _TO_DO_ORDER, (limit,)).fetchall()
         return _entries(rows)
 
     def next_exhausted(self, limit: int) -> Sequence[JournalEntry]:
-        """Le prime `limit` voci fallite per tentativi esauriti, dalla più recente."""
+        """The first `limit` entries failed for exhausted attempts, from the most recent."""
         if limit < 1:
-            raise ValueError("il limite deve essere almeno 1")
+            raise ValueError("the limit must be at least 1")
         with _translating():
             rows = self._db.connection.execute(
                 _SELECT_ENTRIES + _EXHAUSTED_ORDER, (limit,)
@@ -167,7 +167,7 @@ class SqliteSyncJournal:
         return _entries(rows)
 
     def get(self, garmin_id: GarminActivityId) -> JournalEntry | None:
-        """La voce con questo id, o None."""
+        """The entry with this id, or None."""
         with _translating():
             row = self._db.connection.execute(
                 _SELECT_ENTRIES + "WHERE garmin_id = ?", (garmin_id.value,)
@@ -175,14 +175,14 @@ class SqliteSyncJournal:
         return None if row is None else _entries([row])[0]
 
     def update(self, entry: JournalEntry) -> None:
-        """Porta la voce al nuovo stato, se la transizione è ammessa."""
+        """Moves the entry to the new state, if the transition is allowed."""
         updated = _utc_ms(entry.updated_at)
         with _translating(), self._db.atomic():
             row = self._db.connection.execute(
                 "SELECT status FROM sync_journal WHERE garmin_id = ?", (entry.garmin_id.value,)
             ).fetchone()
             if row is None:
-                raise UnknownJournalEntryError("voce assente dal giornale")
+                raise UnknownJournalEntryError("entry missing from the journal")
             current = SyncStatus(row[0])
             if not can_transition(current, entry.status):
                 raise InvalidTransitionError(f"{current.value} -> {entry.status.value}")
@@ -199,7 +199,7 @@ class SqliteSyncJournal:
             )
 
     def counts(self) -> Mapping[SyncStatus, int]:
-        """Voci per stato, con tutti gli stati presenti."""
+        """Entries per state, with all the states present."""
         with _translating():
             rows = self._db.connection.execute(
                 "SELECT status, COUNT(*) FROM sync_journal GROUP BY status"
@@ -208,11 +208,11 @@ class SqliteSyncJournal:
         try:
             counts.update({SyncStatus(status): int(count) for status, count in rows})
         except ValueError as exc:
-            raise SyncJournalError("stato del giornale non valido") from exc
+            raise SyncJournalError("invalid journal state") from exc
         return counts
 
     def last_completed_at(self) -> datetime | None:
-        """Fine dell'ultima sincronizzazione, o None."""
+        """End of the last synchronization, or None."""
         with _translating():
             row = self._db.connection.execute(
                 "SELECT last_completed_ms FROM sync_state WHERE id = 1"
@@ -220,7 +220,7 @@ class SqliteSyncJournal:
         return None if row is None else from_ms(row[0])
 
     def record_completed(self, when: datetime) -> None:
-        """Segna la fine di una sincronizzazione."""
+        """Marks the end of a synchronization."""
         milliseconds = _utc_ms(when)
         with _translating():
             self._db.connection.execute(

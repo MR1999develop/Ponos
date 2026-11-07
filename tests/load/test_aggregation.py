@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Aggregazioni per i grafici: settimane ISO, sport, zone; settimane vuote a zero."""
+"""Aggregations for the charts: ISO weeks, sport, zones; empty weeks at zero."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from ponos_coach.load.domain import (
     weekly_zone_seconds,
 )
 
-MONDAY = date(2026, 3, 2)  # lunedì
+MONDAY = date(2026, 3, 2)  # Monday
 SUNDAY = date(2026, 3, 8)
 
 
@@ -30,15 +30,15 @@ def test_iso_week_starts_on_monday_and_sunday_belongs_to_the_week_before() -> No
     assert iso_week_start(MONDAY) == MONDAY
     assert iso_week_start(SUNDAY) == MONDAY
     assert iso_week_start(SUNDAY + timedelta(days=1)) == MONDAY + timedelta(weeks=1)
-    assert iso_week_start(date(2026, 1, 1)) == date(2025, 12, 29)  # a cavallo dell'anno
+    assert iso_week_start(date(2026, 1, 1)) == date(2025, 12, 29)  # straddling the year
 
 
 def test_load_per_week_and_sport_by_hand() -> None:
     items = [
         DayLoad(MONDAY, Sport.RUNNING, 50.0),
-        DayLoad(SUNDAY, Sport.RUNNING, 30.0),  # stessa settimana ISO del lunedì
+        DayLoad(SUNDAY, Sport.RUNNING, 30.0),  # same ISO week as the Monday
         DayLoad(SUNDAY, Sport.CYCLING, 20.0),
-        DayLoad(SUNDAY + timedelta(days=1), Sport.RUNNING, 10.0),  # lunedì successivo
+        DayLoad(SUNDAY + timedelta(days=1), Sport.RUNNING, 10.0),  # the following Monday
     ]
 
     result = weekly_load_by_sport(items, date(2026, 3, 9))
@@ -74,7 +74,7 @@ def test_activities_after_today_are_ignored_like_in_the_pmc() -> None:
     result = weekly_load_by_sport(items, date(2026, 3, 4))
 
     assert result.weeks == (MONDAY,)
-    assert result.sports == (Sport.RUNNING,)  # nemmeno lo sport futuro compare
+    assert result.sports == (Sport.RUNNING,)  # not even the future sport appears
     assert result.load.tolist() == [[40.0]]
 
 
@@ -100,7 +100,7 @@ def test_zone_seconds_per_week_by_hand() -> None:
     assert result.weeks == (MONDAY, date(2026, 3, 9), date(2026, 3, 16))
     assert result.seconds.tolist() == [
         [10.0, 25.0, 7.0, 0.0, 3.0],
-        [0.0, 0.0, 0.0, 0.0, 0.0],  # settimana senza attività
+        [0.0, 0.0, 0.0, 0.0, 0.0],  # week without activities
         [1.0, 1.0, 1.0, 1.0, 1.0],
     ]
 
@@ -112,7 +112,7 @@ def test_results_are_read_only() -> None:
         result.load[0, 0] = 1.0
 
 
-# --- Contro una versione ingenua --------------------------------------------------------------
+# --- Against a naive version --------------------------------------------------------------
 
 _zone_values = st.tuples(*[st.floats(min_value=0.0, max_value=5000.0)] * ZONE_COUNT)
 _day_loads = st.builds(

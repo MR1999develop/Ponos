@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-SEC-02 e T-PERF-02: date ostili in file formalmente validi non devono gonfiare le risorse."""
+"""T-SEC-02 and T-PERF-02: hostile dates in formally valid files must not inflate resources."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from ponos_coach.activities.use_cases import ImportStatus
 from tests.collaudo.support import RealProfile, create_profile
 from tests.fixtures.generators import gpx_writer as gw
 
-MAX_PLAUSIBLE_DAYS = 366 * 100  # nessun atleta ha un secolo di storia
+MAX_PLAUSIBLE_DAYS = 366 * 100  # no athlete has a century of history
 
 
 @pytest.fixture
@@ -46,5 +46,5 @@ def test_d_f1_04_a_gpx_dated_year_1_is_refused_or_does_not_make_the_series_span_
     summary = profile.import_files([tmp_path / "anno1.gpx"])
 
     if summary.count(ImportStatus.IMPORTED) == 0:
-        return  # rifiutato: va bene
+        return  # refused: fine
     assert len(profile.overview().pmc) < MAX_PLAUSIBLE_DAYS

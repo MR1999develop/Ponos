@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Preparazione di Qt da fare una volta, prima di creare la `QApplication`."""
+"""Qt preparation to do once, before creating the `QApplication`."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import QCoreApplication, Qt
-from PySide6.QtWebEngineWidgets import QWebEngineView  # noqa: F401 - da importare prima dell'app
+from PySide6.QtWebEngineWidgets import QWebEngineView  # noqa: F401 - must be imported before the app
 
 from ponos_coach.ui.web_policy import register_app_scheme
 
@@ -13,8 +13,8 @@ _prepared = False
 
 
 def prepare_qt() -> None:
-    """Registra lo schema URL dell'app e gli attributi richiesti dal motore web."""
-    global _prepared  # noqa: PLW0603 - la preparazione e per processo
+    """Register the app's URL scheme and the attributes the web engine requires."""
+    global _prepared  # noqa: PLW0603 - preparation is per process
     if _prepared:
         return
     register_app_scheme()

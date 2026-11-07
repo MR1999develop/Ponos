@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dialogo "Nuovo profilo": vista umile sul modello `NewProfileForm`.
+"""Dialog "New profile": humble view on the `NewProfileForm` model.
 
-Il primo errore compare all'invio, poi i messaggi si aggiornano mentre si scrive. La cartella
-si esamina nel thread dei dati (mai nel thread della UI) e l'esito arriva con `show_folder_check`.
+The first error appears on submit, then messages update while typing. The folder
+is examined on the data thread (never on the UI thread) and the outcome arrives via
+`show_folder_check`.
 """
 
 from __future__ import annotations
@@ -51,7 +52,7 @@ from ponos_coach.ui.workspace import FolderCheck
 
 
 class NewProfileDialog(QDialog):
-    """Raccoglie nome, cartella, corpo, FC e sesso, e emette la richiesta di creazione."""
+    """Collect name, folder, body data, HR and sex, and emit the creation request."""
 
     create_requested = Signal(object)  # NewProfileRequest
 
@@ -221,63 +222,63 @@ class NewProfileDialog(QDialog):
         column.addWidget(self._errors[field])
         return box
 
-    # --- Accessori per i test ---------------------------------------------------------
+    # --- Test accessors ---------------------------------------------------------
 
     @property
     def form(self) -> NewProfileForm:
-        """Il modello del modulo."""
+        """The form model."""
         return self._form
 
     @property
     def name_edit(self) -> QLineEdit:
-        """Campo del nome."""
+        """Name field."""
         return self._name
 
     @property
     def folder_edit(self) -> QLineEdit:
-        """Campo della cartella."""
+        """Folder field."""
         return self._folder
 
     @property
     def browse_button(self) -> QPushButton:
-        """Bottone "Sfoglia..."."""
+        """Button "Browse..."."""
         return self._browse
 
     @property
     def height_edit(self) -> QLineEdit:
-        """Campo dell'altezza."""
+        """Height field."""
         return self._height
 
     @property
     def weight_edit(self) -> QLineEdit:
-        """Campo del peso."""
+        """Weight field."""
         return self._weight
 
     @property
     def birth_edit(self) -> BirthDateEdit:
-        """Selettore della data di nascita."""
+        """Birth date picker."""
         return self._birth
 
     @property
     def destination_text(self) -> str:
-        """Riga "I dati andranno in: ..." (vuota se non è mostrata)."""
+        """Row "Data will go in: ..." (empty if not shown)."""
         return self._destination_note.text() if self._destination_note.isVisible() else ""
 
     @property
     def create_button(self) -> QPushButton:
-        """Bottone "Crea profilo"."""
+        """Button "Create profile"."""
         return self._create
 
     @property
     def threshold_note_text(self) -> str:
-        """Nota sulla soglia stimata (vuota se la soglia è stata fissata)."""
+        """Note on the estimated threshold (empty if the threshold was set)."""
         return self._threshold_note.text()
 
     def error_text(self, field: Field) -> str:
-        """Messaggio d'errore mostrato sotto un campo (vuoto se non c'è)."""
+        """Error message shown under a field (empty if there is none)."""
         return self._errors[field].text()
 
-    # --- Dal modello alla vista -------------------------------------------------------
+    # --- From the model to the view -------------------------------------------------------
 
     def _load_from_form(self) -> None:
         form = self._form
@@ -334,7 +335,7 @@ class NewProfileDialog(QDialog):
         }
         return texts[problem]
 
-    # --- Dalla vista al modello -------------------------------------------------------
+    # --- From the view to the model -------------------------------------------------------
 
     def _on_name_edited(self, text: str) -> None:
         self._form.name = text
@@ -356,7 +357,7 @@ class NewProfileDialog(QDialog):
             self._request_inspection()
 
     def _refresh_destination(self) -> None:
-        """Dice dove andranno i dati quando la cartella scelta contiene già altro."""
+        """Say where the data will go when the chosen folder already contains something else."""
         destination = self._form.destination if self._form.uses_subfolder else ""
         self._destination_note.setText(
             self.tr("Data will go in: {folder}").format(folder=destination)
@@ -364,7 +365,8 @@ class NewProfileDialog(QDialog):
         self._destination_note.setVisible(bool(destination))
 
     def _update_create_button(self) -> None:
-        """ "Crea profilo" resta disabilitato, con il motivo nel tooltip, senza cartella valida."""
+        """ "Create profile" stays disabled, with the reason in the tooltip, without a valid
+        folder."""
         problem = self._form.folder_problem()
         self._create.setEnabled(problem is None)
         self._create.setToolTip("" if problem is None else self._problem_text(problem))
@@ -404,7 +406,7 @@ class NewProfileDialog(QDialog):
             self._inspect_folder(Path(text))
 
     def show_folder_check(self, check: FolderCheck) -> None:
-        """Esito dell'esame di una cartella; si ignora se non è più quella scritta."""
+        """Outcome of examining a folder; ignored if it is no longer the one typed."""
         if str(check.folder) != self._form.folder_text.strip():
             return
         if check.inspection is None:

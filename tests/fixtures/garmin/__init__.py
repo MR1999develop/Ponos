@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Risposte JSON sintetiche dell'elenco delle attività di Garmin (vedi README.md)."""
+"""Synthetic JSON responses of the Garmin activity list (see README.md)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,6 @@ FIXTURES = Path(__file__).resolve().parent
 
 
 def load_json(name: str) -> object:
-    """Il JSON della fixture `name` (con i letterali `NaN` e `Infinity`, come li legge
-    `requests`)."""
+    """The JSON of fixture `name` (with the `NaN` and `Infinity` literals, as `requests`
+    reads them)."""
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))

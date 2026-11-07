@@ -1,17 +1,18 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Modulo "Modifica profilo": stato e regole, testabili senza finestra.
+"""Form "Edit profile": state and rules, testable without a window.
 
-Le misure (peso, FC minima, FC massima, soglia) valgono da un giorno scelto dall'utente (oggi per
-default, mai nel futuro). Un campo che l'utente non ha toccato mostra, e vale, il valore in vigore
-quel giorno; cambiando il giorno i campi non toccati seguono. Un valore scritto uguale a quello in
-vigore non è una modifica: il campo torna "non toccato" e segue il giorno. Si salvano solo i campi
-cambiati; `changes` dice cosa cambia rispetto al giorno scelto e `pending_periods` per quanto
-tempo varrebbero i valori nuovi (una misura vale fino alla voce successiva già esistente).
-Per un profilo creato prima che esistessero, altezza e data di nascita si completano una volta.
+Measurements (weight, minimum HR, maximum HR, threshold) apply from a day chosen by the user (today
+by
+default, never in the future). A field the user has not touched shows, and has, the value in force
+that day; changing the day, untouched fields follow. A typed value equal to the one in
+force is not a change: the field goes back to "untouched" and follows the day. Only changed fields
+are saved; `changes` says what changes relative to the chosen day and `pending_periods` for how long
+the new values would apply (a measurement applies until the next already existing entry).
+For a profile created before they existed, height and birth date are completed once.
 
-Il modulo dà problemi come categorie (`EditIssue`): i messaggi li sceglie la vista. Peso, altezza
-e data di nascita sono dati di salute: mai in un messaggio né in un log.
+The form gives problems as categories (`EditIssue`): the view chooses the messages. Weight, height
+and birth date are health data: never in a message or a log.
 """
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ from ponos_coach.ui.new_profile_form import DEFAULT_MAX_BPM, DEFAULT_MIN_BPM, es
 
 
 class EditField(Enum):
-    """Dove la vista mostra un problema."""
+    """Where the view shows a problem."""
 
     GENERAL = "general"
     VALID_FROM = "valid_from"
@@ -59,14 +60,14 @@ type IssueKind = BodyProblem | HeartRateProblem | MeasurementProblem
 
 @dataclass(frozen=True, slots=True)
 class EditIssue:
-    """Un problema e il campo a cui appartiene."""
+    """A problem and the field it belongs to."""
 
     field: EditField
     kind: IssueKind
 
 
 class MeasurementSeries(Enum):
-    """Le due serie datate del profilo: ognuna ha le sue voci e i suoi periodi di validità."""
+    """The profile's two dated series: each has its own entries and validity periods."""
 
     WEIGHT = "weight"
     HEART_RATE = "heart_rate"
@@ -74,28 +75,28 @@ class MeasurementSeries(Enum):
 
 @dataclass(frozen=True, slots=True)
 class FieldChange:
-    """Un valore che il salvataggio cambierebbe, e quello che vale quel giorno prima."""
+    """A value that saving would change, and the one that applied that day before."""
 
     field: EditField
-    before: Weight | int | None  # None: nessun peso registrato fino a quel giorno
+    before: Weight | int | None  # None: no weight recorded up to that day
 
 
 @dataclass(frozen=True, slots=True)
 class PendingPeriod:
-    """Per quanto tempo varrebbero i valori nuovi di una serie se si salvasse ora."""
+    """For how long the new values of a series would apply if saved now."""
 
     series: MeasurementSeries
     period: ValidityPeriod
 
     @property
     def is_superseded(self) -> bool:
-        """Vero se una voce successiva già esistente prende il posto dei valori nuovi."""
+        """True if an already existing later entry takes the place of the new values."""
         return self.period.valid_to is not None
 
 
 @dataclass(frozen=True, slots=True)
 class MeasurementsRequest:
-    """Ciò che il salvataggio deve scrivere: misure datate e/o dati fissi da completare."""
+    """What saving must write: dated measurements and/or fixed data to complete."""
 
     update: MeasurementUpdate | None
     fixed: FixedProfileData | None
@@ -115,14 +116,14 @@ _REJECTION_FIELD = {
 
 
 def issue_for_rejection(problem: MeasurementProblem) -> EditIssue:
-    """Il problema mostrato per un aggiornamento rifiutato dal caso d'uso."""
+    """The problem shown for an update rejected by the use case."""
     return EditIssue(_REJECTION_FIELD[problem], problem)
 
 
 def weight_in_force(history: MeasurementHistory, day: date) -> Weight | None:
-    """Il peso in vigore in un giorno (l'ultima voce non successiva); `None` se non c'è ancora.
+    """The weight in force on a day (the last entry not after it); `None` if there is none yet.
 
-    Solo per mostrare il valore di partenza: la voce che si salva è decisa dal caso d'uso.
+    Only to show the starting value: the entry that gets saved is decided by the use case.
     """
     entries = history.weights
     index = bisect_right([entry.valid_from for entry in entries], day) - 1
@@ -138,77 +139,77 @@ def _default_physiology() -> Physiology:
 
 
 class MeasurementsForm:
-    """Valori del modulo "Modifica profilo" e regole. Non conosce widget né testi."""
+    """Values of the "Edit profile" form and rules. It knows neither widgets nor texts."""
 
     def __init__(self, history: MeasurementHistory, today: date) -> None:
         self._history = history
         self._today = today
         self._valid_from = today
-        self._weight_text: str | None = None  # None: non toccato
+        self._weight_text: str | None = None  # None: untouched
         self._min_bpm: int | None = None
         self._max_bpm: int | None = None
         self._threshold_bpm: int | None = None
-        self.height_text = ""  # solo per completare i dati fissi
+        self.height_text = ""  # only to complete the fixed data
         self.birth_date: date | None = None
 
-    # --- Dati fissi -------------------------------------------------------------------
+    # --- Fixed data -------------------------------------------------------------------
 
     @property
     def fixed(self) -> FixedProfileData | None:
-        """Altezza e data di nascita del profilo; `None` se vanno ancora completate."""
+        """The profile's height and birth date; `None` if they still need completing."""
         return self._history.fixed
 
     @property
     def needs_fixed_data(self) -> bool:
-        """Vero per un profilo creato senza altezza e data di nascita."""
+        """True for a profile created without height and birth date."""
         return self._history.fixed is None
 
     @property
     def sex(self) -> Sex:
-        """Il sesso del profilo (non si cambia): quello dell'ultima impostazione."""
+        """The profile's sex (not changeable): the one from the last setting."""
         return self._latest_physiology().sex
 
-    # --- Giorno di validità -----------------------------------------------------------
+    # --- Validity day -----------------------------------------------------------
 
     @property
     def today(self) -> date:
-        """Il limite superiore del giorno di validità."""
+        """The upper limit of the validity day."""
         return self._today
 
     @property
     def valid_from(self) -> date:
-        """Il giorno da cui valgono le misure (oggi per default)."""
+        """The day from which the measurements apply (today by default)."""
         return self._valid_from
 
     def set_valid_from(self, day: date) -> None:
-        """Sceglie il giorno; un giorno fuori intervallo si porta al limite più vicino."""
+        """Choose the day; an out-of-range day is clamped to the nearest limit."""
         self._valid_from = min(max(day, MIN_MEASUREMENT_DATE), self._today)
 
     # --- Valori mostrati ---------------------------------------------------------------
 
     @property
     def baseline_weight(self) -> Weight | None:
-        """Il peso in vigore nel giorno scelto, se c'è."""
+        """The weight in force on the chosen day, if any."""
         return weight_in_force(self._history, self._valid_from)
 
     @property
     def edited_weight_text(self) -> str | None:
-        """Il peso scritto dall'utente, `None` se non ha toccato il campo."""
+        """The weight typed by the user, `None` if the field was not touched."""
         return self._weight_text
 
     @property
     def min_bpm(self) -> int:
-        """FC minima mostrata: quella scritta, o quella in vigore nel giorno scelto."""
+        """Minimum HR shown: the typed one, or the one in force on the chosen day."""
         return self._min_bpm if self._min_bpm is not None else self._baseline().limits.min_bpm
 
     @property
     def max_bpm(self) -> int:
-        """FC massima mostrata."""
+        """Maximum HR shown."""
         return self._max_bpm if self._max_bpm is not None else self._baseline().limits.max_bpm
 
     @property
     def threshold_bpm(self) -> int:
-        """Soglia mostrata."""
+        """Threshold shown."""
         if self._threshold_bpm is not None:
             return self._threshold_bpm
         return self._baseline().threshold.bpm
@@ -228,8 +229,9 @@ class MeasurementsForm:
     # --- Modifiche ---------------------------------------------------------------------
 
     def edit_weight(self, text: str) -> None:
-        """L'utente scrive il peso. Vuoto o uguale a quello in vigore: il campo torna non toccato
-        e segue il giorno scelto."""
+        """The user types the weight. Empty or equal to the one in force: the field goes back to
+        untouched
+        and follows the chosen day."""
         reading = read_weight(text)
         untouched = reading is BodyProblem.WEIGHT_EMPTY or (
             not isinstance(reading, BodyProblem) and reading == self.baseline_weight
@@ -237,19 +239,19 @@ class MeasurementsForm:
         self._weight_text = None if untouched else text
 
     def edit_min_bpm(self, value: int) -> None:
-        """L'utente cambia la FC minima (uguale a quella in vigore: torna non toccata)."""
+        """The user changes the minimum HR (equal to the one in force: goes back to untouched)."""
         self._min_bpm = _changed(value, self._baseline().limits.min_bpm)
 
     def edit_max_bpm(self, value: int) -> None:
-        """L'utente cambia la FC massima (uguale a quella in vigore: torna non toccata)."""
+        """The user changes the maximum HR (equal to the one in force: goes back to untouched)."""
         self._max_bpm = _changed(value, self._baseline().limits.max_bpm)
 
     def edit_threshold_bpm(self, value: int) -> None:
-        """L'utente cambia la soglia (uguale a quella in vigore: torna non toccata)."""
+        """The user changes the threshold (equal to the one in force: goes back to untouched)."""
         self._threshold_bpm = _changed(value, self._baseline().threshold.bpm)
 
     def _heart_rate_changes(self) -> tuple[int | None, int | None, int | None]:
-        """Le tre FC cambiate rispetto al giorno scelto (`None` dove non cambiano)."""
+        """The three HR values changed relative to the chosen day (`None` where unchanged)."""
         base = self._baseline()
         return (
             _changed(self._min_bpm, base.limits.min_bpm),
@@ -262,7 +264,7 @@ class MeasurementsForm:
 
     @property
     def has_changes(self) -> bool:
-        """C'è qualcosa da salvare (anche un valore da correggere): abilita "Salva"."""
+        """There is something to save (even a value to correct): enables "Save"."""
         heart_rate = any(value is not None for value in self._heart_rate_changes())
         return (
             self._weight_differs()
@@ -271,14 +273,14 @@ class MeasurementsForm:
         )
 
     def _weight_differs(self) -> bool:
-        """Un peso scritto che non è quello in vigore (anche se da correggere)."""
+        """A typed weight that is not the one in force (even if it needs correcting)."""
         if self._weight_text is None:
             return False
         reading = read_weight(self._weight_text)
         return isinstance(reading, BodyProblem) or reading != self.baseline_weight
 
     def changes(self) -> tuple[FieldChange, ...]:
-        """I valori validi che il salvataggio cambierebbe, con quello in vigore il giorno scelto."""
+        """The valid values that saving would change, with the one in force on the chosen day."""
         base = self._baseline()
         found: list[FieldChange] = []
         if self._changed_weight() is not None:
@@ -293,8 +295,8 @@ class MeasurementsForm:
         return tuple(found)
 
     def pending_periods(self) -> tuple[PendingPeriod, ...]:
-        """Per quanto varrebbero i valori nuovi di ogni serie toccata: dal giorno scelto fino a
-        quello prima della voce successiva già esistente (aperto se non ce n'è)."""
+        """For how long the new values of each touched series would apply: from the chosen day up to
+        the one before the next already existing entry (open if there is none)."""
         found: list[PendingPeriod] = []
         if self._changed_weight() is not None:
             days = [entry.valid_from for entry in self._history.weights]
@@ -313,7 +315,7 @@ class MeasurementsForm:
     # --- Validazione -------------------------------------------------------------------
 
     def issues(self) -> tuple[EditIssue, ...]:
-        """Problemi dei valori attuali, nell'ordine dei campi (vuoto se si può salvare)."""
+        """Problems of the current values, in field order (empty if it can be saved)."""
         found: list[EditIssue] = []
         if self._weight_text is not None:
             reading = read_weight(self._weight_text)
@@ -339,7 +341,7 @@ class MeasurementsForm:
         return found
 
     def build(self) -> MeasurementsRequest | tuple[EditIssue, ...]:
-        """La richiesta di salvataggio coi soli campi cambiati, o i problemi che la impediscono."""
+        """The save request with only the changed fields, or the problems that prevent it."""
         found = self.issues()
         if found:
             return found
@@ -354,7 +356,7 @@ class MeasurementsForm:
         return MeasurementsRequest(update, fixed)
 
     def _changed_weight(self) -> Weight | None:
-        """Il peso scritto, se valido e diverso da quello in vigore nel giorno scelto."""
+        """The typed weight, if valid and different from the one in force on the chosen day."""
         if self._weight_text is None:
             return None
         reading = read_weight(self._weight_text)
@@ -373,5 +375,5 @@ class MeasurementsForm:
 
 
 def _changed(edited: int | None, base: int) -> int | None:
-    """Il valore scritto se differisce da quello in vigore, altrimenti `None`."""
+    """The typed value if it differs from the one in force, otherwise `None`."""
     return None if edited is None or edited == base else edited

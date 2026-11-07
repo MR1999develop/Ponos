@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Lingua dell'interfaccia: scelta, installazione dei traduttori, ripiego sull'inglese."""
+"""Interface language: choice, translator installation, fallback to English."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ MINIMAL_CATALOG = """<?xml version="1.0" encoding="utf-8"?>
 
 @pytest.fixture
 def installed(qapp: QCoreApplication) -> Iterator[list[TranslationReport]]:
-    """Registro dei traduttori installati da un test: a fine test si tolgono tutti."""
+    """Registry of the translators installed by a test: at test end all are removed."""
     reports: list[TranslationReport] = []
     yield reports
     for report in reports:
@@ -54,27 +54,27 @@ def installed(qapp: QCoreApplication) -> Iterator[list[TranslationReport]]:
 
 
 def build_catalog(folder: Path) -> Path:
-    """Compila con `pyside6-lrelease` un catalogo minimo (solo "Quit" -> "Esci")."""
+    """Compile with `pyside6-lrelease` a minimal catalog (only "Quit" -> "Esci")."""
     source = folder / "ponos_it.ts"
     source.write_text(MINIMAL_CATALOG, encoding="utf-8")
     scripts = Path(sys.executable).parent
     tool = shutil.which("pyside6-lrelease", path=str(scripts)) or shutil.which("pyside6-lrelease")
     assert tool is not None
     target = folder / APP_CATALOG
-    subprocess.run(  # noqa: S603 - strumento del progetto, argomenti fissi
+    subprocess.run(  # noqa: S603 - project tool, fixed arguments
         [tool, str(source), "-qm", str(target)], check=True, capture_output=True, timeout=60
     )
     return target
 
 
 def build_real_catalog(folder: Path) -> Path:
-    """Compila con `pyside6-lrelease` il catalogo italiano vero del progetto."""
+    """Compile with `pyside6-lrelease` the project's real Italian catalog."""
     source = Path(__file__).resolve().parents[2] / "src" / "ponos_coach" / "i18n" / "ponos_it.ts"
     scripts = Path(sys.executable).parent
     tool = shutil.which("pyside6-lrelease", path=str(scripts)) or shutil.which("pyside6-lrelease")
     assert tool is not None
     target = folder / APP_CATALOG
-    subprocess.run(  # noqa: S603 - strumento del progetto, argomenti fissi
+    subprocess.run(  # noqa: S603 - project tool, fixed arguments
         [tool, str(source), "-qm", str(target)], check=True, capture_output=True, timeout=60
     )
     return target
@@ -97,10 +97,10 @@ def window_action_texts(tmp_path: Path, qtbot: QtBot) -> set[str]:
 @pytest.mark.parametrize(
     ("forced", "saved", "expected"),
     [
-        (None, None, Language.ENGLISH),  # predefinita: l'inglese, mai la lingua del sistema
+        (None, None, Language.ENGLISH),  # default: English, never the system language
         (None, Language.ITALIAN, Language.ITALIAN),
         (None, Language.ENGLISH, Language.ENGLISH),
-        (Language.ENGLISH, Language.ITALIAN, Language.ENGLISH),  # `--lang` ha la precedenza
+        (Language.ENGLISH, Language.ITALIAN, Language.ENGLISH),  # `--lang` takes precedence
         (Language.ITALIAN, Language.ENGLISH, Language.ITALIAN),
         (Language.ITALIAN, None, Language.ITALIAN),
     ],
@@ -166,7 +166,7 @@ def test_with_lang_it_and_a_catalog_the_window_text_is_italian(
 
     assert report.language is Language.ITALIAN
     assert report.app_loaded
-    assert report.qt_loaded  # i dialoghi standard di Qt in italiano
+    assert report.qt_loaded  # Qt's standard dialogs in Italian
     assert "Esci" in texts
     assert "Quit" not in texts
 
@@ -182,7 +182,7 @@ def test_without_a_catalog_the_app_starts_in_english_and_logs_it_once(
         report = setup_translations(
             qapp,
             parse_command_line(["--lang", "it"]),
-            app_dir=tmp_path,  # vuota: manca ponos_it.qm
+            app_dir=tmp_path,  # empty: ponos_it.qm is missing
             qt_dir=qt_translations_dir(),
         )
     installed.append(report)
@@ -248,5 +248,5 @@ def test_the_real_italian_catalog_translates_the_new_menus_and_keeps_language_na
     assert report.app_loaded
     assert {"Profilo", "Lingua", "Modifica profilo...", "Pesi degli sport..."} <= texts
     assert {"Dettaglio attività...", "Aiuto"} <= texts
-    assert {"English", "Italiano"} <= texts  # il nome di una lingua non si traduce
+    assert {"English", "Italiano"} <= texts  # the name of a language is not translated
     assert "Edit profile..." not in texts

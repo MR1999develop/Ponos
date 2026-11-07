@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Casi d'uso delle misure del profilo: peso, FC minima, FC massima e soglia con data di validità.
+"""Use cases for the profile measurements: weight, min HR, max HR and threshold with validity date.
 
-- `UpdateMeasurements`: il salvataggio di "Modifica profilo", in una sola transazione: dati fissi
-  da completare (altezza e data di nascita di un profilo che non le ha), peso e misure di FC
-  datati. Restituisce il periodo di validità effettivo di ciò che ha salvato.
-- `ReadMeasurementHistory`: dati fissi e storico per "Modifica profilo".
+- `UpdateMeasurements`: the saving of "Edit profile", in a single transaction: fixed data
+  to complete (height and date of birth of a profile that lacks them), weight and dated HR
+  measurements. Returns the effective validity period of what it saved.
+- `ReadMeasurementHistory`: fixed data and history for "Edit profile".
 
-Sono dati di salute: mai nei log né nei messaggi d'errore.
+These are health data: never in logs or error messages.
 """
 
 from __future__ import annotations
@@ -36,16 +36,16 @@ from ponos_coach.profiles.ports import FixedDataStore, WeightStore
 
 
 class MeasurementProblem(Enum):
-    """Perché un aggiornamento delle misure è rifiutato (decide il messaggio dell'interfaccia)."""
+    """Why a measurement update is rejected (decides the interface's message)."""
 
-    NOTHING_TO_UPDATE = "nothing_to_update"  # nessuna misura né dato fisso indicati
-    DATE_IN_FUTURE = "date_in_future"  # il giorno di validità è dopo oggi
-    DATE_TOO_OLD = "date_too_old"  # il giorno di validità è anteriore a MIN_MEASUREMENT_DATE
-    INVALID_HEART_RATE = "invalid_heart_rate"  # FC fuori intervallo o incoerente
+    NOTHING_TO_UPDATE = "nothing_to_update"  # no measurement or fixed data given
+    DATE_IN_FUTURE = "date_in_future"  # the validity day is after today
+    DATE_TOO_OLD = "date_too_old"  # the validity day is earlier than MIN_MEASUREMENT_DATE
+    INVALID_HEART_RATE = "invalid_heart_rate"  # HR out of range or inconsistent
 
 
 class InvalidMeasurementsError(ValueError):
-    """Aggiornamento delle misure rifiutato. `problem` dice perché; mai i valori nel messaggio."""
+    """Measurement update rejected. `problem` says why; never the values in the message."""
 
     def __init__(self, problem: MeasurementProblem) -> None:
         super().__init__(problem.value)
@@ -54,12 +54,12 @@ class InvalidMeasurementsError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class MeasurementUpdate:
-    """Nuove misure valide da un giorno: almeno una tra peso, FC minima, FC massima e soglia.
+    """New measurements valid from a day: at least one of weight, min HR, max HR and threshold.
 
-    Una misura `None` non cambia: vale quella in vigore quel giorno. Il sesso non si cambia.
+    A `None` measurement does not change: the one in force that day applies. Sex is not changed.
 
     Raises:
-        InvalidMeasurementsError: nessuna misura indicata (`NOTHING_TO_UPDATE`).
+        InvalidMeasurementsError: no measurement given (`NOTHING_TO_UPDATE`).
     """
 
     valid_from: date
@@ -74,12 +74,12 @@ class MeasurementUpdate:
 
     @property
     def changes_heart_rate(self) -> bool:
-        """Vero se l'aggiornamento tocca FC minima, massima o soglia."""
+        """True if the update touches min HR, max HR or threshold."""
         return not (self.min_bpm is None and self.max_bpm is None and self.threshold_bpm is None)
 
 
 def _physiology_after(base: Physiology, update: MeasurementUpdate) -> Physiology:
-    """I parametri `base` con le misure indicate; il risultato deve restare coerente."""
+    """The `base` parameters with the given measurements; the result must stay consistent."""
     try:
         return Physiology(
             HeartRateLimits(
@@ -97,11 +97,11 @@ def _physiology_after(base: Physiology, update: MeasurementUpdate) -> Physiology
 
 @dataclass(frozen=True, slots=True)
 class ValidityPeriod:
-    """Da quando a quando vale una misura salvata.
+    """From when to when a saved measurement is valid.
 
-    `valid_from` è il primo giorno; `valid_to` l'ultimo giorno incluso, cioè il giorno prima della
-    voce successiva già esistente della stessa serie, o None se nessuna voce la segue (vale
-    fino alla prossima misura).
+    `valid_from` is the first day; `valid_to` the last day included, i.e. the day before the
+    next already existing entry of the same series, or None if no entry follows it (it holds
+    until the next measurement).
     """
 
     valid_from: date
@@ -110,10 +110,10 @@ class ValidityPeriod:
 
 @dataclass(frozen=True, slots=True)
 class SavedMeasurements:
-    """Che cosa ha salvato `UpdateMeasurements`.
+    """What `UpdateMeasurements` saved.
 
-    Il periodo di ogni serie toccata (None se non toccata: il peso e le misure di FC sono due
-    serie distinte) e se ha completato i dati fissi.
+    The period of each series touched (None if not touched: weight and HR measurements are two
+    distinct series) and whether it completed the fixed data.
     """
 
     weight: ValidityPeriod | None
@@ -122,27 +122,30 @@ class SavedMeasurements:
 
 
 def _period_in(valid_from: date, entry_days: Iterable[date]) -> ValidityPeriod:
-    """Il periodo di una voce di data `valid_from` tra le voci della serie (lei compresa)."""
+    """The period of an entry with date `valid_from` among the entries of the series (itself
+    included)."""
     following = min((day for day in entry_days if day > valid_from), default=None)
     return ValidityPeriod(valid_from, None if following is None else following - timedelta(days=1))
 
 
 class UpdateMeasurements:
-    """Salva i dati di "Modifica profilo" in una sola transazione: o tutto o niente.
+    """Saves the data of "Edit profile" in a single transaction: all or nothing.
 
-    Può completare i dati fissi (altezza e data di nascita di un profilo creato prima che
-    esistessero; una volta impostati non si cambiano più) e aggiungere misure datate: peso, FC
-    minima, FC massima, soglia. Se una parte fallisce (per esempio i dati fissi sono già
-    impostati) non resta scritto niente.
+    It can complete the fixed data (height and date of birth of a profile created before
+    they existed; once set they are no longer changed) and add dated measurements: weight, min
+    HR, max HR, threshold. If a part fails (for example the fixed data are already
+    set) nothing remains written.
 
-    Regola di validità: una misura vale dal suo giorno fino alla voce successiva già esistente
-    della stessa serie. Una misura con data passata quindi non cambia ciò che vale dopo una voce
-    più recente, e per lo stesso giorno la voce si sostituisce. Le misure non indicate restano
-    quelle in vigore quel giorno. Il vincolo `FC minima < soglia <= FC massima` si verifica sul
-    risultato. I carichi già calcolati con FC o soglia diverse si ricalcolano da soli alla
-    panoramica successiva (cambia l'impronta); il peso corporeo non entra nel carico.
+    Validity rule: a measurement holds from its day until the next already existing entry
+    of the same series. A measurement with a past date therefore does not change what holds after a
+    more
+    recent entry, and for the same day the entry is replaced. Measurements not given remain
+    those in force that day. The constraint `min HR < threshold <= max HR` is checked on the
+    result. Loads already computed with different HR or threshold are recomputed on their own at
+    the next
+    overview (the fingerprint changes); body weight does not enter the load.
 
-    `today` (la data di oggi nel fuso del profilo) è iniettata dal Composition Root.
+    `today` (today's date in the profile's time zone) is injected by the Composition Root.
     """
 
     def __init__(
@@ -162,15 +165,17 @@ class UpdateMeasurements:
     def __call__(
         self, update: MeasurementUpdate | None = None, fixed: FixedProfileData | None = None
     ) -> SavedMeasurements:
-        """Salva i dati fissi da completare (`fixed`) e/o le misure di `update`, e dice per
-        quali periodi valgono.
+        """Saves the fixed data to complete (`fixed`) and/or the measurements of `update`, and says
+        for
+        which periods apply.
 
         Raises:
-            InvalidMeasurementsError: nulla da salvare, giorno nel futuro o anteriore a
-                `MIN_MEASUREMENT_DATE`, oppure FC incoerenti; nulla è stato scritto.
-            FixedDataAlreadySetError: il profilo ha già altezza e data di nascita; nulla cambia.
-            MissingPhysiologyError: il profilo non ha parametri fisiologici su cui basarsi.
-            LoadStoreError, ProfileDataError: scrittura non riuscita; nulla cambia.
+            InvalidMeasurementsError: nothing to save, day in the future or earlier than
+                `MIN_MEASUREMENT_DATE`, or inconsistent HR; nothing was written.
+            FixedDataAlreadySetError: the profile already has height and date of birth; nothing
+            changes.
+            MissingPhysiologyError: the profile has no physiological parameters to rely on.
+            LoadStoreError, ProfileDataError: write failed; nothing changes.
         """
         if update is None and fixed is None:
             raise InvalidMeasurementsError(MeasurementProblem.NOTHING_TO_UPDATE)
@@ -188,7 +193,8 @@ class UpdateMeasurements:
     def _save(
         self, update: MeasurementUpdate | None
     ) -> tuple[ValidityPeriod | None, ValidityPeriod | None]:
-        """Scrive le misure e dà i periodi (peso, FC), dentro la transazione già aperta."""
+        """Writes the measurements and gives the periods (weight, HR), inside the already open
+        transaction."""
         if update is None:
             return (None, None)
         heart_rate_period = None
@@ -211,8 +217,8 @@ class UpdateMeasurements:
 
 @dataclass(frozen=True, slots=True)
 class MeasurementHistory:
-    """Storico per "Modifica profilo": dati fissi (None se da completare), serie del peso e dei
-    parametri fisiologici, per data di validità crescente."""
+    """History for "Edit profile": fixed data (None if to complete), weight series and
+    physiological parameters, by ascending validity date."""
 
     fixed: FixedProfileData | None
     weights: tuple[WeightEntry, ...]
@@ -220,7 +226,7 @@ class MeasurementHistory:
 
 
 class ReadMeasurementHistory:
-    """Legge i dati fissi e lo storico delle misure del profilo aperto."""
+    """Reads the fixed data and the measurement history of the open profile."""
 
     def __init__(
         self, fixed: FixedDataStore, weights: WeightStore, physiology: PhysiologyStore
@@ -230,10 +236,10 @@ class ReadMeasurementHistory:
         self._physiology = physiology
 
     def __call__(self) -> MeasurementHistory:
-        """Lo storico completo.
+        """The complete history.
 
         Raises:
-            LoadStoreError, ProfileDataError: dati illeggibili.
+            LoadStoreError, ProfileDataError: unreadable data.
         """
         return MeasurementHistory(
             self._fixed.get(),

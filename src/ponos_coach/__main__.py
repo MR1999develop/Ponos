@@ -92,9 +92,9 @@ from ponos_coach.zipread import ZipReadError, ZipReason, read_activity_entry
 
 _ORGANIZATION = "PonosCoach"
 _FALLBACK_ZONE = ZoneInfo("UTC")
-_LOG = logging.getLogger("ponos_coach.main")  # sotto "ponos_coach": lo raccoglie il file di log
+_LOG = logging.getLogger("ponos_coach.main")  # under "ponos_coach": the log file collects it
 
-# Perché uno ZIP scaricato non dà un file di attività -> causa definitiva della voce del giornale.
+# Why a downloaded ZIP does not yield an activity file -> final cause of the journal entry.
 _FAILURE_BY_ZIP_REASON: Final[Mapping[ZipReason, FailureReason]] = {
     ZipReason.ARCHIVE_INVALID: FailureReason.ARCHIVE_INVALID,
     ZipReason.ARCHIVE_LIMIT: FailureReason.ARCHIVE_INVALID,
@@ -102,20 +102,20 @@ _FAILURE_BY_ZIP_REASON: Final[Mapping[ZipReason, FailureReason]] = {
     ZipReason.UNSAFE_NAME: FailureReason.ARCHIVE_INVALID,
     ZipReason.TOO_LARGE: FailureReason.FILE_TOO_LARGE,
     ZipReason.NESTED_ARCHIVE: FailureReason.ARCHIVE_INVALID,
-    ZipReason.NO_ACTIVITY: FailureReason.UNSUPPORTED_FORMAT,  # per esempio solo un TCX
+    ZipReason.NO_ACTIVITY: FailureReason.UNSUPPORTED_FORMAT,  # e.g. only a TCX
     ZipReason.MULTIPLE_ACTIVITIES: FailureReason.ARCHIVE_INVALID,
 }
 
 
 @dataclass(frozen=True, slots=True)
 class CommandLine:
-    """Opzioni della riga di comando."""
+    """Command-line options."""
 
     language: Language | None = None
 
 
 def parse_command_line(argv: Sequence[str]) -> CommandLine:
-    """Legge le opzioni; un uso scorretto termina con `SystemExit(2)` (argparse)."""
+    """Reads the options; incorrect usage ends with `SystemExit(2)` (argparse)."""
     parser = argparse.ArgumentParser(prog="ponos-coach", description=ponos_coach.__doc__)
     parser.add_argument(
         "--lang",
@@ -131,7 +131,7 @@ def parse_command_line(argv: Sequence[str]) -> CommandLine:
 
 
 def resolve_user_timezone(zone_id: str) -> tuple[ZoneInfo, bool]:
-    """Fuso dell'utente da un id IANA; ripiego su UTC (secondo valore vero) se non si trova."""
+    """User time zone from an IANA id; falls back to UTC (second value true) if not found."""
     try:
         return ZoneInfo(zone_id), False
     except (ZoneInfoNotFoundError, ValueError, OSError):
@@ -146,8 +146,9 @@ def setup_translations(
     app_dir: Path | None = None,
     qt_dir: Path | None = None,
 ) -> TranslationReport:
-    """Sceglie la lingua (`--lang`, poi la scelta salvata, poi l'inglese) e installa i traduttori,
-    prima della finestra."""
+    """Chooses the language (`--lang`, then the saved choice, then English) and installs the
+    translators,
+    before the window."""
     language = choose_language(command_line.language, saved)
     return install_translators(
         app,
@@ -158,14 +159,14 @@ def setup_translations(
 
 
 class _SystemClock:
-    """Orologio di produzione per `imported_at`: l'istante corrente in UTC."""
+    """Production clock for `imported_at`: the current instant in UTC."""
 
     def now(self) -> datetime:
         return datetime.now(UTC)
 
 
 class _SystemSyncClock:
-    """Orologio della sincronizzazione: istanti in UTC e durate con l'orologio monotono."""
+    """Synchronization clock: instants in UTC and durations from the monotonic clock."""
 
     def now(self) -> datetime:
         return datetime.now(UTC)
@@ -175,10 +176,10 @@ class _SystemSyncClock:
 
 
 def extract_original_activity(content: bytes) -> ExtractedOriginal:
-    """Il file di attività dentro lo ZIP scaricato da Garmin, con i tetti di `zipread`.
+    """The activity file inside the ZIP downloaded from Garmin, with the `zipread` limits.
 
     Raises:
-        OriginalExtractionError: lo ZIP non dà un file di attività; la causa è sempre definitiva.
+        OriginalExtractionError: the ZIP does not yield an activity file; the cause is always final.
     """
     try:
         entry = read_activity_entry(content)
@@ -188,11 +189,11 @@ def extract_original_activity(content: bytes) -> ExtractedOriginal:
 
 
 class _LazyGarminAccount:
-    """L'account vero, su `garminconnect`, creato al primo uso.
+    """The real account, on `garminconnect`, created on first use.
 
-    `garminconnect` e `curl_cffi` pesano e servono solo a chi collega o sincronizza: l'avvio
-    dell'app non li importa. Le operazioni dell'account girano una alla volta; il lucchetto
-    protegge comunque la creazione.
+    `garminconnect` and `curl_cffi` are heavy and only needed by those who link or sync: app
+    startup does not import them. Account operations run one at a time; the lock
+    still protects creation.
     """
 
     def __init__(self) -> None:
@@ -211,22 +212,22 @@ class _LazyGarminAccount:
     def login(
         self, email: str, password: str, prompt_mfa_code: Callable[[], str | None]
     ) -> GarminSession:
-        """Vedi `GarminAccount.login`."""
+        """See `GarminAccount.login`."""
         return self._real().login(email, password, prompt_mfa_code)
 
     def resume(self, tokens: SessionTokens) -> GarminSession:
-        """Vedi `GarminAccount.resume`."""
+        """See `GarminAccount.resume`."""
         return self._real().resume(tokens)
 
 
 def _default_garmin_account() -> GarminAccount:
-    """L'account vero, che importa la libreria solo alla prima operazione."""
+    """The real account, which imports the library only on the first operation."""
     return _LazyGarminAccount()
 
 
 def _default_token_store(data_dir: Path) -> TokenStore | None:
-    """I token nel portachiavi del sistema; `None` se non si può usare (per esempio Linux senza
-    Secret Service): allora l'account non si collega e l'import da file resta disponibile."""
+    """Tokens in the system keyring; `None` if it cannot be used (e.g. Linux without
+    Secret Service): then the account does not link and file import remains available."""
     try:
         return create_token_store(data_dir)
     except TokenStoreUnavailableError:
@@ -235,7 +236,8 @@ def _default_token_store(data_dir: Path) -> TokenStore | None:
 
 
 def _registry_problem(error: BaseException) -> RegistryProblem | None:
-    """Quale guasto dell'elenco dei profili è (i suoi tipi sono dell'adattatore, non della ui)."""
+    """Which failure of the profile list this is (its types belong to the adapter, not to the
+    ui)."""
     if isinstance(error, RegistryFormatTooNewError):
         return RegistryProblem.TOO_NEW
     if isinstance(error, RegistryBusyError):
@@ -253,7 +255,7 @@ def _default_import_sources() -> ImportSources:
     return ImportSources(files=FilesImportSource, folder=FolderImportSource)
 
 
-def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza volatile iniettabile
+def compose_main_window(  # noqa: PLR0913 - every argument is an injectable volatile dependency
     command_line: CommandLine,
     *,
     settings: QSettings,
@@ -274,20 +276,21 @@ def compose_main_window(  # noqa: PLR0913 - ogni argomento è una dipendenza vol
     mfa_wait_s: float = MFA_WAIT_S,
     language: Language = Language.ENGLISH,
 ) -> MainWindow:
-    """Costruisce la finestra con tutte le dipendenze (richiede una `QApplication`).
+    """Builds the window with all its dependencies (requires a `QApplication`).
 
-    `config_dir` (elenco dei profili) e `documents_dir` (punto di partenza del selettore di
-    cartella la prima volta) valgono i luoghi dell'utente se omessi; `folder_picker` è il selettore
-    di cartella (finto nei test); `system_timezone_id`, `clock`, `now_utc` e
-    `import_sources` e `decode` rendono deterministico l'avvio nei test; `log_dir` è la cartella
-    dei log che il menu Aiuto apre. `garmin_account`, `token_store`, `notifier` e `sync_policy`
-    sostituiscono Garmin, il portachiavi, la notifica di sistema e le pause della
-    sincronizzazione (finti nei test); `data_dir` è la cartella dati locale dell'app, dove stanno
-    i token cifrati su Windows; `mfa_wait_s` è quanto si aspetta il codice MFA; `language` è la
-    lingua già installata (il menu Lingua la mostra spuntata). Non apre nessun profilo: lo fa
-    `MainWindow.start()`, dopo `show()`.
+    `config_dir` (profile list) and `documents_dir` (starting point of the folder picker
+    the first time) default to the user's locations if omitted; `folder_picker` is the folder picker
+    (fake in tests); `system_timezone_id`, `clock`, `now_utc`,
+    `import_sources` and `decode` make startup deterministic in tests; `log_dir` is the log folder
+    that the Help menu opens. `garmin_account`, `token_store`, `notifier` and `sync_policy`
+    replace Garmin, the keyring, the system notification and the synchronization pauses
+    (fake in tests); `data_dir` is the app's local data folder, where the encrypted
+    tokens live on Windows; `mfa_wait_s` is how long to wait for the MFA code; `language` is the
+    language already installed (the Language menu shows it checked). It does not open any profile:
+    that is done by
+    `MainWindow.start()`, after `show()`.
     """
-    del command_line  # per ora nessuna opzione cambia la composizione
+    del command_line  # for now no option changes the composition
     if config_dir is None:
         config_dir = Path(platformdirs.user_config_dir("PonosCoach", appauthor=False))
     if documents_dir is None:
@@ -368,12 +371,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         command_line, settings=settings, log_dir=log_dir, language=report.language
     )
     notifier.occurred.connect(window.show_unexpected_error)
-    app.aboutToQuit.connect(window.release_web_engine)  # pagine e profilo web, prima dei figli
+    app.aboutToQuit.connect(window.release_web_engine)  # pages and web profile, before the children
     window.show()
     window.start()
     exit_code = app.exec()
-    # Se `exec` ritorna senza che la finestra abbia chiuso (sessione di sistema, `quit`), nessun
-    # thread dei dati deve restare in esecuzione: distruggerlo a processo in uscita abortisce.
+    # If `exec` returns without the window having closed (system session, `quit`), no
+    # data thread must remain running: destroying it at process exit aborts.
     DataThread.stop_all()
     return exit_code
 

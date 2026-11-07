@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Configurazione comune dei test: profili hypothesis e marker."""
+"""Common test configuration: hypothesis profiles and markers."""
 
 import os
 from collections.abc import Iterator
 
 import pytest
 
-# Qt senza schermo e senza GPU: va deciso prima che Qt venga caricato.
+# Qt without screen and without GPU: must be decided before Qt is loaded.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--disable-gpu")
 
@@ -16,10 +16,10 @@ from hypothesis import HealthCheck, settings
 from ponos_coach.ui.bootstrap import prepare_qt
 from ponos_coach.ui.data_thread import DataThread
 
-# Schema URL dell'app e attributi del motore web: prima della QApplication di pytest-qt.
+# App URL scheme and web engine attributes: before pytest-qt's QApplication.
 prepare_qt()
 
-# Nessuna scadenza per esempio: i test devono essere deterministici in CI.
+# No per-example deadline: tests must be deterministic in CI.
 settings.register_profile(
     "ci",
     max_examples=100,
@@ -33,11 +33,11 @@ settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "ci"))
 
 @pytest.fixture(autouse=True)
 def stop_data_threads() -> Iterator[None]:
-    """Nessun thread dei dati resta in esecuzione tra un test e l'altro né a fine processo.
+    """No data thread keeps running between one test and the next, nor at process end.
 
-    La finestra chiude in due tempi (senza attendere): `qtbot` chiude e distrugge le finestre
-    subito, quindi il thread può essere ancora a metà della chiusura del profilo. Distruggere un
-    `QThread` in esecuzione abortisce il processo.
+    The window closes in two phases (without waiting): `qtbot` closes and destroys the windows
+    immediately, so the thread may still be midway through closing the profile. Destroying a
+    running `QThread` aborts the process.
     """
     yield
-    assert DataThread.stop_all(30_000), "un thread dei dati non si è fermato"
+    assert DataThread.stop_all(30_000), "a data thread did not stop"

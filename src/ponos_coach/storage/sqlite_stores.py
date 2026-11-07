@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Store SQLite di un profilo: indice delle attività, parametri fisiologici, cache dei carichi.
+"""SQLite stores of a profile: activity index, physiological parameters, load cache.
 
-Tre classi sulla stessa `SqliteDatabase`: la transazione di `SqliteActivityIndex` copre anche
-gli altri due. Solo parametri `?`; nessun testo del database o dell'input finisce nei messaggi
-d'errore (posizioni e salute restano fuori dai log).
+Three classes on the same `SqliteDatabase`: the transaction of `SqliteActivityIndex` also covers
+the other two. Only `?` parameters; no text from the database or from the input ends up in the
+messages
+of errors (positions and health data stay out of the logs).
 """
 
 from __future__ import annotations
@@ -58,7 +59,7 @@ _ACTIVITY_COLUMNS: Final = (
     "start_lat, start_lon, track_polyline, archive_path, archive_sha256, archive_size_bytes, "
     "origin, imported_ms, garmin_activity_id"
 )
-# Solo costanti del modulo nelle query composte: nessun dato esterno (S608).
+# Only module constants in the composed queries: no external data (S608).
 _SELECT_ACTIVITIES: Final = "SELECT " + _ACTIVITY_COLUMNS + " FROM activities "  # noqa: S608
 _INSERT_ACTIVITY: Final = (
     "INSERT INTO activities ("  # noqa: S608
@@ -70,34 +71,34 @@ _INSERT_ACTIVITY: Final = (
 
 
 def to_ms(moment: datetime) -> int:
-    """Millisecondi UTC interi dall'epoca.
+    """Whole UTC milliseconds since the epoch.
 
     Raises:
-        ValueError: l'istante ha una risoluzione sotto il millisecondo (non si arrotonda).
+        ValueError: the instant has a resolution below the millisecond (it is not rounded).
     """
     delta = moment - _EPOCH
     if delta % _MILLISECOND:
-        raise ValueError("istante con risoluzione sotto il millisecondo")
+        raise ValueError("instant with resolution below the millisecond")
     return delta // _MILLISECOND
 
 
 def floor_ms(moment: datetime) -> int:
-    """Millisecondi UTC interi dall'epoca, per difetto (per i confronti, mai per salvare)."""
+    """Whole UTC milliseconds since the epoch, rounded down (for comparisons, never for saving)."""
     return (moment - _EPOCH) // _MILLISECOND
 
 
 def from_ms(milliseconds: int) -> datetime:
-    """Istante UTC da millisecondi interi."""
+    """UTC instant from whole milliseconds."""
     return _EPOCH + timedelta(milliseconds=milliseconds)
 
 
 @contextmanager
 def _translating(error: type[Exception]) -> Iterator[None]:
-    """Gli errori di SQLite diventano l'errore della porta, con la causa ma senza dati."""
+    """SQLite errors become the port's error, with the cause but without data."""
     try:
         yield
     except sqlite3.Error as exc:
-        raise error("operazione sul database non riuscita") from exc
+        raise error("database operation failed") from exc
 
 
 def _is_unique_violation(exc: sqlite3.Error) -> bool:
@@ -149,21 +150,21 @@ def _records(rows: Sequence[Sequence[Any]]) -> list[ActivityRecord]:
     try:
         return [_record_from_row(row) for row in rows]
     except ValueError as exc:
-        raise ActivityIndexError("riga dell'indice non valida") from exc
+        raise ActivityIndexError("invalid index row") from exc
 
 
 class SqliteActivityIndex:
-    """Indice delle attività (porta `ActivityIndex`) su SQLite."""
+    """Activity index (`ActivityIndex` port) on SQLite."""
 
     def __init__(self, database: SqliteDatabase) -> None:
         self._db = database
 
     def transaction(self) -> AbstractContextManager[None]:
-        """Vedi `ActivityIndex.transaction`: `BEGIN IMMEDIATE`, non annidabile."""
+        """See `ActivityIndex.transaction`: `BEGIN IMMEDIATE`, not nestable."""
         return self._db.transaction()
 
     def exists(self, identity: ActivityIdentity) -> bool:
-        """Vero se c'è un record con questa identità."""
+        """True if there is a record with this identity."""
         with _translating(ActivityIndexError):
             row = self._db.connection.execute(
                 "SELECT 1 FROM activities WHERE identity_key = ?", (identity_key(identity),)
@@ -171,7 +172,7 @@ class SqliteActivityIndex:
         return row is not None
 
     def get(self, identity: ActivityIdentity) -> ActivityRecord | None:
-        """Il record con questa identità, o None."""
+        """The record with this identity, or None."""
         with _translating(ActivityIndexError):
             row = self._db.connection.execute(
                 _SELECT_ACTIVITIES + "WHERE identity_key = ?", (identity_key(identity),)
@@ -181,7 +182,7 @@ class SqliteActivityIndex:
     def find_possible_duplicates(
         self, start: datetime, elapsed_s: float
     ) -> Sequence[ActivityRecord]:
-        """Prefiltro SQL sull'inizio (finestra un po' più larga), poi `is_possible_duplicate`."""
+        """SQL prefilter on the start (a slightly wider window), then `is_possible_duplicate`."""
         margin_ms = DUPLICATE_START_TOLERANCE // _MILLISECOND + 1
         centre = floor_ms(start)
         with _translating(ActivityIndexError):
@@ -197,19 +198,19 @@ class SqliteActivityIndex:
         ]
 
     def add(self, record: ActivityRecord) -> None:
-        """Aggiunge un record; identità o id Garmin già presenti → `DuplicateActivityError`."""
+        """Adds a record; identity or Garmin id already present → `DuplicateActivityError`."""
         params = _activity_params(record)
         try:
             self._db.connection.execute(_INSERT_ACTIVITY, params)
         except sqlite3.IntegrityError as exc:
             if _is_unique_violation(exc):
-                raise DuplicateActivityError("attività già presente") from exc
-            raise ActivityIndexError("record rifiutato dai vincoli del database") from exc
+                raise DuplicateActivityError("activity already present") from exc
+            raise ActivityIndexError("record rejected by the database constraints") from exc
         except sqlite3.Error as exc:
-            raise ActivityIndexError("operazione sul database non riuscita") from exc
+            raise ActivityIndexError("database operation failed") from exc
 
     def list_by_start(self) -> Sequence[ActivityRecord]:
-        """Tutti i record per inizio crescente, a parità per chiave di identità."""
+        """All the records by ascending start, ties by identity key."""
         with _translating(ActivityIndexError):
             rows = self._db.connection.execute(
                 _SELECT_ACTIVITIES + "ORDER BY start_ms, identity_key"
@@ -217,7 +218,7 @@ class SqliteActivityIndex:
         return _records(rows)
 
     def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
-        """Il record con questo id Garmin, o None."""
+        """The record with this Garmin id, or None."""
         with _translating(ActivityIndexError):
             row = self._db.connection.execute(
                 _SELECT_ACTIVITIES + "WHERE garmin_activity_id = ?", (garmin_id.value,)
@@ -225,7 +226,7 @@ class SqliteActivityIndex:
         return None if row is None else _records([row])[0]
 
     def link_garmin_id(self, identity: ActivityIdentity, garmin_id: GarminActivityId) -> None:
-        """Collega l'id Garmin a un record che non ne ha ancora uno (idempotente)."""
+        """Links the Garmin id to a record that does not have one yet (idempotent)."""
         key = identity_key(identity)
         try:
             cursor = self._db.connection.execute(
@@ -235,24 +236,24 @@ class SqliteActivityIndex:
             )
         except sqlite3.IntegrityError as exc:
             if _is_unique_violation(exc):
-                raise DuplicateActivityError("id Garmin già assegnato") from exc
-            raise ActivityIndexError("record rifiutato dai vincoli del database") from exc
+                raise DuplicateActivityError("Garmin id already assigned") from exc
+            raise ActivityIndexError("record rejected by the database constraints") from exc
         except sqlite3.Error as exc:
-            raise ActivityIndexError("operazione sul database non riuscita") from exc
+            raise ActivityIndexError("database operation failed") from exc
         if cursor.rowcount == 0:
             if not self.exists(identity):
-                raise ActivityNotFoundError("attività non presente nell'indice")
-            raise DuplicateActivityError("l'attività ha già un altro id Garmin")
+                raise ActivityNotFoundError("activity not in the index")
+            raise DuplicateActivityError("the activity already has another Garmin id")
 
 
 class SqlitePhysiologyStore:
-    """Parametri fisiologici (porta `PhysiologyStore`) su SQLite."""
+    """Physiological parameters (`PhysiologyStore` port) on SQLite."""
 
     def __init__(self, database: SqliteDatabase) -> None:
         self._db = database
 
     def put(self, entry: PhysiologyEntry) -> None:
-        """Salva i parametri validi da `entry.valid_from`, sostituendo la stessa data."""
+        """Saves the parameters valid from `entry.valid_from`, replacing the same date."""
         physiology = entry.physiology
         with _translating(LoadStoreError):
             self._db.connection.execute(
@@ -270,7 +271,7 @@ class SqlitePhysiologyStore:
             )
 
     def list_entries(self) -> Sequence[PhysiologyEntry]:
-        """Tutte le voci per data crescente."""
+        """All the entries by ascending date."""
         with _translating(LoadStoreError):
             rows = self._db.connection.execute(
                 "SELECT valid_from, min_bpm, max_bpm, threshold_bpm, sex "
@@ -286,18 +287,18 @@ class SqlitePhysiologyStore:
                 )
                 for row in rows
             ]
-        except ValueError:  # il testo letto (una data) non si conserva nella catena delle cause
-            raise LoadStoreError("parametri fisiologici non validi") from None
+        except ValueError:  # the text read (a date) is not kept in the chain of causes
+            raise LoadStoreError("physiological parameters invalid") from None
 
 
 class SqliteLoadCache:
-    """Cache dei carichi (porta `LoadCache`) su SQLite: derivata, rigenerabile."""
+    """Load cache (`LoadCache` port) on SQLite: derived, regenerable."""
 
     def __init__(self, database: SqliteDatabase) -> None:
         self._db = database
 
     def get(self, identity: ActivityIdentity, fingerprint: LoadFingerprint) -> ActivityLoad | None:
-        """Il carico salvato, solo se prodotto con questa impronta."""
+        """The saved load, only if produced with this fingerprint."""
         with _translating(LoadStoreError):
             row = self._db.connection.execute(
                 "SELECT c.trimp, c.hr_tss, c.load, c.used_samples, c.discarded_samples, "
@@ -312,7 +313,7 @@ class SqliteLoadCache:
         try:
             zones = ZoneSeconds((row[7], row[8], row[9], row[10], row[11]))
         except ValueError as exc:
-            raise LoadStoreError("secondi in zona non validi") from exc
+            raise LoadStoreError("seconds in zone invalid") from exc
         return ActivityLoad(
             row[0], row[1], row[2], row[3], row[4], row[5], LoadSource(row[6]), zones
         )
@@ -320,7 +321,7 @@ class SqliteLoadCache:
     def put(
         self, identity: ActivityIdentity, fingerprint: LoadFingerprint, load: ActivityLoad
     ) -> None:
-        """Salva o sostituisce il carico; attività sconosciuta → `UnknownActivityError`."""
+        """Saves or replaces the load; unknown activity → `UnknownActivityError`."""
         with _translating(LoadStoreError):
             cursor = self._db.connection.execute(
                 "INSERT INTO load_cache (activity_id, fingerprint, trimp, hr_tss, load, "
@@ -350,10 +351,10 @@ class SqliteLoadCache:
                 ),
             )
         if cursor.rowcount == 0:
-            raise UnknownActivityError("attività non presente nell'indice")
+            raise UnknownActivityError("activity not in the index")
 
     def invalidate(self, identity: ActivityIdentity) -> None:
-        """Dimentica il carico di un'attività (nessun effetto se non c'è)."""
+        """Forgets the load of an activity (no effect if there is none)."""
         with _translating(LoadStoreError):
             self._db.connection.execute(
                 "DELETE FROM load_cache WHERE activity_id IN "
@@ -362,6 +363,6 @@ class SqliteLoadCache:
             )
 
     def clear(self) -> None:
-        """Dimentica tutti i carichi."""
+        """Forgets all the loads."""
         with _translating(LoadStoreError):
             self._db.connection.execute("DELETE FROM load_cache")

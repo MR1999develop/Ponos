@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Righe dei moduli: l'etichetta punta al campo e il campo prende il suo nome accessibile."""
+"""Form rows: the label points to the field and the field gets its accessible name."""
 
 from __future__ import annotations
 

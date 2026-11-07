@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Confine GPX: T-GPX-01 (file validi, valori calcolati a mano), T-SEC-02 (GPX ostili)."""
+"""GPX boundary: T-GPX-01 (valid files, hand-computed values), T-SEC-02 (hostile GPX)."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ from tests.fixtures.generators import gpx_writer as gw
 from tests.fixtures.generators.tracks import SEA_LAT_DEG, SEA_LON_DEG
 
 START = datetime(2026, 3, 2, 7, 0, tzinfo=UTC)
-STEP_M = 111.19508  # 0,001 gradi di latitudine: 0,001 * pi / 180 * 6.371.008,8 m, a mano
+STEP_M = 111.19508  # 0.001 degrees of latitude: 0.001 * pi / 180 * 6,371,008.8 m, by hand
 LIMITS_TIGHT = GpxLimits(max_depth=6, max_points=3, max_text_chars=10)
 
 
@@ -41,7 +41,7 @@ def reason_of(data: bytes, limits: GpxLimits | None = None) -> FitDecodeReason:
 
 
 def meridian(count: int, **options: object) -> list[gw.GpxPoint]:
-    """Punti ogni 10 s lungo un meridiano: ogni passo è di 0,001 gradi di latitudine."""
+    """Points every 10 s along a meridian: each step is 0.001 degrees of latitude."""
     return gw.line_points(START, count, step_s=10, lat_step_deg=0.001, **options)  # type: ignore[arg-type]
 
 
@@ -49,11 +49,11 @@ def decode(points: list[gw.GpxPoint], **spec: object) -> object:
     return decode_gpx(gw.build_gpx(gw.GpxSpec([points], **spec)))  # type: ignore[arg-type]
 
 
-# --- T-GPX-01: file validi -------------------------------------------------------------------
+# --- T-GPX-01: valid files -------------------------------------------------------------------
 
 
 def test_t_gpx_01_one_segment_values_computed_by_hand() -> None:
-    # 11 punti, 10 passi da 111,19508 m, 10 s ciascuno: 1111,9508 m in 100 s, tutto in movimento.
+    # 11 points, 10 steps of 111.19508 m, 10 s each: 1111.9508 m in 100 s, all moving.
     data = gw.build_gpx(gw.GpxSpec([meridian(11)], sport_type="running"))
 
     activity = decode_gpx(data)
@@ -64,7 +64,7 @@ def test_t_gpx_01_one_segment_values_computed_by_hand() -> None:
     assert activity.elapsed_s == 100.0
     assert activity.timer_s == 100.0
     assert activity.summary.distance_m == pytest.approx(10 * STEP_M, rel=1e-7)
-    assert activity.summary.ascent_m is None  # nessuna quota nel file
+    assert activity.summary.ascent_m is None  # no elevation in the file
     assert activity.heart_rate is None
     assert activity.discarded_hr_samples == 0
 
@@ -84,12 +84,12 @@ def test_start_point_and_simplified_track() -> None:
     assert (start.lat_deg, start.lon_deg) == (SEA_LAT_DEG, SEA_LON_DEG)
     assert activity.summary.track_polyline is not None
     track = decode_polyline(activity.summary.track_polyline)
-    assert len(track) == 2  # i punti allineati si semplificano ai due estremi
+    assert len(track) == 2  # collinear points simplify to the two endpoints
     assert track[1].lat_deg == pytest.approx(SEA_LAT_DEG + 0.01, abs=1e-5)
 
 
 def test_moving_time_skips_gaps_over_30_seconds() -> None:
-    # Istanti 0, 10, 20, 60, 70: l'intervallo di 40 s non conta (10 + 10 + 10 = 30 s).
+    # Instants 0, 10, 20, 60, 70: the 40 s gap does not count (10 + 10 + 10 = 30 s).
     seconds = [0, 10, 20, 60, 70]
     points = [
         gw.GpxPoint(SEA_LAT_DEG + 0.001 * i, SEA_LON_DEG, START + timedelta(seconds=s))
@@ -100,7 +100,7 @@ def test_moving_time_skips_gaps_over_30_seconds() -> None:
 
     assert activity.elapsed_s == 70.0
     assert activity.timer_s == 30.0
-    assert activity.summary.distance_m == pytest.approx(4 * STEP_M, rel=1e-7)  # la distanza sì
+    assert activity.summary.distance_m == pytest.approx(4 * STEP_M, rel=1e-7)  # the distance does
 
 
 def test_gap_of_exactly_30_seconds_counts() -> None:
@@ -110,8 +110,8 @@ def test_gap_of_exactly_30_seconds_counts() -> None:
 
 
 def test_segments_are_independent_for_time_distance_and_ascent() -> None:
-    # Segmento 1: t = 0, 10, 20. Segmento 2: t = 25, 35. Il salto 20 -> 25 (e la sua distanza)
-    # non si conta: tempo in movimento 20 + 10 = 30 s, distanza 3 passi.
+    # Segment 1: t = 0, 10, 20. Segment 2: t = 25, 35. The 20 -> 25 jump (and its distance)
+    # is not counted: moving time 20 + 10 = 30 s, distance 3 steps.
     first = gw.line_points(START, 3, step_s=10, lat_step_deg=0.001, ele_m=[100.0, 100.0, 100.0])
     second = [
         gw.GpxPoint(SEA_LAT_DEG + 0.5, SEA_LON_DEG, START + timedelta(seconds=25), 200.0),
@@ -123,12 +123,12 @@ def test_segments_are_independent_for_time_distance_and_ascent() -> None:
     assert activity.elapsed_s == 35.0
     assert activity.timer_s == 30.0
     assert activity.summary.distance_m == pytest.approx(3 * STEP_M, rel=1e-5)
-    assert activity.summary.ascent_m == 0.0  # il salto di quota tra i segmenti non è dislivello
+    assert activity.summary.ascent_m == 0.0  # the elevation jump between segments is not ascent
 
 
 def test_ascent_with_a_3_m_threshold_by_hand() -> None:
-    # Sale 100 -> 106 (il calo a 104 è sotto 3 m, quello a 102 chiude la salita: +6), scende a 99,
-    # risale a 105 (+6): 12 m. Il rumore di 1-2 m non conta.
+    # Climbs 100 -> 106 (the drop to 104 is under 3 m, the one to 102 closes it: +6), down to 99,
+    # up to 105 (+6): 12 m. Noise of 1-2 m does not count.
     elevations = [100.0, 101, 102, 103, 106, 104, 102, 99, 100, 105, 103]
 
     activity = decode_gpx(gw.build_gpx(gw.GpxSpec([meridian(11, ele_m=elevations)])))
@@ -139,16 +139,16 @@ def test_ascent_with_a_3_m_threshold_by_hand() -> None:
 @pytest.mark.parametrize(
     ("elevations", "expected"),
     [
-        ([100, 101, 100, 101, 100, 102], 0.0),  # rumore sotto la soglia
-        ([100, 103], 3.0),  # esattamente la soglia conta
+        ([100, 101, 100, 101, 100, 102], 0.0),  # noise under the threshold
+        ([100, 103], 3.0),  # exactly the threshold counts
         ([100, 102.9], 0.0),
-        ([100, 101, 102, 103, 104], 4.0),  # salita costante: conta intera
-        ([110, 108, 105, 100], 0.0),  # solo discesa
-        ([100, 98, 105], 7.0),  # sotto la partenza, poi su: dal punto più basso
+        ([100, 101, 102, 103, 104], 4.0),  # constant climb: counts in full
+        ([110, 108, 105, 100], 0.0),  # descent only
+        ([100, 98, 105], 7.0),  # below the start, then up: from the lowest point
         ([100, 105, 100, 105], 10.0),
-        ([100, 90, 93], 3.0),  # dopo una discesa, risalire esattamente della soglia conta
+        ([100, 90, 93], 3.0),  # after a descent, climbing back exactly the threshold counts
         ([100, 90, 92.9], 0.0),
-        ([100, 106, 103, 106], 9.0),  # un calo di esattamente 3 m chiude la salita (6), poi +3
+        ([100, 106, 103, 106], 9.0),  # a drop of exactly 3 m closes the climb (6), then +3
         ([100], 0.0),
     ],
 )
@@ -186,7 +186,7 @@ def test_heart_rate_in_another_namespace_is_ignored() -> None:
 def test_repeated_timestamps_discard_the_later_heart_rate_samples() -> None:
     points = [
         gw.GpxPoint(SEA_LAT_DEG, SEA_LON_DEG, START, hr=100),
-        gw.GpxPoint(SEA_LAT_DEG, SEA_LON_DEG, START, hr=101),  # stesso istante: scartato
+        gw.GpxPoint(SEA_LAT_DEG, SEA_LON_DEG, START, hr=101),  # same instant: discarded
         gw.GpxPoint(SEA_LAT_DEG, SEA_LON_DEG, START + timedelta(seconds=10), hr=110),
     ]
 
@@ -244,7 +244,7 @@ def test_decoding_is_deterministic() -> None:
     assert decode_gpx(data) == decode_gpx(data)
 
 
-# --- Non attività e file incoerenti ------------------------------------------------------------
+# --- Non-activity and inconsistent files ------------------------------------------------------
 
 
 def test_gpx_without_times_is_not_an_activity() -> None:
@@ -303,33 +303,33 @@ VALID_WITH_EXTRAS = gw.build_gpx(
 @pytest.mark.parametrize(
     ("old", "new"),
     [
-        (b"2026-03-02T07:00:00Z", b"2026-03-02T07:00:00"),  # senza fuso: ambiguo
-        (b"2026-03-02T07:00:00Z", b"2026-13-02T07:00:00Z"),  # mese 13
+        (b"2026-03-02T07:00:00Z", b"2026-03-02T07:00:00"),  # no offset: ambiguous
+        (b"2026-03-02T07:00:00Z", b"2026-13-02T07:00:00Z"),  # month 13
         (b"2026-03-02T07:00:00Z", b"yesterday"),
         (b"<ele>1.0</ele>", b"<ele>abc</ele>"),
         (b"<ele>1.0</ele>", b"<ele></ele>"),
-        (b"<ele>1.0</ele>", b"<ele>1_0</ele>"),  # float() accetterebbe il trattino basso
-        (b"<ele>1.0</ele>", b"<ele>1.0</ele><ele>2.0</ele>"),  # ripetuto
+        (b"<ele>1.0</ele>", b"<ele>1_0</ele>"),  # float() would accept the underscore
+        (b"<ele>1.0</ele>", b"<ele>1.0</ele><ele>2.0</ele>"),  # repeated
         (b"<gpxtpx:hr>100</gpxtpx:hr>", b"<gpxtpx:hr>fast</gpxtpx:hr>"),
         (b"<gpxtpx:hr>100</gpxtpx:hr>", b"<gpxtpx:hr>-5</gpxtpx:hr>"),
         (b'lat="-29.9990000"', b'lat="91.0"'),
         (b'lat="-29.9990000"', b'lat="nan"'),
         (b'lon="-20.0000000"', b'lon="181"'),
         (b'lon="-20.0000000"', b'lon="1e3"'),
-        (b'lat="-29.9990000"', b'lat1="-30"'),  # attributo mancante
+        (b'lat="-29.9990000"', b'lat1="-30"'),  # missing attribute
         (gw.GPX_NAMESPACE["1.1"].encode(), b"http://example.com/gpx"),
         (b"<gpx ", b"<kml "),
     ],
 )
 def test_malformed_values_are_corrupt_and_never_repaired(old: bytes, new: bytes) -> None:
-    assert decode_gpx(VALID_WITH_EXTRAS).timer_s == 20.0  # il file di partenza è valido
+    assert decode_gpx(VALID_WITH_EXTRAS).timer_s == 20.0  # the starting file is valid
     assert old in VALID_WITH_EXTRAS
 
     assert reason_of(VALID_WITH_EXTRAS.replace(old, new)) is FitDecodeReason.CORRUPT
 
 
 def test_unknown_declared_encoding_is_corrupt_not_a_crash() -> None:
-    # Trovato dal fuzzing: `encoding="ATF-8"` faceva uscire un LookupError dal parser.
+    # Found by fuzzing: `encoding="ATF-8"` made a LookupError escape from the parser.
     data = gw.build_gpx(gw.GpxSpec([meridian(3)])).replace(b"UTF-8", b"ATF-8")
 
     assert reason_of(data) is FitDecodeReason.CORRUPT
@@ -340,19 +340,19 @@ def test_truncated_and_not_xml_are_corrupt() -> None:
 
     assert reason_of(data[: len(data) // 2]) is FitDecodeReason.CORRUPT
     assert reason_of(b"\x00\x01\x02 not xml") is FitDecodeReason.CORRUPT
-    assert reason_of(data[:-8]) is FitDecodeReason.CORRUPT  # manca la chiusura
+    assert reason_of(data[:-8]) is FitDecodeReason.CORRUPT  # missing closing tag
 
 
 def test_empty_and_oversize() -> None:
     assert reason_of(b"") is FitDecodeReason.EMPTY
     assert reason_of(b"x" * 11, GpxLimits(max_bytes=10)) is FitDecodeReason.TOO_LARGE
     data = gw.build_gpx(gw.GpxSpec([meridian(3)]))
-    assert decode_gpx(data, GpxLimits(max_bytes=len(data))).timer_s == 20.0  # al limite
+    assert decode_gpx(data, GpxLimits(max_bytes=len(data))).timer_s == 20.0  # at the limit
 
 
-# --- T-SEC-02: GPX ostili -----------------------------------------------------------------------
+# --- T-SEC-02: hostile GPX -----------------------------------------------------------------------
 
-SOON = 3.0  # secondi: un rifiuto che espande entità o legge file ci mette molto di più
+SOON = 3.0  # seconds: a rejection that expands entities or reads files takes much longer
 
 
 def rejected_quickly(data: bytes, expected: FitDecodeReason = FitDecodeReason.CORRUPT) -> None:
@@ -366,7 +366,7 @@ def test_t_sec_02_gpx_with_any_doctype_is_rejected() -> None:
 
 
 def test_t_sec_02_exponential_entity_expansion_is_rejected_without_expanding() -> None:
-    data = gw.billion_laughs()  # 10^8 ripetizioni se espanso
+    data = gw.billion_laughs()  # 10^8 repetitions if expanded
     assert len(data) < 2000
     rejected_quickly(data)
 
@@ -391,8 +391,8 @@ def test_t_sec_02_external_entities_and_dtds_are_never_opened(tmp_path: Path) ->
 
 def test_t_sec_02_deep_nesting_is_rejected_at_the_depth_limit() -> None:
     rejected_quickly(gw.deeply_nested(100_000))
-    # gpx + 5 elementi = 6 livelli: al limite si legge (nessun punto: non è un'attività),
-    # un livello in più si rifiuta.
+    # gpx + 5 elements = 6 levels: at the limit it is read (no points: not an activity),
+    # one more level is rejected.
     assert reason_of(gw.deeply_nested(5), LIMITS_TIGHT) is FitDecodeReason.NOT_AN_ACTIVITY
     assert reason_of(gw.deeply_nested(6), LIMITS_TIGHT) is FitDecodeReason.CORRUPT
 
@@ -403,7 +403,7 @@ def test_t_sec_02_point_limit_at_and_over_it() -> None:
 
 
 def test_t_sec_02_millions_of_points_are_rejected_at_the_default_limit() -> None:
-    data = gw.points_without_data(1_000_001)  # circa 24 MB, generati al volo
+    data = gw.points_without_data(1_000_001)  # about 24 MB, generated on the fly
     assert len(data) < GpxLimits().max_bytes
 
     assert reason_of(data) is FitDecodeReason.TOO_MANY_RECORDS
@@ -426,7 +426,7 @@ def test_t_sec_02_gpx_over_the_size_limit_is_refused_before_reading() -> None:
     assert reason_of(padded) is FitDecodeReason.TOO_LARGE
 
 
-# --- Invarianti con hypothesis -------------------------------------------------------------------
+# --- Invariants with hypothesis -------------------------------------------------------------------
 
 
 def naive_haversine_m(a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -457,7 +457,7 @@ def test_distance_matches_a_naive_loop(track: list[tuple[float, float]]) -> None
 
 
 def naive_ascent(elevations: list[float], threshold: float = 3.0) -> float:
-    """Stessa regola, scritta punto per punto senza alcuna riduzione preliminare."""
+    """Same rule, written point by point without any preliminary reduction."""
     low = high = elevations[0]
     rising, total = True, 0.0
     for value in elevations[1:]:
@@ -512,7 +512,7 @@ def test_mutated_files_are_decoded_or_rejected_never_crash(data: st.DataObject) 
         "repeat": base[:position] + base[position : position + 40] * 3 + base[position:],
     }[mutation]
 
-    with contextlib.suppress(GpxDecodeError):  # rifiutare è lecito; ogni altra eccezione no
+    with contextlib.suppress(GpxDecodeError):  # rejecting is fine; any other exception is not
         decode_gpx(mutated)
 
 

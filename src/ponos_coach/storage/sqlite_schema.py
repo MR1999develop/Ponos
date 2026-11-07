@@ -1,50 +1,50 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Schema SQLite del profilo e migrazioni versionate.
+"""SQLite schema of the profile and versioned migrations.
 
-La versione dello schema sta in `PRAGMA user_version` (unica fonte). Le migrazioni sono
-elenchi di istruzioni, una per volta, eseguite in una sola transazione dal chiamante: mai
-`executescript`, che conferma da solo. Una migrazione già rilasciata non si modifica; per
-cambiare lo schema si aggiunge la successiva (e un test confronta gli insiemi chiusi della
-v1 con gli enum del dominio, così un valore nuovo obbliga a scrivere una migrazione).
+The schema version lives in `PRAGMA user_version` (single source). Migrations are
+lists of statements, one at a time, executed in a single transaction by the caller: never
+`executescript`, which commits on its own. An already released migration is not modified; to
+change the schema the next one is added (and a test compares the closed sets of
+v1 with the domain enums, so a new value forces writing a migration).
 
-Colonne di v1 (tutte `STRICT`, tempi in millisecondi UTC interi):
+Columns of v1 (all `STRICT`, times in whole UTC milliseconds):
 
-- `meta(key, value)`: `profile_id`, `name`, `timezone`. Chiavi sconosciute si conservano.
-- `activities`: una riga per attività; `identity_key` e `garmin_activity_id` UNIQUE; durate e
-  distanze in secondi e metri (`REAL`, valori misurati); percorso, SHA-256 e byte del file
-  originale; vincoli CHECK uguali agli invarianti del dominio.
-- `physiology`: parametri validi da `valid_from` (data ISO, chiave primaria).
-- `load_cache`: un carico per attività (chiave esterna con `ON DELETE CASCADE`), con l'impronta
-  dei parametri; derivato e rigenerabile.
+- `meta(key, value)`: `profile_id`, `name`, `timezone`. Unknown keys are preserved.
+- `activities`: one row per activity; `identity_key` and `garmin_activity_id` UNIQUE; durations and
+  distances in seconds and meters (`REAL`, measured values); path, SHA-256 and bytes of the
+  original file; CHECK constraints equal to the domain invariants.
+- `physiology`: parameters valid from `valid_from` (ISO date, primary key).
+- `load_cache`: one load per activity (foreign key with `ON DELETE CASCADE`), with the fingerprint
+  of the parameters; derived and regenerable.
 
-Colonne di v2 (sincronizzazione Garmin, tutte `STRICT`):
+Columns of v2 (Garmin synchronization, all `STRICT`):
 
-- `sync_journal`: una riga per attività remota (`garmin_id` chiave primaria) con il riepilogo
-  remoto (inizio in millisecondi UTC, durata, chiave dello sport, FC nota), lo stato su insieme
-  chiuso, i tentativi falliti e la causa; i CHECK impongono le stesse coerenze di
-  `JournalEntry`. Nessuna chiave esterna: una voce abbinata o scaricata sopravvive alla
-  cancellazione dell'attività.
-- `sync_cursor`: il punto raggiunto in ciascun elenco remoto (`full`, `verify`, `incremental`).
-- `sync_state`: una sola riga (`id = 1`) con la fine dell'ultima sincronizzazione.
+- `sync_journal`: one row per remote activity (`garmin_id` primary key) with the remote
+  summary (start in UTC milliseconds, duration, sport key, known HR), the state on a closed
+  set, the failed attempts and the cause; the CHECKs impose the same consistency as
+  `JournalEntry`. No foreign key: a matched or downloaded entry survives the
+  deletion of the activity.
+- `sync_cursor`: the point reached in each remote list (`full`, `verify`, `incremental`).
+- `sync_state`: a single row (`id = 1`) with the end of the last synchronization.
 
-Colonne di v3 (dati personali, pesi degli sport e zone di FC):
+Columns of v3 (personal data, sport weights and HR zones):
 
-- `profile_body`: una sola riga (`id = 1`) con altezza (cm) e data di nascita, fisse: un trigger
-  rifiuta ogni `UPDATE` e ogni `DELETE`; la data di nascita è una data ISO esistente
-  (`date(col) IS col`). Assente nei profili creati prima della v3 (da completare una volta).
-- `weight`: serie del peso con data di validità (data ISO esistente, non anteriore al
-  1900-01-01), in decimi di chilogrammo interi.
-- `sport_weights`: solo i pesi degli sport diversi dal default.
-- `load_cache`: cinque colonne `zone1_s ... zone5_s` con i secondi in ciascuna zona. La cache è
-  derivata e rigenerabile: la migrazione la svuota, così nessun carico resta senza zone.
+- `profile_body`: a single row (`id = 1`) with height (cm) and date of birth, fixed: a trigger
+  rejects every `UPDATE` and every `DELETE`; the date of birth is an existing ISO date
+  (`date(col) IS col`). Absent in profiles created before v3 (to be completed once).
+- `weight`: weight series with validity date (existing ISO date, not earlier than
+  1900-01-01), in whole tenths of a kilogram.
+- `sport_weights`: only the sport weights different from the default.
+- `load_cache`: five columns `zone1_s ... zone5_s` with the seconds in each zone. The cache is
+  derived and regenerable: the migration empties it, so no load remains without zones.
 """
 
 from __future__ import annotations
 
 from typing import Final
 
-# Insiemi chiusi della v1 (valori stabili dei dati salvati); congelati qui apposta.
+# Closed sets of v1 (stable values of the saved data); frozen here on purpose.
 _SPORTS = "'running','trail','cycling','strength','hiking','walking','other'"
 _FORMATS = "'fit','gpx'"
 _ORIGINS = "'import','garmin'"
@@ -57,7 +57,7 @@ V1_ORIGINS: Final = frozenset(_ORIGINS.replace("'", "").split(","))
 V1_SEXES: Final = frozenset(_SEXES.replace("'", "").split(","))
 V1_LOAD_SOURCES: Final = frozenset(_LOAD_SOURCES.replace("'", "").split(","))
 
-# Insiemi chiusi della v2 (valori stabili dei dati salvati); congelati qui apposta.
+# Closed sets of v2 (stable values of the saved data); frozen here on purpose.
 _SYNC_STATUSES = "'pending','downloaded','matched','retryable','failed'"
 _RETRYABLE_FAILURES = "'transient_error','rate_limited'"
 _FAILURES = (
@@ -71,7 +71,7 @@ V2_FAILURES: Final = frozenset(_FAILURES.replace("'", "").split(","))
 V2_RETRYABLE_FAILURES: Final = frozenset(_RETRYABLE_FAILURES.replace("'", "").split(","))
 V2_LISTING_KINDS: Final = frozenset(_LISTING_KINDS.replace("'", "").split(","))
 
-# Limiti dei dati personali (gli stessi dei tipi di dominio), congelati qui apposta.
+# Limits of the personal data (the same as the domain types), frozen here on purpose.
 V3_HEIGHT_CM = (100, 250)
 V3_WEIGHT_TENTHS_KG = (200, 3000)
 V3_MIN_BIRTH_DATE = "1900-01-01"
@@ -79,7 +79,7 @@ V3_MIN_MEASUREMENT_DATE = "1900-01-01"
 V3_SPORT_WEIGHT_MAX = 5.0
 ZONE_COLUMNS: Final = ("zone1_s", "zone2_s", "zone3_s", "zone4_s", "zone5_s")
 
-# Le tabelle che ogni database di profilo ha dalla v1: senza, il file non è di un profilo.
+# The tables that every profile database has since v1: without them, the file is not a profile's.
 V1_TABLES: Final = frozenset({"meta", "activities", "physiology", "load_cache"})
 V2_TABLES: Final = frozenset({"sync_journal", "sync_cursor", "sync_state"})
 V3_TABLES: Final = frozenset({"profile_body", "weight", "sport_weights"})
@@ -168,7 +168,7 @@ CREATE TABLE sync_journal (
 ) STRICT
 """
 
-# Indice parziale: solo le voci da lavorare, nell'ordine in cui si lavorano.
+# Partial index: only the entries to process, in the order in which they are processed.
 _V2_SYNC_JOURNAL_TO_DO_INDEX = (
     "CREATE INDEX sync_journal_to_do ON sync_journal (start_ms DESC, garmin_id DESC) "
     "WHERE status IN ('pending', 'retryable')"
@@ -199,7 +199,7 @@ CREATE TABLE profile_body (
 ) STRICT
 """
 
-# Altezza e data di nascita sono fisse: nemmeno un UPDATE o un DELETE diretto le cambia.
+# Height and date of birth are fixed: not even a direct UPDATE or DELETE changes them.
 _V3_PROFILE_BODY_FIXED = """
 CREATE TRIGGER profile_body_is_fixed BEFORE UPDATE ON profile_body
 BEGIN
@@ -230,14 +230,14 @@ CREATE TABLE sport_weights (
 ) STRICT
 """
 
-# I carichi salvati non hanno le zone: la cache è derivata, si svuota e si ricalcola dai file.
+# Saved loads have no zones: the cache is derived, it is emptied and recomputed from the files.
 _V3_CLEAR_LOAD_CACHE = "DELETE FROM load_cache"
 _V3_ZONE_COLUMNS = tuple(
     f"ALTER TABLE load_cache ADD COLUMN {column} REAL NOT NULL DEFAULT 0 CHECK ({column} >= 0)"
     for column in ZONE_COLUMNS
 )
 
-# Migrazione i (indice i-1): porta lo schema dalla versione i-1 alla i.
+# Migration i (index i-1): brings the schema from version i-1 to i.
 MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     (_V1_META, _V1_ACTIVITIES, _V1_ACTIVITIES_START_INDEX, _V1_PHYSIOLOGY, _V1_LOAD_CACHE),
     (_V2_SYNC_JOURNAL, _V2_SYNC_JOURNAL_TO_DO_INDEX, _V2_SYNC_CURSOR, _V2_SYNC_STATE),

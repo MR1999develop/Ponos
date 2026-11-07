@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Composizione della finestra dal Composition Root e gesti comuni ai test dell'area di lavoro."""
+"""Window composition from the Composition Root and gestures common to the workspace tests."""
 
 from __future__ import annotations
 
@@ -42,11 +42,11 @@ from tests.fixtures.generators.zip_writer import garmin_download
 
 TODAY = date(2026, 6, 30)
 WAIT_MS = 60_000
-FILES_IN_FIXTURE_FOLDER = 8  # 5 FIT, 1 GPX, 1 ZIP, 1 FIT in una sottocartella
-DAYS_IN_CHART = 61  # dal 1 maggio al 30 giugno 2026
+FILES_IN_FIXTURE_FOLDER = 8  # 5 FIT, 1 GPX, 1 ZIP, 1 FIT in a subfolder
+DAYS_IN_CHART = 61  # from 1 May to 30 June 2026
 
 
-# Pause e attese di Garmin quasi nulle: i test non devono aspettare secondi per ogni attività.
+# Garmin pauses and waits nearly zero: tests must not wait seconds for each activity.
 FAST_POLICY = SyncPolicy(
     min_pause_s=0.001, max_jitter_s=0.0, backoff_base_s=0.01, backoff_cap_s=0.05
 )
@@ -54,7 +54,7 @@ FAST_POLICY = SyncPolicy(
 
 @dataclass(frozen=True, slots=True)
 class GarminFakes:
-    """Garmin, portachiavi e notifica finti con cui `compose` costruisce la finestra."""
+    """Fake Garmin, keyring and notification with which `compose` builds the window."""
 
     source: FakeActivitySource
     account: FakeGarminAccount
@@ -68,10 +68,10 @@ def make_fakes(
     source: FakeActivitySource | None = None,
     served: ActivitySource | None = None,
 ) -> GarminFakes:
-    """Fake nuovi: nessun'attività su Garmin, nessun token, nessuna notifica.
+    """New fakes: no activity on Garmin, no token, no notification.
 
-    `served` è ciò che l'account dà alla sincronizzazione al posto di `source` (per esempio un
-    decoratore con un cancello)."""
+    `served` is what the account gives to the sync instead of `source` (for example a
+    decorator with a gate)."""
     garmin = source or FakeActivitySource([])
     return GarminFakes(
         garmin,
@@ -85,7 +85,7 @@ _FAKES: weakref.WeakKeyDictionary[MainWindow, GarminFakes] = weakref.WeakKeyDict
 
 
 def fakes_of(window: MainWindow) -> GarminFakes:
-    """I fake con cui `compose` ha costruito la finestra."""
+    """The fakes with which `compose` built the window."""
     return _FAKES[window]
 
 
@@ -94,10 +94,10 @@ def make_settings(tmp_path: Path) -> QSettings:
 
 
 class FakeFolderPicker:
-    """Selettore di cartella finto: risponde con `answer` e ricorda da dove è partito."""
+    """Fake folder picker: answers with `answer` and remembers where it started."""
 
     def __init__(self, base: Path) -> None:
-        self.base = base  # cartella dei profili nei test
+        self.base = base  # profiles folder in the tests
         self.answer = base
         self.starts: list[str] = []
 
@@ -110,12 +110,12 @@ _PICKERS: weakref.WeakKeyDictionary[MainWindow, FakeFolderPicker] = weakref.Weak
 
 
 def picker_of(window: MainWindow) -> FakeFolderPicker:
-    """Il selettore finto con cui `compose` ha costruito la finestra."""
+    """The fake picker with which `compose` built the window."""
     return _PICKERS[window]
 
 
 def pick_profile_folder(window: MainWindow, dialog: NewProfileDialog, folder: Path) -> None:
-    """Sceglie `folder` con "Sfoglia..." del dialogo (selettore finto)."""
+    """Choose `folder` with the dialog's "Browse..." (fake picker)."""
     picker_of(window).answer = folder
     QTest.mouseClick(dialog.browse_button, Qt.MouseButton.LeftButton)
 
@@ -132,9 +132,9 @@ def compose(
     mfa_wait_s: float = MFA_WAIT_S,
     language: Language = Language.ENGLISH,
 ) -> MainWindow:
-    """Finestra dal Composition Root, con configurazione e profili in `tmp_path`.
+    """Window from the Composition Root, with configuration and profiles in `tmp_path`.
 
-    `gate` (se dato) fa attendere la decodifica della panoramica finché non è impostato.
+    `gate` (if given) makes the overview decoding wait until it is set.
     """
 
     def gated_decode(data: bytes, file_format: FileFormat) -> Activity:
@@ -169,13 +169,13 @@ def compose(
 
 
 def close_window(qtbot: QtBot, window: MainWindow) -> None:
-    """Chiude la finestra e attende la fine della chiusura in due tempi (profilo chiuso)."""
+    """Close the window and wait for the end of the two-phase closing (profile closed)."""
     window.close()
     qtbot.waitUntil(lambda: window.is_closed, timeout=WAIT_MS)
 
 
 def make_import_folder(tmp_path: Path) -> Path:
-    """Cartella con 8 attività valide (FIT, GPX, ZIP, una in sottocartella) e un file rotto."""
+    """Folder with 8 valid activities (FIT, GPX, ZIP, one in a subfolder) and a broken file."""
     folder = tmp_path / "to-import"
     (folder / "sub").mkdir(parents=True)
     for number in range(5):
@@ -193,21 +193,21 @@ def fill_body_data(
     weight: str = "65,5",
     birth: date = date(1995, 4, 2),
 ) -> None:
-    """Scrive altezza, peso e data di nascita (valori di prova, di nessuna persona reale)."""
+    """Write height, weight and date of birth (test values, of no real person)."""
     QTest.keyClicks(dialog.height_edit, height)
     QTest.keyClicks(dialog.weight_edit, weight)
     dialog.birth_edit.select(birth)
 
 
 def fill_new_profile(window: MainWindow, dialog: NewProfileDialog, name: str) -> None:
-    """Scrive nome e dati del corpo e sceglie la cartella `<profiles>/<nome>` (selettore finto)."""
+    """Write name and body data and choose the folder `<profiles>/<name>` (fake picker)."""
     QTest.keyClicks(dialog.name_edit, name)
     fill_body_data(dialog)
     pick_profile_folder(window, dialog, picker_of(window).base / name)
 
 
 def create_profile(qtbot: QtBot, window: MainWindow, name: str) -> None:
-    """Guida il dialogo "Nuovo profilo" (aperto o da aprire) fino a profilo creato e aperto."""
+    """Drive the "New profile" dialog (open or to be opened) to a created and opened profile."""
     if window.new_profile_dialog is None:
         window.show_new_profile()
     qtbot.waitUntil(lambda: window.new_profile_dialog is not None, timeout=WAIT_MS)
@@ -226,7 +226,7 @@ def create_profile(qtbot: QtBot, window: MainWindow, name: str) -> None:
 
 
 def wait_ready(qtbot: QtBot, window: MainWindow, activities: int) -> None:
-    """Attende la panoramica pronta con questo numero di attività."""
+    """Wait for the overview ready with this number of activities."""
     qtbot.waitUntil(
         lambda: (
             isinstance(window.controller.overview_state, Ready)
@@ -237,7 +237,7 @@ def wait_ready(qtbot: QtBot, window: MainWindow, activities: int) -> None:
 
 
 class GatedSource:
-    """Fake di `ImportSource`: ogni lettura attende un cancello, con scadenza."""
+    """Fake of `ImportSource`: each read waits at a gate, with a deadline."""
 
     def __init__(self, inner: ImportSource, gate: threading.Event) -> None:
         self._inner = inner
@@ -256,7 +256,7 @@ class GatedSource:
 
 
 def gated_sources(gate: threading.Event) -> ImportSources:
-    """Sorgenti vere, con le letture trattenute dal cancello."""
+    """Real sources, with the reads held by the gate."""
     return ImportSources(
         files=lambda paths: GatedSource(FilesImportSource(list(paths)), gate),
         folder=lambda folder: GatedSource(FolderImportSource(folder), gate),

@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Modulo "Nuovo profilo": stato e validazione, testabili senza finestra.
+"""Form "New profile": state and validation, testable without a window.
 
-Il modello tiene i valori, decide dove vanno i dati (la cartella scelta, o una sottocartella con
-il nome del profilo se la scelta contiene già altro), stima la FC di soglia dalla massima
-finché l'utente non la fissa, e dice quali campi hanno un problema (categorie, non testi: i
-messaggi li sceglie la vista). Dà una `NewProfileRequest` solo se tutto è valido.
+The model holds the values, decides where the data goes (the chosen folder, or a subfolder with
+the profile name if the chosen one already contains something else), estimates the threshold HR
+from the maximum
+until the user sets it, and says which fields have a problem (categories, not texts: the
+view chooses the messages). It gives a `NewProfileRequest` only if everything is valid.
 
-Altezza, peso e data di nascita sono dati di salute: stanno nel modulo come testo o data, si
-leggono con `body_input` e non compaiono mai in un messaggio né in un log.
+Height, weight and birth date are health data: they stay in the form as text or date, are
+read with `body_input` and never appear in a message or a log.
 """
 
 from __future__ import annotations
@@ -59,11 +60,11 @@ __all__ = [
 
 DEFAULT_MIN_BPM = 50
 DEFAULT_MAX_BPM = 190
-THRESHOLD_SHARE_OF_MAX = 0.9  # soglia stimata: 90% della FC massima
+THRESHOLD_SHARE_OF_MAX = 0.9  # estimated threshold: 90% of the maximum HR
 
 _FORBIDDEN_IN_FOLDER_NAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
-# Nomi che Windows riserva ai dispositivi, anche con un'estensione (CON.txt); COM e LPT con le
-# cifre in apice sono riservati allo stesso modo.
+# Names that Windows reserves for devices, even with an extension (CON.txt); COM and LPT with
+# superscript digits are reserved in the same way.
 _RESERVED_DEVICE_NAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL"}
     | {f"{prefix}{digit}" for prefix in ("COM", "LPT") for digit in "123456789¹²³"}
@@ -72,7 +73,7 @@ RESERVED_NAME_SUFFIX = "_profile"
 
 
 class Field(Enum):
-    """Campo del modulo."""
+    """Form field."""
 
     NAME = "name"
     FOLDER = "folder"
@@ -85,7 +86,7 @@ class Field(Enum):
 
 
 class Problem(Enum):
-    """Che cosa non va in un campo."""
+    """What is wrong with a field."""
 
     NAME_EMPTY = (Field.NAME, "name_empty")
     NAME_TOO_LONG = (Field.NAME, "name_too_long")
@@ -104,7 +105,7 @@ class Problem(Enum):
 
     @property
     def field(self) -> Field:
-        """Il campo a cui appartiene il problema."""
+        """The field the problem belongs to."""
         return self.value[0]
 
 
@@ -126,25 +127,25 @@ _PROBLEM_TO_HEART_RATE = {problem: rule for rule, problem in _HEART_RATE_PROBLEM
 
 type BodyReadings = tuple[
     Height | BodyProblem, Weight | BodyProblem, BirthDate | BodyProblem
-]  # altezza, peso e data di nascita letti una volta sola
+]  # height, weight and birth date read only once
 
 
 def heart_rate_problem_of(problem: Problem) -> HeartRateProblem | None:
-    """La regola di `heart_rate_rules` violata da un problema di FC."""
+    """The `heart_rate_rules` rule violated by an HR problem."""
     return _PROBLEM_TO_HEART_RATE.get(problem)
 
 
 def body_problem_of(problem: Problem) -> BodyProblem | None:
-    """La categoria di `body_input` di un problema di altezza, peso o data di nascita."""
+    """The `body_input` category of a height, weight or birth date problem."""
     return _PROBLEM_TO_BODY.get(problem)
 
 
 def folder_name_from(profile_name: str) -> str:
-    """Nome di cartella derivato da un nome di profilo.
+    """Folder name derived from a profile name.
 
-    I caratteri vietati diventano `_`; un nome che Windows riserva a un dispositivo (CON, PRN,
-    AUX, NUL, COM1-9, LPT1-9, anche con un'estensione) prende il suffisso `_profile` prima
-    dell'estensione.
+    Forbidden characters become `_`; a name that Windows reserves for a device (CON, PRN,
+    AUX, NUL, COM1-9, LPT1-9, even with an extension) gets the suffix `_profile` before
+    the extension.
     """
     cleaned = _FORBIDDEN_IN_FOLDER_NAME.sub("_", unicodedata.normalize("NFC", profile_name))
     cleaned = cleaned.strip().rstrip(". ")
@@ -155,46 +156,47 @@ def folder_name_from(profile_name: str) -> str:
 
 
 def estimated_threshold(max_bpm: int) -> int:
-    """FC di soglia stimata dalla massima (90%), portata nei limiti ammessi."""
+    """Threshold HR estimated from the maximum (90%), brought within the allowed limits."""
     return max(MIN_THRESHOLD_BPM, min(MAX_ALLOWED_BPM, round(max_bpm * THRESHOLD_SHARE_OF_MAX)))
 
 
 class NewProfileForm:
-    """Valori del modulo e regole. Non conosce widget né testi."""
+    """Form values and rules. It knows neither widgets nor texts."""
 
     def __init__(self, timezone_name: str) -> None:
         self.timezone_name = timezone_name
         self.name = ""
-        self.height_text = ""  # vuoti finché l'utente non li scrive: nessuna proposta
+        self.height_text = ""  # empty until the user types them: no suggestion
         self.weight_text = ""
         self.birth_date: date | None = None
         self.min_bpm = DEFAULT_MIN_BPM
         self.max_bpm = DEFAULT_MAX_BPM
         self.sex = Sex.MALE
-        self._folder_text = ""  # vuota finché l'utente non sceglie: nessuna proposta
-        self._threshold: int | None = None  # None: stimata dalla massima
-        self.folder_state: FolderState | None = None  # ultimo esame noto della cartella
+        self._folder_text = ""  # empty until the user chooses: no suggestion
+        self._threshold: int | None = None  # None: estimated from the maximum
+        self.folder_state: FolderState | None = None  # last known examination of the folder
 
-    # --- Cartella e soglia ------------------------------------------------------------
+    # --- Folder and threshold ------------------------------------------------------------
 
     @property
     def folder_text(self) -> str:
-        """Cartella scelta dall'utente (vuota finché non la sceglie)."""
+        """Folder chosen by the user (empty until chosen)."""
         return self._folder_text
 
     def choose_folder(self, text: str) -> None:
-        """L'utente sceglie o scrive la cartella; l'esame precedente non vale più."""
+        """The user chooses or types the folder; the previous examination no longer applies."""
         self._folder_text = text
         self.folder_state = None
 
     @property
     def uses_subfolder(self) -> bool:
-        """Vero se la cartella scelta contiene già altro: i dati vanno in una sottocartella."""
+        """True if the chosen folder already contains something else: the data goes in a
+        subfolder."""
         return self.folder_state is FolderState.NOT_EMPTY
 
     @property
     def destination(self) -> str:
-        """Cartella in cui andranno i dati (vuota se non è ancora determinabile)."""
+        """Folder where the data will go (empty if not yet determinable)."""
         chosen = self._folder_text.strip()
         if not chosen or not self.uses_subfolder:
             return chosen
@@ -203,29 +205,29 @@ class NewProfileForm:
 
     @property
     def threshold_bpm(self) -> int:
-        """FC di soglia: quella fissata, o la stima dalla massima."""
+        """Threshold HR: the one set, or the estimate from the maximum."""
         return estimated_threshold(self.max_bpm) if self._threshold is None else self._threshold
 
     @property
     def threshold_is_estimate(self) -> bool:
-        """Vero finché la soglia è una stima da confermare con il test."""
+        """True while the threshold is an estimate to confirm with the test."""
         return self._threshold is None
 
     def set_threshold(self, bpm: int) -> None:
-        """L'utente fissa la soglia: non è più una stima."""
+        """The user sets the threshold: it is no longer an estimate."""
         self._threshold = bpm
 
     # --- Validazione ------------------------------------------------------------------
 
     def problems(self, today: date) -> tuple[Problem, ...]:
-        """Problemi dei valori attuali, nell'ordine dei campi (vuoto se tutto è valido).
+        """Problems of the current values, in field order (empty if everything is valid).
 
-        `today` (data di oggi nel fuso del profilo) serve al limite della data di nascita.
+        `today` (today's date in the profile's time zone) serves for the birth date limit.
         """
         return self._problems_of(self._read_body(today))
 
     def _read_body(self, today: date) -> BodyReadings:
-        """Altezza, peso e data di nascita: valori validi o la categoria del problema."""
+        """Height, weight and birth date: valid values or the problem category."""
         return (
             read_height(self.height_text),
             read_weight(self.weight_text),
@@ -254,7 +256,8 @@ class NewProfileForm:
         return []
 
     def folder_problem(self) -> Problem | None:
-        """Problema della cartella scelta (il solo che blocca "Crea profilo" da subito)."""
+        """Problem of the chosen folder (the only one that blocks "Create profile" from the
+        start)."""
         text = self._folder_text.strip()
         if not text:
             return Problem.FOLDER_EMPTY
@@ -269,7 +272,7 @@ class NewProfileForm:
         if found is not None:
             return [found]
         if self.uses_subfolder and not self.destination and not self._name_problems():
-            return [Problem.NAME_INVALID]  # nome valido ma senza un nome di cartella utilizzabile
+            return [Problem.NAME_INVALID]  # valid name but without a usable folder name
         return []
 
     def _heart_rate_problems(self) -> list[Problem]:
@@ -277,7 +280,7 @@ class NewProfileForm:
         return [_HEART_RATE_PROBLEMS[item] for item in found]
 
     def build_request(self, today: date) -> NewProfileRequest | tuple[Problem, ...]:
-        """La richiesta di creazione, oppure i problemi che la impediscono."""
+        """The creation request, or the problems that prevent it."""
         readings = self._read_body(today)
         height, weight, birth = readings
         found = self._problems_of(readings)

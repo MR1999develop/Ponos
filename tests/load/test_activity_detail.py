@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Caso d'uso `GetActivityDetail`: tracciato, zone valide quel giorno, riepilogo, carico, errori."""
+"""`GetActivityDetail` use case: track, zones valid that day, summary, load, errors."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ START = datetime(2026, 2, 10, 7, 0, tzinfo=UTC)
 def add_activity(
     world: World, bpm: Sequence[int | None], *, serial: int = 1, start: datetime = START
 ) -> ActivityRecord:
-    """Un'attività a 1 Hz con questi bpm (None = senza FC valida) nell'archivio del mondo."""
+    """A 1 Hz activity with these bpm (None = no valid HR) in the world's archive."""
     first = fw.datetime_to_fit(start)
     samples = [fw.Sample(first + i, value) for i, value in enumerate(bpm)]
     spec = fw.ActivitySpec(
@@ -118,7 +118,7 @@ def test_out_of_limit_samples_are_marked_as_discarded_in_the_trace() -> None:
     world = World()
     world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
     bpm: list[int | None] = [150] * 20
-    bpm[3], bpm[9] = 200, 40  # sopra la massima 190, sotto la minima 50
+    bpm[3], bpm[9] = 200, 40  # above the maximum 190, below the minimum 50
     record = add_activity(world, bpm)
 
     detail = detail_of(world, record)
@@ -126,11 +126,11 @@ def test_out_of_limit_samples_are_marked_as_discarded_in_the_trace() -> None:
     assert detail.trace is not None
     assert np.flatnonzero(detail.trace.discarded).tolist() == [3, 9]
     assert detail.trace.discarded_count == detail.load.discarded_samples == 2
-    assert detail.trace.bpm[3] == 200.0  # il campione scartato si vede, marcato
+    assert detail.trace.bpm[3] == 200.0  # the discarded sample is visible, marked
 
 
 def test_limits_and_zones_are_the_ones_valid_on_the_activity_day() -> None:
-    """T-CALC-05: due attività a cavallo di un cambio di soglia e di FC massima."""
+    """T-CALC-05: two activities straddling a threshold and maximum HR change."""
     world = World()
     world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
     world.profile.physiology.put(physiology_entry(CHANGE_DAY, 160))
@@ -142,7 +142,7 @@ def test_limits_and_zones_are_the_ones_valid_on_the_activity_day() -> None:
     assert (detail_before.threshold_bpm, detail_after.threshold_bpm) == (170, 160)
     assert detail_after.zone_starts_bpm == (136.0, 144.0, 152.0, 160.0)
     assert detail_before.load.zone_seconds.values == (0.0, 60.0, 0.0, 0.0, 0.0)  # 150 = 88%
-    assert detail_after.load.zone_seconds.values == (0.0, 0.0, 60.0, 0.0, 0.0)  # 150 = 93,75%
+    assert detail_after.load.zone_seconds.values == (0.0, 0.0, 60.0, 0.0, 0.0)  # 150 = 93.75%
 
 
 def test_a_saved_sport_weight_changes_the_load_in_the_detail() -> None:
@@ -179,7 +179,7 @@ def test_the_detail_reads_the_file_but_leaves_the_load_cache_alone() -> None:
 
     assert world.archive.reads == 1
     world.overview()
-    assert world.archive.reads == 2  # la cache era vuota: la panoramica ha dovuto leggere
+    assert world.archive.reads == 2  # the cache was empty: the overview had to read
 
 
 def test_an_unknown_activity_is_an_error_of_the_caller() -> None:
@@ -214,7 +214,7 @@ def test_an_altered_file_is_a_clear_outcome() -> None:
     world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
     record = add_activity(world, [150] * 60)
     data = bytearray(world.archive.files[record.archived.relative_path])
-    data[20] ^= 0xFF  # stessa dimensione, contenuto diverso: lo SHA-256 non torna più
+    data[20] ^= 0xFF  # same size, different content: the SHA-256 no longer matches
     world.archive.files[record.archived.relative_path] = bytes(data)
 
     assert use_case(world)(record.identity) == ExcludedActivity(

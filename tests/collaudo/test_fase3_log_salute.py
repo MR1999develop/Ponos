@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-SEC-08 per i dati personali della fase 3: altezza, peso, data di nascita e FC mai nei log.
+"""T-SEC-08 for the personal data of phase 3: height, weight, date of birth and HR never in the
+logs.
 
-Si percorre l'interfaccia vera con valori inventati e riconoscibili (nessuna persona reale):
-creazione del profilo, modifica delle misure, pesi degli sport, input rifiutati, un guasto del
-database e un'eccezione imprevista il cui testo contiene i valori. Poi si cerca ogni valore in tutto
-ciò che l'app scrive o mostra: il file di log, i record catturati (messaggio, argomenti, traceback)
-e i testi dei messaggi e dei campi d'errore.
+The real interface is run through with invented, recognisable values (no real person):
+profile creation, measurement edit, sport weights, refused inputs, a database failure
+and an unexpected exception whose text contains the values. Then every value is searched for in
+everything
+the app writes or shows: the log file, the captured records (message, arguments, traceback)
+and the texts of the messages and of the error fields.
 """
 
 from __future__ import annotations
@@ -52,7 +54,7 @@ WEIGHT_TYPED = "93,7"
 BIRTH = date(1983, 11, 27)
 FIRST_WEIGHT_UPDATE = "88,3"
 MIN_BPM, MAX_BPM, THRESHOLD_BPM = 43, 199, 181
-LEAKY = "the weight 77.7 kg and height 191 cm"  # il testo di un'eccezione che contiene dati
+LEAKY = "the weight 77.7 kg and height 191 cm"  # the text of an exception that contains data
 
 FORBIDDEN = {
     "altezza": re.compile(r"(?<![\w.])187(?![\w])"),
@@ -70,7 +72,7 @@ def settings(tmp_path: Path) -> QSettings:
 
 @pytest.fixture(autouse=True)
 def log_file(tmp_path: Path) -> Iterator[Path]:
-    """Il file di log come lo configura `main()`, tolto a fine test."""
+    """The log file as `main()` configures it, removed at the end of the test."""
     path = configure_logging(tmp_path / "logs", version="collaudo")
     assert path is not None
     yield path
@@ -81,12 +83,12 @@ def log_file(tmp_path: Path) -> Iterator[Path]:
 
 
 def strip_timestamps(text: str) -> str:
-    """Toglie la data e l'ora iniziali di ogni riga del file di log (cifre dell'orologio)."""
+    """Removes the initial date and time of every line of the log file (clock digits)."""
     return "\n".join(re.sub(r"^\S+T\S+Z ", "", line) for line in text.splitlines())
 
 
 def visible_boxes() -> list[QMessageBox]:
-    """Ogni messaggio visibile dell'app, comunque sia stato aperto."""
+    """Every visible message of the app, however it was opened."""
     return [
         w for w in QApplication.topLevelWidgets() if isinstance(w, QMessageBox) and w.isVisible()
     ]
@@ -100,7 +102,7 @@ def box_texts() -> str:
 
 
 def error_texts(dialog: ProfileEditDialog) -> str:
-    """I messaggi d'errore sotto i campi (non i dati che il dialogo mostra all'utente)."""
+    """The error messages under the fields (not the data the dialog shows the user)."""
     return "\n".join(dialog.error_text(field) for field in EditField)
 
 
@@ -127,16 +129,16 @@ def create_with_sentinels(qtbot: QtBot, window: MainWindow, tmp_path: Path) -> N
 def drive_the_interface(
     qtbot: QtBot, window: MainWindow, monkeypatch: pytest.MonkeyPatch
 ) -> list[str]:
-    """Modifiche valide, input rifiutati, guasti e pesi; dà i testi che l'utente ha visto."""
+    """Valid edits, refused inputs, failures and weights; gives the texts the user saw."""
     shown: list[str] = []
-    # 1. modifica valida delle misure
+    # 1. valid edit of the measurements
     edit = open_edit_dialog(qtbot, window)
     edit.weight_edit.clear()
     QTest.keyClicks(edit.weight_edit, FIRST_WEIGHT_UPDATE)
     click(edit.save_button)
     qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
 
-    # 2. input rifiutati sul posto: testo non numerico, peso fuori limite, FC incoerenti
+    # 2. inputs refused on the spot: non-numeric text, weight out of range, inconsistent HR
     edit = open_edit_dialog(qtbot, window)
     for text in ("abc", "19,9", "301", "93,77"):
         edit.weight_edit.clear()
@@ -144,14 +146,14 @@ def drive_the_interface(
         click(edit.save_button)
         shown.append(error_texts(edit))
     edit.weight_edit.clear()
-    edit.min_box.setValue(MAX_BPM)  # minima sopra la massima
+    edit.min_box.setValue(MAX_BPM)  # minimum above the maximum
     edit.threshold_box.setValue(THRESHOLD_BPM)
     click(edit.save_button)
     shown.append(error_texts(edit))
 
-    # 3. guasto del database (errore noto del salvataggio) e poi eccezione imprevista con dati
+    # 3. database failure (known save error) and then an unexpected exception with data
     def known_failure(*_args: object) -> None:
-        raise ProfileDataError("scrittura del peso non riuscita")
+        raise ProfileDataError("weight write failed")
 
     def leaky_failure(*_args: object) -> None:
         raise RuntimeError(LEAKY)
@@ -171,7 +173,7 @@ def drive_the_interface(
         monkeypatch.undo()
         again.reject()
 
-    # 4. pesi degli sport
+    # 4. sport weights
     weights = open_weights_dialog(qtbot, window)
     weights.box(Sport.CYCLING).setValue(1.25)
     click(weights.save_button)
@@ -202,19 +204,19 @@ def test_t_sec_08_no_body_datum_reaches_the_log_the_messages_or_the_error_texts(
     raw_with_traceback = strip_timestamps(format_logs(caplog.records))
     everywhere = {
         "file di log": on_disk,
-        "righe del formatter sicuro": safe_lines,
+        "lines of the safe formatter": safe_lines,
         "messaggi grezzi": raw_messages,
         "messaggi e traceback": raw_with_traceback,
         "testi mostrati": "\n".join(shown),
     }
-    assert log_file.exists() and on_disk  # il file di log esiste e ha scritto qualcosa
+    assert log_file.exists() and on_disk  # the log file exists and has written something
     leaks = {
         (where, kind, match.group(0))
         for where, text in everywhere.items()
         for kind, pattern in FORBIDDEN.items()
         for match in pattern.finditer(text)
-        # il traceback grezzo contiene per forza il testo dell'eccezione imprevista: è il
-        # formatter sicuro (quello del file) a dover tacere, non il traceback di pytest
+        # the raw traceback necessarily contains the text of the unexpected exception: it is the
+        # safe formatter (the file's one) that must stay silent, not pytest's traceback
         if not (where == "messaggi e traceback" and kind == "eccezione")
     }
     assert leaks == set()
@@ -243,12 +245,12 @@ def test_t_sec_08_the_last_resort_handler_shows_a_generic_message_and_logs_only_
     monkeypatch.undo()
 
     assert not FORBIDDEN["eccezione"].search(texts)
-    assert "RuntimeError" not in texts  # nessun nome di classe all'utente
-    assert texts.strip()  # ma un messaggio c'è
+    assert "RuntimeError" not in texts  # no class name shown to the user
+    assert texts.strip()  # but a message is there
     for box in visible_boxes():
         box.close()
     edit.reject()
     close_window(qtbot, window)
     log = (tmp_path / "logs" / LOG_FILE_NAME).read_text(encoding="utf-8")
-    assert "RuntimeError" in log  # il dettaglio per chi indaga: il tipo
-    assert not FORBIDDEN["eccezione"].search(log)  # mai il testo
+    assert "RuntimeError" in log  # the detail for whoever investigates: the type
+    assert not FORBIDDEN["eccezione"].search(log)  # never the text

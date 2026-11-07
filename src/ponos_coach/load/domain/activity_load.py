@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Carico di una singola attività: TRIMP di Banister, hrTSS e carico pesato.
+"""Load of a single activity: Banister TRIMP, hrTSS and weighted load.
 
-Formule in `PLAN.md` sezione 4.5. Il calcolo è vettoriale (NumPy), senza cicli per campione.
+Formulas in `PLAN.md` section 4.5. The computation is vectorized (NumPy), with no per-sample loops.
 """
 
 from __future__ import annotations
@@ -19,9 +19,9 @@ from ponos_coach.load.domain.heart_rate import HeartRateLimits, Physiology, thre
 from ponos_coach.load.domain.sport import SportWeight, typical_intensity
 from ponos_coach.load.domain.zones import ZoneSeconds, seconds_per_zone
 
-MAX_GAP_S = 10.0  # default del progetto: oltre questo intervallo tra campioni, non si conta
-MAX_BAD_FRACTION = 0.30  # default del progetto: oltre, il carico è una stima
-_SINGLE_SAMPLE_S = 1.0  # validità di un campione unico (nessun intervallo da cui dedurla)
+MAX_GAP_S = 10.0  # project default: beyond this interval between samples, it is not counted
+MAX_BAD_FRACTION = 0.30  # project default: beyond this, the load is an estimate
+_SINGLE_SAMPLE_S = 1.0  # validity of a single sample (no interval to infer it from)
 _BANISTER_COEFFICIENT = 0.64
 _MS_PER_S = 1000
 _PERCENT_DENOMINATOR = 100
@@ -29,7 +29,7 @@ _GOOD_PERCENT = round((1.0 - MAX_BAD_FRACTION) * _PERCENT_DENOMINATOR)  # 70
 
 
 class LoadSource(Enum):
-    """Da dove viene il carico: dalla FC misurata o stimato dalla durata."""
+    """Where the load comes from: measured HR or estimated from the duration."""
 
     HEART_RATE = "heart_rate"
     ESTIMATE = "estimate"
@@ -37,14 +37,15 @@ class LoadSource(Enum):
 
 @dataclass(frozen=True, slots=True)
 class ActivityLoad:
-    """Esito del calcolo del carico di un'attività.
+    """Outcome of the load computation of an activity.
 
-    `used_samples` sono i campioni contati (0 per una stima); `discarded_samples` quelli con
-    FC fuori da `[min, max]`; `excluded_seconds` i secondi di intervalli oltre 10 s non contati.
-    `zone_seconds` sono i secondi dei campioni contati in ciascuna zona di FC (sulla soglia dello
-    sport): gli stessi campioni del carico, quindi senza scarti né buchi; tutti zero se non c'è
-    una serie di FC (anche per una stima fatta con pochi campioni validi i secondi in zona sono
-    quelli misurati).
+    `used_samples` are the samples counted (0 for an estimate); `discarded_samples` those with
+    HR outside `[min, max]`; `excluded_seconds` the seconds of intervals over 10 s not counted.
+    `zone_seconds` are the seconds of the counted samples in each HR zone (on the sport's
+    threshold): the same samples as the load, hence with no discards or gaps; all zero if there is
+    no
+    HR series (even for an estimate made with few valid samples the seconds in zone are
+    the measured ones).
     """
 
     trimp: float
@@ -58,12 +59,12 @@ class ActivityLoad:
 
 
 def trimp_per_minute(hrr: float, k: float) -> float:
-    """TRIMP di un minuto alla riserva cardiaca relativa `hrr` (tra 0 e 1)."""
+    """One-minute TRIMP at relative heart-rate reserve `hrr` (between 0 and 1)."""
     return hrr * _BANISTER_COEFFICIENT * math.exp(k * hrr)
 
 
 def hour_at_threshold_trimp(sport: Sport, physiology: Physiology) -> float:
-    """TRIMP di un'ora alla FC di soglia dello sport (in bici: vedi `threshold_for_sport`)."""
+    """One-hour TRIMP at the sport's threshold HR (on the bike: see `threshold_for_sport`)."""
     limits = physiology.limits
     threshold = threshold_for_sport(physiology, sport)
     hrr = (threshold - limits.min_bpm) / limits.reserve_bpm
@@ -71,7 +72,7 @@ def hour_at_threshold_trimp(sport: Sport, physiology: Physiology) -> float:
 
 
 def _sample_validity_s(seconds: NDArray[np.float64]) -> NDArray[np.float64]:
-    """Secondi di validità di ogni campione: fino al successivo; l'ultimo vale la mediana."""
+    """Validity seconds of each sample: until the next; the last one takes the median."""
     if seconds.size == 1:
         return np.array([_SINGLE_SAMPLE_S])
     gaps = np.diff(seconds)
@@ -79,7 +80,7 @@ def _sample_validity_s(seconds: NDArray[np.float64]) -> NDArray[np.float64]:
 
 
 def out_of_limits(series: HeartRateSeries, limits: HeartRateLimits) -> NDArray[np.bool_]:
-    """Maschera dei campioni con FC fuori da `[min, max]`: sono quelli scartati dal carico."""
+    """Mask of the samples with HR outside `[min, max]`: those discarded by the load."""
     return ~_in_range(series, limits)
 
 
@@ -87,7 +88,7 @@ def _in_range(series: HeartRateSeries, limits: HeartRateLimits) -> NDArray[np.bo
     return (series.bpm >= limits.min_bpm) & (series.bpm <= limits.max_bpm)
 
 
-def _estimated(  # noqa: PLR0913 - i dati dell'esito, tutti necessari
+def _estimated(  # noqa: PLR0913 - the outcome's data, all necessary
     sport: Sport,
     moving_time_s: float,
     physiology: Physiology,
@@ -105,7 +106,7 @@ def _estimated(  # noqa: PLR0913 - i dati dell'esito, tutti necessari
 
 
 def _is_mostly_missing(counted_s: float, moving_time_s: float) -> bool:
-    """Vero se i secondi contati sono meno del 70% del tempo in movimento (millisecondi interi)."""
+    """True if the counted seconds are less than 70% of the moving time (whole milliseconds)."""
     counted_ms = round(counted_s * _MS_PER_S)
     moving_ms = round(moving_time_s * _MS_PER_S)
     return counted_ms * _PERCENT_DENOMINATOR < _GOOD_PERCENT * moving_ms
@@ -118,21 +119,22 @@ def compute_activity_load(
     physiology: Physiology,
     weight: SportWeight,
 ) -> ActivityLoad:
-    """Calcola TRIMP, hrTSS e carico pesato di un'attività.
+    """Computes TRIMP, hrTSS and weighted load of an activity.
 
-    Ogni campione vale fino al successivo (l'ultimo, la mediana degli intervalli); i campioni
-    con FC fuori dai limiti si scartano e si contano; gli intervalli oltre 10 s non si contano.
-    `moving_time_s` è il tempo in movimento (timer dell'attività), non il tempo trascorso, che
-    include le pause. Se i secondi contati sono meno del 70% del tempo in movimento (cioè oltre
-    il 30% scartato o mancante) o non c'è FC, il carico è la stima `durata_h * 100 * IF^2` con
-    l'intensità tipica dello sport, marcata `LoadSource.ESTIMATE`. Il confronto col 70% è in
-    millisecondi interi, senza virgola mobile al limite. Funzione pura e deterministica.
+    Each sample is valid until the next (the last, the median of the intervals); samples
+    with HR out of limits are discarded and counted; intervals over 10 s are not counted.
+    `moving_time_s` is the moving time (activity timer), not the elapsed time, which
+    includes pauses. If the counted seconds are less than 70% of the moving time (i.e. over
+    30% discarded or missing) or there is no HR, the load is the estimate `duration_h * 100 * IF^2`
+    with
+    the typical intensity of the sport, marked `LoadSource.ESTIMATE`. The comparison with 70% is in
+    whole milliseconds, with no floating point at the boundary. Pure and deterministic function.
 
     Raises:
-        ValueError: se `moving_time_s` non è finito e positivo.
+        ValueError: if `moving_time_s` is not finite and positive.
     """
     if not math.isfinite(moving_time_s) or moving_time_s <= 0:
-        raise ValueError("la durata deve essere finita e positiva")
+        raise ValueError("the duration must be finite and positive")
     if series is None:
         return _estimated(
             sport,

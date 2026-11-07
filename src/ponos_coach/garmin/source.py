@@ -1,16 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""`ActivitySource` su Garmin Connect: elenco a pagine e download dell'originale.
+"""`ActivitySource` on Garmin Connect: paged list and download of the original.
 
-Adattatore sottile sopra il "client" (`client.GarminClient`): chiama, traduce gli errori nei tipi
-della porta, interpreta la risposta al confine (`listing`) e applica i tetti. I timeout sono
-quelli del client (15 s per richiesta); le pause e i ritentativi sono del chiamante, che ha la
-politica (`SyncPolicy`): il client non ritenta da solo.
+Thin adapter on top of the "client" (`client.GarminClient`): it calls, translates errors into the
+port's
+types, interprets the response at the boundary (`listing`) and applies the caps. Timeouts are
+those of the client (15 s per request); pauses and retries belong to the caller, who has the
+policy (`SyncPolicy`): the client does not retry on its own.
 
-Limite noto: `garminconnect` legge tutto il corpo della risposta in memoria prima di
-restituirlo, quindi il tetto di byte del download si applica dopo la lettura e non la
-interrompe (il timeout di 15 s e il tetto sulla dimensione dichiarata dall'ZIP a valle
-limitano il danno). Idem per la dimensione del JSON dell'elenco.
+Known limit: `garminconnect` reads the whole response body into memory before
+returning it, so the byte cap of the download applies after the read and does not
+interrupt it (the 15 s timeout and the cap on the size declared by the downstream ZIP
+limit the damage). Same for the size of the list JSON.
 """
 
 from __future__ import annotations
@@ -32,33 +33,33 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class GarminActivitySource:
-    """Elenca e scarica le attività dell'utente di una sessione già autenticata.
+    """Lists and downloads the activities of the user of an already authenticated session.
 
-    Non è thread-safe: una sessione per thread di sincronizzazione.
+    Not thread-safe: one session per synchronization thread.
     """
 
     def __init__(self, client: GarminClient) -> None:
         self._client = client
 
     def list_page(self, offset: int, limit: int) -> ActivityPage:
-        """Vedi `ActivitySource.list_page`.
+        """See `ActivitySource.list_page`.
 
-        Il totale dichiarato si chiede solo per la prima pagina (`offset == 0`): un'altra
-        richiesta per pagina raddoppierebbe il carico; se la richiesta del totale fallisce
-        per altro che autenticazione o limite di frequenza, il totale resta ignoto.
+        The declared total is requested only for the first page (`offset == 0`): another
+        request per page would double the load; if the total request fails
+        for something other than authentication or rate limit, the total stays unknown.
 
-        Scelta documentata (R12): la richiesta del totale è parte della stessa chiamata
-        `list_page` della prima pagina, quindi sta sotto la stessa disciplina del chiamante:
-        una sola pausa prima della chiamata, e se Garmin limita la frequenza o chiede il login
-        l'errore esce dalla chiamata e il chiamante applica backoff o si ferma. Costa una
-        richiesta in più per elenco (non per pagina), senza una seconda pausa fra le due; il
-        totale serve solo all'avanzamento e non decide quando l'elenco finisce.
+        Documented choice (R12): the total request is part of the same `list_page` call
+        as the first page, so it falls under the same discipline of the caller:
+        a single pause before the call, and if Garmin limits the rate or asks for login
+        the error comes out of the call and the caller applies backoff or stops. It costs one
+        extra request per list (not per page), without a second pause between the two; the
+        total is only for progress and does not decide when the list ends.
 
         Raises:
-            ValueError: `offset` negativo o `limit` fuori da 1..`MAX_PAGE_SIZE`.
+            ValueError: negative `offset` or `limit` outside 1..`MAX_PAGE_SIZE`.
         """
         if offset < 0 or not 1 <= limit <= MAX_PAGE_SIZE:
-            raise ValueError("posizione o limite non validi")
+            raise ValueError("invalid position or limit")
         try:
             raw = self._client.list_activities(offset, limit)
         except Exception as exc:
@@ -66,28 +67,28 @@ class GarminActivitySource:
         try:
             items, raw_count = parse_page(raw)
         except UnexpectedListingError as exc:
-            raise DefinitiveSourceError("risposta dell'elenco non interpretabile") from exc
+            raise DefinitiveSourceError("list response not interpretable") from exc
         if raw_count > len(items):
-            _LOGGER.warning("voci dell'elenco scartate", extra={"skipped": raw_count - len(items)})
+            _LOGGER.warning("list entries discarded", extra={"skipped": raw_count - len(items)})
         total = self._declared_total() if offset == 0 else None
         return ActivityPage(offset, items, raw_count, total)
 
     def download_original(self, activity_id: GarminActivityId, max_bytes: int) -> bytes:
-        """Vedi `ActivitySource.download_original`.
+        """See `ActivitySource.download_original`.
 
         Raises:
-            ValueError: `max_bytes` non positivo.
+            ValueError: non-positive `max_bytes`.
         """
         if max_bytes <= 0:
-            raise ValueError("max_bytes deve essere positivo")
+            raise ValueError("max_bytes must be positive")
         try:
             content = self._client.download_original(activity_id.value)
         except Exception as exc:
             raise translate_source_error(exc) from exc
         if not isinstance(content, bytes):
-            raise DefinitiveSourceError("il download non è un blocco di byte")
+            raise DefinitiveSourceError("the download is not a block of bytes")
         if len(content) > max_bytes:
-            raise DownloadTooLargeError("download troppo grande")
+            raise DownloadTooLargeError("download too large")
         return content
 
     def _declared_total(self) -> int | None:

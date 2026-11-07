@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Modulo "Nuovo profilo": destinazione, stima della soglia e validazione, senza finestra."""
+"""Form "New profile": destination, threshold estimate and validation, without a window."""
 
 from __future__ import annotations
 
@@ -100,7 +100,7 @@ def test_characters_not_allowed_in_a_folder_name_are_replaced() -> None:
 def test_threshold_is_an_estimate_at_90_percent_until_the_user_sets_it() -> None:
     form = make_form()
     assert form.threshold_is_estimate
-    assert form.threshold_bpm == 171  # 90% di 190
+    assert form.threshold_bpm == 171  # 90% of 190
     form.max_bpm = 200
     assert form.threshold_bpm == 180
 
@@ -124,11 +124,11 @@ def test_allowed_ranges_match_the_domain() -> None:
     HeartRateLimits(MIN_ALLOWED_BPM, MAX_ALLOWED_BPM)
     ThresholdHeartRate(MIN_THRESHOLD_BPM)
     ThresholdHeartRate(MAX_ALLOWED_BPM)
-    with pytest.raises(ValueError, match="FC"):
+    with pytest.raises(ValueError, match="HR"):
         HeartRateLimits(MIN_ALLOWED_BPM - 1, 100)
-    with pytest.raises(ValueError, match="FC"):
+    with pytest.raises(ValueError, match="HR"):
         HeartRateLimits(50, MAX_ALLOWED_BPM + 1)
-    with pytest.raises(ValueError, match="FC"):
+    with pytest.raises(ValueError, match="HR"):
         ThresholdHeartRate(MIN_THRESHOLD_BPM - 1)
 
 
@@ -216,8 +216,8 @@ def test_the_request_carries_height_weight_and_birth_date() -> None:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("100", None),  # on point: il minimo
-        ("250", None),  # on point: il massimo
+        ("100", None),  # on point: the minimum
+        ("250", None),  # on point: the maximum
         ("99", Problem.HEIGHT_INVALID),  # off point
         ("251", Problem.HEIGHT_INVALID),  # off point
         ("", Problem.HEIGHT_EMPTY),
@@ -228,9 +228,9 @@ def test_the_request_carries_height_weight_and_birth_date() -> None:
         (
             "".join(chr(0x660 + digit) for digit in (1, 7, 5)),
             Problem.HEIGHT_INVALID,
-        ),  # cifre arabo-indiche
+        ),  # Arabic-Indic digits
         ("1750", Problem.HEIGHT_INVALID),
-        ("x" * 5000, Problem.HEIGHT_INVALID),  # la lunghezza prima del resto
+        ("x" * 5000, Problem.HEIGHT_INVALID),  # the length before the rest
     ],
 )
 def test_height_is_a_whole_number_of_centimetres_between_100_and_250(
@@ -245,13 +245,13 @@ def test_height_is_a_whole_number_of_centimetres_between_100_and_250(
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("68,5", None),  # la virgola
-        ("68.5", None),  # il punto
-        ("20", None),  # on point: il minimo
-        ("300,0", None),  # on point: il massimo
+        ("68,5", None),  # the comma
+        ("68.5", None),  # the period
+        ("20", None),  # on point: the minimum
+        ("300,0", None),  # on point: the maximum
         ("19,9", Problem.WEIGHT_INVALID),  # off point
         ("300,1", Problem.WEIGHT_INVALID),  # off point
-        ("70,55", Problem.WEIGHT_INVALID),  # più di un decimale
+        ("70,55", Problem.WEIGHT_INVALID),  # more than one decimal
         ("abc", Problem.WEIGHT_INVALID),
         ("nan", Problem.WEIGHT_INVALID),
         ("1e400", Problem.WEIGHT_INVALID),
@@ -270,7 +270,7 @@ def test_weight_accepts_comma_and_point_between_20_and_300_with_one_decimal(
 
 def test_birth_date_limits_come_from_the_domain_on_and_off_point() -> None:
     latest = latest_birth_date(TODAY)
-    assert latest == date(2021, 5, 1)  # cinque anni prima di oggi
+    assert latest == date(2021, 5, 1)  # five years before today
     form = make_form()
 
     form.birth_date = latest  # on point
@@ -291,7 +291,7 @@ def test_the_latest_birth_date_follows_the_leap_day_rule_of_the_domain() -> None
     latest = latest_birth_date(today)
 
     BirthDate.on(latest, today)
-    with pytest.raises(ValueError, match="anni"):
+    with pytest.raises(ValueError, match="years"):
         BirthDate.on(latest + timedelta(days=1), today)
 
 
@@ -338,7 +338,7 @@ def test_the_subfolder_for_a_reserved_name_is_suffixed() -> None:
 
 
 def counting(calls: list[str], name: str, reader: Callable[..., object]) -> Callable[..., object]:
-    """Lo stesso lettore, che annota ogni chiamata."""
+    """The same reader, which records each call."""
 
     def read(*args: object) -> object:
         calls.append(name)
@@ -364,4 +364,4 @@ def test_building_the_request_reads_height_weight_and_birth_date_once(
     result = form.build_request(TODAY)
 
     assert isinstance(result, NewProfileRequest)
-    assert sorted(calls) == ["birth", "height", "weight"]  # una lettura per valore, non due
+    assert sorted(calls) == ["birth", "height", "weight"]  # one read per value, not two

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Sostituzione durevole di un file e sottocartelle: il modulo condiviso `fsio`."""
+"""Durable replacement of a file and subfolders: the shared `fsio` module."""
 
 from __future__ import annotations
 
@@ -31,11 +31,11 @@ def test_a_failed_replace_keeps_the_old_file_and_removes_the_temporary(
     target.write_bytes(b"vecchio")
 
     def refuse(source: Path, destination: Path) -> None:
-        raise OSError("rinomina rifiutata")
+        raise OSError("rename refused")
 
     monkeypatch.setattr(durable, "replace_file", refuse)
 
-    with pytest.raises(OSError, match="rifiutata"):
+    with pytest.raises(OSError, match="refused"):
         fsio.write_file_atomically(target, b"nuovo")
 
     assert target.read_bytes() == b"vecchio"
@@ -79,7 +79,7 @@ def test_make_subdirectory_refuses_a_file_in_the_way(tmp_path: Path) -> None:
         fsio.make_subdirectory(tmp_path / "anno")
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="permessi POSIX")
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permissions")
 def test_posix_subdirectory_is_private(tmp_path: Path) -> None:
     folder = tmp_path / "anno"
 

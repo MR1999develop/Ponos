@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Apertura e chiusura dei dialoghi dei dati del profilo: modifica, pesi degli sport, dettaglio.
+"""Opening and closing the profile data dialogs: edit, sport weights, detail.
 
-Ogni dialogo si apre quando il thread dei dati ha letto ciò che mostra (storico delle misure,
-pesi, dettaglio dell'attività): la UI non legge mai il profilo. Il salvataggio chiude il dialogo
-solo a lavoro finito; se il caso d'uso rifiuta le misure, il problema compare sul campo giusto e
-il dialogo resta aperto con i dati scritti.
+Each dialog opens when the data thread has read what it shows (measurement history,
+weights, activity detail): the UI never reads the profile. Saving closes the dialog
+only when the job is done; if the use case rejects the measurements, the problem appears on the
+right field and
+the dialog stays open with the typed data.
 """
 
 from __future__ import annotations
@@ -42,9 +43,9 @@ from ponos_coach.ui.tokens import Theme, tokens_for
 
 
 class ProfileDialogs(QObject):
-    """Possiede i dialoghi dei dati del profilo e li collega ai lavori del thread dei dati."""
+    """Own the profile data dialogs and connect them to the data thread jobs."""
 
-    def __init__(  # noqa: PLR0913 - ogni argomento è una dipendenza della finestra madre
+    def __init__(  # noqa: PLR0913 - each argument is a dependency of the parent window
         self,
         window: QWidget,
         editor: ProfileEditor,
@@ -83,25 +84,25 @@ class ProfileDialogs(QObject):
         loader.loaded.connect(self._on_detail_loaded)
         loader.failed.connect(self._on_detail_failed)
 
-    # --- Accessori per i test ---------------------------------------------------------
+    # --- Test accessors ---------------------------------------------------------
 
     @property
     def edit_dialog(self) -> ProfileEditDialog | None:
-        """Il dialogo "Modifica profilo" aperto, se c'è."""
+        """The open "Edit profile" dialog, if any."""
         return self._edit_dialog
 
     @property
     def weights_dialog(self) -> SportWeightsDialog | None:
-        """Il dialogo "Pesi degli sport" aperto, se c'è."""
+        """The open "Sport weights" dialog, if any."""
         return self._weights_dialog
 
     @property
     def detail_dialog(self) -> ActivityDetailDialog | None:
-        """La finestra "Dettaglio attività" aperta, se c'è."""
+        """The open "Activity detail" window, if any."""
         return self._detail_dialog
 
     def close_all(self) -> None:
-        """Chiude i dialoghi aperti (alla chiusura della finestra): le pagine web si rilasciano."""
+        """Close the open dialogs (when the window closes): the web pages are released."""
         for dialog in (self._detail_dialog, self._edit_dialog, self._weights_dialog):
             if dialog is not None:
                 dialog.close()
@@ -109,7 +110,7 @@ class ProfileDialogs(QObject):
     # --- Modifica profilo -------------------------------------------------------------
 
     def edit_profile(self) -> None:
-        """Legge lo storico e apre "Modifica profilo" (nessun effetto se è già aperto)."""
+        """Read the history and open "Edit profile" (no effect if already open)."""
         if self._edit_dialog is not None or self._waiting_for_edit:
             return
         self._waiting_for_edit = self._editor.load_measurements()
@@ -162,10 +163,10 @@ class ProfileDialogs(QObject):
     def _on_edit_closed(self) -> None:
         self._edit_dialog = None
 
-    # --- Pesi degli sport -------------------------------------------------------------
+    # --- Sport weights -------------------------------------------------------------
 
     def edit_sport_weights(self) -> None:
-        """Legge i pesi e apre "Pesi degli sport" (nessun effetto se è già aperto)."""
+        """Read the weights and open "Sport weights" (no effect if already open)."""
         if self._weights_dialog is not None or self._waiting_for_weights:
             return
         self._waiting_for_weights = self._editor.load_sport_weights()
@@ -202,10 +203,10 @@ class ProfileDialogs(QObject):
     def _on_weights_closed(self) -> None:
         self._weights_dialog = None
 
-    # --- Dettaglio attività -----------------------------------------------------------
+    # --- Activity detail -----------------------------------------------------------
 
     def show_activity_detail(self, identity: ActivityIdentity) -> None:
-        """Apre (o riusa) la finestra del dettaglio e avvia il caricamento."""
+        """Open (or reuse) the detail window and start loading."""
         dialog = self._detail_dialog
         if dialog is None:
             dialog = ActivityDetailDialog(self._engine, self._zone(), self._window)
@@ -243,7 +244,7 @@ class ProfileDialogs(QObject):
     # --- Errori -----------------------------------------------------------------------
 
     def _not_now(self) -> None:
-        """Il salvataggio non è partito (il profilo è occupato): i dati scritti restano."""
+        """Saving did not start (the profile is busy): the typed data stays."""
         self._unlock_all()
         self._notify(
             QCoreApplication.translate(
@@ -257,7 +258,7 @@ class ProfileDialogs(QObject):
                 self._unlock(dialog)
 
     def _on_failed(self, message: object) -> None:
-        """Un lavoro è fallito: i dialoghi tornano modificabili e l'errore si mostra."""
+        """A job failed: the dialogs become editable again and the error is shown."""
         self._waiting_for_edit = False
         self._waiting_for_weights = False
         self._unlock_all()

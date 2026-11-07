@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Contratti del giornale della sincronizzazione e dei collegamenti all'id Garmin dell'indice.
+"""Contracts of the sync journal and of the links to the index's Garmin id.
 
-Come gli altri contratti di archiviazione, si provano attraverso un profilo creato dal
-`ProfileStorage` della fixture `harness`.
+Like the other storage contracts, they are tried through a profile created by the
+`ProfileStorage` of the `harness` fixture.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ def _id(number: int) -> GarminActivityId:
 
 
 class ActivityIndexGarminIdContract:
-    """Cercare un'attività per id Garmin e collegarglielo (abbinamento a un import da file)."""
+    """Find an activity by Garmin id and link it (matching with a file import)."""
 
     def test_activity_is_found_by_its_garmin_id(self, harness: StorageHarness) -> None:
         record = make_record(origin=ActivityOrigin.GARMIN, garmin_activity_id=77)
@@ -140,7 +140,7 @@ class ActivityIndexGarminIdContract:
 
 
 class SyncJournalContract:
-    """Il giornale della sincronizzazione: cursori, voci e transizioni di stato."""
+    """The sync journal: cursors, entries and state transitions."""
 
     def test_new_journal_is_empty(self, harness: StorageHarness) -> None:
         with closing(create(harness)) as profile:
@@ -332,7 +332,7 @@ class SyncJournalContract:
             assert journal.known_ids(asked) == frozenset(r.garmin_id for r in remotes)
 
     def test_next_to_process_needs_a_positive_limit(self, harness: StorageHarness) -> None:
-        with closing(create(harness)) as profile, pytest.raises(ValueError, match="limite"):
+        with closing(create(harness)) as profile, pytest.raises(ValueError, match="limit"):
             profile.sync_journal.next_to_process(0)
 
     def test_exhausted_entries_are_listed_newest_first_and_rearmed_to_pending(
@@ -365,7 +365,7 @@ class SyncJournalContract:
             assert [e.garmin_id for e in journal.next_exhausted(1)] == [_id(2)]
 
     def test_next_exhausted_needs_a_positive_limit(self, harness: StorageHarness) -> None:
-        with closing(create(harness)) as profile, pytest.raises(ValueError, match="limite"):
+        with closing(create(harness)) as profile, pytest.raises(ValueError, match="limit"):
             profile.sync_journal.next_exhausted(0)
 
     def test_last_completed_instant_is_kept_and_replaced(self, harness: StorageHarness) -> None:

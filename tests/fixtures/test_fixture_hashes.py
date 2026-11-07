@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Le fixture versionate non cambiano byte: i test degli altri pacchetti ne dipendono."""
+"""The versioned fixtures do not change byte for byte: the tests of other packages depend on them."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import pytest
 
 DATA = Path(__file__).resolve().parent / "data"
 
-# SHA-256 delle fixture della fase 0. Le fixture nuove si aggiungono; queste non si toccano.
+# SHA-256 of the phase 0 fixtures. New fixtures are added; these are not touched.
 FROZEN = {
     "fit-ostili/bad_file_crc.fit": "35fced8cc32012fa29da972f30a21bc5eecea5725257b5ae169a0294e8b58cb0",
     "fit-ostili/bad_header_crc.fit": "a95d1be0e16fa25c39aeebe7e3db4125f6f36fd472872f573e68401a3e871ac6",

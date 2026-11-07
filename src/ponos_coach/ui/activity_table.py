@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Tabella delle attività: modello, ordinamento per colonna e pagina con il suo stato vuoto.
+"""Activities table: model, per-column sorting and the page with its empty state.
 
-Il modello dà testi per la vista e chiavi numeriche per l'ordinamento; i numeri stanno a destra,
-le unità nell'intestazione, la cella è vuota dove il dato manca (per esempio la distanza di una
-seduta indoor). I filtri sono della fase 9.
+The model gives texts for the view and numeric keys for sorting; numbers sit on the right,
+units are in the header, and the cell is empty where the datum is missing (for example the distance
+of an indoor session). Filters belong to phase 9.
 """
 
 from __future__ import annotations
@@ -48,12 +48,12 @@ from ponos_coach.ui.activity_text import (
 from ponos_coach.ui.state_page import StatePage
 
 SORT_ROLE = Qt.ItemDataRole.UserRole
-_MISSING_SORT_KEY = -1.0  # una cella vuota viene prima di ogni valore, in ordine crescente
+_MISSING_SORT_KEY = -1.0  # an empty cell comes before every value, in ascending order
 
 type _Key = float | str
 
-# Righe che la larghezza delle colonne guarda: i testi hanno tutti la stessa forma, quindi un
-# campione basta (300 righe intere costavano circa 80 ms nel thread della UI).
+# Rows that the column width looks at: the texts all have the same shape, so a
+# sample is enough (300 full rows cost about 80 ms on the UI thread).
 _WIDTH_SAMPLE_ROWS = 30
 
 _ALIGN_RIGHT = int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -61,7 +61,7 @@ _ALIGN_LEFT = int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
 
 class Column(IntEnum):
-    """Colonne della tabella, nell'ordine in cui compaiono."""
+    """Table columns, in display order."""
 
     START = 0
     SPORT = 1
@@ -85,7 +85,7 @@ def _local_qdatetime(activity: ProfileActivity, zone: ZoneInfo) -> QDateTime:
 
 
 class ActivityTableModel(QAbstractTableModel):
-    """Le attività di un profilo, una riga ciascuna, in sola lettura."""
+    """A profile's activities, one row each, read-only."""
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -93,7 +93,7 @@ class ActivityTableModel(QAbstractTableModel):
         self._zone = ZoneInfo("UTC")
 
     def set_activities(self, activities: Sequence[ProfileActivity], zone: ZoneInfo) -> None:
-        """Sostituisce le righe; `zone` è il fuso del profilo, per data e ora locali."""
+        """Replace the rows; `zone` is the profile's time zone, for local date and time."""
         self.beginResetModel()
         self._activities = tuple(activities)
         self._zone = zone
@@ -102,7 +102,7 @@ class ActivityTableModel(QAbstractTableModel):
     def rowCount(  # noqa: N802 - Qt
         self, parent: QModelIndex | QPersistentModelIndex | None = None
     ) -> int:
-        """Numero di attività (nessuna riga figlia)."""
+        """Number of activities (no child rows)."""
         if parent is not None and parent.isValid():
             return 0
         return len(self._activities)
@@ -110,7 +110,7 @@ class ActivityTableModel(QAbstractTableModel):
     def columnCount(  # noqa: N802 - Qt
         self, parent: QModelIndex | QPersistentModelIndex | None = None
     ) -> int:
-        """Numero di colonne."""
+        """Number of columns."""
         if parent is not None and parent.isValid():
             return 0
         return len(Column)
@@ -121,7 +121,7 @@ class ActivityTableModel(QAbstractTableModel):
         orientation: Qt.Orientation,
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> object:
-        """Intestazioni, con l'unità di misura dove serve."""
+        """Headers, with the unit of measure where needed."""
         if orientation != Qt.Orientation.Horizontal:
             return None
         if role == Qt.ItemDataRole.DisplayRole and 0 <= section < len(Column):
@@ -135,7 +135,7 @@ class ActivityTableModel(QAbstractTableModel):
         index: QModelIndex | QPersistentModelIndex,
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> object:
-        """Testo, allineamento e chiave di ordinamento di una cella."""
+        """Text, alignment and sort key of a cell."""
         if not index.isValid() or not 0 <= index.row() < len(self._activities):
             return None
         column = Column(index.column())
@@ -162,7 +162,7 @@ class ActivityTableModel(QAbstractTableModel):
         return headers[column]
 
     def activity_at(self, row: int) -> ProfileActivity | None:
-        """L'attività di una riga del modello (non del proxy), o `None` se fuori intervallo."""
+        """The activity of a model row (not of the proxy), or `None` if out of range."""
         return self._activities[row] if 0 <= row < len(self._activities) else None
 
     def _text(self, activity: ProfileActivity, column: Column) -> str:
@@ -180,7 +180,7 @@ def _missing_as_key(value: float | None) -> float:
     return _MISSING_SORT_KEY if value is None else value
 
 
-# Una funzione per colonna: testo mostrato e chiave di ordinamento.
+# One function per column: displayed text and sort key.
 _TEXT_OF: dict[Column, Callable[[ProfileActivity, ZoneInfo], str]] = {
     Column.START: _start_text,
     Column.SPORT: lambda a, _z: sport_text(a.sport),
@@ -207,7 +207,7 @@ _SORT_KEY_OF: dict[Column, Callable[[ProfileActivity], _Key]] = {
 def sorted_table_model(
     model: ActivityTableModel, parent: QObject | None = None
 ) -> QSortFilterProxyModel:
-    """Proxy che ordina per colonna con le chiavi del modello (più recenti prima)."""
+    """Proxy that sorts by column using the model's keys (most recent first)."""
     proxy = QSortFilterProxyModel(parent)
     proxy.setSourceModel(model)
     proxy.setSortRole(SORT_ROLE)
@@ -217,10 +217,10 @@ def sorted_table_model(
 
 
 class ActivitiesPage(QWidget):
-    """Pagina "Attività": la tabella, o lo stato vuoto con il primo passo."""
+    """Page "Activities": the table, or the empty state with the first step."""
 
     import_requested = Signal()
-    detail_requested = Signal(object)  # ActivityIdentity, con doppio clic o Invio
+    detail_requested = Signal(object)  # ActivityIdentity, on double click or Enter
     selection_changed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -237,7 +237,7 @@ class ActivitiesPage(QWidget):
         self._table.selectionModel().selectionChanged.connect(
             lambda *_: self.selection_changed.emit()
         )
-        self._table.setShowGrid(False)  # niente linee verticali né orizzontali
+        self._table.setShowGrid(False)  # no vertical or horizontal lines
         self._table.setAlternatingRowColors(True)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -262,26 +262,26 @@ class ActivitiesPage(QWidget):
 
     @property
     def table(self) -> QTableView:
-        """La vista a tabella."""
+        """The table view."""
         return self._table
 
     @property
     def model(self) -> ActivityTableModel:
-        """Il modello (le righe nell'ordine del dominio)."""
+        """The model (rows in domain order)."""
         return self._model
 
     @property
     def proxy(self) -> QSortFilterProxyModel:
-        """Il proxy che ordina."""
+        """The sorting proxy."""
         return self._proxy
 
     @property
     def empty_page(self) -> StatePage:
-        """Lo stato vuoto."""
+        """The empty state."""
         return self._empty
 
     def selected_activity(self) -> ProfileActivity | None:
-        """L'attività della riga selezionata (la corrente, se nessuna è selezionata)."""
+        """The activity of the selected row (the current one, if none is selected)."""
         rows = self._table.selectionModel().selectedRows()
         index = rows[0] if rows else self._table.currentIndex()
         if not index.isValid():
@@ -289,7 +289,7 @@ class ActivitiesPage(QWidget):
         return self._model.activity_at(self._proxy.mapToSource(index).row())
 
     def request_detail(self) -> None:
-        """Chiede il dettaglio dell'attività selezionata (nessun effetto senza selezione)."""
+        """Request the detail of the selected activity (no effect without a selection)."""
         activity = self.selected_activity()
         if activity is not None:
             self.detail_requested.emit(activity.identity)
@@ -300,7 +300,7 @@ class ActivitiesPage(QWidget):
             self.detail_requested.emit(activity.identity)
 
     def show_activities(self, activities: Sequence[ProfileActivity], zone: ZoneInfo) -> None:
-        """Mostra le attività, o lo stato vuoto se non ce ne sono."""
+        """Show the activities, or the empty state if there are none."""
         self._model.set_activities(activities, zone)
         self._stack.setCurrentWidget(self._table if activities else self._empty)
         if activities:

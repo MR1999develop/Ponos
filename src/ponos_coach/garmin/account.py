@@ -1,18 +1,19 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""`GarminAccount` su Garmin Connect: login con MFA e ripresa dai token salvati.
+"""`GarminAccount` on Garmin Connect: login with MFA and resumption from saved tokens.
 
-La password e il codice MFA passano solo al client e non si conservano né si registrano. I
-token (`SessionTokens`) si rivelano (`reveal()`) solo nel punto in cui si passano al client per
-riprendere la sessione. Il login non ritenta: ogni errore è tradotto nel tipo della porta
-(`errors`) e la politica dei ritentativi è di chi chiama.
+The password and the MFA code go only to the client and are neither kept nor logged. The
+tokens (`SessionTokens`) are revealed (`reveal()`) only at the point where they are passed to the
+client to
+resume the session. Login does not retry: every error is translated into the port's type
+(`errors`) and the retry policy belongs to the caller.
 
-Limiti: la richiesta del codice MFA (`prompt_mfa_code`) è una callback dell'interfaccia e non
-ha un timeout qui, che attenderebbe una persona; il numero di richieste per login è limitato.
-I token che la sessione restituisce (`GarminSession.tokens`) sono quelli dopo l'accesso o la
-ripresa, rinnovati se la libreria li ha rinnovati: li salva il chiamante (il worker di
-sincronizzazione li riscrive nel portachiavi se sono cambiati). Un rinnovo che avviene più tardi,
-durante la sessione, non si salva: alla ripresa successiva la libreria li rinnova da sé.
+Limits: the MFA code request (`prompt_mfa_code`) is an interface callback and has
+no timeout here, since it would wait for a person; the number of requests per login is limited.
+The tokens the session returns (`GarminSession.tokens`) are those after login or
+resumption, renewed if the library renewed them: the caller saves them (the
+synchronization worker rewrites them in the keyring if they changed). A renewal that happens later,
+during the session, is not saved: at the next resumption the library renews them on its own.
 """
 
 from __future__ import annotations
@@ -40,14 +41,14 @@ _MAX_MFA_CODE_CHARS: Final = 32
 
 
 class _MfaAbortError(Exception):
-    """Interrompe il login dal punto in cui la libreria chiede il codice MFA."""
+    """Interrupts the login at the point where the library asks for the MFA code."""
 
 
 class _MfaPrompter:
-    """Il codice MFA per la libreria: al più `max_prompts` richieste, annullabile.
+    """The MFA code for the library: at most `max_prompts` requests, cancellable.
 
-    Ricorda perché ha interrotto il login (`cancelled`, `exhausted`), così l'errore della
-    libreria che ne segue non si scambia per credenziali sbagliate o per rete assente.
+    Remembers why it interrupted the login (`cancelled`, `exhausted`), so the error of the
+    library that follows is not mistaken for wrong credentials or a missing network.
     """
 
     def __init__(self, ask: Callable[[], str | None], max_prompts: int) -> None:
@@ -67,13 +68,13 @@ class _MfaPrompter:
             raise _MfaAbortError
         code = code.strip()
         if not 0 < len(code) <= _MAX_MFA_CODE_CHARS:
-            self.exhausted = True  # un codice vuoto o enorme non si manda a Garmin
+            self.exhausted = True  # an empty or huge code is not sent to Garmin
             raise _MfaAbortError
         return code
 
 
 def _is_json_object(text: str) -> bool:
-    """Vero se il testo è un oggetto JSON (i token sono un oggetto, mai un percorso)."""
+    """True if the text is a JSON object (tokens are an object, never a path)."""
     try:
         return isinstance(json.loads(text), dict)
     except (ValueError, RecursionError):
@@ -81,44 +82,44 @@ def _is_json_object(text: str) -> bool:
 
 
 class GarminConnectAccount:
-    """`GarminAccount` su un `GarminClientFactory` (in produzione `ConnectClientFactory`).
+    """`GarminAccount` on a `GarminClientFactory` (in production `ConnectClientFactory`).
 
-    Può sollevare, oltre agli errori della porta, `DefinitiveSourceError` se il client non dà
-    token utilizzabili dopo un accesso riuscito.
+    Besides the port's errors it may raise `DefinitiveSourceError` if the client gives no
+    usable tokens after a successful login.
     """
 
     def __init__(
         self, factory: GarminClientFactory, *, max_mfa_prompts: int = DEFAULT_MAX_MFA_PROMPTS
     ) -> None:
         if max_mfa_prompts < 1:
-            raise ValueError("max_mfa_prompts deve essere almeno 1")
+            raise ValueError("max_mfa_prompts must be at least 1")
         self._factory = factory
         self._max_mfa_prompts = max_mfa_prompts
 
     def login(
         self, email: str, password: str, prompt_mfa_code: Callable[[], str | None]
     ) -> GarminSession:
-        """Vedi `GarminAccount.login`. Email o password vuote o enormi sono credenziali
-        rifiutate senza contattare Garmin."""
+        """See `GarminAccount.login`. Empty or huge email or password are credentials
+        rejected without contacting Garmin."""
         if not 0 < len(email) <= _MAX_EMAIL_CHARS or not 0 < len(password) <= _MAX_PASSWORD_CHARS:
-            raise InvalidCredentialsError("credenziali non valide")
+            raise InvalidCredentialsError("invalid credentials")
         prompter = _MfaPrompter(prompt_mfa_code, self._max_mfa_prompts)
         try:
             client = self._factory.login(email, password, prompter)
         except Exception as exc:
             if prompter.cancelled:
-                raise MfaCancelledError("MFA annullato") from exc
+                raise MfaCancelledError("MFA cancelled") from exc
             if prompter.exhausted:
-                raise InvalidCredentialsError("codice MFA rifiutato") from exc
+                raise InvalidCredentialsError("MFA code rejected") from exc
             raise translate_login_error(exc) from exc
         return self._session(client)
 
     def resume(self, tokens: SessionTokens) -> GarminSession:
-        """Vedi `GarminAccount.resume`. Token che non sono un oggetto JSON non arrivano alla
-        libreria (potrebbe leggerli come percorso di un file)."""
+        """See `GarminAccount.resume`. Tokens that are not a JSON object do not reach the
+        library (it might read them as a file path)."""
         raw = tokens.reveal()
         if not _is_json_object(raw):
-            raise AuthenticationRequiredError("token non riconosciuti")
+            raise AuthenticationRequiredError("tokens not recognized")
         try:
             client = self._factory.resume(raw)
         except Exception as exc:
@@ -130,5 +131,5 @@ class GarminConnectAccount:
         try:
             tokens = SessionTokens(client.dump_tokens())
         except Exception as exc:
-            raise DefinitiveSourceError("token della sessione non utilizzabili") from exc
+            raise DefinitiveSourceError("session tokens not usable") from exc
         return GarminSession(GarminActivitySource(client), tokens)

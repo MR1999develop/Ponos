@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dall'elenco JSON di Garmin ai tipi di dominio: validazione al confine (T-SEC-03).
+"""From the Garmin JSON list to domain types: validation at the boundary (T-SEC-03).
 
-La risposta è non fidata. Qui diventa una sequenza di `RemoteActivity` valide più il conteggio
-delle voci ricevute; ogni voce malformata (non un oggetto, id non numerico o con percorsi, orario
-senza fuso o fuori finestra, durata assente o non finita, tipo di sport mancante, id ripetuto) si
-scarta e si conta, senza ripararla. Nessun testo libero (nome, descrizione) viene letto. Si
-accede solo alle chiavi note con controlli di tipo: nessuna ricorsione sulla struttura ricevuta.
+The response is untrusted. Here it becomes a sequence of valid `RemoteActivity` plus the count
+of the entries received; every malformed entry (not an object, non-numeric id or with paths, time
+without time zone or out of window, missing or non-finite duration, missing sport type, repeated
+id) is
+discarded and counted, without repairing it. No free text (name, description) is read. Only
+the known keys are accessed with type checks: no recursion on the received structure.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from ponos_coach.activities.domain import (
     truncate_to_millisecond,
 )
 
-MAX_TOTAL_COUNT: Final = 10**9  # totale dichiarato oltre il quale la risposta è sospetta
+MAX_TOTAL_COUNT: Final = 10**9  # declared total beyond which the response is suspicious
 _MAX_TIME_CHARS: Final = 40
 _MAX_SPORT_KEY_CHARS: Final = 64
 _GMT_TIME: Final = re.compile(
@@ -33,16 +34,16 @@ _GMT_TIME: Final = re.compile(
 
 
 class UnexpectedListingError(Exception):
-    """La risposta non è un elenco di attività (forma sbagliata o troppe voci)."""
+    """The response is not a list of activities (wrong shape or too many entries)."""
 
 
 def parse_page(raw: object) -> tuple[tuple[RemoteActivity, ...], int]:
-    """Le attività valide di una pagina di elenco e quante voci Garmin ne ha restituite.
+    """The valid activities of a list page and how many entries Garmin returned.
 
-    `raw` è la lista di voci, oppure un oggetto con la lista in `activityList`.
+    `raw` is the list of entries, or an object with the list in `activityList`.
 
     Raises:
-        UnexpectedListingError: non c'è una lista, o ha più di `MAX_PAGE_SIZE` voci.
+        UnexpectedListingError: there is no list, or it has more than `MAX_PAGE_SIZE` entries.
     """
     entries = raw.get("activityList") if isinstance(raw, Mapping) else raw
     if not isinstance(entries, list) or len(entries) > MAX_PAGE_SIZE:
@@ -58,14 +59,14 @@ def parse_page(raw: object) -> tuple[tuple[RemoteActivity, ...], int]:
 
 
 def parse_total(raw: object) -> int | None:
-    """Il totale dichiarato (intero non negativo e plausibile) da un valore, o None."""
+    """The declared total (non-negative and plausible integer) from a value, or None."""
     if type(raw) is int and 0 <= raw <= MAX_TOTAL_COUNT:
         return raw
     return None
 
 
 def parse_entry(entry: object) -> RemoteActivity | None:
-    """L'attività di una voce dell'elenco, o None se la voce è malformata."""
+    """The activity of a list entry, or None if the entry is malformed."""
     if not isinstance(entry, Mapping):
         return None
     try:
@@ -81,7 +82,7 @@ def parse_entry(entry: object) -> RemoteActivity | None:
 
 
 def _number(value: object) -> float | None:
-    """Un numero finito (non un booleano), altrimenti None."""
+    """A finite number (not a boolean), otherwise None."""
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
     number = float(value)
@@ -89,9 +90,9 @@ def _number(value: object) -> float | None:
 
 
 def _duration_s(entry: Mapping[str, object]) -> float | None:
-    """Durata trascorsa in secondi: `elapsedDuration` se c'è, altrimenti `duration`.
+    """Elapsed duration in seconds: `elapsedDuration` if present, otherwise `duration`.
 
-    La durata dell'app è il tempo trascorso (come nel FIT), che include le pause.
+    The app's duration is the elapsed time (as in FIT), which includes pauses.
     """
     raw = entry.get("elapsedDuration")
     value = _number(raw if raw is not None else entry.get("duration"))
@@ -108,8 +109,8 @@ def _sport_key(activity_type: object) -> str | None:
 
 
 def _has_heart_rate(entry: Mapping[str, object]) -> bool | None:
-    """Vero se la FC media è un numero positivo; falso se è nulla (`null` o 0: Garmin non l'ha
-    registrata); None se l'elenco non ha la chiave o ha un valore che non è un numero."""
+    """True if the average HR is a positive number; false if it is null (`null` or 0: Garmin did not
+    record it); None if the list lacks the key or has a value that is not a number."""
     if "averageHR" not in entry:
         return None
     raw = entry["averageHR"]
@@ -120,7 +121,7 @@ def _has_heart_rate(entry: Mapping[str, object]) -> bool | None:
 
 
 def _parse_start(raw: object) -> datetime | None:
-    """Inizio in UTC al millisecondo da `startTimeGMT` (`2026-03-02 07:00:00`), o None."""
+    """Start in UTC to the millisecond from `startTimeGMT` (`2026-03-02 07:00:00`), or None."""
     if not isinstance(raw, str) or len(raw) > _MAX_TIME_CHARS:
         return None
     match = _GMT_TIME.fullmatch(raw)

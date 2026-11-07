@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Punto d'ingresso unico della decodifica: riconoscimento dal contenuto ed estensione."""
+"""Single decoding entry point: recognition by content and extension."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def reason_of(
 
 
 def assert_same_activity(actual: Activity, expected: Activity) -> None:
-    """Uguali in ogni campo; la serie di FC (colonne NumPy) si confronta per valori."""
+    """Equal in every field; the HR series (NumPy columns) is compared by values."""
     assert actual.heart_rate is not None or expected.heart_rate is None
     if expected.heart_rate is not None and actual.heart_rate is not None:
         assert np.array_equal(actual.heart_rate.seconds, expected.heart_rate.seconds)
@@ -143,7 +143,7 @@ def test_every_reason_of_the_decoder_is_an_import_issue() -> None:
     assert {reason.value for reason in ActivityFileReason} <= {i.value for i in ImportIssue}
 
 
-# --- File già archiviato di formato noto ---------------------------------------------------
+# --- Already archived file of known format -------------------------------------------------
 
 
 @pytest.mark.parametrize(

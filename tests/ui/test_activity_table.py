@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Tabella delle attività: righe, allineamento, celle vuote, ordinamento e stato vuoto."""
+"""Activity table: rows, alignment, empty cells, sorting and empty state."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ def test_the_model_shows_local_time_units_and_empty_cells(qtbot: QtBot) -> None:
     def text(row: int, column: Column) -> str:
         return str(model.index(row, column).data())
 
-    assert "7:30" in text(0, Column.START)  # 06:30 UTC = 07:30 a Roma (CET)
+    assert "7:30" in text(0, Column.START)  # 06:30 UTC = 07:30 in Rome (CET)
     assert text(0, Column.SPORT) == "Running"
     assert text(0, Column.MOVING_TIME) == "1:00:00"
     assert text(0, Column.DISTANCE) == "10.00"
@@ -57,7 +57,7 @@ def test_the_model_shows_local_time_units_and_empty_cells(qtbot: QtBot) -> None:
     assert text(0, Column.LOAD) == "50"
     assert text(0, Column.LOAD_SOURCE) == "Heart rate"
     assert text(0, Column.FORMAT) == "FIT"
-    assert text(1, Column.DISTANCE) == ""  # sedute senza distanza: cella vuota
+    assert text(1, Column.DISTANCE) == ""  # sessions without distance: empty cell
     assert text(1, Column.ASCENT) == ""
     assert text(1, Column.LOAD_SOURCE) == "Estimated"
 
@@ -87,11 +87,11 @@ def test_the_page_sorts_by_date_descending_and_by_any_column(qtbot: QtBot) -> No
     def loads() -> list[str]:
         return [cell(page, row, Column.LOAD) for row in range(3)]
 
-    assert loads() == ["120", "90", "50"]  # più recente prima
+    assert loads() == ["120", "90", "50"]  # most recent first
     page.proxy.sort(Column.LOAD, Qt.SortOrder.AscendingOrder)
     assert loads() == ["50", "90", "120"]
     page.proxy.sort(Column.DISTANCE, Qt.SortOrder.DescendingOrder)
-    assert loads() == ["90", "50", "120"]  # i numeri, non il testo; la cella vuota in fondo
+    assert loads() == ["90", "50", "120"]  # the numbers, not the text; the empty cell at the bottom
 
 
 def test_the_page_shows_the_empty_state_until_there_are_activities(qtbot: QtBot) -> None:

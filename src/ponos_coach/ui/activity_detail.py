@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dettaglio di un'attività: esiti e righe delle zone, testabili senza finestra.
+"""Activity detail: outcomes and zone rows, testable without a window.
 
-Il caso d'uso (`GetActivityDetail`) dà un `ActivityDetail` o il motivo per cui il file non si può
-usare; qui l'esito diventa un valore per la vista, con il grafico già preparato fuori dal thread
-della UI. I testi li sceglie la vista.
+The use case (`GetActivityDetail`) returns an `ActivityDetail` or the reason the file cannot be
+used; here the outcome becomes a value for the view, with the chart already prepared off the
+UI thread. The view chooses the texts.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from ponos_coach.ui.load_figures import zone_label
 
 @dataclass(frozen=True, slots=True)
 class DetailReady:
-    """Il dettaglio c'è. `chart` è `None` se l'attività non ha FC."""
+    """The detail is available. `chart` is `None` if the activity has no HR."""
 
     detail: ActivityDetail
     chart: PreparedChart | None
@@ -28,7 +28,7 @@ class DetailReady:
 
 @dataclass(frozen=True, slots=True)
 class DetailUnavailable:
-    """Il file dell'attività non si può usare: il motivo è una categoria del dominio."""
+    """The activity file cannot be used: the reason is a domain category."""
 
     reason: ExclusionReason
 
@@ -38,7 +38,7 @@ type DetailOutcome = DetailReady | DetailUnavailable
 
 @dataclass(frozen=True, slots=True)
 class ZoneRow:
-    """Tempo in una zona: nome con i confini, secondi e quota del tempo in zona (0-1)."""
+    """Time in one zone: name with its bounds, seconds and share of the time in zone (0-1)."""
 
     label: str
     seconds: float
@@ -46,7 +46,7 @@ class ZoneRow:
 
 
 def zone_rows(detail: ActivityDetail) -> tuple[ZoneRow, ...]:
-    """Una riga per zona, da Z1 a Z5. Senza tempo in zona (carico stimato) le quote sono 0."""
+    """One row per zone, Z1 to Z5. Without time in zone (estimated load) the shares are 0."""
     seconds = detail.load.zone_seconds
     total = seconds.total
     return tuple(

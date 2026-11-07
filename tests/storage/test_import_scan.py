@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Sorgenti dell'import da file e cartelle, ZIP compresi (disco vero, archivio e indice finti).
+"""Sources of import from files and folders, ZIPs included (real disk, fake archive and index).
 
-T-IMP-01 (albero misto, riepilogo esatto), T-IMP-02 (tetti al limite e un passo oltre),
-T-IMP-03 (idempotenza), T-IMP-04 (ZIP), T-SEC-02 (ZIP ostili), T-SEC-04 (percorsi).
+T-IMP-01 (mixed tree, exact summary), T-IMP-02 (caps at the limit and one step beyond),
+T-IMP-03 (idempotence), T-IMP-04 (ZIP), T-SEC-02 (hostile ZIPs), T-SEC-04 (paths).
 """
 
 from __future__ import annotations
@@ -44,11 +44,11 @@ IS_WINDOWS = os.name == "nt"
 MIB = 1024 * 1024
 
 
-# --- Aiuti ------------------------------------------------------------------------------------
+# --- Helpers ------------------------------------------------------------------------------------
 
 
 def raw(path: Path) -> Path:
-    """Percorso adatto a creare nomi riservati o percorsi lunghi su Windows (prefisso `\\\\?\\`)."""
+    """Path suitable for creating reserved names or long paths on Windows (prefix `\\\\?\\`)."""
     return Path("\\\\?\\" + str(path)) if IS_WINDOWS else path
 
 
@@ -85,14 +85,14 @@ def results(summary: ImportSummary) -> dict[str, tuple[ImportStatus, ImportIssue
 
 
 def snapshot(root: Path) -> dict[str, tuple[int, int]]:
-    """Nomi, dimensioni e date di modifica di tutto ciò che sta sotto `root`."""
+    """Names, sizes and modification dates of everything under `root`."""
     return {
         str(p.relative_to(root)): (p.stat().st_size, p.stat().st_mtime_ns) for p in root.rglob("*")
     }
 
 
 def make_directory_link(link: Path, target: Path) -> None:
-    """Giunzione su Windows (non serve alcun privilegio), collegamento simbolico altrove."""
+    """Junction on Windows (needs no privilege), symbolic link elsewhere."""
     try:
         if IS_WINDOWS:
             subprocess.run(  # noqa: S603
@@ -104,20 +104,20 @@ def make_directory_link(link: Path, target: Path) -> None:
         else:
             link.symlink_to(target, target_is_directory=True)
     except (OSError, NotImplementedError, subprocess.CalledProcessError):
-        pytest.skip("il sistema non permette di creare giunzioni o collegamenti")
+        pytest.skip("the system does not allow creating junctions or links")
 
 
 def make_file_link(link: Path, target: Path) -> None:
     try:
         link.symlink_to(target)
     except (OSError, NotImplementedError):
-        pytest.skip("il sistema non permette di creare collegamenti simbolici")
+        pytest.skip("the system does not allow creating symbolic links")
 
 
 def patch_end_record(
     zip_bytes: bytes, *, entries: int | None = None, size: int | None = None
 ) -> bytes:
-    """Ritocca il record finale (22 byte, senza commento): numero di voci e byte della directory."""
+    """Tweak the final record (22 bytes, no comment): number of entries and directory bytes."""
     data = bytearray(zip_bytes)
     end = len(data) - 22
     if entries is not None:
@@ -129,13 +129,13 @@ def patch_end_record(
 
 @pytest.fixture
 def root(tmp_path: Path) -> Path:
-    """Cartella da importare, dentro la cartella temporanea del test."""
+    """Folder to import, inside the test's temporary folder."""
     path = tmp_path / "origine"
     path.mkdir()
     return path
 
 
-# --- T-IMP-01: albero misto -------------------------------------------------------------------
+# --- T-IMP-01: mixed tree -------------------------------------------------------------------
 
 
 def mixed_tree(root: Path) -> None:
@@ -167,7 +167,7 @@ def test_t_imp_01_mixed_tree_gives_the_exact_summary(root: Path) -> None:
     summary, archive, index = import_all(folder(root))
 
     assert results(summary) == {
-        "copy_of_run1.fit": (ImportStatus.IMPORTED, None),  # in ordine di nome arriva prima
+        "copy_of_run1.fit": (ImportStatus.IMPORTED, None),  # in name order it comes first
         "run1.fit": (ImportStatus.ALREADY_PRESENT, None),
         "a/run2.gpx": (ImportStatus.IMPORTED, None),
         "a/b/c/garmin.zip!12345678901_ACTIVITY.fit": (ImportStatus.IMPORTED, None),
@@ -179,7 +179,7 @@ def test_t_imp_01_mixed_tree_gives_the_exact_summary(root: Path) -> None:
     }
     assert len(index.list_by_start()) == 3
     assert all(ARCHIVE_PATH.fullmatch(str(path)) for path in archive.files)
-    assert snapshot(root) == before  # la cartella d'origine non si tocca
+    assert snapshot(root) == before  # the source folder is not touched
 
 
 def test_results_come_in_name_order_after_the_skipped_ones(root: Path) -> None:
@@ -189,7 +189,7 @@ def test_results_come_in_name_order_after_the_skipped_ones(root: Path) -> None:
 
     assert entry_names(scan) == ["a.fit", "b.fit", "c/d.fit"]
     assert [e.entry_id for e in scan.entries] == [0, 1, 2]
-    assert scan.examined == 4  # tre file e una cartella
+    assert scan.examined == 4  # three files and a folder
 
 
 def test_t_imp_03_importing_the_same_folder_again_changes_nothing(root: Path) -> None:
@@ -215,7 +215,7 @@ def test_scanning_twice_gives_the_same_answer(root: Path) -> None:
     assert source.scan() == source.scan()
 
 
-# --- T-IMP-02: tetti --------------------------------------------------------------------------
+# --- T-IMP-02: caps --------------------------------------------------------------------------
 
 
 def test_default_limits_are_those_of_the_plan() -> None:
@@ -270,7 +270,7 @@ def test_t_imp_02_zip_entries_count_as_activity_files(root: Path) -> None:
 
 
 def test_t_imp_02_examined_entries_cap_counts_files_and_folders_of_any_type(root: Path) -> None:
-    write(root, {"a/x.txt": b"x", "a/y.txt": b"x", "b/z.dat": b"x"})  # 2 cartelle + 3 file
+    write(root, {"a/x.txt": b"x", "a/y.txt": b"x", "b/z.dat": b"x"})  # 2 folders + 3 files
     assert folder(root, max_examined_entries=5).scan().examined == 5
 
     with pytest.raises(ImportLimitExceededError) as caught:
@@ -281,7 +281,7 @@ def test_t_imp_02_examined_entries_cap_counts_files_and_folders_of_any_type(root
 
 def test_t_imp_02_zip_entries_of_any_type_are_examined_entries(root: Path) -> None:
     write(root, {"pack.zip": zw.many_entries(10)})
-    assert folder(root, max_examined_entries=11).scan().examined == 11  # lo ZIP e le sue 10 voci
+    assert folder(root, max_examined_entries=11).scan().examined == 11  # the ZIP and its 10 entries
 
     with pytest.raises(ImportLimitExceededError) as caught:
         folder(root, max_examined_entries=10).scan()
@@ -324,7 +324,7 @@ def test_t_imp_02_file_over_the_size_cap_is_skipped_and_reported(root: Path) -> 
 def test_t_imp_02_default_size_cap_is_50_mib(root: Path) -> None:
     for name, size in (("at_limit.fit", 50 * MIB), ("over_limit.fit", 50 * MIB + 1)):
         with (root / name).open("wb") as handle:
-            handle.truncate(size)  # file sparso: non si legge mai nell'esame
+            handle.truncate(size)  # sparse file: never read during the scan
 
     scan = folder(root).scan()
 
@@ -344,7 +344,7 @@ def test_t_imp_02_default_cap_of_50000_activity_files_counts_zip_entries(root: P
 
 
 def test_t_imp_02_default_cap_of_500000_examined_entries(root: Path) -> None:
-    pack = zw.many_entries(50_000)  # 50.000 voci .txt: esaminate, non attività
+    pack = zw.many_entries(50_000)  # 50,000 .txt entries: examined, not activities
     for n in range(9):
         write(root, {f"pack{n}.zip": pack})
     assert folder(root).scan().examined == 9 * 50_001  # 450.009
@@ -370,7 +370,7 @@ def test_t_imp_04_garmin_download_with_one_fit(root: Path) -> None:
         "12345678901.zip!12345678901_ACTIVITY.fit": (ImportStatus.IMPORTED, None)
     }
     (record,) = index.list_by_start()
-    assert archive.read(record.archived, 10**9) == fit  # il file estratto, non lo ZIP
+    assert archive.read(record.archived, 10**9) == fit  # the extracted file, not the ZIP
     assert record.archived.relative_path.suffix == ".fit"
 
 
@@ -384,7 +384,7 @@ def test_t_imp_04_many_fit_and_gpx_activities_and_other_entries_ignored(root: Pa
     summary, archive, index = import_all(folder(root))
 
     assert len(scan.entries) == 8
-    assert not scan.skipped  # le voci di altri tipi si ignorano senza segnalarle
+    assert not scan.skipped  # entries of other types are ignored without reporting them
     assert summary.count(ImportStatus.IMPORTED) == 8
     assert len(index.list_by_start()) == 8
     assert {path.suffix for path in archive.files} == {".fit", ".gpx"}
@@ -428,11 +428,11 @@ def test_empty_zip_has_nothing_to_import_and_nothing_to_report(root: Path) -> No
     assert not scan.skipped
 
 
-# --- T-SEC-02: ZIP ostili ---------------------------------------------------------------------
+# --- T-SEC-02: hostile ZIPs ---------------------------------------------------------------------
 
 
 def hostile(root: Path, zip_bytes: bytes, **limits: int) -> tuple[ImportScan, ImportSummary]:
-    """Scrive lo ZIP, lo esamina e prova a importarlo; nulla deve uscire dalla cartella."""
+    """Write the ZIP, scan it and try to import it; nothing must escape the folder."""
     write(root, {"hostile.zip": zip_bytes})
     outside = snapshot(root.parent)
     scan = folder(root, **limits).scan()
@@ -443,7 +443,7 @@ def hostile(root: Path, zip_bytes: bytes, **limits: int) -> tuple[ImportScan, Im
 
 
 def test_t_sec_02_zip_bomb_is_refused_before_extracting(root: Path) -> None:
-    scan, summary = hostile(root, zw.zero_bomb(45 * MIB))  # sotto 50 MB ma oltre 100:1
+    scan, summary = hostile(root, zw.zero_bomb(45 * MIB))  # under 50 MB but over 100:1
 
     assert not scan.entries
     assert issues(scan) == {"hostile.zip!bomb.fit": ImportIssue.ARCHIVE_LIMIT}
@@ -494,7 +494,7 @@ def test_t_sec_02_default_50001_entries_refuses_the_archive(root: Path) -> None:
 
 
 def test_t_sec_02_zip64_record_is_read_and_its_count_enforced(root: Path) -> None:
-    write(root, {"huge.zip": zw.many_entries(65_536)})  # oltre 65.535 voci: record ZIP64
+    write(root, {"huge.zip": zw.many_entries(65_536)})  # over 65,535 entries: ZIP64 record
 
     assert issues(folder(root).scan()) == {"huge.zip": ImportIssue.ARCHIVE_LIMIT}
 
@@ -529,7 +529,7 @@ def test_t_sec_02_declared_size_larger_than_the_real_one_fails_at_extraction(roo
 
     scan, summary = hostile(root, pack)
 
-    assert entry_names(scan) == ["hostile.zip!a.fit"]  # l'esame vede solo ciò che è dichiarato
+    assert entry_names(scan) == ["hostile.zip!a.fit"]  # the scan sees only what is declared
     assert results(summary) == {
         "hostile.zip!a.fit": (ImportStatus.FAILED, ImportIssue.ARCHIVE_INVALID)
     }
@@ -567,7 +567,7 @@ def test_t_sec_02_wrong_crc_is_detected_at_extraction(root: Path) -> None:
 
 def test_t_sec_02_corrupted_deflate_stream_is_detected(root: Path) -> None:
     pack = bytearray(zw.build_zip([("a.fit", imp.fit_run(1))]))
-    pack[60:70] = b"\xff" * 10  # dentro i dati compressi, dopo l'intestazione locale
+    pack[60:70] = b"\xff" * 10  # inside the compressed data, after the local header
 
     _, summary = hostile(root, bytes(pack))
 
@@ -595,7 +595,7 @@ def test_t_sec_02_nested_zip_is_refused_and_not_opened(root: Path) -> None:
 
     assert issues(scan) == {"hostile.zip!inner.zip": ImportIssue.NESTED_ARCHIVE}
     assert list(results(summary)) == ["hostile.zip!inner.zip", "hostile.zip!ok.fit"]
-    assert summary.count(ImportStatus.IMPORTED) == 1  # solo ok.fit: l'interno non è importato
+    assert summary.count(ImportStatus.IMPORTED) == 1  # only ok.fit: the inside is not imported
 
 
 @pytest.mark.parametrize(
@@ -690,7 +690,7 @@ def test_t_sec_02_extraction_respects_the_byte_cap_of_the_reader(root: Path) -> 
     source.close()
 
 
-# --- T-SEC-04: percorsi -----------------------------------------------------------------------
+# --- T-SEC-04: paths -----------------------------------------------------------------------
 
 
 def test_t_sec_04_linked_folder_leading_outside_is_not_followed(tmp_path: Path, root: Path) -> None:
@@ -757,7 +757,7 @@ def test_t_sec_04_file_replaced_by_a_link_after_the_scan_is_refused_at_the_read(
     assert caught.value.issue is ImportIssue.NOT_REGULAR_FILE
 
 
-@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="i FIFO esistono solo su POSIX")
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFOs exist only on POSIX")
 def test_t_sec_04_fifo_named_fit_is_reported_and_never_opened(root: Path) -> None:
     os.mkfifo(root / "pipe.fit")  # type: ignore[attr-defined,unused-ignore]
 
@@ -789,7 +789,7 @@ def test_t_sec_04_reserved_folder_names_are_not_entered(root: Path) -> None:
 
 
 def test_t_sec_04_long_paths_are_handled(root: Path) -> None:
-    parts = [f"{n}_" + "d" * 60 for n in range(6)]  # oltre 360 caratteri: più di MAX_PATH
+    parts = [f"{n}_" + "d" * 60 for n in range(6)]  # over 360 characters: more than MAX_PATH
     fit = imp.fit_run(1)
     write(root, {"/".join([*parts, "deep.fit"]): fit})
     assert len(str(root.joinpath(*parts))) > 260
@@ -809,7 +809,7 @@ def test_t_sec_04_path_over_the_displayed_length_cap_is_skipped(root: Path) -> N
     assert set(issues(scan).values()) == {ImportIssue.PATH_TOO_LONG}
 
 
-@pytest.mark.skipif(IS_WINDOWS, reason="su Windows i caratteri di controllo non sono ammessi")
+@pytest.mark.skipif(IS_WINDOWS, reason="control characters are not allowed on Windows")
 def test_t_sec_04_control_characters_in_file_names_are_not_shown(root: Path) -> None:
     write(root, {"run" + chr(27) + "[31m.fit": imp.fit_run(1)})
 
@@ -827,7 +827,7 @@ def test_t_sec_04_archive_names_are_generated_by_the_program(root: Path) -> None
     assert len(archive.files) == 1
 
 
-# --- Elenco di file scelti --------------------------------------------------------------------
+# --- List of chosen files --------------------------------------------------------------------
 
 
 def test_chosen_files_are_listed_by_name_and_wrong_choices_are_reported(root: Path) -> None:
@@ -880,7 +880,7 @@ def test_chosen_symlink_is_refused(tmp_path: Path, root: Path) -> None:
     assert issues(scan) == {"l.fit": ImportIssue.NOT_REGULAR_FILE}
 
 
-# --- Lettura e risorse ------------------------------------------------------------------------
+# --- Reading and resources ------------------------------------------------------------------------
 
 
 def test_missing_or_non_folder_roots_are_unreadable(tmp_path: Path) -> None:
@@ -961,11 +961,11 @@ def test_sizes_are_the_declared_ones(root: Path) -> None:
     assert sorted(iter_sizes(folder(root).scan())) == [len(fit), 2 * len(fit)]
 
 
-# --- Conteggio mentre si legge e annullamento (R6) --------------------------------------------
+# --- Counting while reading and cancellation (R6) --------------------------------------------
 
 
 class _CountingListing:
-    """Elenco di una cartella che conta le voci consegnate al chiamante."""
+    """Listing of a folder that counts the entries handed to the caller."""
 
     def __init__(self, inner: object, consumed: list[int]) -> None:
         self._inner = inner
@@ -999,7 +999,7 @@ def test_the_examined_cap_stops_a_single_huge_folder_before_reading_it_all(
         folder(root, max_examined_entries=5).scan()
 
     assert caught.value.limit is ImportLimit.EXAMINED_ENTRIES
-    assert consumed[0] == 6  # il tetto più una: non le 40 voci
+    assert consumed[0] == 6  # the cap plus one: not the 40 entries
 
 
 def test_a_scan_can_be_cancelled_between_entries(root: Path) -> None:
@@ -1013,7 +1013,7 @@ def test_a_scan_can_be_cancelled_between_entries(root: Path) -> None:
     with pytest.raises(ImportScanCancelledError):
         folder(root).scan(cancel_after_three)
 
-    assert calls[0] == 4  # si è fermata alla prima richiesta di annullare
+    assert calls[0] == 4  # it stopped at the first cancel request
 
 
 def test_a_scan_without_cancellation_is_unchanged(root: Path) -> None:

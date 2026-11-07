@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dettaglio di un'attività: righe delle zone e messaggi dei file non disponibili."""
+"""Activity detail: zone rows and messages for unavailable files."""
 
 from __future__ import annotations
 

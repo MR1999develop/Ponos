@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Scenari incrociati della fase 3, da collaudatore indipendente.
+"""Cross scenarios of phase 3, by an independent tester.
 
-- un file dell'archivio sparisce mentre il dettaglio è aperto e mentre si calcola;
-- i pesi degli sport cambiano durante una sincronizzazione (anche tra una attività e la
-  successiva): alla fine ogni carico è quello del calcolo da zero;
-- più modifiche delle misure e dei pesi alla stessa panoramica già in cache.
+- a file of the archive disappears while the detail is open and while it is being calculated;
+- the sport weights change during a synchronisation (even between one activity and the
+  next): in the end every load is the one from the calculation from scratch;
+- several edits of measurements and weights on the same overview already in cache.
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ def settings(tmp_path: Path) -> QSettings:
 
 @pytest.fixture
 def gate() -> Iterator[threading.Event]:
-    """Un cancello che a fine test si apre sempre: nessun thread resta fermo."""
+    """A gate that always opens at the end of the test: no thread stays stuck."""
     event = threading.Event()
     yield event
     event.set()
@@ -82,7 +82,7 @@ def failure_boxes(window: object) -> list[str]:
     return [b.objectName() for b in window.open_boxes if b.objectName() in D_ERRORS]  # type: ignore[attr-defined]
 
 
-# --- File che sparisce -------------------------------------------------------------------------
+# --- File that disappears ----------------------------------------------------------------------
 
 
 def test_a_file_that_disappears_with_the_detail_open_leaves_every_window_usable_and_recoverable(
@@ -104,7 +104,9 @@ def test_a_file_that_disappears_with_the_detail_open_leaves_every_window_usable_
 
     with caplog.at_level(logging.WARNING):
         weights = open_weights_dialog(qtbot, window)
-        weights.box(Sport.RUNNING).setValue(1.5)  # cambia l'impronta: ogni carico si ricalcola
+        weights.box(Sport.RUNNING).setValue(
+            1.5
+        )  # the fingerprint changes: every load is recalculated
         click(weights.save_button)
         qtbot.waitUntil(lambda: window.profile_dialogs.weights_dialog is None, timeout=WAIT_MS)
         qtbot.waitUntil(
@@ -117,12 +119,12 @@ def test_a_file_that_disappears_with_the_detail_open_leaves_every_window_usable_
 
     state = window.controller.overview_state
     assert isinstance(state, Ready)
-    assert state.overview.activities == ()  # nessun carico inventato senza il file
+    assert state.overview.activities == ()  # no invented load without the file
     assert {e.reason for e in state.overview.excluded} == {ExclusionReason.FILE_MISSING}
     assert failure_boxes(window) == []
     assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
-    assert dialog.isVisible()  # la finestra aperta prima non crolla
-    shutil.copytree(stash, archive, dirs_exist_ok=True)  # il file torna
+    assert dialog.isVisible()  # the window opened before does not collapse
+    shutil.copytree(stash, archive, dirs_exist_ok=True)  # the file comes back
     window.controller.recalculate_overview()
     qtbot.waitUntil(
         lambda: (
@@ -142,7 +144,7 @@ def test_a_file_that_disappears_with_the_detail_open_leaves_every_window_usable_
 
 
 class VanishingArchive:
-    """Archivio vero che, alla lettura numero `at`, prima toglie il file (poi legge)."""
+    """Real archive that, at read number `at`, first removes the file (then reads)."""
 
     def __init__(self, inner: FileArchive, at: int, victim: Path) -> None:
         self._inner = inner
@@ -194,7 +196,7 @@ def test_files_that_vanish_during_the_calculation_exclude_only_their_activity(
     session = profile.session
     records = session.activities.list_by_start()
     try:
-        # Mentre si legge la seconda attività sparisce il file della quarta.
+        # While the second activity is being read the file of the fourth disappears.
         later = profile.folder / PROFILE_ARCHIVE_DIR / records[3].archived.relative_path
         archive = VanishingArchive(profile.archive, at=2, victim=later)
         overview = ComputeProfileOverview(
@@ -211,16 +213,17 @@ def test_files_that_vanish_during_the_calculation_exclude_only_their_activity(
         assert [e.identity for e in overview.excluded] == [records[3].identity]
         assert overview.excluded[0].reason is ExclusionReason.FILE_MISSING
         assert len(overview.activities) == len(records) - 1
-        assert len(overview.pmc) > 0  # il PMC si calcola con le altre
+        assert len(overview.pmc) > 0  # the PMC is calculated with the others
     finally:
         profile.close()
 
 
-# --- Pesi cambiati durante una sincronizzazione -------------------------------------------------
+# --- Weights changed during a synchronisation --------------------------------------------------
 
 
 class BlockFromSecondDownload:
-    """Decoratore di `ActivitySource`: la prima attività si scarica, dalla seconda si attende."""
+    """Decorator of `ActivitySource`: the first activity is downloaded, from the second on it
+    waits."""
 
     def __init__(self, inner: FakeActivitySource, gate: threading.Event) -> None:
         self._inner = inner
@@ -236,7 +239,7 @@ class BlockFromSecondDownload:
         if self.downloads > 1:
             self.blocked.set()
             if not self._gate.wait(timeout=30):
-                raise TimeoutError("cancello mai aperto")
+                raise TimeoutError("gate never opened")
         return self._inner.download_original(activity_id, max_bytes)
 
 
@@ -252,7 +255,7 @@ def test_changing_the_sport_weights_during_a_synchronisation_gives_the_load_of_t
     inner = FakeActivitySource(remote_runs(40, 41, 42))
     served = BlockFromSecondDownload(inner, gate)
     if blocked_downloads == 1:
-        served.downloads = 1  # si blocca già al primo download: nessuna attività ancora scaricata
+        served.downloads = 1  # it blocks already at the first download: no activity downloaded yet
     fakes: GarminFakes = make_fakes(mfa_required=False, source=inner, served=served)
     window = window_with_profile(qtbot, tmp_path, settings, fakes)
 
@@ -264,7 +267,7 @@ def test_changing_the_sport_weights_during_a_synchronisation_gives_the_load_of_t
         weights.box(Sport.RUNNING).setValue(2.0)
         click(weights.save_button)
         qtbot.waitUntil(lambda: window.profile_dialogs.weights_dialog is None, timeout=WAIT_MS)
-        assert sync_of(window).is_syncing  # la sincronizzazione non è stata toccata
+        assert sync_of(window).is_syncing  # the synchronisation was not touched
         with qtbot.waitSignal(sync_of(window).sync_finished, timeout=WAIT_MS):
             gate.set()
         wait_activities(qtbot, window, 3)
@@ -273,7 +276,7 @@ def test_changing_the_sport_weights_during_a_synchronisation_gives_the_load_of_t
     assert isinstance(state, Ready)
     assert state.overview.excluded == ()
     for item in state.overview.activities:
-        assert item.load.load == pytest.approx(item.load.hr_tss * 2.0)  # tutte con il peso nuovo
+        assert item.load.load == pytest.approx(item.load.hr_tss * 2.0)  # all with the new weight
     assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
     assert failure_boxes(window) == []
     close_window(qtbot, window)
@@ -316,7 +319,7 @@ def test_a_set_of_weights_replaces_the_previous_one_even_when_saved_twice_in_a_r
     try:
         save({Sport.RUNNING: SportWeight(2.0), Sport.CYCLING: SportWeight(0.1)})
         first = profile.overview()
-        save({Sport.RUNNING: SportWeight(3.0)})  # il ciclismo torna al predefinito
+        save({Sport.RUNNING: SportWeight(3.0)})  # cycling goes back to the default
         second = profile.overview()
 
         for before, after in zip(first.activities, second.activities, strict=True):

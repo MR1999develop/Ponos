@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Tipi di dominio dei profili: id, nome, voce del registro, informazioni."""
+"""Profile domain types: id, name, registry entry, info."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def test_profile_id_accepts_a_random_uuid_and_prints_it_canonically() -> None:
     ],
 )
 def test_profile_id_refuses_other_uuid_versions(value: uuid.UUID) -> None:
-    with pytest.raises(ValueError, match="versione 4"):
+    with pytest.raises(ValueError, match="version 4"):
         ProfileId(value)
 
 
@@ -58,18 +58,18 @@ def test_profile_id_parse_round_trips() -> None:
     [
         "",
         "non un uuid",
-        "11111111-1111-4111-8111-11111111111",  # troppo corto
-        "11111111-1111-4111-8111-1111111111111",  # troppo lungo
-        "11111111-1111-1111-8111-111111111111",  # versione 1
+        "11111111-1111-4111-8111-11111111111",  # too short
+        "11111111-1111-4111-8111-1111111111111",  # too long
+        "11111111-1111-1111-8111-111111111111",  # version 1
         "11111111-1111-4111-8111-11111111111G",
-        "{11111111-1111-4111-8111-111111111111}",  # forma non canonica
-        "11111111111141118111111111111111",  # senza trattini
-        "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",  # maiuscole
+        "{11111111-1111-4111-8111-111111111111}",  # non-canonical form
+        "11111111111141118111111111111111",  # no hyphens
+        "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",  # uppercase
         "../../etc/passwd",
     ],
 )
 def test_profile_id_parse_refuses_other_forms(text: str) -> None:
-    with pytest.raises(ValueError, match="id del profilo"):
+    with pytest.raises(ValueError, match="profile id"):
         ProfileId.parse(text)
 
 
@@ -96,30 +96,30 @@ def test_name_length_on_and_off_point() -> None:
 
 
 def test_length_is_measured_after_normalisation() -> None:
-    decomposed = ("e" + COMBINING_ACUTE) * NAME_MAX_CHARS  # 120 punti di codice, 60 dopo NFC
+    decomposed = ("e" + COMBINING_ACUTE) * NAME_MAX_CHARS  # 120 code points, 60 after NFC
 
     assert len(ProfileName.parse(decomposed).value) == NAME_MAX_CHARS
 
 
 def test_huge_input_is_refused_before_any_processing() -> None:
-    with pytest.raises(InvalidProfileNameError, match="lungo"):
+    with pytest.raises(InvalidProfileNameError, match="too long"):
         ProfileName.parse(" " * 100_000)
 
 
 @pytest.mark.parametrize(
     "special",
     [
-        chr(0x0A),  # a capo
-        chr(0x09),  # tabulazione
+        chr(0x0A),  # newline
+        chr(0x09),  # tab
         chr(0x00),  # NUL
         chr(0x1B),  # ESC
         chr(0x7F),  # DEL
-        chr(0x200B),  # zero width space (formato)
-        chr(0x202E),  # inversione della direzione del testo
-        chr(0x2028),  # separatore di riga
-        chr(0x2029),  # separatore di paragrafo
-        chr(0xD800),  # surrogato isolato
-        chr(0xE000),  # uso privato
+        chr(0x200B),  # zero width space (format)
+        chr(0x202E),  # text direction override
+        chr(0x2028),  # line separator
+        chr(0x2029),  # paragraph separator
+        chr(0xD800),  # lone surrogate
+        chr(0xE000),  # private use
     ],
 )
 def test_names_with_control_or_format_characters_are_refused(special: str) -> None:
@@ -130,7 +130,7 @@ def test_names_with_control_or_format_characters_are_refused(special: str) -> No
 def test_constructor_only_takes_already_normalised_text() -> None:
     assert ProfileName("Atleta di prova").value == "Atleta di prova"
     for text in (" Atleta di prova", "Atleta di prova ", "Atle" + COMBINING_ACUTE):
-        with pytest.raises(InvalidProfileNameError, match="normalizzato"):
+        with pytest.raises(InvalidProfileNameError, match="normalized"):
             ProfileName(text)
 
 
@@ -170,7 +170,7 @@ def entry(**changes: object) -> RegistryEntry:
 
 def test_registry_entry_needs_an_absolute_folder_and_a_utc_time() -> None:
     assert entry().folder.is_absolute()
-    with pytest.raises(ValueError, match="assoluto"):
+    with pytest.raises(ValueError, match="absolute"):
         entry(folder=Path("profili/marta"))
     with pytest.raises(ValueError, match="UTC"):
         entry(last_used_utc=datetime(2026, 4, 1, 12, 0))
@@ -197,10 +197,10 @@ def test_profile_info_accepts_known_zones_and_versions() -> None:
 
 @pytest.mark.parametrize("zone", ["", "x" * 65])
 def test_profile_info_refuses_empty_or_overlong_zone_names(zone: str) -> None:
-    with pytest.raises(ValueError, match="fuso"):
+    with pytest.raises(ValueError, match="time zone"):
         info(timezone_name=zone)
 
 
 def test_profile_info_version_starts_at_one() -> None:
-    with pytest.raises(ValueError, match="versione"):
+    with pytest.raises(ValueError, match="version"):
         info(format_version=0)

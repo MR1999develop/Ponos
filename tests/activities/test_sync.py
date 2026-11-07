@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Caso d'uso "sincronizza": elenco completo e incrementale, abbinamento, formati, atomicità.
+"""Use case "synchronize": full and incremental listing, matching, formats, atomicity.
 
-T-SYNC-01 (completa poi incrementale), T-SYNC-05 (attività già importate da file, verifica
-completa), GPX e TCX originali, ZIP corrotti. Garmin, archivio e indice sono finti; orologio e
-attesa non dormono.
+T-SYNC-01 (full then incremental), T-SYNC-05 (activities already imported from file, full
+check), original GPX and TCX, corrupt ZIPs. Garmin, archive and index are fake; clock and
+wait do not sleep.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ from tests.fakes.garmin import FIRST_ACTIVITY_ID, Call, OriginalKind
 from tests.fixtures.generators.import_files import fit_run, gpx_run, run_start
 from tests.fixtures.generators.sync_harness import SyncRig, in_memory_rig, remote_id
 
-FIRST_PAUSE_S = 1.375  # pausa minima 1 s più metà del jitter massimo (0,75 s)
+FIRST_PAUSE_S = 1.375  # minimum pause 1 s plus half the maximum jitter (0.75 s)
 
 
 def list_offsets(rig: SyncRig) -> list[int | None]:
@@ -66,7 +66,7 @@ def import_files(rig: SyncRig, files: dict[str, bytes]) -> None:
     import_activities(InMemoryImportSource(files), rig.archive, rig.index, FixedClock())
 
 
-# --- Quale elenco ---------------------------------------------------------------------------
+# --- Which listing ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -86,11 +86,11 @@ def test_listing_kind_follows_the_mode_and_the_full_cursor(
 
 
 def test_an_extraction_error_must_have_a_definitive_reason() -> None:
-    with pytest.raises(ValueError, match="definitiva"):
+    with pytest.raises(ValueError, match="final"):
         OriginalExtractionError(FailureReason.TRANSIENT_ERROR)
 
 
-# --- T-SYNC-01: completa e poi incrementale ---------------------------------------------------
+# --- T-SYNC-01: full and then incremental ---------------------------------------------------
 
 
 def test_t_sync_01_the_first_sync_lists_everything_and_downloads_every_activity() -> None:
@@ -111,7 +111,7 @@ def test_t_sync_01_the_first_sync_lists_everything_and_downloads_every_activity(
     assert {r.origin for r in records} == {ActivityOrigin.GARMIN}
     assert {r.garmin_activity_id for r in records} == {FIRST_ACTIVITY_ID + n for n in range(25)}
     assert len(rig.memory.files) == 25
-    assert downloaded_numbers(rig) == list(range(24, -1, -1))  # dalla più recente
+    assert downloaded_numbers(rig) == list(range(24, -1, -1))  # most recent first
 
 
 def test_t_sync_01_a_second_sync_is_incremental_and_downloads_only_the_new_ones() -> None:
@@ -128,7 +128,7 @@ def test_t_sync_01_a_second_sync_is_incremental_and_downloads_only_the_new_ones(
 
     assert outcome.kind is ListingKind.INCREMENTAL
     assert (outcome.new_entries, outcome.downloaded) == (3, 3)
-    assert list_offsets(rig) == [0, 10]  # la seconda pagina è tutta di id noti: ci si ferma
+    assert list_offsets(rig) == [0, 10]  # the second page is all known ids: stop
     assert downloaded_numbers(rig)[first_downloads:] == [27, 26, 25]
     assert len(rig.records()) == 28
 
@@ -153,8 +153,8 @@ def test_the_listing_pauses_between_requests_with_the_minimum_plus_jitter() -> N
     rig.run()
 
     requests = len(rig.fake.calls)
-    assert requests == 4  # una pagina e tre download
-    assert rig.wait.waits == [FIRST_PAUSE_S] * (requests - 1)  # mai prima della prima richiesta
+    assert requests == 4  # one page and three downloads
+    assert rig.wait.waits == [FIRST_PAUSE_S] * (requests - 1)  # never before the first request
 
 
 def test_progress_goes_from_the_listing_to_the_downloads_with_an_estimate() -> None:
@@ -164,17 +164,17 @@ def test_progress_goes_from_the_listing_to_the_downloads_with_an_estimate() -> N
     rig.run(report=reports.append)
 
     phases = [p.phase for p in reports]
-    assert phases == sorted(phases, key=lambda p: p is SyncPhase.DOWNLOADING)  # prima l'elenco
+    assert phases == sorted(phases, key=lambda p: p is SyncPhase.DOWNLOADING)  # the listing first
     downloading = [p for p in reports if p.phase is SyncPhase.DOWNLOADING]
     assert [p.done for p in downloading] == [0, 1, 2, 3, 4]
     assert all(p.total == 4 for p in downloading)
-    assert downloading[0].remaining_s is None  # nessuna misura prima della prima voce
+    assert downloading[0].remaining_s is None  # no measurement before the first entry
     entry_s = FIRST_PAUSE_S + 2.0
     assert downloading[1].remaining_s == pytest.approx(entry_s * 3)
     assert downloading[-1].remaining_s == 0.0
 
 
-# --- T-SYNC-05: attività già importate da file ------------------------------------------------
+# --- T-SYNC-05: activities already imported from file ---------------------------------------------
 
 
 def test_t_sync_05_activities_imported_from_files_are_matched_without_downloading() -> None:
@@ -184,32 +184,32 @@ def test_t_sync_05_activities_imported_from_files_are_matched_without_downloadin
     outcome = rig.run()
 
     assert (outcome.matched, outcome.downloaded) == (5, 5)
-    assert sorted(downloaded_numbers(rig)) == [5, 6, 7, 8, 9]  # nessun download per le prime 5
+    assert sorted(downloaded_numbers(rig)) == [5, 6, 7, 8, 9]  # no download for the first 5
     records = rig.records()
-    assert len(records) == 10  # nessun duplicato
+    assert len(records) == 10  # no duplicate
     imported = [r for r in records if r.origin is ActivityOrigin.IMPORT]
     assert len(imported) == 5
-    assert all(r.garmin_activity_id is not None for r in imported)  # id Garmin collegato
+    assert all(r.garmin_activity_id is not None for r in imported)  # Garmin id linked
     assert {rig.status_of(n) for n in range(5)} == {SyncStatus.MATCHED}
     assert {rig.status_of(n) for n in range(5, 10)} == {SyncStatus.DOWNLOADED}
     assert len(rig.memory.files) == 10
 
 
 def test_t_sync_05_the_same_file_already_imported_is_linked_not_duplicated() -> None:
-    # Garmin dice "ciclismo": lo sport non coincide, quindi si scarica; ma il file è lo stesso.
+    # Garmin says "cycling": the sport differs, so it is downloaded; but the file is the same.
     rig = in_memory_rig(3, sport_key="cycling")
     import_files(rig, {f"corsa-{n}.fit": fit_run(n) for n in range(3)})
 
     outcome = rig.run()
 
-    # già nel profilo (stesso file): collegate, mai contate come scaricate (R6)
+    # already in the profile (same file): linked, never counted as downloaded (R6)
     assert (outcome.downloaded, outcome.matched, outcome.already_present) == (0, 0, 3)
     assert len(rig.fake.downloads) == 3
     records = rig.records()
     assert len(records) == 3
     assert {r.origin for r in records} == {ActivityOrigin.IMPORT}
     assert {r.garmin_activity_id for r in records} == {FIRST_ACTIVITY_ID + n for n in range(3)}
-    assert len(rig.memory.files) == 3  # nessun file in più
+    assert len(rig.memory.files) == 3  # no extra file
 
 
 def test_t_sync_05_the_same_activity_imported_in_another_format_is_matched_after_download() -> None:
@@ -223,19 +223,19 @@ def test_t_sync_05_the_same_activity_imported_in_another_format_is_matched_after
     assert record.file_format is FileFormat.GPX
     assert record.garmin_activity_id == FIRST_ACTIVITY_ID
     assert rig.status_of(0) is SyncStatus.MATCHED
-    assert len(rig.memory.files) == 1  # il FIT scaricato non è stato archiviato
+    assert len(rig.memory.files) == 1  # the downloaded FIT was not archived
 
 
 def test_t_sync_05_a_full_verification_finds_activities_uploaded_late_with_old_dates() -> None:
     rig = in_memory_rig(20, policy=SyncPolicy(page_size=10))
     rig.run()
-    for number in (-1, -2):  # caricate in ritardo, più vecchie di tutto lo storico
+    for number in (-1, -2):  # uploaded late, older than the whole history
         rig.fake.add_activity(
             RemoteActivity(remote_id(number), run_start(number), 1800.0, "running", True)
         )
 
     incremental = rig.run()
-    assert (incremental.new_entries, len(rig.records())) == (0, 20)  # non le trova
+    assert (incremental.new_entries, len(rig.records())) == (0, 20)  # does not find them
 
     before = len(rig.fake.downloads)
     rig.fake.calls.clear()
@@ -243,12 +243,12 @@ def test_t_sync_05_a_full_verification_finds_activities_uploaded_late_with_old_d
 
     assert verify.kind is ListingKind.VERIFY
     assert (verify.new_entries, verify.downloaded) == (2, 2)
-    assert list_offsets(rig) == [0, 10, 20]  # rielenca tutto
-    assert downloaded_numbers(rig)[before:] == [-1, -2]  # ma scarica solo le nuove
+    assert list_offsets(rig) == [0, 10, 20]  # lists everything again
+    assert downloaded_numbers(rig)[before:] == [-1, -2]  # but downloads only the new ones
     assert len(rig.records()) == 22
 
 
-# --- Formati e file rovinati ------------------------------------------------------------------
+# --- Formats and damaged files ------------------------------------------------------------------
 
 
 def test_a_gpx_original_is_read_like_an_imported_one() -> None:
@@ -292,14 +292,14 @@ def test_an_unusable_original_fails_that_entry_for_good_and_the_sync_goes_on(
     assert (entry.status, entry.failure) == (SyncStatus.FAILED, reason)
     assert len(rig.records()) == 4
 
-    rig.run()  # una voce fallita in modo definitivo non si riprova
+    rig.run()  # a definitively failed entry is not retried
     assert Counter(rig.fake.downloads)[remote_id(2)] == 1
 
 
 @pytest.mark.parametrize(
     ("error", "reason"),
     [
-        (DownloadTooLargeError("troppo grande"), FailureReason.FILE_TOO_LARGE),
+        (DownloadTooLargeError("too large"), FailureReason.FILE_TOO_LARGE),
         (DefinitiveSourceError("assente"), FailureReason.REMOTE_REJECTED),
     ],
 )
@@ -359,7 +359,7 @@ def test_an_unexpected_error_in_a_helper_fails_only_that_entry_and_logs_only_its
     assert "percorso-riservato-123" not in caplog.text
 
 
-# --- Scrittura: archivio prima, record poi, una transazione -----------------------------------
+# --- Writing: archive first, record next, one transaction -----------------------------------
 
 
 def test_the_archive_is_written_before_the_short_transaction_of_the_record() -> None:
@@ -370,8 +370,8 @@ def test_the_archive_is_written_before_the_short_transaction_of_the_record() -> 
 
     rig.run()
 
-    # La prima transazione è quella della pagina dell'elenco; poi l'archivio (R13) e,
-    # solo dopo, la transazione breve del record e della voce.
+    # The first transaction is the listing page one; then the archive (R13) and,
+    # only after, the short transaction of the record and the entry.
     assert log.events == ["begin", "commit", "store", "begin", "add", "commit"]
 
 
@@ -380,11 +380,11 @@ def test_a_failing_record_write_rolls_back_the_entry_and_a_rerun_finishes_withou
 ):
     rig = in_memory_rig(2)
     real_index = rig.index
-    rig.index = ObservedIndex(real_index, OrderLog(), fail_add_with=RuntimeError("guasto"))
+    rig.index = ObservedIndex(real_index, OrderLog(), fail_add_with=RuntimeError("failure"))
 
-    with pytest.raises(RuntimeError, match="guasto"):
+    with pytest.raises(RuntimeError, match="failure"):
         rig.run()
-    assert rig.status_of(1) is SyncStatus.PENDING  # la voce è com'era
+    assert rig.status_of(1) is SyncStatus.PENDING  # the entry is as it was
     assert rig.records() == []
 
     rig.index = real_index
@@ -392,7 +392,7 @@ def test_a_failing_record_write_rolls_back_the_entry_and_a_rerun_finishes_withou
 
     assert (outcome.completed, outcome.downloaded) == (True, 2)
     assert len(rig.records()) == 2
-    assert len(rig.memory.files) == 2  # il file scritto prima del guasto non si raddoppia
+    assert len(rig.memory.files) == 2  # the file written before the failure is not duplicated
 
 
 def test_a_storage_error_stops_the_sync_and_leaves_the_entry_untouched() -> None:
@@ -407,7 +407,7 @@ def test_a_storage_error_stops_the_sync_and_leaves_the_entry_untouched() -> None
     outcome = rig.run()
 
     assert outcome.stop is StopReason.STORAGE_ERROR
-    assert outcome.failures == ()  # non è colpa della voce
+    assert outcome.failures == ()  # not the entry's fault
     assert outcome.status_counts[SyncStatus.PENDING] == 3
     assert rig.journal.last_completed_at() is None
 

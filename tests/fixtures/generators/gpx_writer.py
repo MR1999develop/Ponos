@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Scrittore di file GPX 1.0 e 1.1 di attività, solo libreria standard, e GPX ostili.
+"""Writer of GPX 1.0 and 1.1 activity files, standard library only, and hostile GPX.
 
-Le coordinate sono inventate, in mare aperto (vedi `tracks.SEA_LAT_DEG`). I file validi hanno
-una traccia con uno o più segmenti, FC nelle estensioni Garmin (`gpxtpx:hr`, v1 o v2), quota e
-orari opzionali; quelli ostili servono ai test di sicurezza e si generano al volo.
+The coordinates are invented, in the open sea (see `tracks.SEA_LAT_DEG`). Valid files have
+a track with one or more segments, HR in the Garmin extensions (`gpxtpx:hr`, v1 or v2), optional
+altitude and times; hostile ones serve the security tests and are generated on the fly.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ class GpxPoint:
 
 @dataclass(frozen=True)
 class GpxSpec:
-    """Descrizione di un GPX: segmenti di punti, tipo di sport, versione e stile della FC."""
+    """Description of a GPX: segments of points, sport type, version and HR style."""
 
     segments: Sequence[Sequence[GpxPoint]]
     sport_type: str | None = None
@@ -53,7 +53,7 @@ class GpxSpec:
 
 
 def format_time(moment: datetime, *, fractional: bool = False) -> str:
-    """Orario ISO 8601 UTC con `Z` (con millisecondi se richiesto)."""
+    """ISO 8601 UTC time with `Z` (with milliseconds if requested)."""
     utc = moment.astimezone(UTC)
     if fractional:
         return utc.strftime("%Y-%m-%dT%H:%M:%S.") + f"{utc.microsecond // 1000:03d}Z"
@@ -109,7 +109,7 @@ def line_points(
     first_lat: float = SEA_LAT_DEG,
     first_lon: float = SEA_LON_DEG,
 ) -> list[GpxPoint]:
-    """`count` punti a passo costante di tempo su una retta (nel mare inventato)."""
+    """`count` points at a constant time step on a straight line (in the invented sea)."""
     return [
         GpxPoint(
             first_lat + i * lat_step_deg,
@@ -122,7 +122,7 @@ def line_points(
     ]
 
 
-# --- GPX ostili ------------------------------------------------------------------------------
+# --- Hostile GPX ------------------------------------------------------------------------------
 
 _HEAD = f'<?xml version="1.0"?>\n{{doctype}}<gpx version="1.1" xmlns="{GPX_NAMESPACE["1.1"]}">'
 
@@ -132,12 +132,12 @@ def _with_doctype(doctype: str, body: str) -> bytes:
 
 
 def gpx_with_empty_doctype() -> bytes:
-    """DOCTYPE senza entità: già un DTD, quindi rifiutato."""
+    """DOCTYPE without entities: already a DTD, hence refused."""
     return _with_doctype("<!DOCTYPE gpx>\n", "<metadata><name>x</name></metadata>")
 
 
 def billion_laughs(levels: int = 9, fan_out: int = 10) -> bytes:
-    """Espansione esponenziale di entità (`fan_out ** levels` ripetizioni), mai da espandere."""
+    """Exponential entity expansion (`fan_out ** levels` repetitions), never to be expanded."""
     entities = ['<!ENTITY e0 "lol">']
     for level in range(1, levels):
         reference = f"&e{level - 1};" * fan_out
@@ -147,45 +147,45 @@ def billion_laughs(levels: int = 9, fan_out: int = 10) -> bytes:
 
 
 def quadratic_blowup(size: int = 50_000, uses: int = 50_000) -> bytes:
-    """Una entità lunga richiamata moltissime volte (`size * uses` caratteri)."""
+    """One long entity referenced very many times (`size * uses` characters)."""
     doctype = f'<!DOCTYPE gpx [<!ENTITY a "{"A" * size}">]>\n'
     return _with_doctype(doctype, "<metadata><name>" + "&a;" * uses + "</name></metadata>")
 
 
 def external_entity(target: str) -> bytes:
-    """Entità esterna (`SYSTEM`) verso `target`: un file o un indirizzo, mai da aprire."""
+    """External entity (`SYSTEM`) towards `target`: a file or an address, never to be opened."""
     doctype = f'<!DOCTYPE gpx [<!ENTITY secret SYSTEM "{target}">]>\n'
     return _with_doctype(doctype, "<metadata><name>&secret;</name></metadata>")
 
 
 def external_dtd(target: str) -> bytes:
-    """DTD esterno (`SYSTEM`) verso `target`, mai da scaricare."""
+    """External DTD (`SYSTEM`) towards `target`, never to be downloaded."""
     return _with_doctype(f'<!DOCTYPE gpx SYSTEM "{target}">\n', "")
 
 
 def parameter_entity(target: str) -> bytes:
-    """Entità parametrica che include un file esterno nel DTD interno."""
+    """Parameter entity that includes an external file in the internal DTD."""
     doctype = f'<!DOCTYPE gpx [<!ENTITY % remote SYSTEM "{target}">%remote;]>\n'
     return _with_doctype(doctype, "")
 
 
 def deeply_nested(depth: int) -> bytes:
-    """`depth` elementi `<a>` annidati dentro `gpx`."""
+    """`depth` nested `<a>` elements inside `gpx`."""
     return _with_doctype("", "<a>" * depth + "</a>" * depth)
 
 
 def points_without_data(count: int) -> bytes:
-    """`count` punti minimi (solo coordinate): per il tetto dei punti, senza orari."""
+    """`count` minimal points (coordinates only): for the point cap, without times."""
     body = "<trk><trkseg>" + '<trkpt lat="0" lon="0"/>' * count + "</trkseg></trk>"
     return _with_doctype("", body)
 
 
 def huge_text(chars: int) -> bytes:
-    """Un nome di `chars` caratteri dentro `metadata`."""
+    """A name of `chars` characters inside `metadata`."""
     return _with_doctype("", "<metadata><name>" + "A" * chars + "</name></metadata>")
 
 
 def huge_attribute(chars: int) -> bytes:
-    """Un punto la cui latitudine è un attributo di `chars` caratteri."""
+    """A point whose latitude is an attribute of `chars` characters."""
     value = "1" * chars
     return _with_doctype("", f'<trk><trkseg><trkpt lat="{value}" lon="0"/></trkseg></trk>')

@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Operazioni elementari di scrittura dell'archivio: la cucitura per l'iniezione di guasti.
+"""Elementary archive write operations: the seam for fault injection.
 
-`FileArchive` scrive solo attraverso `WriteOps`; i test la sostituiscono con una versione che
-fallisce o "muore" all'N-esima operazione (T-DATI-02).
+`FileArchive` writes only through `WriteOps`; tests replace it with a version that
+fails or "dies" at the Nth operation (T-DATI-02).
 
-Durabilità. Su tutti i sistemi: temporaneo nella stessa cartella del file finale, `fsync` del
-temporaneo prima della rinomina. Rinomina e sincronizzazione della cartella (anche della madre
-se la sottocartella dell'anno è nuova) stanno in `ponos_coach.fsio`, condivise con l'elenco dei
-profili; sulle cartelle nuove Windows eredita il descrittore privato della cartella del profilo.
+Durability. On all systems: temporary in the same folder as the final file, `fsync` of the
+temporary before the rename. Rename and directory synchronization (also of the parent
+if the year subfolder is new) live in `ponos_coach.fsio`, shared with the profile
+list; on new folders Windows inherits the private descriptor of the profile folder.
 """
 
 from __future__ import annotations
@@ -31,72 +31,72 @@ _CREATE_FLAGS: Final = (
 
 
 class WriteOps(Protocol):
-    """Operazioni con cui l'archivio scrive un file in modo durevole, nell'ordine d'uso."""
+    """Operations with which the archive writes a file durably, in order of use."""
 
     def make_dir(self, path: Path) -> bool:
-        """Crea la cartella (privata); vero se l'ha creata, falso se c'era già."""
+        """Creates the folder (private); true if it created it, false if it already existed."""
         ...
 
     def create_exclusive(self, path: Path) -> int:
-        """Crea un file nuovo in sola scrittura (fallisce se esiste); restituisce il descrittore."""
+        """Creates a new write-only file (fails if it exists); returns the descriptor."""
         ...
 
     def write(self, descriptor: int, data: memoryview) -> int:
-        """Scrive al più `len(data)` byte; restituisce quanti ne ha scritti."""
+        """Writes at most `len(data)` bytes; returns how many it wrote."""
         ...
 
     def fsync(self, descriptor: int) -> None:
-        """Porta su disco i dati del file."""
+        """Flushes the file's data to disk."""
         ...
 
     def close(self, descriptor: int) -> None:
-        """Chiude il descrittore."""
+        """Closes the descriptor."""
         ...
 
     def replace(self, source: Path, destination: Path) -> None:
-        """Rinomina `source` su `destination` (stesso volume), sostituendo l'esistente."""
+        """Renames `source` to `destination` (same volume), replacing the existing one."""
         ...
 
     def sync_dir(self, path: Path) -> None:
-        """Rende durevole il contenuto della cartella (i nomi), dove il sistema lo permette."""
+        """Makes the folder's content (the names) durable, where the system allows it."""
         ...
 
     def unlink(self, path: Path) -> None:
-        """Toglie il file (nessun errore se manca)."""
+        """Removes the file (no error if missing)."""
         ...
 
 
 class OsWriteOps:
-    """Implementazione reale su `os` (e su `MoveFileExW` per la rinomina su Windows)."""
+    """Real implementation on `os` (and on `MoveFileExW` for the rename on Windows)."""
 
     def make_dir(self, path: Path) -> bool:
-        """Vedi `WriteOps.make_dir`."""
+        """See `WriteOps.make_dir`."""
         return make_subdirectory(path)
 
     def create_exclusive(self, path: Path) -> int:
-        """Vedi `WriteOps.create_exclusive`: permessi 0600 su POSIX, mai link seguiti."""
+        """See `WriteOps.create_exclusive`: 0600 permissions on POSIX, never following links."""
         return os.open(path, _CREATE_FLAGS, _FILE_MODE)
 
     def write(self, descriptor: int, data: memoryview) -> int:
-        """Vedi `WriteOps.write`."""
+        """See `WriteOps.write`."""
         return os.write(descriptor, data)
 
     def fsync(self, descriptor: int) -> None:
-        """Vedi `WriteOps.fsync` (`FlushFileBuffers` su Windows)."""
+        """See `WriteOps.fsync` (`FlushFileBuffers` on Windows)."""
         os.fsync(descriptor)
 
     def close(self, descriptor: int) -> None:
-        """Vedi `WriteOps.close`."""
+        """See `WriteOps.close`."""
         os.close(descriptor)
 
     def replace(self, source: Path, destination: Path) -> None:
-        """Vedi `WriteOps.replace`: con write-through su Windows."""
+        """See `WriteOps.replace`: with write-through on Windows."""
         replace_file(source, destination)
 
     def sync_dir(self, path: Path) -> None:
-        """Vedi `WriteOps.sync_dir`: `fsync` della cartella su POSIX, nulla su Windows."""
+        """See `WriteOps.sync_dir`: `fsync` of the folder on POSIX, nothing on Windows."""
         sync_directory(path)
 
     def unlink(self, path: Path) -> None:
-        """Vedi `WriteOps.unlink`."""
+        """See `WriteOps.unlink`."""
         path.unlink(missing_ok=True)

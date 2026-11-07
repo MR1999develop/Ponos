@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Aggregazioni per i grafici: carico per settimana e sport, secondi per zona per settimana.
+"""Aggregations for the charts: load per week and sport, seconds per zone per week.
 
-Le settimane sono ISO (da lunedì a domenica) sui giorni locali del profilo, che chi chiama ha
-già calcolato per ogni attività. Le settimane senza attività dentro l'intervallo ci sono, a
-zero. L'intervallo va dalla settimana della prima attività alla settimana di `through`
-(oggi); le attività dopo `through` si ignorano, come nel PMC. Le somme sono vettoriali (NumPy),
-senza cicli per attività.
+Weeks are ISO (Monday to Sunday) on the profile's local days, which the caller has
+already computed for each activity. Weeks without activities inside the range are there, at
+zero. The range goes from the week of the first activity to the week of `through`
+(today); activities after `through` are ignored, as in the PMC. Sums are vectorized (NumPy),
+with no per-activity loops.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ _DAYS_PER_WEEK = 7
 
 @dataclass(frozen=True, slots=True)
 class DayLoad:
-    """Un'attività vista dalle aggregazioni: giorno locale, sport, carico e secondi in zona."""
+    """An activity as seen by the aggregations: local day, sport, load and seconds in zone."""
 
     day: date
     sport: Sport
@@ -35,17 +35,18 @@ class DayLoad:
 
 
 def iso_week_start(day: date) -> date:
-    """Il lunedì della settimana ISO che contiene `day`."""
+    """The Monday of the ISO week containing `day`."""
     return day - timedelta(days=day.weekday())
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class WeeklyLoad:
-    """Carico per settimana e sport: `load[i, j]` è il carico della settimana `weeks[i]` per lo
+    """Load per week and sport: `load[i, j]` is the load of week `weeks[i]` for the
     sport `sports[j]`.
 
-    `weeks` sono i lunedì consecutivi; `sports` gli sport con almeno un'attività, nell'ordine di
-    `Sport`. Senza attività sono vuoti. Array di sola lettura.
+    `weeks` are the consecutive Mondays; `sports` the sports with at least one activity, in the
+    order of
+    `Sport`. Without activities they are empty. Read-only arrays.
     """
 
     weeks: tuple[date, ...]
@@ -54,20 +55,20 @@ class WeeklyLoad:
 
     def __post_init__(self) -> None:
         if self.load.shape != (len(self.weeks), len(self.sports)):
-            raise ValueError("la matrice del carico non corrisponde a settimane e sport")
+            raise ValueError("the load matrix does not match weeks and sports")
         self.load.setflags(write=False)
 
     @property
     def total_by_week(self) -> NDArray[np.float64]:
-        """Carico totale di ogni settimana (tutti gli sport)."""
+        """Total load of each week (all sports)."""
         return np.asarray(self.load.sum(axis=1), dtype=np.float64)
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class WeeklyZones:
-    """Secondi per zona e settimana: `seconds[i, z]` per la settimana `weeks[i]` e la zona Z(z+1).
+    """Seconds per zone and week: `seconds[i, z]` for week `weeks[i]` and zone Z(z+1).
 
-    Array di sola lettura, `len(weeks)` righe e cinque colonne.
+    Read-only arrays, `len(weeks)` rows and five columns.
     """
 
     weeks: tuple[date, ...]
@@ -75,14 +76,14 @@ class WeeklyZones:
 
     def __post_init__(self) -> None:
         if self.seconds.shape != (len(self.weeks), ZONE_COUNT):
-            raise ValueError("la matrice dei secondi non corrisponde a settimane e zone")
+            raise ValueError("the seconds matrix does not match weeks and zones")
         self.seconds.setflags(write=False)
 
 
 def _week_axis(
     items: Sequence[DayLoad], through: date
 ) -> tuple[tuple[date, ...], NDArray[np.intp], Sequence[DayLoad]]:
-    """Lunedì consecutivi, indice di settimana di ogni attività tenuta e le attività tenute."""
+    """Consecutive Mondays, week index of each kept activity and the kept activities."""
     kept = [item for item in items if item.day <= through]
     if not kept:
         return (), np.zeros(0, dtype=np.intp), ()
@@ -95,8 +96,8 @@ def _week_axis(
 
 
 def weekly_load_by_sport(items: Sequence[DayLoad], through: date) -> WeeklyLoad:
-    """Carico per settimana ISO e per sport, dalla settimana della prima attività a quella di
-    `through`; le settimane vuote valgono 0."""
+    """Load per ISO week and per sport, from the week of the first activity to that of
+    `through`; empty weeks are worth 0."""
     weeks, week_index, kept = _week_axis(items, through)
     present = {item.sport for item in kept}
     sports = tuple(sport for sport in Sport if sport in present)
@@ -110,7 +111,7 @@ def weekly_load_by_sport(items: Sequence[DayLoad], through: date) -> WeeklyLoad:
 
 
 def weekly_zone_seconds(items: Sequence[DayLoad], through: date) -> WeeklyZones:
-    """Secondi in ciascuna zona per settimana ISO; stesso intervallo di `weekly_load_by_sport`."""
+    """Seconds in each zone per ISO week; same range as `weekly_load_by_sport`."""
     weeks, week_index, kept = _week_axis(items, through)
     matrix = np.zeros((len(weeks), ZONE_COUNT), dtype=np.float64)
     if kept:

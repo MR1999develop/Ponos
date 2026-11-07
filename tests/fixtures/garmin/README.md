@@ -1,19 +1,19 @@
-# Fixture delle risposte di Garmin
+# Garmin response fixtures
 
-**Costruite sulla struttura reale registrata dallo spike del 2026-11-06**
-(`experiments/garmin_spike_shapes.json`): stesse chiavi, tipi, annidamenti e
-lunghezze delle stringhe di una voce vera dell'elenco; i valori sono inventati
-(id, date, numeri, nomi come "Atleta di prova"), nessuno è reale. Le tre chiavi
-con un id nel nome sono anonimizzate nella registrazione e qui restano
-con il segnaposto `<id-key-N>` della registrazione. Nella risposta reale `averageHR` è sempre un numero; i casi
-`null`, 0, assente, id come stringa e orario con decimali sono coperti dai test
-con voci costruite a mano.
+**Built on the real structure recorded by the 2026-11-06 spike**
+(`experiments/garmin_spike_shapes.json`): same keys, types, nesting and
+string lengths as a real entry of the list; the values are invented
+(ids, dates, numbers, names such as "Atleta di prova"), none is real. The three keys
+with an id in the name are anonymised in the recording and here stay
+with the recording's `<id-key-N>` placeholder. In the real response `averageHR` is always a number; the cases
+`null`, 0, missing, id as a string and time with decimals are covered by the tests
+with hand-built entries.
 
-| File | Contenuto |
+| File | Content |
 |---|---|
-| `activity_list_page.json` | Una pagina valida di 5 voci con la struttura reale completa, dalla più recente; le chiavi non lette sono ignorate |
-| `activity_list_hostile.json` | Voci ostili (T-SEC-03): non oggetti, id non numerici o con percorsi, orari assenti, malformati o fuori finestra, durate assenti, nulle, negative, non finite o testuali, tipo di sport assente o con `../`, id ripetuto, nomi con HTML o SQL (che sono testo e non contano). Contiene i letterali `NaN` e `Infinity`, che `json` di Python accetta |
-| `count_activities.json` | Risposta del conteggio: un intero nudo, come nella realtà |
+| `activity_list_page.json` | A valid page of 5 entries with the complete real structure, from the most recent; keys not read are ignored |
+| `activity_list_hostile.json` | Hostile entries (T-SEC-03): non-objects, non-numeric ids or ids with paths, missing, malformed or out-of-window times, missing, null, negative, non-finite or textual durations, missing sport type or with `../`, repeated id, names with HTML or SQL (which are text and do not count). Contains the `NaN` and `Infinity` literals, which Python's `json` accepts |
+| `count_activities.json` | Count response: a bare integer, as in reality |
 
-`load_json(nome)` in `__init__.py` legge un file. La struttura profonda o
-enorme non si può versionare e si costruisce nei test.
+`load_json(name)` in `__init__.py` reads a file. Deeply nested or
+huge structures cannot be versioned and are built in the tests.

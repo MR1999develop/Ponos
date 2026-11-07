@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-IMP-01, T-IMP-03, T-IMP-04, T-GPX-01, T-GPX-02 sulla pila reale.
+"""T-IMP-01, T-IMP-03, T-IMP-04, T-GPX-01, T-GPX-02 on the real stack.
 
-Cartelle, ZIP e file veri sul disco, sorgenti `FolderImportSource` e `FilesImportSource`,
-archivio su file system e indice SQLite: il comportamento che l'utente vede, file per file.
+Real folders, ZIPs and files on disk, `FolderImportSource` and `FilesImportSource` sources,
+file system archive and SQLite index: the behaviour the user sees, file by file.
 """
 
 from __future__ import annotations
@@ -64,9 +64,9 @@ def tree_bytes(root: Path) -> dict[str, bytes]:
 
 
 def mixed_tree(root: Path) -> dict[str, tuple[ImportStatus, ImportIssue | None]]:
-    """Scrive l'albero di prova e dice l'esito atteso per ogni file elencato."""
+    """Writes the test tree and gives the expected outcome for every listed file."""
     fit1 = imp.fit_run(1)
-    resaved = imp.fit_run(1, seconds=1200)  # stesso file_id, byte diversi
+    resaved = imp.fit_run(1, seconds=1200)  # same file_id, different bytes
     no_times = gw.build_gpx(gw.GpxSpec([[gw.GpxPoint(1.0, 1.0), gw.GpxPoint(1.0, 1.1)]]))
     tcx = b'<?xml version="1.0"?><TrainingCenterDatabase xmlns="urn:x"/>'
     write(
@@ -119,14 +119,14 @@ def test_t_imp_01_a_real_tree_gives_the_exact_summary_file_by_file(
 
     assert outcomes(summary) == expected
     names = [r.name for r in summary.results]
-    assert names == sorted(names)  # nessun file skipped dalla sorgente: ordine di nome
+    assert names == sorted(names)  # no file skipped by the source: name order
     assert len(names) == len(set(names))
     assert summary.count(ImportStatus.IMPORTED) == 4
     assert summary.count(ImportStatus.ALREADY_PRESENT) == 2
     assert summary.count(ImportStatus.IGNORED) == 1
     assert summary.count(ImportStatus.FAILED) == 7
     assert not summary.cancelled
-    assert snapshot(source) == before  # la cartella d'origine non si modifica mai
+    assert snapshot(source) == before  # the source folder is never modified
     assert len(profile.records()) == 4
     assert len(stored_files(profile.folder)) == 4
 
@@ -142,7 +142,7 @@ def test_t_imp_01_the_archive_holds_the_original_bytes_under_generated_names(
     originals = {
         hashlib.sha256(source.joinpath(name).read_bytes()).hexdigest()
         for name in ("a_corsa.fit", "b_camminata.gpx", "c_maiuscolo.FIT")
-    } | {hashlib.sha256(imp.fit_run(6)).hexdigest()}  # il FIT estratto dallo ZIP, non lo ZIP
+    } | {hashlib.sha256(imp.fit_run(6)).hexdigest()}  # the FIT extracted from the ZIP, not the ZIP
     in_archive = {p.stem for p in stored_files(profile.folder)}
     assert in_archive == originals
     assert {p.suffix for p in stored_files(profile.folder)} == {".fit", ".gpx"}
@@ -169,12 +169,15 @@ def test_t_imp_03_importing_the_same_tree_again_changes_nothing(
         ImportStatus.FAILED,
         ImportStatus.IGNORED,
     }
-    for name, outcome in expected.items():  # i rifiuti restano gli stessi, il resto e gia presente
+    for (
+        name,
+        outcome,
+    ) in expected.items():  # the refusals stay the same, the rest is already present
         if outcome == IMPORTED:
             assert outcomes(again)[name] == ALREADY
         else:
             assert outcomes(again)[name] == outcome
-    assert list(profile.records()) == records  # compreso imported_at
+    assert list(profile.records()) == records  # including imported_at
     assert tree_bytes(profile.folder / "archivio") == archive
 
 
@@ -263,7 +266,7 @@ def test_t_imp_04_many_fit_and_gpx_activities_and_other_entries_are_ignored(
 
     summary = profile.import_files([tmp_path / "tutto.zip"])
 
-    assert len(summary.results) == 16  # le voci di altri tipi non compaiono
+    assert len(summary.results) == 16  # entries of other types do not appear
     assert {r.status for r in summary.results} == {ImportStatus.IMPORTED}
     assert {r.name.split("!")[1].split("/")[0] for r in summary.results} == {"fit", "gpx"}
     assert len(profile.records()) == 16
@@ -304,7 +307,7 @@ def test_t_imp_04_entries_of_a_zip_count_in_the_caps_at_the_limit_and_one_over(
         with pytest.raises(ImportLimitExceededError) as raised:
             over.import_files([tmp_path / "sei.zip"], limits)
         assert raised.value.limit is ImportLimit.ACTIVITY_FILES
-        assert over.records() == []  # niente import parziali a sorpresa
+        assert over.records() == []  # no surprise partial imports
         assert stored_files(over.folder) == []
     finally:
         over.close()
@@ -346,7 +349,8 @@ DUP = (ImportStatus.DUPLICATE_OF_OTHER_FORMAT, None)
 @pytest.mark.parametrize(
     ("order", "expected"),
     [
-        # Si importa in ordine di nome: vince la prima arrivata, l'altro formato e un doppione.
+        # Import happens in name order: the first one to arrive wins, the other format is a
+        # duplicate.
         (
             "fit_first",
             {"d.zip!a1.fit": IMPORTED, "d.zip!a3.fit": ALREADY, "d.zip!b.gpx": DUP},
@@ -389,7 +393,7 @@ def test_a_zip_with_two_entries_of_the_same_name_is_refused_whole_and_the_rest_i
 ) -> None:
     buffer = io.BytesIO()
     with warnings.catch_warnings(), zipfile.ZipFile(buffer, "w") as archive:
-        warnings.simplefilter("ignore", UserWarning)  # zipfile avvisa dei nomi doppi
+        warnings.simplefilter("ignore", UserWarning)  # zipfile warns about duplicate names
         archive.writestr("stesso.fit", imp.fit_run(1))
         archive.writestr("stesso.fit", imp.fit_run(2))
     write(tmp_path, {"doppio-nome.zip": buffer.getvalue(), "sano.fit": imp.fit_run(3)})
@@ -403,7 +407,7 @@ def test_a_zip_with_two_entries_of_the_same_name_is_refused_whole_and_the_rest_i
     assert len(profile.records()) == 1
 
 
-# --- T-GPX-01 e T-GPX-02 -------------------------------------------------------------------------
+# --- T-GPX-01 and T-GPX-02 ------------------------------------------------------------------------
 
 
 def gpx_file(tmp_path: Path, name: str, spec: gw.GpxSpec) -> Path:
@@ -445,7 +449,7 @@ def test_t_gpx_01_gpx_activities_reach_the_index_and_the_load_with_the_right_sou
     assert sources[start.date()] is LoadSource.HEART_RATE
     assert sources[(start + timedelta(days=1)).date()] is LoadSource.ESTIMATE
     two = by_day[(start + timedelta(days=2)).date()]
-    assert two.timer_s == pytest.approx(2 * 900.0)  # la pausa tra i segmenti non conta
+    assert two.timer_s == pytest.approx(2 * 900.0)  # the pause between segments does not count
 
 
 def test_t_gpx_01_a_gpx_without_times_is_ignored_and_a_gpx_with_a_doctype_is_refused(
@@ -479,7 +483,7 @@ def test_t_gpx_02_arrival_order_and_the_60_second_boundary(
     if first == "gpx":
         ordered.reverse()
 
-    for path in ordered:  # due import separati: l'ordine di arrivo e quello scelto
+    for path in ordered:  # two separate imports: the order of arrival is the chosen one
         last = profile.import_files([path])
 
     ((_, outcome),) = ((r.name, r.status) for r in last.results)
@@ -487,7 +491,7 @@ def test_t_gpx_02_arrival_order_and_the_60_second_boundary(
     assert len(profile.records()) == (1 if duplicate else 2)
     kept = profile.records()[0].file_format
     if duplicate:
-        assert kept is (FileFormat.FIT if first == "fit" else FileFormat.GPX)  # prima arrivata
+        assert kept is (FileFormat.FIT if first == "fit" else FileFormat.GPX)  # first to arrive
 
 
 @pytest.mark.parametrize(

@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-SEC-03, T-SYNC-03 e Retry-After ostili: risposte di Garmin cattive all'adattatore vero.
+"""T-SEC-03, T-SYNC-03 and hostile Retry-After: bad Garmin responses to the real adapter.
 
-L'adattatore (`GarminActivitySource`) e il suo client finto (`ScriptedClient`): le risposte sono
-JSON non fidato; tutto ciò che non è una voce valida si scarta o ferma il giro con un errore
-della porta, mai un'eccezione qualsiasi. Nessuna rete.
+The adapter (`GarminActivitySource`) and its fake client (`ScriptedClient`): the responses are
+untrusted JSON; everything that is not a valid entry is discarded or stops the round with an error
+of the port, never an arbitrary exception. No network.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ HTML = "<script>alert(1)</script><img src=x onerror=alert(2)>"
 
 
 def nested(depth: int) -> object:
-    """Una lista annidata `depth` volte, costruita a mano (`json.loads` rifiuterebbe)."""
+    """A list nested `depth` times, built by hand (`json.loads` would refuse)."""
     value: object = []
     for _ in range(depth):
         value = [value]
@@ -48,7 +48,7 @@ def nested_dict(depth: int) -> object:
 
 
 class RawListing(ScriptedClient):
-    """Un client che risponde sempre `raw` all'elenco, anche `None`."""
+    """A client that always answers `raw` to the list, even `None`."""
 
     def __init__(self, raw: object) -> None:
         super().__init__()
@@ -59,13 +59,13 @@ class RawListing(ScriptedClient):
 
 
 def page_of(raw: object) -> tuple[int, int]:
-    """(attività valide, voci ricevute) di una pagina data come risposta dell'elenco."""
+    """(valid activities, entries received) of a page given as the list response."""
     source = GarminActivitySource(RawListing(raw))
     page = source.list_page(0, 100)
     return len(page.items), page.raw_count
 
 
-# --- T-SEC-03: l'elenco ---------------------------------------------------------------------
+# --- T-SEC-03: the list ---------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -294,7 +294,7 @@ def test_t_sec_03_a_hostile_listing_through_the_whole_stack_downloads_only_the_v
         stack.close()
 
 
-# --- T-SYNC-03: Retry-After ostili, con l'adattatore vero ---------------------------------------
+# --- T-SYNC-03: hostile Retry-After, with the real adapter ---------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -314,7 +314,7 @@ def test_t_sync_03_any_retry_after_gives_a_bounded_sync_with_a_clear_outcome(
 
     assert outcome.stop is StopReason.RATE_LIMITED
     assert len(client.list_calls) <= rig.policy.max_attempts_per_request
-    # l'attesa totale (orologio finto) non supera il tetto del backoff per ogni tentativo
+    # the total wait (fake clock) does not exceed the backoff cap for each attempt
     assert rig.wait.total_s <= rig.policy.max_attempts_per_request * rig.policy.backoff_cap_s
     assert all(0 <= wait <= rig.policy.backoff_cap_s for wait in rig.wait.waits)
 
@@ -335,7 +335,7 @@ def test_d_f2_01_the_same_header_through_the_stack_is_ignored_and_the_backoff_go
     client.list_failures.append(rate_limit_error("\u00b2"))
     stack = build_stack(tmp_path, client)
     try:
-        result = stack.sync()  # nessuna attesa suggerita: vale il solo backoff, poi riesce
+        result = stack.sync()  # no suggested wait: only the backoff counts, then it succeeds
 
         assert isinstance(result, SyncFinished) and result.outcome.completed
         assert len(client.list_calls) == 2
@@ -372,7 +372,7 @@ def test_d_f2_02_a_source_with_a_hostile_retry_after_value_gives_an_outcome_not_
     assert not outcome.completed
 
 
-# --- ZIP di Garmin ------------------------------------------------------------------------------
+# --- Garmin ZIP ------------------------------------------------------------------------------
 
 
 def _zip_with(entries: list[tuple[str, bytes]]) -> bytes:
@@ -436,7 +436,7 @@ def test_t_sec_03_zip_entry_names_never_become_paths_in_the_archive(
     try:
         content = _zip_with([(name, fit_run(0))])
     except (ValueError, OSError):
-        pytest.skip("il generatore di ZIP non scrive questo nome")
+        pytest.skip("the ZIP generator does not write this name")
     result, _ = _sync_one_download(tmp_path / "w", content)
 
     assert result.outcome.completed
@@ -456,8 +456,8 @@ def test_t_sync_a_bomb_from_garmin_fails_the_entry_and_the_sync_goes_on(tmp_path
 
 
 def test_t_sync_the_json_of_the_listing_is_data_never_executed() -> None:
-    # il sorgente (JSON letto da un client finto) non passa mai per eval/pickle: una stringa
-    # che sembra codice resta una stringa scartata
+    # the source (JSON read by a fake client) never goes through eval/pickle: a string
+    # that looks like code stays a discarded string
     payload = json.loads("[{\"activityId\": \"__import__('os').system('x')\"}]")
 
     assert page_of(payload) == (0, 1)

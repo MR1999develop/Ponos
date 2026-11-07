@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Rigenera le fixture FIT versionate in `tests/fixtures/data/`.
+"""Regenerates the versioned FIT fixtures in `tests/fixtures/data/`.
 
-Uso, dalla radice del repository: `python -m tests.fixtures.generators.make_fixtures`.
-Con seme fisso e date fisse, ogni esecuzione produce gli stessi byte.
+Usage, from the repository root: `python -m tests.fixtures.generators.make_fixtures`.
+With a fixed seed and fixed dates, every run produces the same bytes.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from .tracks import (
 
 SEED = 20260101
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-BASE = datetime(2026, 3, 2, 7, 0, 0, tzinfo=UTC)  # data inventata
+BASE = datetime(2026, 3, 2, 7, 0, 0, tzinfo=UTC)  # invented date
 
 
 def _spec(
@@ -44,11 +44,11 @@ def _spec(
 
 
 def build_valid(rng: random.Random) -> dict[str, bytes]:
-    """File validi, per nome."""
+    """Valid files, by name."""
     run, bike, walk = fw.Sport.RUNNING, fw.Sport.CYCLING, fw.Sport.WALKING
     out: dict[str, bytes] = {}
 
-    # T-CALC-01: 60' esatti a 160 bpm, senza rumore.
+    # T-CALC-01: exactly 60' at 160 bpm, without noise.
     out["run_constant_160.fit"] = fw.build_activity(
         _spec(0, run, fw.SubSport.GENERIC, hold(160, 3600), 5000001)
     )
@@ -77,7 +77,7 @@ def build_valid(rng: random.Random) -> dict[str, bytes]:
         _spec(4, walk, fw.SubSport.GENERIC, [None] * 2400, 5000005)
     )
 
-    # Buchi di FC oltre 10 s: 12 s con FC non valida e 15 s senza record.
+    # HR gaps over 10 s: 12 s with invalid HR and 15 s without records.
     gap_track: Track = add_noise(hold(150, 1800), rng)
     gap_track[300:312] = [None] * 12
     gap_spec = _spec(5, run, fw.SubSport.GENERIC, gap_track, 5000006)
@@ -96,7 +96,7 @@ def build_valid(rng: random.Random) -> dict[str, bytes]:
         )
     )
 
-    # Campioni fuori limiti: 0 e 250 bpm sparsi in un tracciato normale.
+    # Out-of-range samples: 0 and 250 bpm scattered in a normal track.
     bad = add_noise(hold(145, 1800), rng)
     for i in (100, 101, 700, 1200):
         bad[i] = 0
@@ -106,7 +106,7 @@ def build_valid(rng: random.Random) -> dict[str, bytes]:
         _spec(6, run, fw.SubSport.GENERIC, bad, 5000007)
     )
 
-    # Attività di 1 s e di 24 h (un campione ogni 5 s).
+    # 1 s and 24 h activities (one sample every 5 s).
     out["run_one_second.fit"] = fw.build_activity(
         _spec(7, run, fw.SubSport.GENERIC, [120], 5000008)
     )
@@ -127,14 +127,14 @@ def build_valid(rng: random.Random) -> dict[str, bytes]:
 
 
 def build_gps(rng: random.Random) -> dict[str, bytes]:
-    """File con posizioni e distanza (coordinate inventate in mare aperto).
+    """Files with positions and distance (invented coordinates in the open sea).
 
-    Si generano con un proprio generatore casuale: i byte dei file di `build_valid` non
-    dipendono da questi.
+    They are generated with their own random generator: the bytes of the `build_valid` files do not
+    depend on these.
     """
     out: dict[str, bytes] = {}
 
-    # Corsa su un cerchio di 300 m di raggio, 3 m/s, con quota e dislivello dichiarato.
+    # Run on a circle of 300 m radius, 3 m/s, with altitude and declared elevation gain.
     loop = circle_positions(1200, 300.0, 3.0)
     base = _spec(9, fw.Sport.RUNNING, fw.SubSport.ROAD, add_noise(hold(150, 1200), rng), 5000010)
     samples = [
@@ -157,7 +157,7 @@ def build_gps(rng: random.Random) -> dict[str, bytes]:
         )
     )
 
-    # Bici indoor: nessuna posizione, distanza dal sensore, nessun dislivello.
+    # Indoor bike: no position, distance from the sensor, no elevation gain.
     trainer = _spec(
         10, fw.Sport.CYCLING, fw.SubSport.INDOOR_CYCLING,
         add_noise(hold(130, 1800), rng), 5000011,
@@ -167,8 +167,9 @@ def build_gps(rng: random.Random) -> dict[str, bytes]:
         replace(trainer, samples=trainer_samples, total_distance_m=1799 * 8.0)
     )
 
-    # Linea retta con posizioni non valide all'inizio e in mezzo; la sessione non dichiara la
-    # partenza: vale il primo record valido.
+    # Straight line with invalid positions at the start and in the middle; the session does not
+    # declare the
+    # start: the first valid record counts.
     line = straight_positions(600, 2.5)
     gaps = [*range(30), *range(300, 310)]
     straight = _spec(
@@ -210,10 +211,10 @@ def _write(directory: Path, files: dict[str, bytes]) -> None:
 
 
 def main() -> None:
-    """Scrive tutte le fixture."""
+    """Writes all the fixtures."""
     rng = random.Random(SEED)
     valid = build_valid(rng)
-    # Stesso file_id e stessi byte, nome diverso: duplicato per T-IMP.
+    # Same file_id and same bytes, different name: duplicate for T-IMP.
     valid["copy_of_run_constant_160.fit"] = valid["run_constant_160.fit"]
     valid.update(build_gps(random.Random(SEED + 1)))
     _write(DATA_DIR / "fit", valid)

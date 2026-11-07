@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Lettura del descrittore di sicurezza di un file o di una cartella (solo Windows, per i test).
+"""Reading the security descriptor of a file or folder (Windows only, for tests).
 
-Indipendente dal codice sotto prova: legge ciò che il sistema ha davvero registrato.
+Independent of the code under test: it reads what the system really recorded.
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ if sys.platform == "win32":
     _advapi32.ConvertSidToStringSidW.restype = wintypes.BOOL
 
     def normalize_sid(text: str) -> str:
-        """Forma estesa `S-1-...` di un SID scritto come alias SDDL (`LA`, `SY`) o per esteso."""
+        """Extended `S-1-...` form of a SID written as an SDDL alias (`LA`, `SY`) or in full."""
         sid = ctypes.c_void_p()
         if not _advapi32.ConvertStringSidToSidW(text, ctypes.byref(sid)):
             raise ctypes.WinError(ctypes.get_last_error())
@@ -57,14 +57,14 @@ if sys.platform == "win32":
             if not _advapi32.ConvertSidToStringSidW(sid, ctypes.byref(out)):
                 raise ctypes.WinError(ctypes.get_last_error())
             if out.value is None:
-                raise OSError("SID non disponibile")
+                raise OSError("SID not available")
             return ctypes.wstring_at(out.value)
         finally:
             _kernel32.LocalFree(out)
             _kernel32.LocalFree(sid)
 
     def dacl_sddl(path: Path) -> str:
-        """DACL di `path` in forma SDDL, per esempio `D:P(A;OICI;FA;;;SY)`."""
+        """DACL of `path` in SDDL form, for example `D:P(A;OICI;FA;;;SY)`."""
         descriptor = ctypes.c_void_p()
         code = _advapi32.GetNamedSecurityInfoW(
             str(path),
@@ -85,7 +85,7 @@ if sys.platform == "win32":
             ):
                 raise ctypes.WinError(ctypes.get_last_error())
             if text.value is None:
-                raise OSError("SDDL non disponibile")
+                raise OSError("SDDL not available")
             return ctypes.wstring_at(text.value)
         finally:
             _kernel32.LocalFree(text)
@@ -94,11 +94,11 @@ if sys.platform == "win32":
 else:
 
     def dacl_sddl(path: Path) -> str:
-        """Solo Windows."""
+        """Windows only."""
         raise NotImplementedError
 
     def normalize_sid(text: str) -> str:
-        """Solo Windows."""
+        """Windows only."""
         raise NotImplementedError
 
 
@@ -106,11 +106,11 @@ _ACE = re.compile(r"\(([^)]*)\)")
 
 
 def trustees(sddl: str) -> list[str]:
-    """Chi ha una voce nella DACL, come SID in forma estesa (gli alias `LA`, `SY`... si
-    espandono), nell'ordine in cui compaiono. Si confrontano i SID, non le stringhe SDDL."""
+    """Who has an entry in the DACL, as SIDs in extended form (the aliases `LA`, `SY`... are
+    expanded), in the order they appear. SIDs are compared, not SDDL strings."""
     return [normalize_sid(ace.split(";")[5]) for ace in _ACE.findall(sddl)]
 
 
 def is_protected(sddl: str) -> bool:
-    """Vero se la DACL è protetta, cioè non eredita dal padre (flag `P`)."""
+    """True if the DACL is protected, i.e. does not inherit from the parent (flag `P`)."""
     return sddl.startswith("D:") and "P" in sddl[2 : sddl.index("(")]

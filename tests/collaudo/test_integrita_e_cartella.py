@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-DATI-03 e T-DATI-04 sulla pila reale; cartella del profilo guastata mentre e aperta.
+"""T-DATI-03 and T-DATI-04 on the real stack; profile folder damaged while it is open.
 
-Integrita: un FIT dell'archivio alterato in ogni modo plausibile e segnalato (mai letto per
-calcolare un carico) e le altre attivita continuano a funzionare. Lock: il rifiuto e il
-superamento del lock di un processo morto, dal caso d'uso che usa l'interfaccia.
+Integrity: a FIT of the archive altered in every plausible way is reported (never read to
+compute a load) and the other activities keep working. Lock: refusal and takeover of the
+lock of a dead process, from the use case that uses the interface.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def file_of(profile: RealProfile, record: ActivityRecord) -> Path:
 
 
 class CountingDecoder:
-    """Decodifica come l'app e ricorda quante volte e stata chiamata."""
+    """Decodes like the app and remembers how many times it was called."""
 
     def __init__(self) -> None:
         self.calls = 0
@@ -126,7 +126,7 @@ def test_t_dati_03_an_altered_archived_file_is_reported_and_never_used(
         assert [(e.identity, e.reason) for e in overview.excluded] == [(victim.identity, reason)]
         assert len(overview.activities) == FILES - 1
         assert victim.identity not in {a.identity for a in overview.activities}
-        assert decoder.calls == FILES - 1  # il file alterato non e mai arrivato al decodificatore
+        assert decoder.calls == FILES - 1  # the altered file never reached the decoder
     finally:
         profile.close()
 
@@ -137,10 +137,10 @@ def test_t_dati_03_the_reading_api_itself_refuses_an_altered_file(tmp_path: Path
         victim = profile.records()[0]
         flip_a_byte(file_of(profile, victim))
 
-        with pytest.raises(Exception, match=r"SHA-256|dimensione") as raised:
+        with pytest.raises(Exception, match=r"SHA-256|size") as raised:
             profile.archive.read(victim.archived, 10**9)
         assert type(raised.value).__name__ == "ArchiveIntegrityError"
-        with pytest.raises(Exception, match=r"SHA-256|dimensione") as verified:
+        with pytest.raises(Exception, match=r"SHA-256|size") as verified:
             profile.archive.verify(victim.archived)
         assert type(verified.value).__name__ == "ArchiveIntegrityError"
     finally:
@@ -150,14 +150,14 @@ def test_t_dati_03_the_reading_api_itself_refuses_an_altered_file(tmp_path: Path
 def test_t_dati_03_a_file_altered_to_a_different_valid_activity_never_counts_for_the_old_one(
     tmp_path: Path,
 ) -> None:
-    """Anche se il contenuto nuovo e un FIT valido (e con l'hash ricalcolato nell'indice a mano
-    non si arriva qui), l'identita decodificata deve restare quella del record."""
+    """Even if the new content is a valid FIT (and with the hash recalculated by hand in the index
+    one does not get here), the decoded identity must stay the record's."""
     profile, _ = profile_with_runs(tmp_path)
     try:
         before = profile.overview()
         victim = profile.records()[2]
         swap_for_another_valid_fit(file_of(profile, victim))
-        profile.session.load_cache.clear()  # senza cache l'archivio si rilegge
+        profile.session.load_cache.clear()  # without cache the archive is read again
 
         after = profile.overview()
 
@@ -178,7 +178,7 @@ def test_d_f1_03_importing_the_original_again_repairs_a_bad_archived_file(
 
         profile.import_folder(source)
 
-        profile.archive.verify(victim.archived)  # l'archivio e tornato integro
+        profile.archive.verify(victim.archived)  # the archive is intact again
     finally:
         profile.close()
 
@@ -186,7 +186,7 @@ def test_d_f1_03_importing_the_original_again_repairs_a_bad_archived_file(
 def test_t_dati_03_storing_the_same_bytes_again_repairs_the_archive_atomically(
     tmp_path: Path,
 ) -> None:
-    """Il meccanismo di riparazione dell'archivio funziona; D-F1-03 e che nessuno lo chiama."""
+    """The archive repair mechanism works; D-F1-03 is that nobody calls it."""
     profile, _ = profile_with_runs(tmp_path)
     try:
         victim = profile.records()[1]
@@ -219,7 +219,7 @@ def test_t_dati_04_a_second_open_of_the_same_profile_is_refused_and_changes_noth
             registry_before
         )
         assert database.stat().st_size == size_before
-        assert len(first.records()) == FILES  # la prima istanza non e disturbata
+        assert len(first.records()) == FILES  # the first instance is not disturbed
     finally:
         first.close()
 
@@ -235,7 +235,9 @@ def test_t_dati_04_a_profile_held_by_another_process_cannot_be_opened_or_deleted
     other.mkdir()
     (other / "extra.fit").write_bytes(fit_run(50))
 
-    with Worker("import", folder, other, "op:4") as worker:  # tiene il lock, fermo a meta scrittura
+    with Worker(
+        "import", folder, other, "op:4"
+    ) as worker:  # holds the lock, stopped halfway through a write
         worker.expect_ready()
         worker.read_until("blocked")
 
@@ -243,12 +245,12 @@ def test_t_dati_04_a_profile_held_by_another_process_cannot_be_opened_or_deleted
             open_profile_from_folder(ports, folder)
         with pytest.raises(ProfileInUseError):
             DeleteProfileFolder(ports)(profile_id)
-        assert (folder / "ponos.sqlite3").exists()  # la cancellazione non ha toccato nulla
+        assert (folder / "ponos.sqlite3").exists()  # the deletion touched nothing
         assert len(stored_files(folder)) == FILES
 
-        worker.kill()  # crash: il lock resta nel file ma non nel sistema
+        worker.kill()  # crash: the lock stays in the file but not in the system
 
-    reopened = open_profile_from_folder(ports, folder)  # lock superato, WAL recuperato
+    reopened = open_profile_from_folder(ports, folder)  # lock taken over, WAL recovered
     try:
         assert len(reopened.records()) == FILES
         assert reopened.import_folder(other).count(ImportStatus.IMPORTED) == 1
@@ -256,12 +258,13 @@ def test_t_dati_04_a_profile_held_by_another_process_cannot_be_opened_or_deleted
         reopened.close()
 
 
-# --- Cartella del profilo guastata mentre il profilo e aperto ------------------------------------
+# --- Profile folder damaged while the profile is open --------------------------------------------
 
 
 @contextlib.contextmanager
 def unreadable(files: list[Path]) -> Iterator[None]:
-    """Rende illeggibili i file: su Windows li tiene aperti senza condivisione, altrove 0o000."""
+    """Makes the files unreadable: on Windows it keeps them open without sharing, elsewhere
+    0o000."""
     if sys.platform == "win32":
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         kernel32.CreateFileW.restype = ctypes.c_void_p
@@ -308,7 +311,7 @@ def test_the_archive_folder_deleted_while_open_excludes_the_activities_without_c
         assert {e.reason for e in overview.excluded} == {ExclusionReason.FILE_MISSING}
         assert len(overview.excluded) == FILES
 
-        again = profile.import_folder(source)  # l'archivio si ricrea da solo
+        again = profile.import_folder(source)  # the archive recreates itself
 
         assert {r.status for r in again.results} == {ImportStatus.REPAIRED}  # D-F1-03
     finally:
@@ -349,9 +352,9 @@ def test_the_archive_root_replaced_by_a_file_makes_imports_fail_with_a_reason_no
         assert status is ImportStatus.FAILED
         assert issue is not None
         assert issue.value == "storage_failed"
-        assert len(profile.records()) == FILES  # nessun record senza file
+        assert len(profile.records()) == FILES  # no record without a file
         profile.session.load_cache.clear()
-        assert len(profile.overview().excluded) == FILES  # e il resto segnala, non cade
+        assert len(profile.overview().excluded) == FILES  # and the rest reports, does not fall
     finally:
         (profile.folder / "archivio").unlink(missing_ok=True)
         profile.close()
@@ -371,15 +374,15 @@ def test_archived_files_made_unreadable_while_open_are_excluded_then_count_again
             summary = profile.import_files([extra])
 
         assert overview.activities == ()
-        assert len(overview.excluded) == FILES  # nessun carico calcolato da file illeggibili
+        assert len(overview.excluded) == FILES  # no load computed from unreadable files
         assert {e.reason for e in overview.excluded} <= {
             ExclusionReason.UNREADABLE,
             ExclusionReason.FILE_MISSING,
             ExclusionReason.FILE_ALTERED,
         }
-        assert outcomes(summary) == {"nuovo.fit": (ImportStatus.IMPORTED, None)}  # file nuovo
+        assert outcomes(summary) == {"nuovo.fit": (ImportStatus.IMPORTED, None)}  # new file
         assert len(profile.records()) == FILES + 1
-        # Tornati leggibili, tutte le attivita tornano a contare.
+        # Once readable again, all the activities count again.
         assert len(profile.overview().activities) == FILES + 1
     finally:
         profile.close()
@@ -390,18 +393,18 @@ def test_a_profile_folder_deleted_from_outside_while_open_leaves_the_session_clo
 ) -> None:
     profile, _ = profile_with_runs(tmp_path)
     folder, ports = profile.folder, profile.ports
-    shutil.rmtree(folder, ignore_errors=True)  # su Windows i file aperti (database, lock) restano
+    shutil.rmtree(folder, ignore_errors=True)  # on Windows the open files (database, lock) remain
 
     try:
         extra = tmp_path / "nuovo.fit"
         extra.write_bytes(fit_run(73))
         summary = profile.import_files([extra])
-        assert len(summary.results) == 1  # un esito, mai un'eccezione fuori dal riepilogo
+        assert len(summary.results) == 1  # an outcome, never an exception outside the summary
     finally:
-        profile.close()  # la chiusura non lancia nemmeno se la cartella non c'e piu
+        profile.close()  # closing does not even raise if the folder no longer exists
 
     try:
         reopened = open_profile_from_folder(ports, folder)
     except (ProfileNotFoundError, NotAProfileFolderError, ProfileCorruptError):
-        return  # errori della porta: l'interfaccia li sa descrivere
+        return  # port errors: the interface knows how to describe them
     reopened.close()

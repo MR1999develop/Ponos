@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Testi della sincronizzazione con Garmin, in parole comuni: l'unico punto in cui un motivo,
-un avanzamento o un esito diventa testo.
+"""Garmin synchronisation texts, in plain words: the only place where a reason,
+progress or outcome becomes text.
 
-Contesto "Sync": `lupdate` trova solo contesto e testo scritti come letterali, quindi niente
-alias di `QCoreApplication.translate`. Mai il testo di un'eccezione, mai un nome né un dato
-dell'utente.
+Context "Sync": `lupdate` only finds context and text written as literals, so no
+aliases of `QCoreApplication.translate`. Never an exception's text, never a name or data
+of the user.
 """
 
 from __future__ import annotations
@@ -34,12 +34,12 @@ from ponos_coach.ui.sync_model import (
 
 
 def disabled_reason_text(reason: DisabledReason) -> str:
-    """Perché un comando del menu Garmin è spento (tooltip)."""
+    """Why a Garmin menu command is off (tooltip)."""
     return _DISABLED_REASONS[reason]()
 
 
 def remaining_text(seconds: float) -> str:
-    """Il tempo stimato in parole comode."""
+    """The estimated time in convenient words."""
     rounded = round_remaining(seconds)
     if rounded.unit is RemainingUnit.UNDER_A_MINUTE:
         return QCoreApplication.translate("Sync", "less than a minute left")
@@ -49,7 +49,7 @@ def remaining_text(seconds: float) -> str:
 
 
 def progress_text(progress: SyncProgress) -> str:
-    """Fase, contatore e, se c'è, tempo stimato: per la barra di stato."""
+    """Phase, counter and, if present, estimated time: for the status bar."""
     if progress.phase is SyncPhase.LISTING:
         if progress.total:
             # {done}: activities listed so far; %n: activities Garmin has declared.
@@ -105,7 +105,7 @@ _FAILURE_REASONS: dict[FailureReason, Callable[[], str]] = {
 
 
 def failure_reason_text(reason: FailureReason) -> str:
-    """Perché una voce non è stata scaricata, in parole comuni."""
+    """Why an item was not downloaded, in plain words."""
     return _FAILURE_REASONS[reason]()
 
 
@@ -137,7 +137,7 @@ _STOP_REASONS: dict[StopReason, Callable[[], str]] = {
 
 
 def stop_reason_text(reason: StopReason) -> str:
-    """Perché la sincronizzazione si è fermata, e che cosa fare."""
+    """Why the synchronisation stopped, and what to do."""
     return _STOP_REASONS[reason]()
 
 
@@ -167,12 +167,12 @@ _PROBLEMS: dict[SyncProblem, Callable[[], str]] = {
 
 
 def problem_text(problem: SyncProblem) -> str:
-    """Perché un giro non è partito, e che cosa fare."""
+    """Why a round did not start, and what to do."""
     return _PROBLEMS[problem]()
 
 
 def headline_text(result: SyncResult) -> str:
-    """Una riga che dice com'è andata: per la barra di stato e per il titolo del riepilogo."""
+    """A line saying how it went: for the status bar and the summary title."""
     if isinstance(result, SyncNotStarted):
         return QCoreApplication.translate("Sync", "Synchronisation did not start")
     outcome = result.outcome
@@ -193,7 +193,7 @@ def headline_text(result: SyncResult) -> str:
 
 
 def summary_lines(result: SyncResult) -> tuple[str, ...]:
-    """Il riepilogo, una riga per cosa: nuove, abbinate, non scaricate (con il motivo), arresto."""
+    """The summary, one line per item: new, matched, not downloaded (with the reason), stop."""
     if isinstance(result, SyncNotStarted):
         return (problem_text(result.problem),)
     outcome = result.outcome
@@ -239,7 +239,7 @@ def _failure_lines(result: SyncResult) -> list[str]:
 
 
 def summary_message(result: SyncResult) -> ErrorMessage:
-    """Titolo e righe del riepilogo con il suo rimedio, per la finestra del riepilogo."""
+    """Title and lines of the summary with its remedy, for the summary window."""
     lines = summary_lines(result)
     what = "\n".join(lines)
     remedy = "\n".join(_remedy_lines(result))
@@ -247,8 +247,8 @@ def summary_message(result: SyncResult) -> ErrorMessage:
 
 
 def _remedy_lines(result: SyncResult) -> list[str]:
-    """Che cosa fare: riprendere il giro se si è fermato, e il destino delle voci fallite
-    (le transitorie restano in elenco, le definitive no)."""
+    """What to do: resume the round if it stopped, and the fate of the failed items
+    (transient ones stay in the list, permanent ones do not)."""
     remedies: list[str] = []
     if not isinstance(result, SyncFinished) or not result.outcome.completed:
         remedies.append(
@@ -275,7 +275,7 @@ def _remedy_lines(result: SyncResult) -> list[str]:
 
 
 def notification_texts(count: int) -> tuple[str, str]:
-    """Titolo e testo della notifica di sistema per `count` attività nuove."""
+    """Title and text of the system notification for `count` new activities."""
     return (
         QCoreApplication.translate("Sync", "New activities from Garmin"),
         QCoreApplication.translate("Sync", "New activities downloaded: %n", "", count),
@@ -307,7 +307,7 @@ _LOGIN_FAILURES: dict[LoginFailure, Callable[[], str]] = {
 
 
 def login_failure_text(failure: LoginFailure) -> str:
-    """Perché il collegamento non è riuscito, e che cosa fare."""
+    """Why the connection did not succeed, and what to do."""
     return _LOGIN_FAILURES[failure]()
 
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""I fake di Garmin (elenco, download, account): ciò che promettono ai test di sincronizzazione."""
+"""The Garmin fakes (listing, download, account): what they promise to the sync tests."""
 
 from __future__ import annotations
 
@@ -179,7 +179,7 @@ class TestFakeActivitySource:
         assert [i.garmin_id for i in source.list_page(0, 10).items] == [_id(3), _id(2), _id(1)]
 
     def test_the_arguments_are_checked(self) -> None:
-        with pytest.raises(ValueError, match="limite"):
+        with pytest.raises(ValueError, match="limit"):
             _source(1).list_page(0, 0)
 
 

@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Visita e cancellazione di alberi di cartelle senza mai seguire link né giunzioni.
+"""Visiting and deleting folder trees without ever following links or junctions.
 
-Un link simbolico o una giunzione (junction) dentro la cartella di un profilo potrebbe portare la
-cancellazione fuori da essa: si rifiuta prima di toccare qualcosa. Gli altri reparse point di
-Windows (segnaposto di OneDrive, deduplicazione) sono file veri e si cancellano normalmente.
+A symbolic link or a junction inside a profile folder could take the
+deletion outside it: it is refused before touching anything. Other Windows reparse
+points (OneDrive placeholders, deduplication) are real files and are deleted normally.
 """
 
 from __future__ import annotations
@@ -20,11 +20,11 @@ _LINK_REPARSE_TAGS = frozenset({_IO_REPARSE_TAG_MOUNT_POINT, _IO_REPARSE_TAG_SYM
 
 
 class LinkInTreeError(OSError):
-    """Nell'albero c'è un link simbolico o una giunzione."""
+    """There is a symbolic link or a junction in the tree."""
 
 
 def is_link(path: Path) -> bool:
-    """Vero se `path` è un link simbolico o una giunzione (senza seguirlo)."""
+    """True if `path` is a symbolic link or a junction (without following it)."""
     status = os.lstat(path)
     if stat.S_ISLNK(status.st_mode) or path.is_junction():
         return True
@@ -43,17 +43,17 @@ def _children(folder: Path) -> Iterator[Path]:
 
 
 def check_no_links(root: Path) -> None:
-    """Verifica che né `root` né nulla al suo interno sia un link.
+    """Verifies that neither `root` nor anything inside it is a link.
 
     Raises:
-        LinkInTreeError: trovato un link (il nome è nel messaggio, non il percorso intero).
-        OSError: albero non leggibile.
+        LinkInTreeError: a link was found (the name is in the message, not the full path).
+        OSError: tree not readable.
     """
     pending = [root]
     while pending:
         current = pending.pop()
         if is_link(current):
-            raise LinkInTreeError(f"link o giunzione: {current.name}")
+            raise LinkInTreeError(f"link or junction: {current.name}")
         if _is_directory(current):
             pending.extend(_children(current))
 
@@ -62,14 +62,15 @@ def _unlink_file(path: Path) -> None:
     try:
         path.unlink()
     except PermissionError:
-        path.chmod(stat.S_IWRITE)  # file di sola lettura su Windows
+        path.chmod(stat.S_IWRITE)  # read-only file on Windows
         path.unlink()
 
 
 def _remove_path(path: Path) -> None:
-    """Cancella file o cartella (con contenuto); rifiuta i link, anche comparsi dopo i controlli."""
+    """Deletes a file or folder (with content); refuses links, even those that appeared after the
+    checks."""
     if is_link(path):
-        raise LinkInTreeError(f"link o giunzione: {path.name}")
+        raise LinkInTreeError(f"link or junction: {path.name}")
     if _is_directory(path):
         _remove_directory(path)
     else:
@@ -82,25 +83,25 @@ def _remove_directory(path: Path) -> None:
     while pending:
         for child in _children(pending.pop()):
             if is_link(child):
-                raise LinkInTreeError(f"link o giunzione: {child.name}")
+                raise LinkInTreeError(f"link or junction: {child.name}")
             if _is_directory(child):
                 directories.append(child)
                 pending.append(child)
             else:
                 _unlink_file(child)
-    for directory in reversed(directories):  # i figli prima dei genitori
+    for directory in reversed(directories):  # children before parents
         directory.rmdir()
 
 
 def remove_children(folder: Path, *, keep: Collection[str], last: Collection[str]) -> None:
-    """Cancella il contenuto di `folder` tranne i nomi in `keep`.
+    """Deletes the content of `folder` except the names in `keep`.
 
-    I nomi che iniziano con uno di `last` si cancellano per ultimi: se l'operazione si
-    interrompe, resta ciò che identifica la cartella (il database del profilo).
+    Names that start with one of `last` are deleted last: if the operation is
+    interrupted, what identifies the folder (the profile database) remains.
 
     Raises:
-        LinkInTreeError: un elemento è un link; nulla di ciò che segue si tocca.
-        OSError: cancellazione non riuscita.
+        LinkInTreeError: an element is a link; nothing that follows is touched.
+        OSError: deletion failed.
     """
     names = [p.name for p in _children(folder) if p.name not in keep]
     names.sort(key=lambda name: name.startswith(tuple(last)))

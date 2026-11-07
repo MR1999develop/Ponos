@@ -1,20 +1,20 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Confine di lettura dei file GPX: `bytes` → `Activity` oppure `GpxDecodeError`.
+"""Reading boundary for GPX files: `bytes` → `Activity` or `GpxDecodeError`.
 
-Il GPX è XML non fidato: si legge a eventi (SAX) con `defusedxml`, senza DTD, entità né
-risorse esterne, a blocchi, e i limiti di dimensione, profondità, numero di punti e lunghezza
-dei testi si controllano prima e durante la lettura (mai si costruisce l'albero intero). Nessun
-I/O: il chiamante legge i byte con un massimo. Un file non valido non si ripara mai; si
-rifiuta con un errore proprio (`GpxDecodeError`) che usa gli stessi motivi del lettore FIT
+GPX is untrusted XML: it is read by events (SAX) with `defusedxml`, without DTD, entities or
+external resources, in blocks, and the limits on size, depth, number of points and text length
+are checked before and during reading (the whole tree is never built). No
+I/O: the caller reads the bytes with a maximum. An invalid file is never repaired; it is
+rejected with its own error (`GpxDecodeError`) that uses the same reasons as the FIT reader
 (`FitDecodeReason`).
 
-Regole del progetto (PLAN.md sezione 2 punto 12): identità = SHA-256 dei byte; FC da
-`gpxtpx:hr` di TrackPointExtension v1 e v2; sport dal `type` della traccia; tempo in movimento =
-somma degli intervalli tra punti consecutivi fino a 30 s; distanza con l'emisenoverso;
-dislivello positivo con una soglia di 3 m; senza orari non è un'attività. Ogni `trkseg` è un
-tratto a sé: tra l'ultimo punto di un segmento e il primo del successivo non si contano né
-distanza, né tempo in movimento, né dislivello.
+Project rules (PLAN.md section 2 point 12): identity = SHA-256 of the bytes; HR from
+`gpxtpx:hr` of TrackPointExtension v1 and v2; sport from the `type` of the track; moving time =
+sum of the intervals between consecutive points up to 30 s; distance with the haversine;
+positive ascent with a 3 m threshold; without times it is not an activity. Each `trkseg` is a
+stretch of its own: between the last point of a segment and the first of the next neither
+distance, nor moving time, nor ascent is counted.
 """
 
 from __future__ import annotations
@@ -60,14 +60,14 @@ _HR_NAMESPACES = frozenset(
         "http://www.garmin.com/xmlschemas/TrackPointExtension/v2",
     }
 )
-MOVING_GAP_MAX_S = 30.0  # intervalli più lunghi tra due punti non sono tempo in movimento
-ASCENT_THRESHOLD_M = 3.0  # variazioni di quota più piccole sono rumore
-# Errori del parser su XML ostile: sintassi (SAX), DTD o entità vietati (defusedxml) e codifica
-# dichiarata sconosciuta (`LookupError`) o non decodificabile (`UnicodeError`).
+MOVING_GAP_MAX_S = 30.0  # longer intervals between two points are not moving time
+ASCENT_THRESHOLD_M = 3.0  # smaller altitude changes are noise
+# Parser errors on hostile XML: syntax (SAX), forbidden DTD or entities (defusedxml) and
+# unknown declared encoding (`LookupError`) or undecodable (`UnicodeError`).
 _XML_ERRORS = (SAXException, DefusedXmlException, LookupError, UnicodeError)
 _CHUNK_BYTES = 64 * 1024
 _SNIFF_BYTES = 64 * 1024
-_NO_TIME = -(2**63)  # sentinella del punto senza orario, mai un orario valido
+_NO_TIME = -(2**63)  # sentinel for a point without time, never a valid time
 _US = timedelta(microseconds=1)
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _MAX_ATTRIBUTE_CHARS = 32
@@ -78,7 +78,7 @@ _TIME = re.compile(
 _DECIMAL = re.compile(r"[+-]?\d{1,9}(?:\.\d{1,15})?", re.ASCII)
 _HEART_RATE = re.compile(r"\d{1,3}", re.ASCII)
 
-# Valori del campo `type` (minuscolo, spazi e trattini come `_`) → sport.
+# Values of the `type` field (lowercase, spaces and hyphens as `_`) → sport.
 _SPORT_BY_TYPE = {
     **dict.fromkeys(
         ("running", "run", "street_running", "treadmill_running", "virtual_run"), Sport.RUNNING
@@ -105,7 +105,7 @@ _SPORT_BY_TYPE = {
 
 
 class GpxDecodeError(Exception):
-    """Il file GPX non è un'attività valida entro i limiti; `reason` dice perché."""
+    """The GPX file is not a valid activity within the limits; `reason` says why."""
 
     def __init__(self, reason: FitDecodeReason) -> None:
         super().__init__(reason.value)
@@ -114,10 +114,10 @@ class GpxDecodeError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class GpxLimits:
-    """Tetti di lettura (default del progetto): 50 MB, profondità 32, un milione di punti.
+    """Reading caps (project default): 50 MB, depth 32, one million points.
 
-    `max_text_chars` limita ogni testo (e ogni valore di attributo letto); `max_duration_s` è
-    la durata massima dell'attività (7 giorni, come per il FIT).
+    `max_text_chars` limits each text (and each attribute value read); `max_duration_s` is
+    the maximum duration of the activity (7 days, as for FIT).
     """
 
     max_bytes: int = MAX_ACTIVITY_FILE_BYTES
@@ -128,39 +128,39 @@ class GpxLimits:
 
     def __post_init__(self) -> None:
         if min(self.max_bytes, self.max_depth, self.max_points, self.max_text_chars) <= 0:
-            raise ValueError("i limiti di byte, profondità, punti e testi devono essere positivi")
+            raise ValueError("byte, depth, point and text limits must be positive")
         if not math.isfinite(self.max_duration_s) or self.max_duration_s <= 0:
-            raise ValueError("la durata massima deve essere finita e positiva")
+            raise ValueError("the maximum duration must be finite and positive")
 
 
 @dataclass(frozen=True, slots=True)
 class XmlRoot:
-    """Elemento radice di un documento XML: nome locale e spazio dei nomi (None se assente)."""
+    """Root element of an XML document: local name and namespace (None if absent)."""
 
     name: str
     namespace: str | None
 
 
-# --- Riconoscimento della radice -------------------------------------------------------------
+# --- Root recognition ------------------------------------------------------------------------
 
 
 class _RootFoundError(Exception):
-    """Interrompe la lettura al primo elemento: serve solo il nome della radice."""
+    """Stops reading at the first element: only the root name is needed."""
 
     def __init__(self, root: XmlRoot) -> None:
-        super().__init__("radice trovata")
+        super().__init__("root found")
         self.root = root
 
 
 class _RootSniffer(ContentHandler):
-    def startElementNS(  # noqa: N802 - nome imposto da xml.sax
+    def startElementNS(  # noqa: N802 - name imposed by xml.sax
         self, name: tuple[str | None, str], _qname: str | None, _attrs: object
     ) -> None:
         raise _RootFoundError(XmlRoot(name[1], name[0]))
 
 
 def _new_parser(handler: ContentHandler) -> expatreader.DefusedExpatParser:
-    """Parser SAX senza DTD, entità né riferimenti esterni, con gli spazi dei nomi."""
+    """SAX parser without DTD, entities or external references, with namespaces."""
     parser = expatreader.create_parser(
         namespaceHandling=1, forbid_dtd=True, forbid_entities=True, forbid_external=True
     )
@@ -169,10 +169,10 @@ def _new_parser(handler: ContentHandler) -> expatreader.DefusedExpatParser:
 
 
 def read_xml_root(data: bytes) -> XmlRoot | None:
-    """Radice del documento XML, o None se `data` non comincia come XML ammesso.
+    """Root of the XML document, or None if `data` does not start as allowed XML.
 
-    Guarda solo i primi 64 KiB, senza DTD né entità: un documento con DOCTYPE non ha radice
-    (si rifiuta come qualsiasi XML ostile). Non verifica il resto del documento.
+    Looks only at the first 64 KiB, without DTD or entities: a document with a DOCTYPE has no root
+    (it is rejected like any hostile XML). It does not verify the rest of the document.
     """
     parser = _new_parser(_RootSniffer())
     try:
@@ -184,7 +184,7 @@ def read_xml_root(data: bytes) -> XmlRoot | None:
     return None
 
 
-# --- Valori ----------------------------------------------------------------------------------
+# --- Values ----------------------------------------------------------------------------------
 
 
 def _corrupt() -> GpxDecodeError:
@@ -192,7 +192,7 @@ def _corrupt() -> GpxDecodeError:
 
 
 def _parse_time_us(text: str) -> int:
-    """Istante ISO 8601 con fuso (`Z` o `±hh:mm`) in microsecondi da 1970-01-01 UTC."""
+    """ISO 8601 instant with time zone (`Z` or `±hh:mm`) in microseconds since 1970-01-01 UTC."""
     match = _TIME.fullmatch(text)
     if match is None:
         raise _corrupt()
@@ -230,21 +230,21 @@ def _coordinate(attrs: AttributesNSImpl, name: str, bound: float) -> float:
 
 
 def _set_once[T](current: T | None, new: T) -> T:
-    """Un valore compare una volta sola per punto: una ripetizione è un file incoerente."""
+    """A value appears only once per point: a repetition is an inconsistent file."""
     if current is not None:
         raise _corrupt()
     return new
 
 
 def map_gpx_sport(text: str | None) -> Sport:
-    """Sport dal campo `type` (senza distinguere maiuscole); ciò che non si riconosce è OTHER."""
+    """Sport from the `type` field (case-insensitive); what is not recognized is OTHER."""
     if text is None:
         return Sport.OTHER
     key = re.sub(r"[\s-]+", "_", text.strip().lower())
     return _SPORT_BY_TYPE.get(key, Sport.OTHER)
 
 
-# --- Lettura a eventi --------------------------------------------------------------------------
+# --- Event-based reading -----------------------------------------------------------------
 
 
 class _Kind(Enum):
@@ -280,7 +280,7 @@ class _Point:
 
 
 class _Columns:
-    """Colonne dei punti (un valore per punto, NaN o sentinella dove manca)."""
+    """Point columns (one value per point, NaN or sentinel where missing)."""
 
     def __init__(self) -> None:
         self.lat = array("d")
@@ -301,7 +301,7 @@ class _Columns:
 
 
 class _GpxHandler(ContentHandler):
-    """Raccoglie i punti delle tracce; ogni limite scatta all'evento che lo supera."""
+    """Collects the points of the tracks; each limit trips at the event that exceeds it."""
 
     def __init__(self, limits: GpxLimits) -> None:
         super().__init__()
@@ -336,7 +336,7 @@ class _GpxHandler(ContentHandler):
             raise GpxDecodeError(FitDecodeReason.TOO_MANY_RECORDS)
         self._point = _Point(_coordinate(attrs, "lat", 90.0), _coordinate(attrs, "lon", 180.0))
 
-    def startElementNS(  # noqa: N802 - nome imposto da xml.sax
+    def startElementNS(  # noqa: N802 - name imposed by xml.sax
         self, name: tuple[str | None, str], _qname: str | None, attrs: AttributesNSImpl
     ) -> None:
         if len(self._kinds) >= self._limits.max_depth:
@@ -376,7 +376,7 @@ class _GpxHandler(ContentHandler):
         if kind is _Kind.TYPE:
             self.sport_text = self.sport_text or text
         elif point is None:
-            raise _corrupt()  # irraggiungibile: ele, time e hr stanno solo dentro un punto
+            raise _corrupt()  # unreachable: ele, time and hr appear only inside a point
         elif kind is _Kind.ELEVATION:
             point.ele = _set_once(point.ele, _parse_decimal(text))
         elif kind is _Kind.TIME:
@@ -387,7 +387,7 @@ class _GpxHandler(ContentHandler):
     def _finish_point(self) -> None:
         point, self._point = self._point, None
         if point is None:
-            raise _corrupt()  # irraggiungibile: ogni fine di punto segue il suo inizio
+            raise _corrupt()  # unreachable: every point end follows its start
         self.columns.append(point, self._segments)
 
 
@@ -403,11 +403,11 @@ def _read_points(data: bytes, limits: GpxLimits) -> _GpxHandler:
     return handler
 
 
-# --- Calcoli sulle colonne ---------------------------------------------------------------------
+# --- Computations on the columns ---------------------------------------------------------------
 
 
 def _microseconds(columns: _Columns) -> NDArray[np.int64]:
-    """Orari dei punti in microsecondi: tutti presenti e non decrescenti, altrimenti errore."""
+    """Point times in microseconds: all present and non-decreasing, otherwise error."""
     when = np.frombuffer(columns.when_us, dtype=np.int64)
     missing = when == _NO_TIME
     if missing.all():
@@ -420,7 +420,7 @@ def _microseconds(columns: _Columns) -> NDArray[np.int64]:
 def _durations(
     when_us: NDArray[np.int64], same_segment: NDArray[np.bool_], limits: GpxLimits
 ) -> tuple[float, float]:
-    """Tempo trascorso e tempo in movimento (secondi), in interi di microsecondi."""
+    """Elapsed time and moving time (seconds), in whole microseconds."""
     elapsed_us = int(when_us[-1] - when_us[0])
     if elapsed_us <= 0:
         raise GpxDecodeError(FitDecodeReason.NOT_AN_ACTIVITY)
@@ -437,7 +437,7 @@ def _durations(
 def _distance_m(
     lat_deg: NDArray[np.float64], lon_deg: NDArray[np.float64], same_segment: NDArray[np.bool_]
 ) -> float:
-    """Somma delle distanze (emisenoverso) tra punti consecutivi dello stesso segmento."""
+    """Sum of the distances (haversine) between consecutive points of the same segment."""
     lat, lon = np.radians(lat_deg), np.radians(lon_deg)
     half_dlat, half_dlon = np.diff(lat) / 2.0, np.diff(lon) / 2.0
     a = np.sin(half_dlat) ** 2 + np.cos(lat[:-1]) * np.cos(lat[1:]) * np.sin(half_dlon) ** 2
@@ -447,9 +447,10 @@ def _distance_m(
 
 
 def _turning_points(ele: NDArray[np.float64]) -> list[float]:
-    """Quote senza ripetizioni consecutive né punti intermedi di un tratto monotono.
+    """Altitudes without consecutive repetitions or intermediate points of a monotonic stretch.
 
-    Il dislivello con soglia non cambia: conta solo da dove a dove la quota sale o scende.
+    The ascent with threshold does not change: only from where to where the altitude rises or falls
+    matters.
     """
     steps = np.diff(ele)
     distinct = ele[np.concatenate(([True], steps != 0.0))]
@@ -463,8 +464,8 @@ def _turning_points(ele: NDArray[np.float64]) -> list[float]:
 
 @dataclass(slots=True)
 class _Zigzag:
-    """Dislivello positivo con isteresi: una salita conta quando la quota scende di `threshold`
-    dal suo massimo o la serie finisce, e solo se è alta almeno `threshold`."""
+    """Positive ascent with hysteresis: a climb counts when the altitude drops by `threshold`
+    from its maximum or the series ends, and only if it is at least `threshold` high."""
 
     threshold: float
     low: float
@@ -506,11 +507,11 @@ class _Zigzag:
 def positive_ascent_m(
     elevation_m: NDArray[np.float64], threshold_m: float = ASCENT_THRESHOLD_M
 ) -> float:
-    """Dislivello positivo di una serie di quote, in metri, contro il rumore della quota.
+    """Positive ascent of a series of altitudes, in meters, against altitude noise.
 
-    Le salite più piccole di `threshold_m` non contano; una salita conta intera (dal suo punto
-    più basso al più alto) quando la quota scende di almeno `threshold_m` o la serie finisce.
-    Una serie con meno di due quote dà 0.
+    Climbs smaller than `threshold_m` do not count; a climb counts whole (from its lowest
+    point to the highest) when the altitude drops by at least `threshold_m` or the series ends.
+    A series with fewer than two altitudes gives 0.
     """
     points = _turning_points(np.asarray(elevation_m, dtype=np.float64))
     if len(points) < 2:
@@ -522,7 +523,7 @@ def positive_ascent_m(
 
 
 def _ascent_m(columns: _Columns) -> float | None:
-    """Dislivello positivo dei segmenti sommati (None se nessun punto ha la quota)."""
+    """Positive ascent of the summed segments (None if no point has altitude)."""
     ele = np.frombuffer(columns.ele, dtype=np.float64)
     segment = np.frombuffer(columns.segment, dtype=np.intc)
     known = ~np.isnan(ele)
@@ -549,10 +550,10 @@ def _summary(columns: _Columns, same_segment: NDArray[np.bool_]) -> ActivitySumm
 def _heart_rate(
     columns: _Columns, when_us: NDArray[np.int64]
 ) -> tuple[HeartRateSeries | None, int]:
-    """Serie di FC (secondi dal primo punto) e campioni scartati.
+    """HR series (seconds from the first point) and discarded samples.
 
-    Come per il FIT, un campione con orario non maggiore di tutti i precedenti (ripetuto) si
-    scarta: vale il primo di una ripetizione.
+    As for FIT, a sample with a time not greater than all the previous ones (repeated) is
+    discarded: the first of a repetition counts.
     """
     bpm = np.frombuffer(columns.heart_rate, dtype=np.float64)
     known = ~np.isnan(bpm)
@@ -588,19 +589,19 @@ def _build(data: bytes, handler: _GpxHandler, limits: GpxLimits) -> Activity:
 
 
 def decode_gpx(data: bytes, limits: GpxLimits | None = None) -> Activity:
-    """Decodifica un file GPX 1.0 o 1.1 di attività.
+    """Decodes a GPX 1.0 or 1.1 activity file.
 
-    Controlla prima la dimensione, poi legge a eventi con i limiti di profondità, punti e
-    testi. Considera solo le tracce (`trk`/`trkseg`/`trkpt`): rotte e waypoint non sono
-    attività. Ogni punto ha `lat` e `lon` validi; gli orari sono ISO 8601 con fuso, presenti su
-    tutti i punti e non decrescenti. La FC viene dalle estensioni Garmin `hr` (v1 e v2).
-    L'inizio è l'orario del primo punto; il tempo trascorso va dal primo all'ultimo.
+    Checks the size first, then reads by events with the depth, point and text
+    limits. Considers only the tracks (`trk`/`trkseg`/`trkpt`): routes and waypoints are not
+    activities. Every point has valid `lat` and `lon`; times are ISO 8601 with time zone, present on
+    all points and non-decreasing. HR comes from the Garmin `hr` extensions (v1 and v2).
+    The start is the time of the first point; the elapsed time goes from the first to the last.
 
     Raises:
-        GpxDecodeError: l'unico errore in uscita, con il motivo in `reason`. NOT_AN_ACTIVITY se
-            non ci sono punti, orari, durata o intervalli entro 30 s; CORRUPT per XML non valido
-            o ostile, valori malformati, orari incompleti o all'indietro, limiti di profondità
-            e di testo superati.
+        GpxDecodeError: the only error raised, with the reason in `reason`. NOT_AN_ACTIVITY if
+            there are no points, times, duration or intervals within 30 s; CORRUPT for invalid
+            or hostile XML, malformed values, incomplete or backwards times, depth and
+            text limits exceeded.
     """
     limits = limits or GpxLimits()
     if not data:

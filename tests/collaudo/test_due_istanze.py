@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-DATI-04 con due processi veri: due istanze dell'app sullo stesso elenco dei profili.
+"""T-DATI-04 with two real processes: two app instances on the same profile list.
 
-Due sottoprocessi creano profili diversi (e nella stessa cartella madre, mancante) con la
-partenza data insieme da un segnale sullo standard input; poi si controlla l'elenco e ogni
-cartella. In piu un test deterministico della perdita di una gara sulla stessa cartella.
+Two subprocesses create different profiles (and in the same, missing, parent folder) with the
+start given together by a signal on standard input; then the list and every
+folder are checked. In addition a deterministic test of losing a race on the same folder.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def read_results(worker: Worker, expected: int) -> list[str]:
     lines: list[str] = []
     while len(lines) < expected:
         line = worker.read_line()
-        assert line, "il processo e finito troppo presto"
+        assert line, "the process ended too early"
         lines.append(line)
     assert worker.read_line() == "finished"
     return lines
@@ -43,7 +43,7 @@ def test_t_dati_04_two_instances_creating_different_profiles_lose_no_entry(tmp_p
         first.expect_ready()
         second.expect_ready()
         first.send("via")
-        second.send("via")  # partenza quasi insieme
+        second.send("via")  # start almost together
         outcomes = read_results(first, PER_WORKER) + read_results(second, PER_WORKER)
 
     assert outcomes == ["ok"] * (2 * PER_WORKER)
@@ -53,7 +53,7 @@ def test_t_dati_04_two_instances_creating_different_profiles_lose_no_entry(tmp_p
     assert len({e.folder for e in entries}) == len(entries)
     storage = SqliteProfileStorage()
     for entry in entries:
-        opened = storage.open(entry.folder)  # ogni cartella ha il suo database integro
+        opened = storage.open(entry.folder)  # every folder has its intact database
         try:
             assert opened.info.profile_id == entry.profile_id
             assert opened.info.name == entry.cached_name
@@ -80,7 +80,7 @@ def test_t_dati_04_collaudo_two_instances_racing_for_the_same_folder_leave_one_v
     entries = JsonProfileRegistry(config).list_entries()
     assert len(entries) == 1
     assert entries[0].folder == folder
-    opened = SqliteProfileStorage().open(folder)  # il profilo vincitore e intero
+    opened = SqliteProfileStorage().open(folder)  # the winning profile is intact
     try:
         assert opened.info.profile_id == entries[0].profile_id
     finally:
@@ -88,7 +88,7 @@ def test_t_dati_04_collaudo_two_instances_racing_for_the_same_folder_leave_one_v
 
 
 class _RacingStorage(SqliteProfileStorage):
-    """Un altro processo mette il suo database nella cartella un attimo prima del nostro."""
+    """Another process puts its database in the folder just before ours."""
 
     def create(
         self, folder: Path, profile_id: ProfileId, name: ProfileName, timezone_name: str
@@ -111,5 +111,5 @@ def test_d_f1_07_losing_a_creation_race_never_deletes_the_winners_profile(tmp_pa
     with pytest.raises(ProfileAlreadyExistsError):
         CreateProfile(racing, fixed_now, new_id)(request)
 
-    assert (folder / PROFILE_DATABASE_NAME).exists()  # il profilo del vincitore e salvo
-    assert list(ports.registry.list_entries()) == []  # e il perdente non e nell'elenco
+    assert (folder / PROFILE_DATABASE_NAME).exists()  # the winner's profile is safe
+    assert list(ports.registry.list_entries()) == []  # and the loser is not in the list

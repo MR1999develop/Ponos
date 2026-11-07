@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Cancellazione della cartella di un profilo: mai attraverso link o giunzioni."""
+"""Deleting a profile folder: never through links or junctions."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from ponos_coach.platform.profile_folders import LocalProfileFolders
 from ponos_coach.profiles.domain import PROFILE_DATABASE_NAME, FolderKind
 from ponos_coach.profiles.ports import FolderUnavailableError
 
-_IS_WINDOWS: bool = sys.platform == "win32"  # bool, non Literal: mypy non scarta un ramo
+_IS_WINDOWS: bool = sys.platform == "win32"  # bool, not Literal: mypy does not discard a branch
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ def folders() -> LocalProfileFolders:
 
 @pytest.fixture
 def profile(tmp_path: Path, folders: LocalProfileFolders) -> Path:
-    """Cartella di profilo con database, archivio annidato, un file di sola lettura e un -wal."""
+    """Profile folder with database, nested archive, a read-only file and a -wal."""
     folder = tmp_path / "profilo"
     folders.create_private_folder(folder)
     (folder / PROFILE_DATABASE_NAME).write_bytes(b"db")
@@ -41,7 +41,7 @@ def profile(tmp_path: Path, folders: LocalProfileFolders) -> Path:
 
 @pytest.fixture
 def outside(tmp_path: Path) -> Path:
-    """Cartella estranea con un file che nessuna cancellazione deve toccare."""
+    """Foreign folder with a file that no deletion must touch."""
     folder = tmp_path / "estranea"
     folder.mkdir()
     (folder / "preziosa.txt").write_bytes(b"da non perdere")
@@ -49,21 +49,21 @@ def outside(tmp_path: Path) -> Path:
 
 
 def _make_directory_link(link: Path, target: Path) -> None:
-    """Giunzione su Windows (non richiede privilegi), link simbolico altrove."""
+    """Junction on Windows (needs no privileges), symbolic link elsewhere."""
     if _IS_WINDOWS:
-        result = subprocess.run(  # noqa: S603 - comando fisso, percorsi come argomenti
+        result = subprocess.run(  # noqa: S603 - fixed command, paths as arguments
             ["cmd.exe", "/c", "mklink", "/J", str(link), str(target)],  # noqa: S607
             capture_output=True,
             check=False,
             timeout=30,
         )
         if result.returncode != 0:
-            pytest.skip("giunzione non creabile qui")
+            pytest.skip("junction cannot be created here")
         return
     try:
         link.symlink_to(target, target_is_directory=True)
     except OSError:
-        pytest.skip("link simbolici non creabili qui")
+        pytest.skip("symbolic links cannot be created here")
 
 
 def test_whole_tree_is_removed_including_readonly_files_and_the_lock_file(
@@ -83,7 +83,7 @@ def test_a_junction_or_symlink_to_a_folder_inside_blocks_the_deletion_and_is_not
         folders.delete_folder(profile)
 
     assert (outside / "preziosa.txt").read_bytes() == b"da non perdere"
-    assert (profile / PROFILE_DATABASE_NAME).exists()  # nulla è stato cancellato
+    assert (profile / PROFILE_DATABASE_NAME).exists()  # nothing was deleted
     assert (profile / "archivio" / "2026" / "a.fit").exists()
 
 
@@ -93,7 +93,7 @@ def test_a_file_symlink_inside_blocks_the_deletion(
     try:
         (profile / "file-link").symlink_to(outside / "preziosa.txt")
     except OSError:
-        pytest.skip("link simbolici non creabili qui")
+        pytest.skip("symbolic links cannot be created here")
 
     with pytest.raises(FolderUnavailableError):
         folders.delete_folder(profile)
@@ -114,7 +114,7 @@ def test_a_profile_folder_that_is_itself_a_link_is_not_deleted(
     assert (profile / PROFILE_DATABASE_NAME).exists()
 
 
-# --- remove_if_empty: mai attraverso link ------------------------------------------------
+# --- remove_if_empty: never through links ------------------------------------------------
 
 
 def test_remove_if_empty_does_not_follow_a_link_to_an_empty_folder(

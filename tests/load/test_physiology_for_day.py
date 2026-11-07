@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""`physiology_for_day`: parametri validi in un giorno."""
+"""`physiology_for_day`: parameters valid on a day."""
 
 from __future__ import annotations
 
@@ -26,8 +26,8 @@ def test_no_entries_is_an_explicit_error() -> None:
 @pytest.mark.parametrize(
     ("day", "threshold"),
     [
-        (FIRST - timedelta(days=1), 170),  # prima del primo: vale il primo
-        (FIRST, 170),  # on point: la data di validità è inclusa
+        (FIRST - timedelta(days=1), 170),  # before the first: the first applies
+        (FIRST, 170),  # on point: the validity date is included
         (SECOND - timedelta(days=1), 170),  # off point
         (SECOND, 160),
         (SECOND + timedelta(days=400), 160),

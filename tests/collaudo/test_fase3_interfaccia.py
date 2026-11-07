@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-UI-05 (tastiera e nomi accessibili), T-UI-06 (lingue) e T-UI-07 (impostazioni) della fase 3.
+"""T-UI-05 (keyboard and accessible names), T-UI-06 (languages) and T-UI-07 (settings) of phase 3.
 
-I dialoghi nuovi (Nuovo profilo, Modifica profilo, Pesi degli sport, Dettaglio attività) si
-provano da soli, senza la finestra: percorso del Tab, nome accessibile letto dall'interfaccia di
-accessibilità di Qt, testi in italiano dal catalogo vero e con un traduttore "pseudo" che allunga
-ogni testo di metà. Le impostazioni si provano con valori rovinati a mano.
+The new dialogs (New profile, Edit profile, Sport weights, Activity detail) are
+exercised on their own, without the window: Tab path, accessible name read from Qt's
+accessibility interface, texts in Italian from the real catalogue and with a "pseudo" translator
+that lengthens
+every text by half. The settings are exercised with values corrupted by hand.
 """
 
 from __future__ import annotations
@@ -69,7 +70,7 @@ def settings(tmp_path: Path) -> QSettings:
     return make_settings(tmp_path)
 
 
-# --- I quattro dialoghi nuovi ------------------------------------------------------------------
+# --- The four new dialogs ----------------------------------------------------------------------
 
 
 def edit_dialog(*, fixed_missing: bool = False) -> QDialog:
@@ -110,7 +111,7 @@ def shown(qtbot: QtBot, name: str) -> QDialog:
 
 
 def interactive(dialog: QDialog) -> list[QWidget]:
-    """I controlli con cui l'utente agisce, visibili e abilitati (non gli interni di Qt)."""
+    """The controls the user acts with, visible and enabled (not Qt's internals)."""
     found: list[QWidget] = []
     for widget in dialog.findChildren(QWidget):
         if widget.objectName().startswith("qt_") or isinstance(widget, QHeaderView):
@@ -129,7 +130,7 @@ def accessible_name(widget: QWidget) -> str:
 
 
 def tab_order(dialog: QDialog) -> list[QWidget]:
-    """I controlli nell'ordine in cui il Tab li visita (la catena del fuoco di Qt)."""
+    """The controls in the order the Tab visits them (Qt's focus chain)."""
     allowed = {id(w) for w in interactive(dialog)}
     order: list[QWidget] = []
     seen: set[int] = set()
@@ -194,7 +195,7 @@ def test_t_ui_05_the_tab_order_follows_the_visual_order_from_top_to_bottom(
 
     positions = [y_of(w, dialog) for w in tab_order(dialog)]
 
-    tolerance = 12  # un bottone accanto a un campo può stare qualche pixel più in alto
+    tolerance = 12  # a button next to a field may sit a few pixels higher
     assert all(b >= a - tolerance for a, b in pairwise(positions)), positions
 
 
@@ -205,14 +206,14 @@ def test_t_ui_05_the_save_button_is_off_with_a_reason_until_something_changes_an
     assert isinstance(dialog, ProfileEditDialog)
 
     assert not dialog.save_button.isEnabled()
-    assert dialog.save_button.toolTip()  # il motivo
-    assert dialog.save_button not in tab_order(dialog)  # un bottone spento non prende il fuoco
+    assert dialog.save_button.toolTip()  # the reason
+    assert dialog.save_button not in tab_order(dialog)  # a disabled button does not take focus
     dialog.threshold_box.setValue(dialog.threshold_box.value() - 1)
     assert dialog.save_button.isEnabled()
     assert dialog.save_button in tab_order(dialog)
 
 
-# --- Lingue ------------------------------------------------------------------------------------
+# --- Languages ------------------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -237,7 +238,7 @@ def catalog_messages() -> tuple[Message, ...]:
 
 
 def texts_of(dialog: QDialog) -> set[str]:
-    """Ogni testo che l'utente vede o sente: etichette, bottoni, titoli, suggerimenti, nomi."""
+    """Every text the user sees or hears: labels, buttons, titles, hints, names."""
     texts = {dialog.windowTitle()}
     for widget in dialog.findChildren(QWidget):
         for value in (widget.toolTip(), widget.accessibleName()):
@@ -317,8 +318,8 @@ def test_t_ui_06_italian_plurals_carry_the_number_and_use_the_singular_only_for_
 
         assert str(count) in text, message.source
         assert "%n" not in text
-        assert not re.search(r"\(\w{1,3}\)", text), text  # nessun "(i)" / "(e)" lasciato
-        form = message.forms[0 if count == 1 else 1]  # italiano: singolare solo per uno
+        assert not re.search(r"\(\w{1,3}\)", text), text  # no "(i)" / "(e)" left
+        form = message.forms[0 if count == 1 else 1]  # Italian: singular only for one
         assert text == form.replace("%n", str(count)), message.source
 
 
@@ -334,7 +335,7 @@ def test_t_ui_06_english_plurals_do_not_use_the_optional_ending_form(count: int)
 
 
 class PseudoTranslator(QTranslator):
-    """Allunga ogni testo di metà con parole in coda (parole vere, per poter andare a capo)."""
+    """Lengthens every text by half with words at the end (real words, so it can wrap)."""
 
     def isEmpty(self) -> bool:  # noqa: N802 - Qt
         return False
@@ -357,7 +358,7 @@ def pseudo(qapp: QCoreApplication) -> Iterator[PseudoTranslator]:
 
 
 def inside_state_page(widget: QWidget) -> bool:
-    """Le pagine di messaggio hanno una prova a parte (D-F3-11)."""
+    """Message pages have a separate test (D-F3-11)."""
     parent = widget.parentWidget()
     while parent is not None:
         if isinstance(parent, StatePage):
@@ -367,8 +368,8 @@ def inside_state_page(widget: QWidget) -> bool:
 
 
 def clipped(dialog: QDialog) -> list[str]:
-    """Etichette e bottoni il cui testo non entra nello spazio che hanno."""
-    dialog.resize(dialog.sizeHint().expandedTo(dialog.size()))  # mai sotto la misura d'uso
+    """Labels and buttons whose text does not fit in the space they have."""
+    dialog.resize(dialog.sizeHint().expandedTo(dialog.size()))  # never below the usable size
     QCoreApplication.processEvents()
     problems: list[str] = []
     for widget in dialog.findChildren(QWidget):
@@ -377,7 +378,7 @@ def clipped(dialog: QDialog) -> list[str]:
         if isinstance(widget, QLabel) and widget.text() and not inside_state_page(widget):
             if widget.wordWrap():
                 if widget.heightForWidth(widget.width()) > widget.height() + 1:
-                    problems.append(f"label tagliata in altezza: {widget.text()[:40]}")
+                    problems.append(f"label cut off in height: {widget.text()[:40]}")
             elif widget.fontMetrics().horizontalAdvance(widget.text()) > widget.width() + 1:
                 problems.append(f"label tagliata in larghezza: {widget.text()[:40]}")
         if isinstance(widget, QAbstractButton) and widget.text():
@@ -395,7 +396,7 @@ def test_t_ui_06_the_layout_holds_texts_half_as_long_again(
 
     assert clipped(dialog) == []
     hint = dialog.sizeHint()
-    assert hint.width() <= 1280  # sta in uno schermo da portatile
+    assert hint.width() <= 1280  # fits in a laptop screen
     assert hint.height() <= 1000
 
 
@@ -436,7 +437,7 @@ def test_t_ui_06_the_message_pages_of_the_detail_window_show_every_line_of_their
     assert cut == []
 
 
-# --- T-UI-07: impostazioni ricordate e rovinate -----------------------------------------------
+# --- T-UI-07: settings remembered and corrupted -----------------------------------------------
 
 HOSTILE_VALUES: list[object] = [
     "", " ", "abc", "-1", "0", "1.0", "1e3", "99999999999999999999", "9" * 5000, "\x00", "\u202e",
@@ -488,7 +489,7 @@ def test_t_ui_07_language_section_and_geometry_come_back_in_the_next_session(
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
     sidebar.setCurrentRow(sidebar_row)
-    size_before = window.size()  # lo schermo senza display può limitare la dimensione chiesta
+    size_before = window.size()  # the headless screen may limit the requested size
     close_window(qtbot, window)
 
     later = QSettings(str(tmp_path / "ricordi.ini"), QSettings.Format.IniFormat)

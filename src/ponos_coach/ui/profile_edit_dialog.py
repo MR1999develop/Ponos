@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dialogo "Modifica profilo": vista umile sul modello `MeasurementsForm`.
+"""Dialog "Edit profile": humble view on the `MeasurementsForm` model.
 
-In alto i dati fissi in sola lettura (o da completare, una volta sola, per un profilo vecchio);
-sotto le misure aggiornabili, che valgono da un giorno scelto (oggi per default); in fondo lo
-storico. Il dialogo modifica una copia: "Annulla" non cambia nulla. Il salvataggio parte con
-`save_requested`; l'esito (ok o misure rifiutate) lo comunica la finestra.
+At the top the fixed data, read-only (or to complete, once only, for an old profile);
+below the updatable measurements, which apply from a chosen day (today by default); at the bottom
+the
+history. The dialog edits a copy: "Cancel" changes nothing. Saving starts with
+`save_requested`; the outcome (ok or rejected measurements) is reported by the window.
 """
 
 from __future__ import annotations
@@ -62,7 +63,7 @@ _NOTE_FIELDS = (EditField.WEIGHT, EditField.MIN_BPM, EditField.MAX_BPM, EditFiel
 
 
 class ProfileEditDialog(QDialog):
-    """Dati fissi in sola lettura, misure datate da aggiornare e storico."""
+    """Read-only fixed data, dated measurements to update and history."""
 
     save_requested = Signal(object)  # MeasurementsRequest
 
@@ -142,7 +143,7 @@ class ProfileEditDialog(QDialog):
         proxy = sorted_history_model(self._history_model, self)
         self._table.setModel(proxy)
         self._table.setSortingEnabled(True)
-        self._table.setShowGrid(False)  # niente linee verticali né orizzontali
+        self._table.setShowGrid(False)  # no vertical or horizontal lines
         self._table.setAlternatingRowColors(True)
         self._table.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
@@ -161,7 +162,7 @@ class ProfileEditDialog(QDialog):
         self._buttons.rejected.connect(self.reject)
 
     def _set_tab_order(self) -> None:
-        """Il Tab segue l'ordine visivo, dall'alto in basso: prima i dati fissi da completare."""
+        """Tab follows the visual order, top to bottom: first the fixed data to complete."""
         cancel = self._buttons.button(QDialogButtonBox.StandardButton.Cancel)
         order = [
             self._height,
@@ -214,7 +215,7 @@ class ProfileEditDialog(QDialog):
                 to_qdate(fixed.birth_date.value), QLocale.FormatType.ShortFormat
             )
             layout.addRow(self.tr("Date of birth"), self._read_only(born, "fixedBirthDate"))
-            self._height.hide()  # niente da completare: i campi restano fuori dal modulo
+            self._height.hide()  # nothing to complete: the fields stay out of the form
             self._birth.hide()
         layout.addRow(self.tr("Sex"), self._read_only(sex_text, "fixedSex"))
         return box
@@ -267,7 +268,7 @@ class ProfileEditDialog(QDialog):
         return label
 
     def _note_label(self) -> QLabel:
-        """Riga di spiegazione sotto un campo (testo attenuato, con contrasto sufficiente)."""
+        """Explanation row under a field (muted text, with sufficient contrast)."""
         label = QLabel(self)
         label.setTextFormat(Qt.TextFormat.PlainText)
         label.setWordWrap(True)
@@ -287,77 +288,77 @@ class ProfileEditDialog(QDialog):
         column.addWidget(self._errors[field])
         return box
 
-    # --- Accessori per i test ---------------------------------------------------------
+    # --- Test accessors ---------------------------------------------------------
 
     @property
     def form(self) -> MeasurementsForm:
-        """Il modello del modulo."""
+        """The form model."""
         return self._form
 
     @property
     def valid_from_edit(self) -> QDateEdit:
-        """Selettore del giorno di validità."""
+        """Validity day picker."""
         return self._valid_from
 
     @property
     def weight_edit(self) -> QLineEdit:
-        """Campo del peso."""
+        """Weight field."""
         return self._weight
 
     @property
     def min_box(self) -> QSpinBox:
-        """FC minima."""
+        """Minimum HR."""
         return self._min
 
     @property
     def max_box(self) -> QSpinBox:
-        """FC massima."""
+        """Maximum HR."""
         return self._max
 
     @property
     def threshold_box(self) -> QSpinBox:
-        """Soglia."""
+        """Threshold."""
         return self._threshold
 
     @property
     def height_edit(self) -> QLineEdit:
-        """Altezza da completare (nascosta se il profilo ha già i dati fissi)."""
+        """Height to complete (hidden if the profile already has the fixed data)."""
         return self._height
 
     @property
     def birth_edit(self) -> BirthDateEdit:
-        """Data di nascita da completare (nascosta se il profilo ha già i dati fissi)."""
+        """Birth date to complete (hidden if the profile already has the fixed data)."""
         return self._birth
 
     @property
     def save_button(self) -> QWidget:
-        """Bottone "Salva modifiche"."""
+        """Button "Save changes"."""
         return self._save
 
     @property
     def history_table(self) -> QTableView:
-        """La tabella dello storico."""
+        """The history table."""
         return self._table
 
     def error_text(self, field: EditField) -> str:
-        """Messaggio mostrato sotto un campo (vuoto se non c'è)."""
+        """Message shown under a field (empty if there is none)."""
         return self._errors[field].text()
 
     def note_text(self, field: EditField) -> str:
-        """Ciò che vale quel giorno per un campo cambiato (vuoto se il campo non è cambiato)."""
+        """What applied that day for a changed field (empty if the field is unchanged)."""
         label = self._notes[field]
         return label.text() if label.isVisibleTo(self) else ""
 
     @property
     def validity_notice_text(self) -> str:
-        """Avviso che una misura successiva sostituisce la nuova (vuoto se non c'è)."""
+        """Notice that a later measurement replaces the new one (empty if there is none)."""
         label = self._validity_notice
         return label.text() if label.isVisibleTo(self) else ""
 
-    # --- Dal modello alla vista -------------------------------------------------------
+    # --- From the model to the view -------------------------------------------------------
 
     def set_history(self, history: MeasurementHistory) -> None:
-        """Mostra lo storico delle misure."""
+        """Show the measurement history."""
         self._history_model.set_history(history)
 
     def _load_from_form(self) -> None:
@@ -367,7 +368,7 @@ class ProfileEditDialog(QDialog):
         self._refresh_values()
 
     def _refresh_values(self) -> None:
-        """Mostra i valori del modello: i campi non toccati seguono il giorno scelto."""
+        """Show the model's values: untouched fields follow the chosen day."""
         form = self._form
         for box, value in (
             (self._min, form.min_bpm),
@@ -410,12 +411,12 @@ class ProfileEditDialog(QDialog):
         return texts[kind]
 
     def _update_save_button(self) -> None:
-        """ "Salva modifiche" resta disabilitato, con il motivo nel tooltip, senza modifiche."""
+        """ "Save changes" stays disabled, with the reason in the tooltip, without changes."""
         has_changes = self._form.has_changes
         self._save.setEnabled(has_changes)
         self._save.setToolTip("" if has_changes else self.tr("Change at least one value first."))
 
-    # --- Dalla vista al modello -------------------------------------------------------
+    # --- From the view to the model -------------------------------------------------------
 
     def _after_edit(self) -> None:
         self._update_save_button()
@@ -423,8 +424,9 @@ class ProfileEditDialog(QDialog):
         self._refresh_errors()
 
     def _refresh_notes(self) -> None:
-        """Cosa cambia rispetto al giorno scelto e per quanto varrebbe: si ricalcola a ogni modifica
-        e a ogni cambio di giorno, così le note non restano quelle di un altro giorno."""
+        """What changes relative to the chosen day and for how long it would apply: recomputed at
+        every edit
+        and every day change, so the notes never belong to another day."""
         changes = {change.field: change for change in self._form.changes()}
         for field, label in self._notes.items():
             change = changes.get(field)
@@ -492,10 +494,10 @@ class ProfileEditDialog(QDialog):
         if target is not None:
             target.setFocus()
 
-    # --- Esito del salvataggio --------------------------------------------------------
+    # --- Save outcome --------------------------------------------------------
 
     def set_busy(self, busy: bool) -> None:
-        """Mentre il salvataggio è in corso il dialogo non accetta altre modifiche."""
+        """While saving is in progress the dialog accepts no other edits."""
         self._save.setEnabled(not busy and self._form.has_changes)
         for widget in (
             self._valid_from,
@@ -509,13 +511,13 @@ class ProfileEditDialog(QDialog):
             widget.setEnabled(not busy)
 
     def show_rejection(self, issue: EditIssue) -> None:
-        """Le misure rifiutate dal caso d'uso: il problema compare sul campo giusto."""
+        """Measurements rejected by the use case: the problem appears on the right field."""
         self.set_busy(False)
         self._show_errors = True
         self._refresh_errors((issue,))
         self._focus_first(issue.field)
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt
-        """Il primo campo da scrivere ha il fuoco: il peso, o l'altezza se va completata."""
+        """The first field to type in has the focus: weight, or height if it must be completed."""
         super().showEvent(event)
         (self._height if self._form.needs_fixed_data else self._weight).setFocus()

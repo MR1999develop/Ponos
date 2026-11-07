@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Diagnostica: log su file con rotazione, formatter sicuro e gestore di ultima istanza.
+"""Diagnostics: rotating file log, safe formatter and last-resort handler.
 
-Il formatter è l'unico punto in cui un log diventa testo: di un'eccezione scrive solo il tipo e
-la catena dei tipi (mai il testo, che può contenere percorsi o dati dell'utente, né le righe del
-traceback) e neutralizza i caratteri di controllo, così un nome di file ostile non può
-fingere una riga di log. Il Composition Root chiama `configure_logging` e
+The formatter is the only place where a log becomes text: of an exception it writes only the type
+and
+the chain of types (never the text, which may contain paths or user data, nor the lines of the
+traceback) and neutralises control characters, so a hostile file name cannot
+forge a log line. The Composition Root calls `configure_logging` and
 `install_exception_hooks`.
 """
 
@@ -27,8 +28,8 @@ from PySide6.QtCore import QObject, Signal
 LOGGER_NAME = "ponos_coach"
 LOG_FILE_NAME = "ponos-coach.log"
 LOG_MAX_BYTES = 1_000_000
-LOG_BACKUP_COUNT = 3  # al massimo (1 + 3) file da 1 MB nella cartella dei log
-MAX_CHAIN_LENGTH = 8  # tipi della catena di un'eccezione che si scrivono
+LOG_BACKUP_COUNT = 3  # at most (1 + 3) files of 1 MB in the log folder
+MAX_CHAIN_LENGTH = 8  # types of an exception chain that are written
 _FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 _DATE_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")
@@ -37,7 +38,7 @@ _HANDLER_MARK = "_ponos_coach_handler"
 
 
 def neutralize(text: str) -> str:
-    """Sostituisce i caratteri di controllo (a-capo compresi) con la loro forma scritta."""
+    """Replace control characters (newlines included) with their written form."""
     return _CONTROL.sub(lambda m: _ESCAPES.get(m[0], f"\\x{ord(m[0]):02x}"), text)
 
 
@@ -48,7 +49,7 @@ def _type_name(kind: type[BaseException]) -> str:
 
 
 def exception_chain(error: BaseException) -> str:
-    """I tipi di un'eccezione e delle sue cause, dal più esterno: `A <- B <- C`. Mai i testi."""
+    """The types of an exception and its causes, outermost first: `A <- B <- C`. Never the texts."""
     names: list[str] = []
     seen: set[int] = set()
     current: BaseException | None = error
@@ -61,7 +62,7 @@ def exception_chain(error: BaseException) -> str:
 
 
 class SafeFormatter(logging.Formatter):
-    """Formatter dei log: messaggio neutralizzato, eccezioni solo come catena di tipi."""
+    """Log formatter: neutralised message, exceptions only as a chain of types."""
 
     converter = staticmethod(time.gmtime)
 
@@ -69,7 +70,7 @@ class SafeFormatter(logging.Formatter):
         super().__init__(_FORMAT, _DATE_FORMAT)
 
     def format(self, record: logging.LogRecord) -> str:
-        """La riga di log di un record (una sola riga, senza traceback)."""
+        """The log line of a record (a single line, without traceback)."""
         clone = copy.copy(record)
         clone.msg = neutralize(record.getMessage())
         clone.args = None
@@ -83,10 +84,10 @@ class SafeFormatter(logging.Formatter):
 
 
 def configure_logging(log_dir: Path, *, version: str) -> Path | None:
-    """Scrive i log di `ponos_coach` su un file con rotazione in `log_dir`.
+    """Write the `ponos_coach` logs to a rotating file in `log_dir`.
 
-    Restituisce il file, o `None` se la cartella non si può usare: allora i log vanno su
-    stderr e l'app parte lo stesso. Si può chiamare più volte (sostituisce il gestore).
+    Return the file, or `None` if the folder cannot be used: then logs go to
+    stderr and the app starts anyway. Can be called several times (replaces the handler).
     """
     logger = logging.getLogger(LOGGER_NAME)
     for old in [h for h in logger.handlers if getattr(h, _HANDLER_MARK, False)]:
@@ -116,20 +117,20 @@ def configure_logging(log_dir: Path, *, version: str) -> Path | None:
 
 
 class ErrorNotifier(QObject):
-    """Porta nel thread della UI la notizia di un errore non gestito, da qualunque thread."""
+    """Bring the news of an unhandled error to the UI thread, from any thread."""
 
     occurred = Signal()
 
     def notify(self) -> None:
-        """Si può chiamare da ogni thread: il segnale arriva nel thread della UI."""
+        """Can be called from any thread: the signal arrives on the UI thread."""
         self.occurred.emit()
 
 
 def install_exception_hooks(notify: Callable[[], None]) -> None:
-    """Gestore di ultima istanza: registra l'errore non gestito e avvisa l'utente.
+    """Last-resort handler: log the unhandled error and notify the user.
 
-    Vale per il thread principale (`sys.excepthook`, usato da Qt per le eccezioni negli
-    slot) e per gli altri thread (`threading.excepthook`). Si registrano solo i tipi.
+    Applies to the main thread (`sys.excepthook`, used by Qt for exceptions in
+    slots) and to the other threads (`threading.excepthook`). Only the types are logged.
     """
     logger = logging.getLogger(LOGGER_NAME)
 
@@ -138,8 +139,8 @@ def install_exception_hooks(notify: Callable[[], None]) -> None:
         logger.critical("Unhandled exception in %s: %s", where, chain)
         try:
             notify()
-        except Exception as error:  # il gestore di ultima istanza non deve fallire a sua volta
-            logger.error(  # noqa: TRY400 - il testo dell'eccezione non si registra
+        except Exception as error:  # the last-resort handler must not fail in turn
+            logger.error(  # noqa: TRY400 - the exception's text is not logged
                 "Could not tell the user about an error: %s", exception_chain(error)
             )
 

@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Testi di "Modifica profilo" sui periodi di validità e sui valori in vigore.
+"""Texts of "Edit profile" about validity periods and the values in force.
 
-Il modulo (`measurements_form`) dà categorie e date; qui si scelgono le frasi. Ogni frase è intera,
-una per serie e per caso (periodo chiuso o aperto), così la traduzione non compone frammenti.
-Peso e FC sono dati di salute: i testi servono solo alla finestra, mai ai log.
+The module (`measurements_form`) gives categories and dates; here the sentences are chosen. Each
+sentence is whole,
+one per series and per case (closed or open period), so the translation does not compose fragments.
+Weight and HR are health data: the texts serve only the window, never the logs.
 """
 
 from __future__ import annotations
@@ -18,16 +19,16 @@ from ponos_coach.profiles.measurements import ValidityPeriod
 from ponos_coach.ui.measurement_history_model import weight_text
 from ponos_coach.ui.measurements_form import EditField, FieldChange, MeasurementSeries
 
-# Contesto "MeasurementTexts" scritto come letterale: lupdate non segue gli alias.
+# Context "MeasurementTexts" written as a literal: lupdate does not follow aliases.
 
 
 def date_text(day: date) -> str:
-    """Una data nel formato breve del luogo."""
+    """A date in the locale's short format."""
     return QLocale().toString(QDate(day.year, day.month, day.day), QLocale.FormatType.ShortFormat)
 
 
 def saved_period_text(series: MeasurementSeries, period: ValidityPeriod) -> str:
-    """Per quanto vale ciò che si è appena salvato ("dal ... al ..." o "dal ... in poi")."""
+    """For how long what was just saved is valid ("from ... to ..." or "from ... onwards")."""
     first = date_text(period.valid_from)
     if period.valid_to is None:
         if series is MeasurementSeries.WEIGHT:
@@ -48,7 +49,8 @@ def saved_period_text(series: MeasurementSeries, period: ValidityPeriod) -> str:
 
 
 def superseded_text(series: MeasurementSeries, last_day: date) -> str:
-    """Avviso prima di salvare: una misura successiva già esistente prende il posto della nuova."""
+    """Warning before saving: an already existing later measurement takes the place of the new
+    one."""
     last = date_text(last_day)
     if series is MeasurementSeries.WEIGHT:
         return QCoreApplication.translate(
@@ -63,7 +65,7 @@ def superseded_text(series: MeasurementSeries, last_day: date) -> str:
 
 
 def in_force_text(change: FieldChange) -> str:
-    """Sotto un campo cambiato: il valore che valeva quel giorno prima della modifica."""
+    """Under a changed field: the value that applied that day before the change."""
     before = change.before
     if change.field is EditField.WEIGHT:
         if isinstance(before, Weight):

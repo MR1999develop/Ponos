@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Carico delle attività fixture decodificate: T-CALC-01 e i casi di T-CALC-07."""
+"""Load of the decoded fixture activities: T-CALC-01 and the T-CALC-07 cases."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def test_t_calc_01_sixty_minutes_at_threshold_160_is_hrtss_100() -> None:
 
     result = load_of("run_constant_160.fit", physiology)
 
-    assert result.hr_tss == pytest.approx(100.0, rel=1e-9)  # tolleranza dichiarata
+    assert result.hr_tss == pytest.approx(100.0, rel=1e-9)  # declared tolerance
     assert result.source is LoadSource.HEART_RATE
     assert (result.used_samples, result.discarded_samples) == (3600, 0)
 
@@ -63,7 +63,7 @@ def test_t_calc_07_twenty_four_hours_hike_is_measured_not_estimated() -> None:
 
 
 def test_t_calc_07_long_pauses_with_good_heart_rate_are_measured_not_estimated() -> None:
-    # 30 minuti di corsa a 150 bpm (timer 1800 s) in un'uscita di 2 ore (pause: 7200 s).
+    # 30 minutes of running at 150 bpm (timer 1800 s) in a 2-hour outing (pauses: 7200 s).
     start = datetime(2026, 3, 2, 7, 0, tzinfo=UTC)
     first = fw.datetime_to_fit(start)
     samples = [fw.Sample(first + i, 150) for i in range(1800)]
@@ -89,7 +89,7 @@ def test_t_calc_07_long_pauses_with_good_heart_rate_are_measured_not_estimated()
 def test_t_calc_07_hr_gaps_over_ten_seconds_are_not_counted() -> None:
     result = load_of("run_hr_gaps.fit")
 
-    # 12 s di FC non valida (intervallo di 13 s) e 15 s senza record (16 s).
+    # 12 s of invalid HR (13 s interval) and 15 s without records (16 s).
     assert result.excluded_seconds == 29.0
     assert result.source is LoadSource.HEART_RATE
 

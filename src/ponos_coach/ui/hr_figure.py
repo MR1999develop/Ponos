@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Figura Plotly della FC di un'attività: curva nel tempo con le bande delle zone.
+"""Plotly HR figure of an activity: curve over time with the zone bands.
 
-Funzione pura da `HeartRateTrace` e confini di zona (già calcolati dal dominio) a `go.Figure`.
-Le bande stanno dietro la curva e portano il nome della zona sul bordo destro; i campioni scartati
-dal calcolo del carico (fuori da FC minima e massima) sono evidenziati con una croce, non solo con
-il colore. Le curve molto lunghe si diradano a `MAX_TRACE_POINTS` punti, tenendo tutti gli scarti.
+Pure function from `HeartRateTrace` and zone bounds (already computed by the domain) to `go.Figure`.
+The bands sit behind the curve and carry the zone name on the right edge; samples discarded
+by the load computation (outside minimum and maximum HR) are highlighted with a cross, not only with
+colour. Very long curves are thinned to `MAX_TRACE_POINTS` points, keeping all the discarded ones.
 """
 
 from __future__ import annotations
@@ -33,17 +33,17 @@ from ponos_coach.ui.tokens import ThemeTokens
 HEART_RATE_UNIT = "bpm"
 TIME_UNIT = "min"
 HR_EXPORT_STEM = "ponos-coach-heart-rate"
-MAX_TRACE_POINTS = 3000  # punti della curva mandati alla pagina
+MAX_TRACE_POINTS = 3000  # curve points sent to the page
 _SECONDS_PER_MINUTE = 60.0
 _LINE_WIDTH = 1.5
 _MARKER_SIZE = 7
 _AXIS_PADDING_BPM = 5
-_LABEL_X = 0.995  # etichette di zona vicino al bordo destro dell'area del grafico
+_LABEL_X = 0.995  # zone labels near the right edge of the chart area
 
 
 @dataclass(frozen=True, slots=True)
 class HeartRateLabels:
-    """Testi del grafico della FC, già tradotti dalla vista."""
+    """HR chart texts, already translated by the view."""
 
     x_axis: str
     y_axis: str
@@ -53,8 +53,8 @@ class HeartRateLabels:
 
 
 def thinned_indices(count: int, keep: NDArray[np.bool_]) -> NDArray[np.intp]:
-    """Indici dei punti da disegnare: al massimo `MAX_TRACE_POINTS` equidistanti, più gli indici
-    di `keep` (campioni scartati), anch'essi diradati se da soli superano il tetto."""
+    """Indices of the points to draw: at most `MAX_TRACE_POINTS` evenly spaced, plus the indices
+    of `keep` (discarded samples), also thinned if alone they exceed the cap."""
     if count <= MAX_TRACE_POINTS:
         return np.arange(count, dtype=np.intp)
     even = np.linspace(0, count - 1, MAX_TRACE_POINTS).astype(np.intp)
@@ -65,7 +65,7 @@ def thinned_indices(count: int, keep: NDArray[np.bool_]) -> NDArray[np.intp]:
 
 
 def _axis_range(trace: HeartRateTrace, limits: HeartRateLimits) -> tuple[float, float]:
-    """Intervallo di FC dell'asse: i limiti del profilo, allargati ai campioni disegnati."""
+    """HR range of the axis: the profile's limits, widened to the drawn samples."""
     low: float = limits.min_bpm
     high: float = limits.max_bpm
     if trace.bpm.size:
@@ -77,7 +77,7 @@ def _axis_range(trace: HeartRateTrace, limits: HeartRateLimits) -> tuple[float, 
 def zone_bands(
     starts_bpm: tuple[float, float, float, float], low: float, high: float
 ) -> list[tuple[int, float, float]]:
-    """Bande (indice di zona, da, a) dentro `[low, high]`; le zone fuori scala non compaiono."""
+    """Bands (zone index, from, to) inside `[low, high]`; off-scale zones do not appear."""
     edges = [low, *starts_bpm, high]
     bands: list[tuple[int, float, float]] = []
     for zone in range(len(edges) - 1):
@@ -95,7 +95,7 @@ def build_heart_rate_figure(
     labels: HeartRateLabels,
     tokens: ThemeTokens,
 ) -> go.Figure:
-    """Curva della FC (serie 0) e, se ce ne sono, i campioni scartati (serie 1)."""
+    """HR curve (series 0) and, if there are any, the discarded samples (series 1)."""
     keep = trace.discarded
     chosen = thinned_indices(trace.bpm.size, keep)
     minutes = trace.seconds[chosen] / _SECONDS_PER_MINUTE
@@ -178,6 +178,6 @@ def prepare_heart_rate_chart(
     labels: HeartRateLabels,
     tokens: ThemeTokens,
 ) -> PreparedChart:
-    """Figura e JSON della FC (lavoro puro, adatto a un thread che non è la UI)."""
+    """HR figure and JSON (pure work, suited to a non-UI thread)."""
     figure = build_heart_rate_figure(trace, limits, zone_starts_bpm, labels, tokens)
     return prepare_figure(figure, labels.chrome, HR_EXPORT_STEM, tokens)

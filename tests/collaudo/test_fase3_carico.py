@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-CALC-01...07 della fase 3: carico con le zone e i pesi salvati, ricalcolo e coerenza.
+"""T-CALC-01...07 of phase 3: load with saved zones and weights, recalculation and consistency.
 
-Il collaudatore ricalcola ogni risultato in modo indipendente (oracoli scritti qui, senza usare le
-funzioni sotto prova) e confronta la panoramica incrementale, quella che l'utente vede dopo una
-serie di modifiche, con il calcolo da zero su un profilo nuovo con la cache vuota.
+The tester recalculates every result independently (oracles written here, without using the
+functions under test) and compares the incremental overview, the one the user sees after a
+series of changes, with the calculation from scratch on a new profile with an empty cache.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ from tests.collaudo.fase3_support import (
 from tests.collaudo.support import RealProfile, create_profile, open_profile_from_folder
 from tests.fixtures.generators import fit_writer as fw
 
-PHYSIOLOGY = make_physiology(170)  # FC 50-190, soglia 170, uomo
+PHYSIOLOGY = make_physiology(170)  # HR 50-190, threshold 170, male
 SECONDS_PER_ZONE_TEST = 3600
 WEIGHT_SAMPLES = (0.0, 0.05, 0.5, 1.0, 1.1, 2.0, 5.0)
 
@@ -70,7 +70,7 @@ def constant_series(bpm: float, seconds: int) -> HeartRateSeries:
     return HeartRateSeries(np.arange(seconds, dtype=float), np.full(seconds, float(bpm)))
 
 
-# --- T-CALC-01 con i pesi e le zone --------------------------------------------------------
+# --- T-CALC-01 with weights and zones ------------------------------------------------------
 
 
 @pytest.mark.parametrize("sport", list(Sport))
@@ -78,7 +78,7 @@ def constant_series(bpm: float, seconds: int) -> HeartRateSeries:
 def test_t_calc_01_an_hour_at_the_threshold_of_each_sport_is_hrtss_100_all_in_zone_5(
     sport: Sport, weight: float
 ) -> None:
-    threshold = threshold_for_sport(PHYSIOLOGY, sport)  # in bici: soglia della corsa - 4
+    threshold = threshold_for_sport(PHYSIOLOGY, sport)  # on the bike: running threshold - 4
     series = constant_series(threshold, SECONDS_PER_ZONE_TEST)
 
     result = compute_activity_load(
@@ -128,12 +128,12 @@ def test_t_calc_03_an_estimate_keeps_the_weight_and_the_measured_zone_seconds() 
     assert result.source is LoadSource.ESTIMATE
     assert result.zone_seconds.total == 0.0
     assert result.load == pytest.approx(result.hr_tss * 2.0)
-    assert result.hr_tss == pytest.approx(100.0 * 0.65**2)  # durata_h * 100 * IF^2
+    assert result.hr_tss == pytest.approx(100.0 * 0.65**2)  # duration_h * 100 * IF^2
 
 
 @st.composite
 def random_series(draw: st.DrawFn) -> tuple[HeartRateSeries, float]:
-    """Secondi crescenti con buchi anche oltre 10 s e bpm anche fuori limiti."""
+    """Increasing seconds with gaps even over 10 s and bpm even out of range."""
     steps = draw(st.lists(st.integers(1, 15), min_size=1, max_size=60))
     seconds = np.cumsum([0, *steps[:-1]]).astype(float)
     bpm = np.array(
@@ -147,7 +147,7 @@ def random_series(draw: st.DrawFn) -> tuple[HeartRateSeries, float]:
 def naive_zone_seconds(
     series: HeartRateSeries, limits: HeartRateLimits, threshold: int
 ) -> tuple[list[float], float]:
-    """Oracolo ingenuo: ciclo per campione, confini in interi (percentuale * soglia)."""
+    """Naive oracle: loop per sample, boundaries in integers (percentage * threshold)."""
     seconds = series.seconds.tolist()
     gaps = [b - a for a, b in pairwise(seconds)]
     ordered = sorted(gaps)
@@ -188,7 +188,7 @@ def test_t_calc_03_zone_seconds_equal_the_naive_oracle_and_never_exceed_the_coun
     assert result.load == pytest.approx(result.hr_tss * weight, rel=1e-12, abs=1e-12)
 
 
-# --- Impronta dei carichi ---------------------------------------------------------------------
+# --- Load fingerprint -------------------------------------------------------------------------
 
 
 def test_t_calc_05_the_fingerprint_depends_on_every_input_of_the_load_and_on_nothing_else() -> None:
@@ -213,18 +213,18 @@ def test_t_calc_05_the_fingerprint_depends_on_every_input_of_the_load_and_on_not
     )
 
 
-# --- Cache, panoramica e dettaglio sulla pila reale ------------------------------------------
+# --- Cache, overview and detail on the real stack --------------------------------------------
 
 
 @pytest.fixture
 def profile(tmp_path: Path) -> Iterator[RealProfile]:
     opened = profile_with_mixed(tmp_path, "pila")
     yield opened
-    opened.close()  # ripetibile
+    opened.close()  # repeatable
 
 
 def raising_decoder(*_args: object) -> None:
-    raise AssertionError("la cache avrebbe dovuto bastare: nessun file va riletto")
+    raise AssertionError("the cache should have been enough: no file should be read again")
 
 
 def test_t_calc_05_a_cached_overview_is_bit_identical_with_zones_and_saved_weights(
@@ -244,7 +244,9 @@ def test_t_calc_05_a_cached_overview_is_bit_identical_with_zones_and_saved_weigh
     assert any(a.load.zone_seconds.total > 0 for a in first.activities)
     by_sport = {a.sport: a for a in first.activities}
     assert by_sport[Sport.STRENGTH].load.load == 0.0
-    assert by_sport[Sport.STRENGTH].load.hr_tss > 0.0  # lo zero è del peso, non dell'attività
+    assert (
+        by_sport[Sport.STRENGTH].load.hr_tss > 0.0
+    )  # the zero belongs to the weight, not to the activity
     folder = profile.folder
     profile.close()
     reopened = open_profile_from_folder(profile.ports, folder)
@@ -277,7 +279,7 @@ def test_t_calc_05_the_detail_of_every_activity_gives_the_same_load_as_the_overv
         assert isinstance(result, ActivityDetail)
         assert result.load == item.load
         assert result.local_day == item.local_day
-        run_threshold = 160  # la prima voce (1 febbraio) vale anche per i giorni che la precedono
+        run_threshold = 160  # the first entry (1 February) also holds for the days that precede it
         bike_offset = 4 if item.sport is Sport.CYCLING else 0
         assert result.threshold_bpm == run_threshold - bike_offset
         assert result.zone_starts_bpm == tuple(
@@ -285,11 +287,11 @@ def test_t_calc_05_the_detail_of_every_activity_gives_the_same_load_as_the_overv
         )
 
 
-# --- Ricalcolo dopo una serie di modifiche = calcolo da zero ---------------------------------
+# --- Recalculation after a series of changes = calculation from scratch ---------------------
 
 
 def apply_random_step(rng: random.Random, profile: RealProfile, history: list[str]) -> None:
-    """Un'operazione a caso sul profilo; i rifiuti non cambiano nulla (verificato dal chiamante)."""
+    """A random operation on the profile; refusals change nothing (verified by the caller)."""
     session = profile.session
     update = UpdateMeasurements(
         session.activities,
@@ -324,13 +326,13 @@ def apply_random_step(rng: random.Random, profile: RealProfile, history: list[st
 def test_t_calc_05_every_step_of_a_random_sequence_of_updates_equals_the_calculation_from_scratch(
     tmp_path: Path, seed: int
 ) -> None:
-    rng = random.Random(seed)  # deterministico: la sequenza è nel nome del test
+    rng = random.Random(seed)  # deterministic: the sequence is in the test name
     profile = profile_with_mixed(tmp_path, "incrementale")
     history: list[str] = []
     try:
         for step in range(8):
             apply_random_step(rng, profile, history)
-            incremental = profile.overview()  # cache riempita dai passi precedenti
+            incremental = profile.overview()  # cache filled by the previous steps
             scratch, scratch_profile = scratch_overview(
                 tmp_path,
                 f"zero{seed}_{step}",
@@ -342,7 +344,7 @@ def test_t_calc_05_every_step_of_a_random_sequence_of_updates_equals_the_calcula
             try:
                 assert_same_overview(incremental, scratch, TODAY)
             except AssertionError as error:
-                error.add_note(f"operazioni fin qui: {history}")
+                error.add_note(f"operations so far: {history}")
                 raise
     finally:
         profile.close()
@@ -364,7 +366,7 @@ def test_t_calc_05_the_same_update_repeated_and_the_same_day_replaced_leave_one_
         for _ in range(3):
             update(MeasurementUpdate(date(2026, 2, 1), threshold_bpm=150))
         update(MeasurementUpdate(date(2026, 2, 1), threshold_bpm=155))
-        update(MeasurementUpdate(date(2026, 2, 1), weight=Weight(701)))  # solo peso: FC com'era
+        update(MeasurementUpdate(date(2026, 2, 1), weight=Weight(701)))  # weight only: HR as it was
 
         entries = [e for e in session.physiology.list_entries() if e.valid_from == date(2026, 2, 1)]
 
@@ -372,12 +374,12 @@ def test_t_calc_05_the_same_update_repeated_and_the_same_day_replaced_leave_one_
         assert [e.valid_from for e in session.physiology.list_entries()] == sorted(
             {e.valid_from for e in session.physiology.list_entries()}
         )
-        assert len(session.weights.list_entries()) == 1  # un solo peso, nella data 1 febbraio
+        assert len(session.weights.list_entries()) == 1  # a single weight, on the date 1 February
     finally:
         profile.close()
 
 
-# --- Vincolo min < soglia <= max in tutte le combinazioni -----------------------------------
+# --- Constraint min < threshold <= max in all combinations ----------------------------------
 
 
 BASE = (50, 190, 170)
@@ -390,7 +392,7 @@ CONSTRAINT_DAY = date(2026, 4, 1)
 def expected_triple(
     minimum: int | None, maximum: int | None, threshold: int | None
 ) -> tuple[int, int, int] | None:
-    """Oracolo: il risultato dell'aggiornamento se coerente, altrimenti `None` (rifiuto)."""
+    """Oracle: the result of the update if consistent, otherwise `None` (refusal)."""
     low = BASE[0] if minimum is None else minimum
     high = BASE[1] if maximum is None else maximum
     thr = BASE[2] if threshold is None else threshold
@@ -431,7 +433,7 @@ def test_t_calc_05_the_heart_rate_constraint_holds_for_every_combination_and_ref
                         with pytest.raises(InvalidMeasurementsError):
                             update(request)
                         assert session.physiology.list_entries() == before_entries
-                        assert session.weights.list_entries() == before_weights  # peso incluso
+                        assert session.weights.list_entries() == before_weights  # weight included
                         refused += 1
                     else:
                         update(request)
@@ -449,7 +451,7 @@ def test_t_calc_05_the_heart_rate_constraint_holds_for_every_combination_and_ref
     finally:
         profile.close()
     assert accepted > 50
-    assert refused > 500  # la griglia prova davvero i rifiuti, non solo i casi buoni
+    assert refused > 500  # the grid really exercises the refusals, not just the good cases
 
 
 def test_t_calc_05_a_stored_database_refuses_incoherent_heart_rate_even_without_the_use_case(
@@ -459,9 +461,9 @@ def test_t_calc_05_a_stored_database_refuses_incoherent_heart_rate_even_without_
     database = profile.folder / "ponos.sqlite3"
     profile.close()
     statements = (
-        "INSERT INTO physiology VALUES ('2026-04-01', 50, 190, 50, 'male')",  # soglia = minima
-        "INSERT INTO physiology VALUES ('2026-04-01', 50, 190, 191, 'male')",  # soglia > massima
-        "INSERT INTO physiology VALUES ('2026-04-01', 50, 50, 50, 'male')",  # minima = massima
+        "INSERT INTO physiology VALUES ('2026-04-01', 50, 190, 50, 'male')",  # threshold = minimum
+        "INSERT INTO physiology VALUES ('2026-04-01', 50, 190, 191, 'male')",  # threshold > maximum
+        "INSERT INTO physiology VALUES ('2026-04-01', 50, 50, 50, 'male')",  # minimum = maximum
         "INSERT INTO physiology VALUES ('2026-04-01', 19, 190, 170, 'male')",
         "INSERT INTO physiology VALUES ('2026-04-01', 50, 251, 170, 'male')",
         "INSERT INTO physiology VALUES ('2026-04-01', 50, 190, 39, 'male')",
@@ -472,11 +474,11 @@ def test_t_calc_05_a_stored_database_refuses_incoherent_heart_rate_even_without_
                 raw.execute(statement)
 
 
-# --- Fusi orari e ora legale -----------------------------------------------------------------
+# --- Time zones and daylight saving time ----------------------------------------------------------
 
 
 def starts_near(boundary: datetime) -> tuple[MixedActivity, ...]:
-    """Cinque corse identiche attorno a un istante, a +-90 minuti e al minuto stesso."""
+    """Five identical runs around an instant, at +-90 minutes and at the very minute."""
     offsets = (-90, -1, 0, 1, 90)
     return tuple(
         MixedActivity(
@@ -505,10 +507,10 @@ def loads_by_start(profile: RealProfile, zone: ZoneInfo, today: date) -> dict[da
 @pytest.mark.parametrize(
     ("zone_name", "change_day"),
     [
-        ("Europe/Rome", date(2026, 3, 29)),  # giorno in cui salta da 02:00 a 03:00
-        ("Europe/Rome", date(2026, 10, 25)),  # giorno in cui 02:00-03:00 si ripete
-        ("Africa/Cairo", date(2026, 4, 24)),  # la mezzanotte locale non esiste (00:00 -> 01:00)
-        ("America/Havana", date(2026, 3, 8)),  # idem
+        ("Europe/Rome", date(2026, 3, 29)),  # day when it jumps from 02:00 to 03:00
+        ("Europe/Rome", date(2026, 10, 25)),  # day when 02:00-03:00 repeats
+        ("Africa/Cairo", date(2026, 4, 24)),  # local midnight does not exist (00:00 -> 01:00)
+        ("America/Havana", date(2026, 3, 8)),  # same
         ("Pacific/Auckland", date(2026, 3, 29)),
         ("America/Los_Angeles", date(2026, 3, 29)),
         ("Pacific/Kiritimati", date(2026, 6, 15)),  # UTC+14
@@ -534,7 +536,7 @@ def test_t_calc_07_the_parameters_of_a_day_apply_by_the_local_day_across_dst_and
     try:
         loads = loads_by_start(profile, zone, date(2026, 12, 31))
 
-        assert set(expected_thresholds.values()) == {150, 170}  # il confine taglia le cinque corse
+        assert set(expected_thresholds.values()) == {150, 170}  # the boundary cuts the five runs
         for spec in specs:
             activity = decode_stored_activity(
                 (folder / f"{spec.name}.fit").read_bytes(), FileFormat.FIT
@@ -561,8 +563,8 @@ def test_t_calc_07_a_one_second_and_a_twenty_four_hour_activity_with_saved_weigh
     short = compute_activity_load(Sport.RUNNING, 1.0, one_second, PHYSIOLOGY, weight)
     long = compute_activity_load(Sport.RUNNING, 24 * 3600.0, day, PHYSIOLOGY, weight)
 
-    assert short.zone_seconds.values == (0.0, 0.0, 0.0, 0.0, 1.0)  # un campione vale 1 s
+    assert short.zone_seconds.values == (0.0, 0.0, 0.0, 0.0, 1.0)  # a sample is worth 1 s
     assert long.zone_seconds.values == (0.0, 0.0, 0.0, 0.0, 24 * 3600.0)
-    assert long.hr_tss > 24 * 100  # più di 24 ore alla soglia
+    assert long.hr_tss > 24 * 100  # more than 24 hours at the threshold
     assert long.load == pytest.approx(long.hr_tss * 1.7)
     assert np.isfinite([short.load, long.load]).all()

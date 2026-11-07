@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-DATI-04: un solo processo per profilo; il lock di un processo morto non blocca nessuno."""
+"""T-DATI-04: one process per profile; the lock of a dead process blocks nobody."""
 
 from __future__ import annotations
 
@@ -30,25 +30,25 @@ from ponos_coach.profiles.domain import FolderKind
 
 lock = LocalProfileFolders(lambda _folder: FolderKind.LOCAL).acquire_lock(Path(sys.argv[1]))
 print("locked", os.getpid(), flush=True)
-sys.stdin.read()  # resta in vita (e col lock) finche' il test non lo uccide
+sys.stdin.read()  # stays alive (and holds the lock) until the test kills it
 """
-# Sempre senza pulizia: su Windows `SIGTERM` di `os.kill` è `TerminateProcess`.
+# Always without cleanup: on Windows `os.kill`'s `SIGTERM` is `TerminateProcess`.
 _KILL_SIGNAL = getattr(signal, "SIGKILL", signal.SIGTERM)
 
 
 @dataclass(frozen=True)
 class _Holder:
-    """Il processo che tiene il lock.
+    """The process that holds the lock.
 
-    Su Windows `sys.executable` di un ambiente virtuale è un lanciatore che avvia l'interprete
-    vero come figlio: il lock sta nell'interprete (`pid`), non nel lanciatore (`launcher`).
+    On Windows `sys.executable` of a virtual environment is a launcher that starts the real
+    interpreter as a child: the lock lives in the interpreter (`pid`), not in the launcher.
     """
 
     launcher: subprocess.Popen[str]
     pid: int
 
     def crash(self) -> None:
-        """Termina l'interprete senza nessuna pulizia, come un crash, e attende la fine."""
+        """Terminate the interpreter with no cleanup, like a crash, and wait for the end."""
         with contextlib.suppress(ProcessLookupError, PermissionError):
             os.kill(self.pid, _KILL_SIGNAL)
         self.launcher.wait(timeout=_HOLDER_TIMEOUT_S)
@@ -67,7 +67,7 @@ def profile_folder(tmp_path: Path, folders: LocalProfileFolders) -> Path:
 
 
 def _read_first_line(process: subprocess.Popen[str]) -> str:
-    """Prima riga dell'output del sottoprocesso, con un tempo massimo."""
+    """First line of the subprocess output, with a maximum time."""
     assert process.stdout is not None
     stdout = process.stdout
     lines: list[str] = []
@@ -79,8 +79,8 @@ def _read_first_line(process: subprocess.Popen[str]) -> str:
 
 @pytest.fixture
 def lock_holder(profile_folder: Path) -> Iterator[_Holder]:
-    """Un sottoprocesso che tiene il lock del profilo; sempre ucciso alla fine."""
-    process = subprocess.Popen(  # noqa: S603 - eseguibile e script fissi, percorso come argomento
+    """A subprocess that holds the profile lock; always killed at the end."""
+    process = subprocess.Popen(  # noqa: S603 - fixed executable and script, path as argument
         [sys.executable, "-I", "-c", _HOLDER_SCRIPT, str(profile_folder)],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -89,7 +89,7 @@ def lock_holder(profile_folder: Path) -> Iterator[_Holder]:
     holder: _Holder | None = None
     try:
         fields = _read_first_line(process).split()
-        assert fields[:1] == ["locked"], "il sottoprocesso non ha preso il lock"
+        assert fields[:1] == ["locked"], "the subprocess did not take the lock"
         holder = _Holder(process, int(fields[1]))
         yield holder
     finally:
@@ -113,12 +113,12 @@ def test_second_instance_on_the_same_profile_is_refused_while_a_process_holds_it
 def test_lock_left_by_a_killed_process_is_released_by_the_system(
     folders: LocalProfileFolders, profile_folder: Path, lock_holder: _Holder
 ) -> None:
-    lock_holder.crash()  # nessuna pulizia, nessun release()
+    lock_holder.crash()  # no cleanup, no release()
 
     lock = folders.acquire_lock(profile_folder)
 
     lock.release()
-    assert (profile_folder / PROFILE_LOCK_NAME).exists()  # il file resta: non è lui il lock
+    assert (profile_folder / PROFILE_LOCK_NAME).exists()  # the file stays: it is not the lock
 
 
 def test_lock_is_refused_inside_the_same_process_too(
@@ -140,7 +140,7 @@ def test_lock_file_that_is_a_symbolic_link_is_not_followed(
     try:
         (profile_folder / PROFILE_LOCK_NAME).symlink_to(target)
     except OSError:
-        pytest.skip("link simbolici non creabili qui (privilegi)")
+        pytest.skip("symbolic links cannot be created here (privileges)")
 
     with pytest.raises(FolderUnavailableError):
         folders.acquire_lock(profile_folder)

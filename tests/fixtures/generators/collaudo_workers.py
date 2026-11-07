@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Processi di prova del collaudo, da avviare con `python -I collaudo_workers.py <comando> ...`.
+"""Test processes of the campaign, to be started with `python -I collaudo_workers.py <command> ...`.
 
-Servono ai test che uccidono davvero un processo o ne fanno correre due insieme. Parlano con
-il test per righe di testo: `ready <pid>` quando sono pronti, poi (dove serve) attendono una
-riga sullo standard input come segnale di partenza.
+They serve the tests that really kill a process or run two at once. They talk to
+the test with text lines: `ready <pid>` when they are ready, then (where needed) they wait for a
+line on standard input as the start signal.
 
-- `import <cartella-profilo> <cartella-sorgente> <punto>`: apre il profilo, prende il lock e
-  importa la cartella con l'archivio vero. `<punto>` dice dove fermarsi e attendere la morte:
-  `none` (mai: stampa `progress <n>` dopo ogni file e `finished`), `op:<n>` (prima della n-esima
-  operazione di scrittura dell'archivio), `before_add:<n>` (dopo l'archivio, prima del record
-  della n-esima attivita), `after_add:<n>` (record scritto ma transazione non confermata).
-- `create <config> <genitore> <prefisso> <quanti>`: crea `quanti` profili sotto `genitore`.
-- `race <config> <cartella>`: tenta di creare un profilo proprio nella cartella indicata.
+- `import <profile-folder> <source-folder> <point>`: opens the profile, takes the lock and
+  imports the folder with the real archive. `<point>` says where to stop and wait for death:
+  `none` (never: prints `progress <n>` after each file and `finished`), `op:<n>` (before the n-th
+  write operation of the archive), `before_add:<n>` (after the archive, before the record
+  of the n-th activity), `after_add:<n>` (record written but transaction not committed).
+- `create <config> <parent> <prefix> <how-many>`: creates `how-many` profiles under `parent`.
+- `race <config> <folder>`: tries to create a profile of its own in the given folder.
 """
 
 from __future__ import annotations
@@ -42,17 +42,17 @@ _FIXED_NOW = datetime(2026, 7, 1, 8, 0, tzinfo=UTC)
 
 
 def _say(*words: object) -> None:
-    print(*words, flush=True)  # noqa: T201 - il dialogo col test e su stdout
+    print(*words, flush=True)  # noqa: T201 - the dialogue with the test is on stdout
 
 
 def _wait_for_death() -> None:
-    """Resta fermo finche il test non uccide il processo; se il test chiude, esce comunque."""
+    """Stays still until the test kills the process; if the test closes, it exits anyway."""
     sys.stdin.read()
     os._exit(3)
 
 
 class _Point:
-    """Dove fermarsi: `tipo:n` oppure `none`."""
+    """Where to stop: `kind:n` or `none`."""
 
     def __init__(self, spec: str) -> None:
         kind, _, number = spec.partition(":")
@@ -61,7 +61,7 @@ class _Point:
 
 
 class _CountingOps(OsWriteOps):
-    """Scritture vere, ma ferme prima della n-esima."""
+    """Real writes, but stopped before the n-th."""
 
     def __init__(self, point: _Point) -> None:
         self._point = point
@@ -103,7 +103,7 @@ class _CountingOps(OsWriteOps):
 
 
 class _BlockingIndex:
-    """Indice vero che si ferma attorno alla n-esima aggiunta."""
+    """Real index that stops around the n-th addition."""
 
     def __init__(self, inner: ActivityIndex, point: _Point) -> None:
         self._inner = inner
@@ -196,7 +196,7 @@ def _request(folder: Path, name: str) -> NewProfileRequest:
 def _try_create(create: CreateProfile, request: NewProfileRequest) -> str:
     try:
         create(request).close()
-    except Exception as error:  # confine del processo di prova: l'esito va al test
+    except Exception as error:  # boundary of the test process: the outcome goes to the test
         return f"error {type(error).__name__}"
     return "ok"
 
@@ -204,7 +204,7 @@ def _try_create(create: CreateProfile, request: NewProfileRequest) -> str:
 def _create_many(config: str, parent: str, prefix: str, count: int) -> None:
     create = _creator(config)
     _say("ready", os.getpid())
-    sys.stdin.readline()  # segnale di partenza
+    sys.stdin.readline()  # start signal
     for number in range(count):
         folder = Path(parent) / "nuovi" / f"{prefix}-{number}"
         _say(_try_create(create, _request(folder, f"Atleta {prefix} {number}")))
@@ -214,7 +214,7 @@ def _create_many(config: str, parent: str, prefix: str, count: int) -> None:
 def _race(config: str, folder: str) -> None:
     create = _creator(config)
     _say("ready", os.getpid())
-    sys.stdin.readline()  # segnale di partenza
+    sys.stdin.readline()  # start signal
     _say(_try_create(create, _request(Path(folder), f"Atleta {os.getpid()}")))
     _say("finished")
 

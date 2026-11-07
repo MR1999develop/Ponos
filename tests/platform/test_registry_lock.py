@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Elenco dei profili condiviso da due istanze: ogni scrittura è protetta da un lock del sistema."""
+"""Profile list shared by two instances: every write is protected by a system lock."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from ponos_coach.platform.file_lock import acquire_file_lock
 
 lock = acquire_file_lock(Path(sys.argv[1]))
 print("locked", os.getpid(), flush=True)
-sys.stdin.read()  # resta in vita (e col lock) finche' il test non lo uccide
+sys.stdin.read()  # stays alive (and holds the lock) until the test kills it
 """
 _KILL_SIGNAL = getattr(signal, "SIGKILL", signal.SIGTERM)
 
@@ -58,8 +58,8 @@ def config_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def lock_holder(config_dir: Path) -> Iterator[int]:
-    """Un sottoprocesso che tiene il lock dell'elenco; sempre ucciso alla fine. Dà il suo pid."""
-    process = subprocess.Popen(  # noqa: S603 - eseguibile e script fissi, percorso come argomento
+    """A subprocess that holds the list's lock; always killed at the end. Gives its pid."""
+    process = subprocess.Popen(  # noqa: S603 - fixed executable and script, path as argument
         [sys.executable, "-I", "-c", _HOLDER_SCRIPT, str(config_dir / REGISTRY_LOCK_NAME)],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -68,7 +68,7 @@ def lock_holder(config_dir: Path) -> Iterator[int]:
     pid = 0
     try:
         fields = _read_first_line(process).split()
-        assert fields[:1] == ["locked"], "il sottoprocesso non ha preso il lock"
+        assert fields[:1] == ["locked"], "the subprocess did not take the lock"
         pid = int(fields[1])
         yield pid
     finally:
@@ -96,7 +96,7 @@ def test_a_write_waits_a_bounded_time_for_another_instance_then_fails_loudly(
         registry.add(entry)
 
     assert isinstance(RegistryBusyError("x"), ProfileRegistryError)
-    assert registry.list_entries() == []  # niente scritto, e la lettura non attende il lock
+    assert registry.list_entries() == []  # nothing written, and reading does not wait for the lock
 
 
 @pytest.mark.parametrize("operation", ["add", "remove", "mark_used"])
@@ -122,7 +122,7 @@ def test_the_lock_of_a_killed_instance_does_not_block_the_next_write(
     os.kill(lock_holder, _KILL_SIGNAL)
     entry = registry_entry(1)
 
-    # Il sistema libera il lock alla morte del processo: al massimo si attende la sua fine.
+    # The system releases the lock when the process dies: at most we wait for its end.
     registry.add(entry)
 
     assert registry.list_entries() == [entry]
@@ -132,7 +132,9 @@ def test_the_lock_is_released_after_each_operation_even_when_it_fails(config_dir
     registry = JsonProfileRegistry(config_dir, lock_timeout_s=_SHORT_TIMEOUT_S)
 
     with pytest.raises(ProfileRegistryError):
-        registry.remove(registry_entry(9).profile_id)  # non c'è: errore dopo aver preso il lock
+        registry.remove(
+            registry_entry(9).profile_id
+        )  # it is not there: error after taking the lock
     registry.add(registry_entry(1))
 
     assert len(registry.list_entries()) == 1
@@ -160,4 +162,4 @@ def test_two_instances_in_one_process_serialise_their_writes(config_dir: Path) -
         thread.join(_HOLDER_TIMEOUT_S)
 
     assert errors == []
-    assert len(first.list_entries()) == 40  # nessuna modifica persa
+    assert len(first.list_entries()) == 40  # no change lost

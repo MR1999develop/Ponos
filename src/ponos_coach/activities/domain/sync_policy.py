@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Politica di pausa e ritentativi verso Garmin, e stima del tempo restante.
+"""Pause and retry policy toward Garmin, and remaining-time estimate.
 
-Tutti i valori stanno in `SyncPolicy` (default del progetto, PLAN.md rischi e 4.4 punto 4); le
-funzioni sono pure: il jitter viene da una sorgente casuale iniettata, mai dal modulo `random`.
+All the values live in `SyncPolicy` (project default, PLAN.md risks and 4.4 point 4); the
+functions are pure: the jitter comes from an injected random source, never from the `random` module.
 """
 
 from __future__ import annotations
@@ -18,15 +18,15 @@ import numpy as np
 from ponos_coach.activities.domain.limits import MAX_ACTIVITY_FILE_BYTES
 from ponos_coach.activities.domain.remote import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 
-MAX_DOWNLOAD_BYTES: Final = MAX_ACTIVITY_FILE_BYTES  # tetto dello ZIP scaricato (default)
-ETA_WINDOW: Final = 20  # durate recenti nella media mobile della stima
+MAX_DOWNLOAD_BYTES: Final = MAX_ACTIVITY_FILE_BYTES  # cap on the downloaded ZIP (default)
+ETA_WINDOW: Final = 20  # recent durations in the moving average of the estimate
 
 
 class RandomSource(Protocol):
-    """Sorgente casuale iniettata (`random.Random` la soddisfa)."""
+    """Injected random source (`random.Random` satisfies it)."""
 
     def uniform(self, low: float, high: float) -> float:
-        """Un numero in `[low, high]`."""
+        """A number in `[low, high]`."""
         ...
 
 
@@ -36,15 +36,15 @@ def _positive_finite(*values: float) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class SyncPolicy:
-    """Pause, backoff e tetti dei tentativi (default del progetto).
+    """Pauses, backoff and caps on attempts (project default).
 
-    - pausa tra due richieste: `min_pause_s` più un jitter in `[0, max_jitter_s]`;
-    - dopo un errore transitorio o un 429: `backoff_base_s * 2^(n-1)` (n = errori di fila) più
-      il jitter, al massimo `backoff_cap_s`;
-    - al massimo `max_attempts_per_request` tentativi per la stessa richiesta;
-    - una voce del giornale diventa "fallita definitiva" dopo `max_syncs_per_activity`
-      sincronizzazioni fallite;
-    - l'elenco si chiede a pagine di `page_size` voci.
+    - pause between two requests: `min_pause_s` plus a jitter in `[0, max_jitter_s]`;
+    - after a transient error or a 429: `backoff_base_s * 2^(n-1)` (n = errors in a row) plus
+      the jitter, at most `backoff_cap_s`;
+    - at most `max_attempts_per_request` attempts for the same request;
+    - a journal entry becomes "definitively failed" after `max_syncs_per_activity`
+      failed synchronizations;
+    - the list is requested in pages of `page_size` entries.
     """
 
     min_pause_s: float = 1.0
@@ -57,22 +57,22 @@ class SyncPolicy:
 
     def __post_init__(self) -> None:
         if not _positive_finite(self.min_pause_s, self.backoff_base_s, self.backoff_cap_s):
-            raise ValueError("pause e backoff devono essere finiti e positivi")
+            raise ValueError("pauses and backoff must be finite and positive")
         if not math.isfinite(self.max_jitter_s) or self.max_jitter_s < 0:
-            raise ValueError("il jitter deve essere finito e non negativo")
+            raise ValueError("the jitter must be finite and non-negative")
         if self.backoff_cap_s < self.backoff_base_s:
-            raise ValueError("il tetto del backoff non può stare sotto la base")
+            raise ValueError("the backoff cap cannot be below the base")
         if self.max_attempts_per_request < 1 or self.max_syncs_per_activity < 1:
-            raise ValueError("serve almeno un tentativo")
+            raise ValueError("at least one attempt is required")
         if not 1 <= self.page_size <= MAX_PAGE_SIZE:
-            raise ValueError("dimensione di pagina fuori intervallo")
+            raise ValueError("page size out of range")
 
 
 DEFAULT_POLICY: Final = SyncPolicy()
 
 
 def pause_between_requests_s(policy: SyncPolicy, rng: RandomSource) -> float:
-    """Secondi da attendere prima della richiesta successiva: pausa minima più jitter."""
+    """Seconds to wait before the next request: minimum pause plus jitter."""
     return policy.min_pause_s + _jitter(policy, rng)
 
 
@@ -82,26 +82,27 @@ def retry_wait_s(
     rng: RandomSource,
     suggested_s: float | None = None,
 ) -> float | None:
-    """Attesa prima di ritentare una richiesta fallita `failures` volte di fila, o None.
+    """Wait before retrying a request that failed `failures` times in a row, or None.
 
-    None dice di smettere: i tentativi hanno raggiunto `max_attempts_per_request`, oppure
-    Garmin chiede un'attesa (`suggested_s`, per esempio `Retry-After`) oltre il tetto del
-    backoff, e aspettarla a lungo sarebbe peggio di fermarsi con un errore chiaro. Altrimenti
-    l'attesa è `backoff_base_s * 2^(failures-1)`, almeno `suggested_s`, più il jitter, mai oltre
+    None says to stop: the attempts have reached `max_attempts_per_request`, or
+    Garmin asks for a wait (`suggested_s`, e.g. `Retry-After`) beyond the backoff
+    cap, and waiting that long would be worse than stopping with a clear error. Otherwise
+    the wait is `backoff_base_s * 2^(failures-1)`, at least `suggested_s`, plus the jitter, never
+    beyond
     `backoff_cap_s`.
 
     Raises:
-        ValueError: `failures` minore di 1 o `suggested_s` negativo o non finito.
+        ValueError: `failures` less than 1 or `suggested_s` negative or not finite.
     """
     if failures < 1:
-        raise ValueError("serve almeno un fallimento")
+        raise ValueError("at least one failure is required")
     if suggested_s is not None and (not math.isfinite(suggested_s) or suggested_s < 0):
-        raise ValueError("attesa suggerita non valida")
+        raise ValueError("invalid suggested wait")
     if failures >= policy.max_attempts_per_request:
         return None
     if suggested_s is not None and suggested_s > policy.backoff_cap_s:
         return None
-    exponent = min(failures - 1, 62)  # oltre il tetto non cambia nulla, ma 2**n resta piccolo
+    exponent = min(failures - 1, 62)  # beyond the cap nothing changes, but 2**n stays small
     base = min(policy.backoff_base_s * 2.0**exponent, policy.backoff_cap_s)
     wait = max(base, suggested_s or 0.0) + _jitter(policy, rng)
     return min(wait, policy.backoff_cap_s)
@@ -116,22 +117,22 @@ def _jitter(policy: SyncPolicy, rng: RandomSource) -> float:
 def estimate_remaining_s(
     recent_durations_s: Sequence[float], remaining_items: int, window: int = ETA_WINDOW
 ) -> float | None:
-    """Secondi stimati per le voci rimaste: media mobile delle ultime `window` durate.
+    """Estimated seconds for the remaining entries: moving average of the last `window` durations.
 
-    Ogni durata è il tempo di una voce intera (pause comprese). None se non c'è ancora nessuna
-    durata e restano voci; 0 se non resta nulla.
+    Each duration is the time of a whole entry (pauses included). None if there is no
+    duration yet and entries remain; 0 if nothing remains.
 
     Raises:
-        ValueError: `remaining_items` negativo, `window` minore di 1 o durate non finite o
+        ValueError: `remaining_items` negative, `window` less than 1 or durations not finite or
             negative.
     """
     if remaining_items < 0 or window < 1:
-        raise ValueError("voci rimaste o finestra non valide")
+        raise ValueError("remaining entries or window invalid")
     if remaining_items == 0:
         return 0.0
     if not recent_durations_s:
         return None
     recent = np.asarray(recent_durations_s[-window:], dtype=np.float64)
     if not bool(np.all(np.isfinite(recent))) or bool(np.any(recent < 0)):
-        raise ValueError("durate non valide")
+        raise ValueError("invalid durations")
     return float(np.mean(recent)) * remaining_items

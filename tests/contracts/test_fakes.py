@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""I test di contratto applicati ai fake in memoria (verificano i fake, non la produzione).
+"""The contract tests applied to the in-memory fakes (they verify the fakes, not production).
 
-Gli adattatori reali (SQLite, disco, portachiavi) ereditano le stesse classi `*Contract`.
+The real adapters (SQLite, disk, keyring) inherit the same `*Contract` classes.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ class _FakeRegistryHarness:
         return self._registry
 
     def reopen(self) -> ProfileRegistry:
-        return self._registry  # il supporto è la memoria dello stesso oggetto
+        return self._registry  # the medium is the memory of the same object
 
 
 class _FakeFoldersHarness:
@@ -172,7 +172,7 @@ class _FakeTokenStoreHarness:
         return self._store
 
     def reopen(self) -> TokenStore:
-        return self._store  # il supporto è la memoria dello stesso oggetto
+        return self._store  # the medium is the memory of the same object
 
     def corrupt(self, profile_id: ProfileId) -> None:
         self._store.corrupt(profile_id)
@@ -209,7 +209,7 @@ class TestFakeSportWeightStore(_FakeStorageFixture, SportWeightStoreContract):
 
 
 def test_fake_folders_and_storage_share_one_disk_for_delete() -> None:
-    """Il fake delle cartelle riconosce un profilo creato dal fake del database."""
+    """The folders fake recognizes a profile created by the database fake."""
     storage = InMemoryProfileStorage()
     folders = InMemoryProfileFolders(storage.disk)
     folder = absolute_path("shared")

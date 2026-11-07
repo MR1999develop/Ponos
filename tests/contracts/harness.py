@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Impalcature che ogni implementazione offre ai test di contratto.
+"""Scaffolding that each implementation offers to the contract tests.
 
-Le porte non permettono di creare un guasto (un file alterato, un temporaneo orfano, un file
-in una cartella): ogni implementazione, fake o reale, lo fa con il suo mezzo. Così lo stesso
-contratto gira su tutte.
+The ports do not allow creating a fault (a tampered file, an orphan temporary, a file
+in a folder): each implementation, fake or real, does it by its own means. This way the same
+contract runs on all of them.
 """
 
 from __future__ import annotations
@@ -19,91 +19,91 @@ from ponos_coach.profiles.ports import ProfileFolders, ProfileRegistry, ProfileS
 
 
 class ArchiveHarness(Protocol):
-    """Un archivio vuoto e i modi per guastarlo."""
+    """An empty archive and the ways to break it."""
 
     @property
     def archive(self) -> ActivityArchive:
-        """L'archivio sotto prova."""
+        """The archive under test."""
         ...
 
     def plant_orphan_temporary(self) -> None:
-        """Lascia nell'archivio un temporaneo di una scrittura interrotta."""
+        """Leave in the archive a temporary from an interrupted write."""
         ...
 
     def corrupt(self, file: ArchivedFile) -> None:
-        """Altera i byte del file archiviato (stessa dimensione, contenuto diverso)."""
+        """Alter the bytes of the archived file (same size, different content)."""
         ...
 
     def delete(self, file: ArchivedFile) -> None:
-        """Toglie il file dall'archivio."""
+        """Remove the file from the archive."""
         ...
 
 
 class RegistryHarness(Protocol):
-    """Un elenco di profili vuoto."""
+    """An empty list of profiles."""
 
     @property
     def registry(self) -> ProfileRegistry:
-        """L'elenco sotto prova."""
+        """The list under test."""
         ...
 
     def reopen(self) -> ProfileRegistry:
-        """Un nuovo oggetto sullo stesso supporto (come dopo un riavvio dell'app)."""
+        """A new object on the same medium (as after an app restart)."""
         ...
 
 
 class FoldersHarness(Protocol):
-    """Una cartella radice esistente e vuota in cui provare, e i modi per riempirla."""
+    """An existing, empty root folder to test in, and the ways to fill it."""
 
     @property
     def folders(self) -> ProfileFolders:
-        """Le cartelle sotto prova."""
+        """The folders under test."""
         ...
 
     @property
     def root(self) -> Path:
-        """Cartella radice esistente e vuota (assoluta)."""
+        """Existing, empty root folder (absolute)."""
         ...
 
     @property
     def root_kind(self) -> FolderKind:
-        """Tipo che `inspect(root)` deve riportare."""
+        """Kind that `inspect(root)` must report."""
         ...
 
     def put_file(self, folder: Path, name: str) -> None:
-        """Mette un file qualunque nella cartella esistente."""
+        """Put any file in the existing folder."""
         ...
 
     def make_profile_folder(self, folder: Path) -> None:
-        """Mette nella cartella esistente il database di un profilo (come lo lascia `create`)."""
+        """Put a profile database in the existing folder (as `create` leaves it)."""
         ...
 
 
 class StorageHarness(Protocol):
-    """Il database dei profili e cartelle in cui crearli."""
+    """The profile database and folders to create them in."""
 
     @property
     def storage(self) -> ProfileStorage:
-        """Il database sotto prova."""
+        """The database under test."""
         ...
 
     def new_folder(self) -> Path:
-        """Una cartella nuova, esistente e vuota, assoluta e distinta a ogni chiamata."""
+        """A new, existing and empty absolute folder, distinct at each call."""
         ...
 
 
 class TokenStoreHarness(Protocol):
-    """Un archivio di token vuoto e i modi per guastarlo."""
+    """An empty token store and the ways to break it."""
 
     @property
     def store(self) -> TokenStore:
-        """L'archivio sotto prova."""
+        """The store under test."""
         ...
 
     def reopen(self) -> TokenStore:
-        """Un nuovo oggetto sullo stesso supporto (come dopo un riavvio dell'app)."""
+        """A new object on the same medium (as after an app restart)."""
         ...
 
     def corrupt(self, profile_id: ProfileId) -> None:
-        """Rende illeggibile il contenuto salvato per il profilo (che deve averne uno)."""
+        """Make the content saved for the profile unreadable (it must have one)."""
         ...

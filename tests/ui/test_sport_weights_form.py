@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Modulo "Pesi degli sport": limiti, ripristino e modifiche, senza finestra."""
+"""Form "Sport weights": limits, reset and changes, without a window."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from ponos_coach.ui.sport_weights_form import SportWeightsForm
 
 
 def defaults_only(form: SportWeightsForm) -> bool:
-    """`is_default` letto da una funzione: il tipo non si restringe tra una modifica e l'altra."""
+    """`is_default` read through a function: the type is not narrowed between changes."""
     return form.is_default
 
 
@@ -35,9 +35,9 @@ def test_a_new_form_shows_the_defaults_and_has_no_changes() -> None:
     [
         (0.0, 0.0),  # on point
         (5.0, 5.0),  # on point
-        (-0.01, 0.0),  # off point: si porta al limite
+        (-0.01, 0.0),  # off point: brought to the limit
         (5.01, 5.0),  # off point
-        (1.234, 1.23),  # due decimali
+        (1.234, 1.23),  # two decimals
         (100.0, 5.0),
     ],
 )
@@ -69,7 +69,7 @@ def test_restoring_the_defaults_resets_every_sport() -> None:
     form.restore_defaults()
 
     assert defaults_only(form)
-    assert form.has_changes  # rispetto a quanto era in vigore
+    assert form.has_changes  # compared to what was in force
     assert form.build() == {sport: default_weight(sport) for sport in Sport}
 
 
@@ -90,7 +90,7 @@ def test_a_nan_changes_nothing_and_build_never_raises(typed: float) -> None:
 
     form.set_value(Sport.TRAIL, typed)
 
-    assert form.value(Sport.TRAIL) == 1.75  # azzerarlo toglierebbe lo sport dal carico
+    assert form.value(Sport.TRAIL) == 1.75  # zeroing it would remove the sport from the load
     assert form.build()[Sport.TRAIL] == SportWeight(1.75)
 
 

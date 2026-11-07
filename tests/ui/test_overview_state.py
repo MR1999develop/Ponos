@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Modello di presentazione: quale pagina, quale comando e quali numeri, senza finestra."""
+"""Presentation model: which page, which command and which numbers, without a window."""
 
 from __future__ import annotations
 

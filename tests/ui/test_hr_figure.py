@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-UI-04 (parte pura): la figura della FC di un'attività con le bande delle zone."""
+"""T-UI-04 (pure part): the HR figure of an activity with the zone bands."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def test_the_curve_is_in_minutes_and_bpm() -> None:
     np.testing.assert_allclose(curve.y, trace.bpm)
     assert figure.layout.xaxis.title.text == "Time (min)"
     assert figure.layout.yaxis.title.text == "Heart rate (bpm)"
-    assert len(figure.data) == 1  # nessuno scarto: nessuna seconda serie
+    assert len(figure.data) == 1  # no discards: no second series
 
 
 def test_discarded_samples_are_marked_with_a_cross_in_a_second_series() -> None:
@@ -63,7 +63,7 @@ def test_discarded_samples_are_marked_with_a_cross_in_a_second_series() -> None:
     marks = figure.data[1]
     assert marks.name == "Samples outside your limits"
     assert marks.mode == "markers"
-    assert marks.marker.symbol == "x"  # non solo il colore
+    assert marks.marker.symbol == "x"  # not just the colour
     assert list(marks.y) == [255.0, 10.0]
     assert marks.marker.color == tokens_for(Theme.LIGHT).error
 
@@ -111,13 +111,13 @@ def test_zones_outside_the_axis_range_have_no_band() -> None:
     bands = zone_bands((144.0, 153.0, 162.0, 171.0), low=100.0, high=150.0)
 
     assert [zone for zone, _, _ in bands] == [0, 1]
-    assert bands[-1][2] == 150.0  # la banda taglia al bordo dell'asse
+    assert bands[-1][2] == 150.0  # the band is clipped at the axis edge
 
 
 def test_a_long_curve_is_thinned_but_every_discarded_sample_is_kept() -> None:
     count = 20_000
     bpm = np.full(count, 140.0)
-    bpm[[7, 9_999, 19_999]] = 255.0  # tre scarti
+    bpm[[7, 9_999, 19_999]] = 255.0  # three discards
     series = HeartRateSeries(np.arange(count, dtype=np.float64), bpm)
     trace = HeartRateTrace.of(series, LIMITS)
 
@@ -135,7 +135,7 @@ def test_thinning_a_short_series_changes_nothing_and_caps_the_flags() -> None:
     count = MAX_TRACE_POINTS * 4
     everything = np.ones(count, dtype=np.bool_)
     chosen = thinned_indices(count, everything)
-    assert len(chosen) <= 2 * MAX_TRACE_POINTS  # anche con tutti gli scarti il tetto regge
+    assert len(chosen) <= 2 * MAX_TRACE_POINTS  # even with all discards the cap holds
     assert list(chosen) == sorted(set(chosen))
 
 

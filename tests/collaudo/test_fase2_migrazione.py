@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-DATI-01 per la fase 2: dal database v1 congelato alla v2 usata davvero dalla sincronizzazione.
+"""T-DATI-01 for phase 2: from the frozen v1 database to the v2 actually used by synchronisation.
 
-I test della migrazione stanno in `test_database_del_profilo.py` (schema congelato, copia di
-sicurezza, campi sconosciuti). Qui si prova ciò che manca: la migrazione interrotta a metà non
-lascia un database a pezzi, e un profilo v1 migrato sincronizza davvero (con il lavoro vecchio
-intatto).
+The migration tests are in `test_database_del_profilo.py` (frozen schema, safety
+copy, unknown fields). Here what is missing is exercised: a migration interrupted halfway does not
+leave a database in pieces, and a migrated v1 profile really synchronises (with the old work
+intact).
 """
 
 from __future__ import annotations
@@ -55,8 +55,8 @@ def test_t_dati_01_a_migration_that_fails_halfway_leaves_the_v1_database_as_it_w
     write_frozen_v1(path)
     tables_before = table_names(path)
     broken_v2 = (
-        sqlite_schema.MIGRATIONS[1][0],  # una tabella nuova che va a buon fine...
-        "CREATE TABLE questa_no (",  # ...poi un errore di sintassi
+        sqlite_schema.MIGRATIONS[1][0],  # a new table that succeeds...
+        "CREATE TABLE questa_no (",  # ...then a syntax error
     )
     monkeypatch.setattr(sqlite_database, "MIGRATIONS", (sqlite_schema.MIGRATIONS[0], broken_v2))
 
@@ -64,9 +64,9 @@ def test_t_dati_01_a_migration_that_fails_halfway_leaves_the_v1_database_as_it_w
         SqliteProfileStorage().open(tmp_path)
 
     assert user_version(path) == 1
-    assert table_names(path) == tables_before  # nessuna tabella a metà
+    assert table_names(path) == tables_before  # no half table
     monkeypatch.undo()
-    opened = SqliteProfileStorage().open(tmp_path)  # e il giro buono riesce
+    opened = SqliteProfileStorage().open(tmp_path)  # and the good round succeeds
     try:
         assert opened.info.format_version == sqlite_schema.SCHEMA_VERSION
         assert len(opened.activities.list_by_start()) == 1
@@ -109,11 +109,11 @@ def test_t_dati_01_a_v1_profile_syncs_after_the_migration_and_keeps_its_old_acti
     opened = SqliteProfileStorage().open(tmp_path)
     try:
         records = opened.activities.list_by_start()
-        assert len(records) == 4  # la vecchia attività v1 e le tre nuove
+        assert len(records) == 4  # the old v1 activity and the three new ones
         assert opened.sync_journal.counts()[SyncStatus.DOWNLOADED] == 3
         assert sum(1 for r in records if r.garmin_activity_id is None) == 1
     finally:
         opened.close()
     with closing(sqlite3.connect(tmp_path / PROFILE_DATABASE_NAME)) as raw:
         unknown = raw.execute("SELECT value FROM meta WHERE key = 'futuro'").fetchone()
-    assert unknown == ("conservami",)  # il campo sconosciuto sopravvive anche alla sincronizzazione
+    assert unknown == ("conservami",)  # the unknown field survives synchronisation too

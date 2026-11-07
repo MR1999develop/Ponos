@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Un solo punto d'ingresso per decodificare un file di attività (FIT o GPX).
+"""Single entry point to decode an activity file (FIT or GPX).
 
-Il formato si riconosce dal contenuto (la firma `.FIT` dell'intestazione, l'elemento radice
-`gpx`) e deve coincidere con l'estensione del nome: un `.gpx` che contiene un FIT, o il
-contrario, non si decodifica mai con l'altro lettore. Nessun I/O. L'errore è uno solo,
-`ActivityFileError`, con un motivo enumerato; il comportamento dei due lettori non cambia.
+The format is recognized from the content (the `.FIT` signature of the header, the root element
+`gpx`) and must match the file name extension: a `.gpx` that contains a FIT, or the
+reverse, is never decoded with the other reader. No I/O. There is only one error,
+`ActivityFileError`, with an enumerated reason; the behavior of the two readers does not change.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ _FORMAT_BY_EXTENSION = {"fit": FileFormat.FIT, "gpx": FileFormat.GPX}
 
 
 class ActivityFileReason(Enum):
-    """Motivo per cui un file non diventa un'attività. Il valore è stabile."""
+    """Reason why a file does not become an activity. The value is stable."""
 
     EMPTY = "empty"
     TOO_LARGE = "too_large"
@@ -47,7 +47,7 @@ class ActivityFileReason(Enum):
 
 
 class ActivityFileError(Exception):
-    """Il file non è un'attività valida entro i limiti; `reason` dice perché."""
+    """The file is not a valid activity within the limits; `reason` says why."""
 
     def __init__(self, reason: ActivityFileReason) -> None:
         super().__init__(reason.value)
@@ -56,25 +56,25 @@ class ActivityFileError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class ActivityFileLimits:
-    """Tetti dei due lettori (default del progetto: 50 MB, un milione di record o punti)."""
+    """Limits of the two readers (project default: 50 MB, one million records or points)."""
 
     fit: FitLimits = field(default_factory=FitLimits)
     gpx: GpxLimits = field(default_factory=GpxLimits)
 
 
 class DetectedContent(Enum):
-    """Che cosa sembra il contenuto di un file, a prescindere dal nome."""
+    """What the content of a file looks like, regardless of its name."""
 
     FIT = "fit"
     GPX = "gpx"
-    OTHER_XML = "other_xml"  # per esempio TCX: riconosciuto ma non supportato
+    OTHER_XML = "other_xml"  # e.g. TCX: recognized but not supported
     UNKNOWN = "unknown"
 
 
 def detect_content(data: bytes) -> DetectedContent:
-    """Riconosce il formato dal contenuto: firma FIT, radice XML `gpx`, altro XML, ignoto.
+    """Recognizes the format from the content: FIT signature, `gpx` XML root, other XML, unknown.
 
-    Guarda solo l'inizio del file; non lo decodifica né ne verifica la validità.
+    Looks only at the start of the file; does not decode it or verify its validity.
     """
     start = _FIT_SIGNATURE_OFFSET
     if (
@@ -90,7 +90,7 @@ def detect_content(data: bytes) -> DetectedContent:
 
 
 def _extension(file_name: str) -> str:
-    """Estensione minuscola, senza punto, dopo l'ultimo punto del nome (vuota se manca)."""
+    """Lowercase extension, without the dot, after the last dot in the name (empty if missing)."""
     _, dot, extension = file_name.rpartition(".")
     return extension.lower() if dot else ""
 
@@ -115,17 +115,17 @@ def _check_content(data: bytes, expected: FileFormat) -> None:
 def decode_activity_file(
     data: bytes, file_name: str, limits: ActivityFileLimits | None = None
 ) -> Activity:
-    """Decodifica un file di attività FIT o GPX.
+    """Decodes a FIT or GPX activity file.
 
-    Di `file_name` conta solo l'estensione (`.fit` o `.gpx`, senza distinguere maiuscole):
-    mai un percorso. L'ordine dei controlli è: vuoto, estensione, contenuto riconosciuto e
-    coerente con l'estensione, poi il lettore del formato con i suoi limiti.
+    Of `file_name` only the extension counts (`.fit` or `.gpx`, case-insensitive):
+    never a path. The order of checks is: empty, extension, content recognized and
+    consistent with the extension, then the format reader with its limits.
 
     Raises:
-        ActivityFileError: l'unico errore in uscita. EMPTY; UNSUPPORTED_FORMAT per estensione
-            diversa da `.fit` e `.gpx` o per un XML che non è GPX (per esempio TCX); CORRUPT se
-            il contenuto non è né FIT né XML ammesso; EXTENSION_MISMATCH se contenuto ed
-            estensione sono formati diversi; poi i motivi dei lettori (TOO_LARGE, CORRUPT,
+        ActivityFileError: the only error raised. EMPTY; UNSUPPORTED_FORMAT for an extension
+            other than `.fit` and `.gpx` or for an XML that is not GPX (e.g. TCX); CORRUPT if
+            the content is neither FIT nor allowed XML; EXTENSION_MISMATCH if content and
+            extension are different formats; then the reader reasons (TOO_LARGE, CORRUPT,
             NOT_AN_ACTIVITY, TOO_MANY_RECORDS, TOO_LONG).
     """
     limits = limits or ActivityFileLimits()
@@ -139,21 +139,21 @@ def decode_activity_file(
 def decode_stored_activity(
     data: bytes, file_format: FileFormat, limits: ActivityFileLimits | None = None
 ) -> Activity:
-    """Decodifica un file già archiviato, di cui il formato è noto dall'indice.
+    """Decodes an already archived file, whose format is known from the index.
 
-    Non c'è un nome da confrontare: il lettore del formato dato fa tutti i controlli del
-    proprio contenuto. Nessun I/O.
+    There is no name to compare: the reader of the given format performs all the checks on its
+    own content. No I/O.
 
     Raises:
-        ActivityFileError: l'unico errore in uscita, come per `decode_activity_file`: EMPTY
-            e poi i motivi del lettore (TOO_LARGE, CORRUPT, NOT_AN_ACTIVITY, TOO_MANY_RECORDS,
+        ActivityFileError: the only error raised, as for `decode_activity_file`: EMPTY
+            and then the reader reasons (TOO_LARGE, CORRUPT, NOT_AN_ACTIVITY, TOO_MANY_RECORDS,
             TOO_LONG).
     """
     return _decode_as(data, file_format, limits or ActivityFileLimits())
 
 
 def _decode_as(data: bytes, file_format: FileFormat, limits: ActivityFileLimits) -> Activity:
-    """Il lettore del formato con i suoi limiti; i suoi errori diventano `ActivityFileError`."""
+    """The format reader with its limits; its errors become `ActivityFileError`."""
     try:
         if file_format is FileFormat.FIT:
             return decode_activity(data, limits.fit)

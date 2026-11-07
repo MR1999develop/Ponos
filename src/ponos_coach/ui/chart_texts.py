@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Testi della barra di ogni grafico (esporta e strumenti di Plotly), uguali in tutti i grafici."""
+"""Toolbar texts of every chart (Plotly export and tools), the same in all charts."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ from PySide6.QtCore import QCoreApplication
 
 from ponos_coach.ui.chart_payload import ChartChrome
 
-# Contesto "Charts" scritto come letterale: lupdate non segue gli alias.
+# Context "Charts" written as a literal: lupdate does not follow aliases.
 
 
 def chart_chrome() -> ChartChrome:
-    """I titoli dei bottoni della barra, nella lingua dell'interfaccia."""
+    """The toolbar button titles, in the interface language."""
     return ChartChrome(
         export_png=QCoreApplication.translate("Charts", "Save chart as PNG"),
         export_svg=QCoreApplication.translate("Charts", "Save chart as SVG"),

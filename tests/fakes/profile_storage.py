@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Database dei profili in memoria: `ProfileStorage`, `OpenProfile` e gli store.
+"""In-memory profile database: `ProfileStorage`, `OpenProfile` and the stores.
 
-I dati di ogni profilo vivono nel `InMemoryDisk` (come il file del database): chiudere e
-riaprire il profilo li ritrova. Una transazione salva una copia dei dati e la ripristina se
-termina con un'eccezione.
+The data of each profile live in the `InMemoryDisk` (like the database file): closing and
+reopening the profile finds them again. A transaction saves a copy of the data and restores it if
+it ends with an exception.
 """
 
 from __future__ import annotations
@@ -74,10 +74,10 @@ FORMAT_VERSION = 3
 
 @dataclass
 class _Database:
-    """Contenuto del database di un profilo."""
+    """Content of a profile's database."""
 
     info: ProfileInfo
-    records: dict[str, ActivityRecord] = field(default_factory=dict)  # per chiave d'identità
+    records: dict[str, ActivityRecord] = field(default_factory=dict)  # by identity key
     garmin_ids: set[int] = field(default_factory=set)
     physiology: dict[date, PhysiologyEntry] = field(default_factory=dict)
     weights: dict[date, WeightEntry] = field(default_factory=dict)
@@ -90,7 +90,7 @@ class _Database:
     in_transaction: bool = False
 
     def snapshot(self) -> tuple[object, ...]:
-        """Copia dei dati modificabili da una transazione (tipi immutabili: basta la copia)."""
+        """Copy of the data a transaction can modify (immutable types: the copy is enough)."""
         return copy.deepcopy(
             (
                 self.records,
@@ -107,7 +107,7 @@ class _Database:
         )
 
     def restore(self, snapshot: tuple[object, ...]) -> None:
-        """Rimette i dati com'erano nella copia."""
+        """Put the data back as they were in the copy."""
         (
             self.records,
             self.garmin_ids,
@@ -124,7 +124,7 @@ class _Database:
 
 @dataclass
 class InMemoryDisk:
-    """Disco finto condiviso da cartelle e database: nomi contenuti, tipi, lock, database."""
+    """Fake disk shared by folders and databases: contained names, kinds, locks, databases."""
 
     folders: dict[Path, set[str]] = field(default_factory=dict)
     kinds: dict[Path, FolderKind] = field(default_factory=dict)
@@ -132,7 +132,7 @@ class InMemoryDisk:
     databases: dict[Path, _Database] = field(default_factory=dict)
 
     def kind_of(self, folder: Path) -> FolderKind:
-        """Tipo della cartella o del suo antenato più vicino con un tipo dichiarato."""
+        """Kind of the folder or of its nearest ancestor with a declared kind."""
         for candidate in (folder, *folder.parents):
             if candidate in self.kinds:
                 return self.kinds[candidate]
@@ -227,7 +227,7 @@ class _Journal:
 
     def next_to_process(self, limit: int) -> Sequence[JournalEntry]:
         if limit < 1:
-            raise ValueError("il limite deve essere almeno 1")
+            raise ValueError("the limit must be at least 1")
         todo = [
             e
             for e in self._db.journal.values()
@@ -238,7 +238,7 @@ class _Journal:
 
     def next_exhausted(self, limit: int) -> Sequence[JournalEntry]:
         if limit < 1:
-            raise ValueError("il limite deve essere almeno 1")
+            raise ValueError("the limit must be at least 1")
         exhausted = [
             e
             for e in self._db.journal.values()
@@ -304,7 +304,7 @@ class _FixedData:
 
     def set_once(self, data: FixedProfileData) -> None:
         if self._db.fixed is not None:
-            raise FixedDataAlreadySetError("già impostati")
+            raise FixedDataAlreadySetError("already set")
         self._db.fixed = data
 
 
@@ -386,11 +386,11 @@ class _OpenProfile:
         return self._cache
 
     def close(self) -> None:
-        """Nessun effetto: i dati restano nel disco finto."""
+        """No effect: the data stay in the fake disk."""
 
 
 class InMemoryProfileStorage:
-    """`ProfileStorage` su un `InMemoryDisk`."""
+    """`ProfileStorage` on an `InMemoryDisk`."""
 
     def __init__(self, disk: InMemoryDisk | None = None) -> None:
         self.disk = disk or InMemoryDisk()
@@ -398,7 +398,7 @@ class InMemoryProfileStorage:
     def create(
         self, folder: Path, profile_id: ProfileId, name: ProfileName, timezone_name: str
     ) -> OpenProfile:
-        """Vedi `ProfileStorage.create`."""
+        """See `ProfileStorage.create`."""
         if folder in self.disk.databases:
             raise ProfileAlreadyExistsError(folder.name)
         require_known_timezone(timezone_name)
@@ -409,14 +409,14 @@ class InMemoryProfileStorage:
         return _OpenProfile(database)
 
     def peek(self, folder: Path) -> ProfilePeek:
-        """Vedi `ProfileStorage.peek`."""
+        """See `ProfileStorage.peek`."""
         database = self.disk.databases.get(folder)
         if database is None:
             raise ProfileNotFoundError(folder.name)
         return ProfilePeek(database.info, len(database.records))
 
     def open(self, folder: Path, *, check_integrity: bool = True) -> OpenProfile:
-        """Vedi `ProfileStorage.open` (i controlli di integrità non hanno senso in memoria)."""
+        """See `ProfileStorage.open` (integrity checks make no sense in memory)."""
         del check_integrity
         database = self.disk.databases.get(folder)
         if database is None:

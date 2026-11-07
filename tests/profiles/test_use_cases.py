@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Casi d'uso dei profili, con i fake in memoria di `tests/fakes/`."""
+"""Profile use cases, with the in-memory fakes of `tests/fakes/`."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ NAME = ProfileName.parse("Atleta di prova")
 
 
 class _FailingRegistry(InMemoryProfileRegistry):
-    """Elenco che non riesce a scrivere nuove voci."""
+    """List that cannot write new entries."""
 
     def add(self, entry: RegistryEntry) -> None:  # noqa: ARG002
         raise ProfileRegistryError("disco pieno")
@@ -71,7 +71,7 @@ class _FailingRegistry(InMemoryProfileRegistry):
 
 
 class _FailingStorage(InMemoryProfileStorage):
-    """Database che non si riesce a creare."""
+    """Database that cannot be created."""
 
     def create(
         self,
@@ -85,7 +85,7 @@ class _FailingStorage(InMemoryProfileStorage):
 
 
 class _CountingStorage(InMemoryProfileStorage):
-    """Database che conta le chiusure, per provare che i casi d'uso non le dimenticano."""
+    """Database that counts closes, to prove the use cases do not forget them."""
 
     def __init__(self, disk: InMemoryDisk) -> None:
         super().__init__(disk)
@@ -149,7 +149,7 @@ class _CountingProfile:
 
 @dataclass
 class World:
-    """Fake, casi d'uso già costruiti e utilità per le verifiche."""
+    """Fakes, ready-built use cases and helpers for the checks."""
 
     disk: InMemoryDisk = field(default_factory=InMemoryDisk)
     registry: InMemoryProfileRegistry = field(default_factory=InMemoryProfileRegistry)
@@ -185,7 +185,7 @@ def request(folder: Path | None = None, name: str = "Atleta di prova") -> NewPro
     )
 
 
-# --- Crea ----------------------------------------------------------------------------------
+# --- Create ----------------------------------------------------------------------------------
 
 
 def test_create_makes_folder_database_parameters_and_registry_entry(world: World) -> None:
@@ -286,7 +286,7 @@ def test_create_failing_on_the_database_leaves_no_entry_and_no_lock(world: World
 
     assert world.registry.list_entries() == []
     assert folder not in world.disk.locks
-    assert folder not in world.disk.folders  # anche la cartella vuota creata prima è tolta
+    assert folder not in world.disk.folders  # the empty folder created earlier is removed too
 
 
 def test_create_with_an_unknown_timezone_is_refused_before_touching_the_disk(
@@ -295,7 +295,7 @@ def test_create_with_an_unknown_timezone_is_refused_before_touching_the_disk(
     folder = absolute_path("profili", "atleta")
     bad = NewProfileRequest(NAME, folder, "Marte/Olympus", physiology(), TODAY)
 
-    with pytest.raises(ValueError, match="fuso"):
+    with pytest.raises(ValueError, match="time zone"):
         world.create()(bad)
 
     assert world.registry.list_entries() == []
@@ -303,7 +303,7 @@ def test_create_with_an_unknown_timezone_is_refused_before_touching_the_disk(
 
 
 class _LosingTheRace(InMemoryProfileStorage):
-    """Un'altra istanza mette il suo database nella cartella un attimo prima del nostro."""
+    """Another instance puts its database in the folder just before ours."""
 
     def create(
         self, folder: Path, profile_id: ProfileId, name: ProfileName, timezone_name: str
@@ -320,14 +320,14 @@ def test_losing_the_creation_race_never_deletes_the_winners_database(world: Worl
     with pytest.raises(ProfileAlreadyExistsError):
         world.create(world.ports(_LosingTheRace(world.disk)))(request(folder))
 
-    assert folder in world.disk.databases  # il profilo del vincitore e salvo
+    assert folder in world.disk.databases  # the winner's profile is safe
     assert PROFILE_DATABASE_NAME in world.disk.folders[folder]
     assert world.registry.list_entries() == []
     assert folder not in world.disk.locks
 
 
 def test_a_request_needs_an_absolute_folder() -> None:
-    with pytest.raises(ValueError, match="assoluto"):
+    with pytest.raises(ValueError, match="absolute"):
         NewProfileRequest(NAME, Path("relativa"), "UTC", physiology(), TODAY)
 
 
@@ -342,7 +342,7 @@ def test_closing_a_session_twice_is_harmless_and_releases_the_lock_once(world: W
 
 class _BrokenClose(_CountingProfile):
     def close(self) -> None:
-        raise ProfileStorageError("flush non riuscito")
+        raise ProfileStorageError("flush failed")
 
 
 class _RecordingLock:
@@ -366,12 +366,12 @@ def test_closing_a_session_releases_the_lock_even_when_the_database_fails_to_clo
 
     with pytest.raises(ProfileStorageError):
         broken.close()
-    broken.close()  # già chiuso: nessun secondo tentativo
+    broken.close()  # already closed: no second attempt
 
     assert lock.released == 1
 
 
-# --- Apri ----------------------------------------------------------------------------------
+# --- Open ----------------------------------------------------------------------------------
 
 
 def _created(world: World, folder: Path | None = None, name: str = "Atleta di prova") -> ProfileId:
@@ -393,7 +393,7 @@ def test_open_from_folder_registers_an_unknown_profile_with_the_name_in_its_data
 ) -> None:
     folder = absolute_path("profili", "atleta")
     profile_id = _created(world, folder)
-    world.registry.remove(profile_id)  # come un profilo copiato da un altro PC
+    world.registry.remove(profile_id)  # like a profile copied from another PC
 
     with _open_from_folder(world)(folder) as session:
         assert session.info.profile_id == profile_id
@@ -483,7 +483,7 @@ def test_open_from_a_folder_without_a_profile_fails_without_taking_the_lock(
 
 
 class _LockCountingFolders(InMemoryProfileFolders):
-    """Cartelle che contano i lock presi."""
+    """Folders that count the locks taken."""
 
     locks_taken = 0
 
@@ -606,7 +606,7 @@ def test_open_registered_of_a_vanished_folder_fails(world: World) -> None:
     assert world.registry.list_entries() == [entry]
 
 
-# --- Elenco, rimozione, cancellazione ------------------------------------------------------
+# --- List, removal, deletion ------------------------------------------------------
 
 
 def test_list_profiles_starts_from_the_most_recently_used(world: World) -> None:
@@ -673,7 +673,7 @@ def test_delete_folder_that_is_not_a_profile_keeps_the_entry_and_the_files(world
     assert world.registry.list_entries() == [entry]
 
 
-# --- Guarda (sola lettura) -----------------------------------------------------------------
+# --- Peek (read-only) -----------------------------------------------------------------
 
 
 def test_peek_reports_the_info_and_the_count_without_locking_or_marking_use(world: World) -> None:

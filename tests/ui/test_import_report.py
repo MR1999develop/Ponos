@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Riepilogo dell'import per la vista e testi dei motivi, senza finestra."""
+"""Import summary for the view and reason texts, without a window."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def test_every_reason_has_a_plain_sentence(issue: ImportIssue) -> None:
     text = import_issue_text(issue)
 
     assert text.endswith(".")
-    assert "_" not in text  # mai l identificatore tecnico
+    assert "_" not in text  # never the technical identifier
 
 
 def test_a_repaired_archive_file_is_counted_apart_and_not_as_a_problem() -> None:

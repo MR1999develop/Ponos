@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Il profilo aperto espone anche il giornale della sincronizzazione."""
+"""The open profile also exposes the sync journal."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Modello di presentazione della sincronizzazione: comandi, esiti e tempo stimato."""
+"""Synchronization presentation model: commands, outcomes and estimated time."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def inputs(
     return CommandInputs(profile_open, account, operation, closing)
 
 
-# --- Comandi -----
+# --- Commands -----
 
 
 def test_with_a_linked_account_sync_check_and_disconnect_are_available() -> None:
@@ -133,7 +133,7 @@ def test_when_closing_nothing_is_available_not_even_stop() -> None:
     assert not commands.sync.enabled
 
 
-# --- Esiti -----
+# --- Outcomes -----
 
 
 def test_only_downloaded_activities_count_as_new() -> None:
@@ -198,7 +198,7 @@ def test_failures_are_grouped_by_reason_most_frequent_first() -> None:
     assert failure_counts(SyncNotStarted(SyncProblem.UNEXPECTED, SyncMode.SYNC, False)) == ()
 
 
-# --- Tempo stimato -----
+# --- Estimated time -----
 
 
 @pytest.mark.parametrize(
@@ -223,7 +223,7 @@ def test_remaining_time_is_rounded_to_a_comfortable_unit(
 
 @pytest.mark.parametrize("seconds", [-1.0, math.inf, math.nan])
 def test_remaining_time_must_be_finite_and_not_negative(seconds: float) -> None:
-    with pytest.raises(ValueError, match="finito"):
+    with pytest.raises(ValueError, match="finite"):
         round_remaining(seconds)
 
 

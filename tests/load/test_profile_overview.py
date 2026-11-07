@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Caso d'uso `ComputeProfileOverview`: cache, cambio di parametri, escluse, annullamento."""
+"""`ComputeProfileOverview` use case: cache, parameter change, excluded, cancellation."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ CHANGE_DAY = date(2026, 2, 1)
 
 
 class CountingArchive(InMemoryActivityArchive):
-    """Archivio in memoria che conta le letture."""
+    """In-memory archive that counts the reads."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -74,7 +74,7 @@ def run_bytes(start: datetime, serial: int, bpm: int = 150, minutes: int = 30) -
 
 
 class World:
-    """Un profilo in memoria con il suo archivio e il caso d'uso da avviare."""
+    """An in-memory profile with its archive and the use case to start."""
 
     def __init__(self) -> None:
         self.archive = CountingArchive()
@@ -131,7 +131,7 @@ class World:
 
 
 def two_runs(world: World) -> tuple[ActivityRecord, ActivityRecord]:
-    """Una corsa prima e una dopo il cambio di parametri del 1 febbraio."""
+    """One run before and one after the parameter change of 1 February."""
     before = world.add_run(datetime(2026, 1, 15, 7, 0, tzinfo=UTC), serial=1)
     after = world.add_run(datetime(2026, 2, 10, 7, 0, tzinfo=UTC), serial=2)
     return before, after
@@ -161,7 +161,7 @@ def test_load_summary_and_local_day_of_each_activity() -> None:
     result = world.overview()
 
     (entry,) = result.activities
-    assert entry.local_day == date(2026, 1, 16)  # 00:30 a Roma
+    assert entry.local_day == date(2026, 1, 16)  # 00:30 in Rome
     assert entry.summary == record.summary
     assert entry.timer_s == record.timer_s
     assert result.pmc.first_day == date(2026, 1, 16)
@@ -207,7 +207,7 @@ def test_changed_sport_weights_invalidate_the_cache() -> None:
 
 
 def test_parameter_change_on_a_date_applies_to_later_activities_only() -> None:
-    """T-CALC-05: prima del cambio valgono i vecchi parametri, dopo i nuovi."""
+    """T-CALC-05: before the change the old parameters apply, after it the new ones."""
     world = World()
     world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
     world.profile.physiology.put(physiology_entry(CHANGE_DAY, 160))
@@ -230,13 +230,13 @@ def test_parameter_change_on_a_date_applies_to_later_activities_only() -> None:
 
 
 def test_full_recalculation_equals_calculation_from_scratch_after_a_change() -> None:
-    """T-CALC-05: dopo il cambio, cache parziale e ricalcolo completo danno lo stesso esito."""
+    """T-CALC-05: after the change, partial cache and full recomputation give the same result."""
     incremental = World()
     incremental.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
     two_runs(incremental)
     incremental.overview()
     incremental.profile.physiology.put(physiology_entry(CHANGE_DAY, 160))
-    after_change = incremental.overview()  # la prima attività resta in cache
+    after_change = incremental.overview()  # the first activity stays in cache
 
     from_scratch = World()
     from_scratch.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
@@ -338,7 +338,7 @@ def test_cancellation_raises_and_keeps_the_loads_already_computed() -> None:
 
     result = world.overview()
 
-    assert world.archive.reads == 2  # solo la seconda attività, la prima è in cache
+    assert world.archive.reads == 2  # only the second activity, the first is in cache
     assert len(result.activities) == 2
 
 

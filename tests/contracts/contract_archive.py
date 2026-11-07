@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Contratto di `ActivityArchive`: salvare, rileggere con verifica, guasti, temporanei."""
+"""Contract of `ActivityArchive`: store, read back with verification, failures, temporaries."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ CONTENT = b"contenuto originale di prova " * 10
 
 
 class ActivityArchiveContract:
-    """Test da ereditare in una classe `Test...` con la fixture `harness`."""
+    """Tests to inherit in a `Test...` class with the `harness` fixture."""
 
     def test_store_returns_generated_relative_path_hash_and_size(
         self, harness: ArchiveHarness

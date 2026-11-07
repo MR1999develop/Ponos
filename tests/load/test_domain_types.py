@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Tipi di dominio del carico: validi per costruzione."""
+"""Load domain types: valid by construction."""
 
 from __future__ import annotations
 
@@ -27,19 +27,19 @@ def test_limits_accept_valid_ranges(low: int, high: int) -> None:
 
 @pytest.mark.parametrize(("low", "high"), [(19, 190), (50, 50), (90, 80), (50, 251)])
 def test_limits_reject_invalid_ranges(low: int, high: int) -> None:
-    with pytest.raises(ValueError, match="FC"):
+    with pytest.raises(ValueError, match="HR"):
         HeartRateLimits(low, high)
 
 
 @pytest.mark.parametrize("bpm", [39, 251, 0, -1])
 def test_threshold_rejects_out_of_range(bpm: int) -> None:
-    with pytest.raises(ValueError, match="soglia"):
+    with pytest.raises(ValueError, match="threshold"):
         ThresholdHeartRate(bpm)
 
 
 @pytest.mark.parametrize("threshold", [191, 50, 49])
 def test_physiology_rejects_threshold_outside_limits(threshold: int) -> None:
-    with pytest.raises(ValueError, match="soglia"):
+    with pytest.raises(ValueError, match="threshold"):
         Physiology(HeartRateLimits(50, 190), ThresholdHeartRate(threshold), Sex.MALE)
 
 
@@ -93,7 +93,7 @@ def test_typical_intensity_is_defined_and_below_threshold_for_every_sport() -> N
 
 @pytest.mark.parametrize("value", [-0.1, 5.1, float("nan"), float("inf")])
 def test_weight_rejects_invalid_values(value: float) -> None:
-    with pytest.raises(ValueError, match="peso"):
+    with pytest.raises(ValueError, match="weight"):
         SportWeight(value)
 
 
@@ -127,5 +127,5 @@ def test_series_copies_its_input() -> None:
     ],
 )
 def test_series_rejects_invalid_columns(seconds: list[float], bpm: list[float]) -> None:
-    with pytest.raises(ValueError, match=r"serie|secondi|finiti"):
+    with pytest.raises(ValueError, match=r"series|seconds|finite"):
         HeartRateSeries(np.array(seconds), np.array(bpm))

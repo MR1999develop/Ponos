@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dominio della sincronizzazione: id, elenco remoto, giornale, cursore, politica, token."""
+"""Sync domain: id, remote listing, journal, cursor, policy, token."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ LATER = NOW + timedelta(minutes=1)
 
 
 class _Edge:
-    """Sorgente casuale che dà sempre un estremo dell'intervallo (per i casi limite)."""
+    """Random source that always gives one end of the interval (for edge cases)."""
 
     def __init__(self, *, high: bool) -> None:
         self._high = high
@@ -72,7 +72,7 @@ NO_JITTER = _Edge(high=False)
 MAX_JITTER = _Edge(high=True)
 
 
-# --- Id Garmin ---------------------------------------------------------------------------------
+# --- Garmin id ---------------------------------------------------------------------------------
 
 
 class TestGarminActivityId:
@@ -82,7 +82,7 @@ class TestGarminActivityId:
 
     @pytest.mark.parametrize("value", [0, -1, MAX_GARMIN_ACTIVITY_ID + 1, True, 1.0, "1"])
     def test_invalid_ids_are_refused(self, value: object) -> None:
-        with pytest.raises(ValueError, match="id Garmin"):
+        with pytest.raises(ValueError, match="Garmin id"):
             GarminActivityId(value)  # type: ignore[arg-type]
 
     @pytest.mark.parametrize(
@@ -108,9 +108,9 @@ class TestGarminActivityId:
             "1e3",
             "../1",
             "1/../2",
-            "12345678901234567890",  # 20 cifre
-            "9223372036854775808",  # oltre il massimo
-            "١٢٣",  # cifre non ASCII
+            "12345678901234567890",  # 20 digits
+            "9223372036854775808",  # above the maximum
+            "١٢٣",  # non-ASCII digits
             None,
             True,
             1.0,
@@ -119,7 +119,7 @@ class TestGarminActivityId:
         ],
     )
     def test_parse_refuses_everything_else(self, raw: object) -> None:
-        with pytest.raises(ValueError, match="id Garmin"):
+        with pytest.raises(ValueError, match="Garmin id"):
             GarminActivityId.parse(raw)
 
     @given(st.integers(min_value=1, max_value=MAX_GARMIN_ACTIVITY_ID))
@@ -129,7 +129,7 @@ class TestGarminActivityId:
         assert GarminActivityId.parse(str(identifier)) == identifier
 
 
-# --- Elenco remoto -----------------------------------------------------------------------------
+# --- Remote listing -----------------------------------------------------------------------------
 
 
 class TestRemoteActivity:
@@ -163,7 +163,7 @@ class TestRemoteActivity:
             )
 
     def test_the_end_must_stay_in_the_plausible_window(self) -> None:
-        with pytest.raises(ValueError, match="finestra"):
+        with pytest.raises(ValueError, match="window"):
             RemoteActivity(
                 GarminActivityId(1), datetime(2099, 12, 31, tzinfo=UTC), 10 * 86_400.0, "running"
             )
@@ -234,7 +234,7 @@ class TestFindMatchingImport:
         [
             (60, 3600.0, True),  # on point: 60 s
             (61, 3600.0, False),  # off point
-            (0, 3420.0, True),  # on point: 180 s sono il 5% di 3600
+            (0, 3420.0, True),  # on point: 180 s is 5% of 3600
             (0, 3419.0, False),  # off point
         ],
     )
@@ -253,7 +253,7 @@ class TestFindMatchingImport:
         assert find_matching_import(remote_activity(1), [far, near]) == near
         assert (
             find_matching_import(remote_activity(1), [twin_a, near]) == near
-        )  # parità: fit:..1:2 < :3
+        )  # tie: fit:..1:2 < :3
         assert find_matching_import(remote_activity(1), [gpx_record(), near]) == near
 
     @given(st.permutations([0, 1, 2, 3]))
@@ -269,11 +269,11 @@ class TestFindMatchingImport:
 
         found = find_matching_import(remote_activity(1), [records[i] for i in order])
 
-        # Le due più vicine distano entrambe 10 s: vince la chiave d'identità più piccola.
+        # The two nearest are both 10 s away: the smaller identity key wins.
         assert found == records[0]
 
 
-# --- Giornale ----------------------------------------------------------------------------------
+# --- Journal ----------------------------------------------------------------------------------
 
 
 def _entry(status: SyncStatus = SyncStatus.PENDING, attempts: int = 0) -> JournalEntry:
@@ -293,7 +293,7 @@ class TestJournalEntry:
     @pytest.mark.parametrize(
         "kwargs",
         [
-            {"status": SyncStatus.RETRYABLE, "failed_attempts": 1},  # senza causa
+            {"status": SyncStatus.RETRYABLE, "failed_attempts": 1},  # no cause
             {"status": SyncStatus.FAILED, "failed_attempts": 1},
             {"status": SyncStatus.PENDING, "failure": FailureReason.CORRUPT_FILE},
             {"status": SyncStatus.DOWNLOADED, "failure": FailureReason.CORRUPT_FILE},
@@ -324,7 +324,7 @@ class TestJournalEntry:
     def test_the_instant_must_be_utc_and_at_the_millisecond(self) -> None:
         with pytest.raises(ValueError, match="UTC"):
             JournalEntry(remote_activity(1), SyncStatus.PENDING, datetime(2026, 1, 1))
-        with pytest.raises(ValueError, match="millisecondo"):
+        with pytest.raises(ValueError, match="millisecond"):
             JournalEntry(remote_activity(1), SyncStatus.PENDING, NOW + timedelta(microseconds=1))
 
     def test_a_downloaded_entry_after_failures_keeps_its_attempts(self) -> None:
@@ -409,7 +409,7 @@ class TestTransitions:
     ) -> None:
         expected = (
             old in (SyncStatus.PENDING, SyncStatus.RETRYABLE) and new is not SyncStatus.PENDING
-        ) or (old is SyncStatus.FAILED and new is SyncStatus.PENDING)  # solo per rearm_exhausted
+        ) or (old is SyncStatus.FAILED and new is SyncStatus.PENDING)  # only for rearm_exhausted
 
         assert can_transition(old, new) is expected
         assert (new in ALLOWED_TRANSITIONS[old]) is expected
@@ -469,7 +469,7 @@ class TestTransitions:
         assert failed.failure is FailureReason.ATTEMPTS_EXHAUSTED
 
     def test_zero_attempts_is_refused(self) -> None:
-        with pytest.raises(ValueError, match="tentativo"):
+        with pytest.raises(ValueError, match="attempt"):
             mark_failed(_entry(), FailureReason.TRANSIENT_ERROR, LATER, 0)
 
     @given(
@@ -492,7 +492,7 @@ class TestTransitions:
         assert entry.failed_attempts == min(len(reasons), limit)
 
 
-# --- Cursore dell'elenco -----------------------------------------------------------------------
+# --- Listing cursor -----------------------------------------------------------------------
 
 
 def _page(
@@ -508,7 +508,7 @@ class TestListingCursor:
 
     @pytest.mark.parametrize("args", [(-1, None, False), (0, -1, False)])
     def test_negative_values_are_refused(self, args: tuple[int, int | None, bool]) -> None:
-        with pytest.raises(ValueError, match="negativ"):
+        with pytest.raises(ValueError, match="negative"):
             ListingCursor(*args)
 
     def test_a_full_page_moves_the_cursor_on(self) -> None:
@@ -524,7 +524,7 @@ class TestListingCursor:
         assert second == ListingCursor(200, 250, False)
 
     def test_reaching_the_declared_total_does_not_complete_the_listing(self) -> None:
-        # D-F2-04: il totale si fissa alla prima pagina e può essere vecchio.
+        # D-F2-04: the total is fixed at the first page and may be stale.
         cursor = advance_cursor(ListingCursor(100, 200, False), _page(100, 100, total=200), 100)
 
         assert cursor == ListingCursor(200, 200, False)
@@ -550,11 +550,11 @@ class TestListingCursor:
     @pytest.mark.parametrize(
         ("cursor", "page", "limit"),
         [
-            (ListingCursor(5, None, True), _page(5, 1), 100),  # già completato
-            (ListingCursor(5, None, False), _page(0, 1), 100),  # posizione diversa
-            (ListingCursor(0, None, False), _page(0, 1), 0),  # limite non valido
+            (ListingCursor(5, None, True), _page(5, 1), 100),  # already completed
+            (ListingCursor(5, None, False), _page(0, 1), 100),  # different position
+            (ListingCursor(0, None, False), _page(0, 1), 0),  # invalid limit
             (ListingCursor(0, None, False), _page(0, 1), MAX_PAGE_SIZE + 1),
-            (ListingCursor(0, None, False), _page(0, 5), 4),  # pagina più grande del limite
+            (ListingCursor(0, None, False), _page(0, 5), 4),  # page larger than the limit
         ],
         ids=["completed", "offset", "limit-zero", "limit-too-big", "page-over-limit"],
     )
@@ -612,7 +612,7 @@ class TestIncrementalStop:
         assert not advance_cursor(ListingCursor.start(), page, 3).completed
 
 
-# --- Politica di pausa e ritentativi -----------------------------------------------------------
+# --- Pause and retry policy -----------------------------------------------------------
 
 
 class TestSyncPolicy:
@@ -671,7 +671,7 @@ class TestSyncPolicy:
         waits = [retry_wait_s(policy, n, NO_JITTER) for n in range(1, 8)]
 
         assert waits == [5.0, 10.0, 20.0, 40.0, 80.0, 120.0, 120.0]
-        assert retry_wait_s(policy, 19, MAX_JITTER) == 120.0  # tetto anche con il jitter
+        assert retry_wait_s(policy, 19, MAX_JITTER) == 120.0  # cap even with jitter
 
     def test_the_jitter_adds_to_the_wait(self) -> None:
         assert retry_wait_s(DEFAULT_POLICY, 1, MAX_JITTER) == 5.75
@@ -752,7 +752,7 @@ class TestRemainingTime:
 
 # --- Token -------------------------------------------------------------------------------------
 
-SECRET = "TOKEN-SEGNAPOSTO-0123456789"  # noqa: S105 - segnaposto
+SECRET = "TOKEN-SEGNAPOSTO-0123456789"  # noqa: S105 - placeholder
 
 
 class TestSessionTokens:
@@ -786,7 +786,7 @@ class TestSessionTokens:
 
     @pytest.mark.parametrize("value", ["", "x" * (MAX_TOKEN_CHARS + 1), None, b"abc", 7])
     def test_invalid_values_are_refused_without_echoing_them(self, value: object) -> None:
-        with pytest.raises(ValueError, match="token non valido") as error:
+        with pytest.raises(ValueError, match="invalid token") as error:
             SessionTokens(value)  # type: ignore[arg-type]
         assert "xxxx" not in str(error.value)
 

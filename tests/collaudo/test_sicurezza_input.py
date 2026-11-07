@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-SEC-02, T-SEC-04, T-SEC-05, T-SEC-09 sulla pila reale (file veri, archivio e SQLite veri).
+"""T-SEC-02, T-SEC-04, T-SEC-05, T-SEC-09 on the real stack (real files, archive and SQLite).
 
-Il corpus ostile (FIT, GPX, ZIP) entra dalla cartella come lo riceverebbe l'app. Oracoli oltre
-l'esito: nessun record, nessun file nell'archivio, nulla scritto fuori dalla cartella del profilo,
-nessuna connessione di rete tentata, memoria al picco sotto un tetto.
+The hostile corpus (FIT, GPX, ZIP) enters from the folder as the app would receive it. Oracles
+beyond
+the outcome: no record, no file in the archive, nothing written outside the profile folder,
+no network connection attempted, peak memory under a cap.
 """
 
 from __future__ import annotations
@@ -50,7 +51,7 @@ from tests.platform.windows_dacl import dacl_sddl, normalize_sid, trustees
 
 HOSTILE_FIT_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "data" / "fit-ostili"
 MIB = 1024 * 1024
-PEAK_MEMORY_LIMIT = 96 * MIB  # tetto al picco di memoria dell'intero corpus ostile
+PEAK_MEMORY_LIMIT = 96 * MIB  # cap on the peak memory of the whole hostile corpus
 FAILURES = {ImportStatus.FAILED, ImportStatus.IGNORED}
 
 
@@ -74,7 +75,7 @@ def all_files(root: Path) -> set[str]:
 
 @contextmanager
 def peak_memory() -> Iterator[list[int]]:
-    """Picco di memoria di Python nel blocco, in byte (la lista ha un solo elemento)."""
+    """Python's peak memory in the block, in bytes (the list has a single element)."""
     peak = [0]
     tracemalloc.start()
     try:
@@ -86,7 +87,7 @@ def peak_memory() -> Iterator[list[int]]:
 
 @contextmanager
 def loopback_listener() -> Iterator[tuple[int, list[bool]]]:
-    """Un server sul solo 127.0.0.1: dice se qualcuno ha provato a connettersi."""
+    """A server on 127.0.0.1 only: tells whether anyone tried to connect."""
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind(("127.0.0.1", 0))
     server.listen(8)
@@ -140,7 +141,7 @@ def test_t_sec_02_hostile_fit_corpus_is_refused_end_to_end_without_side_effects(
     assert profile.records() == []
     assert stored_files(profile.folder) == []
     assert temporaries(profile.folder) == []
-    assert all_files(tmp_path) == before  # nulla di nuovo, da nessuna parte
+    assert all_files(tmp_path) == before  # nothing new, anywhere
     assert peak[0] < PEAK_MEMORY_LIMIT
 
 
@@ -165,13 +166,13 @@ def test_t_sec_02_file_just_over_50_mib_is_skipped_without_being_read(
     source = tmp_path / "grande"
     source.mkdir()
     with (source / "enorme.fit").open("wb") as handle:
-        handle.truncate(50 * MIB + 1)  # file sparso: nessun byte scritto davvero
+        handle.truncate(50 * MIB + 1)  # sparse file: no byte actually written
 
     with peak_memory() as peak:
         summary = profile.import_folder(source)
 
     assert outcomes(summary) == {"enorme.fit": (ImportStatus.FAILED, ImportIssue.TOO_LARGE)}
-    assert peak[0] < 4 * MIB  # non si e allocato nulla di proporzionale al file
+    assert peak[0] < 4 * MIB  # nothing proportional to the file was allocated
 
 
 def test_t_sec_02_file_growing_after_the_scan_is_stopped_at_the_cap_not_read_whole(
@@ -244,7 +245,7 @@ def test_t_sec_02_hostile_gpx_corpus_is_refused_without_network_or_side_effects(
         with peak_memory() as peak:
             summary = profile.import_folder(source)
 
-    assert not contacted[0], "il lettore GPX ha aperto una connessione"
+    assert not contacted[0], "the GPX reader opened a connection"
     assert set(outcomes(summary)) == set(files)
     assert {status for status, _ in outcomes(summary).values()} <= FAILURES
     assert profile.records() == []
@@ -295,7 +296,7 @@ def test_t_sec_02_zip_entries_with_hostile_names_write_nothing_outside_the_archi
     tmp_path: Path, profile: RealProfile
 ) -> None:
     fit = imp.fit_run(1)
-    # Su Windows `zipfile` legge `\` come `/`: i nomi uguali dopo questo si contano una volta.
+    # On Windows `zipfile` reads `\` as `/`: names equal after this are counted once.
     distinct = {
         name.replace("\\", "/") if sys.platform == "win32" else name: name
         for name in UNSAFE_ENTRY_NAMES
@@ -372,7 +373,7 @@ def test_t_sec_02_a_zip_inside_the_folder_does_not_hide_the_loose_files_next_to_
 def make_junction(link: Path, target: Path) -> None:
     try:
         if sys.platform == "win32":
-            subprocess.run(  # noqa: S603 - comando di sistema, argomenti fissi
+            subprocess.run(  # noqa: S603 - system command, fixed arguments
                 [os.environ["COMSPEC"], "/c", "mklink", "/J", str(link), str(target)],
                 check=True,
                 capture_output=True,
@@ -381,7 +382,7 @@ def make_junction(link: Path, target: Path) -> None:
         else:
             link.symlink_to(target, target_is_directory=True)
     except (OSError, NotImplementedError, subprocess.CalledProcessError):
-        pytest.skip("il sistema non permette di creare giunzioni o collegamenti")
+        pytest.skip("the system does not allow creating junctions or links")
 
 
 def test_t_sec_04_a_junction_to_the_outside_and_a_loop_are_reported_and_not_followed(
@@ -402,7 +403,7 @@ def test_t_sec_04_a_junction_to_the_outside_and_a_loop_are_reported_and_not_foll
     assert results["anello"] == (ImportStatus.FAILED, ImportIssue.NOT_REGULAR_FILE)
     assert len(results) == 3
     assert len(profile.records()) == 1
-    assert (outside / "segreta.fit").exists()  # e non e stata toccata
+    assert (outside / "segreta.fit").exists()  # and it was not touched
 
 
 def test_t_sec_04_a_folder_that_is_called_like_a_file_is_walked_as_a_folder(
@@ -424,7 +425,7 @@ def test_t_sec_04_importing_the_profile_folder_itself_changes_nothing(
     profile.import_folder(source)
     snapshot = {p: p.read_bytes() for p in sorted(stored_files(profile.folder))}
 
-    summary = profile.import_folder(profile.folder)  # errore dell'utente: la cartella dei dati
+    summary = profile.import_folder(profile.folder)  # user error: the data folder
 
     assert {r.status for r in summary.results} == {ImportStatus.ALREADY_PRESENT}
     assert {p: p.read_bytes() for p in sorted(stored_files(profile.folder))} == snapshot
@@ -438,7 +439,7 @@ def test_t_sec_04_archive_paths_never_contain_anything_from_the_file_names(
         "o'brien.fit",
         "a b (1).fit",
         "100%.fit",
-        "\u202egpj.fit",  # inversione bidi
+        "\u202egpj.fit",  # bidi reversal
         "caff\u00e8 \U0001f3c3.fit",
         "..fit",
         "x'); DROP TABLE activities;--.fit",
@@ -477,7 +478,7 @@ SQL_NAMES = [
 def test_t_sec_05_profile_names_with_quotes_and_sql_are_stored_and_read_back_identical(
     tmp_path: Path, name: str
 ) -> None:
-    expected = ProfileName.parse(name).value  # il nome canonico (NFC) e quello salvato
+    expected = ProfileName.parse(name).value  # the canonical name (NFC) is the one saved
     profile = create_profile(tmp_path, name, folder_name="o'brien profilo")
     profile_id = profile.session.info.profile_id
     (tmp_path / "a.fit").write_bytes(imp.fit_run(1))
@@ -497,13 +498,13 @@ def test_t_sec_05_profile_names_with_quotes_and_sql_are_stored_and_read_back_ide
     try:
         assert reopened.info.name.value == expected
         assert reopened.info.profile_id == profile_id
-        assert len(reopened.activities.list_by_start()) == 1  # le tabelle ci sono ancora
+        assert len(reopened.activities.list_by_start()) == 1  # the tables are still there
     finally:
         reopened.close()
 
 
 def test_t_sec_05_no_sql_in_the_application_is_built_from_text(tmp_path: Path) -> None:
-    """Controllo statico: ogni argomento di `execute*` e una costante, mai testo composto."""
+    """Static check: every argument of `execute*` is a constant, never composed text."""
     root = Path(__file__).resolve().parents[2] / "src" / "ponos_coach"
     constants: dict[str, set[str]] = {}
     suspicious: list[str] = []
@@ -526,8 +527,8 @@ def test_t_sec_05_no_sql_in_the_application_is_built_from_text(tmp_path: Path) -
                 continue
             if not _is_constant_sql(node.args[0], constants[path.name]):
                 suspicious.append(f"{path.name}: {ast.unparse(node.args[0])[:80]}")
-    # Le sole composizioni ammesse: PRAGMA con costanti intere del modulo e le istruzioni
-    # delle migrazioni, che sono costanti di `sqlite_schema`. Qualsiasi altra va rivista.
+    # The only compositions allowed: PRAGMA with integer constants of the module and the
+    # migration statements, which are constants of `sqlite_schema`. Any other must be reviewed.
     assert suspicious == [
         "sqlite_database.py: f'PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}'",
         "sqlite_database.py: f'PRAGMA user_version = {int(SCHEMA_VERSION)}'",
@@ -551,7 +552,7 @@ def _is_constant_sql(node: ast.expr, module_constants: set[str]) -> bool:
 
 
 def populated_profile_paths(tmp_path: Path, profile: RealProfile) -> tuple[list[Path], list[Path]]:
-    """(cartella, lock e database con -wal/-shm), (archivio e tutto cio che contiene)."""
+    """(folder, lock and database with -wal/-shm), (archive and everything it contains)."""
     source = tmp_path / "sorgente"
     write(
         source,
@@ -561,7 +562,7 @@ def populated_profile_paths(tmp_path: Path, profile: RealProfile) -> tuple[list[
             "z.zip": zw.garmin_download(imp.fit_run(3)),
         },
     )
-    profile.import_folder(source)  # il database e aperto: ci sono anche -wal e -shm
+    profile.import_folder(source)  # the database is open: there are also -wal and -shm
     archive = profile.folder / PROFILE_ARCHIVE_DIR
     in_archive = [archive, *sorted(archive.rglob("*"))]
     others = [p for p in profile.folder.rglob("*") if p not in in_archive]
@@ -571,7 +572,7 @@ def populated_profile_paths(tmp_path: Path, profile: RealProfile) -> tuple[list[
         "ponos.sqlite3-shm",
         "ponos.sqlite3-wal",
     }
-    assert len(in_archive) == 1 + 1 + 3  # radice, anno, tre file
+    assert len(in_archive) == 1 + 1 + 3  # root, year, three files
     return [profile.folder, *others], in_archive
 
 
@@ -653,7 +654,7 @@ def test_t_sec_02_a_file_of_exactly_50_mib_is_read_not_skipped_and_then_refused_
     source = tmp_path / "al-limite"
     source.mkdir()
     with (source / "limite.fit").open("wb") as handle:
-        handle.truncate(50 * MIB)  # esattamente il tetto: non e "oltre 50 MB"
+        handle.truncate(50 * MIB)  # exactly the cap: it is not "over 50 MB"
 
     summary = profile.import_folder(source)
 

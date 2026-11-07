@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-UI-04 (parte pura): le figure del carico settimanale e del tempo nelle zone."""
+"""T-UI-04 (pure part): the weekly load and time-in-zones figures."""
 
 from __future__ import annotations
 
@@ -35,16 +35,16 @@ from ponos_coach.ui.load_figures import (
 from ponos_coach.ui.tokens import Theme, tokens_for
 from tests.ui.helpers import CHROME
 
-MONDAY = date(2025, 9, 1)  # un lunedì
-RED_ORANGE_END = 50.0  # gradi di tinta: da 0 a qui sono rossi, arancio e ambra
-RED_START = 335.0  # da qui a 360 il rosso
+MONDAY = date(2025, 9, 1)  # a Monday
+RED_ORANGE_END = 50.0  # degrees of hue: from 0 to here are reds, oranges and ambers
+RED_START = 335.0  # from here to 360 the red
 SPORT_NAMES = {sport: f"Sport {sport.value}" for sport in Sport}
 LOAD_LABELS = WeeklyLoadLabels("Week", "Load", SPORT_NAMES, CHROME)
 ZONES_LABELS = WeeklyZonesLabels("Week", "Time in zone", "Zone", CHROME)
 
 
 def long_history(weeks: int = 40) -> list[DayLoad]:
-    """Una corsa e (a settimane alterne) una pedalata a settimana, per `weeks` settimane."""
+    """A run and (in alternate weeks) one ride per week, for `weeks` weeks."""
     items: list[DayLoad] = []
     for index in range(weeks):
         monday = MONDAY + timedelta(weeks=index)
@@ -78,7 +78,7 @@ def test_weekly_load_shows_only_the_last_26_weeks() -> None:
 
     running = figure.data[0]
     assert len(running.x) == CHART_WEEKS == 26
-    assert running.x[-1] == through_of(40) - timedelta(days=3)  # il lunedì di questa settimana
+    assert running.x[-1] == through_of(40) - timedelta(days=3)  # the Monday of this week
     assert list(running.y) == [50.0 + i for i in range(14, 40)]
 
 
@@ -169,7 +169,7 @@ def test_zones_are_in_hours_per_week_and_the_axes_say_so() -> None:
 
     figure = build_weekly_zones_figure(weekly, ZONES_LABELS, tokens_for(Theme.LIGHT))
 
-    # la prima settimana ha due attività (corsa e pedalata), ciascuna con 600 s in Z1 e 1200 s in Z2
+    # the first week has two activities (run and ride), each with 600 s in Z1 and 1200 s in Z2
     first_week_hours = [float(trace.y[0]) for trace in figure.data]
     assert first_week_hours == pytest.approx([1200 / 3600, 2400 / 3600, 0, 0, 0])
     assert figure.layout.yaxis.title.text == "Time in zone (hours per week)"
@@ -195,7 +195,7 @@ def test_the_prepared_chart_carries_one_json_argument_and_an_ascii_script() -> N
 
     prefix, suffix = "ponosRender(", ");"
     assert prepared.script.startswith(prefix)
-    assert prepared.script.isascii()  # le virgolette e i simboli passano come escape JSON
+    assert prepared.script.isascii()  # quotes and symbols pass as JSON escapes
     payload = json.loads(prepared.script[len(prefix) : -len(suffix)])
     assert payload["filename"] == "ponos-coach-zones"
     assert payload["figure"]["data"][0]["name"] == "Z1 <85%"
@@ -227,11 +227,11 @@ def test_no_value_is_negative() -> None:
     assert all(np.all(np.asarray(trace.y) >= 0) for trace in figure.data)
 
 
-# --- Serie degli sport, colori, unità ed etichette delle zone -----------------------------------
+# --- Sport series, colours, units and zone labels -----------------------------------
 
 
 def every_sport_week(loads: dict[Sport, float]) -> list[DayLoad]:
-    """Un'attività per sport nella stessa settimana, con il carico dato."""
+    """One activity per sport in the same week, with the given load."""
     return [DayLoad(MONDAY, sport, load, ZoneSeconds.ZERO) for sport, load in loads.items()]
 
 
@@ -274,7 +274,7 @@ def test_with_more_than_five_sports_the_least_loaded_are_grouped_in_other() -> N
         SPORT_NAMES[Sport.HIKING]: 40.0,
         SPORT_NAMES[Sport.OTHER]: 15.0,  # trail + walking + other
     }
-    assert sum(series.values()) == sum(loads.values())  # il carico totale non cambia
+    assert sum(series.values()) == sum(loads.values())  # total load does not change
 
 
 def test_the_grouping_keeps_the_sport_order_other_last_and_the_color_of_each_sport() -> None:
@@ -316,7 +316,7 @@ def test_no_sport_color_is_red_or_orange(theme: Theme) -> None:
         hue, saturation, _ = colorsys.rgb_to_hsv(red / 255, green / 255, blue / 255)
         degrees = hue * 360
         warm = degrees < RED_ORANGE_END or degrees > RED_START
-        assert not (warm and saturation > 0.25), (sport, degrees)  # grigi e neri non contano
+        assert not (warm and saturation > 0.25), (sport, degrees)  # greys and blacks do not count
 
 
 def test_the_units_of_the_axes_and_tooltips_come_from_the_labels() -> None:

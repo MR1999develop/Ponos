@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Notifica di sistema finta (porta `SystemNotifier` della ui): registra le chiamate."""
+"""Fake system notification (`SystemNotifier` port of the ui): records the calls."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import threading
 
 
 class RecordingNotifier:
-    """Registra titolo e testo di ogni notifica. `fail_with` fa sollevare l'errore dato, per
-    provare che una notifica che fallisce non cambia nulla per l'utente."""
+    """Record title and text of each notification. `fail_with` makes it raise the given error, to
+    check that a failing notification changes nothing for the user."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
@@ -17,7 +17,7 @@ class RecordingNotifier:
         self._lock = threading.Lock()
 
     def notify(self, title: str, message: str) -> None:
-        """Vedi `SystemNotifier.notify`."""
+        """See `SystemNotifier.notify`."""
         with self._lock:
             self.calls.append((title, message))
         if self.fail_with is not None:

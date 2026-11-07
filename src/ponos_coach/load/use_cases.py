@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Casi d'uso della panoramica della forma: carico delle attività, PMC, pesi degli sport.
+"""Use cases of the form overview: activity load, PMC, sport weights.
 
-- `ComputeProfileOverview`: panoramica di un profilo (indice, archivio, cache dei carichi):
-  giorno locale, calcolo del carico, serie PMC.
-- `GetSportWeights` e `SetSportWeights`: leggono e impostano i pesi degli sport del profilo.
+- `ComputeProfileOverview`: overview of a profile (index, archive, load cache):
+  local day, load computation, PMC series.
+- `GetSportWeights` and `SetSportWeights`: read and set the profile's sport weights.
 """
 
 from __future__ import annotations
@@ -58,15 +58,15 @@ from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 
 
 def local_day_of(start: datetime, timezone: ZoneInfo) -> date:
-    """Giorno locale (nel fuso del profilo) dell'inizio di un'attività."""
+    """Local day (in the profile's time zone) of the start of an activity."""
     return start.astimezone(timezone).date()
 
 
 def load_of_activity(
     activity: Activity, physiology: Physiology, saved_weights: Mapping[Sport, SportWeight]
 ) -> ActivityLoad:
-    """Carico dell'attività sul tempo in movimento: l'unico punto di calcolo, usato dalla
-    panoramica e dal dettaglio. Il peso dello sport è quello salvato o, senza, il default."""
+    """Load of the activity over the moving time: the single computation point, used by the
+    overview and by the detail. The sport weight is the saved one or, without it, the default."""
     return compute_activity_load(
         activity.sport,
         activity.timer_s,
@@ -77,7 +77,8 @@ def load_of_activity(
 
 
 def _pmc_of(day_loads: Iterable[tuple[date, float]], today: date) -> PmcSeries:
-    """PMC dal primo giorno con attività a `today`; vuoto se non ce ne sono (o sono future)."""
+    """PMC from the first day with activity to `today`; empty if there are none (or they are in
+    the future)."""
     daily: dict[date, float] = defaultdict(float)
     for day, load in day_loads:
         daily[day] += load
@@ -89,33 +90,34 @@ def _pmc_of(day_loads: Iterable[tuple[date, float]], today: date) -> PmcSeries:
     return compute_pmc(daily, first_day, today)
 
 
-# --- Panoramica di un profilo ---------------------------------------------------------------
+# --- Overview of a profile ---------------------------------------------------------------
 
 
 class ExclusionReason(Enum):
-    """Perché un'attività del profilo non entra nella panoramica."""
+    """Why an activity of the profile does not enter the overview."""
 
-    FILE_MISSING = "file_missing"  # il file non è più nell'archivio
-    FILE_ALTERED = "file_altered"  # dimensione o SHA-256 diversi, o identità diversa
-    FILE_TOO_LARGE = "file_too_large"  # oltre il tetto di byte
-    UNREADABLE = "unreadable"  # altro errore dell'archivio
-    DECODE_FAILED = "decode_failed"  # il contenuto non è un'attività valida
+    FILE_MISSING = "file_missing"  # the file is no longer in the archive
+    FILE_ALTERED = "file_altered"  # different size or SHA-256, or different identity
+    FILE_TOO_LARGE = "file_too_large"  # beyond the byte cap
+    UNREADABLE = "unreadable"  # other archive error
+    DECODE_FAILED = "decode_failed"  # the content is not a valid activity
 
 
 class OverviewCancelledError(Exception):
-    """Il calcolo è stato annullato dall'utente; nessun risultato parziale."""
+    """The computation was cancelled by the user; no partial result."""
 
 
 type Decoder = Callable[[bytes, FileFormat], Activity]
-"""Decodifica i byte di un file archiviato; solleva `ActivityFileError` se non è valido."""
+"""Decodes the bytes of an archived file; raises `ActivityFileError` if it is not valid."""
 
 
 @dataclass(frozen=True, slots=True)
 class ProfileActivity:
-    """Un'attività del profilo con il suo carico e il riepilogo (distanza, dislivello).
+    """An activity of the profile with its load and summary (distance, ascent).
 
-    `start` è in UTC, `local_day` la data locale nel fuso del profilo; `load.source` dice se il
-    carico viene dalla FC o da una stima.
+    `start` is in UTC, `local_day` the local date in the profile's time zone; `load.source` says
+    whether the
+    load comes from HR or from an estimate.
     """
 
     identity: ActivityIdentity
@@ -130,7 +132,7 @@ class ProfileActivity:
 
 @dataclass(frozen=True, slots=True)
 class ExcludedActivity:
-    """Un'attività che non si è potuta calcolare e il motivo."""
+    """An activity that could not be computed and the reason."""
 
     identity: ActivityIdentity
     reason: ExclusionReason
@@ -138,25 +140,26 @@ class ExcludedActivity:
 
 @dataclass(frozen=True, slots=True)
 class ProfileOverview:
-    """Esito: PMC dal primo giorno con attività a `today` (vuoto senza attività), attività con
-    carico per inizio crescente, escluse nello stesso ordine."""
+    """Outcome: PMC from the first day with activity to `today` (empty without activities),
+    activities with
+    load by ascending start, excluded ones in the same order."""
 
     pmc: PmcSeries
     activities: tuple[ProfileActivity, ...]
     excluded: tuple[ExcludedActivity, ...]
 
     def day_loads(self) -> tuple[DayLoad, ...]:
-        """Le attività nella forma delle aggregazioni (giorno locale, sport, carico, zone)."""
+        """The activities in the shape of the aggregations (local day, sport, load, zones)."""
         return tuple(
             DayLoad(a.local_day, a.sport, a.load.load, a.load.zone_seconds) for a in self.activities
         )
 
     def weekly_load(self, through: date) -> WeeklyLoad:
-        """Carico per settimana ISO e sport fino alla settimana di `through` (di solito oggi)."""
+        """Load per ISO week and sport up to the week of `through` (usually today)."""
         return weekly_load_by_sport(self.day_loads(), through)
 
     def weekly_zones(self, through: date) -> WeeklyZones:
-        """Secondi per zona di FC e settimana ISO fino alla settimana di `through`."""
+        """Seconds per HR zone and ISO week up to the week of `through`."""
         return weekly_zone_seconds(self.day_loads(), through)
 
 
@@ -178,10 +181,10 @@ def _read_bytes(
 def read_original_activity(
     archive: ActivityArchive, record: ActivityRecord, decode: Decoder, max_file_bytes: int
 ) -> Activity | ExclusionReason:
-    """Legge l'originale dall'archivio (con il tetto di byte) e lo decodifica.
+    """Reads the original from the archive (with the byte cap) and decodes it.
 
-    Un guasto non solleva: dà il motivo (file mancante, alterato, troppo grande, illeggibile,
-    non decodificabile, o con un'identità diversa da quella del record).
+    A failure does not raise: it gives the reason (missing file, altered, too large, unreadable,
+    not decodable, or with an identity different from the record's).
     """
     data = _read_bytes(archive, record, max_file_bytes)
     if isinstance(data, ExclusionReason):
@@ -207,25 +210,25 @@ type _Computed = tuple[ActivityIdentity, LoadFingerprint, ActivityLoad]
 
 
 class ComputeProfileOverview:
-    """Calcola la panoramica del profilo aperto.
+    """Computes the overview of the open profile.
 
-    Per ogni attività dell'indice: giorno locale, parametri validi quel giorno, impronta; se la
-    cache ha il carico con quella impronta non si legge nulla, altrimenti si legge l'originale
-    dall'archivio (con il tetto di byte), lo si decodifica e si calcola il carico sul tempo in
-    movimento. Un guasto su una attività la mette tra le escluse senza fermare le altre.
-    I carichi calcolati si scrivono in cache in una sola transazione alla fine (anche dopo un
-    annullamento). Deterministico: stessi dati e parametri, stesso risultato.
+    For each activity in the index: local day, parameters valid that day, fingerprint; if the
+    cache has the load with that fingerprint nothing is read, otherwise the original is read
+    from the archive (with the byte cap), decoded, and the load is computed over the moving
+    time. A failure on an activity puts it among the excluded ones without stopping the others.
+    Computed loads are written to the cache in a single transaction at the end (even after a
+    cancellation). Deterministic: same data and parameters, same result.
 
-    I pesi degli sport sono quelli salvati nel profilo (`sport_weights`), letti a ogni calcolo;
-    uno sport senza peso salvato usa il default. L'impronta di un'attività comprende solo il
-    peso del suo sport: cambiare quello della bici non fa ricalcolare le corse.
+    Sport weights are those saved in the profile (`sport_weights`), read at every computation;
+    a sport without a saved weight uses the default. An activity's fingerprint includes only the
+    weight of its sport: changing the bike's does not recompute the runs.
 
-    Dipendenze volatili iniettate: porte, `decode` (fornita dal Composition Root), `today`
-    (oggi, nel fuso del profilo), `is_cancelled` (annullamento cooperativo, controllato prima di
-    ogni attività) e `report(fatte, totali)` per l'avanzamento.
+    Volatile dependencies injected: ports, `decode` (supplied by the Composition Root), `today`
+    (today, in the profile's time zone), `is_cancelled` (cooperative cancellation, checked before
+    every activity) and `report(done, total)` for progress.
     """
 
-    def __init__(  # noqa: PLR0913 - ogni porta è una dipendenza volatile distinta
+    def __init__(  # noqa: PLR0913 - every port is a distinct volatile dependency
         self,
         index: ActivityIndex,
         archive: ActivityArchive,
@@ -241,7 +244,7 @@ class ComputeProfileOverview:
         report: Callable[[int, int], None] = _ignore_progress,
     ) -> None:
         if max_file_bytes <= 0:
-            raise ValueError("il tetto di byte deve essere positivo")
+            raise ValueError("the byte cap must be positive")
         self._index = index
         self._archive = archive
         self._physiology = physiology
@@ -255,11 +258,11 @@ class ComputeProfileOverview:
         self._report = report
 
     def execute(self) -> ProfileOverview:
-        """Calcola la panoramica.
+        """Computes the overview.
 
         Raises:
-            OverviewCancelledError: `is_cancelled` è diventato vero.
-            MissingPhysiologyError: ci sono attività ma nessun parametro fisiologico.
+            OverviewCancelledError: `is_cancelled` became true.
+            MissingPhysiologyError: there are activities but no physiological parameter.
         """
         records = self._index.list_by_start()
         today = self._today()
@@ -301,7 +304,7 @@ class ComputeProfileOverview:
         physiology: Physiology,
         saved_weights: Mapping[Sport, SportWeight],
     ) -> ActivityLoad | ExclusionReason:
-        """Carico dall'originale in archivio, o il motivo per cui non si può calcolare."""
+        """Load from the original in the archive, or the reason why it cannot be computed."""
         activity = read_original_activity(self._archive, record, self._decode, self._max_file_bytes)
         if isinstance(activity, ExclusionReason):
             return activity
@@ -324,30 +327,31 @@ def _profile_activity(
     )  # fmt: skip
 
 
-# --- Pesi degli sport -----------------------------------------------------------------------
+# --- Sport weights -----------------------------------------------------------------------
 
 
 class GetSportWeights:
-    """Legge i pesi degli sport del profilo: quelli scelti dall'utente, il default per il resto."""
+    """Reads the profile's sport weights: those chosen by the user, the default for the rest."""
 
     def __init__(self, store: SportWeightStore) -> None:
         self._store = store
 
     def __call__(self) -> Mapping[Sport, SportWeight]:
-        """Il peso di ogni sport, tutti presenti.
+        """The weight of each sport, all present.
 
         Raises:
-            LoadStoreError: pesi salvati illeggibili.
+            LoadStoreError: saved weights unreadable.
         """
         return MappingProxyType(effective_weights(self._store.load()))
 
 
 class SetSportWeights:
-    """Imposta i pesi degli sport del profilo.
+    """Sets the profile's sport weights.
 
-    Si salvano solo i pesi diversi dal default (forma canonica: nessun ricalcolo inutile dei
-    carichi). I carichi già calcolati con altri pesi si ricalcolano da soli alla panoramica
-    successiva, perché l'impronta cambia.
+    Only the weights different from the default are saved (canonical form: no useless recomputation
+    of the
+    loads). Loads already computed with other weights are recomputed on their own at the next
+    overview, because the fingerprint changes.
     """
 
     def __init__(self, activities: ActivityIndex, store: SportWeightStore) -> None:
@@ -355,10 +359,10 @@ class SetSportWeights:
         self._store = store
 
     def __call__(self, weights: Mapping[Sport, SportWeight]) -> None:
-        """Sostituisce i pesi salvati con `weights` (gli sport non indicati tornano al default).
+        """Replaces the saved weights with `weights` (sports not indicated go back to the default).
 
         Raises:
-            LoadStoreError: scrittura non riuscita; i pesi di prima restano.
+            LoadStoreError: write failed; the previous weights stay.
         """
         with self._activities.transaction():
             self._store.replace(customised_weights(weights))

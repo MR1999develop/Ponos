@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Modifica dei dati del profilo: misure datate e pesi degli sport, nel thread dei dati.
+"""Editing the profile data: dated measurements and sport weights, on the data thread.
 
-Ogni lavoro (lettura dello storico, salvataggio delle misure, lettura e salvataggio dei pesi)
-costruisce il caso d'uso dentro il thread dei dati con la connessione del profilo aperto e
-restituisce il risultato come segnale. Dopo un salvataggio la panoramica si ricalcola. Peso,
-FC e dati fissi sono dati di salute: mai nei log né nei messaggi d'errore.
+Each job (reading the history, saving the measurements, reading and saving the weights)
+builds the use case inside the data thread with the open profile's connection and
+returns the result as a signal. After a save the overview is recomputed. Weight,
+HR and fixed data are health data: never in logs or error messages.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from ponos_coach.ui.workspace import ProfileAccess, WorkspaceController
 
 @dataclass(frozen=True, slots=True)
 class SavedEdit:
-    """Esito di un salvataggio: lo storico riletto e i periodi di validità effettivi."""
+    """Outcome of a save: the re-read history and the effective validity periods."""
 
     history: MeasurementHistory
     saved: SavedMeasurements
@@ -44,10 +44,10 @@ def _read_history(access: ProfileAccess) -> MeasurementHistory:
 
 
 class ProfileEditor(QObject):
-    """Lavori di modifica del profilo aperto. Gli esiti arrivano come segnali nel thread UI."""
+    """Jobs that edit the open profile. Outcomes arrive as signals on the UI thread."""
 
     measurements_loaded = Signal(object)  # MeasurementHistory
-    measurements_saved = Signal(object)  # SavedEdit: storico già riletto e periodi di validità
+    measurements_saved = Signal(object)  # SavedEdit: re-read history and validity periods
     measurements_rejected = Signal(object)  # EditIssue
     sport_weights_loaded = Signal(object)  # Mapping[Sport, SportWeight]
     sport_weights_saved = Signal()
@@ -60,13 +60,13 @@ class ProfileEditor(QObject):
     # --- Misure -----------------------------------------------------------------------
 
     def load_measurements(self) -> bool:
-        """Legge dati fissi e storico. Falso se ora non si può modificare il profilo."""
+        """Read fixed data and history. False if the profile cannot be edited now."""
         if not self._controller.can_edit_profile:
             return False
         return self._controller.run_on_profile(_read_history, self._after_load_measurements)
 
     def save_measurements(self, request: MeasurementsRequest) -> bool:
-        """Salva le misure datate e/o completa i dati fissi, poi rilegge lo storico."""
+        """Save the dated measurements and/or complete the fixed data, then re-read the history."""
         if not self._controller.can_edit_profile:
             return False
 
@@ -100,10 +100,10 @@ class ProfileEditor(QObject):
             else:
                 self.failed.emit(self._controller.describe_failure(error))
 
-    # --- Pesi degli sport -------------------------------------------------------------
+    # --- Sport weights -------------------------------------------------------------
 
     def load_sport_weights(self) -> bool:
-        """Legge i pesi degli sport. Falso se ora non si può modificare il profilo."""
+        """Read the sport weights. False if the profile cannot be edited now."""
         if not self._controller.can_edit_profile:
             return False
 
@@ -113,7 +113,7 @@ class ProfileEditor(QObject):
         return self._controller.run_on_profile(work, self._after_load_weights)
 
     def save_sport_weights(self, weights: Mapping[Sport, SportWeight]) -> bool:
-        """Salva i pesi degli sport e ricalcola la panoramica."""
+        """Save the sport weights and recompute the overview."""
         if not self._controller.can_edit_profile:
             return False
         chosen = dict(weights)

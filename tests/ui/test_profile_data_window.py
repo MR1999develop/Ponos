@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Fase 3: lingua, nuovo profilo con i dati del corpo, modifica profilo e pesi degli sport.
+"""Phase 3: language, new profile with body data, edit profile and sport weights.
 
-Si parte dalla finestra composta come fa `main()`, con profili e dati in `tmp_path`. Tutti i
-valori sono inventati (nessuna persona reale).
+We start from the window composed as `main()` does, with profiles and data in `tmp_path`. All the
+values are made up (no real person).
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ def settings(tmp_path: Path) -> QSettings:
 
 @pytest.fixture(autouse=True)
 def english_numbers() -> Iterator[None]:
-    """Numeri e date nel formato inglese, qualunque sia la lingua del computer che prova."""
+    """Numbers and dates in English format, whatever the language of the test computer."""
     previous = QLocale()
     QLocale.setDefault(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
     yield
@@ -74,7 +74,7 @@ def english_numbers() -> Iterator[None]:
 
 
 def window_with_activities(qtbot: QtBot, tmp_path: Path, settings: QSettings) -> MainWindow:
-    """Profilo creato dall'interfaccia, con le otto attività della cartella di prova."""
+    """Profile created from the interface, with the eight activities of the test folder."""
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
     window.start()
@@ -110,7 +110,7 @@ def open_weights_dialog(qtbot: QtBot, window: MainWindow) -> SportWeightsDialog:
 
 
 def chosen_birth(dialog: NewProfileDialog) -> date | None:
-    """La data di nascita nel modulo, letta da una funzione (il tipo non si restringe)."""
+    """The date of birth in the form, read through a function (the type is not narrowed)."""
     return dialog.form.birth_date
 
 
@@ -118,7 +118,7 @@ def click(button: QWidget) -> None:
     QTest.mouseClick(button, Qt.MouseButton.LeftButton)
 
 
-# --- Lingua -----------------------------------------------------------------------------------
+# --- Language -----------------------------------------------------------------------------------
 
 
 def test_the_language_menu_offers_english_and_italian_with_english_checked_by_default(
@@ -149,7 +149,7 @@ def test_choosing_italian_is_remembered_and_the_window_says_when_it_applies(
     box = open_message_box(qtbot, window, "languageChanged")
     assert box.text() == "The language changes the next time Ponos Coach starts."
     assert saved_language(settings) is Language.ITALIAN
-    assert window.windowTitle() == "Ponos Coach"  # non cambia a caldo
+    assert window.windowTitle() == "Ponos Coach"  # does not change live
     box.close()
 
     chosen = saved_language(settings) or Language.ENGLISH
@@ -170,7 +170,7 @@ def test_choosing_the_active_language_again_shows_no_message(
     assert saved_language(settings) is Language.ENGLISH
 
 
-# --- Nuovo profilo con altezza, peso e data di nascita ---------------------------------
+# --- New profile with height, weight and date of birth ---------------------------------
 
 
 def open_new_dialog(qtbot: QtBot, window: MainWindow) -> NewProfileDialog:
@@ -189,10 +189,10 @@ def test_creation_asks_for_the_body_data_and_shows_the_first_error_on_submit(
     dialog = open_new_dialog(qtbot, window)
     QTest.keyClicks(dialog.name_edit, PROFILE)
     pick_profile_folder(window, dialog, tmp_path / "profiles" / PROFILE)
-    assert dialog.height_edit.text() == ""  # nessun dato inventato
+    assert dialog.height_edit.text() == ""  # no made-up data
     assert dialog.weight_edit.text() == ""
     assert dialog.birth_edit.selected_date() is None
-    assert dialog.error_text(Field.HEIGHT) == ""  # mai errori alla prima scrittura
+    assert dialog.error_text(Field.HEIGHT) == ""  # never errors at the first write
 
     QTest.mouseClick(dialog.create_button, Qt.MouseButton.LeftButton)
 
@@ -200,7 +200,7 @@ def test_creation_asks_for_the_body_data_and_shows_the_first_error_on_submit(
     assert dialog.error_text(Field.WEIGHT) == "Enter the weight in kilograms."
     assert dialog.error_text(Field.BIRTH_DATE) == "Enter the date of birth."
     assert window.controller.profile is None
-    assert window.new_profile_dialog is dialog  # resta aperto con i dati scritti
+    assert window.new_profile_dialog is dialog  # stays open with the data written
 
 
 def test_body_errors_update_while_typing_and_never_repeat_the_typed_value(
@@ -210,7 +210,7 @@ def test_body_errors_update_while_typing_and_never_repeat_the_typed_value(
     qtbot.addWidget(window)
     dialog = open_new_dialog(qtbot, window)
     pick_profile_folder(window, dialog, tmp_path / "profiles" / PROFILE)
-    QTest.mouseClick(dialog.create_button, Qt.MouseButton.LeftButton)  # attiva gli errori
+    QTest.mouseClick(dialog.create_button, Qt.MouseButton.LeftButton)  # turns on the errors
     QTest.keyClicks(dialog.height_edit, "31337")
     QTest.keyClicks(dialog.weight_edit, "66,66")
 
@@ -237,11 +237,13 @@ def test_the_birth_date_control_has_the_limits_of_the_domain(
     latest = latest_birth_date(TODAY)
 
     assert edit.maximumDate() == QDate(latest.year, latest.month, latest.day)
-    assert edit.minimumDate() == NOT_SET_DATE  # un giorno prima del 1900-01-01
+    assert edit.minimumDate() == NOT_SET_DATE  # one day before 1900-01-01
     assert edit.minimumDate().addDays(1) == QDate(1900, 1, 1)
     edit.select(latest)  # on point
     assert chosen_birth(dialog) == latest
-    edit.setDate(edit.maximumDate().addDays(1))  # off point: il controllo lo riporta al limite
+    edit.setDate(
+        edit.maximumDate().addDays(1)
+    )  # off point: the control brings it back to the limit
     assert chosen_birth(dialog) == latest
     edit.select(None)
     assert chosen_birth(dialog) is None
@@ -267,12 +269,14 @@ def test_the_stored_body_data_come_back_in_edit_profile_and_the_weight_in_the_hi
     assert labels["fixedName"] == PROFILE
     assert labels["fixedHeightValue"] == "183 cm"
     assert labels["fixedSex"] == "Male"
-    assert edit.height_edit.isHidden()  # niente da completare
+    assert edit.height_edit.isHidden()  # nothing to complete
     assert edit.birth_edit.isHidden()
     model = edit.history_table.model()
     assert model.rowCount() == 1
     assert model.data(model.index(0, 1)) == "71.3"
-    assert model.data(model.index(0, 4)) == "171"  # soglia stimata al 90% della massima di 190
+    assert (
+        model.data(model.index(0, 4)) == "171"
+    )  # threshold estimated at 90% of the maximum of 190
 
 
 def test_body_data_never_reach_the_logs(
@@ -300,7 +304,7 @@ def test_body_data_never_reach_the_logs(
         assert secret not in text
 
 
-# --- Modifica profilo ------------------------------------------------------------------
+# --- Edit profile ------------------------------------------------------------------
 
 
 def test_a_past_measurement_changes_the_load_and_the_overview_is_recalculated(
@@ -309,8 +313,8 @@ def test_a_past_measurement_changes_the_load_and_the_overview_is_recalculated(
     window = window_with_activities(qtbot, tmp_path, settings)
     before = first_load(window)
     dialog = open_edit_dialog(qtbot, window)
-    assert dialog.valid_from_edit.date() == QDate(2026, 6, 30)  # oggi per default
-    assert dialog.valid_from_edit.maximumDate() == QDate(2026, 6, 30)  # mai nel futuro
+    assert dialog.valid_from_edit.date() == QDate(2026, 6, 30)  # today by default
+    assert dialog.valid_from_edit.maximumDate() == QDate(2026, 6, 30)  # never in the future
     assert not dialog.save_button.isEnabled()
     assert dialog.save_button.toolTip() == "Change at least one value first."
 
@@ -326,7 +330,7 @@ def test_a_past_measurement_changes_the_load_and_the_overview_is_recalculated(
         ),
         timeout=WAIT_MS,
     )
-    assert first_load(window) > before  # soglia più bassa: stessa FC pesa di più
+    assert first_load(window) > before  # lower threshold: the same HR weighs more
     assert "recalculated" in window.statusBar().currentMessage()
 
 
@@ -349,7 +353,7 @@ def test_only_the_changed_fields_are_stored_and_the_history_lists_the_new_row(
         [model.data(model.index(row, col)) for col in range(model.columnCount())]
         for row in range(model.rowCount())
     ]
-    # la nuova voce tiene FC minima e massima di prima: cambia solo la soglia
+    # the new entry keeps the previous minimum and maximum HR: only the threshold changes
     thresholds = {row[4] for row in rows}
     assert thresholds == {"171", "150"}
     assert {row[2] for row in rows} == {"50"}
@@ -370,7 +374,7 @@ def test_a_weight_with_a_past_date_is_added_to_the_history(
     again = open_edit_dialog(qtbot, window)
 
     model = again.history_table.model()
-    assert model.rowCount() == 2  # la creazione e il 10 maggio
+    assert model.rowCount() == 2  # the creation and 10 May
     weights = {model.data(model.index(row, 1)) for row in range(model.rowCount())}
     assert weights == {"65.5", "64.0"}
 
@@ -387,7 +391,7 @@ def test_an_invalid_weight_is_reported_on_the_field_and_nothing_is_saved(
 
     assert "at most one decimal" in dialog.error_text(EditField.WEIGHT)
     assert "70" not in dialog.error_text(EditField.WEIGHT).replace("300", "")
-    assert window.profile_dialogs.edit_dialog is dialog  # resta aperto con i dati scritti
+    assert window.profile_dialogs.edit_dialog is dialog  # stays open with the data written
     assert dialog.weight_edit.text() == "70,55"
 
 
@@ -396,7 +400,7 @@ def test_heart_rate_that_does_not_fit_together_is_reported_before_saving(
 ) -> None:
     window = window_with_activities(qtbot, tmp_path, settings)
     dialog = open_edit_dialog(qtbot, window)
-    dialog.min_box.setValue(200)  # sopra la soglia e la massima
+    dialog.min_box.setValue(200)  # above the threshold and the maximum
 
     click(dialog.save_button)
 
@@ -414,7 +418,7 @@ def test_a_rejection_from_the_use_case_stays_open_with_the_message_on_the_right_
     dialog = open_edit_dialog(qtbot, window)
     future = MeasurementUpdate(date(2027, 1, 1), weight=Weight(700))
 
-    dialog.save_requested.emit(MeasurementsRequest(future, None))  # il modulo non lo permette
+    dialog.save_requested.emit(MeasurementsRequest(future, None))  # the form does not allow it
 
     qtbot.waitUntil(lambda: dialog.error_text(EditField.VALID_FROM) != "", timeout=WAIT_MS)
     assert dialog.error_text(EditField.VALID_FROM) == "The date cannot be in the future."
@@ -437,7 +441,7 @@ def test_a_profile_created_without_height_and_birth_date_completes_them_once(
         "Europe/Rome",
         Physiology(HeartRateLimits(50, 190), ThresholdHeartRate(171), Sex.FEMALE),
         TODAY,
-    )  # come un profilo di una versione precedente: senza altezza, data di nascita e peso
+    )  # like a profile from a previous version: without height, date of birth and weight
     assert window.controller.create_profile(request)
     qtbot.waitUntil(lambda: isinstance(window.controller.overview_state, Ready), timeout=WAIT_MS)
 
@@ -445,10 +449,10 @@ def test_a_profile_created_without_height_and_birth_date_completes_them_once(
 
     assert first.form.needs_fixed_data
     assert not first.height_edit.isHidden()
-    assert first.history_table.model().rowCount() == 1  # solo la FC: nessun peso
+    assert first.history_table.model().rowCount() == 1  # HR only: no weight
     assert not first.save_button.isEnabled()
     QTest.keyClicks(first.height_edit, "168")
-    click(first.save_button)  # manca la data di nascita
+    click(first.save_button)  # the date of birth is missing
     assert first.error_text(EditField.BIRTH_DATE) == "Enter the date of birth."
     first.birth_edit.select(date(1991, 11, 5))
     click(first.save_button)
@@ -489,7 +493,7 @@ def test_edit_commands_wait_for_a_profile_and_for_the_calculation_with_the_reaso
     assert "Wait" not in window.edit_profile_action.toolTip()
 
 
-# --- Pesi degli sport -------------------------------------------------------------------------
+# --- Sport weights -------------------------------------------------------------------------
 
 
 def test_sport_weights_dialog_shows_the_defaults_and_explains_the_effect(
@@ -510,7 +514,7 @@ def test_sport_weights_dialog_shows_the_defaults_and_explains_the_effect(
     )
     assert "recalculates every activity" in explanation
     assert not dialog.save_button.isEnabled()
-    assert not dialog.restore_button.isEnabled()  # già i predefiniti
+    assert not dialog.restore_button.isEnabled()  # already the defaults
     assert dialog.restore_button.toolTip() == "All weights already have their default value."
 
 
@@ -534,7 +538,7 @@ def test_saving_a_sport_weight_rescales_the_load_and_restoring_defaults_brings_i
     assert first_load(window) == pytest.approx(before * 2.0)
 
     again = open_weights_dialog(qtbot, window)
-    assert again.box(Sport.RUNNING).value() == 2.0  # persistito
+    assert again.box(Sport.RUNNING).value() == 2.0  # persisted
     click(again.restore_button)
     assert again.box(Sport.RUNNING).value() == default_weight(Sport.RUNNING).value
     click(again.save_button)
@@ -576,7 +580,7 @@ def test_closing_the_window_with_the_dialogs_open_finishes_the_closing(
     assert window.profile_dialogs.weights_dialog is None
 
 
-# --- Periodo di validità (R6) ----------------------------------------------------------------
+# --- Validity period (R6) ----------------------------------------------------------------
 
 
 def test_the_validity_day_can_go_back_to_the_first_day_the_domain_accepts(
@@ -593,22 +597,22 @@ def test_a_day_before_a_later_measurement_warns_before_saving_and_the_status_giv
 ) -> None:
     window = window_with_activities(qtbot, tmp_path, settings)
     dialog = open_edit_dialog(qtbot, window)
-    assert dialog.validity_notice_text == ""  # niente da avvisare finché non si cambia nulla
+    assert dialog.validity_notice_text == ""  # nothing to warn about until something changes
     dialog.valid_from_edit.setDate(QDate(2026, 5, 10))
     dialog.weight_edit.clear()
     QTest.keyClicks(dialog.weight_edit, "64,0")
 
-    # il profilo ha già un peso da oggi (30 giugno): il nuovo vale fino al giorno prima
+    # the profile already has a weight from today (30 June): the new one lasts until the day before
     assert "only until" in dialog.validity_notice_text
     assert "6/29/26" in dialog.validity_notice_text
     assert dialog.note_text(EditField.WEIGHT) == "No weight is recorded for this day."
-    assert window.profile_dialogs.edit_dialog is dialog  # l'avviso non è un dialogo che blocca
+    assert window.profile_dialogs.edit_dialog is dialog  # the warning is not a blocking dialog
     click(dialog.save_button)
     qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
 
     message = window.statusBar().currentMessage()
     assert "Weight valid from 5/10/26 to 6/29/26." in message
-    assert "Heart rate valid" not in message  # la FC non è stata toccata
+    assert "Heart rate valid" not in message  # the HR was not touched
     assert "recalculated" in message
 
 
@@ -619,7 +623,7 @@ def test_the_status_says_from_when_an_open_period_holds_onwards(
     dialog = open_edit_dialog(qtbot, window)
     dialog.threshold_box.setValue(150)
 
-    assert dialog.validity_notice_text == ""  # oggi: nessuna voce successiva
+    assert dialog.validity_notice_text == ""  # today: no later entry
     click(dialog.save_button)
     qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
 
@@ -636,10 +640,10 @@ def test_changing_the_day_after_an_edit_shows_the_value_in_force_the_new_day(
 
     dialog.valid_from_edit.setDate(QDate(2026, 5, 10))
 
-    assert dialog.threshold_box.value() == 150  # la modifica non si perde
+    assert dialog.threshold_box.value() == 150  # the change is not lost
     assert dialog.note_text(EditField.THRESHOLD) == "In force on this day: 171 bpm"
-    assert "only until" in dialog.validity_notice_text  # ora c'è una voce successiva (oggi)
-    dialog.threshold_box.setValue(171)  # di nuovo il valore in vigore: non è più una modifica
+    assert "only until" in dialog.validity_notice_text  # now there is a later entry (today)
+    dialog.threshold_box.setValue(171)  # again the value in force: no longer a change
     assert dialog.note_text(EditField.THRESHOLD) == ""
     assert dialog.validity_notice_text == ""
     assert not dialog.save_button.isEnabled()
@@ -648,7 +652,7 @@ def test_changing_the_day_after_an_edit_shows_the_value_in_force_the_new_day(
 def test_profile_commands_are_disabled_as_soon_as_an_overview_recalculation_starts(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
-    """Regressione (CI della PR #3): durante il calcolo i comandi non restano attivi e muti."""
+    """Regression (PR #3 CI): during the computation the commands do not stay active and silent."""
     window = window_with_activities(qtbot, tmp_path, settings)
     assert window.edit_profile_action.isEnabled()
 

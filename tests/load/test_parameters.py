@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Impronta dei parametri del carico e voci fisiologiche con data di validità."""
+"""Fingerprint of the load parameters and physiology entries with validity date."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ def test_sport_weights_change_the_fingerprint() -> None:
 def test_fingerprint_text_must_be_lowercase_hex_of_64_digits() -> None:
     LoadFingerprint("0" * 64)
     for text in ("", "A" * 64, "0" * 63, "0" * 65, "z" * 64):
-        with pytest.raises(ValueError, match="impronta"):
+        with pytest.raises(ValueError, match="fingerprint"):
             LoadFingerprint(text)
 
 
@@ -75,7 +75,7 @@ def test_entry_keeps_its_date_and_parameters() -> None:
 def test_fingerprint_changes_when_the_zone_percentages_change(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Le zone fanno parte del modello: ridefinirle invalida i carichi salvati."""
+    """Zones are part of the model: redefining them invalidates the saved loads."""
     before = load_fingerprint(physiology(), {})
     monkeypatch.setattr(parameters, "ZONE_STARTS_PERCENT", (80, 88, 94, 100))
 

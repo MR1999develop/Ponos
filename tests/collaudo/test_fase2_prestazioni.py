@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-SYNC-01 su 20.000 attività con SQLite vero e T-UI-02 durante la sincronizzazione.
+"""T-SYNC-01 on 20,000 activities with real SQLite and T-UI-02 during synchronisation.
 
-Test lunghi: solo nella sessione `collaudo`. Misure con distribuzione (p50, p95, massimo) nel
-rapporto; le asserzioni sono ampie (il rumore della macchina rende instabile un confronto stretto),
-tranne i 100 ms del piano per l'interfaccia, che restano rigidi.
+Long tests: only in the `collaudo` session. Measurements with distribution (p50, p95, maximum) in
+the
+report; the assertions are loose (machine noise makes a tight comparison unstable),
+except the 100 ms of the plan for the interface, which stay rigid.
 """
 
 from __future__ import annotations
@@ -60,14 +61,14 @@ pytestmark = pytest.mark.collaudo
 
 HISTORY = 20_000
 PAGE_SIZE = 100
-UI_EVENT_LIMIT_S = 0.1  # PLAN 7.6: un evento di input si elabora entro 100 ms
-LISTING_PAGE_BUDGET_S = 1.0  # una pagina di 100 voci (SQLite + giornale) in meno di 1 s
-MATCH_ENTRY_BUDGET_S = 0.25  # un abbinamento con 20.000 attività nell'indice
+UI_EVENT_LIMIT_S = 0.1  # PLAN 7.6: an input event is processed within 100 ms
+LISTING_PAGE_BUDGET_S = 1.0  # a page of 100 entries (SQLite + journal) in under 1 s
+MATCH_ENTRY_BUDGET_S = 0.25  # a match with 20,000 activities in the index
 TOTAL_BUDGET_S = 900.0
 
 
 def report(line: str) -> None:
-    print(line)  # noqa: T201 - il rapporto delle misure
+    print(line)  # noqa: T201 - the report of the measurements
 
 
 def percentiles(values: list[float]) -> str:
@@ -110,7 +111,7 @@ def rig(tmp_path: Path) -> Iterator[SyncRig]:
 
 
 def preimport_everything(rig: SyncRig) -> None:
-    """20.000 attività già importate da file (cinque secondi di scarto): l'indice è pieno."""
+    """20,000 activities already imported from files (five seconds apart): the index is full."""
     batch = 500
     for first in range(0, HISTORY, batch):
         with rig.index.transaction():
@@ -142,13 +143,13 @@ def test_t_sync_01_collaudo_twenty_thousand_activities_listing_and_matching_time
     listing = [b - a for (pa, a), (pb, b) in pairs if pa is pb is SyncPhase.LISTING]
     matching = [b - a for (pa, a), (pb, b) in pairs if pa is pb is SyncPhase.DOWNLOADING]
     with capsys.disabled():
-        report(f"\nT-SYNC-01 [{HISTORY} attivita, SQLite vero] totale {total_s:.1f}s")
-        report(f"  elenco, per pagina da {PAGE_SIZE}: {percentiles(listing)}")
-        report(f"  abbinamento, per voce: {percentiles(matching)}")
+        report(f"\nT-SYNC-01 [{HISTORY} activities, real SQLite] total {total_s:.1f}s")
+        report(f"  list, per page of {PAGE_SIZE}: {percentiles(listing)}")
+        report(f"  matching, per entry: {percentiles(matching)}")
     assert outcome.completed and outcome.failures == ()
     assert (outcome.new_entries, outcome.matched, outcome.downloaded) == (HISTORY, HISTORY, 0)
-    assert rig.fake.downloads == []  # tutto abbinato: nessun download
-    assert len(rig.records()) == HISTORY  # nessun duplicato
+    assert rig.fake.downloads == []  # everything matched: no download
+    assert len(rig.records()) == HISTORY  # no duplicate
     assert max(listing) < LISTING_PAGE_BUDGET_S
     assert max(matching) < MATCH_ENTRY_BUDGET_S
     assert total_s < TOTAL_BUDGET_S
@@ -170,19 +171,17 @@ def test_t_sync_01_collaudo_twenty_thousand_incremental_and_full_verification_ti
     verify_s = time.perf_counter() - verify_started
 
     with capsys.disabled():
-        report(f"\nT-SYNC-01 [{HISTORY} attivita, SQLite vero, archivio in memoria]")
-        report(f"  prima sincronizzazione completa: {first_s:.1f}s")
-        report(
-            f"  incrementale senza novita: {incremental_s:.3f}s; verifica completa: {verify_s:.1f}s"
-        )
+        report(f"\nT-SYNC-01 [{HISTORY} activities, real SQLite, in-memory archive]")
+        report(f"  first complete synchronisation: {first_s:.1f}s")
+        report(f"  incremental, nothing new: {incremental_s:.3f}s; full check: {verify_s:.1f}s")
     assert incremental.kind is ListingKind.INCREMENTAL and incremental.downloaded == 0
     assert verify.kind is ListingKind.VERIFY and (verify.new_entries, verify.downloaded) == (0, 0)
     assert rig.journal.counts()[SyncStatus.DOWNLOADED] == HISTORY
-    assert incremental_s < 5.0  # una pagina: quasi nulla
+    assert incremental_s < 5.0  # one page: almost nothing
     assert verify_s < TOTAL_BUDGET_S
 
 
-# --- T-UI-02 durante la sincronizzazione ---------------------------------------------------------
+# --- T-UI-02 during synchronisation ---------------------------------------------------------
 
 
 def test_t_ui_02_collaudo_the_event_loop_is_never_held_for_100_ms_during_a_sync(
@@ -222,11 +221,11 @@ def test_t_ui_02_collaudo_the_event_loop_is_never_held_for_100_ms_during_a_sync(
     try:
         timer.start()
         with qtbot.waitSignal(controller.sync_finished, timeout=300_000):
-            controller.profile_opened(profile_id, profile.folder)  # controlla e sincronizza
+            controller.profile_opened(profile_id, profile.folder)  # checks and synchronises
         timer.stop()
 
         with capsys.disabled():
-            report(f"\nT-UI-02 durante la sincronizzazione ({count} FIT veri): scatti da 10 ms")
+            report(f"\nT-UI-02 during synchronisation ({count} real FIT files): 10 ms ticks")
             report(f"  {percentiles(gaps)}")
         assert isinstance(results[0], SyncFinished) and results[0].outcome.downloaded == count
         assert max(gaps) < UI_EVENT_LIMIT_S

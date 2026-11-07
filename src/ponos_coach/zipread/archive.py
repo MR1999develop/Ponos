@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Lettura sicura di archivi ZIP non fidati, in memoria (PLAN.md 4.9).
+"""Safe reading of untrusted ZIP archives, in memory (PLAN.md 4.9).
 
-Voci e dimensioni dichiarate si controllano prima di estrarre (directory centrale letta con un
-tetto, numero di voci dichiarato e reale, somma delle dimensioni, rapporto di compressione per
-voce, dimensione per voce); la dimensione reale si ricontrolla durante l'estrazione a blocchi e
-il CRC si verifica fino all'ultimo byte. Voci cifrate, ZIP annidati e nomi non sicuri si
-rifiutano; i nomi delle voci non sono mai percorsi e non si usano per scrivere. Ogni rifiuto è
-un `ZipReadError` con il motivo, mai uno ZIP riparato.
+Entries and declared sizes are checked before extracting (central directory read with a
+cap, declared and actual number of entries, sum of sizes, compression ratio per
+entry, size per entry); the real size is rechecked during block extraction and
+the CRC is verified up to the last byte. Encrypted entries, nested ZIPs and unsafe names are
+rejected; entry names are never paths and are not used for writing. Every rejection is
+a `ZipReadError` with the reason, never a repaired ZIP.
 
-Modulo di basso livello: non importa nulla del progetto.
+Low-level module: it imports nothing from the project.
 """
 
 from __future__ import annotations
@@ -32,9 +32,9 @@ _MIB = 1024 * 1024
 _GIB = 1024 * _MIB
 _BLOCK_BYTES = 64 * 1024
 _ZIP_STORED, _ZIP_DEFLATED, _ZIP_AES = 0, 8, 99
-_ZIP_ENCRYPTED_FLAGS = 0x1 | 0x40 | 0x2000  # cifrata, cifratura forte, directory mascherata
+_ZIP_ENCRYPTED_FLAGS = 0x1 | 0x40 | 0x2000  # encrypted, strong encryption, masked directory
 
-# Directory centrale e record finale dello ZIP.
+# Central directory and end record of the ZIP.
 _EOCD = struct.Struct("<4sHHHHIIH")
 _EOCD_SIGNATURE = b"PK\x05\x06"
 _EOCD_MAX_COMMENT = 0xFFFF
@@ -61,20 +61,20 @@ _ZIP_ERRORS = (
 
 
 class ZipReason(Enum):
-    """Perché uno ZIP o una sua voce non si legge. Il valore è stabile."""
+    """Why a ZIP or one of its entries cannot be read. The value is stable."""
 
-    ARCHIVE_INVALID = "archive_invalid"  # corrotto, incoerente, dimensione o CRC falsi
-    ARCHIVE_LIMIT = "archive_limit"  # troppe voci, troppi byte, rapporto di compressione
-    ENCRYPTED = "encrypted"  # voce cifrata
-    UNSAFE_NAME = "unsafe_name"  # `..`, percorso assoluto, unità, controlli, nome riservato
-    TOO_LARGE = "too_large"  # voce oltre `max_entry_bytes`
-    NESTED_ARCHIVE = "nested_archive"  # ZIP dentro uno ZIP
-    NO_ACTIVITY = "no_activity"  # nessuna voce `.fit` o `.gpx`
-    MULTIPLE_ACTIVITIES = "multiple_activities"  # più di una voce `.fit` o `.gpx`
+    ARCHIVE_INVALID = "archive_invalid"  # corrupt, inconsistent, false size or CRC
+    ARCHIVE_LIMIT = "archive_limit"  # too many entries, too many bytes, compression ratio
+    ENCRYPTED = "encrypted"  # encrypted entry
+    UNSAFE_NAME = "unsafe_name"  # `..`, absolute path, drive, control characters, reserved name
+    TOO_LARGE = "too_large"  # entry beyond `max_entry_bytes`
+    NESTED_ARCHIVE = "nested_archive"  # ZIP inside a ZIP
+    NO_ACTIVITY = "no_activity"  # no `.fit` or `.gpx` entry
+    MULTIPLE_ACTIVITIES = "multiple_activities"  # more than one `.fit` or `.gpx` entry
 
 
 class ZipReadError(Exception):
-    """Lo ZIP o la voce non si leggono; `reason` dice perché. Il messaggio è solo il motivo."""
+    """The ZIP or the entry cannot be read; `reason` says why. The message is only the reason."""
 
     def __init__(self, reason: ZipReason) -> None:
         super().__init__(reason.value)
@@ -83,33 +83,33 @@ class ZipReadError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class ZipLimits:
-    """Tetti della lettura; tutti positivi. I default sono quelli del progetto (PLAN.md 4.9)."""
+    """Reading caps; all positive. The defaults are the project's (PLAN.md 4.9)."""
 
-    max_entries: int = 50_000  # voci di un solo ZIP
-    max_total_bytes: int = 5 * _GIB  # somma delle dimensioni dichiarate
-    max_ratio: int = 100  # dimensione dichiarata / dimensione compressa, per voce
-    max_directory_bytes: int = 32 * _MIB  # directory centrale, letta in memoria
-    max_entry_bytes: int = 50 * _MIB  # dimensione dichiarata di una voce
+    max_entries: int = 50_000  # entries of a single ZIP
+    max_total_bytes: int = 5 * _GIB  # sum of the declared sizes
+    max_ratio: int = 100  # declared size / compressed size, per entry
+    max_directory_bytes: int = 32 * _MIB  # central directory, read into memory
+    max_entry_bytes: int = 50 * _MIB  # declared size of an entry
 
     def __post_init__(self) -> None:
         for item in fields(self):
             if getattr(self, item.name) <= 0:
-                raise ValueError(f"il limite {item.name} deve essere positivo")
+                raise ValueError(f"the limit {item.name} must be positive")
 
 
 @dataclass(frozen=True, slots=True)
 class ZipActivity:
-    """La voce di attività estratta: `suffix` è `.fit` o `.gpx`; il nome della voce non esce."""
+    """The extracted activity entry: `suffix` is `.fit` or `.gpx`; the entry name does not leave."""
 
     suffix: str
     content: bytes
 
 
-# --- Directory centrale ---------------------------------------------------------------------
+# --- Central directory ----------------------------------------------------------------
 
 
 def _locate_zip64(handle: BinaryIO, end_position: int) -> tuple[int, int, int]:
-    """Voci, byte e inizio della directory centrale da un record ZIP64."""
+    """Entries, bytes and start of the central directory from a ZIP64 record."""
     record_position = end_position - _ZIP64_LOCATOR.size - _ZIP64_RECORD.size
     if record_position < 0:
         raise ZipReadError(ZipReason.ARCHIVE_INVALID)
@@ -126,7 +126,7 @@ def _locate_zip64(handle: BinaryIO, end_position: int) -> tuple[int, int, int]:
 
 
 def _locate_directory(handle: BinaryIO, file_size: int) -> tuple[int, int, int]:
-    """(voci dichiarate, byte, posizione) della directory centrale, dal record finale."""
+    """(declared entries, bytes, position) of the central directory, from the end record."""
     tail_length = min(file_size, _EOCD.size + _EOCD_MAX_COMMENT)
     handle.seek(file_size - tail_length)
     tail = handle.read(tail_length)
@@ -137,14 +137,14 @@ def _locate_directory(handle: BinaryIO, file_size: int) -> tuple[int, int, int]:
     _, disk, directory_disk, on_disk, total, directory_bytes, directory_offset, _ = values
     end_position = file_size - tail_length + found
     if disk or directory_disk or on_disk != total:
-        raise ZipReadError(ZipReason.ARCHIVE_INVALID)  # archivio su più dischi
+        raise ZipReadError(ZipReason.ARCHIVE_INVALID)  # archive spanning several disks
     if _UINT16_MAX in (total, on_disk) or _UINT32_MAX in (directory_bytes, directory_offset):
         return _locate_zip64(handle, end_position)
     return total, directory_bytes, end_position - directory_bytes
 
 
 def _count_directory_entries(raw: bytes, limit: int) -> int:
-    """Voci della directory centrale contate sui byte stessi; oltre `limit` si ferma."""
+    """Entries of the central directory counted on the bytes themselves; beyond `limit` it stops."""
     position = count = 0
     while position < len(raw):
         if raw[position : position + 4] != _CENTRAL_SIGNATURE or position + 46 > len(raw):
@@ -160,8 +160,8 @@ def _count_directory_entries(raw: bytes, limit: int) -> int:
 
 
 def _check_directory(handle: BinaryIO, limits: ZipLimits) -> int:
-    """Controlla la directory centrale prima di lasciarla leggere a `zipfile`: dimensione,
-    numero di voci dichiarato e reale. Restituisce il numero di voci."""
+    """Checks the central directory before letting `zipfile` read it: size,
+    declared and actual number of entries. Returns the number of entries."""
     file_size = handle.seek(0, os.SEEK_END)
     declared, directory_bytes, start = _locate_directory(handle, file_size)
     if declared > limits.max_entries or directory_bytes > limits.max_directory_bytes:
@@ -177,12 +177,12 @@ def _check_directory(handle: BinaryIO, limits: ZipLimits) -> int:
     return declared
 
 
-# --- Interfaccia ------------------------------------------------------------------------------
+# --- Interface ------------------------------------------------------------------------
 
 
 def open_checked_zip(handle: BinaryIO, limits: ZipLimits) -> zipfile.ZipFile:
-    """Apre lo ZIP dopo aver controllato directory, numero di voci, somma delle dimensioni
-    dichiarate e nomi duplicati (anche solo per maiuscole). Chi chiama chiude l'archivio e
+    """Opens the ZIP after checking directory, number of entries, sum of declared
+    sizes and duplicate names (even by case only). The caller closes the archive and
     l'handle.
 
     Raises:
@@ -205,7 +205,7 @@ def open_checked_zip(handle: BinaryIO, limits: ZipLimits) -> zipfile.ZipFile:
 
 
 def entry_issue(info: zipfile.ZipInfo, limits: ZipLimits) -> ZipReason | None:
-    """Perché una voce non si estrae (None se va bene), da dati dichiarati."""
+    """Why an entry is not extracted (None if fine), from declared data."""
     checks = (
         (not is_safe_entry_name(info.filename), ZipReason.UNSAFE_NAME),
         (
@@ -220,11 +220,11 @@ def entry_issue(info: zipfile.ZipInfo, limits: ZipLimits) -> ZipReason | None:
 
 
 def extract_entry(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
-    """Estrae la voce in memoria a blocchi; la dimensione reale deve essere quella dichiarata.
+    """Extracts the entry in memory in blocks; the real size must be the declared one.
 
     Raises:
-        ZipReadError: `ARCHIVE_INVALID` (CRC errato, deflate corrotto, voce troncata o con
-            dimensione diversa da quella dichiarata).
+        ZipReadError: `ARCHIVE_INVALID` (wrong CRC, corrupt deflate, truncated entry or with
+            size different from the declared one).
     """
     chunks: list[bytes] = []
     total = 0
@@ -243,7 +243,7 @@ def extract_entry(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
 
 
 def _single_activity(archive: zipfile.ZipFile) -> zipfile.ZipInfo:
-    """L'unica voce di attività dell'archivio; uno ZIP annidato si rifiuta."""
+    """The only activity entry of the archive; a nested ZIP is rejected."""
     candidates: list[zipfile.ZipInfo] = []
     for info in archive.infolist():
         suffix = file_suffix(info.filename)
@@ -260,14 +260,14 @@ def _single_activity(archive: zipfile.ZipFile) -> zipfile.ZipInfo:
 
 
 def read_activity_entry(content: bytes, limits: ZipLimits | None = None) -> ZipActivity:
-    """L'unica voce `.fit` o `.gpx` di uno ZIP dato come byte, estratta in memoria.
+    """The only `.fit` or `.gpx` entry of a ZIP given as bytes, extracted in memory.
 
-    Le altre voci (che non sono ZIP) si ignorano senza leggerle. Nessun nome esce da qui.
+    The other entries (which are not ZIPs) are ignored without reading them. No name leaves here.
 
     Raises:
-        ZipReadError: lo ZIP non si apre o supera un tetto, ha uno ZIP annidato, nessuna voce
-            di attività o più d'una, oppure la voce è cifrata, ha un nome non sicuro, è troppo
-            grande, ha rapporto di compressione eccessivo o dati incoerenti.
+        ZipReadError: the ZIP cannot be opened or exceeds a cap, has a nested ZIP, no activity
+            entry or more than one, or the entry is encrypted, has an unsafe name, is too
+            large, has an excessive compression ratio or inconsistent data.
     """
     effective = limits or ZipLimits()
     with io.BytesIO(content) as handle, open_checked_zip(handle, effective) as archive:

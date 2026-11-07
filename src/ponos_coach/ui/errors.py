@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Messaggi per l'utente: l'unico punto in cui un'eccezione o un motivo diventa testo.
+"""User messages: the only place where an exception or a reason becomes text.
 
-Mai il testo dell'eccezione né un percorso: solo cosa è successo e come rimediare, in
-linguaggio comune.
+Never the exception's text nor a path: only what happened and how to fix it, in
+plain language.
 """
 
 from __future__ import annotations
@@ -36,13 +36,13 @@ from ponos_coach.profiles.ports import (
 )
 from ponos_coach.profiles.use_cases import ProfileMismatchError
 
-# Contesti "Errors", "ImportIssues" e "Exclusions": lupdate trova solo contesto e testo scritti
-# come letterali, quindi niente alias di `QCoreApplication.translate`.
+# Contexts "Errors", "ImportIssues" and "Exclusions": lupdate only finds context and text written
+# as literals, so no aliases of `QCoreApplication.translate`.
 
 
 @dataclass(frozen=True, slots=True)
 class ErrorMessage:
-    """Cosa è successo e come rimediare, in linguaggio comune."""
+    """What happened and how to fix it, in plain language."""
 
     title: str
     what: str
@@ -50,7 +50,7 @@ class ErrorMessage:
 
 
 class RegistryProblem(Enum):
-    """Come è fallito l'elenco dei profili, se il Composition Root sa distinguerlo."""
+    """How the profile list failed, if the Composition Root can tell."""
 
     TOO_NEW = "too_new"
     BUSY = "busy"
@@ -59,11 +59,11 @@ class RegistryProblem(Enum):
 
 @dataclass(frozen=True, slots=True)
 class ErrorContext:
-    """Ciò che il testo di un errore chiede al Composition Root.
+    """What an error text asks of the Composition Root.
 
-    `registry_problem` riconosce le tre cause di un elenco dei profili inutilizzabile: i loro
-    tipi stanno nell'adattatore, che la ui non può importare. `config_folder` è dove sta il file
-    dell'elenco (una cartella dell'app, non un dato dell'utente).
+    `registry_problem` recognises the three causes of an unusable profile list: their
+    types live in the adapter, which the ui cannot import. `config_folder` is where the file
+    of the list lives (an app folder, not user data).
     """
 
     registry_problem: Callable[[BaseException], RegistryProblem | None] = lambda _error: None
@@ -219,7 +219,7 @@ _REGISTRY_BUILDERS: dict[RegistryProblem, Callable[[ErrorContext], ErrorMessage]
 
 
 def unexpected_error_message() -> ErrorMessage:
-    """Messaggio generico del gestore di ultima istanza (il dettaglio è nel log)."""
+    """Generic message of the last-resort handler (the detail is in the log)."""
     return ErrorMessage(
         QCoreApplication.translate("Errors", "Something unexpected happened"),
         QCoreApplication.translate(
@@ -295,11 +295,11 @@ def _generic(_error: BaseException) -> ErrorMessage:
     )
 
 
-# Dal più specifico al più generale: vale la prima corrispondenza.
+# From most specific to most general: the first match wins.
 _BUILDERS: tuple[tuple[type[BaseException], Callable[[BaseException], ErrorMessage]], ...] = (
     (ProfileInUseError, _in_use),
     (FolderNotEmptyError, _not_empty),
-    (FolderHasOtherContentError, _other_content),  # prima della sua classe madre
+    (FolderHasOtherContentError, _other_content),  # before its parent class
     (FolderUnavailableError, _unavailable),
     (NotAProfileFolderError, _not_a_profile),
     (ProfileNotFoundError, _not_a_profile),
@@ -313,7 +313,7 @@ _BUILDERS: tuple[tuple[type[BaseException], Callable[[BaseException], ErrorMessa
 
 
 def describe_error(error: BaseException, context: ErrorContext | None = None) -> ErrorMessage:
-    """Messaggio per l'utente di un'eccezione; mai il testo dell'eccezione."""
+    """User message for an exception; never the exception's text."""
     if isinstance(error, ImportLimitExceededError):
         return _import_limit(error)
     context = context or ErrorContext()
@@ -327,7 +327,7 @@ def describe_error(error: BaseException, context: ErrorContext | None = None) ->
 
 
 def import_issue_text(issue: ImportIssue) -> str:
-    """Perché un file non è stato importato, in una frase breve in parole comuni."""
+    """Why a file was not imported, in one short sentence in plain words."""
     texts = {
         ImportIssue.EMPTY: QCoreApplication.translate("ImportIssues", "The file is empty."),
         ImportIssue.TOO_LARGE: QCoreApplication.translate("ImportIssues", "The file is too large."),
@@ -384,7 +384,7 @@ def import_issue_text(issue: ImportIssue) -> str:
 
 
 def unavailable_detail_message(reason: ExclusionReason) -> ErrorMessage:
-    """Perché il dettaglio di un'attività non si può mostrare e che cosa fare."""
+    """Why an activity's detail cannot be shown and what to do."""
     reimport = QCoreApplication.translate(
         "Exclusions", "Import the original file again to see its detail."
     )
@@ -432,7 +432,7 @@ def unavailable_detail_message(reason: ExclusionReason) -> ErrorMessage:
 
 
 def exclusion_reason_text(reason: ExclusionReason) -> str:
-    """Perché un'attività non è nella panoramica, in una frase breve."""
+    """Why an activity is not in the overview, in one short sentence."""
     texts = {
         ExclusionReason.FILE_MISSING: QCoreApplication.translate(
             "Exclusions", "file missing from the archive"

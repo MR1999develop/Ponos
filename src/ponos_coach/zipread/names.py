@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Nomi di file e di voci di archivio: riservati di Windows, caratteri non validi, nomi sicuri.
+"""File and archive-entry names: Windows reserved, invalid characters, safe names.
 
-Un nome che viene da fuori (voce di uno ZIP, file di una cartella) non è mai un percorso su
-disco: queste funzioni dicono solo se è accettabile come testo da mostrare e da confrontare.
+A name that comes from outside (ZIP entry, file in a folder) is never a path on
+disk: these functions only say whether it is acceptable as text to display and compare.
 """
 
 from __future__ import annotations
@@ -22,24 +22,24 @@ _RESERVED_NAMES: Final = frozenset(
 
 
 def file_suffix(name: str) -> str:
-    """Suffisso minuscolo con il punto (vuoto se manca) dell'ultimo componente del nome."""
+    """Lowercase suffix with the dot (empty if missing) of the last component of the name."""
     last = _SEPARATORS.split(name)[-1]
     _, dot, tail = last.rpartition(".")
     return f".{tail.lower()}" if dot else ""
 
 
 def is_reserved_name(name: str) -> bool:
-    """Nome riservato di Windows (`CON`, `NUL`, `COM1`...) con qualunque estensione."""
+    """Windows reserved name (`CON`, `NUL`, `COM1`...) with any extension."""
     return name.split(".", 1)[0].rstrip(" ").upper() in _RESERVED_NAMES
 
 
 def has_invalid_windows_chars(name: str) -> bool:
-    """Caratteri di controllo o `<>:"|?*`, oppure punto o spazio finale."""
+    """Control characters or `<>:"|?*`, or trailing dot or space."""
     return name != name.rstrip(" .") or any(c in _INVALID_NAME_CHARS or ord(c) < 32 for c in name)
 
 
 def is_safe_entry_name(name: str) -> bool:
-    """Nome di una voce senza `..`, percorso assoluto, unità, controlli né nomi di Windows."""
+    """Name of an entry without `..`, absolute path, drive, control characters or Windows names."""
     if not name or len(name) > _ENTRY_NAME_CHARS or name[0] in "/\\":
         return False
     if _DRIVE.match(name) or any(ord(c) < 32 or ord(c) == 127 for c in name):

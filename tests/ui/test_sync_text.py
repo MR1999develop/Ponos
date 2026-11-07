@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Testi della sincronizzazione: ogni motivo ha una frase in parole comuni (sorgente inglese)."""
+"""Synchronization texts: each reason has a sentence in plain words (English source)."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def finished(
 
 
 def assert_finished_text(text: str) -> None:
-    """Un testo finito: non vuoto, senza segnaposto rimasti né `%n` non risolti."""
+    """A finished text: not empty, with no placeholders left or unresolved `%n`."""
     assert text.strip()
     assert "{" not in text
     assert "%n" not in text

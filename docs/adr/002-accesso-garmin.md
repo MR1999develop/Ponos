@@ -1,68 +1,67 @@
-# 002. Accesso a Garmin Connect
+# 002. Access to Garmin Connect
 
-- Stato: Accettato
-- Data: 2026-11-05
+- Status: Accepted
+- Date: 2026-11-05
 
-## Contesto
+## Context
 
-Garmin non offre un'API ufficiale ai privati. Le attività si possono ottenere
-solo con un accesso non ufficiale o tramite un servizio terza parte. A marzo
-2026 Garmin ha cambiato il login e ha rotto la libreria `garth`. La libreria
-`garminconnect` dalla versione 0.3 ha un login proprio, con MFA. L'accesso può
-rompersi ancora e può essere contrario ai termini d'uso di Garmin.
+Garmin does not offer an official API to private users. Activities can be
+obtained only with an unofficial login or through a third-party service. In
+March 2026 Garmin changed the login and broke the `garth` library. The
+`garminconnect` library, since version 0.3, has a login of its own, with MFA.
+The access may break again and may be against Garmin's terms of use.
 
-## Opzioni
+## Options
 
-1. **Login diretto non ufficiale con `garminconnect`.**
-   - Pro: nessun intermediario, dati completi (FIT originali, calendario),
-     MFA supportato.
-   - Contro: può smettere di funzionare a ogni cambio di Garmin; possibile
-     violazione dei termini d'uso; rischio di blocco temporaneo (429); la
-     password passa dall'app.
-2. **intervals.icu come intermediario (API ufficiale di una terza parte).**
-   - Pro: API documentata e stabile, nessuna password Garmin nell'app.
-   - Contro: serve un secondo account; i dati passano da un terzo; dipende
-     dalla sincronizzazione tra i due servizi e dalla sua disponibilità; i FIT
-     originali e il calendario Garmin potrebbero non essere disponibili
-     (da verificare).
-3. **Entrambi selezionabili dall'utente.**
-   - Pro: ripiego se uno dei due si rompe.
-   - Contro: due adattatori da mantenere e testare; più superficie d'attacco.
+1. **Direct unofficial login with `garminconnect`.**
+   - Pro: no intermediary, complete data (original FIT files, calendar), MFA
+     supported.
+   - Con: it can stop working at every Garmin change; possible violation of the
+     terms of use; risk of a temporary block (429); the password goes through
+     the app.
+2. **intervals.icu as an intermediary (official API of a third party).**
+   - Pro: documented and stable API, no Garmin password in the app.
+   - Con: a second account is needed; the data goes through a third party;
+     depends on the synchronisation between the two services and on its
+     availability; the original FIT files and the Garmin calendar might not be
+     available (to be verified).
+3. **Both selectable by the user.**
+   - Pro: fallback if one of the two breaks.
+   - Con: two adapters to maintain and test; more attack surface.
 
-## Decisione
+## Decision
 
-Opzione 1, `garminconnect`, con versione bloccata nel lockfile e aggiornata
-solo dopo prova. L'opzione 3 non è esclusa: se la porta `ActivitySource` lo
-permette, un secondo adattatore si potrà aggiungere con un nuovo ADR.
+Option 1, `garminconnect`, with the version pinned in the lockfile and updated
+only after a trial. Option 3 is not excluded: if the `ActivitySource` port
+allows it, a second adapter can be added with a new ADR.
 
-Compensazioni:
+Mitigations:
 
-- adattatore isolato dietro la porta `ActivitySource` (e `WorkoutCalendar`);
-- test di contratto su risposte registrate e anonimizzate, e su un fake;
-- import manuale di file FIT e da cartella sempre disponibile;
-- poche richieste: solo all'avvio e a mano, pause con jitter, backoff con
-  tetto, nessun ritentativo infinito;
-- la password si inserisce in un dialogo dell'app, va solo a `garminconnect`
-  e non si salva; i token stanno nel portachiavi del sistema.
+- adapter isolated behind the `ActivitySource` port (and `WorkoutCalendar`);
+- contract tests on recorded and anonymised responses, and on a fake;
+- manual import of FIT files and from a folder always available;
+- few requests: only at start-up and by hand, pauses with jitter, backoff with
+  a cap, no endless retries;
+- the password is entered in a dialog of the app, goes only to
+  `garminconnect` and is not saved; the tokens are in the system keychain.
 
-Questa decisione è anche un'eccezione scritta in `CLAUDE.md`: il login si fa
-nell'app invece che nel browser di sistema con PKCE, perché non esiste un flusso
-ufficiale.
+This decision is also an exception written in `CLAUDE.md`: the login is done in
+the app instead of in the system browser with PKCE, because no official flow
+exists.
 
-## Conseguenze
+## Consequences
 
-- La sincronizzazione può fermarsi senza preavviso; l'app resta utilizzabile
-  con i file FIT.
-- Il README avvisa che l'accesso non è ufficiale.
-- La password è trattata come dato sensibile in memoria e nei log (mai
-  registrata).
-- Ogni aggiornamento di `garminconnect` è un lavoro con prova e test di
-  contratto.
+- Synchronisation can stop without warning; the app stays usable with FIT
+  files.
+- The README warns that the access is not official.
+- The password is treated as sensitive data in memory and in logs (never
+  recorded).
+- Every update of `garminconnect` is a job with a trial and contract tests.
 
-## Come se ne verifica il rispetto
+## How compliance is verified
 
-- `lint-imports`: solo il pacchetto `garmin` importa `garminconnect`.
-- T-SYNC-03 e T-SYNC-04 (errori, backoff, login); T-SEC-03 (risposte
-  ostili); T-SEC-07 (nessun segreto in cartella, configurazione e log).
-- Spike della fase 0 e test di contratto sulle risposte registrate a ogni
-  aggiornamento della libreria.
+- `lint-imports`: only the `garmin` package imports `garminconnect`.
+- T-SYNC-03 and T-SYNC-04 (errors, backoff, login); T-SEC-03 (hostile
+  responses); T-SEC-07 (no secret in the folder, configuration and logs).
+- Phase 0 spike and contract tests on the recorded responses at every update
+  of the library.

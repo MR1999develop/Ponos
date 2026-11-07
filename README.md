@@ -1,205 +1,207 @@
 # Ponos Coach
 
-Ponos Coach è un'app desktop per Windows e Ubuntu, con più profili utente.
-Scarica le attività da Garmin Connect, calcola il carico dalla frequenza
-cardiaca e mostra la forma (ATL, CTL, TSB). Genera un piano di allenamento
-adattivo verso uno o più obiettivi nel calendario e guida il recupero dagli
-infortuni.
+Ponos Coach is a desktop app for Windows and Ubuntu, with several user
+profiles. It downloads activities from Garmin Connect, computes the training
+load from heart rate and shows fitness and fatigue (ATL, CTL, TSB). It builds
+an adaptive training plan towards one or more goals in the calendar and guides
+recovery from injuries.
 
-**Stato:** in sviluppo, fase 3 (carico e grafici, su profili, archivio,
-import e sincronizzazione con Garmin). Non ci sono ancora versioni
-distribuite: si avvia da sorgente.
+**Status:** in development, phase 3 (load and charts, on top of profiles,
+archive, import and Garmin synchronisation). There are no released versions
+yet: run it from source.
 
-## Avviso: non è un dispositivo medico
+## Notice: not a medical device
 
-Ponos Coach non è un dispositivo medico. Non fa diagnosi e non sostituisce un
-medico o un allenatore. Con i segnali d'allarme di un infortunio il piano
-della zona colpita si ferma e l'app invita a rivolgersi a un medico.
+Ponos Coach is not a medical device. It makes no diagnosis and does not
+replace a doctor or a coach. When an injury shows warning signs, the plan for
+the affected area stops and the app asks you to see a doctor.
 
-## Avviso: accesso a Garmin Connect
+## Notice: Garmin Connect access
 
-Garmin non offre un'API ufficiale ai privati. L'app usa un accesso non
-ufficiale (libreria `garminconnect`). Può smettere di funzionare quando Garmin
-cambia il login o le API. Può essere contrario ai termini d'uso di Garmin:
-l'uso è a rischio dell'utente. L'import manuale di file FIT resta sempre
-disponibile.
+Garmin does not offer an official API to private users. The app uses an
+unofficial login (the `garminconnect` library). It may stop working when
+Garmin changes the login or the APIs. It may be against Garmin's terms of
+use: use it at your own risk. Manual import of FIT files is always available.
 
-## Funzioni previste
+## Planned features
 
-- Più profili, ciascuno con una cartella scelta dall'utente per tutti i suoi
-  dati.
-- Sincronizzazione delle attività da Garmin Connect, riprendibile (fase 2), e
-  import di file FIT e GPX, anche in archivi ZIP, da file o da una cartella.
-- Per provare l'app senza dati propri: `uv run python -m
-  tests.fixtures.generators.demo_history <cartella>` crea uno storico
-  sintetico di file FIT, da caricare in un profilo con "Importa da cartella".
-- Carico da frequenza cardiaca e grafici di ATL, CTL e TSB (fase 3), carico
-  settimanale per sport, tempo nelle zone e dettaglio di ogni attività.
-- Test di soglia di 30 minuti e zone di allenamento.
-- Obiettivi (gare A/B/C, tempo obiettivo, livello di forma) e piano adattivo.
-- Percorso di recupero dagli infortuni.
-- Invio degli allenamenti al calendario Garmin (fase successiva).
-- Interfaccia in italiano e inglese.
+- Several profiles, each with a folder chosen by the user for all its data.
+- Synchronisation of activities from Garmin Connect, resumable (phase 2), and
+  import of FIT and GPX files, also inside ZIP archives, from files or from a
+  folder.
+- To try the app without your own data: `uv run python -m
+  tests.fixtures.generators.demo_history <folder>` creates a synthetic
+  history of FIT files, to load into a profile with "Import from folder...".
+- Load from heart rate and charts of ATL, CTL and TSB (phase 3), weekly load
+  by sport, time in zones and the detail of each activity.
+- 30-minute threshold test and training zones.
+- Goals (A/B/C races, target time, fitness level) and an adaptive plan.
+- Recovery path from injuries.
+- Sending workouts to the Garmin calendar (later phase).
+- Interface in English and Italian.
 
-Il comportamento previsto è descritto in `docs/specifica.md`, le decisioni in
-`docs/adr/` e il piano di lavoro in `PLAN.md`.
+The planned behaviour is described in `docs/specifica.md`, the decisions in
+`docs/adr/` and the work plan in `PLAN.md`.
 
-## Requisiti
+## Requirements
 
-- Windows o Ubuntu.
+- Windows or Ubuntu.
 - Python 3.13.
 - [uv](https://docs.astral.sh/uv/).
 
-## Primo profilo
+## First profile
 
-Al primo avvio si apre il dialogo "Nuovo profilo". Servono:
+At the first start the "New profile" dialog opens. You need:
 
-1. il nome del profilo;
-2. la cartella dei dati, da scegliere con "Sfoglia…": se è vuota la usa così
-   com'è, altrimenti crea dentro una sottocartella con il nome del profilo e
-   mostra dove andranno i dati; meglio evitare cartelle sincronizzate come
-   OneDrive (su Windows spesso anche Documenti);
-3. altezza, peso e data di nascita;
-4. la frequenza cardiaca a riposo e la massima; la soglia è stimata al 90%
-   della massima finché non la si fissa con il test;
-5. il sesso (serve alla formula del carico).
+1. the profile name;
+2. the data folder, chosen with "Browse...": if it is empty the app uses it
+   as it is, otherwise it creates a subfolder with the profile name inside it
+   and shows where the data will go; avoid synchronised folders such as
+   OneDrive (on Windows often Documents too);
+3. height, weight and date of birth;
+4. resting and maximum heart rate; the threshold is estimated at 90% of the
+   maximum until you set it with the test;
+5. sex (the load formula needs it).
 
-Altezza, peso e data di nascita sono dati di salute: restano nel database del
-profilo e non vanno mai nei log. Altezza e data di nascita non si cambiano più.
-Peso e frequenze cardiache si aggiornano con una data di validità da Profilo,
-Modifica profilo (Ctrl+E), dove si vede anche lo storico; un profilo creato
-prima della fase 3 completa altezza e data di nascita lì, una volta sola. Le
-regole sono nella specifica (sezione 5).
+Height, weight and date of birth are health data: they stay in the profile
+database and never go to the logs. Height and date of birth cannot be changed
+afterwards. Weight and heart rates are updated with a validity date from
+Profile, Edit profile... (Ctrl+E), where the history is also shown; a profile
+created before phase 3 fills in height and date of birth there, once. The
+rules are in the specification (section 5).
 
-Profilo, Pesi degli sport (Ctrl+Maiusc+W) cambia quanto pesa ogni sport nel
-carico; ogni attività si ricalcola da sola quando serve.
+Profile, Sport weights... (Ctrl+Shift+W) changes how much each sport counts
+in the load; each activity is recalculated on its own when needed.
 
-Altri profili: File, Nuovo profilo (Ctrl+N). Un profilo spostato o copiato su
-un altro PC si apre con File, Apri profilo da cartella (Ctrl+O). Con File,
-Cambia profilo si passa da uno all'altro. "Rimuovi profilo dall'elenco" non
-tocca i dati; "Elimina cartella del profilo" li cancella per sempre, dopo una
-conferma, e solo se nella cartella ci sono soltanto file creati dall'app: se
-c'è altro (per esempio file tuoi) non cancella nulla e lo dice. Alla chiusura
-dell'app, se un lavoro è in corso (un import), l'app lo ferma e aspetta che
-finisca; se non riesce entro 10 secondi lascia la finestra aperta e avvisa, e
-basta chiuderla di nuovo. L'app ricorda la sezione aperta, la finestra e le
-ultime cartelle usate.
+More profiles: File, New profile... (Ctrl+N). A profile moved or copied to
+another PC is opened with File, Open profile from folder... (Ctrl+O). With
+File, Switch profile you move from one to another. "Remove profile from list"
+does not touch the data; "Delete profile folder" deletes it for good, after a
+confirmation, and only if the folder contains nothing but files created by the
+app: if there is anything else (for example your own files) it deletes
+nothing and says so. When the app is closed while a job is running (an
+import), the app stops it and waits for it to finish; if it does not finish
+within 10 seconds, it leaves the window open and warns you, and you only need
+to close it again. The app remembers the open section, the window and the
+last folders used.
 
-## Collegare l'account Garmin
+## Connecting the Garmin account
 
-Serve un profilo aperto. Il collegamento è facoltativo: l'import di file
-funziona sempre.
+A profile must be open. Connecting is optional: file import always works.
 
-1. Menu Garmin, Collega account Garmin… (Ctrl+G).
-2. Scrivi email e password di Garmin Connect. Vanno solo a Garmin e l'app non
-   le salva.
-3. Se il tuo account usa la verifica in due passaggi, scrivi il codice che
-   Garmin ti manda. Hai 5 minuti; se scadono o annulli, non si salva nulla.
+1. Garmin menu, Connect Garmin account... (Ctrl+G).
+2. Enter your Garmin Connect email and password. They go only to Garmin and
+   the app does not save them.
+3. If your account uses two-step verification, enter the code Garmin sends
+   you. You have 5 minutes; if time runs out or you cancel, nothing is saved.
 
-L'accesso non è ufficiale (vedi l'avviso sopra): se Garmin lo cambia, la
-sincronizzazione può smettere di funzionare. Un solo account per profilo; per
-usarne un altro, Garmin, Scollega account Garmin (Ctrl+Maiusc+G).
+The login is not official (see the notice above): if Garmin changes it,
+synchronisation may stop working. One account per profile; to use another,
+Garmin, Disconnect Garmin account (Ctrl+Shift+G).
 
-**Prima sincronizzazione.** Dopo il collegamento parte da sola e scarica tutto
-lo storico, con i file originali. Può durare a lungo (circa una pausa di un
-secondo per attività, più il tempo di scaricamento): la barra di stato mostra
-l'avanzamento e il tempo stimato, e "Interrompi sincronizzazione" (Maiusc+F5)
-ferma tutto senza perdere nulla, perché la volta dopo riprende da dove si era
-fermata. Intanto puoi usare l'app. Se Garmin limita le richieste o non
-risponde, l'app aspetta e riprova poche volte, poi si ferma con un messaggio.
+**First synchronisation.** After connecting it starts by itself and downloads
+the whole history, with the original files. It can take a long time (about
+a one-second pause per activity, plus the download time): the status bar
+shows the progress and the estimated time, and "Stop synchronisation"
+(Shift+F5) stops everything without losing anything, because the next time it
+resumes where it stopped. Meanwhile you can use the app. If Garmin limits the
+requests or does not answer, the app waits and tries again a few times, then
+stops with a message.
 
-Le volte successive: Sincronizza (F5) scarica solo le attività mancanti.
-Verifica completa (Ctrl+F5) rielenca tutto lo storico, per trovare attività
-caricate in ritardo con date vecchie. Le attività che avevi già importato da
-file non si riscaricano né si duplicano. A fine giro, la barra di stato e una
-notifica del sistema dicono quante attività nuove sono entrate.
+The following times: Synchronise (F5) downloads only the missing activities.
+Full check (Ctrl+F5) lists the whole history again, to find activities
+uploaded late with old dates. Activities you had already imported from files
+are neither downloaded again nor duplicated. At the end, the status bar and a
+system notification tell you how many new activities came in.
 
-**Dove stanno i token.** I token di accesso non stanno mai nella cartella del
-profilo né nei backup. Su Windows sono un file cifrato con DPAPI, per il tuo
-utente, in `secrets/` nella cartella dati locale dell'app. Su Ubuntu stanno nel
-Secret Service (per esempio GNOME Keyring o KeePassXC); se non c'è, l'app non
-collega l'account e non ripiega su un file in chiaro. Altri programmi che
-girano con il tuo utente possono leggerli. Un profilo portato su un altro PC
-chiede di nuovo l'accesso.
+**Where the tokens are.** The access tokens are never in the profile folder or
+in the backups. On Windows they are a file encrypted with DPAPI, for your
+user, in `secrets/` inside the app's local data folder. On Ubuntu they are in
+the Secret Service (for example GNOME Keyring or KeePassXC); if there is none,
+the app does not connect the account and does not fall back to a plain file.
+Other programs running as your user can read them. A profile moved to another
+PC asks for the login again.
 
-**Spike opzionale.** `experiments/garmin_spike.py` prova dal vivo l'accesso a
-Garmin e scrive la struttura (senza valori) delle risposte reali, utile per
-aggiornare le fixture dei test. Non serve per usare l'app: vedi
-`experiments/README.md`. Chiede email, password e codice nel tuo terminale, e
-lascia in `experiments/spike-data/` file con frequenza cardiaca e GPS in
-chiaro: cancellali con `--logout` a fine prova.
+**Optional spike.** `experiments/garmin_spike.py` tries the Garmin login live
+and writes the structure (without values) of the real responses, useful to
+update the test fixtures. It is not needed to use the app: see
+`experiments/README.md`. It asks for email, password and code in your
+terminal, and leaves files with heart rate and GPS in plain text in
+`experiments/spike-data/`: delete them with `--logout` at the end of the
+test.
 
-## Importare le attività
+## Importing activities
 
-Serve un profilo aperto. Si possono importare file FIT e GPX, anche dentro file
-ZIP, come l'archivio che si scarica dal sito Garmin.
+A profile must be open. You can import FIT and GPX files, also inside ZIP
+files, such as the archive you download from the Garmin site.
 
-- File, Importa file… (Ctrl+I): si scelgono uno o più file `.fit`, `.gpx` o
-  `.zip`.
-- File, Importa da cartella… (Ctrl+Maiusc+I): si sceglie una cartella; l'app
-  cerca i file anche nelle sottocartelle. Se ce ne sono troppi (oltre 50.000
-  file di attività, 500.000 voci o 32 livelli) non importa nulla e chiede di
-  scegliere una sottocartella.
-- In alternativa si trascinano file o una cartella sulla finestra.
+- File, Import files... (Ctrl+I): choose one or more `.fit`, `.gpx` or `.zip`
+  files.
+- File, Import from folder... (Ctrl+Shift+I): choose a folder; the app looks
+  for files in the subfolders too. If there are too many (over 50,000
+  activity files, 500,000 entries or 32 levels) it imports nothing and asks
+  you to choose a subfolder.
+- Or drag files or a folder onto the window.
 
-I file originali non vengono modificati: l'app ne tiene una copia nel profilo.
-Le attività già presenti si saltano, quindi rilanciare l'import è sicuro. Alla
-fine un riepilogo dice quante attività sono state importate e, per ogni file
-non importato, il motivo. Se un'attività c'era già ma il suo file nell'archivio
-mancava o era alterato, reimportare lo stesso file lo rimette a posto: il
-riepilogo lo conta come "riparato". Le attività compaiono nella pagina Attività e nel
-grafico della Panoramica. I file TCX non sono supportati.
+The original files are not modified: the app keeps a copy in the profile.
+Activities already present are skipped, so running the import again is safe.
+At the end a summary says how many activities were imported and, for each
+file not imported, the reason. If an activity was already there but its file
+in the archive was missing or altered, importing the same file again puts it
+right: the summary counts it as "repaired". Activities appear in the
+Activities page and in the Overview chart. TCX files are not supported.
 
-## Grafici e dettaglio delle attività
+## Charts and activity detail
 
-La Panoramica mostra la forma di oggi e tre grafici: forma e fatica (CTL, ATL,
-TSB), carico settimanale per sport e tempo nelle zone di frequenza cardiaca. Un
-doppio clic (o Invio) su un'attività della pagina Attività, o Profilo,
-Dettaglio attività (Ctrl+D), apre la curva della FC con le zone e il tempo in
-ciascuna. Tutti i grafici si esportano in SVG e PNG, nel tema chiaro o scuro, e
-non usano la rete. Le zone sono percentuali della soglia scelte dal progetto
-(vedi la specifica, sezione 6, e `docs/adr/007-dati-del-profilo-e-zone.md`).
+The Overview shows today's form and three charts: fitness and fatigue (CTL,
+ATL, TSB), weekly load by sport and time in heart-rate zones. A double click
+(or Enter) on an activity in the Activities page, or Profile, Activity
+detail... (Ctrl+D), opens the heart-rate curve with the zones and the time in
+each. All charts can be exported to SVG and PNG, in the light or dark theme,
+and do not use the network. The zones are percentages of the threshold chosen
+by the project (see the specification, section 6, and
+`docs/adr/007-dati-del-profilo-e-zone.md`).
 
-## Lingua
+## Language
 
-L'interfaccia parte in inglese. Per l'italiano: menu Lingua, Italiano; la
-scelta si ricorda e vale dal prossimo avvio. `--lang it` o `--lang en` ha la
-precedenza.
+The interface starts in English. For Italian: Language menu, Italiano; the
+choice is remembered and applies from the next start. `--lang it` or
+`--lang en` takes precedence.
 
-## Dove stanno i dati
+## Where the data is
 
-Tutti i dati di un profilo stanno nella cartella scelta alla creazione:
+All the data of a profile is in the folder chosen at creation:
 
-- `ponos.sqlite3`: il database, con attività, parametri, peso, dati personali
-  e pesi degli sport (con i file `-wal` e `-shm` mentre l'app è aperta);
-- `archivio/<anno>/`: i file originali, con il nome dato dal loro SHA-256;
-- `backup/`: le copie del database fatte prima di un aggiornamento del formato
-  (`ponos-v{da}-v{a}.sqlite3`);
-- `ponos.lock`: impedisce di aprire lo stesso profilo due volte.
+- `ponos.sqlite3`: the database, with activities, parameters, weight,
+  personal data and sport weights (with the `-wal` and `-shm` files while the
+  app is open);
+- `archivio/<year>/`: the original files, named by their SHA-256;
+- `backup/`: the copies of the database made before a format upgrade
+  (`ponos-v{from}-v{to}.sqlite3`);
+- `ponos.lock`: prevents opening the same profile twice.
 
-Non spostare né modificare a mano questi file mentre l'app è aperta. L'elenco
-dei profili è nella cartella di configurazione dell'app (`profiles.json`). I
-token Garmin non stanno mai nella cartella del profilo (vedi "Collegare
-l'account Garmin").
+Do not move or edit these files by hand while the app is open. The list of
+profiles is in the app's configuration folder (`profiles.json`). The Garmin
+tokens are never in the profile folder (see "Connecting the Garmin account").
 
-## Dati e privacy
+## Data and privacy
 
-I dati di ogni profilo (attività, frequenza cardiaca, altezza, peso, data di
-nascita, posizioni GPS, infortuni) restano sul computer, nella cartella scelta per il profilo, non
-cifrati e leggibili solo dall'utente del sistema. Per proteggerli anche dal
-furto del disco attiva la cifratura del disco (BitLocker su Windows, LUKS su
-Ubuntu). Evita cartelle di rete o sincronizzate (OneDrive, NAS): se ne scegli
-una, l'app avverte, ma il database può rovinarsi. Anche `archivio/` e
-`backup/` contengono dati di salute e posizioni GPS.
+The data of each profile (activities, heart rate, height, weight, date of
+birth, GPS positions, injuries) stays on the computer, in the folder chosen
+for the profile, unencrypted and readable only by the system user. To protect
+it from disk theft too, turn on disk encryption (BitLocker on Windows, LUKS
+on Ubuntu). Avoid network or synchronised folders (OneDrive, NAS): if you
+choose one, the app warns you, but the database may get damaged. `archivio/`
+and `backup/` also contain health data and GPS positions.
 
 ## Log
 
-L'app scrive un log con rotazione (al massimo circa 4 MB) nella cartella dei
-log dell'utente. Per aprirla: Aiuto, Apri la cartella dei log (Ctrl+Maiusc+L).
-Il log ha eventi e tipi di errore, senza percorsi, nomi di file né dati di
-salute. Se qualcosa non va, allegalo a una segnalazione dopo averlo riletto.
+The app writes a rotating log (at most about 4 MB) in the user's log folder.
+To open it: Help, Open the log folder (Ctrl+Shift+L). The log has events and
+error types, without paths, file names or health data. If something goes
+wrong, attach it to a report after reading it.
 
-## Avvio da sorgente
+## Running from source
 
 ```
 uv sync
@@ -207,22 +209,22 @@ uv run --locked nox -s i18n
 uv run ponos-coach
 ```
 
-Il comando `nox -s i18n` genera le traduzioni italiane (`.qm`); senza, l'app
-resta in inglese anche se si sceglie l'italiano.
+The command `nox -s i18n` generates the Italian translations (`.qm`); without
+it the app stays in English even if you choose Italian.
 
-## Controlli
+## Checks
 
 ```
 uv run --locked nox
 ```
 
-Esegue formattazione e lint, `mypy --strict`, controllo delle dipendenze tra
-moduli, test, test delle traduzioni e `pip-audit`.
+It runs formatting and lint, `mypy --strict`, the check of dependencies
+between modules, tests, translation tests and `pip-audit`.
 
-## Sicurezza
+## Security
 
-Per segnalare una vulnerabilità vedi `SECURITY.md`.
+To report a vulnerability see `SECURITY.md`.
 
-## Licenza
+## Licence
 
-GPL-3.0-only. Il testo completo è nel file `LICENSE`.
+GPL-3.0-only. The full text is in the `LICENSE` file.

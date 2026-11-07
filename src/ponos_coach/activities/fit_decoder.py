@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Confine di lettura dei file FIT: `bytes` → `Activity` oppure `FitDecodeError`.
+"""Reading boundary for FIT files: `bytes` → `Activity` or `FitDecodeError`.
 
-Nessun I/O: il chiamante legge i byte (con un massimo) e li passa qui. Dimensione, numero di
-record e durata si controllano con i limiti di `FitLimits`; i CRC si verificano; un file non
-valido non si ripara mai, si rifiuta con un motivo enumerato. Gli errori di `fitdecode` e le
-sole eccezioni del parser osservate su file ostili e byte casuali diventano
-`FitDecodeReason.CORRUPT`; un errore di programmazione si propaga.
+No I/O: the caller reads the bytes (with a maximum) and passes them here. Size, number of
+records and duration are checked against the `FitLimits` limits; CRCs are verified; an invalid
+file is never repaired, it is rejected with an enumerated reason. `fitdecode` errors and the
+only parser exceptions observed on hostile files and random bytes become
+`FitDecodeReason.CORRUPT`; a programming error propagates.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ from ponos_coach.activities.domain import (
     truncate_to_millisecond,
 )
 
-# Numeri del profilo FIT (campo `sport` e `sub_sport` del messaggio `session`).
+# FIT profile numbers (field `sport` and `sub_sport` of the `session` message).
 _FIT_SPORT_RUNNING = 1
 _FIT_SPORT_CYCLING = 2
 _FIT_SPORT_TRAINING = 10
@@ -48,24 +48,24 @@ _FIT_SPORT_HIKING = 17
 _FIT_SUB_SPORT_TRAIL = 3
 _FIT_SUB_SPORT_STRENGTH = 20
 _FIT_TYPE_ACTIVITY = 4
-_MESSAGES_PER_RECORD = 5  # tetto ai messaggi di dati totali: 5 volte i record ammessi
-_SEMICIRCLE_INVALID = 0x7FFFFFFF  # valore non valido di un campo sint32
-_SEMICIRCLES_HALF_TURN = 2**31  # 180 gradi
-_SEMICIRCLES_QUARTER_TURN = 2**30  # 90 gradi
+_MESSAGES_PER_RECORD = 5  # cap on total data messages: 5 times the allowed records
+_SEMICIRCLE_INVALID = 0x7FFFFFFF  # invalid value of an sint32 field
+_SEMICIRCLES_HALF_TURN = 2**31  # 180 degrees
+_SEMICIRCLES_QUARTER_TURN = 2**30  # 90 degrees
 _DEGREES_PER_SEMICIRCLE = 180.0 / _SEMICIRCLES_HALF_TURN
-_TIMER_EXCESS_TOLERANCE_MS = 1000  # tempo in movimento oltre il trascorso: fino a 1 s si porta
+_TIMER_EXCESS_TOLERANCE_MS = 1000  # moving time above elapsed: up to 1 s it is brought down
 _MS_PER_S = 1000
 
-# Errori di `fitdecode` e sole eccezioni di Python osservate dentro il suo parser su `fit-ostili/`
-# e su byte casuali o mutati (le fa scattare, su dati ostili, un controllo mancante della
-# libreria): TypeError (processore di date), struct.error (header troncato), AssertionError
-# (lunghezza di chunk) e ValueError (lettura oltre la fine). Valgono solo attorno alla lettura
-# dei frame: un errore del nostro codice non passa di qui e si propaga.
+# `fitdecode` errors and the only Python exceptions observed inside its parser on `fit-ostili/`
+# and on random or mutated bytes (triggered, on hostile data, by a missing check in the
+# library): TypeError (date processor), struct.error (truncated header), AssertionError
+# (chunk length) and ValueError (read past the end). They apply only around the reading
+# of frames: an error in our code does not pass through here and propagates.
 _PARSER_ERRORS = (fitdecode.FitError, TypeError, struct.error, AssertionError, ValueError)
 
 
 class FitDecodeReason(Enum):
-    """Motivo per cui un file non diventa un'attività."""
+    """Reason why a file does not become an activity."""
 
     EMPTY = "empty"
     TOO_LARGE = "too_large"
@@ -76,7 +76,7 @@ class FitDecodeReason(Enum):
 
 
 class FitDecodeError(Exception):
-    """Il file non è un'attività valida entro i limiti; `reason` dice perché."""
+    """The file is not a valid activity within the limits; `reason` says why."""
 
     def __init__(self, reason: FitDecodeReason) -> None:
         super().__init__(reason.value)
@@ -85,7 +85,7 @@ class FitDecodeError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class FitLimits:
-    """Tetti di lettura (default del progetto): 50 MB, un milione di record, 7 giorni."""
+    """Reading caps (project default): 50 MB, one million records, 7 days."""
 
     max_bytes: int = MAX_ACTIVITY_FILE_BYTES
     max_records: int = 1_000_000
@@ -93,13 +93,13 @@ class FitLimits:
 
     def __post_init__(self) -> None:
         if self.max_bytes <= 0 or self.max_records <= 0:
-            raise ValueError("i limiti di byte e record devono essere positivi")
+            raise ValueError("byte and record limits must be positive")
         if not math.isfinite(self.max_duration_s) or self.max_duration_s <= 0:
-            raise ValueError("la durata massima deve essere finita e positiva")
+            raise ValueError("the maximum duration must be finite and positive")
 
 
 def map_sport(sport: int | None, sub_sport: int | None) -> Sport:
-    """Sport FIT (numeri del profilo) → `Sport`; ciò che non si riconosce è `OTHER`."""
+    """FIT sport (profile numbers) → `Sport`; what is not recognized is `OTHER`."""
     if sport == _FIT_SPORT_RUNNING:
         return Sport.TRAIL if sub_sport == _FIT_SUB_SPORT_TRAIL else Sport.RUNNING
     if sport == _FIT_SPORT_TRAINING:
@@ -121,7 +121,7 @@ class _Session:
     sub_sport: int | None
     distance_m: float | None
     ascent_m: float | None
-    start_lat: int | None  # semicerchi
+    start_lat: int | None  # semicircles
     start_lon: int | None
 
 
@@ -132,7 +132,7 @@ class _Parsed:
     record_times: list[datetime] = field(default_factory=list)
     hr_times: list[datetime] = field(default_factory=list)
     hr_values: list[int] = field(default_factory=list)
-    pos_lat: list[int] = field(default_factory=list)  # semicerchi, solo coppie valide
+    pos_lat: list[int] = field(default_factory=list)  # semicircles, valid pairs only
     pos_lon: list[int] = field(default_factory=list)
     messages: int = 0
     records: int = 0
@@ -145,7 +145,7 @@ def _value(frame: fitdecode.FitDataMessage, name: str, *, raw: bool = False) -> 
 
 
 def _as_datetime(value: object) -> datetime | None:
-    """Istante UTC, o None se manca il fuso o la conversione non è rappresentabile."""
+    """UTC instant, or None if the time zone is missing or the conversion is not representable."""
     if not isinstance(value, datetime) or value.tzinfo is None:
         return None
     try:
@@ -165,7 +165,7 @@ def _as_float(value: object) -> float | None:
 
 
 def _semicircles(value: object) -> int | None:
-    """Semicerchi validi (non 0x7FFFFFFF e dentro l'intervallo di una coordinata) o None."""
+    """Valid semicircles (not 0x7FFFFFFF and within the range of a coordinate) or None."""
     number = _as_int(value)
     if number is None or number == _SEMICIRCLE_INVALID or abs(number) > _SEMICIRCLES_HALF_TURN:
         return None
@@ -173,7 +173,7 @@ def _semicircles(value: object) -> int | None:
 
 
 def _position(frame: fitdecode.FitDataMessage, lat: str, lon: str) -> tuple[int, int] | None:
-    """Coppia di coordinate in semicerchi se entrambe valide (±90° di latitudine)."""
+    """Coordinate pair in semicircles if both valid (±90° of latitude)."""
     latitude = _semicircles(_value(frame, lat, raw=True))
     longitude = _semicircles(_value(frame, lon, raw=True))
     if latitude is None or longitude is None or abs(latitude) > _SEMICIRCLES_QUARTER_TURN:
@@ -236,7 +236,7 @@ def _take_message(frame: fitdecode.FitDataMessage, parsed: _Parsed, limits: FitL
 
 
 def _frames(data: bytes) -> Iterator[fitdecode.FitDataMessage]:
-    """Messaggi di dati del file; un guasto del parser diventa `FitDecodeError(CORRUPT)`."""
+    """Data messages of the file; a parser failure becomes `FitDecodeError(CORRUPT)`."""
     try:
         with fitdecode.FitReader(
             io.BytesIO(data),
@@ -279,10 +279,10 @@ def _file_id(parsed: _Parsed) -> FileId:
 
 
 def _timing(parsed: _Parsed) -> tuple[datetime, float, float]:
-    """Inizio UTC, tempo trascorso e tempo in movimento (secondi).
+    """UTC start, elapsed time and moving time (seconds).
 
-    Dalle sessioni; se mancano, dai record. Il tempo in movimento è `total_timer_time` e, per
-    una sessione che non lo dichiara, il suo tempo trascorso (default del progetto).
+    From the sessions; if missing, from the records. The moving time is `total_timer_time` and, for
+    a session that does not declare it, its elapsed time (project default).
     """
     times = parsed.record_times
     if not parsed.sessions and not times:
@@ -301,11 +301,11 @@ def _timing(parsed: _Parsed) -> tuple[datetime, float, float]:
 
 
 def _series(parsed: _Parsed) -> tuple[HeartRateSeries | None, int]:
-    """Serie di FC e numero di campioni scartati.
+    """HR series and number of discarded samples.
 
-    Un campione con timestamp non maggiore di tutti i precedenti (ripetuto o all'indietro) si
-    scarta: vale il primo di una ripetizione e un ritorno indietro non entra mai (default del
-    progetto, deterministico).
+    A sample with a timestamp not greater than all the previous ones (repeated or backwards) is
+    discarded: the first of a repetition counts and a step backwards never enters (project
+    default, deterministic).
     """
     if not parsed.hr_values:
         return None, 0
@@ -318,10 +318,11 @@ def _series(parsed: _Parsed) -> tuple[HeartRateSeries | None, int]:
 
 
 def _moving_time(elapsed_s: float, timer_s: float) -> float:
-    """Tempo in movimento coerente con il trascorso.
+    """Moving time consistent with the elapsed time.
 
-    Oltre 1 s sopra il trascorso il file è corrotto; entro 1 s si porta al trascorso (default
-    del progetto: il timer dell'orologio e il trascorso si arrotondano in modo indipendente).
+    Above 1 s over the elapsed time the file is corrupt; within 1 s it is brought to the elapsed
+    time (project
+    default: the watch timer and the elapsed time are rounded independently).
     """
     excess_ms = round(timer_s * _MS_PER_S) - round(elapsed_s * _MS_PER_S)
     if excess_ms > _TIMER_EXCESS_TOLERANCE_MS:
@@ -335,7 +336,7 @@ def _sum_declared(values: list[float | None]) -> float | None:
 
 
 def _start_point(parsed: _Parsed) -> GeoPoint | None:
-    """Partenza dalla prima sessione che la dichiara, altrimenti il primo record valido."""
+    """Start from the first session that declares it, otherwise the first valid record."""
     first = parsed.sessions[0] if parsed.sessions else None
     if first is not None and first.start_lat is not None and first.start_lon is not None:
         lat, lon = first.start_lat, first.start_lon
@@ -347,7 +348,7 @@ def _start_point(parsed: _Parsed) -> GeoPoint | None:
 
 
 def _track_polyline(parsed: _Parsed) -> str | None:
-    """Traccia semplificata (RDP, tetto del progetto) dai record con posizione valida."""
+    """Simplified track (RDP, project cap) from the records with a valid position."""
     if not parsed.pos_lat:
         return None
     lat = np.array(parsed.pos_lat, dtype=np.float64) * _DEGREES_PER_SEMICIRCLE
@@ -366,7 +367,7 @@ def _summary(parsed: _Parsed) -> ActivitySummary:
 
 
 def _require_plausible_times(parsed: _Parsed, start: datetime, elapsed_s: float) -> None:
-    """Inizio, fine e orari dei record dentro la finestra ammessa, altrimenti `CORRUPT`."""
+    """Start, end and times of the records within the allowed window, otherwise `CORRUPT`."""
     times = parsed.record_times
     stamps = [start, *(s.start for s in parsed.sessions if s.start is not None)]
     if times:
@@ -395,15 +396,15 @@ def _build(parsed: _Parsed, limits: FitLimits) -> Activity:
 
 
 def decode_activity(data: bytes, limits: FitLimits | None = None) -> Activity:
-    """Decodifica un file FIT di attività.
+    """Decodes an activity FIT file.
 
-    Controlla prima la dimensione, poi legge con verifica dei CRC e dei limiti di record e di
-    durata. L'identità (`FileId`) richiede `file_id` di tipo attività con produttore, prodotto,
-    numero di serie e ora di creazione; senza, il file non è un'attività. Secondi della serie
-    di FC dal primo record; campioni con FC non valida (0xFF) omessi.
+    Checks the size first, then reads verifying the CRCs and the record and duration
+    limits. The identity (`FileId`) requires an activity-type `file_id` with manufacturer, product,
+    serial number and creation time; without it, the file is not an activity. Seconds of the
+    HR series from the first record; samples with invalid HR (0xFF) omitted.
 
     Raises:
-        FitDecodeError: l'unico errore in uscita, con il motivo in `reason`.
+        FitDecodeError: the only error raised, with the reason in `reason`.
     """
     limits = limits or FitLimits()
     if not data:

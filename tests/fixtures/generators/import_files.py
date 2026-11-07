@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Attività distinte, in FIT e in GPX, per i test dell'import (generate al volo, non versionate).
+"""Distinct activities, in FIT and GPX, for the import tests (generated on the fly, not versioned).
 
-`fit_run(n)` e `gpx_run(n)` danno una corsa diversa per ogni numero (inizio, numero di serie e
-posizioni diversi). `same_run_as_fit_and_gpx` dà la stessa attività nei due formati: stesso
-inizio, stessa durata, stesso percorso.
+`fit_run(n)` and `gpx_run(n)` give a different run for each number (different start, serial number
+and
+positions). `same_run_as_fit_and_gpx` gives the same activity in the two formats: same
+start, same duration, same route.
 """
 
 from __future__ import annotations
@@ -17,11 +18,11 @@ from .tracks import SEA_LAT_DEG, SEA_LON_DEG
 
 FIRST_START = datetime(2026, 5, 1, 7, 0, tzinfo=UTC)
 RUN_SECONDS = 1800
-STEP_S = 10  # un campione ogni 10 s: file piccoli, intervalli entro i 30 s del GPX
+STEP_S = 10  # one sample every 10 s: small files, intervals within the 30 s of the GPX
 
 
 def run_start(number: int) -> datetime:
-    """Inizio della corsa numero `number`: una al giorno, alla stessa ora."""
+    """Start of run number `number`: one per day, at the same time."""
     return FIRST_START + timedelta(days=number)
 
 
@@ -30,7 +31,7 @@ def _heart_rate(index: int) -> int:
 
 
 def fit_run(number: int, *, seconds: int = RUN_SECONDS) -> bytes:
-    """FIT di una corsa di `seconds` secondi, un campione ogni 10 s, con posizione e FC."""
+    """FIT of a run of `seconds` seconds, one sample every 10 s, with position and HR."""
     start = run_start(number)
     first = fw.datetime_to_fit(start)
     samples = [
@@ -56,7 +57,7 @@ def fit_run(number: int, *, seconds: int = RUN_SECONDS) -> bytes:
 
 
 def gpx_points(number: int, *, seconds: int = RUN_SECONDS) -> list[GpxPoint]:
-    """Gli stessi campioni di `fit_run`, come punti GPX."""
+    """The same samples as `fit_run`, as GPX points."""
     return line_points(
         run_start(number),
         seconds // STEP_S + 1,
@@ -68,10 +69,10 @@ def gpx_points(number: int, *, seconds: int = RUN_SECONDS) -> list[GpxPoint]:
 
 
 def gpx_run(number: int, *, seconds: int = RUN_SECONDS, sport_type: str = "running") -> bytes:
-    """GPX di una corsa di `seconds` secondi, con quota e FC."""
+    """GPX of a run of `seconds` seconds, with altitude and HR."""
     return build_gpx(GpxSpec([gpx_points(number, seconds=seconds)], sport_type=sport_type))
 
 
 def same_run_as_fit_and_gpx(number: int = 0) -> tuple[bytes, bytes]:
-    """La stessa attività come FIT e come GPX (inizio e durata uguali)."""
+    """The same activity as FIT and as GPX (same start and duration)."""
     return fit_run(number), gpx_run(number)

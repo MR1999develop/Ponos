@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""`TokenStore` reali: contratto, T-SEC-07 (parziale) e file danneggiati."""
+"""Real `TokenStore`s: contract, T-SEC-07 (partial) and damaged files."""
 
 from __future__ import annotations
 
@@ -31,11 +31,11 @@ from tests.contracts.contract_tokens import PROFILE_A, PROFILE_B, TOKENS_A, Toke
 from tests.contracts.harness import TokenStoreHarness
 from tests.platform.windows_dacl import dacl_sddl, is_protected
 
-windows_only = pytest.mark.skipif(sys.platform != "win32", reason="DPAPI di Windows")
+windows_only = pytest.mark.skipif(sys.platform != "win32", reason="Windows DPAPI")
 
 
 class _MemoryBackend(KeyringBackend):
-    """Backend keyring in memoria, solo per i test."""
+    """In-memory keyring backend, for tests only."""
 
     priority = 1
 
@@ -55,7 +55,7 @@ class _MemoryBackend(KeyringBackend):
 
 
 class _ChainOf(ChainerBackend):
-    """Un `ChainerBackend` con i backend dati, senza cercarli nel sistema."""
+    """A `ChainerBackend` with the given backends, without looking them up in the system."""
 
     def __init__(self, backends: list[KeyringBackend]) -> None:
         self._given = backends
@@ -202,7 +202,7 @@ class TestPlatformChoice:
 
         store.save(PROFILE_A, TOKENS_A)
         assert store.load(PROFILE_A) == TOKENS_A
-        assert secret_service.items  # ha scritto il Secret Service, non l'altro backend
+        assert secret_service.items  # the Secret Service wrote, not the other backend
 
     def test_a_chainer_backend_without_the_secret_service_is_unavailable(
         self, monkeypatch: pytest.MonkeyPatch

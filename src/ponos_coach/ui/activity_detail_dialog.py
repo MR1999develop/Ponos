@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Finestra "Dettaglio attività": riepilogo, grafico della FC con le zone e tempo per zona.
+"""Window "Activity detail": summary, HR chart with zones and time per zone.
 
-La finestra non è modale: l'utente può guardarla accanto alla panoramica. Mostra uno di tre
-stati: caricamento, esito del caso d'uso (dettaglio o motivo per cui il file non si usa) o errore.
-Le figure arrivano già preparate dal thread dei dati.
+The window is not modal: the user can keep it next to the overview. It shows one of three
+states: loading, the use case outcome (detail or the reason the file is not usable) or error.
+The figures arrive already prepared by the data thread.
 """
 
 from __future__ import annotations
@@ -63,14 +63,14 @@ _ZONE_TABLE_HEIGHT = 170
 
 
 class ZoneTableModel(QAbstractTableModel):
-    """Tempo per zona di un'attività: zona, tempo, quota. Sola lettura, numeri a destra."""
+    """Time per zone of an activity: zone, time, share. Read-only, numbers on the right."""
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._rows: tuple[ZoneRow, ...] = ()
 
     def set_rows(self, rows: tuple[ZoneRow, ...]) -> None:
-        """Sostituisce le righe."""
+        """Replace the rows."""
         self.beginResetModel()
         self._rows = rows
         self.endResetModel()
@@ -78,7 +78,7 @@ class ZoneTableModel(QAbstractTableModel):
     def rowCount(  # noqa: N802 - Qt
         self, parent: QModelIndex | QPersistentModelIndex | None = None
     ) -> int:
-        """Una riga per zona."""
+        """One row per zone."""
         if parent is not None and parent.isValid():
             return 0
         return len(self._rows)
@@ -86,7 +86,7 @@ class ZoneTableModel(QAbstractTableModel):
     def columnCount(  # noqa: N802 - Qt
         self, parent: QModelIndex | QPersistentModelIndex | None = None
     ) -> int:
-        """Zona, tempo, quota."""
+        """Zone, time, share."""
         if parent is not None and parent.isValid():
             return 0
         return 3
@@ -97,7 +97,7 @@ class ZoneTableModel(QAbstractTableModel):
         orientation: Qt.Orientation,
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> object:
-        """Intestazioni, con l'unità."""
+        """Headers, with the unit."""
         if orientation != Qt.Orientation.Horizontal or not 0 <= section < 3:
             return None
         if role == Qt.ItemDataRole.DisplayRole:
@@ -115,7 +115,7 @@ class ZoneTableModel(QAbstractTableModel):
         index: QModelIndex | QPersistentModelIndex,
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> object:
-        """Testo e allineamento di una cella."""
+        """Text and alignment of a cell."""
         if not index.isValid() or not 0 <= index.row() < len(self._rows):
             return None
         row = self._rows[index.row()]
@@ -132,7 +132,7 @@ class ZoneTableModel(QAbstractTableModel):
 
 
 class ActivityDetailDialog(QDialog):
-    """Riepilogo, grafico della FC e tempo per zona di una attività."""
+    """Summary, HR chart and time per zone of an activity."""
 
     def __init__(self, engine: ChartEngine, zone: ZoneInfo, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -176,7 +176,7 @@ class ActivityDetailDialog(QDialog):
         self._table.setObjectName("detailZones")
         self._table.setAccessibleName(self.tr("Time in each zone"))
         self._table.setModel(self._zone_model)
-        self._table.setShowGrid(False)  # niente linee verticali né orizzontali
+        self._table.setShowGrid(False)  # no vertical or horizontal lines
         self._table.setAlternatingRowColors(True)
         self._table.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
         self._table.setSelectionMode(QTableView.SelectionMode.NoSelection)
@@ -214,55 +214,55 @@ class ActivityDetailDialog(QDialog):
             ("limits", self.tr("Heart-rate limits (bpm)")),
         )
 
-    # --- Accessori per i test ---------------------------------------------------------
+    # --- Test accessors ---------------------------------------------------------------
 
     @property
     def chart(self) -> ChartView:
-        """Il grafico della FC."""
+        """The HR chart."""
         return self._chart
 
     @property
     def zone_model(self) -> ZoneTableModel:
-        """Il modello della tabella delle zone."""
+        """The zones table model."""
         return self._zone_model
 
     @property
     def title_text(self) -> str:
-        """Titolo: sport e data."""
+        """Title: sport and date."""
         return self._title.text()
 
     @property
     def message_page(self) -> StatePage:
-        """La pagina dei messaggi (caricamento, assenza di FC, file non disponibile, errore)."""
+        """The messages page (loading, no HR, file unavailable, error)."""
         return self._message
 
     @property
     def notice_text(self) -> str:
-        """Avviso sui campioni scartati (vuoto se non c'è)."""
+        """Notice about discarded samples (empty if there are none)."""
         return self._notice.text() if self._notice.isVisible() else ""
 
     def summary_text(self, key: str) -> str:
-        """Il valore di una riga del riepilogo."""
+        """The value of one summary row."""
         return self._summary_values[key].text()
 
     def shows_chart(self) -> bool:
-        """Vero se il grafico è la pagina visibile."""
+        """True if the chart is the visible page."""
         return self._body.currentWidget() is self._chart
 
     # --- Stati ------------------------------------------------------------------------
 
     def show_loading(self) -> None:
-        """Mentre il thread dei dati lavora."""
+        """While the data thread is working."""
         self._set_details_visible(False)
         self._show_message(self.tr("Loading the activity..."), "")
 
     def show_error(self, message: ErrorMessage) -> None:
-        """Un errore imprevisto del caricamento."""
+        """An unexpected loading error."""
         self._set_details_visible(False)
         self._show_message(message.title, f"{message.what}\n\n{message.remedy}")
 
     def show_outcome(self, outcome: DetailOutcome) -> None:
-        """Mostra il dettaglio, o il motivo per cui il file non si può usare."""
+        """Show the detail, or the reason the file cannot be used."""
         if isinstance(outcome, DetailUnavailable):
             message = unavailable_detail_message(outcome.reason)
             self._set_details_visible(False)
@@ -275,7 +275,9 @@ class ActivityDetailDialog(QDialog):
         self._set_details_visible(True)
         self._fill_summary(detail)
         self._zone_model.set_rows(zone_rows(detail))
-        self._table.setVisible(ready.chart is not None)  # senza FC il carico è stimato: niente zone
+        self._table.setVisible(
+            ready.chart is not None
+        )  # without HR the load is estimated: no zones
         if ready.chart is None:
             self._show_message(
                 self.tr("No heart-rate data"),

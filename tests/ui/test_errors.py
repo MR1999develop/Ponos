@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Testi degli errori per l'utente: cosa, perche e rimedio, senza il testo dell'eccezione."""
+"""User-facing error texts: what, why and remedy, without the exception text."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def test_a_corrupt_registry_message_says_where_the_file_is(tmp_path: Path) -> No
 
     assert "profiles.json" in message.what
     assert str(tmp_path) in message.what
-    assert "Open profile from folder" in message.remedy  # i dati dei profili non sono nel file
+    assert "Open profile from folder" in message.remedy  # the profile data are not in the file
 
 
 def test_an_unclassified_registry_error_keeps_the_generic_message_that_points_to_the_log() -> None:

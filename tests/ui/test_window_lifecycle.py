@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Chiusura in due tempi, ricordi della finestra, cartella dei log e messaggi d'errore (fase 1)."""
+"""Two-phase closing, window memory, log folder and error messages (phase 1)."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def settings(tmp_path: Path) -> QSettings:
 def window_importing_behind_a_gate(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> tuple[MainWindow, threading.Event]:
-    """Finestra con un import fermo a metà (il cancello tiene il thread dei dati occupato)."""
+    """Window with an import stopped midway (the gate keeps the data thread busy)."""
     gate = threading.Event()
     window = compose(tmp_path, settings, import_sources=gated_sources(gate))
     qtbot.addWidget(window)
@@ -59,7 +59,7 @@ def window_importing_behind_a_gate(
     return window, gate
 
 
-# --- R4: chiusura in due tempi ---------------------------------------------------------------
+# --- R4: two-phase closing ---------------------------------------------------------------
 
 
 def test_closing_never_blocks_the_ui_thread_and_a_busy_data_thread_is_waited_for_by_a_timer(
@@ -72,7 +72,7 @@ def test_closing_never_blocks_the_ui_thread_and_a_busy_data_thread_is_waited_for
     started = time.monotonic()
     window.close()
 
-    assert time.monotonic() - started < 0.2  # il thread della UI non ha atteso
+    assert time.monotonic() - started < 0.2  # the UI thread did not wait
     assert not window.is_closed
     assert window.statusBar().currentMessage() == "Closing the profile..."
     qtbot.waitUntil(lambda: window.is_closed, timeout=WAIT_MS)
@@ -95,7 +95,7 @@ def test_after_closing_starts_nothing_new_runs_not_even_the_overview_after_the_i
     assert not controller.recalculate_overview()
     assert not controller.can_change_profile
     assert not controller.compute(lambda: None, lambda _v: None, lambda _m: None)
-    gate.set()  # l'import annullato finisce: `_after_import` non deve riavviare la panoramica
+    gate.set()  # the cancelled import finishes: `_after_import` must not restart the overview
     qtbot.waitUntil(lambda: window.is_closed, timeout=WAIT_MS)
     assert not [state for state in states if isinstance(state, Loading)]
     assert controller.import_progress is None
@@ -105,17 +105,17 @@ def test_a_data_thread_that_does_not_finish_in_time_leaves_the_window_open_with_
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window, gate = window_importing_behind_a_gate(qtbot, tmp_path, settings)
-    window.shutdown_wait_ms = 200  # tetto breve: il cancello resta chiuso
+    window.shutdown_wait_ms = 200  # short cap: the gate stays closed
 
     window.close()
     box = open_message_box(qtbot, window, "shutdownTimeout")
 
     assert box.text() == "Ponos Coach is still closing the profile"
     assert "close the window again" in box.informativeText()
-    assert not window.is_closed  # nessun QThread distrutto mentre gira
+    assert not window.is_closed  # no QThread destroyed while running
     gate.set()
     click(box, "OK")
-    close_window(qtbot, window)  # secondo tentativo: ora il thread finisce
+    close_window(qtbot, window)  # second attempt: now the thread finishes
     assert window.controller.has_stopped
 
 
@@ -129,7 +129,7 @@ def test_closing_a_window_without_a_profile_is_immediate(
     assert window.is_closed
 
 
-# --- D-F1-08, D-F1-09: la finestra ricorda ---------------------------------------------------
+# --- D-F1-08, D-F1-09: the window remembers ---------------------------------------------------
 
 
 @pytest.mark.parametrize("saved", ["testo", "99", "-1", "3", 42, ""], ids=repr)
@@ -170,7 +170,7 @@ def test_a_geometry_of_the_wrong_type_does_not_stop_the_window_from_opening(
     assert (window.width(), window.height()) == (1100, 720)
 
 
-# --- R5: cartella dei log e gestore di ultima istanza ----------------------------------------
+# --- R5: log folder and last-resort handler ----------------------------------------
 
 
 def test_the_help_menu_opens_the_log_folder_with_the_system_file_manager(
@@ -190,7 +190,9 @@ def test_the_help_menu_opens_the_log_folder_with_the_system_file_manager(
     window.log_action.trigger()
 
     assert opened == [QUrl.fromLocalFile(str(logs))]
-    assert logs.is_dir()  # se non c'era ancora la crea: non si apre una cartella inesistente
+    assert (
+        logs.is_dir()
+    )  # if it did not exist yet it creates it: a nonexistent folder is not opened
     help_menu = window.menuBar().actions()[-1].menu()
     assert isinstance(help_menu, QMenu)
     assert window.log_action in help_menu.actions()
@@ -236,7 +238,7 @@ def test_a_failed_job_logs_only_the_types_never_the_text_of_the_exception(
     create_profile(qtbot, window, "Ada")
     secret = tmp_path / "Segreto_Di_Prova"
 
-    window.open_profile_folder(secret)  # non esiste
+    window.open_profile_folder(secret)  # does not exist
     open_message_box(qtbot, window, "errorMessage")
 
     failed = [r for r in caplog.records if r.getMessage().startswith("Job ")]
@@ -245,7 +247,7 @@ def test_a_failed_job_logs_only_the_types_never_the_text_of_the_exception(
     assert "Segreto_Di_Prova" not in "".join(r.getMessage() for r in caplog.records)
 
 
-# --- R9, esiti dell'import e della cancellazione ---------------------------------------------
+# --- R9, import and deletion outcomes ---------------------------------------------
 
 
 def test_the_deletion_preview_of_an_unreadable_profile_still_asks_and_says_it_cannot_count(
@@ -261,7 +263,7 @@ def test_the_deletion_preview_of_an_unreadable_profile_still_asks_and_says_it_ca
 
     box = open_message_box(qtbot, window, "deleteConfirmation")
     assert "The number of activities could not be read." in box.informativeText()
-    assert database.read_bytes() == b"not a database " * 100  # la sola lettura non tocca nulla
+    assert database.read_bytes() == b"not a database " * 100  # read-only does not touch anything
     click(box, "Cancel")
 
 
@@ -278,7 +280,7 @@ def test_the_deletion_preview_counts_without_opening_or_touching_the_profile(
 
     box = open_message_box(qtbot, window, "deleteConfirmation")
     assert "Activities that will be deleted: 8." in box.informativeText()
-    assert sorted(path.name for path in folder.iterdir()) == before  # niente lock né migrazioni
+    assert sorted(path.name for path in folder.iterdir()) == before  # no lock or migrations
     click(box, "Cancel")
 
 
@@ -320,11 +322,11 @@ def test_reimporting_a_file_whose_archive_copy_is_gone_reports_a_repair(
     assert report.repaired == 1
     assert report.imported == 0
     dialogs = [box for box in window.open_boxes if isinstance(box, ImportReportDialog)]
-    dialog = dialogs[-1]  # l'ultimo riepilogo
+    dialog = dialogs[-1]  # the last summary
     assert "Archived files repaired from the imported original: 1" in dialog.summary_text
 
 
-# --- R14: l'elenco dei profili inutilizzabile ------------------------------------------------
+# --- R14: the profile list unusable ------------------------------------------------
 
 
 def test_a_corrupt_profile_list_says_where_the_file_is_and_how_to_start_again(
@@ -343,7 +345,7 @@ def test_a_corrupt_profile_list_says_where_the_file_is_and_how_to_start_again(
     assert "profiles.json" in box.informativeText()
     assert str(config) in box.informativeText()
     assert "move profiles.json out of that folder" in box.informativeText()
-    assert window.new_profile_action.isEnabled()  # la finestra resta usabile
+    assert window.new_profile_action.isEnabled()  # the window stays usable
 
 
 def test_a_profile_list_from_a_newer_version_says_to_update_the_app(
@@ -364,7 +366,7 @@ def test_a_profile_list_from_a_newer_version_says_to_update_the_app(
     assert "Update Ponos Coach" in box.informativeText()
 
 
-# --- D-F1-02 e D-F1-10 -----------------------------------------------------------------------
+# --- D-F1-02 and D-F1-10 -----------------------------------------------------------------------
 
 
 def test_the_orphan_temporaries_removed_at_opening_are_logged_as_a_count_only(
@@ -423,7 +425,7 @@ def test_the_web_engine_starts_after_the_first_show_not_in_the_constructor(
     qtbot.addWidget(window)
     chart = window.overview_page.chart
 
-    assert not chart.engine_started  # costruire la finestra non costa i 180 ms di Chromium
+    assert not chart.engine_started  # building the window does not cost the 180 ms of Chromium
 
     window.show()
 

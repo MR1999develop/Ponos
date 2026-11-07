@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Contratti di `ProfileStorage` e dei quattro store sulla stessa connessione.
+"""Contracts of `ProfileStorage` and of the four stores on the same connection.
 
-`ActivityIndex`, `SyncJournal`, `PhysiologyStore` e `LoadCache` si provano attraverso un profilo
-creato dal `ProfileStorage` della fixture `harness`.
+`ActivityIndex`, `SyncJournal`, `PhysiologyStore` and `LoadCache` are tried through a profile
+created by the `ProfileStorage` of the `harness` fixture.
 """
 
 from __future__ import annotations
@@ -67,12 +67,12 @@ LOAD = ActivityLoad(80.0, 75.0, 75.0, 3500, 4, 12.5, LoadSource.HEART_RATE)
 
 
 def create(harness: StorageHarness) -> OpenProfile:
-    """Un profilo nuovo in una cartella nuova."""
+    """A new profile in a new folder."""
     return harness.storage.create(harness.new_folder(), PROFILE_ID, NAME, "Europe/Rome")
 
 
 class ProfileStorageContract:
-    """Creare e aprire il database di un profilo."""
+    """Create and open the database of a profile."""
 
     def test_create_reports_the_profile_info(self, harness: StorageHarness) -> None:
         with closing(create(harness)) as profile:
@@ -135,7 +135,7 @@ class ProfileStorageContract:
             harness.storage.peek(harness.new_folder())
 
     def test_unknown_timezone_is_refused(self, harness: StorageHarness) -> None:
-        with pytest.raises(ValueError, match="fuso"):
+        with pytest.raises(ValueError, match="time zone"):
             harness.storage.create(harness.new_folder(), PROFILE_ID, NAME, "Mars/Olympus")
 
     def test_close_can_be_repeated(self, harness: StorageHarness) -> None:
@@ -161,7 +161,7 @@ class ProfileStorageContract:
 
 
 class ActivityIndexContract:
-    """L'indice delle attività di un profilo."""
+    """The activity index of a profile."""
 
     def test_new_index_is_empty(self, harness: StorageHarness) -> None:
         with closing(create(harness)) as profile:
@@ -202,7 +202,7 @@ class ActivityIndexContract:
 
             listed = profile.activities.list_by_start()
 
-        # A parità di inizio vale l'ordine delle chiavi d'identità: "fit:" precede "gpx:".
+        # On equal start the order of the identity keys applies: "fit:" comes before "gpx:".
         assert listed == [earlier, same_start_gpx, later]
 
     def test_fit_and_gpx_identities_are_different_activities(self, harness: StorageHarness) -> None:
@@ -287,9 +287,9 @@ class ActivityIndexContract:
             assert find(T0 + timedelta(seconds=60), 1000.0) == [record]  # on point
             assert find(T0 - timedelta(seconds=60), 1000.0) == [record]
             assert find(T0 + timedelta(seconds=61), 1000.0) == []  # off point
-            assert find(T0, 1050.0) == [record]  # 5% del maggiore: on point
+            assert find(T0, 1050.0) == [record]  # 5% of the larger: on point
             assert find(T0, 1053.0) == []  # off point
-            assert find(T0, 950.0) == [record]  # on point: 50 s sono il 5% di 1000
+            assert find(T0, 950.0) == [record]  # on point: 50 s is 5% of 1000
             assert find(T0, 949.0) == []  # off point
 
     def test_no_possible_duplicates_in_an_empty_index(self, harness: StorageHarness) -> None:
@@ -311,7 +311,7 @@ class ActivityIndexContract:
 
 
 class PhysiologyStoreContract:
-    """Parametri fisiologici con data di validità."""
+    """Physiological parameters with validity date."""
 
     def test_new_store_is_empty(self, harness: StorageHarness) -> None:
         with closing(create(harness)) as profile:
@@ -347,7 +347,7 @@ class PhysiologyStoreContract:
 
 
 class LoadCacheContract:
-    """Carichi legati all'impronta dei parametri che li hanno prodotti."""
+    """Loads tied to the fingerprint of the parameters that produced them."""
 
     def test_miss_when_nothing_was_stored(self, harness: StorageHarness) -> None:
         with closing(create(harness)) as profile:
@@ -387,7 +387,7 @@ class LoadCacheContract:
             profile.load_cache.put(fit_identity(2), FINGERPRINT, LOAD)
 
             profile.load_cache.invalidate(fit_identity(1))
-            profile.load_cache.invalidate(fit_identity(3))  # sconosciuta: nessun effetto
+            profile.load_cache.invalidate(fit_identity(3))  # unknown: no effect
 
             assert profile.load_cache.get(fit_identity(1), FINGERPRINT) is None
             assert profile.load_cache.get(fit_identity(2), FINGERPRINT) == LOAD
@@ -418,7 +418,7 @@ class LoadCacheContract:
 
 
 class LoadCacheZonesContract:
-    """I secondi in zona viaggiano con il carico e con la sua impronta."""
+    """Seconds in zone travel with the load and with its fingerprint."""
 
     def test_zone_seconds_are_stored_with_the_load(self, harness: StorageHarness) -> None:
         zoned = ActivityLoad(
@@ -463,7 +463,7 @@ class LoadCacheZonesContract:
 
 
 class WeightStoreContract:
-    """Serie del peso con data di validità."""
+    """Weight series with validity date."""
 
     def test_new_store_is_empty(self, harness: StorageHarness) -> None:
         with closing(create(harness)) as profile:
@@ -514,7 +514,7 @@ class WeightStoreContract:
 
 
 class FixedDataStoreContract:
-    """Altezza e data di nascita: impostate una volta sola."""
+    """Height and date of birth: set only once."""
 
     DATA = FixedProfileData(Height(172), BirthDate(date(1990, 5, 17)))
 
@@ -561,11 +561,11 @@ class FixedDataStoreContract:
                 raise RuntimeError("boom")
 
             assert profile.fixed_data.get() is None
-            profile.fixed_data.set_once(self.DATA)  # e si può ancora impostare
+            profile.fixed_data.set_once(self.DATA)  # and it can still be set
 
 
 class SportWeightStoreContract:
-    """Pesi degli sport scelti dall'utente."""
+    """Sport weights chosen by the user."""
 
     def test_new_profile_has_no_saved_weights(self, harness: StorageHarness) -> None:
         with closing(create(harness)) as profile:

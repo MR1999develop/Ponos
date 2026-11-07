@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Controlli comuni su istanti e durate di un'attività."""
+"""Common checks on instants and durations of an activity."""
 
 from __future__ import annotations
 
@@ -11,38 +11,38 @@ from ponos_coach.activities.domain.limits import MAX_ACTIVITY_INSTANT, MIN_ACTIV
 
 
 def check_utc(moment: datetime) -> None:
-    """Rifiuta un istante senza fuso o con un fuso diverso da UTC."""
+    """Rejects an instant without time zone or with a time zone other than UTC."""
     if moment.utcoffset() != timedelta(0):
-        raise ValueError("gli istanti devono essere UTC con fuso")
+        raise ValueError("instants must be UTC with time zone")
 
 
 def truncate_to_millisecond(moment: datetime) -> datetime:
-    """L'istante senza la frazione sotto il millisecondo (per difetto, fuso conservato).
+    """The instant without the fraction below the millisecond (rounded down, time zone preserved).
 
-    L'indice delle attività salva i millisecondi interi e rifiuta frazioni più fini: i
-    lettori e il caso d'uso dell'import le tolgono qui, in un solo posto.
+    The activity index saves whole milliseconds and rejects finer fractions: the
+    readers and the import use case remove them here, in one single place.
     """
     return moment.replace(microsecond=moment.microsecond // 1000 * 1000)
 
 
 def check_durations(elapsed_s: float, timer_s: float) -> None:
-    """Durate finite e positive, con il tempo in movimento non oltre il trascorso."""
+    """Finite and positive durations, with the moving time not above the elapsed time."""
     for duration in (elapsed_s, timer_s):
         if not math.isfinite(duration) or duration <= 0:
-            raise ValueError("le durate devono essere finite e positive")
+            raise ValueError("durations must be finite and positive")
     if timer_s > elapsed_s:
-        raise ValueError("il tempo in movimento non può superare il trascorso")
+        raise ValueError("the moving time cannot exceed the elapsed time")
 
 
 def is_plausible_instant(moment: datetime) -> bool:
-    """Vero se l'istante (con fuso) sta nella finestra [1990-01-01, 2100-01-01) UTC."""
+    """True if the instant (with time zone) lies in the window [1990-01-01, 2100-01-01) UTC."""
     return MIN_ACTIVITY_INSTANT <= moment < MAX_ACTIVITY_INSTANT
 
 
 def is_plausible_span(start: datetime, elapsed_s: float) -> bool:
-    """Vero se inizio e fine (`start` + `elapsed_s`) stanno nella finestra degli orari ammessi.
+    """True if start and end (`start` + `elapsed_s`) lie in the window of allowed times.
 
-    Falso anche se la fine non è rappresentabile (`OverflowError` diventa un no).
+    False also if the end is not representable (`OverflowError` becomes a no).
     """
     try:
         end = start + timedelta(seconds=elapsed_s)

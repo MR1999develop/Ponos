@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-UI-04 (parte pura): la figura del PMC ha le serie, gli assi e i temi attesi."""
+"""T-UI-04 (pure part): the PMC figure has the expected series, axes and themes."""
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ def test_series_use_okabe_ito_colors_and_themes_change_the_surface() -> None:
         line_colors = {trace.line.color for trace in figure.data[:3]}
         assert line_colors <= okabe_ito
         assert len(line_colors) == 3
-        assert figure.data[3].marker.color not in line_colors  # le barre sono neutre
+        assert figure.data[3].marker.color not in line_colors  # the bars are neutral
 
 
 def test_daily_load_sums_activities_of_the_same_day() -> None:
@@ -152,7 +152,7 @@ def _contrast(a: str, b: str) -> float:
     return (high + 0.05) / (low + 0.05)
 
 
-# --- CTL e ATL distinguibili anche senza il colore ---------------------------------------------
+# --- CTL and ATL distinguishable even without colour ---------------------------------------------
 
 
 def test_atl_is_dashed_and_ctl_solid_with_the_same_width() -> None:
@@ -179,7 +179,7 @@ def test_each_line_carries_its_name_next_to_its_last_point_in_the_text_colour() 
         assert names[text].y == pytest.approx(value)
         assert names[text].font.color == tokens.text
     higher, lower = sorted(names.values(), key=lambda a: a.y, reverse=True)
-    assert (higher.yanchor, lower.yanchor) == ("bottom", "top")  # i nomi non si sovrappongono
+    assert (higher.yanchor, lower.yanchor) == ("bottom", "top")  # the names do not overlap
 
 
 def test_an_empty_series_has_no_end_labels() -> None:
