@@ -38,7 +38,7 @@ completata e verificata.
 | Lingue | Inglese come lingua predefinita, italiano scelto dal menu Lingua e ricordato (decisione del 2026-11-06; prima seguiva la lingua del sistema) |
 | Dati del profilo | Alla creazione: nome, cartella, altezza, peso, data di nascita, sesso, FC minima e massima, soglia. Poi si aggiornano con una data di validità peso, FC minima, FC massima e soglia; nome, altezza, data di nascita e sesso restano fissi (decisione del 2026-11-06) |
 | Alimentazione (fase 4b) | Cliccando un giorno passato del calendario: kcal e grammi di carboidrati, proteine e grassi per colazione, pranzo, cena, pre, durante (sedute lunghe) e post allenamento, con 2-3 esempi di alimenti; nessun diario dei pasti; obiettivo alimentare per periodi (dimagrimento, mantenimento, performance); calorie fuori dallo sport da un livello di attività nel profilo; nessuna restrizione alimentare per ora; i giorni futuri arriveranno con il piano (fase 5) (decisioni del 2026-11-07) |
-| Piattaforme e repository | Windows e Ubuntu, GitHub con CI (repository pubblico); push automatico della sessione principale sul ramo di lavoro, su `main` solo con PR (dal 2026-11-06; prima lo faceva l'utente a mano) |
+| Piattaforme e repository | Windows e Ubuntu, GitHub con CI (repository pubblico); il push lo fa l'utente a mano (regola del 2026-11-07; dal 2026-11-06 al 2026-11-07 era automatico); su `main` solo con PR |
 
 ## 2. Decisioni di default (le ho fissate io: da confermare o correggere)
 
