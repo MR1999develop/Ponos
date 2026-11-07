@@ -27,6 +27,14 @@ come "punto aperto" nei file `references/`.
 | COG | Coggan e Allen, *Training and Racing with a Power Meter* | TSS, ATL, CTL, TSB, PMC |
 | FRI | Friel, *The Triathlete's Training Bible* | test di soglia di 30 minuti |
 | SEI | Seiler, distribuzione dell'intensità (2010) | distribuzione 80/20 |
+| TON24 | Tønnessen, Sandbakk, Sandbakk, Seiler, Haugen, modelli di seduta, prospettiva norvegese (Sports Med 2024, PMC11560996) | zone, modelli di seduta, conteggio per sedute |
+| HAU22 | Haugen, Sandbakk, Seiler, Tønnessen, corridori di fondo di livello mondiale (Sports Med Open 2022, PMC8975965) | volumi, soglia, VO2max, periodizzazione, scarico |
+| SAN25 | Sandbakk e altri, buone pratiche negli sport di resistenza olimpici (Sports Med Open 2025, PMC12031707) | giorni chiave, settimane di scarico, scarico prima della gara |
+| KNO24 | Knopp, Appelhans, Schönfelder, Seiler, Wackerhage, 92 piani di maratona per amatori (Sports Med Open 2024, PMC11065819) | volumi e lunghi per amatori, progressione, scarico |
+| SVK25 | Seiler-Viken e altri, scala norvegese a zone (Sci Rep 2025, PMC12491423) | confini delle zone, individualizzazione |
+| TON14 | Tønnessen e altri, preparazione e picco prima di un oro (PLoS One 2014, PMC4096917) | picco: volume ridotto, intensità mantenuta |
+| MUN15 | Muñoz, Seiler e altri, intensità nel picco (Asian J Sports Med 2015, PMC4594142) | ritmo gara contro alta intensità nel picco |
+| AUS26 | Ausland, Kelemen, Seiler, FC massima sul campo (Front Sports Act Living 2026, PMC13136085) | FC massima: formule per età da evitare, protocollo di campo |
 | SIL | Silbernagel e altri, modello di monitoraggio del dolore (2007) | ripresa guidata dal dolore |
 | ISSN | International Society of Sports Nutrition, posizioni sulla nutrizione sportiva | carboidrati, proteine, momenti |
 | ACSM | ACSM e Academy of Nutrition and Dietetics, *Nutrition and Athletic Performance* | carboidrati, liquidi, ritmo di perdita di peso |
