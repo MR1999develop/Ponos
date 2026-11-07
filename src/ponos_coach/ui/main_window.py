@@ -58,6 +58,7 @@ from ponos_coach.ui.data_thread import SHUTDOWN_WAIT_MS
 from ponos_coach.ui.day_page import DayPage
 from ponos_coach.ui.errors import ErrorMessage, exclusion_reason_text, unexpected_error_message
 from ponos_coach.ui.garmin_ui import GarminUi
+from ponos_coach.ui.goals_page import GoalsPage
 from ponos_coach.ui.import_report import ImportReport
 from ponos_coach.ui.import_report_dialog import ImportReportDialog
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
@@ -71,6 +72,7 @@ from ponos_coach.ui.overview_state import (
     Ready,
     summary_of,
 )
+from ponos_coach.ui.plan_ui import PlanUi
 from ponos_coach.ui.profile_dialogs import ProfileDialogs
 from ponos_coach.ui.profile_editor import ProfileEditor
 from ponos_coach.ui.threshold_presentation import can_be_threshold_test, not_a_run_reason
@@ -105,7 +107,13 @@ _STATUS_MESSAGE_MS = 8000
 _SECTION_OVERVIEW = 0
 _SECTION_ACTIVITIES = 1
 _SECTION_CALENDAR = 2
-_AVAILABLE_SECTIONS = (_SECTION_OVERVIEW, _SECTION_ACTIVITIES, _SECTION_CALENDAR)
+_SECTION_GOALS = 3
+_AVAILABLE_SECTIONS = (
+    _SECTION_OVERVIEW,
+    _SECTION_ACTIVITIES,
+    _SECTION_CALENDAR,
+    _SECTION_GOALS,
+)
 _SHUTDOWN_POLL_MS = 20
 
 
@@ -177,9 +185,9 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
         self._build_actions()
         self._garmin = GarminUi(self, controller.sync, system_theme, self._remember)
-        self._build_menus()
         self._build_content()
         self._build_dialogs()
+        self._build_menus()
         self._build_status_bar()
         self._restore_geometry()
         self._restore_section()
@@ -297,12 +305,25 @@ class MainWindow(QMainWindow):
             self._back_action,
         ):
             calendar_menu.addAction(action)
+        self._build_plan_menu()
         self._garmin.build_menu(self.menuBar())
         self._build_language_menu()
         help_menu = self.menuBar().addMenu(self.tr("Help"))
         help_menu.addAction(self._log_action)
         help_menu.addSeparator()
         help_menu.addAction(self._about_action)
+
+    def _build_plan_menu(self) -> None:
+        """Menu "Plan": the goals, the training settings, and undo and redo of both."""
+        menu = self.menuBar().addMenu(self.tr("Plan"))
+        actions = self._plan.actions
+        for name in ("add_race", "add_form_goal", "change_goal", "remove_goal"):
+            menu.addAction(actions[name])
+        menu.addSeparator()
+        menu.addAction(actions["training"])
+        menu.addSeparator()
+        menu.addAction(actions["undo"])
+        menu.addAction(actions["redo"])
 
     def _build_language_menu(self) -> None:
         """Menu "Language": English and Italian, with the choice remembered for the next
@@ -331,7 +352,7 @@ class MainWindow(QMainWindow):
             (self.tr("Overview"), True),
             (self.tr("Activities"), True),
             (self.tr("Calendar"), True),
-            (self.tr("Goals"), False),
+            (self.tr("Goals"), True),
             (self.tr("Injuries"), False),
             (self.tr("Tests"), False),
             (self.tr("Profile settings"), False),
@@ -352,17 +373,20 @@ class MainWindow(QMainWindow):
         self._activities.import_requested.connect(self.choose_import_files)
         self._activities.selection_changed.connect(self._update_actions)
         self._calendar = CalendarPage(self._today(), self)
+        self._goals = GoalsPage(self)
         self._day_page = DayPage(self)
         self._pages = QStackedWidget(self)
         self._section_pages: dict[int, QWidget] = {
             _SECTION_OVERVIEW: self._overview,
             _SECTION_ACTIVITIES: self._activities,
             _SECTION_CALENDAR: self._calendar,
+            _SECTION_GOALS: self._goals,
         }
         for page in (*self._section_pages.values(), self._day_page):
             self._pages.addWidget(page)
         self._pages.currentChanged.connect(self._update_actions)
         self._calendar.month_changed.connect(self._update_actions)
+        self._calendar.selection_changed.connect(self._update_actions)
 
         central = QWidget(self)
         row = QHBoxLayout(central)
@@ -402,6 +426,19 @@ class MainWindow(QMainWindow):
         )
         self._day_page.back_requested.connect(self._back_to_calendar)
         self._day_page.edit_profile_requested.connect(self._edit_profile_from_day)
+        self._plan = PlanUi(
+            self,
+            self._controller,
+            self._calendar,
+            self._goals,
+            self._overview,
+            today=self._today,
+            theme=system_theme,
+            show_error=self._show_error,
+            show_goals_page=self._show_goals,
+            edit_profile=self._edit_profile_from_day,
+        )
+        self._plan.retest_proposal_changed.connect(self._on_plan_retest_changed)
 
     def _today(self) -> date:
         return self._defaults.today(self._zone)
@@ -420,6 +457,10 @@ class MainWindow(QMainWindow):
         self._retest_label = self._status_label()
         self._retest_label.setVisible(False)
         bar.addPermanentWidget(self._retest_label)
+        self._plan_retest_label = self._status_label()
+        self._plan_retest_label.setObjectName("planRetestLabel")
+        self._plan_retest_label.setVisible(False)
+        bar.addPermanentWidget(self._plan_retest_label)
         self._warning_label = self._status_label()
         bar.addPermanentWidget(self._warning_label)
         self._import_label = self._status_label()
@@ -478,6 +519,21 @@ class MainWindow(QMainWindow):
     def calendar_page(self) -> CalendarPage:
         """The Calendar page."""
         return self._calendar
+
+    @property
+    def goals_page(self) -> GoalsPage:
+        """The Goals page."""
+        return self._goals
+
+    @property
+    def plan(self) -> PlanUi:
+        """The plan flow (goals, training settings, plan state)."""
+        return self._plan
+
+    @property
+    def plan_retest_text(self) -> str:
+        """The proposal of the plan for the next threshold test (empty while hidden)."""
+        return self._plan_retest_label.text()
 
     @property
     def day_page(self) -> DayPage:
@@ -701,6 +757,13 @@ class MainWindow(QMainWindow):
         self._retest_label.setText(text)
         self._retest_label.setVisible(bool(text))
 
+    def _on_plan_retest_changed(self, text: str) -> None:
+        self._plan_retest_label.setText(text)
+        self._plan_retest_label.setVisible(bool(text))
+
+    def _show_goals(self) -> None:
+        self._sidebar.setCurrentRow(_SECTION_GOALS)
+
     def _edit_profile_from_day(self) -> None:
         """Open "Edit profile" from the day page's missing-data message."""
         if self._controller.can_edit_profile:
@@ -811,6 +874,7 @@ class MainWindow(QMainWindow):
         self._creating_form = None
         self._nutrition.profile_changed()
         self._threshold.profile_changed()
+        self._plan.profile_changed()
         self.setWindowTitle(self.tr("{profile} - Ponos Coach").format(profile=view.name.value))
         self._warning_label.setText(self._warning_text(view.warnings))
         self._warning_label.setVisible(bool(view.warnings))
@@ -1066,6 +1130,7 @@ class MainWindow(QMainWindow):
     def _on_color_scheme_changed(self) -> None:
         self._overview.apply_state(self._controller.overview_state, system_theme(), self._zone)
         self._calendar.apply_theme(system_theme())
+        self._plan.theme_changed()
 
     def _unavailable_reason(self, allowed: bool) -> str:
         """The reason, for the tooltip, why a command on the profile cannot be given now."""
@@ -1144,9 +1209,19 @@ class MainWindow(QMainWindow):
         on_calendar = self._pages.currentWidget() is self._calendar
         on_day = self._pages.currentWidget() is self._day_page
         not_here = self.tr("Open the Calendar section first.")
-        for action in (self._previous_month_action, self._today_action, self._open_day_action):
+        for action in (self._previous_month_action, self._today_action):
             action.setEnabled(on_calendar)
             action.setToolTip("" if on_calendar else not_here)
+        selected = self._calendar.selected_cell()
+        can_open = on_calendar and selected is not None and selected.can_open
+        self._open_day_action.setEnabled(can_open)
+        if can_open:
+            open_reason = ""
+        elif on_calendar:
+            open_reason = self.tr("Select a day up to today first: later days have no day page.")
+        else:
+            open_reason = not_here
+        self._open_day_action.setToolTip(open_reason)
         can_go_forward = on_calendar and self._calendar.next_button.isEnabled()
         self._next_month_action.setEnabled(can_go_forward)
         self._next_month_action.setToolTip(
@@ -1226,6 +1301,7 @@ class MainWindow(QMainWindow):
             self._dialogs.close_all()
             self._nutrition.close_dialogs()
             self._threshold.close_dialogs()
+            self._plan.close_dialogs()
             self.release_web_engine()
             if not self._controller.has_stopped:
                 event.ignore()

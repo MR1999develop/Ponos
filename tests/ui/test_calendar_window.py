@@ -85,25 +85,31 @@ def test_each_past_day_shows_its_sports_and_load_and_a_day_without_activity_only
     assert cell_of(window, LONG_DAY).activity_count == 1
 
 
-def test_navigation_by_buttons_moves_one_month_and_next_stops_at_the_current_month(
+def test_navigation_by_buttons_moves_one_month_and_next_stops_a_year_ahead(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with_days(qtbot, tmp_path, settings)
     window.sidebar.setCurrentRow(2)
     page = window.calendar_page
 
-    assert not page.next_button.isEnabled()  # the calendar shows the past only, for now
-    assert page.next_button.toolTip()
+    assert page.next_button.isEnabled()  # the plan fills the months ahead
+    page.next_button.click()
+    assert page.title_text == "July 2026"
+    page.previous_button.click()
     page.previous_button.click()
     assert page.title_text == "May 2026"
     assert page.current_month == date(2026, 5, 1)
-    assert page.next_button.isEnabled()
     page.previous_button.click()
     page.previous_button.click()
     assert page.title_text == "March 2026"
     page.today_button.click()
     assert page.title_text == "June 2026"
     assert page.selected_day() == date(2026, 6, 30)
+    for _ in range(12):
+        page.next_button.click()
+    assert page.title_text == "June 2027"
+    assert not page.next_button.isEnabled()
+    assert page.next_button.toolTip() == "The calendar shows up to a year ahead."
 
 
 def test_navigation_by_keyboard_uses_page_keys_and_the_menu_shortcuts(
@@ -117,8 +123,7 @@ def test_navigation_by_keyboard_uses_page_keys_and_the_menu_shortcuts(
     assert actions["previous"].toolTip() == "Open the Calendar section first."
     window.sidebar.setCurrentRow(2)
     assert actions["previous"].isEnabled()
-    assert not actions["next"].isEnabled()  # already at the current month
-    assert actions["next"].toolTip()
+    assert actions["next"].isEnabled()
     assert actions["today"].isEnabled()
 
     QTest.keyClick(page.table, Qt.Key.Key_PageUp)
@@ -131,6 +136,8 @@ def test_navigation_by_keyboard_uses_page_keys_and_the_menu_shortcuts(
     actions["previous"].trigger()
     actions["today"].trigger()
     assert page.title_text == "June 2026"
+    actions["next"].trigger()
+    assert page.title_text == "July 2026"
 
 
 def test_arrow_keys_move_between_past_days_and_enter_opens_the_day(
@@ -189,10 +196,10 @@ def test_the_theme_changes_the_goal_tints_of_the_cells(qtbot: QtBot) -> None:
     assert cell.goal is GoalKind.WEIGHT_LOSS
 
 
-# --- Days after today (the plan arrives later) ---------------------------------------------------
+# --- Days after today (they hold the plan) ------------------------------------------------------
 
 
-def test_days_after_today_cannot_be_selected_or_opened(qtbot: QtBot) -> None:
+def test_days_after_today_can_be_selected_but_have_no_day_page(qtbot: QtBot) -> None:
     page = CalendarPage(date(2026, 6, 15))
     qtbot.addWidget(page)
     requested: list[object] = []
@@ -201,21 +208,27 @@ def test_days_after_today_cannot_be_selected_or_opened(qtbot: QtBot) -> None:
 
     page.select_day(date(2026, 6, 20))
     page.table.activated.emit(future)
+    page.request_selected_day()
 
-    assert page.selected_day() is None
-    assert not page.model.flags(future) & Qt.ItemFlag.ItemIsEnabled
-    assert requested == []
-    assert "Not available yet" in str(page.model.data(future, Qt.ItemDataRole.ToolTipRole))
+    assert page.selected_day() == date(2026, 6, 20)
+    assert page.model.flags(future) & Qt.ItemFlag.ItemIsEnabled
+    assert requested == []  # the nutrition day page is for the days up to today
+    assert "No plan for this day" in str(page.model.data(future, Qt.ItemDataRole.ToolTipRole))
+    assert "No plan for this day." in page.panel.detail_text
 
 
-def test_the_arrow_keys_never_land_on_a_day_after_today(qtbot: QtBot) -> None:
+def test_the_arrow_keys_reach_the_days_after_today_and_enter_opens_nothing_there(
+    qtbot: QtBot,
+) -> None:
     page = CalendarPage(date(2026, 6, 15))
     qtbot.addWidget(page)
+    requested: list[object] = []
+    page.day_requested.connect(requested.append)
     page.select_day(date(2026, 6, 15))
 
     QTest.keyClick(page.table, Qt.Key.Key_Right)
     QTest.keyClick(page.table, Qt.Key.Key_Down)
+    QTest.keyClick(page.table, Qt.Key.Key_Return)
 
-    landed = page.selected_day()
-    assert landed is not None
-    assert landed <= date(2026, 6, 15)
+    assert page.selected_day() == date(2026, 6, 23)
+    assert requested == []

@@ -97,6 +97,21 @@ La sessione principale fa domande, piano, orchestrazione e revisione finale
 di ogni fase. In parallelo solo su file che non si sovrappongono, ogni lavoro
 parallelo sul codice nel suo worktree.
 
+Ritmo di lavoro (regola dell'utente del 2026-11-07, per accelerare):
+
+- Gli agenti eseguono solo i controlli del loro perimetro (ruff e mypy sui
+  file toccati, `pytest` delle cartelle toccate); `uv run --locked nox` e
+  `nox -s collaudo` li esegue la sessione principale una volta per fase,
+  prima del commit finale.
+- Ambito congelato: una richiesta nuova durante una fase va in coda alla
+  fase successiva (voce in `PLAN.md`), salvo correzioni di difetti.
+- Più lavoro in parallelo: il nucleo della fase successiva parte in un
+  worktree mentre gira l'interfaccia della fase corrente; i conflitti sui
+  file comuni (finestra principale, schema) li risolve la sessione
+  principale all'unione.
+- Collaudo (`collaudatore`) e revisione (`revisore-codice`) ogni due fasi,
+  sul diff di entrambe.
+
 ## Git
 
 - Autore e committer già nella configurazione del repository; nessuno script

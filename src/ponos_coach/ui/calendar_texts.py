@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Calendar texts: the month's title, weekdays, sports in short, and what each day says.
+"""Calendar texts: the month title, weekdays, sports in short, and what each day says.
 
 The domain gives categories (`Sport`, `GoalKind`); here we choose the words. Context "Calendar"
 written as a literal: lupdate does not follow aliases.
@@ -13,9 +13,22 @@ from datetime import date
 from PySide6.QtCore import QCoreApplication, QDate, QLocale
 
 from ponos_coach.activities.domain import Sport
+from ponos_coach.planning.domain import PlanDay
 from ponos_coach.ui.activity_text import sport_text
-from ponos_coach.ui.calendar_model import DAYS_PER_WEEK, CalendarDay, GoalKind
+from ponos_coach.ui.calendar_model import DAYS_PER_WEEK, CalendarDay, DayGoal, GoalKind
 from ponos_coach.ui.day_presentation import number_text
+from ponos_coach.ui.plan_texts import (
+    duration_clock_text,
+    goal_kind_cell_text,
+    goal_label,
+    phase_text,
+    planned_load_text,
+    priority_race_text,
+    session_lines,
+    session_title,
+    target_class_explanation,
+    target_class_text,
+)
 
 _ISO_MONDAY = 1
 
@@ -63,33 +76,59 @@ def load_text(load: float) -> str:
     return f"{number_text(load)} hrTSS"
 
 
+def _plan_lines(cell: CalendarDay) -> list[str]:
+    """The goal of the day, the planned session and the phase, one short line each."""
+    lines = [goal_kind_cell_text(item.goal) for item in cell.goals]
+    plan = cell.plan
+    if plan is None:
+        return lines
+    if plan.race is not None:
+        if not cell.goals:
+            lines.append(priority_race_text(plan.race.priority))
+    elif plan.session is not None:
+        # {session}: the planned session, for example "Threshold, 60 min".
+        lines.append(
+            QCoreApplication.translate("Calendar", "Plan: {session}").format(
+                session=session_title(plan.session)
+            )
+        )
+    else:
+        lines.append(QCoreApplication.translate("Calendar", "Plan: rest day"))
+    lines.append(phase_text(plan.phase))
+    return lines
+
+
 def cell_text(cell: CalendarDay) -> str:
-    """What a day cell shows: the day, sports, load and goal (nothing outside the month)."""
+    """What a day cell shows: the day, sports, load, goal, plan and nutrition goal (nothing outside
+    the month)."""
     if not cell.in_month:
         return ""
     lines = [str(cell.day.day)]
     if cell.activity_count:
         lines.append(", ".join(sport_short_text(sport) for sport in cell.sports))
         lines.append(load_text(cell.load))
+    lines.extend(_plan_lines(cell))
     if cell.goal is not None:
         lines.append(goal_kind_text(cell.goal))
     return "\n".join(lines)
+
+
+def _long_date(cell: CalendarDay) -> str:
+    return QLocale().toString(
+        QDate(cell.day.year, cell.day.month, cell.day.day), QLocale.FormatType.LongFormat
+    )
 
 
 def cell_description(cell: CalendarDay) -> str:
     """A day in full words, for the tooltip and the accessible description."""
     if not cell.in_month:
         return ""
-    parts = [
-        QLocale().toString(
-            QDate(cell.day.year, cell.day.month, cell.day.day), QLocale.FormatType.LongFormat
-        )
-    ]
+    parts = [_long_date(cell)]
     if cell.is_today:
         parts.append(QCoreApplication.translate("Calendar", "Today"))
-    if cell.is_future:
-        parts.append(QCoreApplication.translate("Calendar", "Not available yet"))
-    elif cell.activity_count:
+    parts.extend(goal_label(item.goal) for item in cell.goals)
+    parts.extend(_planned_sentences(cell))
+    if cell.activity_count:
         sports = ", ".join(sport_text(sport) for sport in cell.sports)
         # {sports}: the names of the sports of the day; %n: the number of activities.
         parts.append(
@@ -101,7 +140,7 @@ def cell_description(cell: CalendarDay) -> str:
         parts.append(
             QCoreApplication.translate("Calendar", "Load {load}").format(load=load_text(cell.load))
         )
-    else:
+    elif not cell.is_future:
         parts.append(QCoreApplication.translate("Calendar", "No activities"))
     if cell.goal is not None:
         # {goal}: the name of the nutrition goal.
@@ -111,3 +150,107 @@ def cell_description(cell: CalendarDay) -> str:
             )
         )
     return ". ".join(parts)
+
+
+def _planned_sentences(cell: CalendarDay) -> list[str]:
+    plan = cell.plan
+    if plan is None:
+        if cell.is_future:
+            return [QCoreApplication.translate("Calendar", "No plan for this day")]
+        return []
+    parts = [phase_text(plan.phase)]
+    if plan.race is not None:
+        parts.append(priority_race_text(plan.race.priority))
+    elif plan.session is not None:
+        # {session}: the planned session, for example "Threshold, 60 min".
+        parts.append(
+            QCoreApplication.translate("Calendar", "Planned: {session}").format(
+                session=session_title(plan.session)
+            )
+        )
+    else:
+        parts.append(QCoreApplication.translate("Calendar", "Planned: rest day"))
+    return parts
+
+
+# --- The day in full (the panel under the grid) ------------------------------------------------
+
+
+def _goal_detail_lines(item: DayGoal, expected_time_s: int | None) -> list[str]:
+    lines = [goal_label(item.goal)]
+    if expected_time_s is not None:
+        # {time}: the time the plan expects, as h:mm:ss.
+        lines.append(
+            QCoreApplication.translate("Calendar", "The plan expects {time}").format(
+                time=duration_clock_text(expected_time_s)
+            )
+        )
+    if item.assessment is not None:
+        # {verdict}: realistic, ambitious, not reachable or cannot be estimated.
+        lines.append(
+            QCoreApplication.translate("Calendar", "Target time: {verdict}").format(
+                verdict=target_class_text(item.assessment.classification)
+            )
+        )
+        lines.append(target_class_explanation(item.assessment.classification))
+    return lines
+
+
+def _planned_section(plan: PlanDay) -> str:
+    """The phase of the day and, if there is one, its session with the blocks and the load."""
+    lines = [phase_text(plan.phase)]
+    if plan.session is not None:
+        lines.extend(session_lines(plan.session))
+        # {load}: the estimated load with its unit.
+        lines.append(
+            QCoreApplication.translate("Calendar", "Estimated load: {load}").format(
+                load=planned_load_text(plan.load)
+            )
+        )
+    elif plan.race is None:
+        lines.append(QCoreApplication.translate("Calendar", "Rest day"))
+    return "\n".join(lines)
+
+
+def day_detail_text(cell: CalendarDay) -> str:
+    """The day in full, for the panel under the grid: the planned session with its blocks, what was
+    done and how it went against the plan, and the goals. Sections are separated by a blank line."""
+    if not cell.in_month:
+        return ""
+    sections = [_long_date(cell)]
+    plan = cell.plan
+    expected = None if plan is None or plan.race is None else plan.race.expected_time_s
+    if plan is not None:
+        sections.append(_planned_section(plan))
+    elif cell.is_future:
+        sections.append(QCoreApplication.translate("Calendar", "No plan for this day."))
+    sections.extend("\n".join(_goal_detail_lines(item, expected)) for item in cell.goals)
+    if cell.activity_count:
+        # {sports}: the sports done; {load}: their load with its unit.
+        sections.append(
+            QCoreApplication.translate("Calendar", "Done: {sports}, {load}").format(
+                sports=", ".join(sport_text(sport) for sport in cell.sports),
+                load=load_text(cell.load),
+            )
+        )
+    if cell.adherence is not None:
+        sections.append(_adherence_text(cell))
+    return "\n\n".join(sections)
+
+
+def _adherence_text(cell: CalendarDay) -> str:
+    adherence = cell.adherence
+    if adherence is None:
+        return ""
+    # {planned} and {done}: the load planned and the load done, each with its unit.
+    line = QCoreApplication.translate("Calendar", "Planned {planned}, done {done}").format(
+        planned=planned_load_text(adherence.planned_load),
+        done=planned_load_text(adherence.actual_load),
+    )
+    if adherence.missed_load > 0:
+        # {missed}: the load planned and not done, with its unit.
+        missed = QCoreApplication.translate("Calendar", "Not done: {missed}").format(
+            missed=planned_load_text(adherence.missed_load)
+        )
+        return f"{line}\n{missed}"
+    return line

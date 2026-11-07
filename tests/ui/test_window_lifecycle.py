@@ -132,7 +132,7 @@ def test_closing_a_window_without_a_profile_is_immediate(
 # --- D-F1-08, D-F1-09: the window remembers ---------------------------------------------------
 
 
-@pytest.mark.parametrize("saved", ["testo", "99", "-1", "3", 42, ""], ids=repr)
+@pytest.mark.parametrize("saved", ["testo", "99", "-1", "4", 42, ""], ids=repr)
 def test_a_saved_section_that_is_not_available_opens_the_overview(
     qtbot: QtBot, tmp_path: Path, settings: QSettings, saved: object
 ) -> None:

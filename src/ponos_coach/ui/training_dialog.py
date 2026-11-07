@@ -1,0 +1,284 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 MR
+"""Dialog "Training settings": the time available each day, the long day, the most time a week and
+the session types the plan may use for each sport.
+
+The dialog edits a copy: "Cancel" changes nothing. What the plan cannot do with the settings (no
+time at all, a long session on a day without time) is written under the fields as soon as it
+appears; it does not stop saving, because the plan says the same in its own notices. A profile that
+saved nothing yet starts from suggested values, and the dialog says so.
+"""
+
+from __future__ import annotations
+
+from PySide6.QtCore import QCoreApplication, Qt
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGridLayout,
+    QGroupBox,
+    QLabel,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
+
+from ponos_coach.activities.domain import Sport
+from ponos_coach.goals.domain import SessionType
+from ponos_coach.goals.domain.availability import MAX_DAY_MINUTES, WEEKDAYS
+from ponos_coach.ui.activity_text import sport_text
+from ponos_coach.ui.form_rows import add_field_row
+from ponos_coach.ui.plan_texts import session_type_text, weekday_name
+from ponos_coach.ui.tokens import DIALOG_MIN_WIDTH, SPACE_2, SPACE_4
+from ponos_coach.ui.training_draft import (
+    DAY_MINUTES_STEP,
+    MAX_WEEK_HOURS,
+    MINUTES_PER_HOUR,
+    TrainingDraft,
+    TrainingHint,
+    hints_of,
+    shown_sports,
+)
+
+_HOURS_STEP = 0.25
+_HOURS_DECIMALS = 2
+
+
+def hint_text(hint: TrainingHint) -> str:
+    """What the plan cannot do with the settings, and how to put it right."""
+    if hint is TrainingHint.NO_TIME:
+        return QCoreApplication.translate(
+            "TrainingDialog",
+            "No training time is set, so the plan cannot be made. "
+            "Give at least one day some minutes, and the week some hours.",
+        )
+    return QCoreApplication.translate(
+        "TrainingDialog",
+        "The long day has no time, so no long session will be planned. "
+        "Give that day some minutes, or choose another long day.",
+    )
+
+
+class TrainingSettingsDialog(QDialog):
+    """Weekly availability and session types of the open profile."""
+
+    def __init__(
+        self,
+        draft: TrainingDraft,
+        *,
+        suggested: bool,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._initial = draft
+        self._draft = draft
+        self._suggested = suggested
+        self._loading = True
+        self.setWindowTitle(self.tr("Training settings"))
+        self.setMinimumWidth(DIALOG_MIN_WIDTH)
+        self.setWindowModality(Qt.WindowModality.WindowModal)
+        self._build()
+        self._show_draft(draft)
+        self._loading = False
+        self._update()
+
+    # --- Construction -------------------------------------------------------------------
+
+    def _build(self) -> None:
+        self._note = QLabel(self)
+        self._note.setObjectName("trainingNote")
+        self._note.setTextFormat(Qt.TextFormat.PlainText)
+        self._note.setWordWrap(True)
+        self._note.setVisible(self._suggested)
+        self._note.setText(
+            self.tr("Nothing is saved yet. These are suggestions: change them, then save.")
+        )
+        self._hints = QLabel(self)
+        self._hints.setObjectName("trainingHints")
+        self._hints.setTextFormat(Qt.TextFormat.PlainText)
+        self._hints.setWordWrap(True)
+        self._hints.setAccessibleName(self.tr("Problem with the settings"))
+        self._buttons = QDialogButtonBox(self)
+        self._save = self._buttons.addButton(
+            self.tr("Save settings"), QDialogButtonBox.ButtonRole.AcceptRole
+        )
+        self._save.setObjectName("trainingSave")
+        self._save.setDefault(True)
+        self._buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        self._buttons.accepted.connect(self.accept)
+        self._buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.setSpacing(SPACE_4)
+        layout.addWidget(self._note)
+        layout.addWidget(self._time_group())
+        layout.addWidget(self._hints)
+        layout.addWidget(self._types_group())
+        layout.addWidget(self._buttons)
+
+    def _time_group(self) -> QGroupBox:
+        box = QGroupBox(self.tr("Time available"), self)
+        form = QFormLayout()
+        form.setVerticalSpacing(SPACE_2)
+        self._day_spins: list[QSpinBox] = []
+        previous: QWidget | None = None
+        for weekday in range(WEEKDAYS):
+            spin = QSpinBox(box)
+            spin.setObjectName(f"trainingDay{weekday}")
+            spin.setRange(0, MAX_DAY_MINUTES)
+            spin.setSingleStep(DAY_MINUTES_STEP)
+            spin.setSuffix(self.tr(" min"))
+            spin.valueChanged.connect(self._on_day_changed)
+            add_field_row(form, weekday_name(weekday), spin)
+            self._day_spins.append(spin)
+            if previous is not None:
+                QWidget.setTabOrder(previous, spin)
+            previous = spin
+        self._long_day = QComboBox(box)
+        self._long_day.setObjectName("trainingLongDay")
+        for weekday in range(WEEKDAYS):
+            self._long_day.addItem(weekday_name(weekday), weekday)
+        self._long_day.currentIndexChanged.connect(self._on_long_day_changed)
+        self._week_hours = QDoubleSpinBox(box)
+        self._week_hours.setObjectName("trainingWeekHours")
+        self._week_hours.setRange(0.0, float(MAX_WEEK_HOURS))
+        self._week_hours.setDecimals(_HOURS_DECIMALS)
+        self._week_hours.setSingleStep(_HOURS_STEP)
+        self._week_hours.setSuffix(self.tr(" h"))
+        self._week_hours.valueChanged.connect(self._on_week_changed)
+        add_field_row(form, self.tr("Long session day"), self._long_day)
+        add_field_row(form, self.tr("Most training in a week"), self._week_hours)
+        if previous is not None:
+            QWidget.setTabOrder(previous, self._long_day)
+        QWidget.setTabOrder(self._long_day, self._week_hours)
+        outer = QVBoxLayout(box)
+        outer.addLayout(form)
+        return box
+
+    def _types_group(self) -> QGroupBox:
+        box = QGroupBox(self.tr("Session types the plan may use"), self)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(SPACE_4)
+        grid.setVerticalSpacing(SPACE_2)
+        self._checks: dict[tuple[Sport, SessionType], QCheckBox] = {}
+        sports = shown_sports()
+        for column, sport in enumerate(sports, start=1):
+            header = QLabel(sport_text(sport), box)
+            header.setTextFormat(Qt.TextFormat.PlainText)
+            grid.addWidget(header, 0, column)
+        for row, session_type in enumerate(SessionType, start=1):
+            type_label = QLabel(session_type_text(session_type), box)
+            type_label.setTextFormat(Qt.TextFormat.PlainText)
+            grid.addWidget(type_label, row, 0)
+            for column, sport in enumerate(sports, start=1):
+                check = QCheckBox(box)
+                check.setObjectName(f"trainingType_{sport.value}_{session_type.value}")
+                # {sport} and {type}: for example "Running" and "Threshold".
+                check.setAccessibleName(
+                    self.tr("{sport}: {type}").format(
+                        sport=sport_text(sport), type=session_type_text(session_type)
+                    )
+                )
+                check.toggled.connect(self._on_type_toggled)
+                grid.addWidget(check, row, column)
+                self._checks[(sport, session_type)] = check
+        outer = QVBoxLayout(box)
+        outer.addLayout(grid)
+        return box
+
+    # --- Showing and reading ---------------------------------------------------------------
+
+    def _show_draft(self, draft: TrainingDraft) -> None:
+        for spin, minutes in zip(self._day_spins, draft.day_minutes, strict=True):
+            spin.setValue(minutes)
+        self._long_day.setCurrentIndex(self._long_day.findData(draft.long_day))
+        self._week_hours.setValue(draft.max_week_minutes / MINUTES_PER_HOUR)
+        for (sport, session_type), check in self._checks.items():
+            check.setChecked(session_type in draft.choices.for_sport(sport))
+
+    def _on_day_changed(self) -> None:
+        if self._loading:
+            return
+        draft = self._draft
+        for weekday, spin in enumerate(self._day_spins):
+            draft = draft.with_day_minutes(weekday, spin.value())
+        self._draft = draft
+        self._update()
+
+    def _on_long_day_changed(self) -> None:
+        if self._loading:
+            return
+        weekday = self._long_day.currentData()
+        if isinstance(weekday, int):
+            self._draft = self._draft.with_long_day(weekday)
+        self._update()
+
+    def _on_week_changed(self) -> None:
+        if self._loading:
+            return
+        self._draft = self._draft.with_max_week_minutes(
+            round(self._week_hours.value() * MINUTES_PER_HOUR)
+        )
+        self._update()
+
+    def _on_type_toggled(self) -> None:
+        if self._loading:
+            return
+        draft = self._draft
+        for (sport, session_type), check in self._checks.items():
+            draft = draft.with_type(sport, session_type, check.isChecked())
+        self._draft = draft
+        self._update()
+
+    def _update(self) -> None:
+        texts = [hint_text(hint) for hint in hints_of(self._draft)]
+        self._hints.setText("\n".join(texts))
+        self._hints.setVisible(bool(texts))
+        changed = self._draft != self._initial
+        self._save.setEnabled(changed or self._suggested)
+        self._save.setToolTip("" if changed or self._suggested else self.tr("Nothing has changed."))
+
+    # --- State for the tests -----------------------------------------------------------------
+
+    @property
+    def day_spins(self) -> list[QSpinBox]:
+        """The minutes of each weekday, Monday first."""
+        return self._day_spins
+
+    @property
+    def long_day_combo(self) -> QComboBox:
+        """The long session day."""
+        return self._long_day
+
+    @property
+    def week_hours_spin(self) -> QDoubleSpinBox:
+        """The most training in a week, in hours."""
+        return self._week_hours
+
+    @property
+    def type_checks(self) -> dict[tuple[Sport, SessionType], QCheckBox]:
+        """The session type check boxes."""
+        return self._checks
+
+    @property
+    def save_button(self) -> QPushButton:
+        """The button that saves the settings."""
+        return self._save
+
+    @property
+    def hint_texts(self) -> str:
+        """What the plan cannot do with the settings now (empty if nothing)."""
+        return "" if self._hints.isHidden() else self._hints.text()
+
+    @property
+    def note_is_shown(self) -> bool:
+        """True when the dialog starts from suggestions."""
+        return not self._note.isHidden()
+
+    def draft(self) -> TrainingDraft:
+        """What the fields hold now."""
+        return self._draft

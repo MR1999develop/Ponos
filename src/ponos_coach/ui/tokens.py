@@ -201,3 +201,14 @@ def goal_tints_for(theme: Theme) -> tuple[str, str, str]:
         oklch_to_hex(lightness, _GOAL_TINT_CHROMA, hue) for hue in _GOAL_TINT_HUES
     )
     return (first, second, third)
+
+
+# Amber of a warning (the second level of gravity, after the error red): deep enough to reach 3:1
+# against its theme's background, used for a border or an icon, never for the only sign.
+_WARNING_LIGHT = "#9A6700"
+_WARNING_DARK = "#D4A72C"
+
+
+def warning_color_for(theme: Theme) -> str:
+    """The amber that marks a warning in a theme."""
+    return _WARNING_DARK if theme is Theme.DARK else _WARNING_LIGHT

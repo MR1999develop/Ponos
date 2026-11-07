@@ -119,7 +119,7 @@ def test_without_a_profile_the_garmin_commands_are_off_and_say_why(
     assert not garmin.stop_action.isEnabled()
 
 
-def test_the_garmin_menu_sits_after_the_calendar_menu_with_every_command(
+def test_the_garmin_menu_sits_after_the_plan_menu_with_every_command(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = compose(tmp_path, settings)
@@ -133,6 +133,7 @@ def test_the_garmin_menu_sits_after_the_calendar_menu_with_every_command(
         "Profile",
         "Threshold test",
         "Calendar",
+        "Plan",
         "Garmin",
         "Language",
         "Help",

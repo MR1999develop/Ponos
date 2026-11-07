@@ -25,6 +25,11 @@ from ponos_coach.assessment.ports import (
     ThresholdTestAlreadyStoredError,
     ThresholdTestNotFoundError,
 )
+from ponos_coach.goals.ports import (
+    GoalAlreadyExistsError,
+    GoalNotFoundError,
+    RaceDayTakenError,
+)
 from ponos_coach.load.domain import MissingPhysiologyError
 from ponos_coach.load.use_cases import ExclusionReason
 from ponos_coach.nutrition.ports import GoalPeriodNotFoundError, GoalPeriodOverlapError
@@ -311,6 +316,32 @@ def _period_missing(_error: BaseException) -> ErrorMessage:
     )
 
 
+def _race_day_taken(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "Another race is already on that day"),
+        QCoreApplication.translate(
+            "Errors", "The plan cannot have two races on one day, so the goal was not saved."
+        ),
+        QCoreApplication.translate("Errors", "Choose another day, or change the other race first."),
+    )
+
+
+def _goal_missing(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The goal is no longer saved"),
+        QCoreApplication.translate("Errors", "The goal was changed or removed meanwhile."),
+        QCoreApplication.translate("Errors", "Open the Goals section to see what is saved."),
+    )
+
+
+def _goal_exists(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "This goal is already saved"),
+        QCoreApplication.translate("Errors", "A goal with the same identity was added before."),
+        QCoreApplication.translate("Errors", "Open the Goals section to see what is saved."),
+    )
+
+
 def _level_in_future(_error: BaseException) -> ErrorMessage:
     return ErrorMessage(
         QCoreApplication.translate("Errors", "The date is in the future"),
@@ -414,6 +445,9 @@ _BUILDERS: tuple[tuple[type[BaseException], Callable[[BaseException], ErrorMessa
     (MissingPhysiologyError, _missing_physiology),
     (GoalPeriodOverlapError, _period_overlap),
     (GoalPeriodNotFoundError, _period_missing),
+    (RaceDayTakenError, _race_day_taken),
+    (GoalNotFoundError, _goal_missing),
+    (GoalAlreadyExistsError, _goal_exists),
     (LevelDateInFutureError, _level_in_future),
     (ThresholdTestChangedError, _threshold_changed),
     (ThresholdTestAlreadyStoredError, _threshold_already_stored),

@@ -272,13 +272,48 @@
         <translation>Mantenimento</translation>
     </message>
     <message>
+        <source>Plan: {session}</source>
+        <translation>Piano: {session}</translation>    </message>
+    <message>
+        <source>Plan: rest day</source>
+        <translation>Piano: riposo</translation>    </message>
+    <message>
         <source>Today</source>
         <translation>Oggi</translation>
     </message>
     <message>
-        <source>Not available yet</source>
-        <translation>Non ancora disponibile</translation>
-    </message>
+        <source>No plan for this day</source>
+        <translation>Nessun piano per questo giorno</translation>    </message>
+    <message>
+        <source>Planned: {session}</source>
+        <translation>Previsto: {session}</translation>    </message>
+    <message>
+        <source>Planned: rest day</source>
+        <translation>Previsto: giorno di riposo</translation>    </message>
+    <message>
+        <source>The plan expects {time}</source>
+        <translation>Il piano prevede {time}</translation>    </message>
+    <message>
+        <source>Target time: {verdict}</source>
+        <translation>Tempo obiettivo: {verdict}</translation>    </message>
+    <message>
+        <source>Estimated load: {load}</source>
+        <translation>Carico stimato: {load}</translation>    </message>
+    <message>
+        <source>Rest day</source>
+        <translation>Giorno di riposo</translation>    </message>
+    <message>
+        <source>No plan for this day.</source>
+        <translation>Nessun piano per questo giorno.</translation>    </message>
+    <message>
+        <source>Done: {sports}, {load}</source>
+        <translation>Fatto: {sports}, {load}</translation>    </message>
+    <message>
+        <source>Planned {planned}, done {done}</source>
+        <translation>Previsto {planned}, fatto {done}</translation>    </message>
+    <message>
+        <source>Not done: {missed}</source>
+        <translation>Non fatto: {missed}</translation>    </message>
     <message numerus="yes">
         <source>Activities: %n ({sports})</source>
         <translation>
@@ -326,9 +361,11 @@
         <translation>Senza colore: nessun periodo di obiettivo, si assume il mantenimento.</translation>
     </message>
     <message>
-        <source>The calendar shows the past only, for now.</source>
-        <translation>Per ora il calendario mostra solo il passato.</translation>
-    </message>
+        <source>The calendar shows up to a year ahead.</source>
+        <translation>Il calendario mostra fino a un anno in avanti.</translation>    </message>
+    <message>
+        <source>Training phase:</source>
+        <translation>Fase di allenamento:</translation>    </message>
 </context>
 <context>
     <name>Charts</name>
@@ -376,6 +413,33 @@
         <source>Compare data on hover</source>
         <translation>Confronta dati al passaggio del mouse</translation>
     </message>
+</context>
+<context>
+    <name>DayDetailPanel</name>
+    <message>
+        <source>Selected day</source>
+        <translation>Giorno selezionato</translation>    </message>
+    <message>
+        <source>Add race here...</source>
+        <translation>Aggiungi gara qui...</translation>    </message>
+    <message>
+        <source>Add form goal here...</source>
+        <translation>Aggiungi obiettivo di forma qui...</translation>    </message>
+    <message>
+        <source>Select a day to see what is planned, what was done and its goals.</source>
+        <translation>Seleziona un giorno per vedere cosa è previsto, cosa è stato fatto e i suoi obiettivi.</translation>    </message>
+    <message>
+        <source>Select a day first.</source>
+        <translation>Seleziona prima un giorno.</translation>    </message>
+    <message>
+        <source>A goal needs a day after today.</source>
+        <translation>Un obiettivo richiede un giorno dopo oggi.</translation>    </message>
+    <message>
+        <source>Change...</source>
+        <translation>Modifica...</translation>    </message>
+    <message>
+        <source>Remove</source>
+        <translation>Rimuovi</translation>    </message>
 </context>
 <context>
     <name>DayPage</name>
@@ -746,6 +810,30 @@
         <source>Look at the table again and repeat the change.</source>
         <translation>Controlla di nuovo la tabella e ripeti la modifica.</translation>
     </message>
+    <message>
+        <source>Another race is already on that day</source>
+        <translation>C&apos;è già un&apos;altra gara in quel giorno</translation>    </message>
+    <message>
+        <source>The plan cannot have two races on one day, so the goal was not saved.</source>
+        <translation>Il piano non può avere due gare nello stesso giorno, quindi l&apos;obiettivo non è stato salvato.</translation>    </message>
+    <message>
+        <source>Choose another day, or change the other race first.</source>
+        <translation>Scegli un altro giorno, oppure modifica prima l&apos;altra gara.</translation>    </message>
+    <message>
+        <source>The goal is no longer saved</source>
+        <translation>L&apos;obiettivo non è più salvato</translation>    </message>
+    <message>
+        <source>The goal was changed or removed meanwhile.</source>
+        <translation>L&apos;obiettivo è stato modificato o rimosso nel frattempo.</translation>    </message>
+    <message>
+        <source>Open the Goals section to see what is saved.</source>
+        <translation>Apri la sezione Obiettivi per vedere cosa è salvato.</translation>    </message>
+    <message>
+        <source>This goal is already saved</source>
+        <translation>Questo obiettivo è già salvato</translation>    </message>
+    <message>
+        <source>A goal with the same identity was added before.</source>
+        <translation>Un obiettivo con la stessa identità è stato aggiunto prima.</translation>    </message>
     <message>
         <source>The date is in the future</source>
         <translation>La data è nel futuro</translation>
@@ -1188,6 +1276,102 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
 </context>
 <context>
+    <name>GoalDialog</name>
+    <message>
+        <source>Choose a day after today: the plan starts tomorrow.</source>
+        <translation>Scegli un giorno dopo oggi: il piano parte da domani.</translation>    </message>
+    <message>
+        <source>Another race is already on this day. Choose another day.</source>
+        <translation>C&apos;è già un&apos;altra gara in questo giorno. Scegli un altro giorno.</translation>    </message>
+    <message>
+        <source>The distance must be between {first} and {last} km.</source>
+        <translation>La distanza deve essere tra {first} e {last} km.</translation>    </message>
+    <message>
+        <source>Write the time as h:mm:ss, for example 1:45:00.</source>
+        <translation>Scrivi il tempo come h:mm:ss, per esempio 1:45:00.</translation>    </message>
+    <message>
+        <source>The target time must be between 1 minute and 7 days.</source>
+        <translation>Il tempo obiettivo deve essere tra 1 minuto e 7 giorni.</translation>    </message>
+    <message>
+        <source>The fitness must be between 0 and {last}.</source>
+        <translation>La condizione deve essere tra 0 e {last}.</translation>    </message>
+    <message>
+        <source>A: the goal of the season</source>
+        <translation>A: l&apos;obiettivo della stagione</translation>    </message>
+    <message>
+        <source>B: an important race</source>
+        <translation>B: una gara importante</translation>    </message>
+    <message>
+        <source>C: a race for training</source>
+        <translation>C: una gara di allenamento</translation>    </message>
+    <message>
+        <source>Add race</source>
+        <translation>Aggiungi gara</translation>    </message>
+    <message>
+        <source>Change race</source>
+        <translation>Modifica gara</translation>    </message>
+    <message>
+        <source>Add form goal</source>
+        <translation>Aggiungi obiettivo di forma</translation>    </message>
+    <message>
+        <source>Change form goal</source>
+        <translation>Modifica obiettivo di forma</translation>    </message>
+    <message>
+        <source>Problem with the date</source>
+        <translation>Problema con la data</translation>    </message>
+    <message>
+        <source>Date</source>
+        <translation>Data</translation>    </message>
+    <message>
+        <source>Add goal</source>
+        <translation>Aggiungi obiettivo</translation>    </message>
+    <message>
+        <source>Save goal</source>
+        <translation>Salva obiettivo</translation>    </message>
+    <message>
+        <source>Other distance</source>
+        <translation>Altra distanza</translation>    </message>
+    <message>
+        <source> km</source>
+        <translation> km</translation>    </message>
+    <message>
+        <source>Distance in kilometres</source>
+        <translation>Distanza in chilometri</translation>    </message>
+    <message>
+        <source>Problem with the distance</source>
+        <translation>Problema con la distanza</translation>    </message>
+    <message>
+        <source>h:mm:ss</source>
+        <translation>h:mm:ss</translation>    </message>
+    <message>
+        <source>Optional. For example 1:45:00.</source>
+        <translation>Facoltativo. Per esempio 1:45:00.</translation>    </message>
+    <message>
+        <source>Problem with the time</source>
+        <translation>Problema con il tempo</translation>    </message>
+    <message>
+        <source>Priority</source>
+        <translation>Priorità</translation>    </message>
+    <message>
+        <source>Sport</source>
+        <translation>Sport</translation>    </message>
+    <message>
+        <source>Distance</source>
+        <translation>Distanza</translation>    </message>
+    <message>
+        <source>Target time (optional)</source>
+        <translation>Tempo obiettivo (facoltativo)</translation>    </message>
+    <message>
+        <source>Problem with the fitness</source>
+        <translation>Problema con la condizione</translation>    </message>
+    <message>
+        <source>Fitness to reach (CTL)</source>
+        <translation>Condizione da raggiungere (CTL)</translation>    </message>
+    <message>
+        <source>Solve the problem written under the field first.</source>
+        <translation>Risolvi prima il problema scritto sotto il campo.</translation>    </message>
+</context>
+<context>
     <name>GoalPeriodDialog</name>
     <message>
         <source>Add goal period</source>
@@ -1245,6 +1429,51 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>These days overlap the period from {first} to {last}.</source>
         <translation>Questi giorni si sovrappongono al periodo dal {first} al {last}.</translation>
     </message>
+</context>
+<context>
+    <name>GoalsPage</name>
+    <message>
+        <source>Add race...</source>
+        <translation>Aggiungi gara...</translation>    </message>
+    <message>
+        <source>Show the goals</source>
+        <translation>Mostra gli obiettivi</translation>    </message>
+    <message>
+        <source>Training settings...</source>
+        <translation>Impostazioni di allenamento...</translation>    </message>
+    <message>
+        <source>Edit profile...</source>
+        <translation>Modifica profilo...</translation>    </message>
+    <message>
+        <source>Goals</source>
+        <translation>Obiettivi</translation>    </message>
+    <message>
+        <source>No goals yet. To get a training plan, add your first race.</source>
+        <translation>Nessun obiettivo ancora. Per avere un piano di allenamento, aggiungi la prima gara.</translation>    </message>
+</context>
+<context>
+    <name>GoalsTable</name>
+    <message>
+        <source>Date</source>
+        <translation>Data</translation>    </message>
+    <message>
+        <source>Goal</source>
+        <translation>Obiettivo</translation>    </message>
+    <message>
+        <source>Sport</source>
+        <translation>Sport</translation>    </message>
+    <message>
+        <source>Distance (km)</source>
+        <translation>Distanza (km)</translation>    </message>
+    <message>
+        <source>Target time (h:mm:ss)</source>
+        <translation>Tempo obiettivo (h:mm:ss)</translation>    </message>
+    <message>
+        <source>Target time verdict</source>
+        <translation>Giudizio sul tempo obiettivo</translation>    </message>
+    <message>
+        <source>Best time possible by the race: {time}</source>
+        <translation>Miglior tempo possibile alla gara: {time}</translation>    </message>
 </context>
 <context>
     <name>HeartRate</name>
@@ -1527,6 +1756,9 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Aiuto</translation>
     </message>
     <message>
+        <source>Plan</source>
+        <translation>Piano</translation>    </message>
+    <message>
         <source>Language</source>
         <translation>Lingua</translation>
     </message>
@@ -1610,6 +1842,9 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>Open the Calendar section first.</source>
         <translation>Apri prima la sezione Calendario.</translation>
     </message>
+    <message>
+        <source>Select a day up to today first: later days have no day page.</source>
+        <translation>Seleziona prima un giorno fino a oggi: i giorni successivi non hanno una pagina del giorno.</translation>    </message>
     <message>
         <source>No day is open.</source>
         <translation>Nessuna giornata aperta.</translation>
@@ -2403,6 +2638,24 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>hrTSS al giorno</translation>
     </message>
     <message>
+        <source>Fitness (CTL), plan</source>
+        <translation>Condizione (CTL), piano</translation>    </message>
+    <message>
+        <source>Fatigue (ATL), plan</source>
+        <translation>Fatica (ATL), piano</translation>    </message>
+    <message>
+        <source>Form (TSB), plan</source>
+        <translation>Forma (TSB), piano</translation>    </message>
+    <message>
+        <source>Races</source>
+        <translation>Gare</translation>    </message>
+    <message>
+        <source>Race {priority}: {name}</source>
+        <translation>Gara {priority}: {name}</translation>    </message>
+    <message>
+        <source>Today</source>
+        <translation>Oggi</translation>    </message>
+    <message>
         <source>Week (starting Monday)</source>
         <translation>Settimana (da lunedì)</translation>
     </message>
@@ -2422,6 +2675,336 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>hours per week</source>
         <translation>ore a settimana</translation>
     </message>
+</context>
+<context>
+    <name>Plan</name>
+    <message>
+        <source>Easy</source>
+        <translation>Facile</translation>    </message>
+    <message>
+        <source>Long</source>
+        <translation>Lungo</translation>    </message>
+    <message>
+        <source>Medium</source>
+        <translation>Medio</translation>    </message>
+    <message>
+        <source>Threshold</source>
+        <translation>Soglia</translation>    </message>
+    <message>
+        <source>VO2max</source>
+        <translation>VO2max</translation>    </message>
+    <message>
+        <source>Recovery run</source>
+        <translation>Corsa di recupero</translation>    </message>
+    <message>
+        <source>Strength</source>
+        <translation>Forza</translation>    </message>
+    <message>
+        <source>Alternative activity</source>
+        <translation>Attività alternativa</translation>    </message>
+    <message>
+        <source>Maintenance phase</source>
+        <translation>Fase di mantenimento</translation>    </message>
+    <message>
+        <source>Base phase</source>
+        <translation>Fase di base</translation>    </message>
+    <message>
+        <source>Build phase</source>
+        <translation>Fase di costruzione</translation>    </message>
+    <message>
+        <source>Peak phase</source>
+        <translation>Fase di picco</translation>    </message>
+    <message>
+        <source>Recovery phase</source>
+        <translation>Fase di recupero</translation>    </message>
+    <message>
+        <source>Mini taper</source>
+        <translation>Mini scarico</translation>    </message>
+    <message>
+        <source>Taper</source>
+        <translation>Scarico</translation>    </message>
+    <message>
+        <source>Race day</source>
+        <translation>Giorno di gara</translation>    </message>
+    <message>
+        <source>Race {priority}</source>
+        <translation>Gara {priority}</translation>    </message>
+    <message>
+        <source>Realistic</source>
+        <translation>Realistico</translation>    </message>
+    <message>
+        <source>Ambitious</source>
+        <translation>Ambizioso</translation>    </message>
+    <message>
+        <source>Not reachable</source>
+        <translation>Non raggiungibile</translation>    </message>
+    <message>
+        <source>Cannot be estimated</source>
+        <translation>Non stimabile</translation>    </message>
+    <message>
+        <source>Realistic: the target time is within what you can run by the race.</source>
+        <translation>Realistico: il tempo obiettivo rientra in ciò che si può correre alla gara.</translation>    </message>
+    <message>
+        <source>Ambitious: the target time is a little faster than the expected progress.</source>
+        <translation>Ambizioso: il tempo obiettivo è un po&apos; più veloce dei progressi previsti.</translation>    </message>
+    <message>
+        <source>Not reachable: the target time is out of reach by the race, even with the expected progress.</source>
+        <translation>Non raggiungibile: il tempo obiettivo è fuori portata alla gara, anche con i progressi previsti.</translation>    </message>
+    <message>
+        <source>Cannot be estimated: the estimate needs a threshold pace from a running test.</source>
+        <translation>Non stimabile: per la stima serve un ritmo di soglia da un test di corsa.</translation>    </message>
+    <message>
+        <source>5 km</source>
+        <translation>5 km</translation>    </message>
+    <message>
+        <source>10 km</source>
+        <translation>10 km</translation>    </message>
+    <message>
+        <source>Half marathon</source>
+        <translation>Mezza maratona</translation>    </message>
+    <message>
+        <source>Marathon</source>
+        <translation>Maratona</translation>    </message>
+    <message>
+        <source>{distance} km</source>
+        <translation>{distance} km</translation>    </message>
+    <message>
+        <source>Form goal, CTL {ctl}, {date}</source>
+        <translation>Obiettivo di forma, CTL {ctl}, {date}</translation>    </message>
+    <message>
+        <source>Race {priority}, {distance}, {date}</source>
+        <translation>Gara {priority}, {distance}, {date}</translation>    </message>
+    <message>
+        <source>Form goal</source>
+        <translation>Obiettivo di forma</translation>    </message>
+    <message>
+        <source>Warm-up</source>
+        <translation>Riscaldamento</translation>    </message>
+    <message>
+        <source>Work</source>
+        <translation>Lavoro</translation>    </message>
+    <message>
+        <source>Rest</source>
+        <translation>Recupero</translation>    </message>
+    <message>
+        <source>Cool-down</source>
+        <translation>Defaticamento</translation>    </message>
+    <message>
+        <source>Steady</source>
+        <translation>Costante</translation>    </message>
+    <message>
+        <source>pace {slow} to {fast} per km</source>
+        <translation>ritmo da {slow} a {fast} al km</translation>    </message>
+    <message>
+        <source>pace {pace} per km or slower</source>
+        <translation>ritmo {pace} al km o più lento</translation>    </message>
+    <message>
+        <source>pace {pace} per km or faster</source>
+        <translation>ritmo {pace} al km o più veloce</translation>    </message>
+    <message numerus="yes">
+        <source>{repeats} x %n min</source>
+        <translation>
+            <numerusform>{repeats} x %n min</numerusform>
+            <numerusform>{repeats} x %n min</numerusform>
+        </translation>    </message>
+    <message numerus="yes">
+        <source>%n min</source>
+        <translation>
+            <numerusform>%n min</numerusform>
+            <numerusform>%n min</numerusform>
+        </translation>    </message>
+    <message>
+        <source>zone {zone}</source>
+        <translation>zona {zone}</translation>    </message>
+    <message>
+        <source>{low} to {high} bpm</source>
+        <translation>da {low} a {high} bpm</translation>    </message>
+    <message>
+        <source>{role}: {details}</source>
+        <translation>{role}: {details}</translation>    </message>
+    <message numerus="yes">
+        <source>{type}, %n min</source>
+        <translation>
+            <numerusform>{type}, %n min</numerusform>
+            <numerusform>{type}, %n min</numerusform>
+        </translation>    </message>
+    <message>
+        <source>{load} hrTSS</source>
+        <translation>{load} hrTSS</translation>    </message>
+    <message>
+        <source>Your heart-rate limits are missing.</source>
+        <translation>Mancano i limiti della frequenza cardiaca.</translation>    </message>
+    <message>
+        <source>Enter your minimum, maximum and threshold heart rate in Edit profile.</source>
+        <translation>Inserisci la frequenza cardiaca minima, massima e di soglia in Modifica profilo.</translation>    </message>
+    <message>
+        <source>The plan could not be made.</source>
+        <translation>Non è stato possibile fare il piano.</translation>    </message>
+    <message>
+        <source>You have no goal yet.</source>
+        <translation>Non c&apos;è ancora nessun obiettivo.</translation>    </message>
+    <message>
+        <source>Add a race or a form goal and the plan starts from tomorrow.</source>
+        <translation>Aggiungi una gara o un obiettivo di forma e il piano parte da domani.</translation>    </message>
+    <message>
+        <source>A goal is today or in the past ({goals}).</source>
+        <translation>Un obiettivo è oggi o nel passato ({goals}).</translation>    </message>
+    <message>
+        <source>Change its date to a day after today, or remove it.</source>
+        <translation>Cambia la sua data con un giorno dopo oggi, oppure rimuovilo.</translation>    </message>
+    <message>
+        <source>Two races are on the same day.</source>
+        <translation>Due gare sono nello stesso giorno.</translation>    </message>
+    <message>
+        <source>Move one of the races to another day.</source>
+        <translation>Sposta una delle gare in un altro giorno.</translation>    </message>
+    <message>
+        <source>No training time is set.</source>
+        <translation>Non è impostato nessun tempo per allenarsi.</translation>    </message>
+    <message>
+        <source>Set the minutes you can train each day in Training settings.</source>
+        <translation>Imposta i minuti in cui puoi allenarti ogni giorno in Impostazioni di allenamento.</translation>    </message>
+    <message>
+        <source>No session type is chosen.</source>
+        <translation>Non è scelto nessun tipo di seduta.</translation>    </message>
+    <message>
+        <source>Choose at least the easy session in Training settings.</source>
+        <translation>Scegli almeno la seduta facile in Impostazioni di allenamento.</translation>    </message>
+    <message>
+        <source>No long session is chosen for {goal}: your endurance will lag.</source>
+        <translation>Non è scelta la seduta lunga per {goal}: la resistenza ne risentirà.</translation>    </message>
+    <message>
+        <source>Choose the long session in Training settings.</source>
+        <translation>Scegli la seduta lunga in Impostazioni di allenamento.</translation>    </message>
+    <message>
+        <source>Neither threshold nor VO2max sessions are chosen for {goal}: the build phase has no quality work.</source>
+        <translation>Non sono scelte né sedute di soglia né di VO2max per {goal}: la fase di costruzione resta senza lavoro di qualità.</translation>    </message>
+    <message>
+        <source>Choose threshold or VO2max sessions in Training settings.</source>
+        <translation>Scegli sedute di soglia o di VO2max in Impostazioni di allenamento.</translation>    </message>
+    <message>
+        <source>The long session day has no time available: no long session is planned.</source>
+        <translation>Il giorno della seduta lunga non ha tempo disponibile: non è prevista nessuna seduta lunga.</translation>    </message>
+    <message>
+        <source>Give that day some minutes, or choose another long day, in Training settings.</source>
+        <translation>Dai a quel giorno qualche minuto, oppure scegli un altro giorno per il lungo, in Impostazioni di allenamento.</translation>    </message>
+    <message numerus="yes">
+        <source>Two A races are close together (days between them: %n): between them the plan only unloads, recovers and maintains.</source>
+        <translation>
+            <numerusform>Due gare A sono vicine (giorni tra le due: %n): tra l&apos;una e l&apos;altra il piano si limita a scaricare, recuperare e mantenere.</numerusform>
+            <numerusform>Due gare A sono vicine (giorni tra le due: %n): tra l&apos;una e l&apos;altra il piano si limita a scaricare, recuperare e mantenere.</numerusform>
+        </translation>    </message>
+    <message>
+        <source>Give them more time, or make one of them a B race.</source>
+        <translation>Dai loro più tempo, oppure rendi una delle due una gara B.</translation>    </message>
+    <message>
+        <source>The fitness asked for {goal} is out of reach: the plan reaches {projected} of {target} CTL.</source>
+        <translation>La condizione richiesta per {goal} è fuori portata: il piano arriva a {projected} CTL su {target}.</translation>    </message>
+    <message>
+        <source>Move the goal later or ask for less fitness: the plan never ramps faster than the safe limit.</source>
+        <translation>Sposta l&apos;obiettivo più avanti o chiedi meno condizione: il piano non sale mai più in fretta del limite di sicurezza.</translation>    </message>
+    <message>
+        <source>The target time of {goal} cannot be reached by the race.</source>
+        <translation>Il tempo obiettivo di {goal} non è raggiungibile entro la gara.</translation>    </message>
+    <message>
+        <source>Choose a slower target time, or a later date.</source>
+        <translation>Scegli un tempo obiettivo più lento, oppure una data più lontana.</translation>    </message>
+    <message numerus="yes">
+        <source>Your recent load is high. Recovery days at the start of the plan: %n.</source>
+        <translation>
+            <numerusform>Il carico recente è alto. Giorni di recupero all&apos;inizio del piano: %n.</numerusform>
+            <numerusform>Il carico recente è alto. Giorni di recupero all&apos;inizio del piano: %n.</numerusform>
+        </translation>    </message>
+    <message>
+        <source>Nothing to do: the plan goes back to training when your form recovers.</source>
+        <translation>Non serve fare nulla: il piano riprende gli allenamenti quando la forma torna a posto.</translation>    </message>
+    <message>
+        <source>{goal} is more than a year away: only the next 52 weeks are planned.</source>
+        <translation>{goal} è tra più di un anno: sono pianificate solo le prossime 52 settimane.</translation>    </message>
+    <message>
+        <source>The rest is planned when it comes closer.</source>
+        <translation>Il resto viene pianificato quando si avvicina.</translation>    </message>
+    <message>
+        <source>The plan has a warning.</source>
+        <translation>Il piano ha un avviso.</translation>    </message>
+    <message>
+        <source>No plan</source>
+        <translation>Nessun piano</translation>    </message>
+    <message>
+        <source>Warning</source>
+        <translation>Avviso</translation>    </message>
+    <message>
+        <source>a goal</source>
+        <translation>un obiettivo</translation>    </message>
+    <message>
+        <source>Plan: do the threshold test before the plan starts</source>
+        <translation>Piano: fai il test di soglia prima che il piano inizi</translation>    </message>
+    <message>
+        <source>Plan: do the threshold test in the easy week from {date}</source>
+        <translation>Piano: fai il test di soglia nella settimana facile da {date}</translation>    </message>
+    <message>
+        <source>Plan: no easy week fits the next threshold test</source>
+        <translation>Piano: nessuna settimana facile è adatta al prossimo test di soglia</translation>    </message>
+</context>
+<context>
+    <name>PlanUi</name>
+    <message>
+        <source>Add race...</source>
+        <translation>Aggiungi gara...</translation>    </message>
+    <message>
+        <source>Add form goal...</source>
+        <translation>Aggiungi obiettivo di forma...</translation>    </message>
+    <message>
+        <source>Change goal...</source>
+        <translation>Modifica obiettivo...</translation>    </message>
+    <message>
+        <source>Remove goal</source>
+        <translation>Rimuovi obiettivo</translation>    </message>
+    <message>
+        <source>Training settings...</source>
+        <translation>Impostazioni di allenamento...</translation>    </message>
+    <message>
+        <source>Undo</source>
+        <translation>Annulla</translation>    </message>
+    <message>
+        <source>Redo</source>
+        <translation>Ripeti</translation>    </message>
+    <message>
+        <source>Create or open a profile first.</source>
+        <translation>Crea o apri prima un profilo.</translation>    </message>
+    <message>
+        <source>Wait a moment: the goals are being read.</source>
+        <translation>Attendi un momento: gli obiettivi si stanno leggendo.</translation>    </message>
+    <message>
+        <source>Select a goal in the Goals section first.</source>
+        <translation>Seleziona prima un obiettivo nella sezione Obiettivi.</translation>    </message>
+    <message>
+        <source>There is no change to the goals to take back.</source>
+        <translation>Non c&apos;è nessuna modifica degli obiettivi da annullare.</translation>    </message>
+    <message>
+        <source>There is no change to the goals to apply again.</source>
+        <translation>Non c&apos;è nessuna modifica degli obiettivi da ripetere.</translation>    </message>
+</context>
+<context>
+    <name>PlanUndo</name>
+    <message>
+        <source>Change training settings</source>
+        <translation>Modifica impostazioni di allenamento</translation>    </message>
+    <message>
+        <source>Add goal</source>
+        <translation>Aggiungi obiettivo</translation>    </message>
+    <message>
+        <source>Change goal</source>
+        <translation>Modifica obiettivo</translation>    </message>
+    <message>
+        <source>Remove goal</source>
+        <translation>Rimuovi obiettivo</translation>    </message>
+    <message>
+        <source>Change training time</source>
+        <translation>Modifica tempo di allenamento</translation>    </message>
+    <message>
+        <source>Change session types</source>
+        <translation>Modifica tipi di seduta</translation>    </message>
 </context>
 <context>
     <name>ProfileDialogs</name>
@@ -3176,6 +3759,54 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>Apply threshold test</source>
         <translation>Applica test di soglia</translation>
     </message>
+</context>
+<context>
+    <name>TrainingDialog</name>
+    <message>
+        <source>No training time is set, so the plan cannot be made. Give at least one day some minutes, and the week some hours.</source>
+        <translation>Non è impostato nessun tempo per allenarsi, quindi il piano non può essere fatto. Dai qualche minuto ad almeno un giorno e qualche ora alla settimana.</translation>    </message>
+    <message>
+        <source>The long day has no time, so no long session will be planned. Give that day some minutes, or choose another long day.</source>
+        <translation>Il giorno del lungo non ha tempo, quindi non verrà pianificata nessuna seduta lunga. Dai a quel giorno qualche minuto, oppure scegli un altro giorno per il lungo.</translation>    </message>
+</context>
+<context>
+    <name>TrainingSettingsDialog</name>
+    <message>
+        <source>Training settings</source>
+        <translation>Impostazioni di allenamento</translation>    </message>
+    <message>
+        <source>Nothing is saved yet. These are suggestions: change them, then save.</source>
+        <translation>Non è ancora salvato nulla. Questi sono suggerimenti: modificali, poi salva.</translation>    </message>
+    <message>
+        <source>Problem with the settings</source>
+        <translation>Problema con le impostazioni</translation>    </message>
+    <message>
+        <source>Save settings</source>
+        <translation>Salva impostazioni</translation>    </message>
+    <message>
+        <source>Time available</source>
+        <translation>Tempo disponibile</translation>    </message>
+    <message>
+        <source> min</source>
+        <translation> min</translation>    </message>
+    <message>
+        <source> h</source>
+        <translation> h</translation>    </message>
+    <message>
+        <source>Long session day</source>
+        <translation>Giorno della seduta lunga</translation>    </message>
+    <message>
+        <source>Most training in a week</source>
+        <translation>Massimo di allenamento in una settimana</translation>    </message>
+    <message>
+        <source>Session types the plan may use</source>
+        <translation>Tipi di seduta che il piano può usare</translation>    </message>
+    <message>
+        <source>{sport}: {type}</source>
+        <translation>{sport}: {type}</translation>    </message>
+    <message>
+        <source>Nothing has changed.</source>
+        <translation>Non è cambiato nulla.</translation>    </message>
 </context>
 <context>
     <name>ZoneTableModel</name>

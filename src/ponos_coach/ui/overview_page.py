@@ -50,7 +50,7 @@ from ponos_coach.ui.overview_state import (
     page_of,
     primary_action_of,
 )
-from ponos_coach.ui.pmc_figure import ChartActivity, PmcChartLabels, prepare_chart
+from ponos_coach.ui.pmc_figure import ChartActivity, PmcChartLabels, PmcProjection, prepare_chart
 from ponos_coach.ui.state_page import StatePage
 from ponos_coach.ui.tokens import (
     SPACE_2,
@@ -151,6 +151,8 @@ class OverviewPage(QWidget):
         super().__init__(parent)
         self._schedule_chart = schedule_chart
         self._chart_request = 0  # an outcome of a superseded request is ignored
+        self._projection: PmcProjection | None = None  # the plan's part of the PMC, if any
+        self._shown: tuple[Ready, Theme, ZoneInfo] | None = None  # what the charts show now
         self._page_action: PrimaryAction | None = None
         self._state_page = StatePage(self)
         self._state_page.action_requested.connect(self._on_state_action)
@@ -218,15 +220,29 @@ class OverviewPage(QWidget):
         page = page_of(state)
         self._page_action = primary_action_of(page)
         if page is Page.LOADING and isinstance(state, Loading):
+            self._shown = None
             self._loading_page.show_progress(state.done, state.total)
             self._stack.setCurrentWidget(self._loading_page)
         elif page is Page.CHART and isinstance(state, Ready):
+            self._shown = (state, theme, zone)
             self._request_chart(state, theme, zone)
         else:
+            self._shown = None
             self._show_state_page(state)
             self._stack.setCurrentWidget(self._state_page)
 
+    def set_projection(self, projection: PmcProjection | None) -> None:
+        """Show the plan's part of the PMC (dotted, with the races as markers); `None` takes it
+        away. The charts are drawn again only if the projection is not the one already shown."""
+        if projection == self._projection:
+            return
+        self._projection = projection
+        if self._shown is not None:
+            self._chart_request += 1
+            self._request_chart(*self._shown)
+
     def _request_chart(self, state: Ready, theme: Theme, zone: ZoneInfo) -> None:
+        projection = self._projection
         tokens = tokens_for(theme)
         chrome = self._chrome()
         labels = self._chart_labels(chrome)
@@ -240,7 +256,7 @@ class OverviewPage(QWidget):
         def build() -> object:
             through = last_day_of(pmc)
             return OverviewCharts(
-                prepare_chart(pmc, activities, labels, tokens),
+                prepare_chart(pmc, activities, labels, tokens, projection),
                 prepare_weekly_load_chart(overview.weekly_load(through), load_labels, tokens),
                 prepare_weekly_zones_chart(overview.weekly_zones(through), zones_labels, tokens),
             )
@@ -306,6 +322,13 @@ class OverviewPage(QWidget):
             daily_load=self.tr("Daily load"),
             chrome=chrome,
             load_unit=self.tr("hrTSS per day"),
+            ctl_plan=self.tr("Fitness (CTL), plan"),
+            atl_plan=self.tr("Fatigue (ATL), plan"),
+            tsb_plan=self.tr("Form (TSB), plan"),
+            races=self.tr("Races"),
+            # {priority}: A, B or C; {name}: the race, for example the distance.
+            race_hint=self.tr("Race {priority}: {name}"),
+            today=self.tr("Today"),
         )
 
     def _load_labels(self, chrome: ChartChrome) -> WeeklyLoadLabels:
