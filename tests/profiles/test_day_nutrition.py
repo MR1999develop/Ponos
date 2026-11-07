@@ -350,19 +350,24 @@ def test_only_the_activities_of_the_local_day_count() -> None:
     assert len(rig.report(date(2026, 3, 3)).activities) == 1
 
 
-def test_a_session_the_next_morning_adds_recovery_carbohydrates_to_the_evening_one() -> None:
-    alone = Rig()
-    alone.add_file(fit_bytes(at(18), 1, calories=500))
-    with_next = Rig()
-    with_next.add_file(fit_bytes(at(18), 1, calories=500))
-    with_next.add_file(fit_bytes(at(7, day=3), 2, calories=500))
+def evening_dinner_carbs(next_start: datetime | None) -> int:
+    rig = Rig()
+    rig.add_file(fit_bytes(at(18), 1, calories=500))
+    if next_start is not None:
+        rig.add_file(fit_bytes(next_start, 2, calories=500))
+    return next(
+        m.meal for m in rig.report().meals if MealSlot.DINNER in m.meal.slots
+    ).macros.carbs_g
 
-    def dinner_carbs(rig: Rig) -> int:
-        return next(
-            m.meal for m in rig.report().meals if MealSlot.DINNER in m.meal.slots
-        ).macros.carbs_g
 
-    assert dinner_carbs(with_next) > dinner_carbs(alone)
+def test_a_session_within_8_hours_adds_recovery_carbohydrates_to_the_evening_one() -> None:
+    # the evening session ends at 19:00 and the next starts at 02:00: 7 h later
+    assert evening_dinner_carbs(at(2, day=3)) > evening_dinner_carbs(None)
+
+
+def test_a_session_the_next_morning_is_too_far_for_rapid_refuelling() -> None:
+    # 19:00 to 07:00 is 12 h: more than the 8 h of rapid refuelling
+    assert evening_dinner_carbs(at(7, day=3)) == evening_dinner_carbs(None)
 
 
 # --- T-NUT-05: determinism and dated changes ----------------------------------------------

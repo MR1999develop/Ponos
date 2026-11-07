@@ -17,7 +17,8 @@ Sources, by abbreviation:
 - COMPENDIUM: Compendium of Physical Activities (METs by activity).
 - ISSN: International Society of Sports Nutrition position stands on nutrient timing,
   protein and diets/body composition.
-- ACSM: ACSM/AND/DC joint position statement on nutrition and athletic performance.
+- ACSM: ACSM/AND/DC joint position statement on nutrition and athletic performance (2016).
+- BOER: Boer 1984, estimation of lean body mass from weight, height and sex.
 - IOC: IOC consensus statement on sports nutrition.
 - MININTAKE: the lower limits of daily energy for unsupervised weight loss that health
   organisations commonly quote (NHLBI and similar: 1,200 kcal for women, 1,500 kcal for men).
@@ -82,7 +83,11 @@ SPORT_MET: Final[dict[Sport, float]] = {
 KCAL_PER_KG_BODY_MASS: Final = 7700.0  # project default (the usual 7700 kcal per kg approximation)
 DAYS_PER_WEEK: Final = 7
 MIN_WEEKLY_LOSS_G: Final = 100
-MAX_WEEKLY_LOSS_G: Final = 1000  # ACSM: 0.5-1 kg per week is the usual upper range
+MAX_WEEKLY_LOSS_G: Final = 1000  # project default: the largest pace the app offers
+# ACSM: stay under 1% of body weight per week to keep lean mass (a study cited there found 0.7%
+# per week better than 1.4%). The pace actually used is the smallest of the goal, the line above
+# and this share of the day's weight.
+MAX_WEEKLY_LOSS_FRACTION: Final = 0.01
 MAX_DEFICIT_FRACTION: Final = 0.20  # of the day's expenditure
 MAX_DEFICIT_KCAL: Final = 750
 ADULT_AGE_YEARS: Final = 18  # below this age the model gives no numbers at all
@@ -91,6 +96,18 @@ MIN_BMI_FOR_DEFICIT: Final = 18.5  # no deficit below this body mass index (WHO 
 # this absolute minimum (project defaults, by sex).
 MIN_INTAKE_KCAL_FEMALE: Final = 1200
 MIN_INTAKE_KCAL_MALE: Final = 1500
+# Energy availability, EA = (energy intake - exercise energy) / fat-free mass, kcal per kg of
+# fat-free mass per day. ACSM: 45 is energy balance for a healthy person, under 30 is harmful
+# (low energy availability). The deficit never leaves the day's EA under the minimum.
+BALANCED_ENERGY_AVAILABILITY_KCAL_PER_KG_FFM: Final = 45
+MIN_ENERGY_AVAILABILITY_KCAL_PER_KG_FFM: Final = 30
+# BOER: fat-free mass in kg = per_kg * weight + per_cm * height - offset (weight in kg, height in
+# cm), as (per_kg, per_cm, constant) with the constant added. The estimate is kept in
+# [MIN_FFM_FRACTION, 1] of the body weight (project default: a formula outside the range it was
+# fitted on must not give an absurd mass).
+BOER_MALE: Final = (0.407, 0.267, -19.2)
+BOER_FEMALE: Final = (0.252, 0.473, -48.3)
+MIN_FFM_FRACTION: Final = 0.5
 
 # --- Day load level -----------------------------------------------------------------------------
 # A day's level is the higher of the one given by the load and by the training time. Project
@@ -135,7 +152,9 @@ DURING_SODIUM_MG_PER_H: Final = 300  # indicative, 0.5 g/L of sodium in the drin
 POST_LEAD_MIN: Final = 30  # within one hour of the end
 POST_PROTEIN_G_PER_KG: Final = 0.3
 POST_CARBS_G_PER_KG: Final = 1.1  # 1-1.2 g/kg
-NEXT_SESSION_WITHIN_MIN: Final = 24 * 60
+# ACSM: rapid refuelling (1-1.2 g/kg/h in the first 4 h) when two demanding sessions are less than
+# 8 hours apart.
+SPEEDY_REFUEL_WITHIN_MIN: Final = 8 * 60
 # Lunch and dinner always keep at least this much carbohydrate (project default), however long the
 # training of the day: the intakes around it give way first (see `meals.py`).
 MAIN_MEAL_MIN_CARBS_G_PER_KG: Final = 1.0

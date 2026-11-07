@@ -111,6 +111,8 @@ tetti, esiti dell'import, lock, dati personali, schema v3 e v4. Dettagli:
   e vive in un solo modulo.
 - Ogni valore scelto dal progetto è marcato "default del progetto".
 - Alimentazione: nessun deficit sotto i 18 anni o con IMC < 18,5; mai oltre il
-  20% della spesa né 750 kcal, mai sotto il metabolismo di base; il risultato
+  20% della spesa né 750 kcal, ritmo sotto l'1% del peso a settimana, mai sotto
+  il metabolismo di base né sotto 30 kcal/kg di massa magra di disponibilità
+  energetica; il risultato
   porta sempre gli avvisi pertinenti; la somma dei pasti è il totale del giorno;
   nessun numero fuori da `defaults.py`; dati di salute mai nei log.

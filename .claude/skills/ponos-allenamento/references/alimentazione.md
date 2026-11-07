@@ -2,7 +2,7 @@
 
 **Quando leggerlo:** scrivendo o rivedendo `nutrition`, `profiles/day_nutrition.py`,
 la tabella degli alimenti, i test `T-NUT` o la pagina "alimentazione" del
-giorno. Sezione 5 di `SKILL.md`. Fonti: ISSN, ACSM, IOC, MSJ, KEYTEL, COMPENDIUM.
+giorno. Sezione 5 di `SKILL.md`. Fonti: ISSN, ACSM, IOC, MSJ, KEYTEL, COMPENDIUM, BOER.
 
 Sono indicazioni generali, mai consigli medici o nutrizionali personalizzati.
 Con patologie, gravidanza, disturbi alimentari o farmaci ci si rivolge a un
@@ -21,7 +21,8 @@ anche questo file e i test `T-NUT`.
 | KEYTEL | Keytel e altri, *Prediction of energy expenditure from heart rate monitoring during submaximal exercise* (2005) | calorie da FC media, età, peso, sesso |
 | COMPENDIUM | *Compendium of Physical Activities* (MET per attività) | calorie senza FC |
 | ISSN | International Society of Sports Nutrition, posizioni su tempi dei nutrienti, proteine, diete e composizione corporea | carboidrati per carico, proteine, momenti |
-| ACSM | ACSM, Academy of Nutrition and Dietetics e Dietitians of Canada, *Nutrition and Athletic Performance* | carboidrati, liquidi, ritmo di perdita di peso |
+| ACSM | ACSM, Academy of Nutrition and Dietetics e Dietitians of Canada, *Nutrition and Athletic Performance* (2016) | carboidrati, liquidi, ritmo di perdita (sotto l'1% del peso a settimana), rifornimento rapido (meno di 8 ore tra due sedute), disponibilità energetica (45 equilibrio, sotto 30 dannosa) |
+| BOER | Boer (1984), stima della massa magra da peso, altezza e sesso | massa magra per la disponibilità energetica |
 | IOC | Consenso del CIO sulla nutrizione dello sportivo | carboidrati durante, recupero |
 | FDC | USDA FoodData Central (dominio pubblico, CC0 1.0) | valori degli alimenti |
 
@@ -79,8 +80,12 @@ anche questo file e i test `T-NUT`.
   mantenimento: **mantenimento** (apporto = spesa), **performance** (apporto =
   spesa, carboidrati in cima alla fascia), **dimagrimento** con ritmo da 100 a
   1000 g a settimana.
-- Deficit richiesto = `g/settimana / 1000 · 7700 / 7` kcal al giorno (500 g →
-  550 kcal; default del progetto: 7700 kcal per kg).
+- **Ritmo ammesso** = il minore tra l'obiettivo, `MAX_WEEKLY_LOSS_G` (1000 g,
+  default del progetto) e l'**1% del peso del giorno** (ACSM: sotto l'1% a
+  settimana per conservare la massa magra). Deficit richiesto = `ritmo / 1000 ·
+  7700 / 7` kcal al giorno (500 g con 80 kg → 550 kcal; 800 g con 50 kg → 500 g →
+  550 kcal; default del progetto: 7700 kcal per kg). Se il ritmo è tagliato
+  c'è `DEFICIT_LIMITED`.
 - **Limiti di sicurezza** (sempre, in quest'ordine, su interi):
   1. nessun deficit con IMC < 18,5 (avvisi `LOW_BMI` e
      `DEFICIT_NOT_APPLIED`); sotto i 18 anni il modello non dà numeri (vedi
@@ -91,7 +96,17 @@ anche questo file e i test `T-NUT`.
   4. mai sotto il **massimo tra il metabolismo di base e il minimo assoluto per
      sesso** (MININTAKE: 1.200 kcal donne, 1.500 kcal uomini):
      `apporto ≥ max(base, minimo)` (`DEFICIT_LIMITED` quando un limite taglia la
-     richiesta). Se la spesa è già sotto il minimo il deficit è 0 e l'avviso c'è.
+     richiesta). Se la spesa è già sotto il minimo il deficit è 0 e l'avviso c'è;
+  5. **disponibilità energetica** `EA = (apporto − energia dell'esercizio) /
+     massa magra` (kcal per kg di massa magra al giorno) mai sotto **30**
+     (`MIN_ENERGY_AVAILABILITY_KCAL_PER_KG_FFM`; ACSM: 45 è l'equilibrio, sotto
+     30 si hanno danni). L'energia dell'esercizio è la stessa energia netta che
+     la spesa somma, quindi il limite è `base · fattore − 30 · massa magra` e
+     non cambia con l'allenamento. Massa magra stimata con **Boer (1984)**:
+     uomo `0,407·kg + 0,267·cm − 19,2`, donna `0,252·kg + 0,473·cm − 48,3`,
+     limitata a `[0,5·peso, peso]`. Vale il limite più restrittivo; il deficit
+     non è mai negativo (`DEFICIT_LIMITED`). Per molte persone è questo, non il
+     metabolismo di base, a mordere per primo.
 - **Minorenni**: sotto i 18 anni il modello non produce kcal, macro né porzioni.
   `PlanDayNutrition` restituisce `NutritionUnavailable(UNDER_18)` (prima di
   chiedere peso o FC) e la pagina invita a rivolgersi a un medico o a un
@@ -126,8 +141,10 @@ Per ogni seduta di almeno 30 minuti (le più brevi non cambiano nulla):
   servono miscele glucosio-fruttosio, che la tabella non distingue. Liquidi
   600 ml/h e sodio 300 mg/h, indicativi (ACSM).
 - **Post**, 30 min dopo la fine: proteine 0,3 g/kg; carboidrati 1,1 g/kg se la
-  seduta dura almeno 90 min o un'altra arriva entro 24 h (un'altra del giorno
-  dopo si passa come `minutes_to_next_session`).
+  seduta dura almeno 90 min o un'altra arriva **a meno di 8 ore**
+  (`SPEEDY_REFUEL_WITHIN_MIN`, rifornimento rapido ACSM; a 8 h esatte no). Una
+  seduta del giorno dopo si passa come `minutes_to_next_session` e di norma
+  supera le 8 ore.
 
 Il resto del giorno si divide in colazione 25%, pranzo 40%, cena 35% agli orari
 tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):

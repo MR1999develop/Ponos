@@ -24,7 +24,10 @@ from ponos_coach.nutrition.domain import (
     basal_metabolic_rate,
     classify_day_load,
     day_macros,
+    energy_availability,
     energy_target,
+    estimated_fat_free_mass_kg,
+    permitted_weekly_loss_g,
     plan_day,
     requested_deficit_kcal,
 )
@@ -85,7 +88,7 @@ def test_a_missing_activity_level_is_assumed_sedentary_and_said_so() -> None:
 
 
 def test_weight_loss_of_500_g_a_week_is_a_550_kcal_deficit() -> None:
-    assert requested_deficit_kcal(WeightLossGoal(500)) == pytest.approx(550.0)
+    assert requested_deficit_kcal(WeightLossGoal(500), 80.0) == pytest.approx(550.0)
     session = TrainingSession(18 * 60, 60.0, 500.0, 50.0)  # expenditure 2992: 20% is 598
 
     result = plan_day(day_of(MAN, WeightLossGoal(500), session))
@@ -202,20 +205,25 @@ def test_the_deficit_is_capped_at_20_percent_of_the_expenditure() -> None:
 
 
 def test_the_deficit_is_capped_at_750_kcal() -> None:
-    expenditure, deficit, target, advisories = target_for(MAN, WeightLossGoal(1000), net=3508.0)
+    # very active man: expenditure 1780 * 1.5 + 3330 = 6000; 1000 g is cut to 800 g (1% of 80 kg)
+    # = 880 kcal; the availability limit allows 2670 - 30 x 61.42 = 827.4
+    very_active = Person(Sex.MALE, 30, 180, 80.0, ActivityLevel.VERY_ACTIVE)
 
-    assert (expenditure, deficit, target) == (6000, 750, 5250)  # 20% would be 1200
-    assert advisories == (Advisory.DEFICIT_LIMITED,)
+    target = energy_target(very_active, WeightLossGoal(1000), REST, BASAL, 3330.0)
+
+    assert (target.expenditure_kcal, target.deficit_kcal, target.target_kcal) == (6000, 750, 5250)
+    assert target.advisories == (Advisory.DEFICIT_LIMITED,)  # 20% would be 1200
 
 
 def test_the_target_never_goes_below_the_basal_rate() -> None:
-    # Sedentary: expenditure 2136, only 356 above the basal rate; 20% would allow 427.
-    person = Person(Sex.MALE, 30, 180, 80.0, ActivityLevel.SEDENTARY)
+    # Sedentary woman 100 kg, 160 cm, 30 y: basal 1689, expenditure 2026.8 -> 2027, 338 above the
+    # basal rate; 20% would allow 405 and the availability limit 2027 - 30 x 52.58 = 449.
+    woman = Person(Sex.FEMALE, 30, 160, 100.0, ActivityLevel.SEDENTARY)
 
-    _, deficit, target, advisories = target_for(person, WeightLossGoal(1000))
+    target = energy_target(woman, WeightLossGoal(1000), REST, basal_metabolic_rate(woman), 0.0)
 
-    assert (deficit, target) == (356, 1780)
-    assert Advisory.DEFICIT_LIMITED in advisories
+    assert (target.deficit_kcal, target.target_kcal) == (338, 1689)
+    assert Advisory.DEFICIT_LIMITED in target.advisories
 
 
 def test_a_woman_is_never_taken_below_1200_kcal_when_her_basal_rate_is_lower() -> None:
@@ -359,3 +367,109 @@ def test_the_macros_of_any_day_cover_the_target_with_a_fat_floor(day: DayInput) 
 @given(days)
 def test_advice_for_a_day_is_deterministic(day: DayInput) -> None:
     assert plan_day(day) == plan_day(day)
+
+
+# --- ACSM/AND/DC 2016: at most 1% of the body weight per week (T-NUT-02) ---------------------
+
+
+def test_the_weekly_loss_is_cut_to_one_percent_of_the_body_weight() -> None:
+    # 50 kg: 1% is 500 g, so a request of 800 g becomes 500 g = 500 / 1000 * 7700 / 7 = 550 kcal
+    assert permitted_weekly_loss_g(800.0, 50.0) == pytest.approx(500.0)
+    assert requested_deficit_kcal(WeightLossGoal(800), 50.0) == pytest.approx(550.0)
+    # a request under 1% is untouched: 300 g for 50 kg
+    assert permitted_weekly_loss_g(300.0, 50.0) == pytest.approx(300.0)
+
+
+def test_the_one_percent_cut_alone_is_reported_as_a_limit() -> None:
+    # Man 60 kg, 165 cm, 30 y, very active: basal 600 + 1031.25 - 150 + 5 = 1486.25;
+    # expenditure 1486.25 * 1.5 + 3000 = 5229.4 -> 5229. A request of 900 g is cut to 600 g
+    # (1% of 60 kg) = 660 kcal a day: under 20% (1045.8) and 750, so only the pace cut acts.
+    # Without the rule the request would be 990 kcal and the 750 cap would give 750.
+    man = Person(Sex.MALE, 30, 165, 60.0, ActivityLevel.VERY_ACTIVE)
+
+    target = energy_target(man, WeightLossGoal(900), REST, basal_metabolic_rate(man), 3000.0)
+
+    assert target.deficit_kcal == 660
+    assert target.advisories == (Advisory.DEFICIT_LIMITED,)
+
+
+# --- BOER: fat-free mass; ACSM: energy availability --------------------------------------------
+
+
+def test_boer_for_a_man_by_hand() -> None:
+    # 0.407 * 80 + 0.267 * 180 - 19.2 = 32.56 + 48.06 - 19.2 = 61.42
+    man = Person(Sex.MALE, 30, 180, 80.0)
+
+    assert estimated_fat_free_mass_kg(man) == pytest.approx(61.42)
+
+
+def test_boer_for_a_woman_by_hand() -> None:
+    # 0.252 * 60 + 0.473 * 165 - 48.3 = 15.12 + 78.045 - 48.3 = 44.865
+    woman = Person(Sex.FEMALE, 30, 165, 60.0)
+
+    assert estimated_fat_free_mass_kg(woman) == pytest.approx(44.865)
+
+
+def test_the_fat_free_mass_never_exceeds_the_weight() -> None:
+    # Man 25 kg is out of the profile range; use 30 kg, 250 cm: 12.21 + 66.75 - 19.2 = 59.76 > 30
+    man = Person(Sex.MALE, 30, 250, 30.0)
+
+    assert estimated_fat_free_mass_kg(man) == 30.0
+
+
+def test_the_fat_free_mass_never_falls_under_half_the_weight() -> None:
+    # Woman 100 kg, 100 cm: 25.2 + 47.3 - 48.3 = 24.2 < 50
+    woman = Person(Sex.FEMALE, 30, 100, 100.0)
+
+    assert estimated_fat_free_mass_kg(woman) == 50.0
+
+
+def test_energy_availability_by_hand() -> None:
+    # (2500 - 500) / 61.42 = 32.5627
+    man = Person(Sex.MALE, 30, 180, 80.0)
+
+    assert energy_availability(man, 2500.0, 500.0) == pytest.approx(32.5627, abs=1e-3)
+
+
+def test_on_a_rest_day_the_energy_availability_limit_decides_the_deficit() -> None:
+    # Sedentary man 80 kg, 180 cm: expenditure 2136; 20% cap 427.2; basal limit 2136 - 1780 = 356;
+    # EA 30 needs 30 * 61.42 = 1842.6 kcal, so at most 2136 - 1842.6 = 293.4 -> 293.
+    man = Person(Sex.MALE, 30, 180, 80.0, ActivityLevel.SEDENTARY)
+
+    target = energy_target(man, WeightLossGoal(1000), REST, BASAL, 0.0)
+
+    assert (target.deficit_kcal, target.target_kcal) == (293, 1843)
+    assert Advisory.DEFICIT_LIMITED in target.advisories
+    assert energy_availability(man, target.target_kcal, 0.0) >= 30.0
+
+
+def test_on_a_long_day_the_exercise_energy_does_not_loosen_the_availability_limit() -> None:
+    # Same man with 3000 kcal of net activity: expenditure 5136; the caps allow 750 and the basal
+    # limit 3356, but EA 30 needs 1842.6 + 3000 = 4842.6 kcal of intake: 5136 - 4842.6 = 293.4.
+    man = Person(Sex.MALE, 30, 180, 80.0, ActivityLevel.SEDENTARY)
+
+    target = energy_target(man, WeightLossGoal(1000), DayLoadLevel.MODERATE, BASAL, 3000.0)
+
+    assert (target.expenditure_kcal, target.deficit_kcal) == (5136, 293)
+    assert energy_availability(man, target.target_kcal, 3000.0) >= 30.0
+
+
+def test_a_person_whose_availability_is_already_under_30_gets_no_deficit() -> None:
+    # Woman 70 kg, 100 cm, 90 y, sedentary: basal 700 + 625 - 450 - 161 = 714, expenditure 857;
+    # Boer 17.64 + 47.3 - 48.3 = 16.64 is clamped to 35 kg, which needs 1050 kcal at EA 30.
+    old = Person(Sex.FEMALE, 90, 100, 70.0, ActivityLevel.SEDENTARY)
+
+    target = energy_target(old, WeightLossGoal(500), REST, basal_metabolic_rate(old), 0.0)
+
+    assert (target.expenditure_kcal, target.deficit_kcal) == (857, 0)
+    assert Advisory.DEFICIT_LIMITED in target.advisories
+
+
+@given(persons, goals, st.sampled_from(DayLoadLevel), st.floats(0.0, 6000.0))
+def test_the_availability_is_at_least_30_or_the_deficit_is_nil(
+    person: Person, goal: NutritionGoal, level: DayLoadLevel, net: float
+) -> None:
+    target = energy_target(person, goal, level, basal_metabolic_rate(person), net)
+
+    if target.deficit_kcal > 0:
+        assert energy_availability(person, target.target_kcal, net) >= 30.0 - 1e-9

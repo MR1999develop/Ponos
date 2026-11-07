@@ -509,19 +509,24 @@ posto e documentati nella skill del progetto; non sono consigli medici.
       - metabolismo di base con Mifflin-St Jeor (età dalla data di nascita,
         altezza, peso valido quel giorno, sesso); spesa del giorno = base ×
         fattore del livello fuori sport + calorie nette delle attività;
-      - dimagrimento: deficit dal ritmo scelto, al massimo il 20% della spesa
-        e 750 kcal al giorno, mai sotto il metabolismo di base; deficit ridotto
-        nei giorni di carico alto; nessun deficit sotto i 18 anni né con IMC
-        sotto 18,5 (avviso); performance: carboidrati secondo il carico;
+      - dimagrimento: deficit dal ritmo scelto, al massimo l'1% del peso a
+        settimana (ACSM 2016), il 20% della spesa e 750 kcal al giorno, mai
+        sotto il metabolismo di base né sotto 1.200 kcal (donne) o 1.500 kcal
+        (uomini), mai con una disponibilità energetica sotto 30 kcal per kg di
+        massa magra (stimata con la formula di Boer); deficit ridotto nei
+        giorni di carico alto; nessuna indicazione numerica sotto i 18 anni,
+        nessun deficit con IMC sotto 18,5 (avviso); performance: carboidrati
+        secondo il carico;
       - macro: carboidrati in g/kg secondo il carico del giorno (riposo e
         leggero 3–5, moderato 5–7, alto 6–10, molto alto 8–12), proteine
         1,6 g/kg (2,0 in deficit), grassi il resto con un minimo del 20% delle
         kcal;
       - momenti: pre 1–4 h prima (carboidrati circa 1 g/kg se la seduta supera
-        un'ora), durante oltre 75 minuti (30–60 g/h, oltre 2,5 h fino a
-        90 g/h, liquidi e sodio indicativi), post entro un'ora (proteine circa
+        un'ora), durante oltre 75 minuti (30–60 g/h, oltre 2,5 h al massimo
+        60 g/h perché la tabella non distingue le miscele glucosio-fruttosio;
+        liquidi e sodio indicativi), post entro un'ora (proteine circa
         0,3 g/kg e carboidrati 1–1,2 g/kg se la seduta è lunga o ce n'è
-        un'altra entro 24 h); il resto distribuito su colazione, pranzo e cena
+        un'altra entro 8 h); il resto distribuito su colazione, pranzo e cena
         secondo gli orari tipici, con pasti spostati o fusi quando cadono
         vicino all'allenamento; due sedute nello stesso giorno gestite.
 - [ ] **Alimenti**: tabella curata di alimenti comuni con kcal e macro per
@@ -550,6 +555,10 @@ posto e documentati nella skill del progetto; non sono consigli medici.
 - [ ] Vista calendario: pianificato contro fatto; proiezione del PMC nel
       grafico.
 - [ ] Ricalcolo del piano dopo ogni sincronizzazione.
+- [ ] Alimentazione dei giorni futuri dal piano, con lo stesso modello della
+      fase 4b; nessun deficit nella settimana di una gara A o B e nello
+      scarico che la precede (ACSM 2016: dimagrire lontano dalle gare), con
+      un avviso quando un periodo di dimagrimento si sovrappone.
 
 ### Fase 6 — Infortuni e recupero
 

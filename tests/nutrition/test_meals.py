@@ -131,15 +131,23 @@ def test_two_sessions_in_a_day_each_get_their_recovery_and_meals_move_around_the
     items = schedule(session(7 * 60, 60.0), session(18 * 60, 60.0))
 
     assert shape(items) == [(540, (B, POST)), (780, (L,)), (1200, (D, POST))]
-    # morning recovery has carbohydrates (another session within 24 h), the evening one does not:
-    # carbohydrates left after 88 g of recovery are split 25/40/35 and the recovery is added back
+    # 10 h separate the sessions (08:00 to 18:00), more than the 8 h of rapid refuelling: neither
+    # recovery has carbohydrates, so the day's 400 g are split 25/40/35 = 100/160/140
     assert [item.macros for item in items] == [
-        Macros(78 + 88, 18 + 24, 20),
-        Macros(125, 29, 32),
-        Macros(109, 25 + 24, 28),
+        Macros(100, 18 + 24, 20),
+        Macros(160, 29, 32),
+        Macros(140, 25 + 24, 28),
     ]
     assert items[0].moved
     assert not items[2].moved
+
+
+def test_sessions_less_than_8_hours_apart_give_the_first_recovery_its_carbohydrates() -> None:
+    items = schedule(session(7 * 60, 60.0), session(15 * 60, 60.0))
+
+    # 08:00 to 15:00 is 7 h: rapid refuelling, 88 g of carbohydrates (1.1 g/kg x 80 kg) in the
+    # recovery; the other 312 g are split 25/40/35 = 78/125/109 and the recovery is added back
+    assert [item.macros.carbs_g for item in items] == [78 + 88, 125, 0, 109]
 
 
 def test_the_order_in_which_sessions_are_given_does_not_matter() -> None:
@@ -157,12 +165,13 @@ def dinner_carbs(next_in: float | None) -> int:
     ("next_in", "expected"),
     [
         (None, 140),  # no recovery carbohydrates: dinner is 35% of the day's 400 g
-        (1441.0, 140),  # the next session is more than 24 h away
-        (1440.0, 197),  # exactly 24 h: 88 g of recovery carbohydrates + 35% of the 312 g left
-        (600.0, 197),
+        (481.0, 140),  # 8 h 01: not rapid refuelling
+        (480.0, 140),  # exactly 8 h: "less than 8 hours" is false
+        (479.0, 197),  # 7 h 59: 88 g of recovery carbohydrates + 35% of the 312 g left
+        (60.0, 197),
     ],
 )
-def test_recovery_carbohydrates_depend_on_a_next_session_within_24_hours(
+def test_recovery_carbohydrates_need_a_next_session_less_than_8_hours_away(
     next_in: float | None, expected: int
 ) -> None:
     assert dinner_carbs(next_in) == expected

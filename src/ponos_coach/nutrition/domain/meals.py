@@ -161,7 +161,7 @@ def _post_moment(
     session: TrainingSession, weight_kg: float, minutes_to_next: float | None
 ) -> _Moment:
     needs_carbs = session.duration_min >= defaults.LONG_SESSION_MIN or (
-        minutes_to_next is not None and minutes_to_next <= defaults.NEXT_SESSION_WITHIN_MIN
+        minutes_to_next is not None and minutes_to_next < defaults.SPEEDY_REFUEL_WITHIN_MIN
     )
     carbs = round(defaults.POST_CARBS_G_PER_KG * weight_kg) if needs_carbs else 0
     protein = round(defaults.POST_PROTEIN_G_PER_KG * weight_kg)
