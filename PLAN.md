@@ -484,10 +484,10 @@ catalogo proprio.*
 
 ### Fase 4 — Test di valutazione
 
-- [ ] Protocollo del test di soglia 30' (istruzioni nell'app), riconoscimento
+- [x] Protocollo del test di soglia 30' (istruzioni nell'app), riconoscimento
       dell'attività del test (scelta dall'utente), calcolo della FC e del
       ritmo di soglia, zone FC e di ritmo.
-- [ ] Storico dei test e retest proposto ogni 6–8 settimane.
+- [x] Storico dei test e retest proposto ogni 6–8 settimane.
 
 ### Fase 4b — Alimentazione dei giorni passati
 
@@ -718,7 +718,8 @@ model e gli esiti del collaudo possono citarlo.
   irraggiungibile, verificata ai confini.
 - **T-PIANO-06** Test di soglia: FC di soglia = media degli ultimi 20' su
   tracciati sintetici; test interrotto o troppo corto rifiutato; retest
-  proposto dopo 6–8 settimane in una settimana di scarico.
+  proposto tra 6 e 8 settimane dopo l'ultimo test (dalla fase 5 anche in una
+  settimana di scarico del piano).
 - **T-INF-01** Ogni segnale d'allarme, uno per test, ferma il piano della
   zona e mostra l'invito al medico.
 - **T-INF-02** Percorso a gradini: si sale con dolore ≤ 3 e mattino normale,

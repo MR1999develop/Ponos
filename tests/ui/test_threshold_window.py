@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QLocale, QSettings, Qt
-from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QLabel, QMenu
 from pytestqt.qtbot import QtBot
 
@@ -91,7 +90,7 @@ def wait_recalculated(qtbot: QtBot, window: MainWindow, load: float) -> None:
 # --- Menu, shortcuts and tooltips -------------------------------------------------------------
 
 
-def test_the_threshold_menu_has_three_commands_with_their_shortcuts(
+def test_the_threshold_menu_has_its_commands_and_the_undo_of_the_tests(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with(qtbot, tmp_path, settings, THRESHOLD_RUN)
@@ -101,15 +100,13 @@ def test_the_threshold_menu_has_three_commands_with_their_shortcuts(
     commands = [(a.text(), a.shortcut().toString()) for a in menu.actions()]
     assert commands == [
         ("Test instructions...", "Ctrl+Shift+H"),
-        ("Use as threshold test...", "Ctrl+Shift+T"),
+        ("Use as threshold test...", "Ctrl+Shift+U"),
         ("Threshold tests...", "Ctrl+Shift+R"),
+        ("", ""),  # separator
+        ("Undo", ""),
+        ("Redo", ""),
     ]
-    edit = next(a.menu() for a in window.menuBar().actions() if a.text() == "Edit")
-    assert isinstance(edit, QMenu)
-    assert [a.shortcut() for a in edit.actions()] == [
-        QKeySequence(QKeySequence.StandardKey.Undo),
-        QKeySequence(QKeySequence.StandardKey.Redo),
-    ]
+    assert not [a for a in window.menuBar().actions() if a.text() == "Edit"]
 
 
 def test_use_as_test_says_why_it_is_disabled_without_a_selection_and_for_a_bike_ride(
@@ -537,3 +534,19 @@ def test_the_threshold_and_pace_never_reach_the_logs(
     assert "168" not in logged
     assert "4:38" not in logged
     assert "threshold" not in logged
+
+
+def test_an_undo_that_cannot_start_clears_the_stack_and_says_the_profile_is_busy(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window = window_with(qtbot, tmp_path, settings, THRESHOLD_RUN)
+    apply_test(qtbot, window)
+    wait_status(qtbot, window, OVERDUE)
+    monkeypatch.setattr(window.threshold.loader, "remove", lambda _cell: False)
+
+    window.threshold.undo_action.trigger()
+
+    box = open_message_box(qtbot, window, "errorMessage")
+    assert box.text() == "The profile is busy"
+    qtbot.waitUntil(lambda: window.threshold.undo_stack.count() == 0)
+    box.close()

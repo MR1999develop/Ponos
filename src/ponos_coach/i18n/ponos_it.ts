@@ -115,7 +115,7 @@
     </message>
     <message>
         <source>The activity is still loading.</source>
-        <translation>L'attività è ancora in caricamento.</translation>
+        <translation>L&apos;attività è ancora in caricamento.</translation>
     </message>
     <message>
         <source>Loading the activity...</source>
@@ -123,7 +123,7 @@
     </message>
     <message>
         <source>The activity detail is not available.</source>
-        <translation>Il dettaglio dell'attività non è disponibile.</translation>
+        <translation>Il dettaglio dell&apos;attività non è disponibile.</translation>
     </message>
     <message>
         <source>No heart-rate data</source>
@@ -764,7 +764,7 @@
     </message>
     <message>
         <source>The threshold was changed after the test, so it was left as it is.</source>
-        <translation>La soglia è stata modificata dopo il test, quindi è stata lasciata com'è.</translation>
+        <translation>La soglia è stata modificata dopo il test, quindi è stata lasciata com&apos;è.</translation>
     </message>
     <message>
         <source>Nothing changed. To correct the threshold, use Profile &gt; Edit profile.</source>
@@ -780,7 +780,7 @@
     </message>
     <message>
         <source>Choose another activity, or open Threshold test &gt; Threshold tests.</source>
-        <translation>Scegli un'altra attività, oppure apri Test di soglia &gt; Storico dei test.</translation>
+        <translation>Scegli un&apos;altra attività, oppure apri Test di soglia &gt; Storico dei test.</translation>
     </message>
     <message>
         <source>The threshold test is no longer saved</source>
@@ -804,7 +804,7 @@
     </message>
     <message>
         <source>Check the date of the activity.</source>
-        <translation>Controlla la data dell'attività.</translation>
+        <translation>Controlla la data dell&apos;attività.</translation>
     </message>
     <message>
         <source>The test is too old</source>
@@ -812,11 +812,11 @@
     </message>
     <message>
         <source>The activity is older than the oldest day the profile accepts.</source>
-        <translation>L'attività è più vecchia del giorno più lontano che il profilo accetta.</translation>
+        <translation>L&apos;attività è più vecchia del giorno più lontano che il profilo accetta.</translation>
     </message>
     <message>
         <source>Choose a more recent activity.</source>
-        <translation>Scegli un'attività più recente.</translation>
+        <translation>Scegli un&apos;attività più recente.</translation>
     </message>
     <message>
         <source>The threshold does not fit your limits</source>
@@ -1513,10 +1513,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Delete profile folder</source>
         <translation>Elimina cartella del profilo</translation>
-    </message>
-    <message>
-        <source>Edit</source>
-        <translation>Modifica</translation>
     </message>
     <message>
         <source>Profile</source>
@@ -2861,7 +2857,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>To add one, do the test, then choose the activity and use Threshold test &gt; Use as threshold test.</source>
-        <translation>Per aggiungerne uno, fai il test, poi scegli l'attività e usa Test di soglia &gt; Usa come test di soglia.</translation>
+        <translation>Per aggiungerne uno, fai il test, poi scegli l&apos;attività e usa Test di soglia &gt; Usa come test di soglia.</translation>
     </message>
     <message>
         <source>When to repeat the test</source>
@@ -2919,7 +2915,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>The {minutes}-minute test measures your threshold heart rate and pace. Record it with your watch.</source>
-        <translation>Il test di {minutes} minuti misura la tua frequenza cardiaca e il tuo ritmo di soglia. Registralo con l'orologio.</translation>
+        <translation>Il test di {minutes} minuti misura la tua frequenza cardiaca e il tuo ritmo di soglia. Registralo con l&apos;orologio.</translation>
     </message>
     <message>
         <source>Your threshold heart rate is the average of the last {minutes} minutes of the test.</source>
@@ -2935,7 +2931,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>Afterwards, choose the activity in Activities and use Threshold test &gt; Use as threshold test.</source>
-        <translation>Dopo, scegli l'attività in Attività e usa Test di soglia &gt; Usa come test di soglia.</translation>
+        <translation>Dopo, scegli l&apos;attività in Attività e usa Test di soglia &gt; Usa come test di soglia.</translation>
     </message>
 </context>
 <context>
@@ -2946,11 +2942,11 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>Evaluating the activity...</source>
-        <translation>Valutazione dell'attività in corso...</translation>
+        <translation>Valutazione dell&apos;attività in corso...</translation>
     </message>
     <message>
         <source>Evaluating the activity</source>
-        <translation>Valutazione dell'attività</translation>
+        <translation>Valutazione dell&apos;attività</translation>
     </message>
     <message>
         <source>Test day</source>
@@ -2990,7 +2986,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>The activity is still being evaluated.</source>
-        <translation>L'attività è ancora in valutazione.</translation>
+        <translation>L&apos;attività è ancora in valutazione.</translation>
     </message>
     <message>
         <source>This activity cannot be applied as a threshold test.</source>
@@ -3013,7 +3009,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>The {minutes} minutes with the highest heart rate (the activity has no usable distance)</source>
-        <translation>I {minutes} minuti con la frequenza cardiaca più alta (l'attività non ha una distanza utilizzabile)</translation>
+        <translation>I {minutes} minuti con la frequenza cardiaca più alta (l&apos;attività non ha una distanza utilizzabile)</translation>
     </message>
     <message>
         <source>Up to {high}</source>
@@ -3049,7 +3045,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>Not available: the activity has no usable distance.</source>
-        <translation>Non disponibile: l'attività non ha una distanza utilizzabile.</translation>
+        <translation>Non disponibile: l&apos;attività non ha una distanza utilizzabile.</translation>
     </message>
     <message>
         <source>Pace (min:s per km)</source>
@@ -3069,27 +3065,27 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>The activity is not a run.</source>
-        <translation>L'attività non è una corsa.</translation>
+        <translation>L&apos;attività non è una corsa.</translation>
     </message>
     <message>
         <source>Choose a running or trail running activity.</source>
-        <translation>Scegli un'attività di corsa o di trail running.</translation>
+        <translation>Scegli un&apos;attività di corsa o di trail running.</translation>
     </message>
     <message>
         <source>The activity is shorter than {minutes} minutes.</source>
-        <translation>L'attività dura meno di {minutes} minuti.</translation>
+        <translation>L&apos;attività dura meno di {minutes} minuti.</translation>
     </message>
     <message>
         <source>Choose an activity with at least {minutes} minutes of running, or repeat the test.</source>
-        <translation>Scegli un'attività con almeno {minutes} minuti di corsa, oppure ripeti il test.</translation>
+        <translation>Scegli un&apos;attività con almeno {minutes} minuti di corsa, oppure ripeti il test.</translation>
     </message>
     <message>
         <source>The activity has more than {seconds} seconds of pauses in the {minutes} minutes of the test.</source>
-        <translation>L'attività ha più di {seconds} secondi di pausa nei {minutes} minuti del test.</translation>
+        <translation>L&apos;attività ha più di {seconds} secondi di pausa nei {minutes} minuti del test.</translation>
     </message>
     <message>
         <source>A test needs a steady effort without stopping. Repeat it without pausing the watch.</source>
-        <translation>Un test richiede uno sforzo costante senza fermarsi. Ripetilo senza mettere in pausa l'orologio.</translation>
+        <translation>Un test richiede uno sforzo costante senza fermarsi. Ripetilo senza mettere in pausa l&apos;orologio.</translation>
     </message>
     <message>
         <source>The heart-rate data is missing or has gaps in the last {minutes} minutes of the test.</source>
@@ -3122,8 +3118,8 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message numerus="yes">
         <source>The last test is %n days old: a new test is recommended</source>
         <translation>
-            <numerusform>L'ultimo test ha %n giorno: si consiglia un nuovo test</numerusform>
-            <numerusform>L'ultimo test ha %n giorni: si consiglia un nuovo test</numerusform>
+            <numerusform>L&apos;ultimo test ha %n giorno: si consiglia un nuovo test</numerusform>
+            <numerusform>L&apos;ultimo test ha %n giorni: si consiglia un nuovo test</numerusform>
         </translation>
     </message>
     <message>
@@ -3163,15 +3159,15 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>Apply the test again when the operation has finished.</source>
-        <translation>Applica di nuovo il test quando l'operazione è finita.</translation>
+        <translation>Applica di nuovo il test quando l&apos;operazione è finita.</translation>
     </message>
     <message>
         <source>There is no threshold test to take back.</source>
-        <translation>Non c'è nessun test di soglia da annullare.</translation>
+        <translation>Non c&apos;è nessun test di soglia da annullare.</translation>
     </message>
     <message>
         <source>There is no threshold test to apply again.</source>
-        <translation>Non c'è nessun test di soglia da applicare di nuovo.</translation>
+        <translation>Non c&apos;è nessun test di soglia da applicare di nuovo.</translation>
     </message>
 </context>
 <context>

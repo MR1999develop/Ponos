@@ -34,6 +34,7 @@ from ponos_coach.assessment.domain.defaults import (
     MAX_PAUSE_S,
     RETEST_MAX_DAYS,
     TEST_DURATION_S,
+    THRESHOLD_TEST_SPORTS,
     THRESHOLD_WINDOW_S,
 )
 from ponos_coach.load.use_cases import ExcludedActivity
@@ -48,7 +49,6 @@ from ponos_coach.ui.measurements_form import MeasurementSeries
 _SECONDS_PER_MINUTE = 60
 _NOISE_DECIMALS = 6
 _ZONE_COUNT = 5
-_TEST_SPORTS = frozenset({Sport.RUNNING, Sport.TRAIL})
 
 type ZoneRows = tuple[tuple[str, ...], ...]
 
@@ -98,7 +98,7 @@ class ThresholdHistory:
 
 def can_be_threshold_test(sport: Sport) -> bool:
     """True if an activity of this sport can be used as the threshold test (a run)."""
-    return sport in _TEST_SPORTS
+    return sport in THRESHOLD_TEST_SPORTS
 
 
 def not_a_run_reason() -> str:

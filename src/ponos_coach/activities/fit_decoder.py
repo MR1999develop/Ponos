@@ -343,6 +343,8 @@ def _series(parsed: _Parsed) -> tuple[HeartRateSeries | None, int]:
     seconds = _seconds_from_first_record(parsed, parsed.hr_times)
     bpm = np.array(parsed.hr_values, dtype=np.float64)
     keep = _increasing_mask(seconds)
+    if not keep.any():
+        return None, int(seconds.size)
     return HeartRateSeries(seconds[keep], bpm[keep]), int(seconds.size - np.count_nonzero(keep))
 
 
@@ -352,10 +354,15 @@ def _seconds_from_first_record(parsed: _Parsed, times: list[datetime]) -> NDArra
 
 
 def _increasing_mask(seconds: NDArray[np.float64]) -> NDArray[np.bool_]:
-    """Samples whose time is greater than all the previous ones (the first of a repetition
-    counts, a step backwards never enters)."""
-    keep = np.ones(seconds.size, dtype=bool)
-    keep[1:] = seconds[1:] > np.maximum.accumulate(seconds)[:-1]
+    """Samples on the series' axis whose time is greater than all the previous ones (the first
+    of a repetition counts, a step backwards never enters). A sample before the first record of
+    the file (negative second) is outside the axis and never enters."""
+    keep = seconds >= 0
+    inside = seconds[keep]
+    increasing = np.ones(inside.size, dtype=bool)
+    if inside.size:
+        increasing[1:] = inside[1:] > np.maximum.accumulate(inside)[:-1]
+    keep[keep] = increasing
     return keep
 
 
@@ -383,6 +390,8 @@ def _distance_series(parsed: _Parsed) -> DistanceSeries | None:
         seconds = seconds[keep]
         meters = _integrated(seconds, speed[keep])
     else:
+        return None
+    if seconds.size == 0:
         return None
     if not np.isfinite(meters).all() or (np.diff(meters) < 0).any():
         return None
@@ -459,6 +468,11 @@ def _require_plausible_times(parsed: _Parsed, start: datetime, elapsed_s: float)
         raise FitDecodeError(FitDecodeReason.CORRUPT)
 
 
+def _first_record_offset_s(parsed: _Parsed, start: datetime) -> float:
+    """Seconds from the start of the activity to its first record (the origin of the series)."""
+    return (parsed.record_times[0] - start).total_seconds() if parsed.record_times else 0.0
+
+
 def _build(parsed: _Parsed, limits: FitLimits) -> Activity:
     file_id = _file_id(parsed)
     start, elapsed_s, timer_s = _timing(parsed)
@@ -475,6 +489,7 @@ def _build(parsed: _Parsed, limits: FitLimits) -> Activity:
     return Activity(
         FitIdentity(file_id), FileFormat.FIT, sport, start, elapsed_s, timer_s, series,
         _summary(parsed), discarded, _distance_series(parsed),
+        _first_record_offset_s(parsed, start),
     )  # fmt: skip
 
 

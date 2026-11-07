@@ -727,10 +727,8 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Stop synchronisation": QKeySequence("Shift+F5").toString(),
         "Synchronise when a profile opens": QKeySequence("Ctrl+Shift+A").toString(),
         "Test instructions...": QKeySequence("Ctrl+Shift+H").toString(),
-        "Use as threshold test...": QKeySequence("Ctrl+Shift+T").toString(),
+        "Use as threshold test...": QKeySequence("Ctrl+Shift+U").toString(),
         "Threshold tests...": QKeySequence("Ctrl+Shift+R").toString(),
-        "Undo": QKeySequence(QKeySequence.StandardKey.Undo).toString(),
-        "Redo": QKeySequence(QKeySequence.StandardKey.Redo).toString(),
     }
 
 

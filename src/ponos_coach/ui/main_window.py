@@ -248,7 +248,7 @@ class MainWindow(QMainWindow):
         )
         self._use_as_test_action = self._action(
             self.tr("Use as threshold test..."),
-            "Ctrl+Shift+T",
+            "Ctrl+Shift+U",
             self.use_selected_as_threshold_test,
         )
         self._threshold_history_action = self._action(
@@ -275,9 +275,6 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self._stop_action)
         file_menu.addSeparator()
         file_menu.addAction(self._quit_action)
-        edit_menu = self.menuBar().addMenu(self.tr("Edit"))
-        edit_menu.addAction(self._threshold.undo_action)
-        edit_menu.addAction(self._threshold.redo_action)
         profile_menu = self.menuBar().addMenu(self.tr("Profile"))
         profile_menu.addAction(self._edit_profile_action)
         profile_menu.addAction(self._sport_weights_action)
@@ -288,6 +285,9 @@ class MainWindow(QMainWindow):
         threshold_menu.addAction(self._threshold_instructions_action)
         threshold_menu.addAction(self._use_as_test_action)
         threshold_menu.addAction(self._threshold_history_action)
+        threshold_menu.addSeparator()
+        threshold_menu.addAction(self._threshold.undo_action)
+        threshold_menu.addAction(self._threshold.redo_action)
         calendar_menu = self.menuBar().addMenu(self.tr("Calendar"))
         for action in (
             self._previous_month_action,

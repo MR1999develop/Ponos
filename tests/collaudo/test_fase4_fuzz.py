@@ -327,15 +327,6 @@ def test_t_piano_06_the_differential_oracle_is_not_vacuous() -> None:
     assert date(2026, 3, 14) == DAY
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "D-F4-06: when a record comes with a timestamp before the first record of the file "
-        "(records out of order at the very start), the distance series starts at a negative "
-        "second: the axis is no longer 'seconds from the first record' and a threshold segment "
-        "could start before the activity (the same holds for the HR series, which is older)"
-    ),
-)
 def test_t_sec_02_a_record_before_the_first_one_cannot_put_the_distance_before_second_zero() -> (
     None
 ):

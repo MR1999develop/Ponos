@@ -16,8 +16,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from zoneinfo import ZoneInfo
 
-from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QAction, QKeySequence, QUndoStack
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtGui import QAction, QUndoStack
 from PySide6.QtWidgets import QWidget
 
 from ponos_coach.activities.domain import ActivityIdentity
@@ -65,9 +65,7 @@ class ThresholdUi(QObject):
         self._loader = ThresholdLoader(controller, self)
         self._stack = QUndoStack(self)
         self._undo_action = self._stack.createUndoAction(self, self.tr("Undo"))
-        self._undo_action.setShortcut(QKeySequence.StandardKey.Undo)
         self._redo_action = self._stack.createRedoAction(self, self.tr("Redo"))
-        self._redo_action.setShortcut(QKeySequence.StandardKey.Redo)
         self._stack.canUndoChanged.connect(self._update_undo_tips)
         self._stack.canRedoChanged.connect(self._update_undo_tips)
         self._update_undo_tips()
@@ -97,12 +95,12 @@ class ThresholdUi(QObject):
 
     @property
     def undo_action(self) -> QAction:
-        """ "Undo", for the Edit menu."""
+        """ "Undo <command>", for the Threshold test menu (no global shortcut)."""
         return self._undo_action
 
     @property
     def redo_action(self) -> QAction:
-        """ "Redo", for the Edit menu."""
+        """ "Redo <command>", for the Threshold test menu (no global shortcut)."""
         return self._redo_action
 
     @property
@@ -173,7 +171,11 @@ class ThresholdUi(QObject):
     def _on_applied(self, applied: object) -> None:
         if not isinstance(applied, ThresholdApplied):
             return
-        self._stack.push(ApplyThresholdTestCommand(self._loader, applied.result, applied.cell))
+        self._stack.push(
+            ApplyThresholdTestCommand(
+                self._loader, applied.result, applied.cell, self._on_command_refused
+            )
+        )
         done = applied.cell.value
         if done is not None:
             self._notify(applied_text(applied.result, done.period))
@@ -206,6 +208,12 @@ class ThresholdUi(QObject):
         if isinstance(message, ErrorMessage):
             self._show_error(message)
         self._loader.load_history()
+
+    def _on_command_refused(self) -> None:
+        """An undo or a redo could not start (no profile, closing): the stack must not move on."""
+        # The command is running: clear the stack once it has returned.
+        QTimer.singleShot(0, self._stack.clear)
+        self._show_error(self._busy_message())
 
     def _update_undo_tips(self) -> None:
         self._undo_action.setToolTip(

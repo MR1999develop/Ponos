@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Pace zones on the threshold pace (five zones aligned with the HR zones).
+"""Pace zones on the threshold pace (five zones, like the HR zones, with their own percentages
+and on the speed).
 
 A pace zone is defined on the speed: Z1 below 78% of the threshold speed, Z2 78-88%, Z3 88-94%,
 Z4 94-100%, Z5 100% and over (percentages in `defaults`). The lower boundary belongs to the

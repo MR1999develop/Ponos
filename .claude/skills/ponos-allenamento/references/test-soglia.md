@@ -27,6 +27,29 @@ Funzione pura e deterministica: stesse attività e stessi limiti, stesso esito.
   la fine dell'ultimo campione di FC. Il massimo di una funzione lineare a
   tratti sta in un punto di rottura: si provano solo quelli (nessun ciclo per
   secondo).
+  - **Velocità massima plausibile** (`MAX_PLAUSIBLE_SPEED_M_S`, 12 m/s, oltre
+    il record mondiale dei 100 m): un passo della distanza cumulativa più
+    veloce (un glitch del GPS: 20 km in 1 s) non conta nulla per la scelta
+    della finestra; se la finestra migliore ne contiene uno, o il suo ritmo sui
+    30 minuti è fuori da 90–3600 s/km, la distanza non è affidabile: si
+    sceglie per FC e il risultato non ha ritmo (anche la FC di soglia viene
+    così dal segmento giusto).
+  - **Scelta per FC e copertura:** contano solo le finestre con almeno il 90%
+    di secondi validi negli ultimi 20 minuti (la stessa regola del rifiuto,
+    `enough_valid_seconds`): una finestra con pochi secondi validi e FC alta non
+    batte una completa. Il limite del 90% si raggiunge tra due punti di
+    rottura, quindi la radice è un candidato. Se nessuna finestra ha
+    copertura, vale la FC più alta e il test è rifiutato per la copertura,
+    come prima.
+  - **Bordo finale:** la serie della distanza vale fino a un intervallo dopo
+    l'ultimo record (al massimo `DISTANCE_END_TOLERANCE_S`, 1 s), come l'ultimo
+    campione di FC vale fino al successivo: un test di 30:00 a 1 Hz, con
+    l'ultimo record a 29:59, ha ancora il ritmo e la scelta per distanza.
+  - **Origine:** i secondi delle serie partono dal primo record, non
+    dall'inizio della sessione; `segment_start` è l'istante del record da cui
+    parte il segmento (`Activity.first_record_offset_s` + secondi). FC e
+    distanza hanno la stessa origine; i campioni con secondo negativo (record
+    con timestamp prima del primo) sono scartati in entrambe.
 - **FC di soglia:** media pesata sul tempo dei campioni di FC validi (dentro
   `[FCmin, FCmax]` del profilo per il giorno del test, intervalli tra campioni
   fino a 10 s, come per il carico) negli ultimi 20 minuti (1200 s) del
@@ -35,7 +58,9 @@ Funzione pura e deterministica: stesse attività e stessi limiti, stesso esito.
 - **Ritmo di soglia:** tempo / distanza degli stessi 20 minuti, in secondi
   interi per km (metà verso l'alto); assente senza distanza che copra tutti i
   20 minuti, con distanza nulla o fuori da 90–3600 s/km (un glitch del GPS o
-  una camminata non sono un ritmo).
+  una camminata non sono un ritmo). Un passo più veloce della velocità
+  massima plausibile dentro i 20 minuti rende il ritmo assente (la FC resta
+  valida): il ritmo non si ripara togliendo il salto.
 - **Giorno del test:** il giorno locale (fuso del profilo) dell'inizio
   dell'attività; i limiti FC sono quelli in vigore quel giorno.
 - **Zone FC:** quelle del carico (`load/domain/zones.py`: Z1 sotto 85% della
@@ -113,7 +138,8 @@ metri cumulativi non decrescenti) viene dal FIT (`record.distance`, o in
 mancanza `speed` integrata, senza inventare distanza sui buchi oltre 10 s) e
 dal GPX (haversine lungo la traccia, nessun passo tra due segmenti). Una
 distanza che va all'indietro non è affidabile: niente serie (e niente ritmo),
-l'attività resta valida.
+l'attività resta valida. Gli sport ammessi al test sono
+`defaults.THRESHOLD_TEST_SPORTS`, usato anche dall'interfaccia.
 
 ## 8. Test attesi
 

@@ -64,6 +64,10 @@ def test_the_chosen_window_is_the_one_with_the_greatest_distance_the_first_on_a_
     chosen = best_start_by_distance(run.distance)
 
     expected = naive_best_by_distance(run.distance.meters)
+    if expected is not None:  # the best window must also be a running pace (90-3600 s/km)
+        gained = float(run.distance.meters[expected + WINDOW] - run.distance.meters[expected])
+        if not 90 <= WINDOW / (gained / 1000) <= 3600:
+            expected = None
     assert chosen == (None if expected is None else float(expected))
 
 

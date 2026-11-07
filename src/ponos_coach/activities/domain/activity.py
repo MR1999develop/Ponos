@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -31,6 +32,8 @@ class Activity:
     record; `discarded_hr_samples` counts the HR samples discarded because of
     repeated or non-increasing timestamps. The optional distance series has the same time
     axis (seconds from the first record); it is absent when the file has no usable distance.
+    `first_record_offset_s` is the time from `start` to that first record (a watch records a few
+    seconds after the session start): the origin of the series is `start + first_record_offset_s`.
     Start and end lie in [1990-01-01, 2100-01-01) UTC.
     """
 
@@ -44,6 +47,7 @@ class Activity:
     summary: ActivitySummary
     discarded_hr_samples: int = 0
     distance: DistanceSeries | None = None
+    first_record_offset_s: float = 0.0
 
     def __post_init__(self) -> None:
         if format_of(self.identity) is not self.file_format:
@@ -52,5 +56,7 @@ class Activity:
         check_durations(self.elapsed_s, self.timer_s)
         if not is_plausible_span(self.start, self.elapsed_s):
             raise ValueError("start or end outside the window of allowed times")
+        if not math.isfinite(self.first_record_offset_s):
+            raise ValueError("the offset of the first record must be finite")
         if self.discarded_hr_samples < 0:
             raise ValueError("discarded samples cannot be negative")

@@ -98,10 +98,11 @@ from a table of the book.
 
 ### Pace zones
 
-1. **Five zones aligned with the HR zones, as a share of the threshold speed:
+1. **Five zones, like the five HR zones, as a share of the threshold speed:
    Z1 below 78%, Z2 78-88%, Z3 88-94%, Z4 94-100%, Z5 100% and over.**
-   - Pro: one idea for HR and pace; the five zones match those of the HR
-     (ADR 007) and the percentages are derived from Friel; speed is linear in the share, pace is not, and
+   - Pro: one idea for HR and pace; five zones as for the HR (ADR 007),
+     although the percentages are not the HR ones (a different quantity),
+     and the percentages are derived from Friel; speed is linear in the share, pace is not, and
      the comparison is done on integers.
    - Con: the percentages are project defaults and not a published table; a
      share of speed is less intuitive than a pace range, so the app also gives

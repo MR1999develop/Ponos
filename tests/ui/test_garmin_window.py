@@ -130,7 +130,6 @@ def test_the_garmin_menu_sits_after_the_calendar_menu_with_every_command(
 
     assert titles == [
         "File",
-        "Edit",
         "Profile",
         "Threshold test",
         "Calendar",

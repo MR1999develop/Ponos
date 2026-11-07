@@ -6,11 +6,14 @@ The command is created when the first apply has already gone through (the dialog
 only then is the command pushed), so the first `redo` does nothing. Undoing takes the test back;
 redoing applies it again. Both start a job on the data thread and do not wait: jobs run in order
 on that one thread, so an undo always lands after the apply before it. If a job is refused (the
-measurement was edited meanwhile) the window shows the message and clears the stack.
+measurement was edited meanwhile) the window shows the message and clears the stack. If a job
+cannot even start (no profile, window closing) the command calls `on_refused`, so the stack never
+moves ahead of the data.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol
 
 from PySide6.QtCore import QCoreApplication
@@ -35,11 +38,18 @@ class ThresholdOps(Protocol):
 class ApplyThresholdTestCommand(QUndoCommand):
     """Apply a threshold test; undoing takes it back."""
 
-    def __init__(self, ops: ThresholdOps, result: ThresholdTestResult, cell: AppliedCell) -> None:
+    def __init__(
+        self,
+        ops: ThresholdOps,
+        result: ThresholdTestResult,
+        cell: AppliedCell,
+        on_refused: Callable[[], None],
+    ) -> None:
         super().__init__(QCoreApplication.translate("ThresholdUndo", "Apply threshold test"))
         self._ops = ops
         self._result = result
         self._cell = cell
+        self._on_refused = on_refused
         self._already_applied = True
 
     def redo(self) -> None:
@@ -47,8 +57,10 @@ class ApplyThresholdTestCommand(QUndoCommand):
         if self._already_applied:
             self._already_applied = False
             return
-        self._ops.reapply(self._result, self._cell)
+        if not self._ops.reapply(self._result, self._cell):
+            self._on_refused()
 
     def undo(self) -> None:
         """Take the test back."""
-        self._ops.remove(self._cell)
+        if not self._ops.remove(self._cell):
+            self._on_refused()

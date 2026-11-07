@@ -136,14 +136,6 @@ def test_t_piano_06_a_run_one_second_under_30_minutes_is_too_short(tp: Threshold
     assert tp.evaluate_bytes(run_fit([Leg(1799, 165, 3.5)])) is ThresholdRejection.TOO_SHORT
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "D-F4-01: a 30:00 run whose last record is at 29:59 loses the pace and the choice by "
-        "distance: `distance_between` demands the series to reach second 1800, but the last "
-        "record of a 1 Hz file is at 1799 (its sample is valid until 1800, as the HR's is)"
-    ),
-)
 def test_t_piano_06_a_30_minute_run_with_its_last_record_at_29_59_still_has_a_pace(
     tp: ThresholdProfile,
 ) -> None:
@@ -158,11 +150,12 @@ def test_t_piano_06_a_30_minute_run_with_its_last_record_at_29_59_still_has_a_pa
 def test_t_piano_06_a_run_of_29_59_of_records_inside_a_30_minute_elapsed_time_keeps_the_hr(
     tp: ThresholdProfile,
 ) -> None:
-    """The consequence of D-F4-01 is limited to the pace (and the way the window is chosen)."""
+    """D-F4-01: the distance series counts one interval past its last record, so the segment is
+    chosen by distance too."""
     result = accepted(tp.evaluate_bytes(run_fit([Leg(1800, 165, 3.5)], last_second=1799)))
 
     assert result.threshold_bpm == 165
-    assert result.selection is SegmentSelection.BY_HEART_RATE  # documents today's behaviour
+    assert result.selection is SegmentSelection.BY_DISTANCE
 
 
 def test_t_piano_06_records_that_stop_long_before_the_elapsed_time_are_too_short(
@@ -510,15 +503,6 @@ def with_distance_jump(at_s: int, jump_m: float) -> bytes:
     return fw.build_activity(spec)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "D-F4-04: a single implausible distance jump (a GPS glitch: 20 km in one second) outside "
-        "the real test attracts the window of 'greatest distance': the segment moves off the "
-        "test and the threshold HR is wrong (161 instead of 165 for a jump in the cool-down). "
-        "The step in metres per second is never checked for plausibility"
-    ),
-)
 @pytest.mark.parametrize("at_s", [300, 2500])
 def test_t_piano_06_a_gps_distance_jump_outside_the_test_does_not_move_the_window(
     tp: ThresholdProfile, at_s: int
@@ -538,14 +522,6 @@ def test_t_piano_06_a_gps_distance_jump_inside_the_test_keeps_the_hr_and_drops_t
     assert result.pace_s_per_km is None  # honest: the pace of those 20 minutes is not known
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "D-F4-02: `segment_start` adds the seconds (counted from the first record) to the start "
-        "of the session, so when the first record comes a few seconds after the session start "
-        "(normal on a watch) the saved instant is early by that delay"
-    ),
-)
 def test_t_piano_06_the_segment_start_is_the_instant_of_the_record_where_it_starts(
     tp: ThresholdProfile,
 ) -> None:

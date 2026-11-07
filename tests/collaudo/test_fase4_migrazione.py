@@ -348,14 +348,6 @@ def test_a_history_row_with_an_unreadable_activity_key_is_a_store_error(tmp_path
     assert type(error).__name__ == "AssessmentStoreError"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "D-F4-05: a history row whose `segment_start_ms` is outside the range of datetime "
-        "(the column has no CHECK) makes `list_tests` raise OverflowError instead of "
-        "AssessmentStoreError, so the screens that list the history or the retest crash"
-    ),
-)
 @pytest.mark.parametrize("start_ms", [9_000_000_000_000_000_000, -9_000_000_000_000_000_000])
 def test_a_history_row_with_an_impossible_start_instant_is_a_store_error(
     tmp_path: Path, start_ms: int

@@ -269,22 +269,23 @@ def test_only_runs_can_be_the_test() -> None:
 class RecordingOps:
     """Fake of the jobs a command starts: it records what it was asked to do."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, accepts: bool = True) -> None:
         self.calls: list[str] = []
+        self._accepts = accepts
 
     def reapply(self, _result: ThresholdTestResult, _cell: AppliedCell) -> bool:
         self.calls.append("reapply")
-        return True
+        return self._accepts
 
     def remove(self, _cell: AppliedCell) -> bool:
         self.calls.append("remove")
-        return True
+        return self._accepts
 
 
 def test_pushing_the_command_does_not_apply_again_then_undo_and_redo_do(qtbot: QtBot) -> None:
     ops = RecordingOps()
     stack = QUndoStack()
-    command = ApplyThresholdTestCommand(ops, a_result(), AppliedCell())
+    command = ApplyThresholdTestCommand(ops, a_result(), AppliedCell(), lambda: None)
 
     stack.push(command)  # the test was already applied by the dialog
     assert ops.calls == []
@@ -294,3 +295,18 @@ def test_pushing_the_command_does_not_apply_again_then_undo_and_redo_do(qtbot: Q
     stack.redo()
 
     assert ops.calls == ["remove", "reapply"]
+
+
+def test_a_refused_undo_and_a_refused_redo_call_the_failure_callback(qtbot: QtBot) -> None:
+    refused: list[str] = []
+    ops = RecordingOps(accepts=False)
+    stack = QUndoStack()
+    stack.push(
+        ApplyThresholdTestCommand(ops, a_result(), AppliedCell(), lambda: refused.append("refused"))
+    )
+
+    stack.undo()
+    stack.redo()
+
+    assert ops.calls == ["remove", "reapply"]
+    assert refused == ["refused", "refused"]

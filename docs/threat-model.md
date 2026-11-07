@@ -206,7 +206,7 @@ service, E elevation of privilege.
 | B3 | Activity indexed before v4 without calories that makes the day wrong | T | T-NUT-03, D-F4B-09 |
 | B13 | Distance that is NaN or infinite (FIT float field, speed, GPX coordinates) that breaks the window search or gives a nonsense pace | T, D | T-PIANO-06, D-F4 |
 | B13 | Distance that goes backwards (damaged file, odometer reset) read as a valid effort | T | T-PIANO-06, D-F4 |
-| B13 | Jumps of distance (GPS glitch, a record after a long gap) that make a window look like a world-record effort and set a wrong threshold pace | T | T-PIANO-06 (pace outside 90–3,600 s/km is left out), D-F4 |
+| B13 | Jumps of distance (GPS glitch, a record after a long gap) that make a window look like a world-record effort and set a wrong threshold pace | T | T-PIANO-06 (steps above 12 m/s ignored for the window; implausible window falls back to heart rate, no pace), D-F4-04 |
 | B13 | Gaps in the records (pauses, missing distance) hidden by a distance that keeps growing, so a test with long stops is accepted | T | T-PIANO-06 (pauses over 60 s in the segment, HR and distance records together), D-F4 |
 | B13 | Speed integrated over a gap that invents distance | T | T-PIANO-06 (no distance over gaps above 10 s), D-F4 |
 | B13 | Series with millions of points or unsorted times that exhaust memory or time in the window search | D | T-SEC-01, T-SEC-02, T-PERF-02 (limits of the readers; the search tries only the breakpoints) |
@@ -599,9 +599,16 @@ them.
 
 | Id | Defect | Behaviour | Test (plan) | Test (file) |
 |---|---|---|---|---|
-| | | | | |
+| D-F4-01 | A 30:00 test recorded at 1 Hz has its last record at 29:59 and lost its pace | The distance counts until one sampling interval (at most 1 s) after the last record, as the HR does | T-PIANO-06 | `tests/collaudo/test_fase4_soglia_e2e.py` |
+| D-F4-02 | The start of the segment was counted from the start of the session, not from the first record, and was early when the first record came later | The segment starts at the instant of its record; HR and distance share the first record as origin | T-PIANO-06 | `tests/collaudo/test_fase4_soglia_e2e.py` |
+| D-F4-03 | The profile session did not expose the threshold test history | `ProfileSession.threshold_tests` | T-PIANO-06 | `tests/collaudo/test_fase4_soglia_e2e.py` |
+| D-F4-04 | A distance jump (20 km in 1 s) outside the test attracted the "greatest distance" window and moved the threshold HR | Steps above 12 m/s are ignored when choosing the window; a window with an implausible step or pace falls back to the choice by heart rate, without pace | T-PIANO-06 | `tests/collaudo/test_fase4_soglia_e2e.py` |
+| D-F4-05 | A history row with an impossible start instant raised `OverflowError` instead of a store error | Any conversion error of the row becomes `AssessmentStoreError` | T-DATI-01 | `tests/collaudo/test_fase4_migrazione.py` |
+| D-F4-06 | A record earlier than the first one put HR and distance samples before second zero | Samples before second zero are dropped from both series; load and cache fingerprint unchanged | T-SEC-02 | `tests/collaudo/test_fase4_fuzz.py` |
 
-Filled in by the acceptance tests.
+All closed on 2026-11-07: their tests, born as expected-fail (strict `xfail`),
+pass without the mark. The review also made the choice by heart rate consider
+only windows with valid HR on at least 90% of the last 20 minutes.
 
 ## 5. Accepted risks
 

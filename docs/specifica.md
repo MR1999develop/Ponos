@@ -403,24 +403,34 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 ## 7. Threshold test
 
 - The app proposes a 30-minute running threshold test at the start and
-  proposes it again every 6–8 weeks, in a recovery week. Decision:
+  proposes it again every 6–8 weeks (from phase 5 also in a recovery week of
+  the plan). Decision:
   [ADR 009](adr/009-test-di-soglia.md).
 
 ### Instructions
 
-- The instructions are in the app, before the test: a 30-minute run at the
-  maximum steady effort the runner can hold, after a warm-up, with the watch
-  recording heart rate and, outdoors, distance (interface in progress: exact
-  wording and place).
+- Menu "Threshold test": "Test instructions..." (Ctrl+Shift+H), "Use as
+  threshold test..." (Ctrl+Shift+U), "Threshold tests..." (Ctrl+Shift+R), then
+  the undo and redo of the last applied test.
+- The instructions open in a dialog: a warm-up of 10–15 minutes, 30 minutes of
+  running at the maximum steady effort the runner can hold, alone and on flat
+  ground, then a cool-down, with the watch recording heart rate and, outdoors,
+  distance; repeat every 6–8 weeks. The test is not a diagnosis: whoever has
+  health problems or doubts talks to a doctor first.
 
 ### Using an activity as the test
 
 - The test is a recorded activity. The app does not recognise it: the user
-  says which activity is the test. Only running activities (run and trail run)
-  can be a test.
-- The test is the 30 minutes of the activity with the greatest distance; if
-  the activity has no usable distance, the 30 minutes with the highest mean
-  heart rate. Warm-up and cool-down fall outside it.
+  selects it in the list of activities (or opens its detail) and chooses "Use
+  as threshold test...". Only running activities (run and trail run) can be a
+  test; for other activities the command is disabled and its tooltip says
+  why.
+- The test is the 30 minutes of the activity with the greatest distance,
+  ignoring steps faster than 12 m/s (GPS jumps). If the activity has no usable
+  distance, or the best window has an implausible step or pace, the test is
+  the 30 minutes with the highest mean heart rate among those with valid heart
+  rate on at least 90% of their last 20 minutes, and has no pace. Warm-up and
+  cool-down fall outside it.
 
 ### Result
 
@@ -430,11 +440,15 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 - Threshold pace: time over distance of the same 20 minutes, in whole seconds
   per kilometre. It is left out if the activity has no distance for those 20
   minutes or the pace is not plausible (outside 1:30 to 60:00 per km).
-- Five pace zones, aligned with the five HR zones, as a share of the threshold
-  speed: Z1 below 78%, Z2 78–88%, Z3 88–94%, Z4 94–100%, Z5 100% and over. A
+- Five pace zones, like the five HR zones but with their own percentages, as
+  a share of the threshold speed: Z1 below 78%, Z2 78–88%, Z3 88–94%, Z4 94–100%, Z5 100% and over. A
   value on the boundary belongs to the faster zone. The HR zones are those of
   section 6.
-- The result is shown before it is applied (interface in progress: layout).
+- The result is shown before it is applied, in a dialog: day, start of the
+  segment and how it was chosen (distance or heart rate), threshold HR,
+  threshold pace, the current threshold of the profile, and the HR and pace
+  zones. Buttons: "Apply threshold" and "Close". The evaluation runs in the
+  background; closing the dialog drops it.
 
 ### Rejection
 
@@ -464,7 +478,9 @@ activity is reported as excluded, with the reason, not as a rejected test.
 - An activity that is already a test in the history cannot be applied again.
 - The loads depend on the threshold: they are recalculated by themselves, as
   for any change of the measurements.
-- Applying can be undone. Undoing removes the test from the history and puts
+- Applying can be undone from the "Threshold test" menu during the session
+  (the undo does not survive a restart). If the profile is busy, the undo is
+  refused with a message and the undo history is cleared. Undoing removes the test from the history and puts
   the measurement of that day back exactly as it was (or removes it, if the
   test had created it). If the user changed that measurement after the test,
   the undo is refused and nothing changes.
@@ -479,8 +495,10 @@ activity is reported as excluded, with the reason, not as a rejected test.
   opens; from day 57 it says the retest is overdue. With no test, it proposes
   the first. Only the most recent test counts. The recovery week arrives with
   the plan (phase 5): for now only the dates are used.
-- The history, the application of a result and the retest message are shown
-  in the interface (interface in progress: where and how).
+- "Threshold tests..." shows the history (most recent first: date, activity,
+  threshold HR, pace, method) and the retest message below it; with no test,
+  an empty state with the first step. The retest message is also in the status
+  bar, as text.
 
 Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-soglia.md).
 

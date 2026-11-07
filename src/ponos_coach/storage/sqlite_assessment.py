@@ -111,5 +111,6 @@ class SqliteThresholdTestStore:
     def _decoded(rows: Sequence[Sequence[object]]) -> list[ThresholdTest]:
         try:
             return [_test_from(row) for row in rows]
-        except ValueError:  # the text read is not kept in the chain of causes
+        except (ValueError, OverflowError, OSError):  # incl. an instant out of datetime's range;
+            # the value read is not kept in the chain of causes
             raise AssessmentStoreError("saved threshold test invalid") from None

@@ -11,9 +11,10 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, date, datetime
 
+import numpy as np
 import pytest
 
-from ponos_coach.activities.domain import DistanceSeries, HeartRateSeries, Sport
+from ponos_coach.activities.domain import Activity, DistanceSeries, HeartRateSeries, Sport
 from ponos_coach.assessment.domain import (
     SegmentSelection,
     ThresholdRejection,
@@ -155,6 +156,71 @@ def test_without_distance_samples_outside_the_limits_do_not_raise_the_window() -
     result = accepted(evaluate(legs, with_distance=False))
 
     assert result.threshold_bpm == 165
+
+
+def test_a_hr_window_with_few_valid_seconds_does_not_win_for_its_high_mean() -> None:
+    # Window 0 is complete at 150 bpm; a later one ends on 100 s at 180 bpm after 1100 s of
+    # invalid HR: a higher mean, but it would be rejected for its coverage.
+    legs = [Leg(1700, 150), Leg(1100, OUT_OF_RANGE_BPM), Leg(100, 180)]
+
+    result = accepted(evaluate(legs, with_distance=False))
+
+    assert result.segment_start_s == 0.0
+    assert result.threshold_bpm == 150
+
+
+def test_a_hr_window_whose_coverage_is_exactly_90_percent_can_win() -> None:
+    # The best window reaches exactly 1080 valid seconds in its last 20 minutes: not a candidate
+    # at a breakpoint, but at the point where the limit is reached.
+    # The mean rises with the start until the 180 bpm part is all in; the valid seconds of the
+    # last 20 minutes fall with it and reach 1080 at second 120, which is no breakpoint.
+    legs = [Leg(1000, 150), Leg(800, 180), Leg(1500, OUT_OF_RANGE_BPM)]
+
+    result = accepted(evaluate(legs, with_distance=False))
+
+    assert result.segment_start_s == pytest.approx(120.0)
+    assert result.threshold_bpm == 172
+
+
+def test_when_no_hr_window_has_enough_valid_seconds_the_test_is_rejected() -> None:
+    legs = [Leg(900, 150), Leg(1800, OUT_OF_RANGE_BPM), Leg(900, 150)]
+
+    assert evaluate(legs, with_distance=False) is ThresholdRejection.TOO_FEW_HEART_RATE_SAMPLES
+
+
+def _with_distance_jump(at_s: int, jump_m: float = 20_000.0) -> Activity:
+    activity = synthetic_run(standard_test())
+    assert activity.distance is not None
+    seconds, meters = activity.distance.seconds, activity.distance.meters
+    jumped = DistanceSeries(seconds, meters + np.where(seconds >= at_s, jump_m, 0.0))
+    return replace(activity, distance=jumped)
+
+
+@pytest.mark.parametrize("at_s", [300, 2500])
+def test_a_distance_jump_outside_the_test_does_not_move_the_segment(at_s: int) -> None:
+    result = accepted(evaluate_threshold_test(_with_distance_jump(at_s), LIMITS, DAY))
+
+    assert result.selection is SegmentSelection.BY_DISTANCE
+    assert result.segment_start_s == 600.0
+    assert result.pace_s_per_km is not None
+
+
+def test_a_distance_jump_inside_the_test_falls_back_to_the_hr_and_gives_no_pace() -> None:
+    result = accepted(evaluate_threshold_test(_with_distance_jump(1500), LIMITS, DAY))
+
+    assert result.selection is SegmentSelection.BY_HEART_RATE
+    assert result.segment_start_s == 600.0
+    assert result.threshold_bpm == 165
+    assert result.pace_s_per_km is None
+
+
+def test_a_best_window_with_a_walking_pace_is_not_trusted_for_the_distance() -> None:
+    legs = [Leg(600, 130, 0.2), Leg(1800, 165, 0.2), Leg(300, 120, 0.2)]  # 5000 s/km
+
+    result = accepted(evaluate(legs))
+
+    assert result.selection is SegmentSelection.BY_HEART_RATE
+    assert result.pace_s_per_km is None
 
 
 # --- Rejections ---------------------------------------------------------------------------

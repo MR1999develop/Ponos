@@ -25,7 +25,6 @@ from numpy.typing import NDArray
 from ponos_coach.activities.domain import (
     Activity,
     ActivityIdentity,
-    Sport,
     truncate_to_millisecond,
 )
 from ponos_coach.assessment.domain.defaults import (
@@ -34,8 +33,8 @@ from ponos_coach.assessment.domain.defaults import (
     METERS_PER_KM,
     METHOD_VERSION,
     MIN_PACE_S_PER_KM,
-    MIN_VALID_HR_PERCENT,
     TEST_DURATION_S,
+    THRESHOLD_TEST_SPORTS,
     THRESHOLD_WINDOW_S,
 )
 from ponos_coach.assessment.domain.pace_zones import pace_zone_starts_s_per_km
@@ -43,14 +42,13 @@ from ponos_coach.assessment.domain.segment import (
     HeartRateTimeline,
     best_start_by_distance,
     distance_between,
+    enough_valid_seconds,
     pause_seconds,
 )
 from ponos_coach.load.domain import HeartRateLimits, ThresholdHeartRate, zone_starts_bpm
 
 _MS_PER_S = 1000
-_PERCENT = 100
 _NOISE_DECIMALS = 9
-_TEST_SPORTS = frozenset({Sport.RUNNING, Sport.TRAIL})
 
 
 class ThresholdRejection(Enum):
@@ -142,14 +140,12 @@ def _is_threshold_for(limits: HeartRateLimits, bpm: int) -> bool:
 
 def _too_few_valid_seconds(valid_s: float) -> bool:
     """True if the valid seconds are under 90% of the last 20 minutes (whole milliseconds)."""
-    return round(valid_s * _MS_PER_S) * _PERCENT < (
-        MIN_VALID_HR_PERCENT * THRESHOLD_WINDOW_S * _MS_PER_S
-    )
+    return not bool(enough_valid_seconds(np.array([valid_s]))[0])
 
 
 def _unfit(activity: Activity) -> ThresholdRejection | None:
     """Rejection that needs nothing but the header of the activity: sport and elapsed time."""
-    if activity.sport not in _TEST_SPORTS:
+    if activity.sport not in THRESHOLD_TEST_SPORTS:
         return ThresholdRejection.WRONG_SPORT
     if activity.elapsed_s < TEST_DURATION_S:
         return ThresholdRejection.TOO_SHORT
@@ -159,7 +155,8 @@ def _unfit(activity: Activity) -> ThresholdRejection | None:
 def _choose_segment(
     activity: Activity, timeline: HeartRateTimeline
 ) -> tuple[SegmentSelection, float] | None:
-    """How and where the segment is: by distance if the distance allows it, otherwise by HR."""
+    """How and where the segment is: by distance if the distance allows it and can be trusted
+    (no implausible step, a running pace), otherwise by HR."""
     if activity.distance is not None:
         by_distance = best_start_by_distance(activity.distance)
         if by_distance is not None:
@@ -211,14 +208,16 @@ def evaluate_threshold_test(
     bpm = _threshold_bpm(activity, timeline, limits, start_s)
     if isinstance(bpm, ThresholdRejection):
         return bpm
-    pace = _pace_s_per_km(activity, start_s)
+    # a segment chosen without trusting the distance gives no pace
+    pace = _pace_s_per_km(activity, start_s) if selection is SegmentSelection.BY_DISTANCE else None
     return ThresholdTestResult(
         identity=activity.identity,
         test_day=test_day,
         selection=selection,
         segment_start_s=start_s,
         segment_start=truncate_to_millisecond(
-            activity.start + timedelta(milliseconds=round(start_s * _MS_PER_S))
+            activity.start
+            + timedelta(milliseconds=round((activity.first_record_offset_s + start_s) * _MS_PER_S))
         ),
         threshold_bpm=bpm,
         pace_s_per_km=pace,
