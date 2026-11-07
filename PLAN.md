@@ -572,6 +572,10 @@ posto e documentati nella skill del progetto; non sono consigli medici.
 
 - [ ] Collaudo completo (sezione 7) superato sull'eseguibile, su Windows e
       Ubuntu, con esiti registrati in `docs/collaudo.md`.
+- [ ] Valori della tabella degli alimenti verificati contro USDA FoodData
+      Central con `experiments/verify_foods.py --apply` (`source.verified_on`
+      valorizzato); il 2026-11-07 `api.nal.usda.gov` non si risolveva.
+- [ ] `nutrition/foods.json` incluso nel pacchetto PyInstaller.
 - [ ] Backup e ripristino di un profilo in un file versionato, con test di
       ripristino.
 - [ ] PyInstaller con `.spec` versionato per Windows e Ubuntu, smoke test

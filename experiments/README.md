@@ -24,3 +24,14 @@ track reading, scheduled workouts read-only).
   bytes and whether it exceeds 2560 bytes (limit of the generic Credential Manager).
 - `spike_shapes.py` contains `shape_of`, the pure function that anonymises; it is tested
   in `tests/experiments/test_spike_shapes.py`.
+
+## verify_foods.py
+
+- `uv run --locked python experiments/verify_foods.py [--api-key KEY] [--apply]` checks
+  `src/ponos_coach/nutrition/foods.json` against USDA FoodData Central: batches of at most 20
+  ids, 2 s pause between requests, `DEMO_KEY` by default. It prints current value, FDC value
+  difference in percent, missing ids, suspicious descriptions and differences over 10%.
+- With `--apply` it rewrites `foods.json` with the FDC values (kcal integer, macros one decimal),
+  adds the FDC dataset per food and sets `source.verified_on` to today (atomic write).
+- Without network it prints a message and exits with 1, touching no file. The pure parsing and
+  comparison functions are tested in `tests/experiments/test_verify_foods.py`.

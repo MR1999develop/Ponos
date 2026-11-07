@@ -29,6 +29,7 @@ from ponos_coach.load.use_cases import (
     OverviewCancelledError,
     ProfileOverview,
 )
+from ponos_coach.nutrition.food_table import FoodTable
 from ponos_coach.profiles.domain import FolderInspection, ProfileId, ProfileName, RegistryEntry
 from ponos_coach.profiles.ports import (
     ProfileFolderError,
@@ -117,6 +118,7 @@ class WorkspaceServices:
     clock: Clock
     today: Callable[[ZoneInfo], date]
     sync: SyncServices
+    foods: Callable[[], FoodTable]
     errors: ErrorContext = field(default_factory=ErrorContext)
 
 
@@ -311,6 +313,11 @@ class WorkspaceController(QObject):
     def profiles(self) -> tuple[RegistryEntry, ...]:
         """The profiles in the list, most recent first."""
         return self._entries
+
+    @property
+    def foods(self) -> Callable[[], FoodTable]:
+        """Reads the food table shipped with the app (called on the data thread)."""
+        return self._services.foods
 
     @property
     def sync(self) -> SyncController:

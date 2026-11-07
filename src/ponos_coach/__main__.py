@@ -35,6 +35,7 @@ from ponos_coach.activities.domain import (
 from ponos_coach.activities.ports import GarminAccount, GarminSession
 from ponos_coach.activities.sync import ExtractedOriginal, OriginalExtractionError
 from ponos_coach.load.use_cases import Decoder
+from ponos_coach.nutrition.food_table import load_food_table
 from ponos_coach.platform.folder_kind import SystemFolderKindDetector
 from ponos_coach.platform.notifier import DesktopNotifier
 from ponos_coach.platform.profile_folders import LocalProfileFolders
@@ -339,6 +340,7 @@ def compose_main_window(  # noqa: PLR0913 - every argument is an injectable vola
             mfa_wait_s=mfa_wait_s,
             preferences=QSettingsSyncPreferences(settings),
         ),
+        foods=load_food_table,
         errors=ErrorContext(_registry_problem, config_dir),
     )
     controller = WorkspaceController(services)

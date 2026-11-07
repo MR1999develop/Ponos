@@ -28,6 +28,11 @@ def to_qdate(value: date) -> QDate:
     return QDate(value.year, value.month, value.day)
 
 
+def from_qdate(value: QDate) -> date:
+    """The same date as a `date` (the `QDate` must be valid)."""
+    return date(value.year(), value.month(), value.day())
+
+
 class _CalendarStartPage(QObject):
     """When the calendar appears and there is no date yet, choose its page."""
 

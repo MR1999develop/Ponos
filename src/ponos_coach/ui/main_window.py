@@ -51,14 +51,17 @@ from ponos_coach.profiles.domain import ProfileId, RegistryEntry
 from ponos_coach.profiles.use_cases import FolderWarning, NewProfileRequest
 from ponos_coach.ui.activity_detail_loader import ActivityDetailLoader
 from ponos_coach.ui.activity_table import ActivitiesPage
+from ponos_coach.ui.calendar_page import CalendarPage
 from ponos_coach.ui.chart_view import ChartEngine
 from ponos_coach.ui.data_thread import SHUTDOWN_WAIT_MS
+from ponos_coach.ui.day_page import DayPage
 from ponos_coach.ui.errors import ErrorMessage, exclusion_reason_text, unexpected_error_message
 from ponos_coach.ui.garmin_ui import GarminUi
 from ponos_coach.ui.import_report import ImportReport
 from ponos_coach.ui.import_report_dialog import ImportReportDialog
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
 from ponos_coach.ui.new_profile_form import NewProfileForm
+from ponos_coach.ui.nutrition_ui import NutritionUi
 from ponos_coach.ui.overview_page import OverviewPage
 from ponos_coach.ui.overview_state import (
     Idle,
@@ -98,7 +101,8 @@ _DEFAULT_SIZE = (1100, 720)
 _STATUS_MESSAGE_MS = 8000
 _SECTION_OVERVIEW = 0
 _SECTION_ACTIVITIES = 1
-_AVAILABLE_SECTIONS = (_SECTION_OVERVIEW, _SECTION_ACTIVITIES)
+_SECTION_CALENDAR = 2
+_AVAILABLE_SECTIONS = (_SECTION_OVERVIEW, _SECTION_ACTIVITIES, _SECTION_CALENDAR)
 _SHUTDOWN_POLL_MS = 20
 
 
@@ -209,6 +213,22 @@ class MainWindow(QMainWindow):
         self._sport_weights_action = self._action(
             self.tr("Sport weights..."), "Ctrl+Shift+W", self.edit_sport_weights
         )
+        self._nutrition_action = self._action(
+            self.tr("Nutrition settings..."), "Ctrl+Shift+N", self.edit_nutrition_settings
+        )
+        self._previous_month_action = self._action(
+            self.tr("Previous month"), "Ctrl+Left", self._calendar_step_back
+        )
+        self._next_month_action = self._action(
+            self.tr("Next month"), "Ctrl+Right", self._calendar_step_forward
+        )
+        self._today_action = self._action(self.tr("Today"), "Ctrl+T", self._calendar_today)
+        self._open_day_action = self._action(
+            self.tr("Open day"), "Ctrl+Return", self._calendar_open_day
+        )
+        self._back_action = self._action(
+            self.tr("Back to calendar"), "Alt+Left", self._back_to_calendar
+        )
         self._detail_action = self._action(
             self.tr("Activity detail..."), "Ctrl+D", self.show_selected_activity_detail
         )
@@ -236,8 +256,18 @@ class MainWindow(QMainWindow):
         profile_menu = self.menuBar().addMenu(self.tr("Profile"))
         profile_menu.addAction(self._edit_profile_action)
         profile_menu.addAction(self._sport_weights_action)
+        profile_menu.addAction(self._nutrition_action)
         profile_menu.addSeparator()
         profile_menu.addAction(self._detail_action)
+        calendar_menu = self.menuBar().addMenu(self.tr("Calendar"))
+        for action in (
+            self._previous_month_action,
+            self._next_month_action,
+            self._today_action,
+            self._open_day_action,
+            self._back_action,
+        ):
+            calendar_menu.addAction(action)
         self._garmin.build_menu(self.menuBar())
         self._build_language_menu()
         help_menu = self.menuBar().addMenu(self.tr("Help"))
@@ -271,7 +301,7 @@ class MainWindow(QMainWindow):
         sections = (
             (self.tr("Overview"), True),
             (self.tr("Activities"), True),
-            (self.tr("Calendar"), False),
+            (self.tr("Calendar"), True),
             (self.tr("Goals"), False),
             (self.tr("Injuries"), False),
             (self.tr("Tests"), False),
@@ -292,9 +322,18 @@ class MainWindow(QMainWindow):
         self._activities = ActivitiesPage(self)
         self._activities.import_requested.connect(self.choose_import_files)
         self._activities.selection_changed.connect(self._update_actions)
+        self._calendar = CalendarPage(self._today(), self)
+        self._day_page = DayPage(self)
         self._pages = QStackedWidget(self)
-        self._pages.addWidget(self._overview)
-        self._pages.addWidget(self._activities)
+        self._section_pages: dict[int, QWidget] = {
+            _SECTION_OVERVIEW: self._overview,
+            _SECTION_ACTIVITIES: self._activities,
+            _SECTION_CALENDAR: self._calendar,
+        }
+        for page in (*self._section_pages.values(), self._day_page):
+            self._pages.addWidget(page)
+        self._pages.currentChanged.connect(self._update_actions)
+        self._calendar.month_changed.connect(self._update_actions)
 
         central = QWidget(self)
         row = QHBoxLayout(central)
@@ -321,6 +360,21 @@ class MainWindow(QMainWindow):
             notify=lambda text: self.statusBar().showMessage(text, _STATUS_MESSAGE_MS),
         )
         self._activities.detail_requested.connect(self._dialogs.show_activity_detail)
+        self._nutrition = NutritionUi(
+            self,
+            self._controller,
+            self._calendar,
+            self._day_page,
+            today=self._today,
+            show_day_page=lambda: self._pages.setCurrentWidget(self._day_page),
+            show_calendar_page=self._show_calendar,
+            show_error=self._show_error,
+        )
+        self._day_page.back_requested.connect(self._back_to_calendar)
+        self._day_page.edit_profile_requested.connect(self._edit_profile_from_day)
+
+    def _today(self) -> date:
+        return self._defaults.today(self._zone)
 
     def _profile_name(self) -> str:
         profile = self._controller.profile
@@ -386,6 +440,48 @@ class MainWindow(QMainWindow):
     def activities_page(self) -> ActivitiesPage:
         """The Activities page."""
         return self._activities
+
+    @property
+    def calendar_page(self) -> CalendarPage:
+        """The Calendar page."""
+        return self._calendar
+
+    @property
+    def day_page(self) -> DayPage:
+        """The page of a day."""
+        return self._day_page
+
+    @property
+    def nutrition(self) -> NutritionUi:
+        """The nutrition flow (day page and settings dialog)."""
+        return self._nutrition
+
+    @property
+    def nutrition_action(self) -> QAction:
+        """Action "Nutrition settings..."."""
+        return self._nutrition_action
+
+    @property
+    def current_page(self) -> QWidget:
+        """The page shown now."""
+        page = self._pages.currentWidget()
+        return self._overview if page is None else page
+
+    @property
+    def sidebar(self) -> QListWidget:
+        """The section list."""
+        return self._sidebar
+
+    @property
+    def calendar_actions(self) -> dict[str, QAction]:
+        """The Calendar menu actions by name."""
+        return {
+            "previous": self._previous_month_action,
+            "next": self._next_month_action,
+            "today": self._today_action,
+            "open_day": self._open_day_action,
+            "back": self._back_action,
+        }
 
     @property
     def profile_dialogs(self) -> ProfileDialogs:
@@ -527,6 +623,38 @@ class MainWindow(QMainWindow):
         if self._controller.can_edit_profile:
             self._dialogs.edit_sport_weights()
 
+    def edit_nutrition_settings(self) -> None:
+        """Open "Nutrition settings" (no effect without an open profile)."""
+        if self._controller.profile is not None:
+            self._nutrition.show_settings()
+
+    def _edit_profile_from_day(self) -> None:
+        """Open "Edit profile" from the day page's missing-data message."""
+        if self._controller.can_edit_profile:
+            self._dialogs.edit_profile()
+        else:
+            reason = self._unavailable_reason(False)
+            self.statusBar().showMessage(reason, _STATUS_MESSAGE_MS)
+
+    def _show_calendar(self) -> None:
+        self._sidebar.setCurrentRow(_SECTION_CALENDAR)
+        self._pages.setCurrentWidget(self._calendar)
+
+    def _back_to_calendar(self) -> None:
+        self._nutrition.back_to_calendar()
+
+    def _calendar_step_back(self) -> None:
+        self._calendar.previous_month()
+
+    def _calendar_step_forward(self) -> None:
+        self._calendar.next_month()
+
+    def _calendar_today(self) -> None:
+        self._calendar.go_today()
+
+    def _calendar_open_day(self) -> None:
+        self._calendar.request_selected_day()
+
     def show_selected_activity_detail(self) -> None:
         """Open the detail of the activity selected in the table."""
         self._activities.request_detail()
@@ -608,6 +736,7 @@ class MainWindow(QMainWindow):
     def _on_profile_changed(self, view: ProfileView) -> None:
         self._zone = view.zone
         self._creating_form = None
+        self._nutrition.profile_changed()
         self.setWindowTitle(self.tr("{profile} - Ponos Coach").format(profile=view.name.value))
         self._warning_label.setText(self._warning_text(view.warnings))
         self._warning_label.setVisible(bool(view.warnings))
@@ -827,8 +956,9 @@ class MainWindow(QMainWindow):
     # --- Reazione agli stati -------------------------------------------------------------
 
     def _on_section_changed(self, row: int) -> None:
-        if 0 <= row < self._pages.count():
-            self._pages.setCurrentIndex(row)
+        page = self._section_pages.get(row)
+        if page is not None:
+            self._pages.setCurrentWidget(page)
             self._settings.setValue(_KEY_SECTION, row)
 
     def _restore_section(self) -> None:
@@ -851,12 +981,16 @@ class MainWindow(QMainWindow):
         self._overview.apply_state(state, system_theme(), self._zone)
         if isinstance(state, Ready):
             self._activities.show_activities(state.overview.activities, self._zone)
+            self._calendar.show_data(self._today(), state.overview.activities, system_theme())
+            self._nutrition.data_changed()
         elif isinstance(state, Idle):
             self._activities.show_activities((), self._zone)
+            self._calendar.show_data(self._today(), (), system_theme())
         self._update_status_summary(state)
 
     def _on_color_scheme_changed(self) -> None:
         self._overview.apply_state(self._controller.overview_state, system_theme(), self._zone)
+        self._calendar.apply_theme(system_theme())
 
     def _unavailable_reason(self, allowed: bool) -> str:
         """The reason, for the tooltip, why a command on the profile cannot be given now."""
@@ -890,14 +1024,32 @@ class MainWindow(QMainWindow):
             (self._import_folder_action, controller.can_import),
             (self._edit_profile_action, controller.can_edit_profile),
             (self._sport_weights_action, controller.can_edit_profile),
+            (self._nutrition_action, controller.profile is not None),
         ):
             action.setEnabled(allowed)
             action.setToolTip(self._unavailable_reason(allowed))
+        self._update_calendar_actions()
         has_selection = self._activities.selected_activity() is not None
         self._detail_action.setEnabled(has_selection)
         self._detail_action.setToolTip(
             "" if has_selection else self.tr("Select an activity in the Activities list first.")
         )
+
+    def _update_calendar_actions(self) -> None:
+        """Calendar commands work on the Calendar page; the day page only has "Back"."""
+        on_calendar = self._pages.currentWidget() is self._calendar
+        on_day = self._pages.currentWidget() is self._day_page
+        not_here = self.tr("Open the Calendar section first.")
+        for action in (self._previous_month_action, self._today_action, self._open_day_action):
+            action.setEnabled(on_calendar)
+            action.setToolTip("" if on_calendar else not_here)
+        can_go_forward = on_calendar and self._calendar.next_button.isEnabled()
+        self._next_month_action.setEnabled(can_go_forward)
+        self._next_month_action.setToolTip(
+            "" if can_go_forward else self._calendar.next_button.toolTip() or not_here
+        )
+        self._back_action.setEnabled(on_day)
+        self._back_action.setToolTip("" if on_day else self.tr("No day is open."))
 
     def _update_status_summary(self, state: OverviewState) -> None:
         summary = summary_of(state)
@@ -968,6 +1120,7 @@ class MainWindow(QMainWindow):
             self._remember_window_state()
             self._controller.begin_shutdown()
             self._dialogs.close_all()
+            self._nutrition.close_dialogs()
             self.release_web_engine()
             if not self._controller.has_stopped:
                 event.ignore()

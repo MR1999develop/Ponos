@@ -218,6 +218,107 @@
     </message>
 </context>
 <context>
+    <name>Calendar</name>
+    <message>
+        <source>Run</source>
+        <translation>Corsa</translation>
+    </message>
+    <message>
+        <source>Trail</source>
+        <translation>Trail</translation>
+    </message>
+    <message>
+        <source>Bike</source>
+        <translation>Bici</translation>
+    </message>
+    <message>
+        <source>Gym</source>
+        <translation>Forza</translation>
+    </message>
+    <message>
+        <source>Hike</source>
+        <translation>Escursione</translation>
+    </message>
+    <message>
+        <source>Walk</source>
+        <translation>Camminata</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Altro</translation>
+    </message>
+    <message>
+        <source>Weight loss</source>
+        <translation>Dimagrimento</translation>
+    </message>
+    <message>
+        <source>Performance</source>
+        <translation>Prestazione</translation>
+    </message>
+    <message>
+        <source>Maintenance</source>
+        <translation>Mantenimento</translation>
+    </message>
+    <message>
+        <source>Today</source>
+        <translation>Oggi</translation>
+    </message>
+    <message>
+        <source>Not available yet</source>
+        <translation>Non ancora disponibile</translation>
+    </message>
+    <message numerus="yes">
+        <source>Activities: %n ({sports})</source>
+        <translation>
+            <numerusform>Attività: %n ({sports})</numerusform>
+            <numerusform>Attività: %n ({sports})</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Load {load}</source>
+        <translation>Carico {load}</translation>
+    </message>
+    <message>
+        <source>No activities</source>
+        <translation>Nessuna attività</translation>
+    </message>
+    <message>
+        <source>Goal: {goal}</source>
+        <translation>Obiettivo: {goal}</translation>
+    </message>
+</context>
+<context>
+    <name>CalendarPage</name>
+    <message>
+        <source>Previous month</source>
+        <translation>Mese precedente</translation>
+    </message>
+    <message>
+        <source>Next month</source>
+        <translation>Mese successivo</translation>
+    </message>
+    <message>
+        <source>Today</source>
+        <translation>Oggi</translation>
+    </message>
+    <message>
+        <source>Calendar</source>
+        <translation>Calendario</translation>
+    </message>
+    <message>
+        <source>Nutrition goal:</source>
+        <translation>Obiettivo alimentare:</translation>
+    </message>
+    <message>
+        <source>No colour: no goal period, maintenance assumed.</source>
+        <translation>Senza colore: nessun periodo di obiettivo, si assume il mantenimento.</translation>
+    </message>
+    <message>
+        <source>The calendar shows the past only, for now.</source>
+        <translation>Per ora il calendario mostra solo il passato.</translation>
+    </message>
+</context>
+<context>
     <name>Charts</name>
     <message>
         <source>Save chart as PNG</source>
@@ -262,6 +363,136 @@
     <message>
         <source>Compare data on hover</source>
         <translation>Confronta dati al passaggio del mouse</translation>
+    </message>
+</context>
+<context>
+    <name>DayPage</name>
+    <message>
+        <source>Back to calendar</source>
+        <translation>Torna al calendario</translation>
+    </message>
+    <message>
+        <source>Calculating the day...</source>
+        <translation>Calcolo della giornata...</translation>
+    </message>
+    <message>
+        <source>Edit profile...</source>
+        <translation>Modifica profilo...</translation>
+    </message>
+    <message>
+        <source>Meals and training intakes</source>
+        <translation>Pasti e assunzioni per l'allenamento</translation>
+    </message>
+    <message>
+        <source>Things to know</source>
+        <translation>Da sapere</translation>
+    </message>
+    <message>
+        <source>Goal: {goal}. Day: {level}.</source>
+        <translation>Obiettivo: {goal}. Giornata: {level}.</translation>
+    </message>
+    <message>
+        <source>Energy and macros</source>
+        <translation>Energia e macronutrienti</translation>
+    </message>
+    <message>
+        <source>Activities</source>
+        <translation>Attività</translation>
+    </message>
+    <message>
+        <source>No activities on this day.</source>
+        <translation>Nessuna attività in questa giornata.</translation>
+    </message>
+    <message>
+        <source>Day activities</source>
+        <translation>Attività della giornata</translation>
+    </message>
+    <message>
+        <source>{meal} at {time}</source>
+        <translation>{meal} alle {time}</translation>
+    </message>
+    <message>
+        <source>Energy (kcal)</source>
+        <translation>Energia (kcal)</translation>
+    </message>
+    <message>
+        <source>Carbohydrates (g)</source>
+        <translation>Carboidrati (g)</translation>
+    </message>
+    <message>
+        <source>Protein (g)</source>
+        <translation>Proteine (g)</translation>
+    </message>
+    <message>
+        <source>Fat (g)</source>
+        <translation>Grassi (g)</translation>
+    </message>
+    <message>
+        <source>Examples</source>
+        <translation>Esempi</translation>
+    </message>
+    <message>
+        <source>No food example matches these amounts.</source>
+        <translation>Nessun esempio di alimenti corrisponde a queste quantità.</translation>
+    </message>
+    <message>
+        <source>Time</source>
+        <translation>Ora</translation>
+    </message>
+    <message>
+        <source>Sport</source>
+        <translation>Sport</translation>
+    </message>
+    <message>
+        <source>Duration (h:mm:ss)</source>
+        <translation>Durata (h:mm:ss)</translation>
+    </message>
+    <message>
+        <source>Load (hrTSS)</source>
+        <translation>Carico (hrTSS)</translation>
+    </message>
+    <message>
+        <source>Energy from</source>
+        <translation>Energia da</translation>
+    </message>
+    <message>
+        <source>Total</source>
+        <translation>Voce</translation>
+    </message>
+    <message>
+        <source>Amount</source>
+        <translation>Valore</translation>
+    </message>
+    <message>
+        <source>Basal metabolism (kcal)</source>
+        <translation>Metabolismo di base (kcal)</translation>
+    </message>
+    <message>
+        <source>Energy spent (kcal)</source>
+        <translation>Energia spesa (kcal)</translation>
+    </message>
+    <message>
+        <source>Calorie deficit (kcal)</source>
+        <translation>Deficit calorico (kcal)</translation>
+    </message>
+    <message>
+        <source>Energy target (kcal)</source>
+        <translation>Obiettivo di energia (kcal)</translation>
+    </message>
+    <message>
+        <source>Each hour: {carbs} g of carbohydrates, {fluid} ml of fluids, {sodium} mg of sodium</source>
+        <translation>Ogni ora: {carbs} g di carboidrati, {fluid} ml di liquidi, {sodium} mg di sodio</translation>
+    </message>
+    <message>
+        <source>Moved from its usual time because of training.</source>
+        <translation>Spostato dal suo orario abituale a causa dell'allenamento.</translation>
+    </message>
+    <message numerus="yes">
+        <source>Activity files that could not be read: %n. The guidance may be less exact.</source>
+        <translation>
+            <numerusform>File di attività non leggibili: %n. L'indicazione potrebbe essere meno precisa.</numerusform>
+            <numerusform>File di attività non leggibili: %n. L'indicazione potrebbe essere meno precisa.</numerusform>
+        </translation>
     </message>
 </context>
 <context>
@@ -480,6 +711,42 @@
         <translation>Ripristina il profilo da un backup, oppure crea un nuovo profilo.</translation>
     </message>
     <message>
+        <source>The goal periods overlap</source>
+        <translation>I periodi di obiettivo si sovrappongono</translation>
+    </message>
+    <message>
+        <source>The period shares at least one day with another goal period.</source>
+        <translation>Il periodo ha almeno un giorno in comune con un altro periodo di obiettivo.</translation>
+    </message>
+    <message>
+        <source>Choose dates that no other period uses.</source>
+        <translation>Scegli date che nessun altro periodo usa.</translation>
+    </message>
+    <message>
+        <source>The goal period no longer exists</source>
+        <translation>Il periodo di obiettivo non esiste più</translation>
+    </message>
+    <message>
+        <source>The period was changed or removed meanwhile.</source>
+        <translation>Nel frattempo il periodo è stato modificato o rimosso.</translation>
+    </message>
+    <message>
+        <source>Look at the table again and repeat the change.</source>
+        <translation>Controlla di nuovo la tabella e ripeti la modifica.</translation>
+    </message>
+    <message>
+        <source>The date is in the future</source>
+        <translation>La data è nel futuro</translation>
+    </message>
+    <message>
+        <source>An activity level can only hold from today or from a past day.</source>
+        <translation>Un livello di attività può valere solo da oggi o da un giorno passato.</translation>
+    </message>
+    <message>
+        <source>Choose today or an earlier day.</source>
+        <translation>Scegli oggi o un giorno precedente.</translation>
+    </message>
+    <message>
         <source>Something went wrong</source>
         <translation>Qualcosa non ha funzionato</translation>
     </message>
@@ -545,6 +812,181 @@
     <message>
         <source>file no longer valid</source>
         <translation>file non più valido</translation>
+    </message>
+</context>
+<context>
+    <name>Foods</name>
+    <message>
+        <source>Rolled oats, dry</source>
+        <translation>Fiocchi d'avena, secchi</translation>
+    </message>
+    <message>
+        <source>Whole-wheat bread</source>
+        <translation>Pane integrale</translation>
+    </message>
+    <message>
+        <source>White bread</source>
+        <translation>Pane bianco</translation>
+    </message>
+    <message>
+        <source>White rice, cooked</source>
+        <translation>Riso bianco, cotto</translation>
+    </message>
+    <message>
+        <source>Brown rice, cooked</source>
+        <translation>Riso integrale, cotto</translation>
+    </message>
+    <message>
+        <source>Pasta, cooked</source>
+        <translation>Pasta, cotta</translation>
+    </message>
+    <message>
+        <source>Whole-wheat pasta, cooked</source>
+        <translation>Pasta integrale, cotta</translation>
+    </message>
+    <message>
+        <source>Potato, boiled</source>
+        <translation>Patata, lessa</translation>
+    </message>
+    <message>
+        <source>Sweet potato, baked</source>
+        <translation>Patata dolce, al forno</translation>
+    </message>
+    <message>
+        <source>Quinoa, cooked</source>
+        <translation>Quinoa, cotta</translation>
+    </message>
+    <message>
+        <source>Banana</source>
+        <translation>Banana</translation>
+    </message>
+    <message>
+        <source>Apple</source>
+        <translation>Mela</translation>
+    </message>
+    <message>
+        <source>Orange</source>
+        <translation>Arancia</translation>
+    </message>
+    <message>
+        <source>Dates, Medjool</source>
+        <translation>Datteri Medjool</translation>
+    </message>
+    <message>
+        <source>Honey</source>
+        <translation>Miele</translation>
+    </message>
+    <message>
+        <source>Raisins</source>
+        <translation>Uvetta</translation>
+    </message>
+    <message>
+        <source>Orange juice</source>
+        <translation>Succo d'arancia</translation>
+    </message>
+    <message>
+        <source>Sugar, granulated (in the drink)</source>
+        <translation>Zucchero semolato (nella bevanda)</translation>
+    </message>
+    <message>
+        <source>Egg, hard-boiled</source>
+        <translation>Uovo sodo</translation>
+    </message>
+    <message>
+        <source>Chicken breast, roasted</source>
+        <translation>Petto di pollo, arrosto</translation>
+    </message>
+    <message>
+        <source>Tuna, light, canned in water</source>
+        <translation>Tonno al naturale, in scatola</translation>
+    </message>
+    <message>
+        <source>Salmon, farmed, cooked</source>
+        <translation>Salmone d'allevamento, cotto</translation>
+    </message>
+    <message>
+        <source>Greek yogurt, plain, nonfat</source>
+        <translation>Yogurt greco bianco, magro</translation>
+    </message>
+    <message>
+        <source>Yogurt, plain, low-fat</source>
+        <translation>Yogurt bianco, parzialmente scremato</translation>
+    </message>
+    <message>
+        <source>Milk, whole</source>
+        <translation>Latte intero</translation>
+    </message>
+    <message>
+        <source>Mozzarella, part-skim</source>
+        <translation>Mozzarella, parzialmente scremata</translation>
+    </message>
+    <message>
+        <source>Lentils, cooked</source>
+        <translation>Lenticchie, cotte</translation>
+    </message>
+    <message>
+        <source>Chickpeas, cooked</source>
+        <translation>Ceci, cotti</translation>
+    </message>
+    <message>
+        <source>Black beans, cooked</source>
+        <translation>Fagioli neri, cotti</translation>
+    </message>
+    <message>
+        <source>Tofu, firm</source>
+        <translation>Tofu compatto</translation>
+    </message>
+    <message>
+        <source>Olive oil</source>
+        <translation>Olio d'oliva</translation>
+    </message>
+    <message>
+        <source>Almonds</source>
+        <translation>Mandorle</translation>
+    </message>
+    <message>
+        <source>Walnuts</source>
+        <translation>Noci</translation>
+    </message>
+    <message>
+        <source>Peanut butter</source>
+        <translation>Burro di arachidi</translation>
+    </message>
+    <message>
+        <source>Avocado</source>
+        <translation>Avocado</translation>
+    </message>
+    <message>
+        <source>Butter</source>
+        <translation>Burro</translation>
+    </message>
+    <message>
+        <source>Tomato</source>
+        <translation>Pomodoro</translation>
+    </message>
+    <message>
+        <source>Broccoli</source>
+        <translation>Broccoli</translation>
+    </message>
+    <message>
+        <source>Spinach</source>
+        <translation>Spinaci</translation>
+    </message>
+    <message>
+        <source>Zucchini</source>
+        <translation>Zucchine</translation>
+    </message>
+    <message>
+        <source>Carrot</source>
+        <translation>Carota</translation>
+    </message>
+    <message>
+        <source>Romaine lettuce</source>
+        <translation>Lattuga romana</translation>
+    </message>
+    <message>
+        <source>Green beans</source>
+        <translation>Fagiolini</translation>
     </message>
 </context>
 <context>
@@ -663,6 +1105,65 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Connect account...</source>
         <translation>Collega account...</translation>
+    </message>
+</context>
+<context>
+    <name>GoalPeriodDialog</name>
+    <message>
+        <source>Add goal period</source>
+        <translation>Aggiungi periodo di obiettivo</translation>
+    </message>
+    <message>
+        <source>Change goal period</source>
+        <translation>Modifica periodo di obiettivo</translation>
+    </message>
+    <message>
+        <source>No end date</source>
+        <translation>Senza data di fine</translation>
+    </message>
+    <message>
+        <source> kg per week</source>
+        <translation> kg a settimana</translation>
+    </message>
+    <message>
+        <source>Problem with the dates</source>
+        <translation>Problema con le date</translation>
+    </message>
+    <message>
+        <source>First day</source>
+        <translation>Primo giorno</translation>
+    </message>
+    <message>
+        <source>Last day</source>
+        <translation>Ultimo giorno</translation>
+    </message>
+    <message>
+        <source>Goal</source>
+        <translation>Obiettivo</translation>
+    </message>
+    <message>
+        <source>Weight loss pace</source>
+        <translation>Ritmo di dimagrimento</translation>
+    </message>
+    <message>
+        <source>Add period</source>
+        <translation>Aggiungi periodo</translation>
+    </message>
+    <message>
+        <source>Save period</source>
+        <translation>Salva periodo</translation>
+    </message>
+    <message>
+        <source>The last day cannot be before the first day.</source>
+        <translation>L'ultimo giorno non può precedere il primo.</translation>
+    </message>
+    <message>
+        <source>These days overlap the period that starts on {first} and has no end date.</source>
+        <translation>Questi giorni si sovrappongono al periodo che inizia il {first} e non ha data di fine.</translation>
+    </message>
+    <message>
+        <source>These days overlap the period from {first} to {last}.</source>
+        <translation>Questi giorni si sovrappongono al periodo dal {first} al {last}.</translation>
     </message>
 </context>
 <context>
@@ -866,6 +1367,30 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Pesi degli sport...</translation>
     </message>
     <message>
+        <source>Nutrition settings...</source>
+        <translation>Impostazioni alimentari...</translation>
+    </message>
+    <message>
+        <source>Previous month</source>
+        <translation>Mese precedente</translation>
+    </message>
+    <message>
+        <source>Next month</source>
+        <translation>Mese successivo</translation>
+    </message>
+    <message>
+        <source>Today</source>
+        <translation>Oggi</translation>
+    </message>
+    <message>
+        <source>Open day</source>
+        <translation>Apri giornata</translation>
+    </message>
+    <message>
+        <source>Back to calendar</source>
+        <translation>Torna al calendario</translation>
+    </message>
+    <message>
         <source>Activity detail...</source>
         <translation>Dettaglio attività...</translation>
     </message>
@@ -980,6 +1505,14 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>The number of activities could not be read.</source>
         <translation>Non è stato possibile leggere il numero di attività.</translation>
+    </message>
+    <message>
+        <source>Open the Calendar section first.</source>
+        <translation>Apri prima la sezione Calendario.</translation>
+    </message>
+    <message>
+        <source>No day is open.</source>
+        <translation>Nessuna giornata aperta.</translation>
     </message>
     <message numerus="yes">
         <source>Activities: %n</source>
@@ -1337,6 +1870,322 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Reason</source>
         <translation>Motivo</translation>
+    </message>
+</context>
+<context>
+    <name>Nutrition</name>
+    <message>
+        <source>Complete it with Edit profile.</source>
+        <translation>Completali con Modifica profilo.</translation>
+    </message>
+    <message>
+        <source>Height and date of birth are missing</source>
+        <translation>Mancano altezza e data di nascita</translation>
+    </message>
+    <message>
+        <source>Nutrition guidance needs your height and date of birth.</source>
+        <translation>L'indicazione alimentare richiede altezza e data di nascita.</translation>
+    </message>
+    <message>
+        <source>No weight is saved</source>
+        <translation>Nessun peso salvato</translation>
+    </message>
+    <message>
+        <source>Nutrition guidance needs your weight.</source>
+        <translation>L'indicazione alimentare richiede il peso.</translation>
+    </message>
+    <message>
+        <source>Heart-rate settings are missing</source>
+        <translation>Mancano le impostazioni della frequenza cardiaca</translation>
+    </message>
+    <message>
+        <source>Nutrition guidance needs your heart-rate settings (they include sex).</source>
+        <translation>L'indicazione alimentare richiede le impostazioni della frequenza cardiaca (comprendono il sesso).</translation>
+    </message>
+    <message>
+        <source>This day is before the date of birth</source>
+        <translation>Questo giorno precede la data di nascita</translation>
+    </message>
+    <message>
+        <source>The date of birth in the profile is after this day.</source>
+        <translation>La data di nascita nel profilo è successiva a questo giorno.</translation>
+    </message>
+    <message>
+        <source>You are under 18: this is general guidance only. Ask a doctor or a dietitian before changing how you eat.</source>
+        <translation>Hai meno di 18 anni: sono solo indicazioni generali. Chiedi a un medico o a un dietista prima di cambiare come mangi.</translation>
+    </message>
+    <message>
+        <source>Your body mass index is below 18.5, so no calorie deficit is suggested. Please talk to a doctor or a dietitian.</source>
+        <translation>Il tuo indice di massa corporea è sotto 18,5: non si suggerisce alcun deficit calorico. Parla con un medico o con un dietista.</translation>
+    </message>
+    <message>
+        <source>No daily activity level is set for this day, so a sedentary level is assumed. You can set it in Nutrition settings.</source>
+        <translation>Per questo giorno non è impostato alcun livello di attività quotidiana: si assume uno stile di vita sedentario. Puoi impostarlo in Impostazioni alimentari.</translation>
+    </message>
+    <message>
+        <source>You asked to lose weight, but no calorie deficit is safe for this day: the target equals what you burn.</source>
+        <translation>Hai chiesto di dimagrire, ma per questo giorno nessun deficit calorico è sicuro: l'obiettivo coincide con ciò che consumi.</translation>
+    </message>
+    <message>
+        <source>A safety limit made the calorie deficit smaller than you asked.</source>
+        <translation>Un limite di sicurezza ha reso il deficit calorico più piccolo di quello richiesto.</translation>
+    </message>
+    <message>
+        <source>The calorie deficit is smaller because today&apos;s training is heavy.</source>
+        <translation>Il deficit calorico è più piccolo perché l'allenamento di oggi è impegnativo.</translation>
+    </message>
+    <message>
+        <source>The energy target is too low for the usual amount of carbohydrates, so carbohydrates are lower than today&apos;s training would suggest.</source>
+        <translation>L'obiettivo di energia è troppo basso per la quantità abituale di carboidrati: i carboidrati sono meno di quelli che l'allenamento di oggi suggerirebbe.</translation>
+    </message>
+    <message>
+        <source>The amounts around training were reduced to fit the day&apos;s totals.</source>
+        <translation>Le quantità attorno all'allenamento sono state ridotte per rientrare nei totali della giornata.</translation>
+    </message>
+    <message>
+        <source>General guidance, not medical or personalised nutrition advice. If you have a medical condition, are pregnant, have an eating disorder or take medication, please consult a professional.</source>
+        <translation>Indicazioni generali, non consigli medici né alimentari personalizzati. Se hai patologie, sei in gravidanza, hai disturbi alimentari o prendi farmaci, rivolgiti a un professionista.</translation>
+    </message>
+    <message>
+        <source>Declared by the device</source>
+        <translation>Dichiarata dal dispositivo</translation>
+    </message>
+    <message>
+        <source>Estimated from heart rate</source>
+        <translation>Stimata dalla frequenza cardiaca</translation>
+    </message>
+    <message>
+        <source>Estimated from the sport</source>
+        <translation>Stimata dallo sport</translation>
+    </message>
+    <message>
+        <source>Breakfast</source>
+        <translation>Colazione</translation>
+    </message>
+    <message>
+        <source>Lunch</source>
+        <translation>Pranzo</translation>
+    </message>
+    <message>
+        <source>Dinner</source>
+        <translation>Cena</translation>
+    </message>
+    <message>
+        <source>Before training</source>
+        <translation>Prima dell'allenamento</translation>
+    </message>
+    <message>
+        <source>During training</source>
+        <translation>Durante l'allenamento</translation>
+    </message>
+    <message>
+        <source>After training</source>
+        <translation>Dopo l'allenamento</translation>
+    </message>
+    <message>
+        <source>Rest day</source>
+        <translation>Giorno di riposo</translation>
+    </message>
+    <message>
+        <source>Light training</source>
+        <translation>Allenamento leggero</translation>
+    </message>
+    <message>
+        <source>Moderate training</source>
+        <translation>Allenamento moderato</translation>
+    </message>
+    <message>
+        <source>High training</source>
+        <translation>Allenamento intenso</translation>
+    </message>
+    <message>
+        <source>Very high training</source>
+        <translation>Allenamento molto intenso</translation>
+    </message>
+    <message>
+        <source>Sedentary</source>
+        <translation>Sedentario</translation>
+    </message>
+    <message>
+        <source>Lightly active</source>
+        <translation>Poco attivo</translation>
+    </message>
+    <message>
+        <source>Active</source>
+        <translation>Attivo</translation>
+    </message>
+    <message>
+        <source>Very active</source>
+        <translation>Molto attivo</translation>
+    </message>
+    <message>
+        <source>{pace} kg per week</source>
+        <translation>{pace} kg a settimana</translation>
+    </message>
+    <message>
+        <source>Maintenance</source>
+        <translation>Mantenimento</translation>
+    </message>
+    <message>
+        <source>Performance</source>
+        <translation>Prestazione</translation>
+    </message>
+    <message>
+        <source>Weight loss</source>
+        <translation>Dimagrimento</translation>
+    </message>
+    <message>
+        <source>{goal}, {pace}</source>
+        <translation>{goal}, {pace}</translation>
+    </message>
+</context>
+<context>
+    <name>NutritionSettings</name>
+    <message>
+        <source>No end date</source>
+        <translation>Senza data di fine</translation>
+    </message>
+</context>
+<context>
+    <name>NutritionSettingsDialog</name>
+    <message>
+        <source>Valid from</source>
+        <translation>Valido dal</translation>
+    </message>
+    <message>
+        <source>Level</source>
+        <translation>Livello</translation>
+    </message>
+    <message>
+        <source>First day</source>
+        <translation>Primo giorno</translation>
+    </message>
+    <message>
+        <source>Last day</source>
+        <translation>Ultimo giorno</translation>
+    </message>
+    <message>
+        <source>Goal</source>
+        <translation>Obiettivo</translation>
+    </message>
+    <message>
+        <source>Weight loss pace (kg per week)</source>
+        <translation>Ritmo di dimagrimento (kg a settimana)</translation>
+    </message>
+    <message>
+        <source>Nutrition settings</source>
+        <translation>Impostazioni alimentari</translation>
+    </message>
+    <message>
+        <source>Problem</source>
+        <translation>Problema</translation>
+    </message>
+    <message>
+        <source>Daily activity outside sport</source>
+        <translation>Attività quotidiana fuori dallo sport</translation>
+    </message>
+    <message>
+        <source>Set level</source>
+        <translation>Imposta livello</translation>
+    </message>
+    <message>
+        <source>The level holds from that day until you set another one.</source>
+        <translation>Il livello vale da quel giorno finché non se ne imposta un altro.</translation>
+    </message>
+    <message>
+        <source>Typical meal times</source>
+        <translation>Orari tipici dei pasti</translation>
+    </message>
+    <message>
+        <source>Breakfast</source>
+        <translation>Colazione</translation>
+    </message>
+    <message>
+        <source>Lunch</source>
+        <translation>Pranzo</translation>
+    </message>
+    <message>
+        <source>Dinner</source>
+        <translation>Cena</translation>
+    </message>
+    <message>
+        <source>Problem with {meal} time</source>
+        <translation>Problema con l'orario di {meal}</translation>
+    </message>
+    <message>
+        <source>Save meal times</source>
+        <translation>Salva orari dei pasti</translation>
+    </message>
+    <message>
+        <source>Goal periods</source>
+        <translation>Periodi di obiettivo</translation>
+    </message>
+    <message>
+        <source>Days outside any period are treated as maintenance.</source>
+        <translation>I giorni fuori da ogni periodo sono trattati come mantenimento.</translation>
+    </message>
+    <message>
+        <source>Add period...</source>
+        <translation>Aggiungi periodo...</translation>
+    </message>
+    <message>
+        <source>Change period...</source>
+        <translation>Modifica periodo...</translation>
+    </message>
+    <message>
+        <source>Remove period</source>
+        <translation>Rimuovi periodo</translation>
+    </message>
+    <message>
+        <source>Undo</source>
+        <translation>Annulla</translation>
+    </message>
+    <message>
+        <source>Redo</source>
+        <translation>Ripeti</translation>
+    </message>
+    <message>
+        <source>These are the default times. Save them or change them.</source>
+        <translation>Sono gli orari predefiniti. Salvali o modificali.</translation>
+    </message>
+    <message>
+        <source>Solve the problem with the times first.</source>
+        <translation>Risolvi prima il problema con gli orari.</translation>
+    </message>
+    <message>
+        <source>The times are already saved.</source>
+        <translation>Gli orari sono già salvati.</translation>
+    </message>
+    <message>
+        <source>Lunch must be at least {hours} hours after breakfast.</source>
+        <translation>Il pranzo deve essere ad almeno {hours} ore dalla colazione.</translation>
+    </message>
+    <message>
+        <source>Dinner must be at least {hours} hours after lunch.</source>
+        <translation>La cena deve essere ad almeno {hours} ore dal pranzo.</translation>
+    </message>
+    <message>
+        <source>Select a period in the table first.</source>
+        <translation>Seleziona prima un periodo nella tabella.</translation>
+    </message>
+</context>
+<context>
+    <name>NutritionUndo</name>
+    <message>
+        <source>Add goal period</source>
+        <translation>Aggiungi periodo di obiettivo</translation>
+    </message>
+    <message>
+        <source>Remove goal period</source>
+        <translation>Rimuovi periodo di obiettivo</translation>
+    </message>
+    <message>
+        <source>Change goal period</source>
+        <translation>Modifica periodo di obiettivo</translation>
+    </message>
+    <message>
+        <source>Change meal times</source>
+        <translation>Modifica orari dei pasti</translation>
     </message>
 </context>
 <context>

@@ -664,7 +664,7 @@ def test_dropping_files_on_the_window_imports_them(
 # --- Sidebar, menus, time zone, command line ----------------------------------------------
 
 
-def test_sidebar_has_overview_and_activities_enabled_and_the_rest_with_a_reason(
+def test_sidebar_has_overview_activities_and_calendar_enabled_and_the_rest_with_a_reason(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = compose(tmp_path, settings)
@@ -673,10 +673,10 @@ def test_sidebar_has_overview_and_activities_enabled_and_the_rest_with_a_reason(
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
     items = [sidebar.item(row) for row in range(sidebar.count())]
-    assert [item.text() for item in items][:2] == ["Overview", "Activities"]
-    for item in items[:2]:
+    assert [item.text() for item in items][:3] == ["Overview", "Activities", "Calendar"]
+    for item in items[:3]:
         assert item.flags() & item.flags().ItemIsEnabled
-    for item in items[2:]:
+    for item in items[3:]:
         assert not item.flags() & item.flags().ItemIsEnabled
         assert item.toolTip() == "Available in a later version"
 
@@ -714,6 +714,12 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Edit profile...": QKeySequence("Ctrl+E").toString(),
         "Sport weights...": QKeySequence("Ctrl+Shift+W").toString(),
         "Activity detail...": QKeySequence("Ctrl+D").toString(),
+        "Nutrition settings...": QKeySequence("Ctrl+Shift+N").toString(),
+        "Previous month": QKeySequence("Ctrl+Left").toString(),
+        "Next month": QKeySequence("Ctrl+Right").toString(),
+        "Today": QKeySequence("Ctrl+T").toString(),
+        "Open day": QKeySequence("Ctrl+Return").toString(),
+        "Back to calendar": QKeySequence("Alt+Left").toString(),
         "Connect Garmin account...": QKeySequence("Ctrl+G").toString(),
         "Disconnect Garmin account": QKeySequence("Ctrl+Shift+G").toString(),
         "Synchronise": QKeySequence("F5").toString(),

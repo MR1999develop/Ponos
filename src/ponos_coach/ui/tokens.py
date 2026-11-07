@@ -182,3 +182,22 @@ _DARK = ThemeTokens(
 def tokens_for(theme: Theme) -> ThemeTokens:
     """Theme tokens."""
     return _DARK if theme is Theme.DARK else _LIGHT
+
+
+# Faint backgrounds that tell the nutrition goal periods apart in the calendar (never red or
+# orange; the legend and the cell text say the goal in words, the colour only helps). One per goal
+# kind in legend order: weight loss, performance, maintenance. Generated in OkLCh; the text of the
+# theme stays at 4.5:1 or more on each.
+_GOAL_TINT_CHROMA = 0.045
+_GOAL_TINT_HUES = (250.0, 150.0, 310.0)
+_GOAL_TINT_LIGHTNESS_LIGHT = 0.92
+_GOAL_TINT_LIGHTNESS_DARK = 0.32
+
+
+def goal_tints_for(theme: Theme) -> tuple[str, str, str]:
+    """Calendar background tints for weight loss, performance and maintenance."""
+    lightness = _GOAL_TINT_LIGHTNESS_DARK if theme is Theme.DARK else _GOAL_TINT_LIGHTNESS_LIGHT
+    first, second, third = (
+        oklch_to_hex(lightness, _GOAL_TINT_CHROMA, hue) for hue in _GOAL_TINT_HUES
+    )
+    return (first, second, third)

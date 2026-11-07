@@ -23,6 +23,8 @@ from ponos_coach.activities.ports import (
 )
 from ponos_coach.load.domain import MissingPhysiologyError
 from ponos_coach.load.use_cases import ExclusionReason
+from ponos_coach.nutrition.ports import GoalPeriodNotFoundError, GoalPeriodOverlapError
+from ponos_coach.nutrition.use_cases import LevelDateInFutureError
 from ponos_coach.profiles.ports import (
     FolderHasOtherContentError,
     FolderNotEmptyError,
@@ -285,6 +287,34 @@ def _missing_physiology(_error: BaseException) -> ErrorMessage:
     )
 
 
+def _period_overlap(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The goal periods overlap"),
+        QCoreApplication.translate(
+            "Errors", "The period shares at least one day with another goal period."
+        ),
+        QCoreApplication.translate("Errors", "Choose dates that no other period uses."),
+    )
+
+
+def _period_missing(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The goal period no longer exists"),
+        QCoreApplication.translate("Errors", "The period was changed or removed meanwhile."),
+        QCoreApplication.translate("Errors", "Look at the table again and repeat the change."),
+    )
+
+
+def _level_in_future(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The date is in the future"),
+        QCoreApplication.translate(
+            "Errors", "An activity level can only hold from today or from a past day."
+        ),
+        QCoreApplication.translate("Errors", "Choose today or an earlier day."),
+    )
+
+
 def _generic(_error: BaseException) -> ErrorMessage:
     return ErrorMessage(
         QCoreApplication.translate("Errors", "Something went wrong"),
@@ -309,6 +339,9 @@ _BUILDERS: tuple[tuple[type[BaseException], Callable[[BaseException], ErrorMessa
     (ProfileRegistryError, _registry),
     (ImportSourceUnreadableError, _import_unreadable),
     (MissingPhysiologyError, _missing_physiology),
+    (GoalPeriodOverlapError, _period_overlap),
+    (GoalPeriodNotFoundError, _period_missing),
+    (LevelDateInFutureError, _level_in_future),
 )
 
 
