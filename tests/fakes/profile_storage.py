@@ -49,6 +49,14 @@ from ponos_coach.load.ports import (
     SportWeightStore,
     UnknownActivityError,
 )
+from ponos_coach.nutrition.domain import ActivityLevelEntry, GoalPeriod, MealTimes
+from ponos_coach.nutrition.ports import (
+    ActivityLevelStore,
+    GoalPeriodNotFoundError,
+    GoalPeriodOverlapError,
+    GoalPeriodStore,
+    MealTimesStore,
+)
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
     FixedProfileData,
@@ -69,7 +77,7 @@ from ponos_coach.profiles.ports import (
 )
 from ponos_coach.profiles.timezones import require_known_timezone
 
-FORMAT_VERSION = 3
+FORMAT_VERSION = 4
 
 
 @dataclass
@@ -84,6 +92,9 @@ class _Database:
     fixed: FixedProfileData | None = None
     sport_weights: dict[Sport, SportWeight] = field(default_factory=dict)
     loads: dict[str, tuple[LoadFingerprint, ActivityLoad]] = field(default_factory=dict)
+    levels: dict[date, ActivityLevelEntry] = field(default_factory=dict)
+    meal_times: MealTimes | None = None
+    goals: dict[date, GoalPeriod] = field(default_factory=dict)
     cursors: dict[ListingKind, ListingCursor] = field(default_factory=dict)
     journal: dict[GarminActivityId, JournalEntry] = field(default_factory=dict)
     last_completed: datetime | None = None
@@ -100,6 +111,9 @@ class _Database:
                 self.fixed,
                 self.sport_weights,
                 self.loads,
+                self.levels,
+                self.meal_times,
+                self.goals,
                 self.cursors,
                 self.journal,
                 self.last_completed,
@@ -116,6 +130,9 @@ class _Database:
             self.fixed,
             self.sport_weights,
             self.loads,
+            self.levels,
+            self.meal_times,
+            self.goals,
             self.cursors,
             self.journal,
             self.last_completed,
@@ -342,6 +359,46 @@ class _Cache:
         self._db.loads.clear()
 
 
+class _ActivityLevels:
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def put(self, entry: ActivityLevelEntry) -> None:
+        self._db.levels[entry.valid_from] = entry
+
+    def list_entries(self) -> Sequence[ActivityLevelEntry]:
+        return [self._db.levels[day] for day in sorted(self._db.levels)]
+
+
+class _MealTimes:
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def get(self) -> MealTimes | None:
+        return self._db.meal_times
+
+    def set(self, times: MealTimes) -> None:
+        self._db.meal_times = times
+
+
+class _GoalPeriods:
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def list_periods(self) -> Sequence[GoalPeriod]:
+        return [self._db.goals[day] for day in sorted(self._db.goals)]
+
+    def add(self, period: GoalPeriod) -> None:
+        if any(period.overlaps(other) for other in self._db.goals.values()):
+            raise GoalPeriodOverlapError("overlap")
+        self._db.goals[period.first_day] = period
+
+    def remove(self, first_day: date) -> None:
+        if first_day not in self._db.goals:
+            raise GoalPeriodNotFoundError("missing")
+        del self._db.goals[first_day]
+
+
 class _OpenProfile:
     def __init__(self, database: _Database) -> None:
         self._db = database
@@ -352,6 +409,9 @@ class _OpenProfile:
         self._fixed_data = _FixedData(database)
         self._sport_weights = _SportWeights(database)
         self._cache = _Cache(database)
+        self._levels = _ActivityLevels(database)
+        self._meal_times = _MealTimes(database)
+        self._goals = _GoalPeriods(database)
 
     @property
     def info(self) -> ProfileInfo:
@@ -384,6 +444,18 @@ class _OpenProfile:
     @property
     def load_cache(self) -> LoadCache:
         return self._cache
+
+    @property
+    def activity_levels(self) -> ActivityLevelStore:
+        return self._levels
+
+    @property
+    def meal_times(self) -> MealTimesStore:
+        return self._meal_times
+
+    @property
+    def goal_periods(self) -> GoalPeriodStore:
+        return self._goals
 
     def close(self) -> None:
         """No effect: the data stay in the fake disk."""

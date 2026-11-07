@@ -109,7 +109,7 @@ root_package = "ponos_coach"
 include_external_packages = true
 
 # Convenzione interna: ogni funzionalita (activities, load, assessment, goals,
-# planning, injury, profiles) ha domain/ (puro), ports.py (Protocol per gli
+# planning, injury, nutrition, profiles) ha domain/ (puro), ports.py (Protocol per gli
 # adattatori) e use_cases.py. Adattatori in garmin, storage, platform;
 # interfaccia in ui; Composition Root in __main__.py.
 
@@ -127,7 +127,7 @@ name = "Funzionalita e adattatori non importano la ui"
 type = "forbidden"
 source_modules = [
     "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
-    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury", "ponos_coach.nutrition",
     "ponos_coach.profiles", "ponos_coach.garmin", "ponos_coach.storage",
     "ponos_coach.platform",
 ]
@@ -138,7 +138,7 @@ name = "Le funzionalita non importano gli adattatori"
 type = "forbidden"
 source_modules = [
     "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
-    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury", "ponos_coach.nutrition",
     "ponos_coach.profiles",
 ]
 forbidden_modules = ["ponos_coach.garmin", "ponos_coach.storage", "ponos_coach.platform"]
@@ -154,7 +154,7 @@ name = "Le funzionalita dipendono solo verso il basso (nessun ciclo)"
 type = "layers"
 layers = [
     "ponos_coach.planning | ponos_coach.profiles",
-    "ponos_coach.goals | ponos_coach.injury | ponos_coach.assessment",
+    "ponos_coach.goals | ponos_coach.injury | ponos_coach.assessment | ponos_coach.nutrition",
     "ponos_coach.load",
     "ponos_coach.activities",
 ]
@@ -165,7 +165,7 @@ type = "forbidden"
 source_modules = ["ponos_coach.fsio"]
 forbidden_modules = [
     "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
-    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury", "ponos_coach.nutrition",
     "ponos_coach.profiles", "ponos_coach.garmin", "ponos_coach.storage",
     "ponos_coach.platform", "ponos_coach.ui", "ponos_coach.i18n", "ponos_coach.__main__",
 ]
@@ -176,7 +176,7 @@ type = "forbidden"
 source_modules = ["ponos_coach.zipread"]
 forbidden_modules = [
     "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
-    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury", "ponos_coach.nutrition",
     "ponos_coach.profiles", "ponos_coach.garmin", "ponos_coach.storage",
     "ponos_coach.platform", "ponos_coach.ui", "ponos_coach.i18n", "ponos_coach.fsio",
     "ponos_coach.__main__",
@@ -187,7 +187,7 @@ name = "Solo ponos_coach.garmin importa garminconnect"
 type = "forbidden"
 source_modules = [
     "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
-    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury", "ponos_coach.nutrition",
     "ponos_coach.profiles", "ponos_coach.storage", "ponos_coach.platform",
     "ponos_coach.ui", "ponos_coach.fsio", "ponos_coach.zipread",
 ]
@@ -208,7 +208,7 @@ name = "Solo gli adattatori usano fsio (non funzionalita ne ui)"
 type = "forbidden"
 source_modules = [
     "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
-    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury", "ponos_coach.nutrition",
     "ponos_coach.profiles", "ponos_coach.ui",
 ]
 forbidden_modules = ["ponos_coach.fsio"]
@@ -223,7 +223,7 @@ name = "Solo il Composition Root importa tutto (nessuno importa __main__)"
 type = "forbidden"
 source_modules = [
     "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
-    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury",
+    "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury", "ponos_coach.nutrition",
     "ponos_coach.profiles", "ponos_coach.garmin", "ponos_coach.storage",
     "ponos_coach.platform", "ponos_coach.ui",
 ]

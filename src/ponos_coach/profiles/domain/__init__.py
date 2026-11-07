@@ -15,6 +15,8 @@ from ponos_coach.profiles.domain.body import (
     Height,
     Weight,
     WeightEntry,
+    age_on,
+    weight_on,
 )
 from ponos_coach.profiles.domain.layout import (
     PROFILE_ARCHIVE_DIR,
@@ -64,4 +66,6 @@ __all__ = [
     "RegistryEntry",
     "Weight",
     "WeightEntry",
+    "age_on",
+    "weight_on",
 ]

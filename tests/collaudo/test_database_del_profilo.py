@@ -211,7 +211,9 @@ def test_t_dati_01_a_frozen_v1_database_is_migrated_with_data_intact_and_a_copy(
     assert after["meta"] == before["meta"]  # including 'future'
     assert after["physiology"] == before["physiology"]
     assert after["load_cache"] == []  # derived: v3 empties it, the loads are recalculated
-    assert [row[:-1] for row in after["activities"]] == [row[:-1] for row in before["activities"]]
+    # Same columns as before, apart from the Garmin id (linked above) and the v4 calories (NULL).
+    assert [row[:-2] for row in after["activities"]] == [row[:-1] for row in before["activities"]]
+    assert {row[-1] for row in after["activities"]} == {None}
     [copy] = sorted((tmp_path / "backup").glob("*"))
     assert copy.name == f"ponos-v1-v{sqlite_schema.SCHEMA_VERSION}.sqlite3"
     assert {table: rows(copy, table) for table in tables} == before
@@ -241,6 +243,9 @@ def test_t_dati_01_a_frozen_v1_database_gets_exactly_the_latest_tables(tmp_path:
         "profile_body",
         "weight",
         "sport_weights",
+        "activity_level",
+        "meal_times",
+        "nutrition_goal",
     }
 
 
@@ -305,7 +310,7 @@ def test_t_dati_01_a_future_migration_keeps_every_v1_row_and_the_unknown_keys(
 
     after_meta = rows(path, "meta")
     assert after_meta == before["meta"]  # including 'future'
-    assert [row[:-1] for row in rows(path, "activities")] == before["activities"]
+    assert [row[:-2] for row in rows(path, "activities")] == before["activities"]
     assert rows(path, "physiology") == before["physiology"]
     assert rows(path, "load_cache") == []  # derived: the v3 migration empties it
     with closing(sqlite3.connect(path)) as raw:

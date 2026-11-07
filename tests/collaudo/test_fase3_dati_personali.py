@@ -435,9 +435,11 @@ def test_t_dati_01_a_v2_database_killed_at_every_migration_statement_is_still_v2
         assert opened.fixed_data.get() is None
     finally:
         opened.close()
-    assert {table: rows(path, table) for table in ("meta", "activities", "physiology")} == {
-        table: before[table] for table in ("meta", "activities", "physiology")
+    assert {table: rows(path, table) for table in ("meta", "physiology")} == {
+        table: before[table] for table in ("meta", "physiology")
     }
+    # The v4 calories column is the only difference in the activities (NULL for old rows).
+    assert [row[:-1] for row in rows(path, "activities")] == before["activities"]
 
 
 @pytest.mark.parametrize("kill_at", V1_KILL_POINTS)

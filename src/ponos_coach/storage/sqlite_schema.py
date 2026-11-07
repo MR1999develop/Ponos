@@ -38,6 +38,19 @@ Columns of v3 (personal data, sport weights and HR zones):
 - `sport_weights`: only the sport weights different from the default.
 - `load_cache`: five columns `zone1_s ... zone5_s` with the seconds in each zone. The cache is
   derived and regenerable: the migration empties it, so no load remains without zones.
+
+Columns of v4 (nutrition, all `STRICT`):
+
+- `activities.calories_kcal`: total energy declared by the device for the activity (FIT
+  `session.total_calories`), NULL when absent: it is then estimated when needed. Activities
+  indexed before v4 have NULL (the index is derived from the files; a re-read fills it).
+- `activity_level`: level of activity outside sport with validity date (existing ISO date, not
+  earlier than 1900-01-01), on a closed set.
+- `meal_times`: a single row (`id = 1`) with the typical breakfast, lunch and dinner times in
+  minutes after midnight, in increasing order at least two hours apart; absent means the defaults.
+- `nutrition_goal`: goal periods (first day, last day included or NULL for open-ended) on a closed
+  set of kinds; weight loss has a rate in grams per week and the others none; a trigger rejects
+  an insertion that overlaps an existing period.
 """
 
 from __future__ import annotations
@@ -77,12 +90,24 @@ V3_WEIGHT_TENTHS_KG = (200, 3000)
 V3_MIN_BIRTH_DATE = "1900-01-01"
 V3_MIN_MEASUREMENT_DATE = "1900-01-01"
 V3_SPORT_WEIGHT_MAX = 5.0
+# Limits of the nutrition data (the same as the domain types), frozen here on purpose.
+V4_MAX_ACTIVITY_KCAL = 50_000
+V4_MEAL_MINUTES = (0, 1439)
+V4_MIN_MEAL_GAP_MIN = 120
+V4_WEEKLY_LOSS_G = (100, 1000)
 ZONE_COLUMNS: Final = ("zone1_s", "zone2_s", "zone3_s", "zone4_s", "zone5_s")
+
+_ACTIVITY_LEVELS = "'sedentary','light','active','very_active'"
+_GOAL_KINDS = "'weight_loss','maintenance','performance'"
+
+V4_ACTIVITY_LEVELS: Final = frozenset(_ACTIVITY_LEVELS.replace("'", "").split(","))
+V4_GOAL_KINDS: Final = frozenset(_GOAL_KINDS.replace("'", "").split(","))
 
 # The tables that every profile database has since v1: without them, the file is not a profile's.
 V1_TABLES: Final = frozenset({"meta", "activities", "physiology", "load_cache"})
 V2_TABLES: Final = frozenset({"sync_journal", "sync_cursor", "sync_state"})
 V3_TABLES: Final = frozenset({"profile_body", "weight", "sport_weights"})
+V4_TABLES: Final = frozenset({"activity_level", "meal_times", "nutrition_goal"})
 
 _V1_META = """
 CREATE TABLE meta (
@@ -237,6 +262,61 @@ _V3_ZONE_COLUMNS = tuple(
     for column in ZONE_COLUMNS
 )
 
+_V4_CALORIES = (
+    "ALTER TABLE activities ADD COLUMN calories_kcal REAL "
+    "CHECK (calories_kcal IS NULL OR "
+    f"(calories_kcal > 0 AND calories_kcal <= {V4_MAX_ACTIVITY_KCAL}))"
+)
+
+_V4_ACTIVITY_LEVEL = f"""
+CREATE TABLE activity_level (
+    valid_from TEXT NOT NULL PRIMARY KEY CHECK (date(valid_from) IS valid_from
+                                               AND valid_from >= '{V3_MIN_MEASUREMENT_DATE}'),
+    level      TEXT NOT NULL CHECK (level IN ({_ACTIVITY_LEVELS}))
+) STRICT
+"""
+
+_V4_MEAL_TIMES = f"""
+CREATE TABLE meal_times (
+    id            INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    breakfast_min INTEGER NOT NULL CHECK (breakfast_min BETWEEN {V4_MEAL_MINUTES[0]}
+                                                            AND {V4_MEAL_MINUTES[1]}),
+    lunch_min     INTEGER NOT NULL CHECK (lunch_min BETWEEN {V4_MEAL_MINUTES[0]}
+                                                        AND {V4_MEAL_MINUTES[1]}),
+    dinner_min    INTEGER NOT NULL CHECK (dinner_min BETWEEN {V4_MEAL_MINUTES[0]}
+                                                         AND {V4_MEAL_MINUTES[1]}),
+    CHECK (lunch_min - breakfast_min >= {V4_MIN_MEAL_GAP_MIN}),
+    CHECK (dinner_min - lunch_min >= {V4_MIN_MEAL_GAP_MIN})
+) STRICT
+"""
+
+_V4_NUTRITION_GOAL = f"""
+CREATE TABLE nutrition_goal (
+    start_date    TEXT    NOT NULL PRIMARY KEY CHECK (date(start_date) IS start_date
+                                                  AND start_date >= '{V3_MIN_MEASUREMENT_DATE}'),
+    end_date      TEXT    CHECK (end_date IS NULL OR (date(end_date) IS end_date
+                                                      AND end_date >= start_date)),
+    kind          TEXT    NOT NULL CHECK (kind IN ({_GOAL_KINDS})),
+    weekly_loss_g INTEGER CHECK (weekly_loss_g IS NULL
+                                 OR weekly_loss_g BETWEEN {V4_WEEKLY_LOSS_G[0]}
+                                                      AND {V4_WEEKLY_LOSS_G[1]}),
+    CHECK ((kind = 'weight_loss') = (weekly_loss_g IS NOT NULL))
+) STRICT
+"""
+
+# Periods never overlap, not even with a direct INSERT (open end = no end date).
+_V4_NUTRITION_GOAL_NO_OVERLAP = """
+CREATE TRIGGER nutrition_goal_no_overlap BEFORE INSERT ON nutrition_goal
+WHEN EXISTS (
+    SELECT 1 FROM nutrition_goal AS g
+    WHERE g.start_date <= COALESCE(NEW.end_date, '9999-12-31')
+      AND COALESCE(g.end_date, '9999-12-31') >= NEW.start_date
+)
+BEGIN
+    SELECT RAISE(ABORT, 'nutrition goal periods overlap');
+END
+"""
+
 # Migration i (index i-1): brings the schema from version i-1 to i.
 MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     (_V1_META, _V1_ACTIVITIES, _V1_ACTIVITIES_START_INDEX, _V1_PHYSIOLOGY, _V1_LOAD_CACHE),
@@ -249,6 +329,13 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
         _V3_SPORT_WEIGHTS,
         _V3_CLEAR_LOAD_CACHE,
         *_V3_ZONE_COLUMNS,
+    ),
+    (
+        _V4_CALORIES,
+        _V4_ACTIVITY_LEVEL,
+        _V4_MEAL_TIMES,
+        _V4_NUTRITION_GOAL,
+        _V4_NUTRITION_GOAL_NO_OVERLAP,
     ),
 )
 

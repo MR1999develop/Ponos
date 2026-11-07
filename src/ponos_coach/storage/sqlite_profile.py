@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
+from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
     ProfileId,
@@ -32,6 +33,11 @@ from ponos_coach.storage.sqlite_database import (
     open_database,
     peek_database,
     read_meta,
+)
+from ponos_coach.storage.sqlite_nutrition import (
+    SqliteActivityLevelStore,
+    SqliteGoalPeriodStore,
+    SqliteMealTimesStore,
 )
 from ponos_coach.storage.sqlite_profile_data import (
     SqliteFixedDataStore,
@@ -88,6 +94,9 @@ class SqliteOpenProfile:
         self._fixed_data = SqliteFixedDataStore(database)
         self._sport_weights = SqliteSportWeightStore(database)
         self._load_cache = SqliteLoadCache(database)
+        self._activity_levels = SqliteActivityLevelStore(database)
+        self._meal_times = SqliteMealTimesStore(database)
+        self._goal_periods = SqliteGoalPeriodStore(database)
         self._closed = False
 
     @property
@@ -129,6 +138,21 @@ class SqliteOpenProfile:
     def load_cache(self) -> LoadCache:
         """Load cache."""
         return self._load_cache
+
+    @property
+    def activity_levels(self) -> ActivityLevelStore:
+        """Activity level outside sport."""
+        return self._activity_levels
+
+    @property
+    def meal_times(self) -> MealTimesStore:
+        """Typical meal times."""
+        return self._meal_times
+
+    @property
+    def goal_periods(self) -> GoalPeriodStore:
+        """Nutrition goal periods."""
+        return self._goal_periods
 
     def close(self) -> None:
         """Closes the connection (checkpoint included); repeating it has no effect.

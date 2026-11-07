@@ -22,6 +22,12 @@ from ponos_coach.profiles.ports import (
 )
 from tests.builders import absolute_path
 from tests.contracts.contract_archive import ActivityArchiveContract
+from tests.contracts.contract_nutrition import (
+    ActivityCaloriesContract,
+    ActivityLevelStoreContract,
+    GoalPeriodStoreContract,
+    MealTimesStoreContract,
+)
 from tests.contracts.contract_profiles import ProfileFoldersContract, ProfileRegistryContract
 from tests.contracts.contract_storage import (
     NAME,
@@ -220,3 +226,19 @@ def test_fake_folders_and_storage_share_one_disk_for_delete() -> None:
 
     assert folder not in storage.disk.databases
     assert folder not in storage.disk.folders
+
+
+class TestFakeActivityCalories(_FakeStorageFixture, ActivityCaloriesContract):
+    pass
+
+
+class TestFakeActivityLevelStore(_FakeStorageFixture, ActivityLevelStoreContract):
+    pass
+
+
+class TestFakeMealTimesStore(_FakeStorageFixture, MealTimesStoreContract):
+    pass
+
+
+class TestFakeGoalPeriodStore(_FakeStorageFixture, GoalPeriodStoreContract):
+    pass

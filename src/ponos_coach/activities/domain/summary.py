@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from ponos_coach.activities.domain.geo import MAX_POLYLINE_CHARS, GeoPoint
 
+MAX_ACTIVITY_KCAL = 50_000.0  # project default: above this, a declared energy is not credible
 _POLYLINE_FIRST_CHAR = 63  # '?'
 _POLYLINE_LAST_CHAR = 126  # '~'
 
@@ -26,16 +27,23 @@ class ActivitySummary:
     `start_point` is the starting position and `track_polyline` the simplified track
     encoded (polyline at 1e-5 degrees, at most `MAX_POLYLINE_CHARS` characters). They are
     position data: never in logs. An indoor activity has only distance and ascent, or nothing.
+    `calories_kcal` is the total energy the device declared for the activity (FIT
+    `session.total_calories`), resting metabolism included; when absent it is estimated later.
+    It is finite, greater than 0 and at most `MAX_ACTIVITY_KCAL`.
     """
 
     distance_m: float | None = None
     ascent_m: float | None = None
     start_point: GeoPoint | None = None
     track_polyline: str | None = None
+    calories_kcal: float | None = None
 
     def __post_init__(self) -> None:
         _check_non_negative("distance", self.distance_m)
         _check_non_negative("ascent", self.ascent_m)
+        kcal = self.calories_kcal
+        if kcal is not None and not (math.isfinite(kcal) and 0.0 < kcal <= MAX_ACTIVITY_KCAL):
+            raise ValueError("calories must be finite, positive and plausible")
         track = self.track_polyline
         if track is None:
             return

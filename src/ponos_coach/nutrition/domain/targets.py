@@ -1,0 +1,142 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 MR
+"""The day's energy target (with the deficit and its safety limits) and macro totals.
+
+All amounts are whole kcal or grams and self-consistent: the deficit is computed on the rounded
+expenditure and never leaves the target below the rounded basal metabolic rate.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+
+from ponos_coach.nutrition.domain import defaults
+from ponos_coach.nutrition.domain.advice import Advisory, DayLoadLevel, ordered
+from ponos_coach.nutrition.domain.energy import Person
+from ponos_coach.nutrition.domain.macros import Macros
+from ponos_coach.nutrition.domain.settings import (
+    MaintenanceGoal,
+    NutritionGoal,
+    PerformanceGoal,
+    WeightLossGoal,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class EnergyTarget:
+    """Energy budget of a day, whole kcal: `target = expenditure - deficit >= basal`."""
+
+    basal_kcal: int
+    expenditure_kcal: int
+    deficit_kcal: int
+    target_kcal: int
+    advisories: tuple[Advisory, ...]
+
+
+def requested_deficit_kcal(goal: WeightLossGoal) -> float:
+    """Daily deficit that produces the requested weekly loss (7700 kcal per kg)."""
+    return goal.weekly_loss_g / 1000.0 * defaults.KCAL_PER_KG_BODY_MASS / defaults.DAYS_PER_WEEK
+
+
+def _person_advisories(person: Person) -> list[Advisory]:
+    found = []
+    if person.age_years < defaults.ADULT_AGE_YEARS:
+        found.append(Advisory.UNDER_18)
+    if person.body_mass_index < defaults.MIN_BMI_FOR_DEFICIT:
+        found.append(Advisory.LOW_BMI)
+    return found
+
+
+def _applied_deficit(
+    goal: WeightLossGoal,
+    person: Person,
+    level: DayLoadLevel,
+    expenditure: int,
+    basal: int,
+) -> tuple[int, list[Advisory]]:
+    """Whole-kcal deficit after the safety limits, and the advisories about it."""
+    if _person_advisories(person):
+        return 0, [Advisory.DEFICIT_NOT_APPLIED]
+    requested = requested_deficit_kcal(goal)
+    cap = min(defaults.MAX_DEFICIT_FRACTION * expenditure, float(defaults.MAX_DEFICIT_KCAL))
+    capped = min(requested, cap)
+    reduced = capped * level.deficit_factor
+    allowed = max(0, expenditure - basal)
+    applied = math.floor(min(reduced, allowed))
+    found = []
+    if min(reduced, allowed) < reduced or capped < requested:
+        found.append(Advisory.DEFICIT_LIMITED)
+    if reduced < capped:
+        found.append(Advisory.DEFICIT_REDUCED_FOR_LOAD)
+    return applied, found
+
+
+def energy_target(
+    person: Person,
+    goal: NutritionGoal,
+    level: DayLoadLevel,
+    basal_kcal: float,
+    net_activity_kcal: float,
+) -> EnergyTarget:
+    """Energy expenditure of the day and the target after the goal's deficit.
+
+    Expenditure is the basal rate times the activity-level factor plus the net activity energy.
+    Only weight loss has a deficit, and it is limited: never above 20% of the expenditure or
+    750 kcal, never leaving the target under the basal rate, reduced on heavy days, and none at
+    all under 18 or with a body mass index under 18.5.
+    """
+    advisories = _person_advisories(person)
+    if person.activity_level is None:
+        advisories.append(Advisory.ACTIVITY_LEVEL_ASSUMED)
+        factor = defaults.DEFAULT_ACTIVITY_PAL
+    else:
+        factor = person.activity_level.factor
+    basal = round(basal_kcal)
+    expenditure = round(basal_kcal * factor + net_activity_kcal)
+    deficit = 0
+    if isinstance(goal, WeightLossGoal):
+        deficit, found = _applied_deficit(goal, person, level, expenditure, basal)
+        advisories += found
+    elif not isinstance(goal, MaintenanceGoal | PerformanceGoal):  # pragma: no cover
+        raise TypeError("unknown nutrition goal")
+    return EnergyTarget(basal, expenditure, deficit, expenditure - deficit, ordered(advisories))
+
+
+def day_macros(
+    person: Person,
+    goal: NutritionGoal,
+    level: DayLoadLevel,
+    target: EnergyTarget,
+) -> tuple[Macros, tuple[Advisory, ...]]:
+    """Carbohydrate, protein and fat grams of the day, covering the target energy.
+
+    Protein is 1.6 g/kg (2.0 in deficit). Carbohydrates follow the day's load band: the low end
+    for weight loss, the middle for maintenance, the high end for performance. Fat is the rest,
+    never below 20% of the target energy; if the energy does not allow the carbohydrates, they
+    give way (advisory). Grams are whole, never negative.
+    """
+    kcal = float(target.target_kcal)
+    fat_min_g = defaults.FAT_MIN_FRACTION * kcal / defaults.KCAL_PER_G_FAT
+    per_kg = (
+        defaults.PROTEIN_G_PER_KG_DEFICIT if target.deficit_kcal > 0 else defaults.PROTEIN_G_PER_KG
+    )
+    protein_cap = (kcal - defaults.KCAL_PER_G_FAT * fat_min_g) / defaults.KCAL_PER_G_PROTEIN
+    protein = min(per_kg * person.weight_kg, protein_cap)
+    low, high = level.carbs_g_per_kg
+    if isinstance(goal, WeightLossGoal):
+        band = low
+    elif isinstance(goal, PerformanceGoal):
+        band = high
+    else:
+        band = (low + high) / 2.0
+    wanted = band * person.weight_kg
+    room = (
+        kcal - defaults.KCAL_PER_G_PROTEIN * protein - defaults.KCAL_PER_G_FAT * fat_min_g
+    ) / defaults.KCAL_PER_G_CARBS
+    carbs = min(wanted, room)
+    protein_g, carbs_g = math.floor(protein), math.floor(carbs)
+    remaining = kcal - defaults.KCAL_PER_G_PROTEIN * (protein_g + carbs_g)
+    fat_g = max(round(remaining / defaults.KCAL_PER_G_FAT), math.ceil(fat_min_g))
+    limited = (Advisory.CARBS_LIMITED_BY_ENERGY,) if carbs < wanted - 1.0 else ()
+    return Macros(carbs_g, protein_g, fat_g), limited

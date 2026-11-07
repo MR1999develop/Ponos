@@ -24,6 +24,7 @@ import numpy as np
 
 from ponos_coach.activities.domain import (
     MAX_ACTIVITY_FILE_BYTES,
+    MAX_ACTIVITY_KCAL,
     Activity,
     ActivitySummary,
     FileFormat,
@@ -121,6 +122,7 @@ class _Session:
     sub_sport: int | None
     distance_m: float | None
     ascent_m: float | None
+    calories_kcal: float | None
     start_lat: int | None  # semicircles
     start_lon: int | None
 
@@ -186,6 +188,12 @@ def _non_negative(value: object) -> float | None:
     return number if number is not None and number >= 0.0 else None
 
 
+def _declared_kcal(value: object) -> float | None:
+    """Energy declared by the device, only if credible (0 means "not computed")."""
+    number = _as_float(value)
+    return number if number is not None and 0.0 < number <= MAX_ACTIVITY_KCAL else None
+
+
 def _take_record(frame: fitdecode.FitDataMessage, parsed: _Parsed, limits: FitLimits) -> None:
     parsed.records += 1
     if parsed.records > limits.max_records:
@@ -229,6 +237,7 @@ def _take_message(frame: fitdecode.FitDataMessage, parsed: _Parsed, limits: FitL
                 _as_int(_value(frame, "sub_sport", raw=True)),
                 _non_negative(_value(frame, "total_distance")),
                 _non_negative(_value(frame, "total_ascent")),
+                _declared_kcal(_value(frame, "total_calories")),
                 start[0] if start else None,
                 start[1] if start else None,
             )
@@ -335,6 +344,16 @@ def _sum_declared(values: list[float | None]) -> float | None:
     return float(sum(declared)) if declared else None
 
 
+def _total_kcal(parsed: _Parsed) -> float | None:
+    """Sum of the sessions' declared energy, only if every session declares it and the total is
+    credible: a partial sum would understate the activity."""
+    declared = [s.calories_kcal for s in parsed.sessions]
+    if not declared or any(v is None for v in declared):
+        return None
+    total = float(sum(v for v in declared if v is not None))
+    return total if total <= MAX_ACTIVITY_KCAL else None
+
+
 def _start_point(parsed: _Parsed) -> GeoPoint | None:
     """Start from the first session that declares it, otherwise the first valid record."""
     first = parsed.sessions[0] if parsed.sessions else None
@@ -363,6 +382,7 @@ def _summary(parsed: _Parsed) -> ActivitySummary:
         _sum_declared([s.ascent_m for s in parsed.sessions]),
         _start_point(parsed),
         _track_polyline(parsed),
+        _total_kcal(parsed),
     )
 
 

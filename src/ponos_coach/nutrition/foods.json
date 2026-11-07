@@ -1,0 +1,693 @@
+{
+ "format": 1,
+ "source": {
+  "name": "USDA FoodData Central",
+  "url": "https://fdc.nal.usda.gov/",
+  "license": "CC0-1.0",
+  "license_note": "USDA FoodData Central data are in the public domain (CC0 1.0 Universal); citation is requested: U.S. Department of Agriculture, Agricultural Research Service, FoodData Central.",
+  "values": "energy (kcal) and macronutrients (g) per 100 g of the edible portion, SR Legacy entries",
+  "verified_on": null,
+  "verification_note": "Values and FoodData Central ids were written without access to the database: verify each entry against FDC and set verified_on to the date of the check."
+ },
+ "foods": [
+  {
+   "id": "oats_rolled_dry",
+   "name": "Rolled oats, dry",
+   "fdc_id": 173904,
+   "group": "carb",
+   "roles": [
+    "breakfast"
+   ],
+   "kcal_100g": 379,
+   "carbs_100g": 67.7,
+   "protein_100g": 13.2,
+   "fat_100g": 6.5,
+   "portion_step_g": 10,
+   "max_portion_g": 150
+  },
+  {
+   "id": "bread_whole_wheat",
+   "name": "Whole-wheat bread",
+   "fdc_id": 172686,
+   "group": "carb",
+   "roles": [
+    "breakfast",
+    "main",
+    "pre"
+   ],
+   "kcal_100g": 252,
+   "carbs_100g": 42.7,
+   "protein_100g": 12.5,
+   "fat_100g": 3.5,
+   "portion_step_g": 10,
+   "max_portion_g": 300
+  },
+  {
+   "id": "bread_white",
+   "name": "White bread",
+   "fdc_id": 172687,
+   "group": "carb",
+   "roles": [
+    "breakfast",
+    "pre",
+    "during"
+   ],
+   "kcal_100g": 266,
+   "carbs_100g": 49.4,
+   "protein_100g": 8.8,
+   "fat_100g": 3.3,
+   "portion_step_g": 10,
+   "max_portion_g": 300
+  },
+  {
+   "id": "rice_white_cooked",
+   "name": "White rice, cooked",
+   "fdc_id": 168878,
+   "group": "carb",
+   "roles": [
+    "main",
+    "post"
+   ],
+   "kcal_100g": 130,
+   "carbs_100g": 28.2,
+   "protein_100g": 2.7,
+   "fat_100g": 0.3,
+   "portion_step_g": 10,
+   "max_portion_g": 600
+  },
+  {
+   "id": "rice_brown_cooked",
+   "name": "Brown rice, cooked",
+   "fdc_id": 168880,
+   "group": "carb",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 123,
+   "carbs_100g": 25.6,
+   "protein_100g": 2.7,
+   "fat_100g": 1.0,
+   "portion_step_g": 10,
+   "max_portion_g": 600
+  },
+  {
+   "id": "pasta_cooked",
+   "name": "Pasta, cooked",
+   "fdc_id": 168928,
+   "group": "carb",
+   "roles": [
+    "main",
+    "post"
+   ],
+   "kcal_100g": 158,
+   "carbs_100g": 30.9,
+   "protein_100g": 5.8,
+   "fat_100g": 0.9,
+   "portion_step_g": 10,
+   "max_portion_g": 600
+  },
+  {
+   "id": "pasta_whole_wheat_cooked",
+   "name": "Whole-wheat pasta, cooked",
+   "fdc_id": 168929,
+   "group": "carb",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 124,
+   "carbs_100g": 26.5,
+   "protein_100g": 5.3,
+   "fat_100g": 0.5,
+   "portion_step_g": 10,
+   "max_portion_g": 600
+  },
+  {
+   "id": "potato_boiled",
+   "name": "Potato, boiled",
+   "fdc_id": 170093,
+   "group": "carb",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 87,
+   "carbs_100g": 20.1,
+   "protein_100g": 1.9,
+   "fat_100g": 0.1,
+   "portion_step_g": 10,
+   "max_portion_g": 600
+  },
+  {
+   "id": "sweet_potato_baked",
+   "name": "Sweet potato, baked",
+   "fdc_id": 168482,
+   "group": "carb",
+   "roles": [
+    "main",
+    "post"
+   ],
+   "kcal_100g": 90,
+   "carbs_100g": 20.7,
+   "protein_100g": 2.0,
+   "fat_100g": 0.2,
+   "portion_step_g": 10,
+   "max_portion_g": 500
+  },
+  {
+   "id": "quinoa_cooked",
+   "name": "Quinoa, cooked",
+   "fdc_id": 168917,
+   "group": "carb",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 120,
+   "carbs_100g": 21.3,
+   "protein_100g": 4.4,
+   "fat_100g": 1.9,
+   "portion_step_g": 10,
+   "max_portion_g": 500
+  },
+  {
+   "id": "banana",
+   "name": "Banana",
+   "fdc_id": 173944,
+   "group": "carb",
+   "roles": [
+    "breakfast",
+    "pre",
+    "during",
+    "post"
+   ],
+   "kcal_100g": 89,
+   "carbs_100g": 22.8,
+   "protein_100g": 1.1,
+   "fat_100g": 0.3,
+   "portion_step_g": 10,
+   "max_portion_g": 800
+  },
+  {
+   "id": "apple",
+   "name": "Apple",
+   "fdc_id": 171688,
+   "group": "carb",
+   "roles": [
+    "breakfast",
+    "pre",
+    "post"
+   ],
+   "kcal_100g": 52,
+   "carbs_100g": 13.8,
+   "protein_100g": 0.3,
+   "fat_100g": 0.2,
+   "portion_step_g": 10,
+   "max_portion_g": 400
+  },
+  {
+   "id": "orange",
+   "name": "Orange",
+   "fdc_id": 169097,
+   "group": "carb",
+   "roles": [
+    "breakfast",
+    "pre",
+    "post"
+   ],
+   "kcal_100g": 47,
+   "carbs_100g": 11.8,
+   "protein_100g": 0.9,
+   "fat_100g": 0.1,
+   "portion_step_g": 10,
+   "max_portion_g": 500
+  },
+  {
+   "id": "dates_medjool",
+   "name": "Dates, Medjool",
+   "fdc_id": 168191,
+   "group": "carb",
+   "roles": [
+    "pre",
+    "during",
+    "post"
+   ],
+   "kcal_100g": 277,
+   "carbs_100g": 75.0,
+   "protein_100g": 1.8,
+   "fat_100g": 0.2,
+   "portion_step_g": 5,
+   "max_portion_g": 400
+  },
+  {
+   "id": "honey",
+   "name": "Honey",
+   "fdc_id": 169640,
+   "group": "carb",
+   "roles": [
+    "breakfast",
+    "pre",
+    "during"
+   ],
+   "kcal_100g": 304,
+   "carbs_100g": 82.4,
+   "protein_100g": 0.3,
+   "fat_100g": 0.0,
+   "portion_step_g": 5,
+   "max_portion_g": 150
+  },
+  {
+   "id": "raisins",
+   "name": "Raisins",
+   "fdc_id": 168165,
+   "group": "carb",
+   "roles": [
+    "during",
+    "post"
+   ],
+   "kcal_100g": 299,
+   "carbs_100g": 79.2,
+   "protein_100g": 3.1,
+   "fat_100g": 0.5,
+   "portion_step_g": 5,
+   "max_portion_g": 300
+  },
+  {
+   "id": "orange_juice",
+   "name": "Orange juice",
+   "fdc_id": 169098,
+   "group": "carb",
+   "roles": [
+    "breakfast",
+    "pre",
+    "during",
+    "post"
+   ],
+   "kcal_100g": 45,
+   "carbs_100g": 10.4,
+   "protein_100g": 0.7,
+   "fat_100g": 0.2,
+   "portion_step_g": 50,
+   "max_portion_g": 1500
+  },
+  {
+   "id": "sugar_granulated",
+   "name": "Sugar, granulated (in the drink)",
+   "fdc_id": 169655,
+   "group": "carb",
+   "roles": [
+    "during"
+   ],
+   "kcal_100g": 387,
+   "carbs_100g": 100.0,
+   "protein_100g": 0.0,
+   "fat_100g": 0.0,
+   "portion_step_g": 5,
+   "max_portion_g": 300
+  },
+  {
+   "id": "egg_hard_boiled",
+   "name": "Egg, hard-boiled",
+   "fdc_id": 173424,
+   "group": "protein",
+   "roles": [
+    "breakfast",
+    "main",
+    "post"
+   ],
+   "kcal_100g": 155,
+   "carbs_100g": 1.1,
+   "protein_100g": 12.6,
+   "fat_100g": 10.6,
+   "portion_step_g": 50,
+   "max_portion_g": 300
+  },
+  {
+   "id": "chicken_breast_roasted",
+   "name": "Chicken breast, roasted",
+   "fdc_id": 171477,
+   "group": "protein",
+   "roles": [
+    "main",
+    "post"
+   ],
+   "kcal_100g": 165,
+   "carbs_100g": 0.0,
+   "protein_100g": 31.0,
+   "fat_100g": 3.6,
+   "portion_step_g": 10,
+   "max_portion_g": 400
+  },
+  {
+   "id": "tuna_light_canned_water",
+   "name": "Tuna, light, canned in water",
+   "fdc_id": 175159,
+   "group": "protein",
+   "roles": [
+    "main",
+    "post"
+   ],
+   "kcal_100g": 116,
+   "carbs_100g": 0.0,
+   "protein_100g": 25.5,
+   "fat_100g": 0.8,
+   "portion_step_g": 10,
+   "max_portion_g": 300
+  },
+  {
+   "id": "salmon_farmed_cooked",
+   "name": "Salmon, farmed, cooked",
+   "fdc_id": 175168,
+   "group": "protein",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 206,
+   "carbs_100g": 0.0,
+   "protein_100g": 22.1,
+   "fat_100g": 12.4,
+   "portion_step_g": 10,
+   "max_portion_g": 300
+  },
+  {
+   "id": "greek_yogurt_nonfat",
+   "name": "Greek yogurt, plain, nonfat",
+   "fdc_id": 170903,
+   "group": "protein",
+   "roles": [
+    "breakfast",
+    "pre",
+    "post"
+   ],
+   "kcal_100g": 59,
+   "carbs_100g": 3.6,
+   "protein_100g": 10.2,
+   "fat_100g": 0.4,
+   "portion_step_g": 10,
+   "max_portion_g": 500
+  },
+  {
+   "id": "yogurt_plain_lowfat",
+   "name": "Yogurt, plain, low-fat",
+   "fdc_id": 171284,
+   "group": "protein",
+   "roles": [
+    "breakfast",
+    "post"
+   ],
+   "kcal_100g": 63,
+   "carbs_100g": 7.0,
+   "protein_100g": 5.3,
+   "fat_100g": 1.6,
+   "portion_step_g": 10,
+   "max_portion_g": 500
+  },
+  {
+   "id": "milk_whole",
+   "name": "Milk, whole",
+   "fdc_id": 171265,
+   "group": "protein",
+   "roles": [
+    "breakfast",
+    "post"
+   ],
+   "kcal_100g": 61,
+   "carbs_100g": 4.8,
+   "protein_100g": 3.2,
+   "fat_100g": 3.3,
+   "portion_step_g": 50,
+   "max_portion_g": 500
+  },
+  {
+   "id": "mozzarella_part_skim",
+   "name": "Mozzarella, part-skim",
+   "fdc_id": 170845,
+   "group": "protein",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 254,
+   "carbs_100g": 2.8,
+   "protein_100g": 24.3,
+   "fat_100g": 15.9,
+   "portion_step_g": 10,
+   "max_portion_g": 200
+  },
+  {
+   "id": "lentils_cooked",
+   "name": "Lentils, cooked",
+   "fdc_id": 172420,
+   "group": "protein",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 116,
+   "carbs_100g": 20.1,
+   "protein_100g": 9.0,
+   "fat_100g": 0.4,
+   "portion_step_g": 10,
+   "max_portion_g": 500
+  },
+  {
+   "id": "chickpeas_cooked",
+   "name": "Chickpeas, cooked",
+   "fdc_id": 173757,
+   "group": "protein",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 164,
+   "carbs_100g": 27.4,
+   "protein_100g": 8.9,
+   "fat_100g": 2.6,
+   "portion_step_g": 10,
+   "max_portion_g": 500
+  },
+  {
+   "id": "black_beans_cooked",
+   "name": "Black beans, cooked",
+   "fdc_id": 173735,
+   "group": "protein",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 132,
+   "carbs_100g": 23.7,
+   "protein_100g": 8.9,
+   "fat_100g": 0.5,
+   "portion_step_g": 10,
+   "max_portion_g": 500
+  },
+  {
+   "id": "tofu_firm",
+   "name": "Tofu, firm",
+   "fdc_id": 172475,
+   "group": "protein",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 144,
+   "carbs_100g": 2.8,
+   "protein_100g": 17.3,
+   "fat_100g": 8.7,
+   "portion_step_g": 10,
+   "max_portion_g": 400
+  },
+  {
+   "id": "olive_oil",
+   "name": "Olive oil",
+   "fdc_id": 171413,
+   "group": "fat",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 884,
+   "carbs_100g": 0.0,
+   "protein_100g": 0.0,
+   "fat_100g": 100.0,
+   "portion_step_g": 5,
+   "max_portion_g": 40
+  },
+  {
+   "id": "almonds",
+   "name": "Almonds",
+   "fdc_id": 170567,
+   "group": "fat",
+   "roles": [
+    "breakfast",
+    "post"
+   ],
+   "kcal_100g": 579,
+   "carbs_100g": 21.6,
+   "protein_100g": 21.2,
+   "fat_100g": 49.9,
+   "portion_step_g": 5,
+   "max_portion_g": 80
+  },
+  {
+   "id": "walnuts",
+   "name": "Walnuts",
+   "fdc_id": 170187,
+   "group": "fat",
+   "roles": [
+    "breakfast",
+    "main"
+   ],
+   "kcal_100g": 654,
+   "carbs_100g": 13.7,
+   "protein_100g": 15.2,
+   "fat_100g": 65.2,
+   "portion_step_g": 5,
+   "max_portion_g": 80
+  },
+  {
+   "id": "peanut_butter",
+   "name": "Peanut butter",
+   "fdc_id": 172470,
+   "group": "fat",
+   "roles": [
+    "breakfast",
+    "pre"
+   ],
+   "kcal_100g": 588,
+   "carbs_100g": 19.6,
+   "protein_100g": 25.1,
+   "fat_100g": 50.4,
+   "portion_step_g": 5,
+   "max_portion_g": 60
+  },
+  {
+   "id": "avocado",
+   "name": "Avocado",
+   "fdc_id": 171705,
+   "group": "fat",
+   "roles": [
+    "breakfast",
+    "main"
+   ],
+   "kcal_100g": 160,
+   "carbs_100g": 8.5,
+   "protein_100g": 2.0,
+   "fat_100g": 14.7,
+   "portion_step_g": 10,
+   "max_portion_g": 200
+  },
+  {
+   "id": "butter",
+   "name": "Butter",
+   "fdc_id": 173430,
+   "group": "fat",
+   "roles": [
+    "breakfast"
+   ],
+   "kcal_100g": 717,
+   "carbs_100g": 0.1,
+   "protein_100g": 0.9,
+   "fat_100g": 81.1,
+   "portion_step_g": 5,
+   "max_portion_g": 30
+  },
+  {
+   "id": "tomato",
+   "name": "Tomato",
+   "fdc_id": 170457,
+   "group": "vegetable",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 18,
+   "carbs_100g": 3.9,
+   "protein_100g": 0.9,
+   "fat_100g": 0.2,
+   "portion_step_g": 10,
+   "max_portion_g": 300
+  },
+  {
+   "id": "broccoli",
+   "name": "Broccoli",
+   "fdc_id": 170379,
+   "group": "vegetable",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 34,
+   "carbs_100g": 6.6,
+   "protein_100g": 2.8,
+   "fat_100g": 0.4,
+   "portion_step_g": 10,
+   "max_portion_g": 300
+  },
+  {
+   "id": "spinach",
+   "name": "Spinach",
+   "fdc_id": 168462,
+   "group": "vegetable",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 23,
+   "carbs_100g": 3.6,
+   "protein_100g": 2.9,
+   "fat_100g": 0.4,
+   "portion_step_g": 10,
+   "max_portion_g": 300
+  },
+  {
+   "id": "zucchini",
+   "name": "Zucchini",
+   "fdc_id": 169291,
+   "group": "vegetable",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 17,
+   "carbs_100g": 3.1,
+   "protein_100g": 1.2,
+   "fat_100g": 0.3,
+   "portion_step_g": 10,
+   "max_portion_g": 300
+  },
+  {
+   "id": "carrot",
+   "name": "Carrot",
+   "fdc_id": 170393,
+   "group": "vegetable",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 41,
+   "carbs_100g": 9.6,
+   "protein_100g": 0.9,
+   "fat_100g": 0.2,
+   "portion_step_g": 10,
+   "max_portion_g": 300
+  },
+  {
+   "id": "romaine_lettuce",
+   "name": "Romaine lettuce",
+   "fdc_id": 169247,
+   "group": "vegetable",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 17,
+   "carbs_100g": 3.3,
+   "protein_100g": 1.2,
+   "fat_100g": 0.3,
+   "portion_step_g": 10,
+   "max_portion_g": 300
+  },
+  {
+   "id": "green_beans",
+   "name": "Green beans",
+   "fdc_id": 169961,
+   "group": "vegetable",
+   "roles": [
+    "main"
+   ],
+   "kcal_100g": 31,
+   "carbs_100g": 7.0,
+   "protein_100g": 1.8,
+   "fat_100g": 0.2,
+   "portion_step_g": 10,
+   "max_portion_g": 300
+  }
+ ]
+}

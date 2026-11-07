@@ -1,6 +1,6 @@
 ---
 name: ponos-allenamento
-description: Conoscenza di dominio di Ponos Coach, app di allenamento con dati Garmin e frequenza cardiaca. Modello di carico (TRIMP di Banister, hrTSS, pesi degli sport, ATL, CTL, TSB), regole del piano adattivo (macrociclo, mesocicli 3:1, rampa, 80/20), test di soglia di 30 minuti, protocollo degli infortuni con segnali d'allarme e percorso a gradini, formato dei dati (cartella del profilo, SQLite, archivio FIT, identità file_id), sincronizzazione riprendibile con Garmin e import da cartella con i tetti; da usare quando si scrive, si rivede o si documenta codice di carico, piano, test, infortuni, sincronizzazione o archivio di Ponos Coach.
+description: Conoscenza di dominio di Ponos Coach, app di allenamento con dati Garmin e frequenza cardiaca. Modello di carico (TRIMP di Banister, hrTSS, pesi degli sport, ATL, CTL, TSB), regole del piano adattivo (macrociclo, mesocicli 3:1, rampa, 80/20), test di soglia di 30 minuti, protocollo degli infortuni con segnali d'allarme e percorso a gradini, formato dei dati (cartella del profilo, SQLite, archivio FIT, identità file_id), sincronizzazione riprendibile con Garmin e import da cartella con i tetti, alimentazione del giorno (metabolismo di base, spesa, deficit con i limiti di sicurezza, macro, momenti, alimenti); da usare quando si scrive, si rivede o si documenta codice di carico, piano, test, infortuni, alimentazione, sincronizzazione o archivio di Ponos Coach.
 ---
 
 # Ponos Allenamento
@@ -28,6 +28,13 @@ come "punto aperto" nei file `references/`.
 | FRI | Friel, *The Triathlete's Training Bible* | test di soglia di 30 minuti |
 | SEI | Seiler, distribuzione dell'intensità (2010) | distribuzione 80/20 |
 | SIL | Silbernagel e altri, modello di monitoraggio del dolore (2007) | ripresa guidata dal dolore |
+| ISSN | International Society of Sports Nutrition, posizioni sulla nutrizione sportiva | carboidrati, proteine, momenti |
+| ACSM | ACSM e Academy of Nutrition and Dietetics, *Nutrition and Athletic Performance* | carboidrati, liquidi, ritmo di perdita di peso |
+| IOC | Consenso del CIO sulla nutrizione dello sportivo | carboidrati durante e dopo |
+| MSJ | Mifflin e altri, equazione del metabolismo a riposo (1990) | metabolismo di base |
+| KEYTEL | Keytel e altri, spesa energetica dalla FC (2005) | calorie senza il dato del dispositivo |
+| COMPENDIUM | *Compendium of Physical Activities* | MET per sport |
+| FDC | USDA FoodData Central (CC0) | valori degli alimenti |
 
 ## 1. Modello di carico
 
@@ -57,12 +64,21 @@ Questionario, segnali d'allarme, percorso a gradini, check-in giornaliero,
 attività alternative. Fonte: SIL.
 Dettagli: `references/infortuni.md`.
 
-## 5. Dati e sincronizzazione
+## 5. Alimentazione
+
+Calorie delle attività (dichiarate, Keytel, MET), metabolismo di base,
+spesa del giorno, obiettivi per periodi, deficit con i limiti di sicurezza,
+macro per carico, pre/durante/post, pasti spostati o fusi, tabella degli
+alimenti. Indicazioni generali, mai consigli medici. Fonti: ISSN, ACSM, IOC,
+MSJ, KEYTEL, COMPENDIUM, FDC. Dettagli: `references/alimentazione.md`; tutti i
+valori in `nutrition/domain/defaults.py`.
+
+## 6. Dati e sincronizzazione
 
 Cartella del profilo e elenco dei profili, SQLite, archivio dei file
 originali (FIT e GPX), identità (`file_id` o SHA-256), giornale della
 sincronizzazione, abbinamento, backoff, import di file, cartelle e ZIP con i
-tetti, esiti dell'import, lock, dati personali e schema v3. Dettagli:
+tetti, esiti dell'import, lock, dati personali, schema v3 e v4. Dettagli:
 `references/dati-e-sincronizzazione.md`; schema e archivio:
 `docs/adr/005-schema-sqlite-e-archivio.md`; dati del profilo:
 `docs/adr/007-dati-del-profilo-e-zone.md`.
@@ -94,3 +110,7 @@ tetti, esiti dell'import, lock, dati personali e schema v3. Dettagli:
 - Ogni limite (dimensione, record, tetti di import) viene prima della lettura
   e vive in un solo modulo.
 - Ogni valore scelto dal progetto è marcato "default del progetto".
+- Alimentazione: nessun deficit sotto i 18 anni o con IMC < 18,5; mai oltre il
+  20% della spesa né 750 kcal, mai sotto il metabolismo di base; il risultato
+  porta sempre gli avvisi pertinenti; la somma dei pasti è il totale del giorno;
+  nessun numero fuori da `defaults.py`; dati di salute mai nei log.

@@ -57,7 +57,7 @@ _MILLISECOND: Final = timedelta(milliseconds=1)
 _ACTIVITY_COLUMNS: Final = (
     "identity_key, file_format, sport, start_ms, elapsed_s, timer_s, distance_m, ascent_m, "
     "start_lat, start_lon, track_polyline, archive_path, archive_sha256, archive_size_bytes, "
-    "origin, imported_ms, garmin_activity_id"
+    "origin, imported_ms, garmin_activity_id, calories_kcal"
 )
 # Only module constants in the composed queries: no external data (S608).
 _SELECT_ACTIVITIES: Final = "SELECT " + _ACTIVITY_COLUMNS + " FROM activities "  # noqa: S608
@@ -65,7 +65,7 @@ _INSERT_ACTIVITY: Final = (
     "INSERT INTO activities ("  # noqa: S608
     + _ACTIVITY_COLUMNS
     + ") VALUES ("
-    + ", ".join("?" * 17)
+    + ", ".join("?" * 18)
     + ")"
 )
 
@@ -126,6 +126,7 @@ def _activity_params(record: ActivityRecord) -> tuple[Any, ...]:
         record.origin.value,
         to_ms(record.imported_at),
         record.garmin_activity_id,
+        summary.calories_kcal,
     )
 
 
@@ -138,7 +139,7 @@ def _record_from_row(row: Sequence[Any]) -> ActivityRecord:
         start=from_ms(row[3]),
         elapsed_s=row[4],
         timer_s=row[5],
-        summary=ActivitySummary(row[6], row[7], point, row[10]),
+        summary=ActivitySummary(row[6], row[7], point, row[10], row[17]),
         archived=ArchivedFile(PurePosixPath(row[11]), row[12], row[13]),
         origin=ActivityOrigin(row[14]),
         imported_at=from_ms(row[15]),

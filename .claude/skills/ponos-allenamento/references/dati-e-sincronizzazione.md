@@ -114,6 +114,25 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   - Altezza, peso e data di nascita sono dati di salute: mai nei log né nei
     messaggi d'errore (i tipi di dominio e gli store non ripetono i valori).
     Motivazioni e alternative: `docs/adr/007-dati-del-profilo-e-zone.md`.
+- **Schema v4** (alimentazione, tutte `STRICT`; formule e soglie in
+  `references/alimentazione.md`):
+  - `activities.calories_kcal`: totale dichiarato dal dispositivo (FIT
+    `session.total_calories`), NULL se manca (CHECK > 0 e <= 50000); le righe
+    precedenti restano NULL.
+  - `activity_level`: livello fuori dallo sport con data di validità (stessa
+    regola del peso), insieme chiuso `sedentary`, `light`, `active`,
+    `very_active`.
+  - `meal_times`: una riga (`id = 1`), minuti dalla mezzanotte in ordine e ad
+    almeno 120 minuti l'uno dall'altro; assente = orari di default.
+  - `nutrition_goal`: periodi (`start_date` chiave, `end_date` NULL = senza
+    fine), `kind` `weight_loss`/`maintenance`/`performance`, `weekly_loss_g`
+    (100-1000) solo per il dimagrimento; un trigger `BEFORE INSERT` rifiuta i
+    periodi che si sovrappongono.
+  - Migrazione v3 → v4 con copia in `backup/ponos-v3-v4.sqlite3`. T-DATI-01:
+    `tests/collaudo/test_fase4b_migrazione.py` (v3 congelata, uccisione a ogni
+    istruzione, limiti dei CHECK e del trigger).
+  - `OpenProfile` espone anche `activity_levels`, `meal_times` e
+    `goal_periods`, sulla stessa connessione e transazione.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.

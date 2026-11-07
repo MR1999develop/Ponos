@@ -67,7 +67,7 @@ from ponos_coach.activities.domain.remote import (
 )
 from ponos_coach.activities.domain.session_tokens import MAX_TOKEN_CHARS, SessionTokens
 from ponos_coach.activities.domain.sport import Sport
-from ponos_coach.activities.domain.summary import ActivitySummary
+from ponos_coach.activities.domain.summary import MAX_ACTIVITY_KCAL, ActivitySummary
 from ponos_coach.activities.domain.sync_policy import (
     DEFAULT_POLICY,
     ETA_WINDOW,
@@ -94,6 +94,7 @@ __all__ = [
     "ETA_WINDOW",
     "MAX_ACTIVITY_FILE_BYTES",
     "MAX_ACTIVITY_INSTANT",
+    "MAX_ACTIVITY_KCAL",
     "MAX_DOWNLOAD_BYTES",
     "MAX_GARMIN_ACTIVITY_ID",
     "MAX_PAGE_SIZE",

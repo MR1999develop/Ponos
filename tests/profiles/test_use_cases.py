@@ -15,6 +15,7 @@ import pytest
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.load.domain import PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
+from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
     FolderKind,
@@ -141,6 +142,18 @@ class _CountingProfile:
     @property
     def load_cache(self) -> LoadCache:
         return self._inner.load_cache
+
+    @property
+    def activity_levels(self) -> ActivityLevelStore:
+        return self._inner.activity_levels
+
+    @property
+    def meal_times(self) -> MealTimesStore:
+        return self._inner.meal_times
+
+    @property
+    def goal_periods(self) -> GoalPeriodStore:
+        return self._inner.goal_periods
 
     def close(self) -> None:
         self._owner.closed += 1

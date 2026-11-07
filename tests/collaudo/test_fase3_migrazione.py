@@ -125,16 +125,19 @@ def test_t_dati_01_a_frozen_v2_database_is_migrated_to_v3_with_data_intact_and_a
 
     opened = SqliteProfileStorage().open(tmp_path)
     try:
-        assert opened.info.format_version == 3
+        assert opened.info.format_version == sqlite_schema.SCHEMA_VERSION
         (record,) = opened.activities.list_by_start()
         assert record.sport is Sport.RUNNING
     finally:
         opened.close()
 
-    assert {table: rows(path, table) for table in kept} == before  # including 'future'
+    # The v4 calories column is the only difference in the activities (NULL for old rows).
+    after = {table: rows(path, table) for table in kept}
+    after["activities"] = [row[:-1] for row in after["activities"]]
+    assert after == before  # including 'future'
     assert rows(path, "load_cache") == []  # derived: recalculated from the files
     [copy] = sorted((tmp_path / "backup").glob("*"))
-    assert copy.name == "ponos-v2-v3.sqlite3"
+    assert copy.name == f"ponos-v2-v{sqlite_schema.SCHEMA_VERSION}.sqlite3"
     assert user_version(copy) == 2
     assert {table: rows(copy, table) for table in kept} == before
     assert rows(copy, "load_cache") != []  # the copy still has the v2 load
@@ -200,7 +203,11 @@ def test_t_dati_01_a_v3_migration_that_fails_halfway_leaves_the_v2_database_as_i
         sqlite_schema.MIGRATIONS[2][4],  # ...the emptied cache...
         "CREATE TABLE questa_no (",  # ...then a syntax error
     )
-    monkeypatch.setattr(sqlite_database, "MIGRATIONS", (*sqlite_schema.MIGRATIONS[:2], broken_v3))
+    monkeypatch.setattr(
+        sqlite_database,
+        "MIGRATIONS",
+        (*sqlite_schema.MIGRATIONS[:2], broken_v3, sqlite_schema.MIGRATIONS[3]),
+    )
 
     with pytest.raises((ProfileStorageError, sqlite3.Error)):
         SqliteProfileStorage().open(tmp_path)
@@ -210,7 +217,7 @@ def test_t_dati_01_a_v3_migration_that_fails_halfway_leaves_the_v2_database_as_i
     assert rows(path, "load_cache") == cache_before  # and the cache was not emptied
     monkeypatch.undo()
     SqliteProfileStorage().open(tmp_path).close()  # the good round succeeds
-    assert user_version(path) == 3
+    assert user_version(path) == sqlite_schema.SCHEMA_VERSION
 
 
 def test_the_database_refuses_to_change_the_fixed_data_even_with_a_direct_update(

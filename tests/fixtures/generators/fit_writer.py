@@ -99,6 +99,7 @@ class ActivitySpec:
     total_timer_ms: int | None = None  # default: equal to the elapsed time
     total_distance_m: float | None = None  # session field, if present
     total_ascent_m: int | None = None  # session field, if present
+    total_calories_kcal: int | None = None  # session field (kcal), if present
     start_position: tuple[float, float] | None = None  # (lat, lon) in degrees, in the session
 
 
@@ -244,6 +245,10 @@ def build_body(spec: ActivitySpec) -> bytes:
         session_fields.append((22, 2, _UINT16))
         session_fmt += "H"
         session_values.append(spec.total_ascent_m)
+    if spec.total_calories_kcal is not None:
+        session_fields.append((11, 2, _UINT16))
+        session_fmt += "H"
+        session_values.append(spec.total_calories_kcal)
     body += _definition(3, _MSG_SESSION, session_fields)
     body += _data(3, session_fmt, *session_values)
 

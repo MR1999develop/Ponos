@@ -16,6 +16,7 @@ from typing import Protocol
 from ponos_coach.activities.domain import SessionTokens
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
+from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
 from ponos_coach.profiles.domain import (
     FixedProfileData,
     FolderInspection,
@@ -314,7 +315,8 @@ class OpenProfile(Protocol):
     """An open profile: its information and the stores that share a connection.
 
     The transactions of `activities.transaction()` also cover `sync_journal`, `physiology`,
-    `weights`, `fixed_data`, `sport_weights` e `load_cache`.
+    `weights`, `fixed_data`, `sport_weights`, `load_cache`, `activity_levels`, `meal_times`
+    and `goal_periods`.
     It must be closed with `close()`; after closing the stores are no longer used.
     """
 
@@ -356,6 +358,21 @@ class OpenProfile(Protocol):
     @property
     def load_cache(self) -> LoadCache:
         """Load cache."""
+        ...
+
+    @property
+    def activity_levels(self) -> ActivityLevelStore:
+        """Activity level outside sport with validity date."""
+        ...
+
+    @property
+    def meal_times(self) -> MealTimesStore:
+        """Typical breakfast, lunch and dinner times."""
+        ...
+
+    @property
+    def goal_periods(self) -> GoalPeriodStore:
+        """Nutrition goal periods."""
         ...
 
     def close(self) -> None:

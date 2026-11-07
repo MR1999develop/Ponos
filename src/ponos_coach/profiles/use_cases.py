@@ -26,6 +26,7 @@ from typing import Self
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.load.domain import Physiology, PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
+from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
 from ponos_coach.profiles.domain import (
     FixedProfileData,
     FolderKind,
@@ -143,6 +144,21 @@ class ProfileSession:
     def load_cache(self) -> LoadCache:
         """Load cache."""
         return self._opened.load_cache
+
+    @property
+    def activity_levels(self) -> ActivityLevelStore:
+        """Activity level outside sport with validity date."""
+        return self._opened.activity_levels
+
+    @property
+    def meal_times(self) -> MealTimesStore:
+        """Typical breakfast, lunch and dinner times."""
+        return self._opened.meal_times
+
+    @property
+    def goal_periods(self) -> GoalPeriodStore:
+        """Nutrition goal periods."""
+        return self._opened.goal_periods
 
     def close(self) -> None:
         """Closes the database and releases the lock."""

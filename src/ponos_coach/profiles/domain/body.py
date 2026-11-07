@@ -10,6 +10,8 @@ profile creation; weight has a series of entries with validity date.
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -113,6 +115,20 @@ class WeightEntry:
     weight: Weight
 
 
+def weight_on(entries: Sequence[WeightEntry], day: date) -> Weight | None:
+    """Weight valid on a day: the entry with the latest validity date not after it.
+
+    `entries` is sorted by ascending date, one entry per date (as `WeightStore` gives them).
+    Project default, as for the heart-rate parameters: for days before the first entry the first
+    one applies, so a history older than the profile still has a weight. None only if there are
+    no entries at all.
+    """
+    if not entries:
+        return None
+    index = bisect_right([entry.valid_from for entry in entries], day) - 1
+    return entries[max(index, 0)].weight
+
+
 def _years_before(day: date, years: int) -> date:
     """The same day `years` years earlier (29 February becomes 28)."""
     if day.month == _FEBRUARY and day.day == _LEAP_DAY:
@@ -154,6 +170,13 @@ class BirthDate:
         if value > cls.latest(today):
             raise ValueError(f"the date of birth must be at least {MIN_AGE_YEARS} years ago")
         return cls(value)
+
+
+def age_on(birth_date: BirthDate, day: date) -> int:
+    """Complete years of age on `day`; negative if `day` is before the birth."""
+    born = birth_date.value
+    had_birthday = (day.month, day.day) >= (born.month, born.day)
+    return day.year - born.year - (0 if had_birthday else 1)
 
 
 @dataclass(frozen=True, slots=True)
