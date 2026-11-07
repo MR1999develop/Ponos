@@ -48,6 +48,16 @@ from ponos_coach.assessment.ports import (
     ThresholdTestNotFoundError,
     ThresholdTestStore,
 )
+from ponos_coach.goals.domain import GoalId, RaceGoal, SessionChoices, WeeklyAvailability
+from ponos_coach.goals.ports import (
+    AvailabilityStore,
+    Goal,
+    GoalAlreadyExistsError,
+    GoalNotFoundError,
+    GoalStore,
+    RaceDayTakenError,
+    SessionChoicesStore,
+)
 from ponos_coach.load.domain import ActivityLoad, LoadFingerprint, PhysiologyEntry, SportWeight
 from ponos_coach.load.ports import (
     LoadCache,
@@ -65,6 +75,8 @@ from ponos_coach.nutrition.ports import (
     GoalPeriodStore,
     MealTimesStore,
 )
+from ponos_coach.planning.domain import Plan, PlanRefusal
+from ponos_coach.planning.ports import FrozenDay, PlanStore, StoredPlan, UnreadablePlan
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
     FixedProfileData,
@@ -85,7 +97,7 @@ from ponos_coach.profiles.ports import (
 )
 from ponos_coach.profiles.timezones import require_known_timezone
 
-FORMAT_VERSION = 5
+FORMAT_VERSION = 6
 
 
 @dataclass
@@ -104,6 +116,11 @@ class _Database:
     meal_times: MealTimes | None = None
     goals: dict[date, GoalPeriod] = field(default_factory=dict)
     threshold_tests: dict[str, ThresholdTest] = field(default_factory=dict)  # by identity key
+    calendar_goals: dict[str, Goal] = field(default_factory=dict)  # by goal id
+    availability: WeeklyAvailability | None = None
+    session_choices: SessionChoices = field(default_factory=lambda: SessionChoices.of({}))
+    plan_state: tuple[Plan | PlanRefusal, date] | None = None
+    past_days: dict[date, FrozenDay] = field(default_factory=dict)
     cursors: dict[ListingKind, ListingCursor] = field(default_factory=dict)
     journal: dict[GarminActivityId, JournalEntry] = field(default_factory=dict)
     last_completed: datetime | None = None
@@ -124,6 +141,11 @@ class _Database:
                 self.meal_times,
                 self.goals,
                 self.threshold_tests,
+                self.calendar_goals,
+                self.availability,
+                self.session_choices,
+                self.plan_state,
+                self.past_days,
                 self.cursors,
                 self.journal,
                 self.last_completed,
@@ -144,6 +166,11 @@ class _Database:
             self.meal_times,
             self.goals,
             self.threshold_tests,
+            self.calendar_goals,
+            self.availability,
+            self.session_choices,
+            self.plan_state,
+            self.past_days,
             self.cursors,
             self.journal,
             self.last_completed,
@@ -455,6 +482,91 @@ class _ThresholdTests:
         return [test for _, test in ordered]
 
 
+class _CalendarGoals:
+    """Goals: like the SQLite store, one race a day."""
+
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def _race_day_taken(self, goal: Goal) -> bool:
+        if not isinstance(goal, RaceGoal):
+            return False
+        return any(
+            isinstance(other, RaceGoal) and other.day == goal.day and other.goal_id != goal.goal_id
+            for other in self._db.calendar_goals.values()
+        )
+
+    def add(self, goal: Goal) -> None:
+        if goal.goal_id.value in self._db.calendar_goals:
+            raise GoalAlreadyExistsError("id taken")
+        if self._race_day_taken(goal):
+            raise RaceDayTakenError("race day taken")
+        self._db.calendar_goals[goal.goal_id.value] = goal
+
+    def replace(self, goal: Goal) -> None:
+        if goal.goal_id.value not in self._db.calendar_goals:
+            raise GoalNotFoundError("missing")
+        if self._race_day_taken(goal):
+            raise RaceDayTakenError("race day taken")
+        self._db.calendar_goals[goal.goal_id.value] = goal
+
+    def remove(self, goal_id: GoalId) -> None:
+        if goal_id.value not in self._db.calendar_goals:
+            raise GoalNotFoundError("missing")
+        del self._db.calendar_goals[goal_id.value]
+
+    def get(self, goal_id: GoalId) -> Goal | None:
+        return self._db.calendar_goals.get(goal_id.value)
+
+    def list_goals(self) -> Sequence[Goal]:
+        return sorted(self._db.calendar_goals.values(), key=lambda g: (g.day, g.goal_id.value))
+
+
+class _Availability:
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def get(self) -> WeeklyAvailability | None:
+        return self._db.availability
+
+    def set(self, availability: WeeklyAvailability | None) -> None:
+        self._db.availability = availability
+
+
+class _SessionChoices:
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def get(self) -> SessionChoices:
+        return self._db.session_choices
+
+    def replace(self, choices: SessionChoices) -> None:
+        self._db.session_choices = choices
+
+
+class _Plans:
+    """The plan store: a frozen day is never overwritten (first freeze wins)."""
+
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def current(self) -> StoredPlan | UnreadablePlan | None:
+        saved = self._db.plan_state
+        return None if saved is None else StoredPlan(*saved)
+
+    def replace_current(self, state: Plan | PlanRefusal, generated_on: date) -> None:
+        if isinstance(state, Plan) and state.generated_on != generated_on:
+            raise ValueError("the plan was generated on another date")
+        self._db.plan_state = (state, generated_on)
+
+    def freeze(self, days: Sequence[FrozenDay]) -> None:
+        for frozen in days:
+            self._db.past_days.setdefault(frozen.day.day, frozen)
+
+    def past_days(self, first: date, last: date) -> Sequence[FrozenDay]:
+        return [f for d, f in sorted(self._db.past_days.items()) if first <= d <= last]
+
+
 class _OpenProfile:
     def __init__(self, database: _Database) -> None:
         self._db = database
@@ -469,6 +581,10 @@ class _OpenProfile:
         self._meal_times = _MealTimes(database)
         self._goals = _GoalPeriods(database)
         self._threshold_tests = _ThresholdTests(database)
+        self._calendar_goals = _CalendarGoals(database)
+        self._availability = _Availability(database)
+        self._session_choices = _SessionChoices(database)
+        self._plans = _Plans(database)
 
     @property
     def info(self) -> ProfileInfo:
@@ -517,6 +633,22 @@ class _OpenProfile:
     @property
     def threshold_tests(self) -> ThresholdTestStore:
         return self._threshold_tests
+
+    @property
+    def goals(self) -> GoalStore:
+        return self._calendar_goals
+
+    @property
+    def availability(self) -> AvailabilityStore:
+        return self._availability
+
+    @property
+    def session_choices(self) -> SessionChoicesStore:
+        return self._session_choices
+
+    @property
+    def plans(self) -> PlanStore:
+        return self._plans
 
     def close(self) -> None:
         """No effect: the data stay in the fake disk."""

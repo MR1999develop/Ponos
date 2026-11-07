@@ -153,7 +153,8 @@ forbidden_modules = ["ponos_coach.garmin", "ponos_coach.storage", "ponos_coach.p
 name = "Le funzionalita dipendono solo verso il basso (nessun ciclo)"
 type = "layers"
 layers = [
-    "ponos_coach.planning | ponos_coach.profiles",
+    "ponos_coach.profiles",
+    "ponos_coach.planning",
     "ponos_coach.goals | ponos_coach.injury | ponos_coach.assessment | ponos_coach.nutrition",
     "ponos_coach.load",
     "ponos_coach.activities",

@@ -14,9 +14,11 @@ import pytest
 
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.assessment.ports import ThresholdTestStore
+from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.load.domain import PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
+from ponos_coach.planning.ports import PlanStore
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
     FolderKind,
@@ -159,6 +161,22 @@ class _CountingProfile:
     @property
     def threshold_tests(self) -> ThresholdTestStore:
         return self._inner.threshold_tests
+
+    @property
+    def goals(self) -> GoalStore:
+        return self._inner.goals
+
+    @property
+    def availability(self) -> AvailabilityStore:
+        return self._inner.availability
+
+    @property
+    def session_choices(self) -> SessionChoicesStore:
+        return self._inner.session_choices
+
+    @property
+    def plans(self) -> PlanStore:
+        return self._inner.plans
 
     def close(self) -> None:
         self._owner.closed += 1

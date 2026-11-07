@@ -247,6 +247,11 @@ def test_t_dati_01_a_frozen_v1_database_gets_exactly_the_latest_tables(tmp_path:
         "meal_times",
         "nutrition_goal",
         "threshold_test",
+        "goal",
+        "weekly_availability",
+        "session_choice",
+        "plan_state",
+        "plan_past_day",
     }
 
 

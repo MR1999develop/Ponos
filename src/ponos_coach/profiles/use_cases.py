@@ -25,9 +25,11 @@ from typing import Self
 
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.assessment.ports import ThresholdTestStore
+from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.load.domain import Physiology, PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
+from ponos_coach.planning.ports import PlanStore
 from ponos_coach.profiles.domain import (
     FixedProfileData,
     FolderKind,
@@ -165,6 +167,26 @@ class ProfileSession:
     def threshold_tests(self) -> ThresholdTestStore:
         """History of the applied threshold tests."""
         return self._opened.threshold_tests
+
+    @property
+    def goals(self) -> GoalStore:
+        """The goals (races and form goals)."""
+        return self._opened.goals
+
+    @property
+    def availability(self) -> AvailabilityStore:
+        """The weekly availability."""
+        return self._opened.availability
+
+    @property
+    def session_choices(self) -> SessionChoicesStore:
+        """The session types chosen for each sport."""
+        return self._opened.session_choices
+
+    @property
+    def plans(self) -> PlanStore:
+        """The current plan and the days of the past as they were planned."""
+        return self._opened.plans
 
     def close(self) -> None:
         """Closes the database and releases the lock."""

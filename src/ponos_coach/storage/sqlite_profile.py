@@ -10,8 +10,10 @@ from pathlib import Path
 
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.assessment.ports import ThresholdTestStore
+from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
+from ponos_coach.planning.ports import PlanStore
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
     ProfileId,
@@ -36,11 +38,17 @@ from ponos_coach.storage.sqlite_database import (
     peek_database,
     read_meta,
 )
+from ponos_coach.storage.sqlite_goals import (
+    SqliteAvailabilityStore,
+    SqliteGoalStore,
+    SqliteSessionChoicesStore,
+)
 from ponos_coach.storage.sqlite_nutrition import (
     SqliteActivityLevelStore,
     SqliteGoalPeriodStore,
     SqliteMealTimesStore,
 )
+from ponos_coach.storage.sqlite_planning import SqlitePlanStore
 from ponos_coach.storage.sqlite_profile_data import (
     SqliteFixedDataStore,
     SqliteSportWeightStore,
@@ -100,6 +108,10 @@ class SqliteOpenProfile:
         self._meal_times = SqliteMealTimesStore(database)
         self._goal_periods = SqliteGoalPeriodStore(database)
         self._threshold_tests = SqliteThresholdTestStore(database)
+        self._goals = SqliteGoalStore(database)
+        self._availability = SqliteAvailabilityStore(database)
+        self._session_choices = SqliteSessionChoicesStore(database)
+        self._plans = SqlitePlanStore(database)
         self._closed = False
 
     @property
@@ -161,6 +173,26 @@ class SqliteOpenProfile:
     def threshold_tests(self) -> ThresholdTestStore:
         """Threshold test history."""
         return self._threshold_tests
+
+    @property
+    def goals(self) -> GoalStore:
+        """Goals (races and form goals)."""
+        return self._goals
+
+    @property
+    def availability(self) -> AvailabilityStore:
+        """Weekly availability."""
+        return self._availability
+
+    @property
+    def session_choices(self) -> SessionChoicesStore:
+        """Chosen session types."""
+        return self._session_choices
+
+    @property
+    def plans(self) -> PlanStore:
+        """Current plan and past days as they were planned."""
+        return self._plans
 
     def close(self) -> None:
         """Closes the connection (checkpoint included); repeating it has no effect.

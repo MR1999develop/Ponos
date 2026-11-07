@@ -57,6 +57,12 @@ from tests.contracts.contract_nutrition import (
     GoalPeriodStoreContract,
     MealTimesStoreContract,
 )
+from tests.contracts.contract_planning import (
+    AvailabilityStoreContract,
+    GoalStoreContract,
+    PlanStoreContract,
+    SessionChoicesStoreContract,
+)
 from tests.contracts.contract_storage import (
     FINGERPRINT,
     LOAD,
@@ -194,6 +200,11 @@ def test_new_database_has_the_latest_schema_and_the_expected_tables(tmp_path: Pa
         "meal_times",
         "nutrition_goal",
         "threshold_test",
+        "goal",
+        "weekly_availability",
+        "session_choice",
+        "plan_state",
+        "plan_past_day",
     }
     assert meta == {
         "profile_id": str(PROFILE_ID),
@@ -921,3 +932,19 @@ def test_r15_an_older_database_is_checked_even_when_the_checks_are_skipped(
 
     assert calls == ["x"]
     migrating.close()
+
+
+class TestSqliteGoalStore(_DiskStorageFixture, GoalStoreContract):
+    pass
+
+
+class TestSqliteAvailabilityStore(_DiskStorageFixture, AvailabilityStoreContract):
+    pass
+
+
+class TestSqliteSessionChoicesStore(_DiskStorageFixture, SessionChoicesStoreContract):
+    pass
+
+
+class TestSqlitePlanStore(_DiskStorageFixture, PlanStoreContract):
+    pass

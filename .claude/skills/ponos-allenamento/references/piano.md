@@ -195,8 +195,8 @@ saltato).
 - Il carico perso non si recupera: il piano riparte dal CTL reale e la rampa
   massima vale comunque. Attività non pianificate e attività vecchie arrivate
   tardi entrano nel PMC e quindi nel nuovo piano.
-- Resta da fare nel guscio: caso d'uso che dopo ogni sincronizzazione legge il
-  PMC, chiama `build_plan` e salva il piano.
+- Il guscio (sezione 13) fa questo dopo ogni panoramica: legge il PMC reale,
+  chiama `build_plan`, salva il piano se è cambiato e congela il passato.
 
 ## 10. Test di soglia nel piano
 
@@ -222,3 +222,43 @@ valgono.
 proprietà con Hypothesis su ingressi casuali con `invariants.violations`,
 scenari, adattamento, classi del tempo obiettivo ai confini, modelli di
 seduta, prestazioni: 52 settimane in meno di 1 s).
+
+## 13. Guscio: obiettivi, piano salvato, passato (fase 5)
+
+- `goals/use_cases.py`: `AddGoal`, `ChangeGoal`, `RemoveGoal`, `ListGoals`,
+  `SetAvailability`, `ReadAvailability`, `SetSessionChoices`,
+  `ReadSessionChoices`. Ogni comando restituisce ciò che serve per annullarlo
+  in modo esatto (`GoalAdded`, `GoalChanged(before, after)`, `GoalRemoved`,
+  `AvailabilityChanged(before, after)`, `SessionChoicesChanged(before, after)`);
+  l'id di un obiettivo lo sceglie chi chiama. Errori: `GoalNotFoundError`,
+  `GoalAlreadyExistsError`, `RaceDayTakenError` (due gare nello stesso giorno),
+  radice `GoalStoreError`.
+- `profiles/rebuild_plan.py`: `RebuildPlan(sources, overview)(today)` legge
+  disponibilità, tipologie, obiettivi, fisiologia del giorno, pesi, ultimo
+  ritmo di soglia (il test più recente che ne ha uno, non oltre oggi), stato del
+  retest e il PMC (stessa `compute_pmc` della panoramica sui carichi già in
+  cache), chiama `build_plan` e salva se l'esito differisce dall'ultimo
+  (confronto sul JSON canonico). Esiti: `PlanBuilt(plan, saved)`,
+  `PlanRefused(refusal, saved)` (anche il rifiuto è uno stato salvato),
+  `PlanNotBuilt(MISSING_PHYSIOLOGY)` (nulla salvato). `PlanAdherence(plans,
+  overview, today)(first, last)` dà `DayAdherence` per i giorni pianificati
+  fino a oggi, con il pianificato di allora.
+- `planning/use_cases.py`: `CurrentPlan()` (ultimo piano o rifiuto con la data
+  di generazione, `None` se manca o è illeggibile) e `PastPlan()(first, last)`.
+- **Il passato resta storia.** Un piano copre solo i giorni dopo la sua data di
+  generazione. Quando un nuovo esito sostituisce quello salvato, nella stessa
+  transazione i giorni del vecchio piano diventati passati (dopo la sua data di
+  generazione, fino a oggi) si congelano in `plan_past_day`, ciascuno con la data
+  del piano da cui viene (`FrozenDay`); un giorno già congelato non si
+  riscrive. Quindi per un giorno passato vale ciò che era pianificato in quel
+  giorno, qualunque cosa direbbe il piano di oggi. Schema scelto perché è il più
+  semplice che lo garantisca: una riga per giorno, immutabile per trigger, senza
+  versioni intere del piano da conservare.
+- **Aggancio al ricalcolo:** `ui/workspace.py` (`WorkspaceController`), dopo
+  ogni panoramica calcolata con successo (apertura del profilo, import,
+  sincronizzazione, cambio di misure o pesi) mette in coda un secondo lavoro sul
+  thread dei dati che ricostruisce il piano dai carichi appena calcolati
+  (`_start_plan`); segnale `plan_rebuilt(PlanBuilt | PlanRefused | PlanNotBuilt)`.
+  Un nuovo calcolo della panoramica annulla il lavoro del piano in coda; se il
+  piano fallisce il thread dei dati registra l'errore una sola volta (solo i
+  tipi, nessun dato di salute) e la sincronizzazione non ne risente.

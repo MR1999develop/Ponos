@@ -16,8 +16,10 @@ from typing import Protocol
 from ponos_coach.activities.domain import SessionTokens
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.assessment.ports import ThresholdTestStore
+from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
+from ponos_coach.planning.ports import PlanStore
 from ponos_coach.profiles.domain import (
     FixedProfileData,
     FolderInspection,
@@ -317,7 +319,7 @@ class OpenProfile(Protocol):
 
     The transactions of `activities.transaction()` also cover `sync_journal`, `physiology`,
     `weights`, `fixed_data`, `sport_weights`, `load_cache`, `activity_levels`, `meal_times`,
-    `goal_periods` and `threshold_tests`.
+    `goal_periods`, `threshold_tests`, `goals`, `availability`, `session_choices` and `plans`.
     It must be closed with `close()`; after closing the stores are no longer used.
     """
 
@@ -379,6 +381,26 @@ class OpenProfile(Protocol):
     @property
     def threshold_tests(self) -> ThresholdTestStore:
         """History of the applied threshold tests."""
+        ...
+
+    @property
+    def goals(self) -> GoalStore:
+        """The goals (races and form goals)."""
+        ...
+
+    @property
+    def availability(self) -> AvailabilityStore:
+        """The weekly availability."""
+        ...
+
+    @property
+    def session_choices(self) -> SessionChoicesStore:
+        """The session types chosen for each sport."""
+        ...
+
+    @property
+    def plans(self) -> PlanStore:
+        """The current plan and the days of the past as they were planned."""
         ...
 
     def close(self) -> None:

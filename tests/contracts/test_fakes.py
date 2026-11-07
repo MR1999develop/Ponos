@@ -32,6 +32,12 @@ from tests.contracts.contract_nutrition import (
     GoalPeriodStoreContract,
     MealTimesStoreContract,
 )
+from tests.contracts.contract_planning import (
+    AvailabilityStoreContract,
+    GoalStoreContract,
+    PlanStoreContract,
+    SessionChoicesStoreContract,
+)
 from tests.contracts.contract_profiles import ProfileFoldersContract, ProfileRegistryContract
 from tests.contracts.contract_storage import (
     NAME,
@@ -253,4 +259,20 @@ class TestFakeThresholdTestStore(_FakeStorageFixture, ThresholdTestStoreContract
 
 
 class TestFakePhysiologyRemoval(_FakeStorageFixture, PhysiologyRemovalContract):
+    pass
+
+
+class TestFakeGoalStore(_FakeStorageFixture, GoalStoreContract):
+    pass
+
+
+class TestFakeAvailabilityStore(_FakeStorageFixture, AvailabilityStoreContract):
+    pass
+
+
+class TestFakeSessionChoicesStore(_FakeStorageFixture, SessionChoicesStoreContract):
+    pass
+
+
+class TestFakePlanStore(_FakeStorageFixture, PlanStoreContract):
     pass

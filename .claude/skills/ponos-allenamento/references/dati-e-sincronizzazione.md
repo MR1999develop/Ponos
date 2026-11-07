@@ -150,6 +150,38 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   - `OpenProfile` espone anche `threshold_tests` (porta `ThresholdTestStore` in
     `assessment/ports.py`), sulla stessa connessione e transazione; la porta
     `PhysiologyStore` ha `remove(valid_from)` per annullare un test.
+- **Schema v6** (obiettivi, disponibilità, tipologie e piano, `STRICT`; regole in
+  `references/piano.md` sezione 13):
+  - `goal`: gare e obiettivi di forma in una tabella (`kind` `race` o `fitness`).
+    `goal_id` (1-64 caratteri `A-Za-z0-9_-`, scelto da chi chiama), `goal_date`
+    (data esistente non prima del 1900-01-01), per la gara `priority` (A, B, C),
+    `sport`, `distance_m` (400-500000) e `target_time_s` facoltativo (60-604800),
+    per l'obiettivo di forma `ctl` (0-200); i CHECK tengono separate le due
+    forme. Un indice univoco parziale (`WHERE kind = 'race'`) ammette una sola
+    gara per giorno, anche con una scrittura diretta; gli obiettivi di forma
+    possono dividere il giorno.
+  - `weekly_availability`: una sola riga (`id = 1`), `day0_min` (lunedì) ...
+    `day6_min` (0-720), `long_day` (0-6), `max_week_min` (0-6000). Assente =
+    non impostata.
+  - `session_choice`: una riga per sport e tipologia scelti (insiemi chiusi).
+  - `plan_state`: una sola riga (`id = 1`) con l'ultimo esito di `build_plan`:
+    piano (`kind = 'plan'`: `method_version`, `plan_json` canonico fino a
+    16 MiB, `plan_sha256`; versione, parametri e ingressi stanno nel JSON) o
+    rifiuto (`kind = 'refusal'`: `refusal_reason` su insieme chiuso,
+    `refusal_goal_ids` separati da virgola). Derivato e sostituibile.
+  - `plan_past_day`: il passato com'era pianificato, una riga per giorno
+    (`day`, `planned_on` sempre prima del giorno, `day_json` fino a 64 KiB,
+    `day_sha256`). Due trigger rifiutano ogni `UPDATE` e `DELETE`: un giorno
+    congelato non cambia mai.
+  - Migrazione v5 → v6 con copia in `backup/ponos-v5-v6.sqlite3`. T-DATI-01:
+    `tests/collaudo/test_fase5_migrazione.py` (v5 congelata, uccisione a ogni
+    istruzione, limiti dei CHECK, trigger, JSON del piano manomesso).
+  - `OpenProfile` espone anche `goals`, `availability`, `session_choices` (porte
+    in `goals/ports.py`) e `plans` (`planning/ports.py`), sulla stessa
+    connessione e transazione. Il JSON letto dal database è input
+    (`planning/plan_codec.py`): dimensione, checksum, sintassi e forma dei tipi;
+    ciò che non regge è `UnreadablePlan` (il piano è derivato, il ricalcolo lo
+    sostituisce) o, per un giorno del passato, un giorno omesso.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.

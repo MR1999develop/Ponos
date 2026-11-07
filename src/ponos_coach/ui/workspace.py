@@ -8,6 +8,12 @@ profile (open, create, import, overview, switch, close) is a `Job` run by the
 "old" outcome (of an already replaced overview) is ignored. Garmin synchronisation belongs to
 `SyncController`, with its own thread and connection; from here only the
 consequences are decided (profile locked while downloading, overview recomputed at the end).
+
+The plan follows the overview: every time an overview is computed (after opening, an import, a
+synchronisation, a change of measurements or weights) a second job on the data thread rebuilds the
+plan from the loads just computed (`profiles.RebuildPlan`) and saves it if it changed. It never
+blocks the interface and never fails the operation that caused it: if it fails, the data thread
+logs the error once (types only, no health data) and the plan stays as it was.
 """
 
 from __future__ import annotations
@@ -35,6 +41,13 @@ from ponos_coach.profiles.ports import (
     ProfileFolderError,
     ProfileRegistryError,
     ProfileStorageError,
+)
+from ponos_coach.profiles.rebuild_plan import (
+    PlanBuilt,
+    PlanNotBuilt,
+    PlanRefused,
+    RebuildPlan,
+    plan_sources_of,
 )
 from ponos_coach.profiles.use_cases import (
     CreateProfile,
@@ -271,6 +284,7 @@ class WorkspaceController(QObject):
     profiles_changed = Signal(object)  # tuple[RegistryEntry, ...], most recent first
     profile_changed = Signal(object)  # ProfileView
     overview_changed = Signal(object)  # OverviewState
+    plan_rebuilt = Signal(object)  # RebuildResult: after each overview; `saved` says if it changed
     import_progress_changed = Signal(object)  # ImportProgress | None
     import_finished = Signal(object)  # ImportReport
     operation_failed = Signal(object)  # ErrorMessage
@@ -300,6 +314,7 @@ class WorkspaceController(QObject):
         self._overview_stale = False
         self._import_progress: ImportProgress | None = None
         self._overview_handle: JobHandle | None = None
+        self._plan_handle: JobHandle | None = None
         self._import_handle: JobHandle | None = None
 
     # --- Stato ------------------------------------------------------------------------
@@ -536,6 +551,7 @@ class WorkspaceController(QObject):
         any more; can be repeated."""
         self._closing = True
         self._cancel_overview()
+        self._cancel_plan()
         if self._import_handle is not None:
             self._import_handle.cancel()
         self._sync.begin_shutdown()
@@ -738,6 +754,7 @@ class WorkspaceController(QObject):
         if self._closing:
             return
         self._cancel_overview()
+        self._cancel_plan()
         self._overview_stale = False
         self._set_overview(Loading(0, 0))
         self._overview_handle = self._submit(
@@ -764,10 +781,52 @@ class WorkspaceController(QObject):
         match outcome:
             case JobSucceeded(ProfileOverview() as overview):
                 self._set_overview(Ready(overview))
+                self._start_plan(overview)
             case JobFailed(error):
                 self._set_overview(Failed(describe_error(error)))
             case _:
                 self._set_overview(Cancelled())
+
+    # --- Piano ------------------------------------------------------------------------
+
+    def _plan_job(
+        self, overview: ProfileOverview, profile_id: ProfileId
+    ) -> Callable[[JobContext], object]:
+        services = self._services
+        data = self._data
+
+        def job(context: JobContext) -> object:
+            current = data.require()
+            if current.session.info.profile_id != profile_id or context.is_cancelled():
+                raise JobCancelledError  # another profile is open now, or a newer overview began
+            rebuild = RebuildPlan(plan_sources_of(current.session), lambda: overview)
+            return rebuild(services.today(current.zone))
+
+        return job
+
+    def _start_plan(self, overview: ProfileOverview) -> None:
+        """Rebuild the plan from this overview, on the data thread, after it."""
+        if self._closing or self._profile is None:
+            return
+        self._cancel_plan()
+        self._plan_handle = self._submit(
+            self._plan_job(overview, self._profile.profile_id), self._after_plan
+        )
+
+    def _cancel_plan(self) -> None:
+        if self._plan_handle is not None:
+            self._plan_handle.cancel()
+            self._plan_handle = None  # its outcome, when it arrives, is "old"
+
+    def _after_plan(self, job_id: int, outcome: JobOutcome) -> None:
+        if self._plan_handle is None or self._plan_handle.job_id != job_id:
+            return
+        self._plan_handle = None
+        # A failure was logged once by the data thread; the plan stays as it was.
+        if isinstance(outcome, JobSucceeded) and isinstance(
+            outcome.value, PlanBuilt | PlanRefused | PlanNotBuilt
+        ):
+            self.plan_rebuilt.emit(outcome.value)
 
     def _is_current_overview(self, job_id: int) -> bool:
         return self._overview_handle is not None and self._overview_handle.job_id == job_id

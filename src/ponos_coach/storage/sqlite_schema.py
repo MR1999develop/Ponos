@@ -59,6 +59,23 @@ Columns of v5 (threshold test, `STRICT`):
   regenerable, and the history of the tests must survive a rebuild of it. Local day (existing ISO
   date, not earlier than 1900-01-01), start of the segment in UTC milliseconds, threshold HR, pace
   in whole seconds per kilometre or NULL (no distance), version of the method that computed them.
+
+Columns of v6 (goals, availability, session types and the plan, all `STRICT`):
+
+- `goal`: races and form goals in one table (`kind` on a closed set). A race has priority, sport,
+  distance and an optional target time, a form goal has a CTL, and the CHECKs keep the two shapes
+  apart and within the domain limits. A partial unique index allows one race per day (the plan
+  refuses two); form goals may share a day.
+- `weekly_availability`: a single row (`id = 1`), minutes per weekday (Monday = `day0_min`), the
+  weekday of the long session and the weekly maximum; absent means "not set".
+- `session_choice`: one row per sport and session type chosen (closed sets).
+- `plan_state`: a single row (`id = 1`) with the last result of the plan engine, either a plan
+  (`kind = 'plan'`: method version, canonical JSON and its SHA-256; the JSON also holds the
+  parameters and the inputs that produced it) or a refusal (`kind = 'refusal'`: reason and goal
+  ids). Derived and replaceable; read back as input (size, checksum, content).
+- `plan_past_day`: the days of the past as they were planned, one row per day (canonical JSON of
+  the `PlanDay` and its SHA-256, and the date of the plan it came from, always before the day). Two
+  triggers reject every `UPDATE` and every `DELETE`: the past stays history.
 """
 
 from __future__ import annotations
@@ -106,7 +123,30 @@ V4_WEEKLY_LOSS_G = (100, 1000)
 # Limits of the threshold test data (the same as the domain types), frozen here on purpose.
 V5_THRESHOLD_BPM = (40, 250)
 V5_PACE_S_PER_KM = (90, 3600)
+# Limits of the goals and plan data (the same as the domain types), frozen here on purpose.
+V6_DISTANCE_M = (400, 500_000)
+V6_TARGET_TIME_S = (60, 7 * 24 * 3600)
+V6_MAX_CTL = 200
+V6_DAY_MINUTES = (0, 720)
+V6_WEEK_MINUTES = (0, 6000)
+V6_MAX_PLAN_JSON_CHARS = 16 * 1024 * 1024
+V6_MAX_DAY_JSON_CHARS = 64 * 1024
+V6_MAX_REFUSAL_IDS_CHARS = 65_536
 ZONE_COLUMNS: Final = ("zone1_s", "zone2_s", "zone3_s", "zone4_s", "zone5_s")
+
+_GOAL_KINDS_V6 = "'race','fitness'"
+_PRIORITIES = "'A','B','C'"
+_SESSION_TYPES = "'easy','long','medium','threshold','vo2max','recovery','strength','alternative'"
+_PLAN_KINDS = "'plan','refusal'"
+_REFUSAL_REASONS = (
+    "'no_goals','goal_not_in_future','goals_on_same_day','no_availability','no_session_types'"
+)
+
+V6_GOAL_KINDS: Final = frozenset(_GOAL_KINDS_V6.replace("'", "").split(","))
+V6_PRIORITIES: Final = frozenset(_PRIORITIES.replace("'", "").split(","))
+V6_SESSION_TYPES: Final = frozenset(_SESSION_TYPES.replace("'", "").split(","))
+V6_PLAN_KINDS: Final = frozenset(_PLAN_KINDS.replace("'", "").split(","))
+V6_REFUSAL_REASONS: Final = frozenset(_REFUSAL_REASONS.replace("'", "").split(","))
 
 _ACTIVITY_LEVELS = "'sedentary','light','active','very_active'"
 _GOAL_KINDS = "'weight_loss','maintenance','performance'"
@@ -120,6 +160,9 @@ V2_TABLES: Final = frozenset({"sync_journal", "sync_cursor", "sync_state"})
 V3_TABLES: Final = frozenset({"profile_body", "weight", "sport_weights"})
 V4_TABLES: Final = frozenset({"activity_level", "meal_times", "nutrition_goal"})
 V5_TABLES: Final = frozenset({"threshold_test"})
+V6_TABLES: Final = frozenset(
+    {"goal", "weekly_availability", "session_choice", "plan_state", "plan_past_day"}
+)
 
 _V1_META = """
 CREATE TABLE meta (
@@ -360,6 +403,106 @@ CREATE TABLE threshold_test (
 ) STRICT
 """
 
+_V6_GOAL = f"""
+CREATE TABLE goal (
+    goal_id       TEXT    NOT NULL PRIMARY KEY
+                          CHECK (length(goal_id) BETWEEN 1 AND 64
+                                 AND goal_id NOT GLOB '*[^A-Za-z0-9_-]*'),
+    kind          TEXT    NOT NULL CHECK (kind IN ({_GOAL_KINDS_V6})),
+    goal_date     TEXT    NOT NULL CHECK (date(goal_date) IS goal_date
+                                          AND goal_date >= '{V3_MIN_MEASUREMENT_DATE}'),
+    priority      TEXT    CHECK (priority IS NULL OR priority IN ({_PRIORITIES})),
+    sport         TEXT    CHECK (sport IS NULL OR sport IN ({_SPORTS})),
+    distance_m    INTEGER CHECK (distance_m IS NULL
+                                 OR distance_m BETWEEN {V6_DISTANCE_M[0]} AND {V6_DISTANCE_M[1]}),
+    target_time_s INTEGER CHECK (target_time_s IS NULL
+                                 OR target_time_s BETWEEN {V6_TARGET_TIME_S[0]}
+                                                      AND {V6_TARGET_TIME_S[1]}),
+    ctl           REAL    CHECK (ctl IS NULL OR (ctl >= 0 AND ctl <= {V6_MAX_CTL})),
+    CHECK (kind <> 'race' OR (priority IS NOT NULL AND sport IS NOT NULL
+                              AND distance_m IS NOT NULL AND ctl IS NULL)),
+    CHECK (kind <> 'fitness' OR (ctl IS NOT NULL AND priority IS NULL AND sport IS NULL
+                                 AND distance_m IS NULL AND target_time_s IS NULL))
+) STRICT
+"""
+
+# One race a day, even with a direct INSERT or UPDATE (the plan refuses two races on one day).
+_V6_GOAL_ONE_RACE_PER_DAY = (
+    "CREATE UNIQUE INDEX goal_one_race_per_day ON goal (goal_date) WHERE kind = 'race'"
+)
+_V6_GOAL_BY_DATE = "CREATE INDEX goal_by_date ON goal (goal_date, goal_id)"
+
+_V6_DAY_COLUMNS = ",\n    ".join(
+    f"day{i}_min INTEGER NOT NULL "
+    f"CHECK (day{i}_min BETWEEN {V6_DAY_MINUTES[0]} AND {V6_DAY_MINUTES[1]})"
+    for i in range(7)
+)
+_V6_WEEKLY_AVAILABILITY = f"""
+CREATE TABLE weekly_availability (
+    id           INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    {_V6_DAY_COLUMNS},
+    long_day     INTEGER NOT NULL CHECK (long_day BETWEEN 0 AND 6),
+    max_week_min INTEGER NOT NULL CHECK (max_week_min BETWEEN {V6_WEEK_MINUTES[0]}
+                                                          AND {V6_WEEK_MINUTES[1]})
+) STRICT
+"""
+
+_V6_SESSION_CHOICE = f"""
+CREATE TABLE session_choice (
+    sport        TEXT NOT NULL CHECK (sport IN ({_SPORTS})),
+    session_type TEXT NOT NULL CHECK (session_type IN ({_SESSION_TYPES})),
+    PRIMARY KEY (sport, session_type)
+) STRICT
+"""
+
+_V6_PLAN_STATE = f"""
+CREATE TABLE plan_state (
+    id               INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    kind             TEXT    NOT NULL CHECK (kind IN ({_PLAN_KINDS})),
+    generated_on     TEXT    NOT NULL CHECK (date(generated_on) IS generated_on
+                                             AND generated_on >= '{V3_MIN_MEASUREMENT_DATE}'),
+    method_version   INTEGER CHECK (method_version IS NULL OR method_version >= 1),
+    plan_json        TEXT    CHECK (plan_json IS NULL
+                                    OR length(plan_json) BETWEEN 2 AND {V6_MAX_PLAN_JSON_CHARS}),
+    plan_sha256      TEXT    CHECK (plan_sha256 IS NULL OR length(plan_sha256) = 64),
+    refusal_reason   TEXT    CHECK (refusal_reason IS NULL
+                                    OR refusal_reason IN ({_REFUSAL_REASONS})),
+    refusal_goal_ids TEXT    CHECK (refusal_goal_ids IS NULL
+                                    OR length(refusal_goal_ids) <= {V6_MAX_REFUSAL_IDS_CHARS}),
+    CHECK (kind <> 'plan' OR (method_version IS NOT NULL AND plan_json IS NOT NULL
+                              AND plan_sha256 IS NOT NULL AND refusal_reason IS NULL
+                              AND refusal_goal_ids IS NULL)),
+    CHECK (kind <> 'refusal' OR (refusal_reason IS NOT NULL AND refusal_goal_ids IS NOT NULL
+                                 AND method_version IS NULL AND plan_json IS NULL
+                                 AND plan_sha256 IS NULL))
+) STRICT
+"""
+
+_V6_PLAN_PAST_DAY = f"""
+CREATE TABLE plan_past_day (
+    day        TEXT NOT NULL PRIMARY KEY CHECK (date(day) IS day
+                                                AND day >= '{V3_MIN_MEASUREMENT_DATE}'),
+    planned_on TEXT NOT NULL CHECK (date(planned_on) IS planned_on AND planned_on < day),
+    day_json   TEXT NOT NULL CHECK (length(day_json) BETWEEN 2 AND {V6_MAX_DAY_JSON_CHARS}),
+    day_sha256 TEXT NOT NULL CHECK (length(day_sha256) = 64)
+) STRICT
+"""
+
+# The past stays history: not even a direct UPDATE or DELETE changes a frozen day.
+_V6_PLAN_PAST_DAY_FIXED = """
+CREATE TRIGGER plan_past_day_is_fixed BEFORE UPDATE ON plan_past_day
+BEGIN
+    SELECT RAISE(ABORT, 'plan_past_day is history');
+END
+"""
+
+_V6_PLAN_PAST_DAY_KEPT = """
+CREATE TRIGGER plan_past_day_is_kept BEFORE DELETE ON plan_past_day
+BEGIN
+    SELECT RAISE(ABORT, 'plan_past_day is history');
+END
+"""
+
 # Migration i (index i-1): brings the schema from version i-1 to i.
 MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     (_V1_META, _V1_ACTIVITIES, _V1_ACTIVITIES_START_INDEX, _V1_PHYSIOLOGY, _V1_LOAD_CACHE),
@@ -382,6 +525,17 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
         _V4_NUTRITION_GOAL_NO_OVERLAP_ON_UPDATE,
     ),
     (_V5_THRESHOLD_TEST,),
+    (
+        _V6_GOAL,
+        _V6_GOAL_ONE_RACE_PER_DAY,
+        _V6_GOAL_BY_DATE,
+        _V6_WEEKLY_AVAILABILITY,
+        _V6_SESSION_CHOICE,
+        _V6_PLAN_STATE,
+        _V6_PLAN_PAST_DAY,
+        _V6_PLAN_PAST_DAY_FIXED,
+        _V6_PLAN_PAST_DAY_KEPT,
+    ),
 )
 
 SCHEMA_VERSION: Final = len(MIGRATIONS)
