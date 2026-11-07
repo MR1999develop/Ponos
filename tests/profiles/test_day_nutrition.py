@@ -256,6 +256,17 @@ def test_without_declared_energy_the_average_heart_rate_gives_a_keytel_estimate(
     assert activity.energy.net_kcal == pytest.approx(791.36 - 1780.0 / 24.0, abs=0.01)
 
 
+def test_an_absurd_declared_energy_with_a_valid_heart_rate_falls_back_to_keytel() -> None:
+    rig = Rig()
+    record = rig.add_file(fit_bytes(at(18), 1, bpm=140, calories=30000))
+    rig.cache_load(record, 90.0)
+
+    (activity,) = rig.report().activities
+
+    assert activity.energy.source is EnergySource.HEART_RATE
+    assert activity.energy.total_kcal == pytest.approx(791.36, abs=0.01)
+
+
 def test_without_heart_rate_the_sport_mets_are_used() -> None:
     rig = Rig()
     rig.add_file(fit_bytes(at(18), 1, bpm=None, sport=fw.Sport.WALKING))

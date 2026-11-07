@@ -336,3 +336,72 @@ def test_a_change_the_store_refuses_is_reported_in_the_dialog_and_the_history_is
     assert "Choose dates that no other period uses." in dialog.failure_text
     assert dialog.undo_stack.count() == 0  # it no longer matches what is stored
     assert dialog.periods_model.rowCount() == 1  # the table shows what is really stored
+
+
+def test_setting_the_activity_level_is_undoable_and_redoable_with_a_description(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+    dialog = open_settings(qtbot, window)
+    first = date(2026, 6, 1)
+    dialog.level_from_edit.setDate(QDate(first.year, first.month, first.day))
+    dialog.level_combo.setCurrentIndex(dialog.level_combo.findData(ActivityLevel.LIGHT))
+    with changed(qtbot, window):
+        dialog.set_level_button.click()
+    dialog.level_combo.setCurrentIndex(dialog.level_combo.findData(ActivityLevel.VERY_ACTIVE))
+    with changed(qtbot, window):
+        dialog.set_level_button.click()
+
+    assert dialog.undo_stack.count() == 2
+    assert dialog.undo_stack.undoText() == "Set activity level"
+    assert dialog.levels_model.rows == ((short_date(first), "Very active"),)
+    with changed(qtbot, window):
+        dialog.undo_stack.undo()
+    assert dialog.levels_model.rows == ((short_date(first), "Lightly active"),)
+    with changed(qtbot, window):
+        dialog.undo_stack.redo()
+    assert dialog.levels_model.rows == ((short_date(first), "Very active"),)
+
+
+def test_undoing_the_first_level_of_a_day_removes_the_entry_and_the_assumed_notice_returns(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+    dialog = open_settings(qtbot, window)
+    dialog.level_combo.setCurrentIndex(dialog.level_combo.findData(ActivityLevel.ACTIVE))
+    dialog.level_from_edit.setDate(QDate(2026, 6, 1))
+    with changed(qtbot, window):
+        dialog.set_level_button.click()
+
+    with changed(qtbot, window):
+        dialog.undo_stack.undo()
+
+    assert dialog.levels_model.rowCount() == 0  # the store is as before, not a "sedentary" row
+    open_day(qtbot, window, EMPTY_DAY)
+    assert advisory_text(Advisory.ACTIVITY_LEVEL_ASSUMED) in window.day_page.advisory_texts
+    with changed(qtbot, window):
+        dialog.undo_stack.redo()
+    assert dialog.levels_model.rows == ((short_date(date(2026, 6, 1)), "Active"),)
+
+
+def test_two_quick_level_changes_followed_by_two_undos_leave_the_store_as_it_was(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+    dialog = open_settings(qtbot, window)
+    dialog.level_from_edit.setDate(QDate(2026, 6, 1))
+    dialog.level_combo.setCurrentIndex(dialog.level_combo.findData(ActivityLevel.LIGHT))
+    dialog.set_level_button.click()  # no wait: the stored settings are still the old ones
+    dialog.level_combo.setCurrentIndex(dialog.level_combo.findData(ActivityLevel.VERY_ACTIVE))
+    dialog.set_level_button.click()
+    expected = ((short_date(date(2026, 6, 1)), "Very active"),)
+    qtbot.waitUntil(lambda: dialog.levels_model.rows == expected, timeout=WAIT_MS)
+
+    dialog.undo_stack.undo()
+    dialog.undo_stack.undo()  # also without waiting: the jobs run in order
+
+    qtbot.waitUntil(lambda: dialog.levels_model.rowCount() == 0, timeout=WAIT_MS)
+    qtbot.wait(100)  # a late failure would clear the stack and show a message
+    assert dialog.failure_text == ""
+    assert dialog.undo_stack.count() == 2
+    assert dialog.levels_model.rowCount() == 0

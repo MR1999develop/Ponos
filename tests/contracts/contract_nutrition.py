@@ -23,7 +23,11 @@ from ponos_coach.nutrition.domain import (
     PerformanceGoal,
     WeightLossGoal,
 )
-from ponos_coach.nutrition.ports import GoalPeriodNotFoundError, GoalPeriodOverlapError
+from ponos_coach.nutrition.ports import (
+    ActivityLevelNotFoundError,
+    GoalPeriodNotFoundError,
+    GoalPeriodOverlapError,
+)
 from tests.builders import fit_identity, make_record
 from tests.contracts.contract_storage import NAME, PROFILE_ID, create
 from tests.contracts.harness import StorageHarness
@@ -81,6 +85,28 @@ class ActivityLevelStoreContract:
             assert list(profile.activity_levels.list_entries()) == [
                 ActivityLevelEntry(D1, ActivityLevel.ACTIVE)
             ]
+
+    def test_remove_deletes_only_the_entry_of_that_date(self, harness: StorageHarness) -> None:
+        first = ActivityLevelEntry(D1, ActivityLevel.LIGHT)
+        with closing(create(harness)) as profile:
+            profile.activity_levels.put(first)
+            profile.activity_levels.put(ActivityLevelEntry(D2, ActivityLevel.ACTIVE))
+
+            profile.activity_levels.remove(D2)
+
+            assert list(profile.activity_levels.list_entries()) == [first]
+
+    def test_removing_a_missing_entry_is_an_error_and_changes_nothing(
+        self, harness: StorageHarness
+    ) -> None:
+        entry = ActivityLevelEntry(D1, ActivityLevel.LIGHT)
+        with closing(create(harness)) as profile:
+            profile.activity_levels.put(entry)
+
+            with pytest.raises(ActivityLevelNotFoundError):
+                profile.activity_levels.remove(D2)
+
+            assert list(profile.activity_levels.list_entries()) == [entry]
 
     @pytest.mark.parametrize("level", list(ActivityLevel))
     def test_every_level_survives_closing_and_reopening(

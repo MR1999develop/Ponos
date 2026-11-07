@@ -3,16 +3,14 @@
 """Dialog "Nutrition settings": activity level, typical meal times and goal periods.
 
 The dialog shows what the profile holds (`NutritionSettings`, re-read after every change: it is
-the only source of truth) and starts the changes on the data thread through `SettingsDialogOps`.
-Goal periods and meal times changes go through a `QUndoStack` (Ctrl+Z, Ctrl+Shift+Z); setting the
-activity level replaces the entry of its day and is not undoable (setting the previous level again
-does the same). Problems are written on the field that has them.
+the only source of truth) and starts the changes on the data thread through `SettingsOps`.
+Changes of goal periods, meal times and activity level go through a `QUndoStack` (Ctrl+Z,
+Ctrl+Shift+Z). Problems are written on the field that has them.
 """
 
 from __future__ import annotations
 
 from datetime import date
-from typing import Protocol
 
 from PySide6.QtCore import QCoreApplication, QLocale, QModelIndex, Qt, QTime
 from PySide6.QtGui import QAction, QKeySequence, QUndoStack
@@ -60,6 +58,7 @@ from ponos_coach.ui.nutrition_undo import (
     AddPeriodCommand,
     RemovePeriodCommand,
     ReplacePeriodCommand,
+    SetActivityLevelCommand,
     SetMealTimesCommand,
     SettingsOps,
 )
@@ -71,14 +70,6 @@ _TABLE_MIN_HEIGHT = 110
 _PACE_DECIMALS = 2
 _GRAMS_PER_KG = 1000.0
 _MEAL_FIELDS = tuple(MealField)
-
-
-class SettingsDialogOps(SettingsOps, Protocol):
-    """What the dialog can start: the undoable changes and the activity level."""
-
-    def set_level(self, level: ActivityLevel, valid_from: date) -> bool:
-        """Set the activity level from a day."""
-        ...
 
 
 def _short_date(day: date) -> str:
@@ -99,7 +90,7 @@ class NutritionSettingsDialog(QDialog):
     def __init__(
         self,
         settings: NutritionSettings,
-        ops: SettingsDialogOps,
+        ops: SettingsOps,
         today: date,
         parent: QWidget | None = None,
     ) -> None:
@@ -413,7 +404,22 @@ class NutritionSettingsDialog(QDialog):
     def _on_set_level(self) -> None:
         level = self._level.currentData()
         if isinstance(level, ActivityLevel):
-            self._ops.set_level(level, from_qdate(self._level_from.date()))
+            valid_from = from_qdate(self._level_from.date())
+            previous = self._level_before_next_command(valid_from)
+            self._stack.push(SetActivityLevelCommand(self._ops, valid_from, level, previous))
+
+    def _level_before_next_command(self, valid_from: date) -> ActivityLevel | None:
+        """The level the entry of a day holds once every command on the stack has run.
+
+        The stored settings arrive after the jobs, so they can be behind the stack: the last
+        command on the stack for that day is the truth, and the stored entry only counts when no
+        command touched the day.
+        """
+        for row in range(self._stack.index() - 1, -1, -1):
+            command = self._stack.command(row)
+            if isinstance(command, SetActivityLevelCommand) and command.valid_from == valid_from:
+                return command.new_level
+        return next((e.level for e in self._settings.levels if e.valid_from == valid_from), None)
 
     # --- Meal times -------------------------------------------------------------------------
 

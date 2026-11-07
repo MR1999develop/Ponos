@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import copy
 import json
+import time
 from datetime import date
 from importlib import resources
 from typing import Any
@@ -342,6 +343,43 @@ def test_role_of_is_total_over_the_slots() -> None:
 
 
 # --- Nesting depth is limited before the JSON is decoded (D-F4B-06) -----------------------------
+
+
+_MAX_SCAN_SECONDS = 1.0  # the only place that defines how long a size-limit input may take
+
+
+def test_the_depth_check_is_linear_on_an_input_of_unterminated_strings() -> None:
+    hostile = b'"' + b'\\"' * ((MAX_FOOD_TABLE_BYTES - 1) // 2)
+    started = time.monotonic()
+
+    with pytest.raises(FoodTableError):
+        parse_food_table(hostile)
+
+    assert time.monotonic() - started < _MAX_SCAN_SECONDS
+
+
+@given(
+    st.recursive(
+        st.none() | st.booleans() | st.integers() | st.text(max_size=8),
+        lambda inner: (
+            st.lists(inner, max_size=3) | st.dictionaries(st.text(max_size=5), inner, max_size=3)
+        ),
+        max_leaves=15,
+    )
+)
+def test_the_depth_check_agrees_with_the_nesting_of_valid_json(value: object) -> None:
+    def depth_of(item: object) -> int:
+        if isinstance(item, list):
+            return 1 + max(map(depth_of, item), default=0)
+        if isinstance(item, dict):
+            return 1 + max(map(depth_of, item.values()), default=0)
+        return 0
+
+    data = json.dumps(value).encode("utf-8")
+
+    with pytest.raises(FoodTableError) as refused:
+        parse_food_table(data)
+    assert ("nested" in str(refused.value)) == (depth_of(value) > MAX_FOOD_TABLE_DEPTH)
 
 
 def _document_nested(depth: int) -> bytes:

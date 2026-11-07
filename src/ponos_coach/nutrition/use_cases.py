@@ -93,6 +93,25 @@ class SetActivityLevel:
             self._store.put(entry)
 
 
+class RemoveActivityLevel:
+    """Removes the activity level entry of a day (the days it covered fall back to the entry before
+    it, or to the assumed level if there is none)."""
+
+    def __init__(self, activities: ActivityIndex, store: ActivityLevelStore) -> None:
+        self._activities = activities
+        self._store = store
+
+    def __call__(self, valid_from: date) -> None:
+        """Deletes the entry that starts on `valid_from`.
+
+        Raises:
+            ActivityLevelNotFoundError: there is none.
+            NutritionStoreError: write failed. Nothing changes.
+        """
+        with self._activities.transaction():
+            self._store.remove(valid_from)
+
+
 class SetMealTimes:
     """Sets the typical breakfast, lunch and dinner times of the profile."""
 

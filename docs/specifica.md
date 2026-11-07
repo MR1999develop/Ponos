@@ -486,6 +486,98 @@ Rules: [injuries](../.claude/skills/ponos-allenamento/references/infortuni.md).
 - An unexpected error shows a generic message; the detail goes in the log,
   without health data.
 
+## 14. Nutrition of the day (phase 4b)
+
+Guidance on food for a past day. It is general guidance, not medical or
+personalised nutritional advice. Formulas, thresholds and sources:
+[nutrition](../.claude/skills/ponos-allenamento/references/alimentazione.md).
+Decision: [ADR 008](adr/008-modello-alimentare.md). There is no meal diary and
+no diet or allergy restriction for now.
+
+### Calendar
+
+- The Calendar section shows one month. Each day shows its activities and
+  load. The days of a nutrition goal period have a colour; the legend says
+  which. A day with no colour is outside any period and is treated as
+  maintenance.
+- "Previous month" (Ctrl+Left), "Next month" (Ctrl+Right), "Today" (Ctrl+T),
+  "Open day" (Ctrl+Return) in the Calendar menu. A click or Enter on a day
+  opens its page.
+- Only past days and today can be opened. Future days arrive with the plan
+  (phase 5); the page says so.
+
+### Day page
+
+- At the top, the day: the goal and the level of the day, the warnings
+  ("Things to know") and a table of energy and macronutrients (carbohydrate,
+  protein, fat): rest rate, expenditure, deficit, target.
+- Below, the activities of the day with their calories and where they come
+  from (device, heart rate estimate, estimate by sport).
+- Then the meals in time order: breakfast, lunch, dinner, and the intakes
+  before, during and after each session of at least 30 minutes. Each card has
+  time, energy and grams, and 2-3 examples of foods with the portion in
+  grams. If no example fits the amounts, it says so.
+- Meals near a session move or merge with the intakes around it. When the
+  carbohydrate of the day is not enough for all of them, the page says that
+  the intakes were scaled.
+- The page ends with a fixed notice: general guidance, not medical or
+  personalised nutrition advice; with illness, pregnancy, eating disorders or
+  medicines, see a professional. The notice cannot be hidden.
+- "Back to calendar" (Alt+Left) returns to the month.
+- A day that cannot be planned says what is missing (weight, body data,
+  heart-rate parameters) with a way to fix it from "Edit profile".
+- The page does not save anything: it is a query. Opening it twice gives the
+  same result.
+
+### Today
+
+- The page of a day not yet over uses the activities recorded so far. Later
+  activities change it; it is not a forecast. A note at the top says that the
+  day is not over yet and the values are partial.
+
+### Nutrition settings
+
+- Profile menu, "Nutrition settings..." (Ctrl+Shift+N). Three parts:
+  - **Daily activity outside sport**: sedentary, light, active or very
+    active, from a chosen day until the next one is set. Without a level the
+    day is sedentary and a warning says so.
+  - **Typical meal times**: breakfast, lunch, dinner (07:30, 13:00 and 20:00
+    at first). Lunch must be at least two hours after breakfast and dinner two
+    hours after lunch; the problem appears under the field.
+  - **Goal periods**: weight loss with a pace of 0.1 to 1.0 kg per week,
+    maintenance or performance, each with a first and a last day (the last
+    may be empty, up to the next period). Periods cannot overlap; days outside
+    any period are maintenance.
+- Changing a period, the meal times or the activity level can be undone and
+  redone (Ctrl+Z, Ctrl+Shift+Z). A level is a dated value like the weight and
+  is replaced by setting it again for the same day.
+- A value applies from its day: the weight, the level and the goal of the day
+  decide that day only.
+
+### Limits of the advice
+
+- Under 18 years the app gives no numbers and invites to speak with a doctor
+  or a dietitian.
+- With a body mass index under 18.5 the app gives no weight-loss deficit and
+  advises talking to a professional.
+- The deficit is limited (ADR 008): a weekly loss of at most 1% of the body
+  weight, at most 20% of the expenditure and 750 kcal, never under the basal
+  rate nor 1,200 kcal (women) or 1,500 kcal (men), and an energy availability
+  of at least 30 kcal per kg of fat-free mass, estimated from weight, height
+  and sex (Boer 1984). When a limit reduces the goal, the page says so.
+- On heavy training days the deficit is smaller or absent.
+
+### Food values
+
+- The foods come from a small table of common foods. Its values come from
+  USDA FoodData Central and are **not yet verified** entry by entry: they must
+  be checked before the release ([dependency register](dipendenze.md)). Until
+  then a note above the meals says that the food values are not yet verified
+  against the source. Sports
+  drinks, gels and bars are not in the table yet.
+- The names of the foods are in English until translated.
+
 ## Open points
 
 - Format and content of the backup file (phase 8).
+- Food values not verified against FoodData Central (section 14).

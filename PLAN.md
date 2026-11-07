@@ -495,17 +495,17 @@ Decisioni dell'utente del 2026-11-07 (sezione 1). Valori e soglie sono default
 del progetto da linee guida pubblicate (ISSN, ACSM, consenso IOC), in un solo
 posto e documentati nella skill del progetto; non sono consigli medici.
 
-- [ ] **Dati**: calorie dell'attività dal FIT (`session.total_calories`) nel
+- [x] **Dati**: calorie dell'attività dal FIT (`session.total_calories`) nel
       riepilogo e nell'indice (schema v4); stima quando mancano (GPX o FIT
       senza calorie): formula di Keytel sulla FC con età, peso e sesso, e se
       manca la FC un MET per sport. Le calorie del metabolismo di base durante
       l'attività si tolgono, per non contarle due volte.
-- [ ] **Profilo**: livello di attività fuori dallo sport con data di validità
+- [x] **Profilo**: livello di attività fuori dallo sport con data di validità
       (sedentario, leggero, attivo, molto attivo); orari tipici di colazione,
       pranzo e cena; obiettivi alimentari per periodi nel calendario
       (dimagrimento con un ritmo in kg a settimana, mantenimento,
       performance), con annulla.
-- [ ] **Modello** (dominio puro, deterministico):
+- [x] **Modello** (dominio puro, deterministico):
       - metabolismo di base con Mifflin-St Jeor (età dalla data di nascita,
         altezza, peso valido quel giorno, sesso); spesa del giorno = base ×
         fattore del livello fuori sport + calorie nette delle attività;
@@ -529,17 +529,17 @@ posto e documentati nella skill del progetto; non sono consigli medici.
         un'altra entro 8 h); il resto distribuito su colazione, pranzo e cena
         secondo gli orari tipici, con pasti spostati o fusi quando cadono
         vicino all'allenamento; due sedute nello stesso giorno gestite.
-- [ ] **Alimenti**: tabella curata di alimenti comuni con kcal e macro per
+- [x] **Alimenti**: tabella curata di alimenti comuni con kcal e macro per
       100 g da una fonte con licenza compatibile (USDA FoodData Central, di
       pubblico dominio: da verificare nel registro delle dipendenze), nomi
       tradotti; 2–3 esempi per pasto con porzioni arrotondate.
-- [ ] **Calendario** dei giorni passati (vista mese, carico e attività per
+- [x] **Calendario** dei giorni passati (vista mese, carico e attività per
       giorno): clic su un giorno → dettaglio con attività, carico e
       indicazione alimentare; base del calendario della fase 5.
-- [ ] Avviso fisso: indicazioni generali, non consigli medici o
+- [x] Avviso fisso: indicazioni generali, non consigli medici o
       nutrizionali personalizzati; con patologie, gravidanza, disturbi
       alimentari o farmaci rivolgersi a un professionista.
-- [ ] Test T-NUT (sezione 7.12), collaudo, revisione, documenti (ADR della
+- [x] Test T-NUT (sezione 7.12), collaudo, revisione, documenti (ADR della
       fase), traduzioni.
 
 ### Fase 5 — Obiettivi e piano adattivo

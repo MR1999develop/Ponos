@@ -23,6 +23,7 @@ from ponos_coach.nutrition.domain import (
     WeightLossGoal,
 )
 from ponos_coach.nutrition.ports import (
+    ActivityLevelNotFoundError,
     GoalPeriodNotFoundError,
     GoalPeriodOverlapError,
     NutritionStoreError,
@@ -50,6 +51,17 @@ class SqliteActivityLevelStore:
             )
         except sqlite3.Error as exc:
             raise NutritionStoreError("writing the activity level failed") from exc
+
+    def remove(self, valid_from: date) -> None:
+        """Deletes the entry that starts on `valid_from`."""
+        try:
+            cursor = self._db.connection.execute(
+                "DELETE FROM activity_level WHERE valid_from = ?", (valid_from.isoformat(),)
+            )
+        except sqlite3.Error as exc:
+            raise NutritionStoreError("deleting the activity level failed") from exc
+        if cursor.rowcount == 0:
+            raise ActivityLevelNotFoundError("no activity level starts on that day")
 
     def list_entries(self) -> Sequence[ActivityLevelEntry]:
         """All the entries by ascending date."""

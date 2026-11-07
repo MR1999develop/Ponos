@@ -117,10 +117,10 @@ def test_a_long_session_has_a_during_training_card_with_the_hourly_amounts() -> 
     assert isinstance(view, DayView)
     during = [m for m in view.meals if m.title == "During training"]
     assert len(during) == 1
-    assert during[0].hourly.startswith("Each hour: ")
-    assert "g of carbohydrates" in during[0].hourly
-    assert "ml of fluids" in during[0].hourly
-    assert "mg of sodium" in during[0].hourly
+    assert during[0].hourly.startswith("Indicative: about ")
+    assert "g of carbohydrate," in during[0].hourly
+    assert "ml of fluid and" in during[0].hourly
+    assert "mg of sodium per hour" in during[0].hourly
     assert all(not m.hourly for m in view.meals if m is not during[0])
     assert [m.time for m in view.meals] == sorted((m.time for m in view.meals), key=_clock_minutes)
 
@@ -186,7 +186,8 @@ def test_what_is_missing_says_what_and_how_to_complete_it(reason: UnavailableRea
     assert view.missing == unavailable_text(reason)
     assert view.missing.title
     assert view.missing.what
-    assert "Edit profile" in view.missing.remedy
+    assert view.missing.remedy
+    assert view.missing.can_edit_profile is (reason is not UnavailableReason.UNDER_18)
 
 
 def test_every_category_of_the_domain_has_a_text() -> None:
@@ -227,7 +228,7 @@ def test_in_italian_the_day_speaks_italian_with_translated_moments_foods_and_not
     assert any("Colazione" in title for title in titles)
     assert "Durante l'allenamento" in titles
     during = next(m for m in view.meals if m.title == "Durante l'allenamento")
-    assert during.hourly.startswith("Ogni ora: ")
+    assert during.hourly.startswith("Indicativo: circa ")
     assert view.notice.startswith("Indicazioni generali, non consigli medici")
     assert view.level == "Allenamento molto intenso"
     assert any(
@@ -236,3 +237,75 @@ def test_in_italian_the_day_speaks_italian_with_translated_moments_foods_and_not
         for example in meal.examples
     )
     assert unavailable_text(UnavailableReason.MISSING_WEIGHT).title == "Nessun peso salvato"
+
+
+def test_the_hourly_line_is_indicative_for_carbohydrate_fluid_and_sodium() -> None:
+    view = present_day(DAY, report_for(ADULT, MaintenanceGoal(), (LONG_RIDE,)))
+
+    assert isinstance(view, DayView)
+    hourly = next(m.hourly for m in view.meals if m.hourly)
+    assert hourly.startswith("Indicative: about ")
+    assert hourly.endswith(" per hour")
+    assert "Each hour" not in hourly
+
+
+def test_the_deficit_advisories_do_not_judge_and_the_low_bmi_one_is_neutral_about_the_goal() -> (
+    None
+):
+    assert advisory_text(Advisory.DEFICIT_NOT_APPLIED) == (
+        "This app does not suggest a calorie deficit for this day."
+    )
+    assert "safe" not in advisory_text(Advisory.DEFICIT_NOT_APPLIED)
+    assert "deficit" not in advisory_text(Advisory.LOW_BMI)
+    assert "dietitian" in advisory_text(Advisory.LOW_BMI)
+    limited = advisory_text(Advisory.DEFICIT_LIMITED)
+    assert "reduced" in limited
+    assert "cautious limits" in limited
+
+
+def test_unverified_food_values_get_a_note_and_verified_ones_do_not() -> None:
+    report = report_for(ADULT, MaintenanceGoal())
+
+    unverified = present_day(DAY, report, foods_verified=False)
+    verified = present_day(DAY, report, foods_verified=True)
+
+    assert isinstance(unverified, DayView)
+    assert isinstance(verified, DayView)
+    assert unverified.foods_note == "Food values not yet verified against the source."
+    assert verified.foods_note == ""
+
+
+def test_under_18_has_no_numbers_and_points_to_a_doctor_or_a_sports_dietitian() -> None:
+    view = present_day(DAY, NutritionUnavailable(UnavailableReason.UNDER_18))
+
+    assert isinstance(view, UnavailableView)
+    assert view.missing.can_edit_profile is False
+    assert "Edit profile" not in view.missing.remedy
+    assert view.missing.remedy == "Please talk to a doctor or a sports dietitian."
+
+
+@pytest.mark.parametrize(
+    "reason", [UnavailableReason.AGE_OUT_OF_RANGE, UnavailableReason.BEFORE_BIRTH]
+)
+def test_a_date_of_birth_out_of_range_invites_to_check_it(reason: UnavailableReason) -> None:
+    view = present_day(DAY, NutritionUnavailable(reason))
+
+    assert isinstance(view, UnavailableView)
+    assert view.missing.remedy == "Check the date of birth with Edit profile."
+    assert view.missing.can_edit_profile is True
+
+
+def test_only_today_is_in_progress() -> None:
+    report = report_for(ADULT, MaintenanceGoal())
+
+    today = present_day(DAY, report, today=DAY)
+    other = present_day(DAY, report, today=date(2026, 6, 11))
+    unknown = present_day(DAY, report)
+
+    assert isinstance(today, DayView)
+    assert isinstance(other, DayView)
+    assert isinstance(unknown, DayView)
+    assert "not over yet" in today.in_progress_note
+    assert "partial" in today.in_progress_note
+    assert other.in_progress_note == ""
+    assert unknown.in_progress_note == ""

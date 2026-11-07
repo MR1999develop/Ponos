@@ -30,7 +30,9 @@ from ponos_coach.ui.nutrition_texts import (
     energy_source_text,
     fixed_notice_text,
     food_name,
+    foods_unverified_text,
     goal_text,
+    in_progress_text,
     load_level_text,
     slots_text,
     unavailable_text,
@@ -69,6 +71,8 @@ class DayView:
     meals: tuple[MealCardView, ...]
     advisories: tuple[str, ...]
     unreadable_note: str  # empty if every activity file could be read
+    in_progress_note: str  # empty unless the day is today
+    foods_note: str  # empty once the food values are verified against their source
     notice: str
 
 
@@ -158,7 +162,8 @@ def _hourly_text(hourly: HourlyIntake) -> str:
     # {carbs}, {fluid} and {sodium}: amounts per hour, as numbers.
     return QCoreApplication.translate(
         "DayPage",
-        "Each hour: {carbs} g of carbohydrates, {fluid} ml of fluids, {sodium} mg of sodium",
+        "Indicative: about {carbs} g of carbohydrate, {fluid} ml of fluid and {sodium} mg "
+        "of sodium per hour",
     ).format(
         carbs=number_text(hourly.carbs_g),
         fluid=number_text(hourly.fluid_ml),
@@ -197,7 +202,7 @@ def _unreadable_note(count: int) -> str:
     )
 
 
-def _present_report(report: DayNutritionReport) -> DayView:
+def _present_report(report: DayNutritionReport, *, in_progress: bool, verified: bool) -> DayView:
     return DayView(
         day_title(report.day),
         goal_text(report.goal),
@@ -207,12 +212,24 @@ def _present_report(report: DayNutritionReport) -> DayView:
         tuple(_meal_card(m) for m in report.meals),
         tuple(advisory_text(a) for a in report.nutrition.advisories),
         _unreadable_note(report.unreadable_activities),
+        in_progress_text() if in_progress else "",
+        "" if verified else foods_unverified_text(),
         fixed_notice_text(),
     )
 
 
-def present_day(day: date, result: DayNutritionResult) -> DayContent:
-    """The page content of a day from the use case's result."""
+def present_day(
+    day: date,
+    result: DayNutritionResult,
+    *,
+    today: date | None = None,
+    foods_verified: bool = True,
+) -> DayContent:
+    """The page content of a day from the use case's result.
+
+    `today` (the profile's today) marks the current day as in progress; `foods_verified` is False
+    while the food table's values have not been checked against their source.
+    """
     if isinstance(result, NutritionUnavailable):
         return UnavailableView(day_title(day), unavailable_text(result.reason), fixed_notice_text())
-    return _present_report(result)
+    return _present_report(result, in_progress=day == today, verified=foods_verified)

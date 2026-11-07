@@ -51,6 +51,7 @@ from ponos_coach.load.ports import (
 )
 from ponos_coach.nutrition.domain import ActivityLevelEntry, GoalPeriod, MealTimes
 from ponos_coach.nutrition.ports import (
+    ActivityLevelNotFoundError,
     ActivityLevelStore,
     GoalPeriodNotFoundError,
     GoalPeriodOverlapError,
@@ -373,6 +374,11 @@ class _ActivityLevels:
 
     def put(self, entry: ActivityLevelEntry) -> None:
         self._db.levels[entry.valid_from] = entry
+
+    def remove(self, valid_from: date) -> None:
+        if valid_from not in self._db.levels:
+            raise ActivityLevelNotFoundError("missing")
+        del self._db.levels[valid_from]
 
     def list_entries(self) -> Sequence[ActivityLevelEntry]:
         return [self._db.levels[day] for day in sorted(self._db.levels)]

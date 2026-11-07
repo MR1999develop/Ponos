@@ -7,7 +7,7 @@ The food table is parsed at the boundary: whatever the bytes, the result is a `F
 illustration of its grams: every one is inside the declared tolerance, made of whole steps of its
 food, deterministic, whatever the order of the foods.
 
-Defects found are kept as `xfail(strict=True)` with their identifier.
+Defects found were kept as strict xfail until fixed; none is left.
 """
 
 from __future__ import annotations
@@ -266,10 +266,6 @@ def test_t_nut_06_every_shipped_food_agrees_with_atwater_and_has_a_real_portion_
         assert food.name == food.name.strip() and food.name
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F4B-08: the food source (USDA FoodData Central, CC0) is not in docs/dipendenze.md",
-)
 def test_d_f4b_08_the_food_table_source_and_licence_are_in_the_dependency_register() -> None:
     register = (REPO / "docs" / "dipendenze.md").read_text(encoding="utf-8")
 

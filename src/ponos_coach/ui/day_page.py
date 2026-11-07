@@ -112,6 +112,8 @@ class DayPage(QWidget):
         self._meal_boxes: list[QGroupBox] = []
         self._advisory_labels: list[QLabel] = []
         self._summary_line = ""
+        self._in_progress_note = ""
+        self._foods_note = ""
         self._build()
 
     # --- Construction -------------------------------------------------------------------
@@ -245,6 +247,16 @@ class DayPage(QWidget):
         return self._summary_line
 
     @property
+    def in_progress_text(self) -> str:
+        """The note that the day is in progress (empty for any other day)."""
+        return self._in_progress_note
+
+    @property
+    def foods_note_text(self) -> str:
+        """The note that the food values are not verified (empty once they are)."""
+        return self._foods_note
+
+    @property
     def activities_model(self) -> TextTableModel:
         """The model of the activities table."""
         return self._activities_model
@@ -288,6 +300,7 @@ class DayPage(QWidget):
             self._missing_title.setText(content.missing.title)
             self._missing_what.setText(content.missing.what)
             self._missing_remedy.setText(content.missing.remedy)
+            self._edit_profile.setVisible(content.missing.can_edit_profile)
             self._set_state(DayState.UNAVAILABLE)
             return
         self._scroll.setWidget(self._build_content(content))
@@ -305,6 +318,8 @@ class DayPage(QWidget):
         self._notice.clear()
         self._meal_boxes = []
         self._advisory_labels = []
+        self._in_progress_note = ""
+        self._foods_note = ""
         self._scroll.takeWidget()
         self._set_state(DayState.EMPTY)
 
@@ -321,12 +336,26 @@ class DayPage(QWidget):
         column.setSpacing(SPACE_4)
         self._meal_boxes = []
         self._advisory_labels = []
+        self._in_progress_note = ""
+        self._foods_note = ""
+        if view.in_progress_note:
+            self._in_progress_note = view.in_progress_note
+            progress = _label(view.in_progress_note, root, bold=True)
+            progress.setObjectName("dayInProgress")
+            progress.setMaximumWidth(_MAX_TEXT_WIDTH)
+            column.addWidget(progress)
         notes = [*view.advisories, *([view.unreadable_note] if view.unreadable_note else [])]
         if notes:
             column.addWidget(self._build_advisories(notes, root))
         column.addWidget(self._build_summary(view, root))
         column.addWidget(self._build_activities(view, root))
         column.addWidget(_label(self.tr("Meals and training intakes"), root, bold=True))
+        if view.foods_note:
+            self._foods_note = view.foods_note
+            foods = _label(view.foods_note, root)
+            foods.setObjectName("dayFoodsNote")
+            foods.setMaximumWidth(_MAX_TEXT_WIDTH)
+            column.addWidget(foods)
         for card in view.meals:
             column.addWidget(self._build_meal(card, root))
         column.addStretch(1)

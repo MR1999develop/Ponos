@@ -23,6 +23,7 @@ from ponos_coach.nutrition.use_cases import (
     AddGoalPeriod,
     NutritionSettings,
     ReadNutritionSettings,
+    RemoveActivityLevel,
     RemoveGoalPeriod,
     ReplaceGoalPeriod,
     SetActivityLevel,
@@ -45,6 +46,7 @@ class DayLoaded:
 
     day: date
     result: DayNutritionResult
+    foods_verified: bool  # the food table's values were checked against their source
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +55,7 @@ class _Cases:
 
     read: ReadNutritionSettings
     set_level: SetActivityLevel
+    remove_level: RemoveActivityLevel
     set_meal_times: SetMealTimes
     add_period: AddGoalPeriod
     replace_period: ReplaceGoalPeriod
@@ -64,6 +67,7 @@ def _cases_of(access: ProfileAccess) -> _Cases:
     return _Cases(
         ReadNutritionSettings(session.activity_levels, session.meal_times, session.goal_periods),
         SetActivityLevel(session.activities, session.activity_levels, access.today),
+        RemoveActivityLevel(session.activities, session.activity_levels),
         SetMealTimes(session.meal_times),
         AddGoalPeriod(session.activities, session.goal_periods),
         ReplaceGoalPeriod(session.activities, session.goal_periods),
@@ -86,8 +90,9 @@ def _plan_day(foods: FoodTableSource, day: date, access: ProfileAccess) -> DayLo
         session.meal_times,
         session.goal_periods,
     )
-    plan = PlanDayNutrition(sources, access.decode, access.zone, foods())
-    return DayLoaded(day, plan(day))
+    table = foods()
+    plan = PlanDayNutrition(sources, access.decode, access.zone, table)
+    return DayLoaded(day, plan(day), table.source.verified_on is not None)
 
 
 class NutritionLoader(QObject):
@@ -153,6 +158,10 @@ class NutritionLoader(QObject):
     def set_level(self, level: ActivityLevel, valid_from: date) -> bool:
         """Set the activity level from a day."""
         return self._change(lambda cases: cases.set_level(level, valid_from))
+
+    def remove_level(self, valid_from: date) -> bool:
+        """Remove the activity level entry of a day."""
+        return self._change(lambda cases: cases.remove_level(valid_from))
 
     def set_meal_times(self, times: MealTimes) -> bool:
         """Set the typical meal times."""

@@ -480,8 +480,8 @@
         <translation>Obiettivo di energia (kcal)</translation>
     </message>
     <message>
-        <source>Each hour: {carbs} g of carbohydrates, {fluid} ml of fluids, {sodium} mg of sodium</source>
-        <translation>Ogni ora: {carbs} g di carboidrati, {fluid} ml di liquidi, {sodium} mg di sodio</translation>
+        <source>Indicative: about {carbs} g of carbohydrate, {fluid} ml of fluid and {sodium} mg of sodium per hour</source>
+        <translation>Indicativo: circa {carbs} g di carboidrati, {fluid} ml di liquidi e {sodium} mg di sodio all&apos;ora</translation>
     </message>
     <message>
         <source>Moved from its usual time because of training.</source>
@@ -1872,7 +1872,15 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <name>Nutrition</name>
     <message>
         <source>Complete it with Edit profile.</source>
-        <translation>Completali con Modifica profilo.</translation>
+        <translation>Completa i dati con Modifica profilo.</translation>
+    </message>
+    <message>
+        <source>Check the date of birth with Edit profile.</source>
+        <translation>Controlla la data di nascita con Modifica profilo.</translation>
+    </message>
+    <message>
+        <source>Please talk to a doctor or a sports dietitian.</source>
+        <translation>Rivolgiti a un medico o a un dietista sportivo.</translation>
     </message>
     <message>
         <source>Height and date of birth are missing</source>
@@ -1919,28 +1927,24 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Nessuna indicazione sotto i 18 anni</translation>
     </message>
     <message>
-        <source>Calories, macronutrients and portions are not given under 18. Please talk to a doctor or a dietitian.</source>
-        <translation>Sotto i 18 anni non si indicano calorie, macronutrienti né porzioni. Rivolgiti a un medico o a un dietista.</translation>
-    </message>
-    <message>
-        <source>You are under 18: this is general guidance only. Ask a doctor or a dietitian before changing how you eat.</source>
-        <translation>Hai meno di 18 anni: sono solo indicazioni generali. Chiedi a un medico o a un dietista prima di cambiare come mangi.</translation>
-    </message>
-    <message>
-        <source>Your body mass index is below 18.5, so no calorie deficit is suggested. Please talk to a doctor or a dietitian.</source>
-        <translation>Il tuo indice di massa corporea è sotto 18,5: non si suggerisce alcun deficit calorico. Parla con un medico o con un dietista.</translation>
-    </message>
-    <message>
         <source>No daily activity level is set for this day, so a sedentary level is assumed. You can set it in Nutrition settings.</source>
         <translation>Per questo giorno non è impostato alcun livello di attività quotidiana: si assume uno stile di vita sedentario. Puoi impostarlo in Impostazioni alimentari.</translation>
     </message>
     <message>
-        <source>You asked to lose weight, but no calorie deficit is safe for this day: the target equals what you burn.</source>
-        <translation>Hai chiesto di dimagrire, ma per questo giorno nessun deficit calorico è sicuro: l&apos;obiettivo coincide con ciò che consumi.</translation>
+        <source>Calories, macronutrients and portions are not given under 18.</source>
+        <translation>Sotto i 18 anni non si indicano calorie, macronutrienti né porzioni.</translation>
     </message>
     <message>
-        <source>A safety limit made the calorie deficit smaller than you asked.</source>
-        <translation>Un limite di sicurezza ha reso il deficit calorico più piccolo di quello richiesto.</translation>
+        <source>Your body mass index is below 18.5. Please talk to a doctor or a dietitian before changing how you eat.</source>
+        <translation>Il tuo indice di massa corporea è inferiore a 18,5. Parla con un medico o con un dietista prima di cambiare come mangi.</translation>
+    </message>
+    <message>
+        <source>This app does not suggest a calorie deficit for this day.</source>
+        <translation>Per questo giorno l&apos;app non suggerisce un deficit calorico.</translation>
+    </message>
+    <message>
+        <source>The calorie deficit was reduced to stay within cautious limits.</source>
+        <translation>Il deficit calorico è stato ridotto per restare entro limiti prudenti.</translation>
     </message>
     <message>
         <source>The calorie deficit is smaller because today&apos;s training is heavy.</source>
@@ -1957,6 +1961,14 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>General guidance, not medical or personalised nutrition advice. If you have a medical condition, are pregnant, have an eating disorder or take medication, please consult a professional.</source>
         <translation>Indicazioni generali, non consigli medici né alimentari personalizzati. Se hai patologie, sei in gravidanza, hai disturbi alimentari o prendi farmaci, rivolgiti a un professionista.</translation>
+    </message>
+    <message>
+        <source>This day is not over yet: the values are partial and change as activities and the energy spent are added.</source>
+        <translation>Questo giorno non è ancora finito: i valori sono parziali e cambiano man mano che si aggiungono attività ed energia spesa.</translation>
+    </message>
+    <message>
+        <source>Food values not yet verified against the source.</source>
+        <translation>Valori degli alimenti non ancora verificati rispetto alla fonte.</translation>
     </message>
     <message>
         <source>Declared by the device</source>
@@ -2198,6 +2210,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Change meal times</source>
         <translation>Modifica orari dei pasti</translation>
+    </message>
+    <message>
+        <source>Set activity level</source>
+        <translation>Imposta il livello di attività</translation>
     </message>
 </context>
 <context>

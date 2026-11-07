@@ -284,7 +284,11 @@ class PlanDayNutrition:
         cached = self._src.load_cache.get(record.identity, fingerprint)
         declared = record.summary.calories_kcal
         original: Activity | ExclusionReason | None = None
-        if cached is None or declared is None:
+        # a declared figure that is not credible is discarded, and the HR then decides
+        credible = declared is not None and declared <= (
+            defaults.MAX_ACTIVITY_KCAL_PER_HOUR * record.timer_s / 3600.0
+        )
+        if cached is None or not credible:
             original = read_original_activity(
                 self._src.archive, record, self._decode, self._max_file_bytes
             )
@@ -301,7 +305,7 @@ class PlanDayNutrition:
                 if activity is None
                 else load_of_activity(activity, physiology, saved_weights).load
             )
-        average_bpm = None if declared is not None else _average_bpm(activity, physiology)
+        average_bpm = _average_bpm(activity, physiology)
         energy = activity_energy(person, record.sport, record.timer_s, declared, average_bpm)
         local = record.start.astimezone(self._timezone)
         start_minute = local.hour * _MINUTES_PER_HOUR + local.minute

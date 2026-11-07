@@ -59,7 +59,6 @@ from ponos_coach.nutrition.domain.settings import (
 from ponos_coach.nutrition.domain.targets import (
     EnergyTarget,
     day_macros,
-    energy_availability,
     energy_target,
     estimated_fat_free_mass_kg,
     max_deficit_for_energy_availability,
@@ -99,7 +98,6 @@ __all__ = [
     "basal_metabolic_rate",
     "classify_day_load",
     "day_macros",
-    "energy_availability",
     "energy_target",
     "estimated_fat_free_mass_kg",
     "goal_for_day",

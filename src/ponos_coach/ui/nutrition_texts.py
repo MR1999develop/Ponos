@@ -94,52 +94,52 @@ class MissingDataText:
     title: str
     what: str
     remedy: str
+    can_edit_profile: bool  # True if "Edit profile" is the way to complete the data
 
 
 def unavailable_text(reason: UnavailableReason) -> MissingDataText:
-    """What is missing for the day's guidance, and how to complete it."""
-    remedy = QCoreApplication.translate("Nutrition", "Complete it with Edit profile.")
+    """What is missing for the day's guidance, and what to do about it."""
+    translate = QCoreApplication.translate
+    complete = translate("Nutrition", "Complete it with Edit profile.")
+    check_birth_date = translate("Nutrition", "Check the date of birth with Edit profile.")
+    see_professional = translate("Nutrition", "Please talk to a doctor or a sports dietitian.")
     texts = {
         UnavailableReason.MISSING_BODY_DATA: (
-            QCoreApplication.translate("Nutrition", "Height and date of birth are missing"),
-            QCoreApplication.translate(
-                "Nutrition", "Nutrition guidance needs your height and date of birth."
-            ),
+            translate("Nutrition", "Height and date of birth are missing"),
+            translate("Nutrition", "Nutrition guidance needs your height and date of birth."),
+            complete,
         ),
         UnavailableReason.MISSING_WEIGHT: (
-            QCoreApplication.translate("Nutrition", "No weight is saved"),
-            QCoreApplication.translate("Nutrition", "Nutrition guidance needs your weight."),
+            translate("Nutrition", "No weight is saved"),
+            translate("Nutrition", "Nutrition guidance needs your weight."),
+            complete,
         ),
         UnavailableReason.MISSING_PHYSIOLOGY: (
-            QCoreApplication.translate("Nutrition", "Heart-rate settings are missing"),
-            QCoreApplication.translate(
+            translate("Nutrition", "Heart-rate settings are missing"),
+            translate(
                 "Nutrition",
                 "Nutrition guidance needs your heart-rate settings (they include sex).",
             ),
+            complete,
         ),
         UnavailableReason.BEFORE_BIRTH: (
-            QCoreApplication.translate("Nutrition", "This day is before the date of birth"),
-            QCoreApplication.translate(
-                "Nutrition", "The date of birth in the profile is after this day."
-            ),
+            translate("Nutrition", "This day is before the date of birth"),
+            translate("Nutrition", "The date of birth in the profile is after this day."),
+            check_birth_date,
         ),
         UnavailableReason.AGE_OUT_OF_RANGE: (
-            QCoreApplication.translate("Nutrition", "This day is too far from the date of birth"),
-            QCoreApplication.translate(
-                "Nutrition", "Nutrition guidance covers ages up to 130 years."
-            ),
+            translate("Nutrition", "This day is too far from the date of birth"),
+            translate("Nutrition", "Nutrition guidance covers ages up to 130 years."),
+            check_birth_date,
         ),
         UnavailableReason.UNDER_18: (
-            QCoreApplication.translate("Nutrition", "No guidance under 18"),
-            QCoreApplication.translate(
-                "Nutrition",
-                "Calories, macronutrients and portions are not given under 18. "
-                "Please talk to a doctor or a dietitian.",
-            ),
+            translate("Nutrition", "No guidance under 18"),
+            translate("Nutrition", "Calories, macronutrients and portions are not given under 18."),
+            see_professional,
         ),
     }
-    title, what = texts[reason]
-    return MissingDataText(title, what, remedy)
+    title, what, remedy = texts[reason]
+    return MissingDataText(title, what, remedy, reason is not UnavailableReason.UNDER_18)
 
 
 def advisory_text(advisory: Advisory) -> str:
@@ -147,13 +147,12 @@ def advisory_text(advisory: Advisory) -> str:
     texts = {
         Advisory.UNDER_18: QCoreApplication.translate(
             "Nutrition",
-            "You are under 18: this is general guidance only. "
-            "Ask a doctor or a dietitian before changing how you eat.",
+            "Please talk to a doctor or a sports dietitian.",
         ),
         Advisory.LOW_BMI: QCoreApplication.translate(
             "Nutrition",
-            "Your body mass index is below 18.5, so no calorie deficit is suggested. "
-            "Please talk to a doctor or a dietitian.",
+            "Your body mass index is below 18.5. "
+            "Please talk to a doctor or a dietitian before changing how you eat.",
         ),
         Advisory.ACTIVITY_LEVEL_ASSUMED: QCoreApplication.translate(
             "Nutrition",
@@ -162,11 +161,10 @@ def advisory_text(advisory: Advisory) -> str:
         ),
         Advisory.DEFICIT_NOT_APPLIED: QCoreApplication.translate(
             "Nutrition",
-            "You asked to lose weight, but no calorie deficit is safe for this day: "
-            "the target equals what you burn.",
+            "This app does not suggest a calorie deficit for this day.",
         ),
         Advisory.DEFICIT_LIMITED: QCoreApplication.translate(
-            "Nutrition", "A safety limit made the calorie deficit smaller than you asked."
+            "Nutrition", "The calorie deficit was reduced to stay within cautious limits."
         ),
         Advisory.DEFICIT_REDUCED_FOR_LOAD: QCoreApplication.translate(
             "Nutrition", "The calorie deficit is smaller because today's training is heavy."
@@ -190,6 +188,22 @@ def fixed_notice_text() -> str:
         "General guidance, not medical or personalised nutrition advice. "
         "If you have a medical condition, are pregnant, have an eating disorder "
         "or take medication, please consult a professional.",
+    )
+
+
+def in_progress_text() -> str:
+    """The note for the current day: it is not over, so the values are partial."""
+    return QCoreApplication.translate(
+        "Nutrition",
+        "This day is not over yet: the values are partial and change as activities "
+        "and the energy spent are added.",
+    )
+
+
+def foods_unverified_text() -> str:
+    """The note shown while the food values have not been checked against their source."""
+    return QCoreApplication.translate(
+        "Nutrition", "Food values not yet verified against the source."
     )
 
 

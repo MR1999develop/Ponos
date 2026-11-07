@@ -24,7 +24,6 @@ from ponos_coach.nutrition.domain import (
     basal_metabolic_rate,
     classify_day_load,
     day_macros,
-    energy_availability,
     energy_target,
     estimated_fat_free_mass_kg,
     permitted_weekly_loss_g,
@@ -415,6 +414,11 @@ def test_the_fat_free_mass_never_exceeds_the_weight() -> None:
     man = Person(Sex.MALE, 30, 250, 30.0)
 
     assert estimated_fat_free_mass_kg(man) == 30.0
+
+
+def energy_availability(person: Person, intake_kcal: float, exercise_kcal: float) -> float:
+    """kcal per kg of fat-free mass per day: (intake - exercise energy) / fat-free mass."""
+    return (intake_kcal - exercise_kcal) / estimated_fat_free_mass_kg(person)
 
 
 def test_the_fat_free_mass_never_falls_under_half_the_weight() -> None:

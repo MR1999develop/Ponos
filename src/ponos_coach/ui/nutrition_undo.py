@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Undoable changes of the nutrition settings (goal periods and meal times).
+"""Undoable changes of the nutrition settings (goal periods, meal times and activity level).
 
 Each command is a `QUndoCommand` that starts the job on the data thread and does not wait: jobs run
 in order on that one thread, so a redo or an undo always lands after the one before it. The window
@@ -16,7 +16,7 @@ from typing import Protocol
 from PySide6.QtCore import QCoreApplication
 from PySide6.QtGui import QUndoCommand
 
-from ponos_coach.nutrition.domain import GoalPeriod, MealTimes
+from ponos_coach.nutrition.domain import ActivityLevel, GoalPeriod, MealTimes
 
 
 class SettingsOps(Protocol):
@@ -36,6 +36,14 @@ class SettingsOps(Protocol):
 
     def set_meal_times(self, times: MealTimes) -> bool:
         """Set the typical meal times."""
+        ...
+
+    def remove_level(self, valid_from: date) -> bool:
+        """Remove the activity level entry of a day."""
+        ...
+
+    def set_level(self, level: ActivityLevel, valid_from: date) -> bool:
+        """Set the activity level from a day (the same day replaces the entry)."""
         ...
 
 
@@ -107,3 +115,45 @@ class SetMealTimesCommand(QUndoCommand):
     def undo(self) -> None:
         """Set the previous times."""
         self._ops.set_meal_times(self._old)
+
+
+class SetActivityLevelCommand(QUndoCommand):
+    """Set the activity level from a day; undoing restores exactly what that day held.
+
+    `previous` is the level of the entry saved on `valid_from` before the change, or None if the day
+    had no entry: undoing then removes the entry, so the store is as it was.
+    """
+
+    def __init__(
+        self,
+        ops: SettingsOps,
+        valid_from: date,
+        new: ActivityLevel,
+        previous: ActivityLevel | None,
+    ) -> None:
+        super().__init__(QCoreApplication.translate("NutritionUndo", "Set activity level"))
+        self._ops = ops
+        self._valid_from = valid_from
+        self._new = new
+        self._previous = previous
+
+    @property
+    def valid_from(self) -> date:
+        """The day the entry starts on."""
+        return self._valid_from
+
+    @property
+    def new_level(self) -> ActivityLevel:
+        """The level this command sets."""
+        return self._new
+
+    def redo(self) -> None:
+        """Set the new level."""
+        self._ops.set_level(self._new, self._valid_from)
+
+    def undo(self) -> None:
+        """Put back the entry of that day, or remove it if there was none."""
+        if self._previous is None:
+            self._ops.remove_level(self._valid_from)
+        else:
+            self._ops.set_level(self._previous, self._valid_from)

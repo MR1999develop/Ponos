@@ -114,7 +114,14 @@ class NutritionUi(QObject):
 
     def _on_day_loaded(self, loaded: object) -> None:
         if isinstance(loaded, DayLoaded) and loaded.day == self._day:
-            self._day_page.show_content(present_day(loaded.day, loaded.result))
+            self._day_page.show_content(
+                present_day(
+                    loaded.day,
+                    loaded.result,
+                    today=self._today(),
+                    foods_verified=loaded.foods_verified,
+                )
+            )
 
     # --- Profile and data changes ------------------------------------------------------------
 

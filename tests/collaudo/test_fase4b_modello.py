@@ -8,7 +8,7 @@ a comment. The people are invented. The invariants of `check_day` hold for every
 person is: no negative amount, the meals add up to the day, the safety limits are never passed,
 the advisories are there when they must be.
 
-Defects found while testing are kept here as `xfail(strict=True)` with their identifier.
+Defects found while testing were kept as strict xfail until fixed; none is left.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from __future__ import annotations
 from datetime import time
 
 import pytest
-from hypothesis import assume, given, settings
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from ponos_coach.activities.domain import Sport
@@ -682,9 +682,6 @@ def test_t_nut_02_04_every_day_keeps_every_invariant(
     next_gap: float | None,
     times: MealTimes,
 ) -> None:
-    # D-F4B-01: with a target under ten times the weight the carbohydrates go negative; the
-    # counterexample is kept apart, here the domain of ordinary people
-    assume(basal_metabolic_rate(person) * 1.2 >= 15 * person.weight_kg)
     day = DayInput(person, goal, times, tuple(drawn), next_gap)
 
     check_day(day, plan_day(day))

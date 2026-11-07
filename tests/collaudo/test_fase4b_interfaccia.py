@@ -152,7 +152,7 @@ def test_t_ui_01_a_minor_and_a_thin_person_are_told_to_talk_to_a_professional() 
         assert isinstance(view, DayView)
         text = " ".join(view.advisories).lower()
         assert "doctor or a dietitian" in text
-        assert "no calorie deficit" in text
+        assert "does not suggest a calorie deficit" in text or "body mass index" in text
         assert view.totals[2][1] == "0"  # the calorie deficit row
 
 

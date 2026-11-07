@@ -101,8 +101,9 @@ MIN_INTAKE_KCAL_MALE: Final = 1500
 # (low energy availability). The deficit never leaves the day's EA under the minimum.
 BALANCED_ENERGY_AVAILABILITY_KCAL_PER_KG_FFM: Final = 45
 MIN_ENERGY_AVAILABILITY_KCAL_PER_KG_FFM: Final = 30
-# BOER: fat-free mass in kg = per_kg * weight + per_cm * height - offset (weight in kg, height in
-# cm), as (per_kg, per_cm, constant) with the constant added. The estimate is kept in
+# BOER: fat-free mass in kg (weight in kg, height in cm), as (per_kg, per_cm, constant):
+# men 0.407 * weight + 0.267 * height - 19.2; women 0.252 * weight + 0.473 * height - 48.3.
+# The estimate is kept in
 # [MIN_FFM_FRACTION, 1] of the body weight (project default: a formula outside the range it was
 # fitted on must not give an absurd mass).
 BOER_MALE: Final = (0.407, 0.267, -19.2)
@@ -153,7 +154,8 @@ POST_LEAD_MIN: Final = 30  # within one hour of the end
 POST_PROTEIN_G_PER_KG: Final = 0.3
 POST_CARBS_G_PER_KG: Final = 1.1  # 1-1.2 g/kg
 # ACSM: rapid refuelling (1-1.2 g/kg/h in the first 4 h) when two demanding sessions are less than
-# 8 hours apart.
+# 8 hours apart. Project choice: it applies to any following session within 8 h, however short,
+# because extra carbohydrates are not a risk and the rule stays simple.
 SPEEDY_REFUEL_WITHIN_MIN: Final = 8 * 60
 # Lunch and dinner always keep at least this much carbohydrate (project default), however long the
 # training of the day: the intakes around it give way first (see `meals.py`).

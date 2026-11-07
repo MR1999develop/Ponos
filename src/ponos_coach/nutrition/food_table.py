@@ -21,8 +21,10 @@ from ponos_coach.nutrition.domain import Food, FoodGroup, MealRole
 FOOD_TABLE_RESOURCE: Final = "foods.json"
 MAX_FOOD_TABLE_BYTES: Final = 256 * 1024
 MAX_FOOD_TABLE_DEPTH: Final = 8  # the real table nests 4 levels (document, foods, food, roles)
-# A string, or one bracket: enough to follow the nesting without decoding anything.
-_TOKEN: Final = re.compile(rb'"(?:[^"\\]|\\.)*"|[\[\]{}]')
+# A string, or one bracket: enough to follow the nesting without decoding anything. The closing
+# quote is optional so that an unterminated string consumes the rest once (a scan that restarted
+# at every stray quote would be quadratic); valid JSON has no unterminated string.
+_TOKEN: Final = re.compile(rb'"(?:[^"\\]|\\.)*"?|[\[\]{}]')
 FOOD_TABLE_FORMAT: Final = 1
 _MIN_FOODS: Final = 40
 _MAX_FOODS: Final = 200

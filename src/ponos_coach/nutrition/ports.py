@@ -28,6 +28,10 @@ class GoalPeriodNotFoundError(NutritionStoreError):
     """There is no period starting on that day."""
 
 
+class ActivityLevelNotFoundError(NutritionStoreError):
+    """There is no activity level entry for that day."""
+
+
 class ActivityLevelStore(Protocol):
     """Activity level outside sport, with validity date."""
 
@@ -35,6 +39,15 @@ class ActivityLevelStore(Protocol):
         """Saves the level valid from `entry.valid_from`; the same date replaces the entry.
 
         Raises:
+            NutritionStoreError: write failed.
+        """
+        ...
+
+    def remove(self, valid_from: date) -> None:
+        """Deletes the entry whose validity starts on `valid_from`.
+
+        Raises:
+            ActivityLevelNotFoundError: there is none; nothing changes.
             NutritionStoreError: write failed.
         """
         ...

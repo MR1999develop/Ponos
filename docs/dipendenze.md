@@ -266,6 +266,27 @@ group and the build backend. Validation: **2026-11-05**.
   project.
 - Validated: 2026-11-05.
 
+### USDA FoodData Central (data, not a package)
+
+- Not a dependency of `pyproject.toml`: it is the source of the food values in
+  `src/ponos_coach/nutrition/foods.json` (phase 4b, ADR 008).
+- Licence: **CC0 1.0 Universal** (public domain). Allowed: no obligation, but
+  the data provider asks for a citation, which the file carries (`source`):
+  U.S. Department of Agriculture, Agricultural Research Service, FoodData
+  Central.
+- Use: energy (kcal) and macronutrients (g) per 100 g of 42 common foods, and
+  the FoodData Central id of each. The data are copied into the file; the app
+  makes no network call to the source.
+- Verification: the first version of the table was written without access to
+  the database. `experiments/verify_foods.py` compares every entry with
+  FoodData Central; it must run, with the result written in the file
+  (`source.verified_on`), **before the release**. Not validated yet: the entry
+  stays open until then.
+- Alternatives: queries to the FoodData Central API at run time (rejected in
+  ADR 008: network and a new trust boundary); other national tables, not
+  evaluated.
+- Registered: 2026-11-07.
+
 ### uv_build (build backend)
 
 - Version: **not pinned in `uv.lock`**. The backend is in `[build-system]`

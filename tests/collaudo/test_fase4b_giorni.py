@@ -8,7 +8,7 @@ with 0, 1, 2 and 3 sessions, a session at dawn and at night, an effort of 8 hour
 make no sense, GPX files without calories, other time zones, daylight saving time, and a weight, a
 level and a goal that change on the same day.
 
-Defects found are kept as `xfail(strict=True)` with their identifier.
+Defects found were kept as strict xfail until fixed; none is left.
 """
 
 from __future__ import annotations

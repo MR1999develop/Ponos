@@ -1,8 +1,10 @@
 # Threat model
 
-Phase 3 version (2026-11-06): adds height, weight and date of birth as
-personal health data, dated measurements, sport weights, HR zones and activity
-details. It builds on that of phase 2 (2026-11-06: login in the app, token
+Phase 4b version (2026-11-07): adds the nutrition of the day (activity
+calories, activity level, meal times, goal periods, the table of foods and the
+guidance itself). It builds on that of phase 3 (2026-11-06: height, weight and
+date of birth as personal health data, dated measurements, sport weights, HR
+zones and activity details), on that of phase 2 (2026-11-06: login in the app, token
 store, Garmin responses and downloads, library log and notifications), on that
 of phase 1 (2026-11-05, updated on 2026-11-06 with the acceptance defects and
 the log boundary) and on phase 0. To be updated again in the same change as
@@ -70,6 +72,8 @@ Boundaries:
 | B8 | App ↔ configuration folder | list of profiles (id, folder, name, last use), lock of the list |
 | B9 | User → login dialog → `garminconnect` library | email, password, MFA code (in memory only, in the login thread) |
 | B10 | App → system notifications | fixed title and number of new activities |
+| B11 | Table of foods (`foods.json`, shipped with the app) → parser | values per 100 g, ids, names, portions. It is part of the package, but it is treated as input: a mistake or a change of source must not reach the guidance |
+| B12 | FIT `session.total_calories` (inside B1 and B2) → model | calories declared by the device: untrusted until checked against the duration |
 
 ### Assets
 
@@ -188,6 +192,19 @@ service, E elevation of privilege.
 | B8 | Two instances that update the list together and lose changes | T | T-DATI-04 |
 | B8 | List entry pointing to a folder with another profile or with no profile | S, T | T-DATI-04, T-UI-01 |
 | B8 | Paths and names of profiles (personal data) in the logs | I | T-SEC-08 |
+| B11 | Food table too large, too deeply nested, with duplicate ids, out-of-range or non-finite values, energy not matching the macros, too few or too many entries | T, D | T-NUT-06, D-F4B-06 |
+| B11 | Food source and licence not recorded; values never checked against the source | T | T-NUT-06, D-F4B-08; accepted risk (section 5) |
+| B12 | Declared calories absurd for the duration (50,000 kcal in 20 minutes) that inflate the expenditure and the target | T | T-NUT-03, D-F4B-02 |
+| B12 | Zero or invalid FIT calories read as real | T | T-NUT-03 |
+| B3 | Migration v3 → v4 interrupted midway, done by two instances, or without a copy | T, D | T-DATI-01 |
+| B3 | Overlapping goal periods, also by an `UPDATE` of the dates; level, meal times or pace out of range | T | T-DATI-01, T-UI-01 |
+| B3 | Weight, age, HR, level, goals and meal times in logs, messages or error chains | I | T-SEC-08 (`tests/collaudo/test_fase4b_log_salute.py`) |
+| B3 | Activity indexed before v4 without calories that makes the day wrong | T | T-NUT-03, D-F4B-09 |
+| Plan | Guidance that harms: deficit too large, intake under the minimum, low energy availability, heavy days, low body mass index | T | T-NUT-02, D-F4B-01 |
+| Plan | Numbers given to a minor | T | T-NUT-02, T-UI-01 |
+| Plan | Guidance taken as medical advice or a diagnosis | T | fixed notice always on screen (`tests/ui/test_day_window.py`); no diagnosis in the model |
+| Plan | Absurd date or person (age over 130, far-future day, extreme weight and height) that crashes the day | D | T-NUT-01, D-F4B-05 |
+| Plan | Time of the recovery wrong across a change of daylight saving time or after long stops | T | T-NUT-04, D-F4B-04, D-F4B-07 |
 | Calendar | Deletion of unwanted workouts on Garmin (phase 7) | T | T-SEC-10, T-UI-03 |
 | Plan | Dangerous plan from wrong data or wrong rules | T | T-PIANO-02, T-PIANO-03, T-PIANO-04, T-INF-01, T-INF-02, T-INF-03 |
 | UI | Interface blocked by a long operation | D | T-UI-02, T-SYNC-06 |
@@ -341,6 +358,38 @@ service, E elevation of privilege.
   previous charts.
 - Deterministic plan with rigid ramp limits and injury warning signs; no
   diagnosis.
+- Nutrition (phase 4b, ADR 008):
+  - Food table (B11): size cap of 256 KiB and nesting depth of at most 8,
+    both checked before the JSON decoder; then ids, ranges, finite values,
+    energy consistent with the macros (±15% or 15 kcal), between 40 and 200
+    entries; anything else is a `FoodTableError`, never a repaired value. The
+    file is read once by the Composition Root; the domain gets a `FoodTable`.
+    Source and licence are in the file and in `docs/dipendenze.md`;
+    `experiments/verify_foods.py` checks the values before the release.
+  - Declared calories (B12): zero and the FIT invalid value mean "not
+    computed"; above 50,000 kcal, or above 1,500 kcal per hour of moving time,
+    they are discarded (not clipped) and estimated. With several sessions in a
+    file, they count only if all declare them.
+  - Health data: weight, age, HR, level, goals and meal times stay in the
+    profile database. The nutrition use cases and the day page write nothing
+    to the log about the person; a failure shows a generic message without the
+    text of the exception (T-SEC-08).
+  - Harmful advice: the safety limits of the deficit are in the pure domain
+    and the most restrictive wins: a weekly loss of at most 1% of the body
+    weight, at most 20% of the expenditure and 750 kcal, never under the basal
+    rate nor 1,200 kcal (women) or 1,500 kcal (men), an energy availability of
+    at least 30 kcal per kg of fat-free mass (estimated with Boer 1984), less
+    or none on heavy days (ADR 008); no numbers under 18
+    years, no deficit with a body mass index under 18.5 (with a warning to see
+    a professional); an age over 130 years is "unavailable", not an error;
+    the page carries a fixed notice that cannot be hidden. The model gives no
+    diagnosis.
+  - Schema v4 goes through the same safety copy as the others
+    (`backup/ponos-v3-v4.sqlite3`), is tested interrupted at every statement,
+    and the database rejects overlapping goal periods (triggers on `INSERT`
+    and `UPDATE`) and values outside the limits (`CHECK`).
+  - The day is a query: it saves nothing and does not touch the index of the
+    activities.
 
 ## 4. Did we do it right?
 
@@ -392,6 +441,14 @@ service, E elevation of privilege.
 | Consistent load after changes of parameters, weights and zones | T-CALC-01…07 |
 | Phase 3 charts and windows (contrast, keyboard, accessible names, languages) | T-UI-04, T-UI-05, T-UI-06, T-UI-07 |
 | Budget with 5,000 activities | T-PERF-01 |
+| Nutrition: model, limits of the deficit, minors, low body mass index | T-NUT-01, T-NUT-02 |
+| Nutrition: calories of the activities, declared and estimated | T-NUT-03 |
+| Nutrition: meals and moments, daylight saving time | T-NUT-04 |
+| Nutrition: determinism and dated changes | T-NUT-05 |
+| Table of foods: hostile file, examples, source and licence | T-NUT-06 |
+| Migration v3 → v4 and the rules of the new tables | T-DATI-01 (`tests/collaudo/test_fase4b_migrazione.py`) |
+| Nutrition data in logs and messages | T-SEC-08 (`tests/collaudo/test_fase4b_log_salute.py`) |
+| Calendar and day page (accessibility, languages, memory of the settings) | T-UI-01, T-UI-06, T-UI-07 (`tests/collaudo/test_fase4b_interfaccia.py`) |
 
 ### Cases closed by the phase 1 acceptance testing (D-F1)
 
@@ -461,6 +518,28 @@ in the tests):
 | — | Preview that modifies the profile | `peek` opens the database read-only, without migrating or taking the lock | T-UI-03 |
 | — | File replacements with different techniques | One single module, `ponos_coach.fsio` | T-DATI-02 |
 
+### Cases closed by the phase 4b acceptance testing (D-F4B)
+
+Defects found by the phase 4b acceptance testing (D-F4B-01…09) and the
+behaviour that closes them. The defect tests have the id in the name
+(`test_d_f4b_NN_…`) or in a comment; D-F4B-06 also has a test in
+`tests/nutrition/test_foods.py`.
+
+| Id | Defect | Behaviour | Test (plan) | Test (file) |
+|---|---|---|---|---|
+| D-F4B-01 | A woman of 98 years, 100 cm and 20.1 kg (inside the limits of the person) with a 100 g loss goal made the day fail with "macronutrient grams cannot be negative" | Carbohydrate room and protein cap of the day's macros are clamped at zero, so no quantity is negative; every adult inside the limits gets a day, under 18 the day is unavailable by design | T-NUT-02, T-NUT-04 | `tests/collaudo/test_fase4b_modello.py` |
+| D-F4B-02 | Declared calories of 50,000 kcal in 20 minutes were taken at face value and inflated the target | A total above 1,500 kcal per hour of moving time is discarded and estimated as if absent | T-NUT-03 | `tests/collaudo/test_fase4b_giorni.py` |
+| D-F4B-03 | In an eight-hour ultra the "during" box said 60 g of carbohydrate an hour, but the item held far fewer grams, and dinner kept none | Box and grams agree; lunch and dinner keep at least 1 g/kg of carbohydrate | T-NUT-04 | `tests/collaudo/test_fase4b_modello.py` |
+| D-F4B-04 | The recovery after a session with long stops was placed at the end of the moving time, while the person was still out | The end of a session is the start plus the elapsed time | T-NUT-04 | `tests/collaudo/test_fase4b_giorni.py` |
+| D-F4B-05 | A date of birth of 1900 and a day in 2035 (135 years) raised an exception | The result is "unavailable" (`AGE_OUT_OF_RANGE`) | T-NUT-01 | `tests/collaudo/test_fase4b_giorni.py` |
+| D-F4B-06 | A food table nested 100,000 levels deep exhausted the JSON decoder's recursion | The depth (at most 8) is checked before the decoder; the error is a `FoodTableError` | T-NUT-06 | `tests/collaudo/test_fase4b_alimenti.py`, `tests/nutrition/test_foods.py` |
+| D-F4B-07 | A session across the change to summer time had its recovery before its end on the wall clock | The end is computed in UTC and then shown in local time | T-NUT-04 | `tests/collaudo/test_fase4b_giorni.py` |
+| D-F4B-08 | The source and licence of the food table (USDA FoodData Central, CC0) were not in the dependency register | Entry "USDA FoodData Central" in `docs/dipendenze.md` | T-NUT-06 | `tests/collaudo/test_fase4b_alimenti.py` |
+| D-F4B-09 | An activity indexed before v4 lost its declared calories and was estimated | The day reads the original file and uses the declared calories | T-NUT-03 | `tests/collaudo/test_fase4b_giorni.py` |
+
+All closed on 2026-11-07: their tests, born as expected-fail (strict `xfail`),
+pass without the mark.
+
 ## 5. Accepted risks
 
 | Risk | Reason |
@@ -480,6 +559,10 @@ in the tests):
 | An attack with the user's permissions can replace the archive and its database together | Integrity protects from errors and partial modifications, not from whoever already controls the account (assumptions). |
 | Unrecognised duplicate between FIT and GPX outside the threshold (60 s, 5%) | The activity enters twice: no data lost. Better than deleting a real activity. |
 | No secure deletion of data | Beyond the reach of an app on ordinary file systems. |
+| Food values not yet verified against FoodData Central | The first version of the table was written without access to the source. Mitigations: `source.verified_on` is empty and the release waits for `experiments/verify_foods.py`; the parser checks energy against macros; the notice says the guidance is general. |
+| Guidance built on population formulas (Mifflin-St Jeor, Keytel, Boer, factors without sport) and on self-assessed level | Individual error of hundreds of kcal is possible, and an app cannot measure more. Mitigations: conservative limits of the deficit, no numbers under 18 years, fixed notice, no diagnosis (ADR 008). |
+| Declared calories that are wrong but plausible | Under 1,500 kcal per hour they cannot be told from a real effort. Only the net energy (without the rest rate) is added to the expenditure, which reduces the effect. |
+| Food names and nutrition advice only in English until translated; no allergy or diet restriction | User decision of 2026-11-07. The examples are an illustration, not a menu. |
 
 ## Open points
 

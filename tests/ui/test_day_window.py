@@ -21,9 +21,11 @@ from pytestqt.qtbot import QtBot
 
 from ponos_coach.load.domain import HeartRateLimits, Physiology, Sex, ThresholdHeartRate
 from ponos_coach.nutrition.domain import Advisory, EnergySource
+from ponos_coach.profiles.day_nutrition import NutritionUnavailable, UnavailableReason
 from ponos_coach.profiles.domain import BirthDate, FixedProfileData, Height, ProfileName
 from ponos_coach.profiles.use_cases import NewProfileRequest
 from ponos_coach.ui.day_page import DayState
+from ponos_coach.ui.day_presentation import present_day
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.nutrition_texts import (
     advisory_text,
@@ -150,10 +152,10 @@ def test_a_three_hour_session_has_a_during_training_card_with_the_hourly_amounts
 
     assert len(during) == 1
     texts = page.meal_texts(during[0])
-    hourly = next(t for t in texts if t.startswith("Each hour: "))
-    assert "g of carbohydrates" in hourly
-    assert "ml of fluids" in hourly
-    assert "mg of sodium" in hourly
+    hourly = next(t for t in texts if t.startswith("Indicative: about "))
+    assert "g of carbohydrate," in hourly
+    assert "ml of fluid and" in hourly
+    assert "mg of sodium per hour" in hourly
     assert any("Before training" in t for t in page.meal_titles)
     assert any("After training" in t for t in page.meal_titles)
 
@@ -306,3 +308,46 @@ def test_an_empty_profile_has_a_calendar_but_cannot_open_nutrition_settings(
     assert window.nutrition_action.toolTip() == "Create or open a profile first."
     window.nutrition.open_day(EMPTY_DAY)  # no profile: nothing happens
     assert window.nutrition.current_day is None
+
+
+def test_the_shipped_food_values_are_marked_as_not_yet_verified_above_the_examples(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+
+    open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
+
+    assert window.day_page.foods_note_text == "Food values not yet verified against the source."
+    assert "Food values not yet verified against the source." in all_label_texts(window.day_page)
+
+
+def test_today_says_that_the_day_is_in_progress_and_a_past_day_does_not(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+
+    open_day(qtbot, window, TODAY)
+    today_note = window.day_page.in_progress_text
+    today_labels = all_label_texts(window.day_page)
+    open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
+
+    assert "not over yet" in today_note
+    assert today_note in today_labels
+    assert window.day_page.in_progress_text == ""
+
+
+def test_a_day_of_a_minor_shows_no_numbers_and_no_edit_profile_button(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+    page = window.day_page
+
+    page.show_content(present_day(EMPTY_DAY, NutritionUnavailable(UnavailableReason.UNDER_18)))
+
+    assert page.state is DayState.UNAVAILABLE
+    assert page.missing_texts[2] == "Please talk to a doctor or a sports dietitian."
+    assert page.edit_profile_button.isHidden()
+    page.show_content(
+        present_day(EMPTY_DAY, NutritionUnavailable(UnavailableReason.MISSING_WEIGHT))
+    )
+    assert not page.edit_profile_button.isHidden()

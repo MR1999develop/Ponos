@@ -109,8 +109,8 @@ anche questo file e i test `T-NUT`.
      metabolismo di base, a mordere per primo.
 - **Minorenni**: sotto i 18 anni il modello non produce kcal, macro né porzioni.
   `PlanDayNutrition` restituisce `NutritionUnavailable(UNDER_18)` (prima di
-  chiedere peso o FC) e la pagina invita a rivolgersi a un medico o a un
-  dietista. Le funzioni pure del dominio (`plan_day`, `energy_target`) mantengono
+  chiedere peso o FC); la pagina non mostra numeri e invita a rivolgersi a un
+  medico o a un dietista sportivo. Le funzioni pure del dominio (`plan_day`, `energy_target`) mantengono
   l'avviso `UNDER_18` e non applicano deficit, ma non vengono chiamate per
   i minorenni.
 - Età oltre 130 anni dalla nascita (giorno lontano nel futuro):
@@ -142,7 +142,9 @@ Per ogni seduta di almeno 30 minuti (le più brevi non cambiano nulla):
   600 ml/h e sodio 300 mg/h, indicativi (ACSM).
 - **Post**, 30 min dopo la fine: proteine 0,3 g/kg; carboidrati 1,1 g/kg se la
   seduta dura almeno 90 min o un'altra arriva **a meno di 8 ore**
-  (`SPEEDY_REFUEL_WITHIN_MIN`, rifornimento rapido ACSM; a 8 h esatte no). Una
+  (`SPEEDY_REFUEL_WITHIN_MIN`, rifornimento rapido ACSM; a 8 h esatte no).
+  Scelta del progetto: scatta per qualunque seduta successiva entro 8 h, anche
+  breve (più carboidrati non è un rischio e la regola resta semplice). Una
   seduta del giorno dopo si passa come `minutes_to_next_session` e di norma
   supera le 8 ore.
 

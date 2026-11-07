@@ -17,11 +17,16 @@ from ponos_coach.nutrition.domain import (
     PerformanceGoal,
     WeightLossGoal,
 )
-from ponos_coach.nutrition.ports import GoalPeriodNotFoundError, GoalPeriodOverlapError
+from ponos_coach.nutrition.ports import (
+    ActivityLevelNotFoundError,
+    GoalPeriodNotFoundError,
+    GoalPeriodOverlapError,
+)
 from ponos_coach.nutrition.use_cases import (
     AddGoalPeriod,
     LevelDateInFutureError,
     ReadNutritionSettings,
+    RemoveActivityLevel,
     RemoveGoalPeriod,
     ReplaceGoalPeriod,
     SetActivityLevel,
@@ -50,6 +55,9 @@ class Rig:
         )
         self.set_level = SetActivityLevel(
             self.profile.activities, self.profile.activity_levels, lambda: TODAY
+        )
+        self.remove_level = RemoveActivityLevel(
+            self.profile.activities, self.profile.activity_levels
         )
         self.add = AddGoalPeriod(self.profile.activities, self.profile.goal_periods)
         self.replace = ReplaceGoalPeriod(self.profile.activities, self.profile.goal_periods)
@@ -85,6 +93,18 @@ def test_a_level_from_a_future_day_is_refused_and_nothing_is_written() -> None:
         rig.set_level(ActivityLevel.ACTIVE, date(2026, 3, 11))
 
     assert rig.read().levels == ()
+
+
+def test_removing_a_level_entry_leaves_the_others_and_a_missing_one_is_an_error() -> None:
+    rig = Rig()
+    rig.set_level(ActivityLevel.LIGHT, date(2026, 3, 1))
+    rig.set_level(ActivityLevel.ACTIVE, date(2026, 3, 5))
+
+    rig.remove_level(date(2026, 3, 5))
+    with pytest.raises(ActivityLevelNotFoundError):
+        rig.remove_level(date(2026, 3, 5))
+
+    assert rig.read().levels == (ActivityLevelEntry(date(2026, 3, 1), ActivityLevel.LIGHT),)
 
 
 def test_the_meal_times_are_saved_and_read_back_as_set() -> None:

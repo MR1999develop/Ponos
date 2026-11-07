@@ -62,12 +62,6 @@ def estimated_fat_free_mass_kg(person: Person) -> float:
     return min(person.weight_kg, max(defaults.MIN_FFM_FRACTION * person.weight_kg, estimate))
 
 
-def energy_availability(person: Person, intake_kcal: float, exercise_kcal: float) -> float:
-    """Energy availability in kcal per kg of fat-free mass per day:
-    `(intake - exercise energy) / fat-free mass`."""
-    return (intake_kcal - exercise_kcal) / estimated_fat_free_mass_kg(person)
-
-
 def max_deficit_for_energy_availability(
     person: Person, expenditure_kcal: float, net_activity_kcal: float
 ) -> float:
