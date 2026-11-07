@@ -73,7 +73,7 @@ def test_a_day_after_today_can_be_selected_and_carries_its_planned_day(plan: Pla
 
     assert cell.is_future
     assert cell.can_select
-    assert not cell.can_open  # the day page is for the days up to today
+    assert cell.can_open  # a day of the plan holds a page: an estimate from the plan
     assert cell.plan == target
     assert cell.adherence is None
 

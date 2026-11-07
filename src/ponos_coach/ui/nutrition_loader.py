@@ -41,6 +41,7 @@ from ponos_coach.profiles.day_nutrition import (
     DayNutritionReport,
     DayNutritionResult,
     NutritionSources,
+    PlanContext,
     PlanDayNutrition,
 )
 from ponos_coach.profiles.domain import weight_on
@@ -141,7 +142,8 @@ def _plan_day(foods: FoodTableSource, day: date, access: ProfileAccess) -> DayLo
         session.lean_masses,
     )
     table = foods()
-    plan = PlanDayNutrition(sources, access.decode, access.zone, table)
+    context = PlanContext(session.plans, access.today())
+    plan = PlanDayNutrition(sources, access.decode, access.zone, table, plan_context=context)
     result = plan(day)
     measured = _lean_mass_measured(access, day) if isinstance(result, DayNutritionReport) else None
     return DayLoaded(day, result, table.source.verified_on is not None, measured)

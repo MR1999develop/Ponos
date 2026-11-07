@@ -132,6 +132,15 @@ def unavailable_text(reason: UnavailableReason) -> MissingDataText:
             translate("Nutrition", "Nutrition guidance covers ages up to 130 years."),
             check_birth_date,
         ),
+        UnavailableReason.NO_PLAN_FOR_DAY: (
+            translate("Nutrition", "The plan does not cover this day"),
+            translate(
+                "Nutrition",
+                "Guidance for a day ahead comes from the training plan, and the plan has "
+                "nothing saved for this day.",
+            ),
+            translate("Nutrition", "Update the plan in the Goals section."),
+        ),
         UnavailableReason.UNDER_18: (
             translate("Nutrition", "No guidance under 18"),
             translate("Nutrition", "Calories, macronutrients and portions are not given under 18."),
@@ -139,7 +148,8 @@ def unavailable_text(reason: UnavailableReason) -> MissingDataText:
         ),
     }
     title, what, remedy = texts[reason]
-    return MissingDataText(title, what, remedy, reason is not UnavailableReason.UNDER_18)
+    can_edit = reason not in (UnavailableReason.UNDER_18, UnavailableReason.NO_PLAN_FOR_DAY)
+    return MissingDataText(title, what, remedy, can_edit)
 
 
 def advisory_text(advisory: Advisory) -> str:
@@ -168,6 +178,11 @@ def advisory_text(advisory: Advisory) -> str:
         ),
         Advisory.DEFICIT_REDUCED_FOR_LOAD: QCoreApplication.translate(
             "Nutrition", "The calorie deficit is smaller because today's training is heavy."
+        ),
+        Advisory.DEFICIT_PAUSED_FOR_RACE: QCoreApplication.translate(
+            "Nutrition",
+            "No calorie deficit in the week of a race or in the taper before it: "
+            "weight loss is best kept away from races.",
         ),
         Advisory.CARBS_LIMITED_BY_ENERGY: QCoreApplication.translate(
             "Nutrition",
@@ -202,6 +217,13 @@ def in_progress_text() -> str:
         "Nutrition",
         "This day is not over yet: the values are partial and change as activities "
         "and the energy spent are added.",
+    )
+
+
+def estimate_from_plan_text() -> str:
+    """The note for a day ahead: the activities are the planned sessions, not recorded ones."""
+    return QCoreApplication.translate(
+        "Nutrition", "Estimate from the plan: the activities are the planned sessions."
     )
 
 

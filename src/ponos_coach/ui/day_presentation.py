@@ -28,6 +28,7 @@ from ponos_coach.ui.nutrition_texts import (
     MissingDataText,
     advisory_text,
     energy_source_text,
+    estimate_from_plan_text,
     fixed_notice_text,
     food_name,
     foods_unverified_text,
@@ -77,6 +78,7 @@ class DayView:
     foods_note: str  # empty once the food values are verified against their source
     lean_mass_note: str  # which lean mass the energy availability limit uses; empty if unknown
     notice: str
+    estimate_note: str = ""  # empty unless the day is ahead: its activities are the plan's
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,6 +234,7 @@ def _present_report(
         "" if verified else foods_unverified_text(),
         "" if lean_mass_measured is None else lean_mass_note_text(measured=lean_mass_measured),
         fixed_notice_text(),
+        estimate_from_plan_text() if report.from_plan else "",
     )
 
 

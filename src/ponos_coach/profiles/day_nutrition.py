@@ -2,6 +2,10 @@
 # Copyright (C) 2026 MR
 """Use case `PlanDayNutrition`: nutrition guidance for one day of the open profile.
 
+For a day after today the activities are the sessions the saved plan has for it, at a typical
+time, with the energy of the sport's METs (no heart rate): an estimate from the plan. In the week
+of an A or B race and in the taper before it a weight-loss goal gets no deficit (ACSM 2016).
+
 It gathers what the nutrition model needs (body data valid that day, activity level, goal, typical
 meal times, the day's activities with their energy and load) and hands it to `nutrition.plan_day`;
 then it attaches example foods to each meal. It only reads: nothing is saved. General guidance,
@@ -24,6 +28,7 @@ from ponos_coach.activities.domain import (
     Sport,
 )
 from ponos_coach.activities.ports import ActivityArchive, ActivityIndex
+from ponos_coach.goals.domain import Priority
 from ponos_coach.load.domain import (
     MissingPhysiologyError,
     Physiology,
@@ -68,11 +73,21 @@ from ponos_coach.nutrition.ports import (
     LeanMassStore,
     MealTimesStore,
 )
+from ponos_coach.planning.domain import Phase, Plan, PlanDay
+from ponos_coach.planning.ports import PlanStore, UnreadablePlan
 from ponos_coach.profiles.domain import age_on, weight_on
 from ponos_coach.profiles.ports import FixedDataStore, WeightStore
 
 _SECONDS_PER_MINUTE = 60.0
 _MINUTES_PER_HOUR = 60
+_MINUTES_PER_DAY = 24 * _MINUTES_PER_HOUR
+_DAYS_PER_WEEK = 7
+# Typical training time of a planned day: the mean start of the sessions of the last 60 days on
+# the same weekday, otherwise 18:00 (project defaults).
+TYPICAL_TIME_LOOKBACK_DAYS = 60
+DEFAULT_TRAINING_MINUTE = 18 * _MINUTES_PER_HOUR
+_DEFICIT_PAUSE_PHASES = frozenset({Phase.TAPER, Phase.MINI_TAPER})
+_DEFICIT_PAUSE_PRIORITIES = frozenset({Priority.A, Priority.B})
 
 
 class UnavailableReason(Enum):
@@ -84,6 +99,7 @@ class UnavailableReason(Enum):
     BEFORE_BIRTH = "before_birth"  # the day is before the date of birth
     AGE_OUT_OF_RANGE = "age_out_of_range"  # the day is more than 130 years after the birth
     UNDER_18 = "under_18"  # younger than 18: the model gives no numbers, only a referral
+    NO_PLAN_FOR_DAY = "no_plan_for_day"  # a day after today that the saved plan does not cover
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,7 +122,7 @@ class DayActivity:
     start plus the elapsed time, worked out in UTC and then shown in local time.
     """
 
-    identity: ActivityIdentity
+    identity: ActivityIdentity | None  # None for a session of the plan
     sport: Sport
     start: datetime
     local_start_minute: int
@@ -130,7 +146,8 @@ class DayNutritionReport:
 
     `unreadable_activities` counts the day's activities whose original file could not be read:
     they are still included (with the energy and load that do not need the file) but the guidance
-    may be less exact. `meal_times` and `goal` are the ones that applied that day.
+    may be less exact. `meal_times` and `goal` are the ones that applied that day. `from_plan` marks
+    an estimate for a day after today: its activities are the plan's sessions, not recorded ones.
     """
 
     day: date
@@ -140,6 +157,7 @@ class DayNutritionReport:
     meals: tuple[MealSuggestion, ...]
     activities: tuple[DayActivity, ...]
     unreadable_activities: int
+    from_plan: bool = False
 
 
 type DayNutritionResult = DayNutritionReport | NutritionUnavailable
@@ -160,6 +178,15 @@ class NutritionSources:
     meal_times: MealTimesStore
     goal_periods: GoalPeriodStore
     lean_masses: LeanMassStore | None = None  # optional: without it the estimate applies
+
+
+@dataclass(frozen=True, slots=True)
+class PlanContext:
+    """What the guidance for a day after `today` needs: the saved plan and today's date (local, in
+    the profile's time zone). Without it every day is computed from recorded activities."""
+
+    plans: PlanStore
+    today: date
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,6 +219,7 @@ class PlanDayNutrition:
         timezone: ZoneInfo,
         foods: FoodTable,
         max_file_bytes: int = MAX_ACTIVITY_FILE_BYTES,
+        plan_context: PlanContext | None = None,
     ) -> None:
         if max_file_bytes <= 0:
             raise ValueError("the byte cap must be positive")
@@ -200,27 +228,49 @@ class PlanDayNutrition:
         self._timezone = timezone
         self._foods = foods
         self._max_file_bytes = max_file_bytes
+        self._plan_context = plan_context
 
     def __call__(self, day: date) -> DayNutritionResult:
         """Guidance for `day` (local date in the profile's time zone).
 
+        A day after today comes from the saved plan (`from_plan`), if a `PlanContext` was given.
+
         Raises:
-            ActivityIndexError, LoadStoreError, ProfileDataError, NutritionStoreError: a store
-                could not be read.
+            ActivityIndexError, LoadStoreError, ProfileDataError, NutritionStoreError,
+            PlanStoreError: a store could not be read.
         """
         src = self._src
         subject = self._subject_on(day)
         if isinstance(subject, NutritionUnavailable):
             return subject
         person, physiology = subject.person, subject.physiology
-        measured, next_gap = self._activities_of(day, person, physiology)
+        context = self._plan_context
+        planned_day: PlanDay | None = None
+        paused = False
+        if context is not None and day > context.today:
+            plan = _saved_plan(context.plans)
+            planned_day = None if plan is None else _day_of(plan, day)
+            if plan is None or planned_day is None:
+                return NutritionUnavailable(UnavailableReason.NO_PLAN_FOR_DAY)
+            paused = _deficit_paused(plan, day)
+            measured, next_gap = self._planned_activities(plan, planned_day, person, context.today)
+        else:
+            measured, next_gap = self._activities_of(day, person, physiology)
         saved_times = src.meal_times.get()
         meal_times = MealTimes.default() if saved_times is None else saved_times
         periods = src.goal_periods.list_periods()
         goal = goal_for_day(periods, day)
         sessions = tuple(_session_of(m.activity) for m in measured)
         nutrition = plan_day(
-            DayInput(person, goal, meal_times, sessions, next_gap, _loss_days(periods, goal, day))
+            DayInput(
+                person,
+                goal,
+                meal_times,
+                sessions,
+                next_gap,
+                _loss_days(periods, goal, day),
+                paused,
+            )
         )
         suggestions = tuple(
             MealSuggestion(meal, suggest_examples(meal, self._foods.foods))
@@ -234,6 +284,7 @@ class PlanDayNutrition:
             suggestions,
             tuple(m.activity for m in measured),
             sum(m.unreadable for m in measured),
+            planned_day is not None,
         )
 
     def _subject_on(self, day: date) -> _Subject | NutritionUnavailable:
@@ -286,6 +337,54 @@ class PlanDayNutrition:
         later = self._src.index.first_start_at_or_after(last_end)
         gap = None if later is None else (later - last_end).total_seconds() / _SECONDS_PER_MINUTE
         return measured, gap
+
+    def _planned_activities(
+        self, plan: Plan, entry: PlanDay, person: Person, today: date
+    ) -> tuple[list[_Measured], float | None]:
+        """The plan's sessions of the day (a session, or a race) at the typical time of the
+        weekday, with the energy of the sport's METs; and the minutes from the end of the last one
+        to the first planned session after it (None if there is none or the day is empty)."""
+        planned = _planned_sessions(entry)
+        if not planned:
+            return [], None
+        typical = self._typical_minutes(today)
+        start_minute = typical.get(entry.day.weekday(), DEFAULT_TRAINING_MINUTE)
+        moment = datetime.combine(entry.day, time(), tzinfo=self._timezone) + timedelta(
+            minutes=start_minute
+        )
+        measured = []
+        for sport, duration_s, load in planned:
+            energy = activity_energy(person, sport, duration_s, None, None)
+            end_minute = start_minute + duration_s / _SECONDS_PER_MINUTE
+            activity = DayActivity(
+                None,
+                sport,
+                moment.astimezone(UTC),
+                start_minute,
+                duration_s,
+                load,
+                energy,
+                end_minute,
+            )
+            measured.append(_Measured(activity, False))
+        last_end = max(m.activity.local_end_minute or 0.0 for m in measured)
+        return measured, _gap_to_next_session(plan, entry.day, last_end, typical)
+
+    def _typical_minutes(self, today: date) -> dict[int, int]:
+        """Mean start (minutes after local midnight, rounded) of the activities of the last 60
+        days up to today, by weekday (Monday = 0); a weekday without any is not in the result."""
+        zone = self._timezone
+        first = datetime.combine(
+            today - timedelta(days=TYPICAL_TIME_LOOKBACK_DAYS), time.min, tzinfo=zone
+        )
+        last = datetime.combine(today + timedelta(days=1), time.min, tzinfo=zone)
+        found = self._src.index.list_started_between(first.astimezone(UTC), last.astimezone(UTC))
+        by_weekday: dict[int, list[int]] = {}
+        for record in found:
+            local = record.start.astimezone(zone)
+            minute = local.hour * _MINUTES_PER_HOUR + local.minute
+            by_weekday.setdefault(local.weekday(), []).append(minute)
+        return {weekday: round(sum(m) / len(m)) for weekday, m in by_weekday.items()}
 
     def _records_of(self, day: date) -> list[ActivityRecord]:
         """The records that start on the local `day`: one range query on the start index over a
@@ -347,6 +446,61 @@ class PlanDayNutrition:
             _local_end_minute(record, local, start_minute, self._timezone),
         )
         return _Measured(day_activity, unreadable)
+
+
+def _saved_plan(plans: PlanStore) -> Plan | None:
+    """The saved plan, or None if there is none, it was refused or it cannot be read."""
+    stored = plans.current()
+    if stored is None or isinstance(stored, UnreadablePlan) or not isinstance(stored.state, Plan):
+        return None
+    return stored.state
+
+
+def _day_of(plan: Plan, day: date) -> PlanDay | None:
+    """The plan's entry for `day`, if the plan covers it."""
+    for entry in plan.days:
+        if entry.day == day:
+            return entry
+    return None
+
+
+def _planned_sessions(entry: PlanDay) -> list[tuple[Sport, float, float]]:
+    """Sport, duration in seconds and load of what the plan has on a day (session and race)."""
+    found = []
+    if entry.session is not None:
+        session = entry.session
+        found.append((session.sport, session.minutes * _SECONDS_PER_MINUTE, session.load))
+    if entry.race is not None:
+        race = entry.race
+        found.append((race.sport, float(race.expected_time_s), race.load))
+    return found
+
+
+def _gap_to_next_session(
+    plan: Plan, day: date, last_end_minute: float, typical: Mapping[int, int]
+) -> float | None:
+    """Minutes from the end of the day's last session to the start of the next planned one."""
+    for later in plan.days:
+        if later.day <= day or not _planned_sessions(later):
+            continue
+        start = typical.get(later.day.weekday(), DEFAULT_TRAINING_MINUTE)
+        return max(0.0, (later.day - day).days * _MINUTES_PER_DAY + start - last_end_minute)
+    return None
+
+
+def _deficit_paused(plan: Plan, day: date) -> bool:
+    """True if `day` is in the taper before an A or B race, or in the Monday-to-Sunday week of one
+    (ACSM 2016: lose weight away from races)."""
+    entry = _day_of(plan, day)
+    if entry is not None and entry.phase in _DEFICIT_PAUSE_PHASES:
+        return True
+    week_start = day - timedelta(days=day.weekday())
+    return any(
+        e.race is not None
+        and e.race.priority in _DEFICIT_PAUSE_PRIORITIES
+        and 0 <= (e.day - week_start).days < _DAYS_PER_WEEK
+        for e in plan.days
+    )
 
 
 def _loss_days(periods: Sequence[GoalPeriod], goal: NutritionGoal, day: date) -> int | None:

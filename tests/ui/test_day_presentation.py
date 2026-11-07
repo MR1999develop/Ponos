@@ -188,7 +188,9 @@ def test_what_is_missing_says_what_and_how_to_complete_it(reason: UnavailableRea
     assert view.missing.title
     assert view.missing.what
     assert view.missing.remedy
-    assert view.missing.can_edit_profile is (reason is not UnavailableReason.UNDER_18)
+    assert view.missing.can_edit_profile is (
+        reason not in (UnavailableReason.UNDER_18, UnavailableReason.NO_PLAN_FOR_DAY)
+    )
 
 
 def test_every_category_of_the_domain_has_a_text() -> None:

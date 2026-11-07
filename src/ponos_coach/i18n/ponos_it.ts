@@ -2017,10 +2017,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Apri prima la sezione Calendario.</translation>
     </message>
     <message>
-        <source>Select a day up to today first: later days have no day page.</source>
-        <translation>Seleziona prima un giorno fino a oggi: i giorni successivi non hanno una pagina del giorno.</translation>
-    </message>
-    <message>
         <source>No day is open.</source>
         <translation>Nessuna giornata aperta.</translation>
     </message>
@@ -2104,6 +2100,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Select an activity in the Activities list first.</source>
         <translation>Seleziona prima un&apos;attività nell&apos;elenco Attività.</translation>
+    </message>
+    <message>
+        <source>Select a day up to today, or a day of the plan, first.</source>
+        <translation>Seleziona prima un giorno fino a oggi o un giorno del piano.</translation>
     </message>
     <message>
         <source>Closing the profile...</source>
@@ -2449,6 +2449,18 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Sotto i 18 anni non si indicano calorie, macronutrienti né porzioni.</translation>
     </message>
     <message>
+        <source>The plan does not cover this day</source>
+        <translation>Il piano non copre questo giorno</translation>
+    </message>
+    <message>
+        <source>Guidance for a day ahead comes from the training plan, and the plan has nothing saved for this day.</source>
+        <translation>L'alimentazione di un giorno futuro viene dal piano di allenamento, e il piano non ha niente di salvato per questo giorno.</translation>
+    </message>
+    <message>
+        <source>Update the plan in the Goals section.</source>
+        <translation>Aggiorna il piano nella sezione Obiettivi.</translation>
+    </message>
+    <message>
         <source>Your body mass index is below 18.5. Please talk to a doctor or a dietitian before changing how you eat.</source>
         <translation>Il tuo indice di massa corporea è inferiore a 18,5. Parla con un medico o con un dietista prima di cambiare come mangi.</translation>
     </message>
@@ -2463,6 +2475,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>The calorie deficit is smaller because today&apos;s training is heavy.</source>
         <translation>Il deficit calorico è più piccolo perché l&apos;allenamento di oggi è impegnativo.</translation>
+    </message>
+    <message>
+        <source>No calorie deficit in the week of a race or in the taper before it: weight loss is best kept away from races.</source>
+        <translation>Nessun deficit calorico nella settimana di una gara e nello scarico che la precede: il dimagrimento va tenuto lontano dalle gare.</translation>
     </message>
     <message>
         <source>The energy target is too low for the usual amount of carbohydrates, so carbohydrates are lower than today&apos;s training would suggest.</source>
@@ -2483,6 +2499,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>This day is not over yet: the values are partial and change as activities and the energy spent are added.</source>
         <translation>Questo giorno non è ancora finito: i valori sono parziali e cambiano man mano che si aggiungono attività ed energia spesa.</translation>
+    </message>
+    <message>
+        <source>Estimate from the plan: the activities are the planned sessions.</source>
+        <translation>Stima dal piano: le attività sono le sedute pianificate.</translation>
     </message>
     <message>
         <source>Food values not yet verified against the source.</source>

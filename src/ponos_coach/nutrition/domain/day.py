@@ -16,7 +16,12 @@ from ponos_coach.nutrition.domain.advice import Advisory, DayLoadLevel, classify
 from ponos_coach.nutrition.domain.energy import Person, basal_metabolic_rate
 from ponos_coach.nutrition.domain.macros import Macros
 from ponos_coach.nutrition.domain.meals import MealItem, TrainingSession, schedule_meals
-from ponos_coach.nutrition.domain.settings import MealTimes, NutritionGoal
+from ponos_coach.nutrition.domain.settings import (
+    MaintenanceGoal,
+    MealTimes,
+    NutritionGoal,
+    WeightLossGoal,
+)
 from ponos_coach.nutrition.domain.targets import day_macros, energy_availability, energy_target
 
 
@@ -27,7 +32,10 @@ class DayInput:
     `sessions` are the day's training sessions in any order; `minutes_to_next_session` is the
     time from the end of the last of them to the next session (the following day's), if there is
     one known. `weight_loss_days` is how long the weight-loss period the day belongs to has lasted,
-    in days (0 on its first day); None outside a weight-loss period.
+    in days (0 on its first day); None outside a weight-loss period. `deficit_paused` marks a day
+    in the week of an A or B race or in the taper before it: a weight-loss goal then gets no
+    deficit (ACSM 2016: lose weight away from races) and the advisory
+    `DEFICIT_PAUSED_FOR_RACE`.
     """
 
     person: Person
@@ -36,6 +44,7 @@ class DayInput:
     sessions: tuple[TrainingSession, ...] = ()
     minutes_to_next_session: float | None = None
     weight_loss_days: int | None = None
+    deficit_paused: bool = False
 
     def __post_init__(self) -> None:
         if self.weight_loss_days is not None and self.weight_loss_days < 0:
@@ -80,16 +89,20 @@ def plan_day(day: DayInput) -> DayNutrition:
     deficit's safety limits), macro totals, then the split into meals and training intakes.
     """
     person = day.person
+    paused = day.deficit_paused and isinstance(day.goal, WeightLossGoal)
+    goal = MaintenanceGoal() if paused else day.goal
     net_kcal = sum(s.net_kcal for s in day.sessions)
     level = classify_day_load(
         sum(s.load for s in day.sessions), sum(s.duration_min for s in day.sessions)
     )
-    target = energy_target(person, day.goal, level, basal_metabolic_rate(person), net_kcal)
-    macros, macro_advisories = day_macros(person, day.goal, level, target)
+    target = energy_target(person, goal, level, basal_metabolic_rate(person), net_kcal)
+    macros, macro_advisories = day_macros(person, goal, level, target)
     meals, scaled = schedule_meals(
         macros, person.weight_kg, day.meal_times, day.sessions, day.minutes_to_next_session
     )
     extra = [Advisory.INTAKES_SCALED] if scaled else []
+    if paused:
+        extra.append(Advisory.DEFICIT_PAUSED_FOR_RACE)
     if _long_weight_loss(day, target.deficit_kcal, target.target_kcal, net_kcal):
         extra.append(Advisory.LONG_WEIGHT_LOSS)
     return DayNutrition(
