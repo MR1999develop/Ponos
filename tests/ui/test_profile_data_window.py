@@ -643,3 +643,20 @@ def test_changing_the_day_after_an_edit_shows_the_value_in_force_the_new_day(
     assert dialog.note_text(EditField.THRESHOLD) == ""
     assert dialog.validity_notice_text == ""
     assert not dialog.save_button.isEnabled()
+
+
+def test_profile_commands_are_disabled_as_soon_as_an_overview_recalculation_starts(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    """Regressione (CI della PR #3): durante il calcolo i comandi non restano attivi e muti."""
+    window = window_with_activities(qtbot, tmp_path, settings)
+    assert window.edit_profile_action.isEnabled()
+
+    window.controller.request_overview_refresh()
+
+    assert not window.controller.can_edit_profile
+    assert not window.edit_profile_action.isEnabled()
+    assert not window.sport_weights_action.isEnabled()
+    wait_ready(qtbot, window, FILES_IN_FIXTURE_FOLDER)
+    assert window.edit_profile_action.isEnabled()
+    close_window(qtbot, window)

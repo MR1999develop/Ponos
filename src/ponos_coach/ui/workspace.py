@@ -735,6 +735,9 @@ class WorkspaceController(QObject):
         self._overview_handle = self._submit(
             self._overview_job(), self._after_overview, self._on_overview_progress
         )
+        # `_set_overview` ha già avvisato, ma prima che il lavoro fosse registrato: senza questo
+        # i comandi che dipendono dal calcolo in corso (Modifica profilo, Pesi) restano attivi.
+        self.busy_changed.emit()
 
     def _cancel_overview(self) -> None:
         if self._overview_handle is not None:
