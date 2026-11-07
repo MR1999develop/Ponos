@@ -30,20 +30,28 @@ from PySide6.QtWidgets import (
 from ponos_coach.load.domain import Sex
 from ponos_coach.profiles.domain import FolderKind
 from ponos_coach.profiles.use_cases import NewProfileRequest
-from ponos_coach.ui.new_profile_form import (
+from ponos_coach.ui.birth_date_edit import BirthDateEdit
+from ponos_coach.ui.body_input import body_problem_text
+from ponos_coach.ui.form_rows import add_field_row
+from ponos_coach.ui.heart_rate_rules import (
     MAX_ALLOWED_BPM,
     MIN_ALLOWED_BPM,
     MIN_THRESHOLD_BPM,
+    heart_rate_problem_text,
+)
+from ponos_coach.ui.new_profile_form import (
     Field,
     NewProfileForm,
     Problem,
+    body_problem_of,
+    heart_rate_problem_of,
 )
 from ponos_coach.ui.tokens import DIALOG_MIN_WIDTH, SPACE_1, SPACE_2, SPACE_4, Theme, tokens_for
 from ponos_coach.ui.workspace import FolderCheck
 
 
 class NewProfileDialog(QDialog):
-    """Raccoglie nome, cartella, FC e sesso, e emette la richiesta di creazione."""
+    """Raccoglie nome, cartella, corpo, FC e sesso, e emette la richiesta di creazione."""
 
     create_requested = Signal(object)  # NewProfileRequest
 
@@ -92,6 +100,15 @@ class NewProfileDialog(QDialog):
         self._folder_note = self._note_label()
         self._destination_note = self._note_label()
 
+        self._height = self._text_field("profileHeight", self.tr("Height (cm)"))
+        self._height.setPlaceholderText(self.tr("For example, 175"))
+        self._height.textEdited.connect(self._on_height_edited)
+        self._weight = self._text_field("profileWeight", self.tr("Weight (kg)"))
+        self._weight.setPlaceholderText(self.tr("For example, 68.5"))
+        self._weight.textEdited.connect(self._on_weight_edited)
+        self._birth = BirthDateEdit(self._today, self)
+        self._birth.selection_changed.connect(self._on_birth_changed)
+
         self._min = self._bpm_box(MIN_ALLOWED_BPM, "minHeartRate")
         self._max = self._bpm_box(MIN_ALLOWED_BPM, "maxHeartRate")
         self._threshold = self._bpm_box(MIN_THRESHOLD_BPM, "thresholdHeartRate")
@@ -109,7 +126,9 @@ class NewProfileDialog(QDialog):
     def _build_layout(self) -> None:
         layout = QFormLayout()
         layout.setVerticalSpacing(SPACE_2)
-        layout.addRow(self.tr("Profile name"), self._with_error(self._name, Field.NAME))
+        add_field_row(
+            layout, self.tr("Profile name"), self._name, self._with_error(self._name, Field.NAME)
+        )
         folder_row = QHBoxLayout()
         folder_row.addWidget(self._folder, stretch=1)
         folder_row.addWidget(self._browse)
@@ -121,9 +140,16 @@ class NewProfileDialog(QDialog):
         folder_column.addWidget(self._destination_note)
         folder_column.addWidget(self._folder_note)
         folder_column.addWidget(self._errors[Field.FOLDER])
-        layout.addRow(self.tr("Profile folder"), folder_box)
-        layout.addRow(self.tr("Resting heart rate"), self._with_error(self._min, Field.MIN_BPM))
-        layout.addRow(self.tr("Maximum heart rate"), self._with_error(self._max, Field.MAX_BPM))
+        add_field_row(layout, self.tr("Profile folder"), self._folder, folder_box)
+        rows = (
+            (self.tr("Height (cm)"), self._height, Field.HEIGHT),
+            (self.tr("Weight (kg)"), self._weight, Field.WEIGHT),
+            (self.tr("Date of birth"), self._birth, Field.BIRTH_DATE),
+            (self.tr("Resting heart rate"), self._min, Field.MIN_BPM),
+            (self.tr("Maximum heart rate"), self._max, Field.MAX_BPM),
+        )
+        for text, widget, field in rows:
+            add_field_row(layout, text, widget, self._with_error(widget, field))
         threshold_box = QWidget(self)
         threshold_column = QVBoxLayout(threshold_box)
         threshold_column.setContentsMargins(0, 0, 0, 0)
@@ -131,7 +157,7 @@ class NewProfileDialog(QDialog):
         threshold_column.addWidget(self._threshold)
         threshold_column.addWidget(self._threshold_note)
         threshold_column.addWidget(self._errors[Field.THRESHOLD])
-        layout.addRow(self.tr("Threshold heart rate"), threshold_box)
+        add_field_row(layout, self.tr("Threshold heart rate"), self._threshold, threshold_box)
         sex_box = QWidget(self)
         sex_row = QHBoxLayout(sex_box)
         sex_row.setContentsMargins(0, 0, 0, 0)
@@ -157,6 +183,12 @@ class NewProfileDialog(QDialog):
         outer.setSpacing(SPACE_4)
         outer.addLayout(layout)
         outer.addWidget(self._buttons)
+
+    def _text_field(self, name: str, accessible_name: str) -> QLineEdit:
+        field = QLineEdit(self)
+        field.setObjectName(name)
+        field.setAccessibleName(accessible_name)
+        return field
 
     def _bpm_box(self, low: int, name: str) -> QSpinBox:
         box = QSpinBox(self)
@@ -212,6 +244,21 @@ class NewProfileDialog(QDialog):
         return self._browse
 
     @property
+    def height_edit(self) -> QLineEdit:
+        """Campo dell'altezza."""
+        return self._height
+
+    @property
+    def weight_edit(self) -> QLineEdit:
+        """Campo del peso."""
+        return self._weight
+
+    @property
+    def birth_edit(self) -> BirthDateEdit:
+        """Selettore della data di nascita."""
+        return self._birth
+
+    @property
     def destination_text(self) -> str:
         """Riga "I dati andranno in: ..." (vuota se non è mostrata)."""
         return self._destination_note.text() if self._destination_note.isVisible() else ""
@@ -237,6 +284,9 @@ class NewProfileDialog(QDialog):
         self._name.setText(form.name)
         self._folder.setText(form.folder_text)
         self._refresh_destination()
+        self._height.setText(form.height_text)
+        self._weight.setText(form.weight_text)
+        self._birth.select(form.birth_date)
         self._min.setValue(form.min_bpm)
         self._max.setValue(form.max_bpm)
         self._sync_threshold()
@@ -258,13 +308,19 @@ class NewProfileDialog(QDialog):
         self._threshold_note.setVisible(self._form.threshold_is_estimate)
 
     def _refresh_errors(self) -> None:
-        problems = self._form.problems() if self._show_errors else ()
+        problems = self._form.problems(self._today) if self._show_errors else ()
         for field, label in self._errors.items():
             first = next((p for p in problems if p.field is field), None)
             label.setText("" if first is None else self._problem_text(first))
             label.setVisible(first is not None)
 
     def _problem_text(self, problem: Problem) -> str:
+        body = body_problem_of(problem)
+        if body is not None:
+            return body_problem_text(body)
+        rule = heart_rate_problem_of(problem)
+        if rule is not None:
+            return heart_rate_problem_text(rule)
         texts = {
             Problem.NAME_EMPTY: self.tr("Enter a name for the profile."),
             Problem.NAME_TOO_LONG: self.tr("The name is too long: use at most 60 characters."),
@@ -274,15 +330,6 @@ class NewProfileDialog(QDialog):
             ),
             Problem.FOLDER_NOT_ABSOLUTE: self.tr(
                 "Enter the full path of the folder, starting from the drive or root."
-            ),
-            Problem.MIN_NOT_BELOW_MAX: self.tr(
-                "The resting heart rate must be lower than the maximum."
-            ),
-            Problem.THRESHOLD_NOT_ABOVE_MIN: self.tr(
-                "The threshold must be higher than the resting heart rate."
-            ),
-            Problem.THRESHOLD_ABOVE_MAX: self.tr(
-                "The threshold cannot be higher than the maximum."
             ),
         }
         return texts[problem]
@@ -321,6 +368,18 @@ class NewProfileDialog(QDialog):
         problem = self._form.folder_problem()
         self._create.setEnabled(problem is None)
         self._create.setToolTip("" if problem is None else self._problem_text(problem))
+
+    def _on_height_edited(self, text: str) -> None:
+        self._form.height_text = text
+        self._refresh_errors()
+
+    def _on_weight_edited(self, text: str) -> None:
+        self._form.weight_text = text
+        self._refresh_errors()
+
+    def _on_birth_changed(self, value: object) -> None:
+        self._form.birth_date = value if isinstance(value, date) else None
+        self._refresh_errors()
 
     def _on_min_changed(self, value: int) -> None:
         self._form.min_bpm = value
@@ -385,6 +444,9 @@ class NewProfileDialog(QDialog):
         target: QWidget = {
             Field.NAME: self._name,
             Field.FOLDER: self._folder,
+            Field.HEIGHT: self._height,
+            Field.WEIGHT: self._weight,
+            Field.BIRTH_DATE: self._birth,
             Field.MIN_BPM: self._min,
             Field.MAX_BPM: self._max,
             Field.THRESHOLD: self._threshold,

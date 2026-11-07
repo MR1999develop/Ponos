@@ -1,0 +1,328 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 MR
+"""Dettaglio di un'attività dalla tabella e grafici della panoramica, nella finestra vera.
+
+Si parte dalla finestra composta come fa `main()`; i dati sono le otto corse sintetiche della
+cartella di prova (nessuna persona reale). T-UI-02 vale anche mentre si costruiscono i grafici.
+"""
+
+from __future__ import annotations
+
+import threading
+import time
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import pytest
+from PySide6.QtCore import QModelIndex, QSettings, Qt, QTimer
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QListWidget, QTableView
+from pytestqt.qtbot import QtBot
+from shiboken6 import isValid
+
+from ponos_coach.load.domain import ZoneSeconds
+from ponos_coach.profiles.domain import PROFILE_ARCHIVE_DIR
+from ponos_coach.ui import activity_detail_loader, overview_page
+from ponos_coach.ui.activity_detail import DetailReady
+from ponos_coach.ui.activity_detail_dialog import ActivityDetailDialog
+from ponos_coach.ui.chart_view import ChartEngine
+from ponos_coach.ui.hr_figure import prepare_heart_rate_chart
+from ponos_coach.ui.load_figures import prepare_weekly_zones_chart
+from ponos_coach.ui.main_window import MainWindow
+from ponos_coach.ui.overview_state import Ready
+from tests.ui.test_activity_detail import detail_with
+from tests.ui.workspace_support import (
+    FILES_IN_FIXTURE_FOLDER,
+    WAIT_MS,
+    close_window,
+    compose,
+    create_profile,
+    make_import_folder,
+    make_settings,
+    wait_ready,
+)
+
+PROFILE = "Atleta di prova"
+
+
+@pytest.fixture
+def settings(tmp_path: Path) -> QSettings:
+    return make_settings(tmp_path)
+
+
+def window_with_activities(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings, *, gate: threading.Event | None = None
+) -> MainWindow:
+    window = compose(tmp_path, settings, gate=gate)
+    qtbot.addWidget(window)
+    window.start()
+    create_profile(qtbot, window, PROFILE)
+    with qtbot.waitSignal(window.controller.import_finished, timeout=WAIT_MS):
+        window.import_folder(make_import_folder(tmp_path))
+    if gate is None:
+        wait_ready(qtbot, window, FILES_IN_FIXTURE_FOLDER)
+    return window
+
+
+def open_detail(qtbot: QtBot, window: MainWindow) -> ActivityDetailDialog:
+    qtbot.waitUntil(lambda: window.profile_dialogs.detail_dialog is not None, timeout=WAIT_MS)
+    dialog = window.profile_dialogs.detail_dialog
+    assert dialog is not None
+    return dialog
+
+
+def latency_of_one_event(qtbot: QtBot) -> float:
+    started = time.monotonic()
+    handled: list[float] = []
+    QTimer.singleShot(0, lambda: handled.append(time.monotonic() - started))
+    qtbot.waitUntil(lambda: bool(handled), timeout=1000)
+    return handled[0]
+
+
+def show_activities_section(window: MainWindow) -> None:
+    """Porta in primo piano la pagina Attività (la tabella è nascosta nella Panoramica)."""
+    sidebar = window.findChild(QListWidget, "sidebar")
+    assert sidebar is not None
+    sidebar.setCurrentRow(1)
+    window.show()
+
+
+def first_row_index(window: MainWindow) -> QModelIndex:
+    table = window.activities_page.table
+    return table.model().index(0, 0)
+
+
+# --- Grafici della panoramica ------------------------------------------------------------------
+
+
+def test_the_overview_shows_three_charts_pmc_weekly_load_and_zones(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    page = window.overview_page
+
+    qtbot.waitUntil(
+        lambda: (
+            page.zones_chart.current_figure is not None
+            and page.load_chart.current_figure is not None
+            and page.chart.current_figure is not None
+        ),
+        timeout=WAIT_MS,
+    )
+
+    assert page.current_widget() is page.charts_widget
+    load = page.load_chart.current_figure
+    zones = page.zones_chart.current_figure
+    assert load is not None
+    assert zones is not None
+    assert [t.name for t in load.data] == ["Running"]
+    assert load.layout.yaxis.title.text == "Load (hrTSS per week)"
+    assert load.layout.xaxis.title.text == "Week (starting Monday)"
+    assert zones.data[0].name == "Z1 <85%"
+    assert zones.layout.yaxis.title.text == "Time in zone (hours per week)"
+    assert zones.layout.legend.title.text == "Heart-rate zone (% of threshold)"
+    assert all(trace.type == "bar" for trace in (*load.data, *zones.data))
+    assert load.layout.yaxis.rangemode == "tozero"
+
+
+def test_t_ui_02_the_ui_stays_responsive_while_the_charts_are_built(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    release = threading.Event()
+    threads: list[int] = []
+    real = prepare_weekly_zones_chart
+
+    def slow(*args: object, **kwargs: object) -> object:
+        threads.append(threading.get_ident())
+        release.wait(timeout=30)
+        return real(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(overview_page, "prepare_weekly_zones_chart", slow)
+    window = window_with_activities(qtbot, tmp_path, settings)
+    page = window.overview_page
+
+    qtbot.waitUntil(lambda: bool(threads), timeout=WAIT_MS)
+
+    assert isinstance(window.controller.overview_state, Ready)
+    assert page.current_widget() is not page.charts_widget  # i grafici non sono ancora pronti
+    assert latency_of_one_event(qtbot) < 0.1  # T-UI-02
+    assert threading.get_ident() not in threads  # fuori dal thread della UI
+    release.set()
+    qtbot.waitUntil(lambda: page.current_widget() is page.charts_widget, timeout=WAIT_MS)
+
+
+# --- Dettaglio di un'attività ------------------------------------------------------------------
+
+
+def test_double_click_opens_the_detail_with_summary_chart_and_time_in_zones(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    table = window.activities_page.table
+    show_activities_section(window)
+    qtbot.waitExposed(window)
+    table.selectRow(0)
+    rect = table.visualRect(first_row_index(window))
+
+    QTest.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=rect.center())
+    QTest.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=rect.center())
+
+    dialog = open_detail(qtbot, window)
+    qtbot.waitUntil(dialog.shows_chart, timeout=WAIT_MS)
+    assert "Running" in dialog.title_text
+    assert dialog.summary_text("moving") == "0:30:00"
+    assert dialog.summary_text("threshold") == "171"
+    assert dialog.summary_text("limits") == "50 to 190"
+    assert dialog.zone_model.rowCount() == 5
+    zone_times = [dialog.zone_model.data(dialog.zone_model.index(r, 1)) for r in range(5)]
+    assert sum(_seconds(text) for text in zone_times) > 1500  # quasi tutti i 1800 s contati
+    figure = dialog.chart.current_figure
+    assert figure is not None
+    assert figure.data[0].name == "Heart rate"
+    assert len(figure.layout.shapes) == 5  # le bande delle zone
+    assert figure.layout.xaxis.title.text == "Time (min)"
+    assert figure.layout.yaxis.title.text == "Heart rate (bpm)"
+
+
+def _seconds(text: object) -> int:
+    assert isinstance(text, str)
+    hours, minutes, seconds = (int(part) for part in text.split(":"))
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def test_enter_in_the_table_opens_the_detail_and_the_command_is_in_the_menu(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    table = window.activities_page.table
+    show_activities_section(window)
+    assert not window.detail_action.isEnabled()
+    assert window.detail_action.toolTip() == "Select an activity in the Activities list first."
+
+    table.selectRow(2)
+    table.setFocus()
+    assert window.detail_action.isEnabled()
+    QTest.keyClick(table, Qt.Key.Key_Return)
+
+    dialog = open_detail(qtbot, window)
+    qtbot.waitUntil(dialog.shows_chart, timeout=WAIT_MS)
+    dialog.close()
+    qtbot.waitUntil(lambda: window.profile_dialogs.detail_dialog is None, timeout=WAIT_MS)
+    window.detail_action.trigger()  # anche dal menu, con la riga ancora selezionata
+    again = open_detail(qtbot, window)
+    qtbot.waitUntil(again.shows_chart, timeout=WAIT_MS)
+
+
+def test_a_missing_file_gives_a_clear_message_instead_of_a_chart(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    archive = tmp_path / "profiles" / PROFILE / PROFILE_ARCHIVE_DIR
+    for original in archive.rglob("*"):
+        if original.is_file():
+            original.unlink()
+    window.activities_page.table.selectRow(0)
+
+    window.detail_action.trigger()
+
+    dialog = open_detail(qtbot, window)
+    page = dialog.message_page
+    qtbot.waitUntil(
+        lambda: page.title_text == "The activity detail is not available", timeout=WAIT_MS
+    )
+
+    assert "no longer in the archive" in page.body_text
+    assert "Import the original file again" in page.body_text
+    assert not dialog.shows_chart()
+    assert dialog.title_text == ""  # niente riepilogo di un'attività che non si legge
+
+
+def test_the_detail_figure_is_built_outside_the_ui_thread(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    threads: list[int] = []
+    real = prepare_heart_rate_chart
+
+    def recording(*args: object, **kwargs: object) -> object:
+        threads.append(threading.get_ident())
+        return real(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(activity_detail_loader, "prepare_heart_rate_chart", recording)
+    window = window_with_activities(qtbot, tmp_path, settings)
+    window.activities_page.table.selectRow(0)
+
+    window.detail_action.trigger()
+
+    dialog = open_detail(qtbot, window)
+    qtbot.waitUntil(dialog.shows_chart, timeout=WAIT_MS)
+    assert threads
+    assert threading.get_ident() not in threads
+
+
+def test_closing_the_window_with_the_detail_open_finishes_the_closing(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    window.activities_page.table.selectRow(0)
+    window.detail_action.trigger()
+    dialog = open_detail(qtbot, window)
+    qtbot.waitUntil(dialog.shows_chart, timeout=WAIT_MS)
+
+    close_window(qtbot, window)
+
+    assert window.is_closed
+    assert window.profile_dialogs.detail_dialog is None
+
+
+def test_closing_a_window_with_several_charts_and_details_open_destroys_every_page_first(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    page = window.overview_page
+    window.activities_page.table.selectRow(0)
+    window.detail_action.trigger()
+    first = open_detail(qtbot, window)
+    qtbot.waitUntil(first.shows_chart, timeout=WAIT_MS)
+    first.close()  # un dettaglio già chiuso e uno ancora aperto alla chiusura della finestra
+    qtbot.waitUntil(lambda: window.profile_dialogs.detail_dialog is None, timeout=WAIT_MS)
+    window.detail_action.trigger()
+    second = open_detail(qtbot, window)
+    qtbot.waitUntil(second.shows_chart, timeout=WAIT_MS)
+    views = [page.chart, page.load_chart, page.zones_chart, second.chart]
+    pages = [view.page for view in views]
+    assert all(isValid(web_page) for web_page in pages)
+
+    close_window(qtbot, window)
+
+    assert window.is_closed
+    assert not any(isValid(web_page) for web_page in pages)  # distrutte subito, non in coda
+    assert not any(view.engine_started for view in views if isValid(view))
+
+
+def test_releasing_the_web_engine_twice_is_harmless_and_after_it_no_page_is_created(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    view = window.overview_page.chart
+    web_page = view.page
+
+    window.release_web_engine()  # come da `aboutToQuit`
+    window.release_web_engine()
+
+    assert not isValid(web_page)
+    assert not view.engine_started
+    view.start_engine()  # il motore non c'è più: nessuna pagina nuova
+    assert not view.engine_started
+
+
+def test_without_heart_rate_the_detail_hides_the_table_of_the_zones(qtbot: QtBot) -> None:
+    dialog = ActivityDetailDialog(ChartEngine(lambda _name: None), ZoneInfo("Europe/Rome"))
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    dialog.show_outcome(DetailReady(detail_with(ZoneSeconds.ZERO), None))  # senza FC: stimato
+
+    table = dialog.findChild(QTableView, "detailZones")
+    assert table is not None
+    assert not table.isVisibleTo(dialog)  # cinque righe a 0:00:00 direbbero il falso
+    assert dialog.message_page.title_text == "No heart-rate data"

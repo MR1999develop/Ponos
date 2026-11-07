@@ -35,8 +35,10 @@ completata e verificata.
 | Ricerca e mappa (fase 9) | Filtri delle attività per data, durata, distanza e dislivello; mappa zoomabile con le attività raggruppate in cerchi numerati che cambiano con lo zoom e, a destra, l'elenco delle attività visibili nell'area |
 | Sincronizzazione | All'avvio e con il pulsante Sincronizza; la prima scarica tutto lo storico, le successive solo le attività mancanti; riprende da dove era rimasta dopo una chiusura; notifica a fine sincronizzazione; niente area di notifica |
 | Calendario Garmin | In una fase successiva: invio degli allenamenti a scelta dell'utente ed eliminazione degli allenamenti futuri programmati |
-| Lingue | Italiano e inglese |
-| Piattaforme e repository | Windows e Ubuntu, GitHub con CI (repository pubblico); push automatico della sessione principale sul ramo di lavoro, su `main` solo con PR (dal 2026-11-06; prima lo faceva l'utente a mano) |
+| Lingue | Inglese come lingua predefinita, italiano scelto dal menu Lingua e ricordato (decisione del 2026-11-06; prima seguiva la lingua del sistema) |
+| Dati del profilo | Alla creazione: nome, cartella, altezza, peso, data di nascita, sesso, FC minima e massima, soglia. Poi si aggiornano con una data di validità peso, FC minima, FC massima e soglia; nome, altezza, data di nascita e sesso restano fissi (decisione del 2026-11-06) |
+| Alimentazione (fase 4b) | Cliccando un giorno passato del calendario: kcal e grammi di carboidrati, proteine e grassi per colazione, pranzo, cena, pre, durante (sedute lunghe) e post allenamento, con 2-3 esempi di alimenti; nessun diario dei pasti; obiettivo alimentare per periodi (dimagrimento, mantenimento, performance); calorie fuori dallo sport da un livello di attività nel profilo; nessuna restrizione alimentare per ora; i giorni futuri arriveranno con il piano (fase 5) (decisioni del 2026-11-07) |
+| Piattaforme e repository | Windows e Ubuntu, GitHub con CI (repository pubblico); il push lo fa l'utente a mano (regola del 2026-11-07; dal 2026-11-06 al 2026-11-07 era automatico); su `main` solo con PR |
 
 ## 2. Decisioni di default (le ho fissate io: da confermare o correggere)
 
@@ -92,6 +94,15 @@ completata e verificata.
     rumore della quota. Un GPX senza orari non è un'attività e si rifiuta. I
     TCX non sono supportati: rifiutati con il motivo.
 
+## 2b. Decisioni rimandate
+
+- **Integrazione AI** (valutata il 2026-11-06, da decidere in seguito):
+  server MCP in sola lettura su stdio, usabile da Claude o Gemini senza
+  chiavi nell'app (consigliato, dopo la fase 5); in alternativa un
+  assistente dentro l'app via API, opzionale e disattivato di default, con
+  consenso esplicito prima di inviare dati di salute. In nessun caso il
+  modello decide il piano: le regole restano l'unica autorità sui carichi.
+
 ## 3. Rischi principali
 
 | Rischio | Conseguenza | Risposta |
@@ -99,6 +110,7 @@ completata e verificata.
 | Garmin cambia il login o le API (è già successo a marzo 2026) | Sincronizzazione ferma | Adattatore isolato dietro una porta, test di contratto su risposte registrate e anonimizzate, import FIT manuale sempre disponibile, versione di `garminconnect` bloccata e aggiornata dopo prova |
 | Accesso non ufficiale contrario ai termini d'uso, blocco temporaneo (429) | Account rallentato o segnalato | Poche richieste: solo all'avvio e a mano, pausa tra le richieste, backoff con limite, nessun ritentativo infinito |
 | Consigli di allenamento sbagliati o pericolosi | Sovraccarico, infortuni | Limiti rigidi di rampa del CTL e di TSB, regole testate con scenari, segnali d'allarme, nessuna diagnosi |
+| Indicazioni alimentari sbagliate o dannose (deficit eccessivo, disturbi alimentari, condizioni mediche) | Danno alla salute | Limiti rigidi sul deficit e sul minimo giornaliero, nessun deficit sotto i 18 anni o con IMC sotto 18,5, avviso di consultare un professionista, linee guida pubblicate (ISSN, ACSM, IOC) come fonte, nessuna diagnosi |
 | Pacchetto pesante (QtWebEngine) | ~250 MB | Accettato con la scelta di Plotly; misurato in fase 8 |
 | Prima sincronizzazione di tutto lo storico | Centinaia o migliaia di richieste: lunga e a rischio di 429 | Pause e backoff, giornale riprendibile, avanzamento con tempo stimato; si può chiudere l'app e riprendere |
 | Cartella del profilo su disco di rete o sincronizzato (OneDrive, NAS) | SQLite può corrompersi con lock e sincronizzazioni a metà scrittura | Avviso alla scelta della cartella; un solo processo per profilo (file di lock) |
@@ -447,14 +459,28 @@ POSIX compresi; campagna di collaudo verde su Windows (esiti in
 
 ### Fase 3 — Carico e grafici
 
-- [ ] Parametri fisiologici con data di validità inseriti dall'utente (FC
+- [x] Lingua: inglese predefinito, menu Lingua con inglese e italiano,
+      scelta ricordata.
+- [x] Dati del profilo: altezza, peso e data di nascita alla creazione;
+      "Modifica profilo" con misure datate (peso, FC minima, FC massima,
+      soglia) e il loro storico; campi fissi in sola lettura. Altezza,
+      peso e data di nascita sono dati personali: solo nel database del
+      profilo, mai nei log.
+- [x] Parametri fisiologici con data di validità inseriti dall'utente (FC
       minima e massima, sesso, soglia; soglia in bici = corsa − 4 bpm);
       campioni fuori limiti scartati e contati.
-- [ ] TRIMP e hrTSS, pesi degli sport, stima per attività senza FC; ricalcolo
+- [x] TRIMP e hrTSS, pesi degli sport, stima per attività senza FC; ricalcolo
       quando cambiano parametri o pesi.
-- [ ] PMC (ATL, CTL, TSB) con property test.
-- [ ] Grafici Plotly in `QWebEngineView` isolato: PMC, carico settimanale per
-      sport, zone, FC dell'attività; esportazione SVG e PNG.
+- [x] PMC (ATL, CTL, TSB) con property test.
+- [x] Grafici Plotly in `QWebEngineView` isolato: PMC, carico settimanale per
+      sport, zone, FC dell'attività; esportazione SVG e PNG. Zone FC sulla
+      soglia secondo Friel, cinque zone (Z1 < 85%, Z2 85–89%, Z3 90–94%,
+      Z4 95–99%, Z5 ≥ 100%: default del progetto, rivisto in fase 4).
+
+*Stato 2026-11-06: completata sul ramo `fase-3-carico-e-grafici`; controlli e
+collaudo verdi su Windows. I plurali inglesi usano frasi invarianti
+("Activities imported: %n"), perché l'inglese è il testo sorgente senza un
+catalogo proprio.*
 
 ### Fase 4 — Test di valutazione
 
@@ -462,6 +488,54 @@ POSIX compresi; campagna di collaudo verde su Windows (esiti in
       dell'attività del test (scelta dall'utente), calcolo della FC e del
       ritmo di soglia, zone FC e di ritmo.
 - [ ] Storico dei test e retest proposto ogni 6–8 settimane.
+
+### Fase 4b — Alimentazione dei giorni passati
+
+Decisioni dell'utente del 2026-11-07 (sezione 1). Valori e soglie sono default
+del progetto da linee guida pubblicate (ISSN, ACSM, consenso IOC), in un solo
+posto e documentati nella skill del progetto; non sono consigli medici.
+
+- [ ] **Dati**: calorie dell'attività dal FIT (`session.total_calories`) nel
+      riepilogo e nell'indice (schema v4); stima quando mancano (GPX o FIT
+      senza calorie): formula di Keytel sulla FC con età, peso e sesso, e se
+      manca la FC un MET per sport. Le calorie del metabolismo di base durante
+      l'attività si tolgono, per non contarle due volte.
+- [ ] **Profilo**: livello di attività fuori dallo sport con data di validità
+      (sedentario, leggero, attivo, molto attivo); orari tipici di colazione,
+      pranzo e cena; obiettivi alimentari per periodi nel calendario
+      (dimagrimento con un ritmo in kg a settimana, mantenimento,
+      performance), con annulla.
+- [ ] **Modello** (dominio puro, deterministico):
+      - metabolismo di base con Mifflin-St Jeor (età dalla data di nascita,
+        altezza, peso valido quel giorno, sesso); spesa del giorno = base ×
+        fattore del livello fuori sport + calorie nette delle attività;
+      - dimagrimento: deficit dal ritmo scelto, al massimo il 20% della spesa
+        e 750 kcal al giorno, mai sotto il metabolismo di base; deficit ridotto
+        nei giorni di carico alto; nessun deficit sotto i 18 anni né con IMC
+        sotto 18,5 (avviso); performance: carboidrati secondo il carico;
+      - macro: carboidrati in g/kg secondo il carico del giorno (riposo e
+        leggero 3–5, moderato 5–7, alto 6–10, molto alto 8–12), proteine
+        1,6 g/kg (2,0 in deficit), grassi il resto con un minimo del 20% delle
+        kcal;
+      - momenti: pre 1–4 h prima (carboidrati circa 1 g/kg se la seduta supera
+        un'ora), durante oltre 75 minuti (30–60 g/h, oltre 2,5 h fino a
+        90 g/h, liquidi e sodio indicativi), post entro un'ora (proteine circa
+        0,3 g/kg e carboidrati 1–1,2 g/kg se la seduta è lunga o ce n'è
+        un'altra entro 24 h); il resto distribuito su colazione, pranzo e cena
+        secondo gli orari tipici, con pasti spostati o fusi quando cadono
+        vicino all'allenamento; due sedute nello stesso giorno gestite.
+- [ ] **Alimenti**: tabella curata di alimenti comuni con kcal e macro per
+      100 g da una fonte con licenza compatibile (USDA FoodData Central, di
+      pubblico dominio: da verificare nel registro delle dipendenze), nomi
+      tradotti; 2–3 esempi per pasto con porzioni arrotondate.
+- [ ] **Calendario** dei giorni passati (vista mese, carico e attività per
+      giorno): clic su un giorno → dettaglio con attività, carico e
+      indicazione alimentare; base del calendario della fase 5.
+- [ ] Avviso fisso: indicazioni generali, non consigli medici o
+      nutrizionali personalizzati; con patologie, gravidanza, disturbi
+      alimentari o farmaci rivolgersi a un professionista.
+- [ ] Test T-NUT (sezione 7.12), collaudo, revisione, documenti (ADR della
+      fase), traduzioni.
 
 ### Fase 5 — Obiettivi e piano adattivo
 
@@ -773,7 +847,9 @@ Budget iniziali, da confermare con le prime misure della fase 3; si
 riportano p50, p95 e massimo, mai la sola media, con l'ambiente di misura.
 
 - **T-PERF-01** Profilo sintetico di 10 anni (5.000 attività): finestra
-  usabile entro 2 s dall'avvio, ricalcolo completo del PMC < 1 s, ricalcolo
+  usabile entro 2 s dall'avvio, ricalcolo completo del PMC dai carichi in
+  cache < 1 s (il ricalcolo da zero dopo un cambio di parametri rilegge
+  tutti i file: lavoro lungo con avanzamento e Interrompi), ricalcolo
   del piano < 0,5 s, grafico PMC interattivo < 0,4 s, import di 1.000 FIT
   < 2 minuti.
 - **T-PERF-02** Memoria sotto un tetto dichiarato durante l'import al limite
@@ -830,3 +906,23 @@ riportano p50, p95 e massimo, mai la sola media, con l'ambiente di misura.
   elenco aggiornato entro 0,4 s (p95).
 - **T-MAP-06** Selezione sincronizzata: clic nell'elenco → attività
   evidenziata e traccia sulla mappa; clic sulla mappa → riga selezionata.
+
+### 7.12 Alimentazione (T-NUT, fase 4b)
+
+- **T-NUT-01** Metabolismo di base, spesa del giorno, deficit e macro contro
+  valori calcolati a mano, per uomo e donna, ai confini di età, peso e
+  livello di attività.
+- **T-NUT-02** Limiti di sicurezza: deficit mai oltre il 20% né 750 kcal,
+  mai sotto il metabolismo di base; nessun deficit sotto i 18 anni o con IMC
+  sotto 18,5, con l'avviso; property test su profili e giorni casuali.
+- **T-NUT-03** Calorie delle attività: dal FIT quando ci sono, stima di
+  Keytel e MET quando mancano; il metabolismo di base durante l'attività non
+  si conta due volte.
+- **T-NUT-04** Momenti: allenamento all'alba prima della colazione, a pranzo,
+  la sera tardi, due sedute in un giorno, seduta lunga con il durante;
+  nessun pasto con quantità negative; totale del giorno uguale alla somma
+  dei pasti.
+- **T-NUT-05** Determinismo: stessi dati, stessa indicazione; cambio del
+  peso o dell'obiettivo a una data che vale solo dal suo giorno.
+- **T-NUT-06** Alimenti: porzioni coerenti con i grammi del pasto entro una
+  tolleranza dichiarata; tabella con licenza registrata.

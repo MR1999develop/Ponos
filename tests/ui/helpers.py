@@ -9,7 +9,14 @@ from datetime import date, datetime, timedelta
 from ponos_coach.activities.domain import ActivitySummary, FileId, FitIdentity, Sport
 from ponos_coach.load.domain import ActivityLoad, LoadSource, PmcSeries, compute_pmc
 from ponos_coach.load.use_cases import ProfileActivity
-from ponos_coach.ui.pmc_figure import PLOTLY_MODEBAR_KEYS, ChartActivity, PmcChartLabels
+from ponos_coach.ui.chart_payload import PLOTLY_MODEBAR_KEYS, ChartChrome
+from ponos_coach.ui.pmc_figure import ChartActivity, PmcChartLabels
+
+CHROME = ChartChrome(
+    export_png="Save as PNG",
+    export_svg="Save as SVG",
+    modebar={key: f"{key} (test)" for key in PLOTLY_MODEBAR_KEYS},
+)
 
 LABELS = PmcChartLabels(
     x_axis="Date",
@@ -19,9 +26,7 @@ LABELS = PmcChartLabels(
     atl="Fatigue (ATL)",
     tsb="Form (TSB)",
     daily_load="Daily load",
-    export_png="Save as PNG",
-    export_svg="Save as SVG",
-    modebar={key: f"{key} (test)" for key in PLOTLY_MODEBAR_KEYS},
+    chrome=CHROME,
 )
 
 FIRST_DAY = date(2026, 3, 2)

@@ -27,9 +27,13 @@ from tests.contracts.contract_storage import (
     NAME,
     PROFILE_ID,
     ActivityIndexContract,
+    FixedDataStoreContract,
     LoadCacheContract,
+    LoadCacheZonesContract,
     PhysiologyStoreContract,
     ProfileStorageContract,
+    SportWeightStoreContract,
+    WeightStoreContract,
 )
 from tests.contracts.contract_sync import ActivityIndexGarminIdContract, SyncJournalContract
 from tests.contracts.contract_tokens import TokenStoreContract
@@ -185,6 +189,22 @@ class TestFakePhysiologyStore(_FakeStorageFixture, PhysiologyStoreContract):
 
 
 class TestFakeLoadCache(_FakeStorageFixture, LoadCacheContract):
+    pass
+
+
+class TestFakeLoadCacheZones(_FakeStorageFixture, LoadCacheZonesContract):
+    pass
+
+
+class TestFakeWeightStore(_FakeStorageFixture, WeightStoreContract):
+    pass
+
+
+class TestFakeFixedDataStore(_FakeStorageFixture, FixedDataStoreContract):
+    pass
+
+
+class TestFakeSportWeightStore(_FakeStorageFixture, SportWeightStoreContract):
     pass
 
 

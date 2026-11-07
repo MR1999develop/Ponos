@@ -189,7 +189,7 @@ def test_t_dati_01_the_released_v2_migration_has_not_changed() -> None:
     assert released == tuple(squash(statement) for statement in FROZEN_V2)
 
 
-def test_t_dati_01_a_frozen_v1_database_is_migrated_to_v2_with_data_intact_and_a_copy(
+def test_t_dati_01_a_frozen_v1_database_is_migrated_with_data_intact_and_a_copy(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / PROFILE_DATABASE_NAME
@@ -199,7 +199,7 @@ def test_t_dati_01_a_frozen_v1_database_is_migrated_to_v2_with_data_intact_and_a
 
     opened = SqliteProfileStorage().open(tmp_path)
     try:
-        assert opened.info.format_version == 2
+        assert opened.info.format_version == sqlite_schema.SCHEMA_VERSION
         assert opened.sync_journal.counts()[SyncStatus.PENDING] == 0
         assert opened.sync_journal.load_cursor(ListingKind.FULL) is None
         (record,) = opened.activities.list_by_start()
@@ -210,10 +210,10 @@ def test_t_dati_01_a_frozen_v1_database_is_migrated_to_v2_with_data_intact_and_a
     after = {table: rows(path, table) for table in tables}
     assert after["meta"] == before["meta"]  # compreso 'futuro'
     assert after["physiology"] == before["physiology"]
-    assert after["load_cache"] == before["load_cache"]
+    assert after["load_cache"] == []  # derivata: la v3 la svuota, i carichi si ricalcolano
     assert [row[:-1] for row in after["activities"]] == [row[:-1] for row in before["activities"]]
     [copy] = sorted((tmp_path / "backup").glob("*"))
-    assert copy.name == "ponos-v1-v2.sqlite3"
+    assert copy.name == f"ponos-v1-v{sqlite_schema.SCHEMA_VERSION}.sqlite3"
     assert {table: rows(copy, table) for table in tables} == before
     with closing(sqlite3.connect(copy)) as raw:
         assert raw.execute("PRAGMA user_version").fetchone() == (1,)
@@ -221,14 +221,14 @@ def test_t_dati_01_a_frozen_v1_database_is_migrated_to_v2_with_data_intact_and_a
     assert names == set(tables)
 
 
-def test_t_dati_01_a_frozen_v1_database_gets_exactly_the_v2_tables(tmp_path: Path) -> None:
+def test_t_dati_01_a_frozen_v1_database_gets_exactly_the_latest_tables(tmp_path: Path) -> None:
     path = tmp_path / PROFILE_DATABASE_NAME
     write_frozen_v1(path)
 
     SqliteProfileStorage().open(tmp_path).close()
 
     with closing(sqlite3.connect(path)) as raw:
-        assert raw.execute("PRAGMA user_version").fetchone() == (2,)
+        assert raw.execute("PRAGMA user_version").fetchone() == (sqlite_schema.SCHEMA_VERSION,)
         names = {r[0] for r in raw.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert names == {
         "meta",
@@ -238,6 +238,9 @@ def test_t_dati_01_a_frozen_v1_database_gets_exactly_the_v2_tables(tmp_path: Pat
         "sync_journal",
         "sync_cursor",
         "sync_state",
+        "profile_body",
+        "weight",
+        "sport_weights",
     }
 
 
@@ -291,7 +294,6 @@ def test_t_dati_01_a_future_migration_keeps_every_v1_row_and_the_unknown_keys(
     path = tmp_path / PROFILE_DATABASE_NAME
     write_frozen_v1(path)
     before = {table: rows(path, table) for table in ("meta", "activities", "physiology")}
-    before_cache = rows(path, "load_cache")
     v2 = (
         "ALTER TABLE activities ADD COLUMN note TEXT",
         "CREATE TABLE tag (id INTEGER PRIMARY KEY, name TEXT NOT NULL) STRICT",
@@ -305,7 +307,7 @@ def test_t_dati_01_a_future_migration_keeps_every_v1_row_and_the_unknown_keys(
     assert after_meta == before["meta"]  # compreso 'futuro'
     assert [row[:-1] for row in rows(path, "activities")] == before["activities"]
     assert rows(path, "physiology") == before["physiology"]
-    assert rows(path, "load_cache") == before_cache
+    assert rows(path, "load_cache") == []  # derivata: la migrazione v3 la svuota
     with closing(sqlite3.connect(path)) as raw:
         assert raw.execute("PRAGMA user_version").fetchone() == (sqlite_schema.SCHEMA_VERSION + 1,)
 

@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 from PySide6.QtCore import QByteArray, QSettings, Qt, QTimer, QUrl
 from PySide6.QtGui import (
     QAction,
+    QActionGroup,
     QCloseEvent,
     QDesktopServices,
     QDragEnterEvent,
@@ -48,7 +49,9 @@ import ponos_coach
 from ponos_coach.load.use_cases import ProfileOverview
 from ponos_coach.profiles.domain import ProfileId, RegistryEntry
 from ponos_coach.profiles.use_cases import FolderWarning, NewProfileRequest
+from ponos_coach.ui.activity_detail_loader import ActivityDetailLoader
 from ponos_coach.ui.activity_table import ActivitiesPage
+from ponos_coach.ui.chart_view import ChartEngine
 from ponos_coach.ui.data_thread import SHUTDOWN_WAIT_MS
 from ponos_coach.ui.errors import ErrorMessage, exclusion_reason_text, unexpected_error_message
 from ponos_coach.ui.garmin_ui import GarminUi
@@ -64,6 +67,8 @@ from ponos_coach.ui.overview_state import (
     Ready,
     summary_of,
 )
+from ponos_coach.ui.profile_dialogs import ProfileDialogs
+from ponos_coach.ui.profile_editor import ProfileEditor
 from ponos_coach.ui.tokens import (
     MIN_WINDOW_HEIGHT,
     MIN_WINDOW_WIDTH,
@@ -73,6 +78,7 @@ from ponos_coach.ui.tokens import (
     STATUS_PROGRESS_WIDTH,
     Theme,
 )
+from ponos_coach.ui.translations import Language, save_language
 from ponos_coach.ui.workspace import (
     DeletionPreview,
     FolderCheck,
@@ -136,9 +142,11 @@ class MainWindow(QMainWindow):
         parent: QWidget | None = None,
         *,
         log_folder: Path | None = None,
+        language: Language = Language.ENGLISH,
     ) -> None:
         super().__init__(parent)
         self._controller = controller
+        self._language = language
         self._settings = settings
         self._defaults = defaults
         self._log_folder = log_folder
@@ -164,6 +172,7 @@ class MainWindow(QMainWindow):
         self._garmin = GarminUi(self, controller.sync, system_theme, self._remember)
         self._build_menus()
         self._build_content()
+        self._build_dialogs()
         self._build_status_bar()
         self._restore_geometry()
         self._restore_section()
@@ -194,6 +203,15 @@ class MainWindow(QMainWindow):
         )
         self._stop_action = self._action(self.tr("Stop"), "Esc", self._controller.cancel_current)
         self._quit_action = self._action(self.tr("Quit"), "Ctrl+Q", self.close)
+        self._edit_profile_action = self._action(
+            self.tr("Edit profile..."), "Ctrl+E", self.edit_profile
+        )
+        self._sport_weights_action = self._action(
+            self.tr("Sport weights..."), "Ctrl+Shift+W", self.edit_sport_weights
+        )
+        self._detail_action = self._action(
+            self.tr("Activity detail..."), "Ctrl+D", self.show_selected_activity_detail
+        )
         self._about_action = self._action(self.tr("About Ponos Coach"), None, self.show_about)
         self._log_action = self._action(
             self.tr("Open the log folder"), "Ctrl+Shift+L", self.open_log_folder
@@ -215,11 +233,33 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self._stop_action)
         file_menu.addSeparator()
         file_menu.addAction(self._quit_action)
+        profile_menu = self.menuBar().addMenu(self.tr("Profile"))
+        profile_menu.addAction(self._edit_profile_action)
+        profile_menu.addAction(self._sport_weights_action)
+        profile_menu.addSeparator()
+        profile_menu.addAction(self._detail_action)
         self._garmin.build_menu(self.menuBar())
+        self._build_language_menu()
         help_menu = self.menuBar().addMenu(self.tr("Help"))
         help_menu.addAction(self._log_action)
         help_menu.addSeparator()
         help_menu.addAction(self._about_action)
+
+    def _build_language_menu(self) -> None:
+        """Menu "Lingua": inglese e italiano, con la scelta ricordata per i prossimi avvii."""
+        menu = self.menuBar().addMenu(self.tr("Language"))
+        group = QActionGroup(self)
+        group.setExclusive(True)
+        self._language_actions: dict[Language, QAction] = {}
+        for language in (Language.ENGLISH, Language.ITALIAN):
+            # Il nome di una lingua nella lingua stessa non si traduce: serve a riconoscerla.
+            action = QAction(language.native_name, self)
+            action.setCheckable(True)
+            action.setChecked(language is self._language)
+            action.triggered.connect(partial(self._on_language_chosen, language))
+            group.addAction(action)
+            menu.addAction(action)
+            self._language_actions[language] = action
 
     def _build_content(self) -> None:
         self._sidebar = QListWidget(self)
@@ -244,11 +284,13 @@ class MainWindow(QMainWindow):
         self._sidebar.setCurrentRow(_SECTION_OVERVIEW)
         self._sidebar.currentRowChanged.connect(self._on_section_changed)
 
-        self._overview = OverviewPage(self._choose_export_path, self._controller.compute, self)
+        self._engine = ChartEngine(self._choose_export_path, self)
+        self._overview = OverviewPage(self._engine, self._controller.compute, self)
         self._overview.action_requested.connect(self._on_overview_action)
         self._overview.cancel_requested.connect(self._controller.cancel_current)
         self._activities = ActivitiesPage(self)
         self._activities.import_requested.connect(self.choose_import_files)
+        self._activities.selection_changed.connect(self._update_actions)
         self._pages = QStackedWidget(self)
         self._pages.addWidget(self._overview)
         self._pages.addWidget(self._activities)
@@ -260,6 +302,28 @@ class MainWindow(QMainWindow):
         row.addWidget(self._sidebar)
         row.addWidget(self._pages, stretch=1)
         self.setCentralWidget(central)
+
+    def _build_dialogs(self) -> None:
+        """Modifica profilo, pesi degli sport e dettaglio: lavorano nel thread dei dati."""
+        self._editor = ProfileEditor(self._controller, self)
+        self._detail_loader = ActivityDetailLoader(self._controller, self)
+        self._dialogs = ProfileDialogs(
+            self,
+            self._editor,
+            self._detail_loader,
+            self._engine,
+            theme=system_theme,
+            today=lambda: self._defaults.today(self._zone),
+            zone=lambda: self._zone,
+            profile_name=self._profile_name,
+            show_error=self._show_error,
+            notify=lambda text: self.statusBar().showMessage(text, _STATUS_MESSAGE_MS),
+        )
+        self._activities.detail_requested.connect(self._dialogs.show_activity_detail)
+
+    def _profile_name(self) -> str:
+        profile = self._controller.profile
+        return "" if profile is None else profile.name.value
 
     def _build_status_bar(self) -> None:
         bar = self.statusBar()
@@ -321,6 +385,31 @@ class MainWindow(QMainWindow):
     def activities_page(self) -> ActivitiesPage:
         """La pagina Attività."""
         return self._activities
+
+    @property
+    def profile_dialogs(self) -> ProfileDialogs:
+        """I dialoghi dei dati del profilo (modifica, pesi, dettaglio)."""
+        return self._dialogs
+
+    @property
+    def language_actions(self) -> dict[Language, QAction]:
+        """Le voci del menu Lingua."""
+        return self._language_actions
+
+    @property
+    def edit_profile_action(self) -> QAction:
+        """Azione "Modifica profilo..."."""
+        return self._edit_profile_action
+
+    @property
+    def sport_weights_action(self) -> QAction:
+        """Azione "Pesi degli sport..."."""
+        return self._sport_weights_action
+
+    @property
+    def detail_action(self) -> QAction:
+        """Azione "Dettaglio attività..."."""
+        return self._detail_action
 
     @property
     def controller(self) -> WorkspaceController:
@@ -406,6 +495,39 @@ class MainWindow(QMainWindow):
     def start(self) -> None:
         """Avvia l'area di lavoro: apre l'ultimo profilo o chiede il primo avvio guidato."""
         self._controller.start()
+
+    # --- Lingua ----------------------------------------------------------------------------
+
+    def _on_language_chosen(self, language: Language) -> None:
+        """Ricorda la lingua scelta. Si applica al prossimo avvio: ritradurre ogni finestra, menu
+        e grafico a caldo duplicherebbe ogni testo, per un cambio che si fa una volta."""
+        save_language(self._settings, language)
+        if language is self._language:
+            return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle(self.tr("Language"))
+        box.setTextFormat(Qt.TextFormat.PlainText)
+        box.setText(self.tr("The language changes the next time Ponos Coach starts."))
+        box.setObjectName("languageChanged")
+        self._remember(box)
+        box.open()
+
+    # --- Dati del profilo ------------------------------------------------------------------
+
+    def edit_profile(self) -> None:
+        """Apre "Modifica profilo" (nessun effetto se ora non si può)."""
+        if self._controller.can_edit_profile:
+            self._dialogs.edit_profile()
+
+    def edit_sport_weights(self) -> None:
+        """Apre "Pesi degli sport" (nessun effetto se ora non si può)."""
+        if self._controller.can_edit_profile:
+            self._dialogs.edit_sport_weights()
+
+    def show_selected_activity_detail(self) -> None:
+        """Apre il dettaglio dell'attività selezionata nella tabella."""
+        self._activities.request_detail()
 
     # --- Profili -------------------------------------------------------------------------
 
@@ -517,7 +639,7 @@ class MainWindow(QMainWindow):
         if preview.activities is None:
             count_text = self.tr("The number of activities could not be read.")
         else:
-            count_text = self.tr("%n activity(ies) will be deleted.", "", preview.activities)
+            count_text = self.tr("Activities that will be deleted: %n.", "", preview.activities)
         box.setInformativeText(
             "\n".join(
                 (
@@ -603,14 +725,14 @@ class MainWindow(QMainWindow):
             return
         # {done}: files already handled; %n: files to import.
         self._import_label.setText(
-            self.tr("Imported {done} of %n file(s)", "", progress.total).format(done=progress.done)
+            self.tr("Files imported: {done} of %n", "", progress.total).format(done=progress.done)
         )
         self._import_bar.setRange(0, progress.total)
         self._import_bar.setValue(progress.done)
 
     def _on_import_finished(self, report: ImportReport) -> None:
         self.statusBar().showMessage(
-            self.tr("%n activity(ies) imported", "", report.imported), _STATUS_MESSAGE_MS
+            self.tr("Activities imported: %n", "", report.imported), _STATUS_MESSAGE_MS
         )
         dialog = ImportReportDialog(report, self)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
@@ -734,6 +856,14 @@ class MainWindow(QMainWindow):
     def _on_color_scheme_changed(self) -> None:
         self._overview.apply_state(self._controller.overview_state, system_theme(), self._zone)
 
+    def _unavailable_reason(self, allowed: bool) -> str:
+        """Il motivo, per il tooltip, per cui un comando sul profilo ora non si può dare."""
+        if allowed:
+            return ""
+        if self._controller.profile is None:
+            return self.tr("Create or open a profile first.")
+        return self.tr("Wait for the current operation to finish, or stop it first.")
+
     def _update_actions(self) -> None:
         controller = self._controller
         can_change = controller.can_change_profile
@@ -744,19 +874,27 @@ class MainWindow(QMainWindow):
         for menu in (self._switch_menu, self._remove_menu, self._delete_menu):
             menu.setEnabled(can_change and not menu.isEmpty())
             menu.menuAction().setToolTip("" if can_change else busy_reason)
-        can_import = controller.can_import
-        if can_import:
-            import_tip = ""
-        elif controller.profile is None:
-            import_tip = self.tr("Create or open a profile first.")
-        else:
-            import_tip = busy_reason
-        for action in (self._import_files_action, self._import_folder_action):
-            action.setEnabled(can_import)
-            action.setToolTip(import_tip)
+        self._update_profile_data_actions()
         self._stop_action.setEnabled(controller.can_stop)
         self._stop_action.setToolTip(
             "" if controller.can_stop else self.tr("There is nothing to stop.")
+        )
+
+    def _update_profile_data_actions(self) -> None:
+        """Importa, modifica profilo, pesi e dettaglio: ognuno con il suo motivo se non si può."""
+        controller = self._controller
+        for action, allowed in (
+            (self._import_files_action, controller.can_import),
+            (self._import_folder_action, controller.can_import),
+            (self._edit_profile_action, controller.can_edit_profile),
+            (self._sport_weights_action, controller.can_edit_profile),
+        ):
+            action.setEnabled(allowed)
+            action.setToolTip(self._unavailable_reason(allowed))
+        has_selection = self._activities.selected_activity() is not None
+        self._detail_action.setEnabled(has_selection)
+        self._detail_action.setToolTip(
+            "" if has_selection else self.tr("Select an activity in the Activities list first.")
         )
 
     def _update_status_summary(self, state: OverviewState) -> None:
@@ -766,10 +904,10 @@ class MainWindow(QMainWindow):
             label.setVisible(summary is not None)
         if summary is None or not isinstance(state, Ready):
             return
-        self._activities_label.setText(self.tr("%n activity(ies)", "", summary.activities))
-        self._excluded_label.setText(self.tr("%n excluded activity(ies)", "", summary.excluded))
+        self._activities_label.setText(self.tr("Activities: %n", "", summary.activities))
+        self._excluded_label.setText(self.tr("Excluded activities: %n", "", summary.excluded))
         self._excluded_label.setVisible(summary.excluded > 0)
-        self._days_label.setText(self.tr("%n day(s) in the chart", "", summary.pmc_days))
+        self._days_label.setText(self.tr("Days in the chart: %n", "", summary.pmc_days))
         self._excluded_label.setToolTip(self._excluded_tooltip(state.overview))
 
     def _excluded_tooltip(self, overview: ProfileOverview) -> str:
@@ -799,19 +937,34 @@ class MainWindow(QMainWindow):
             self._engine_timer.start(0)
 
     def _start_web_engine(self) -> None:
-        self._overview.chart.start_engine()
+        """Avvia le tre pagine web subito dopo il primo `show()`, non "al primo bisogno".
+
+        Misura (offscreen, Chromium a freddo): il primo avvio costa circa 185 ms nel thread della
+        UI, ogni vista in più circa 3 ms. Rimandarlo al primo disegno o all'inizio del calcolo
+        sposterebbe 185 ms dentro l'importazione e il disegno, oltre il limite di 100 ms per
+        evento (T-UI-02); rimandare solo le due viste secondarie ne risparmia 6. Qui l'utente non
+        ha ancora un'azione in corso.
+        """
+        self._overview.start_engines()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt
         """Chiusura in due tempi, senza bloccare il thread della UI.
 
         Il primo tempo annulla i lavori e chiede al thread dei dati di chiudere il profilo; la
         finestra resta aperta e un timer controlla se il thread ha finito. Al secondo tempo
-        (thread finito) rilascia il motore web e si chiude davvero. Oltre il tetto di attesa
-        avvisa e lascia la finestra aperta: un thread in esecuzione non si distrugge mai.
+        (thread finito) si chiude davvero. Oltre il tetto di attesa avvisa e lascia la finestra
+        aperta: un thread in esecuzione non si distrugge mai.
+
+        I dialoghi e il motore web (pagine, poi profilo) si rilasciano già al primo tempo, subito:
+        la finestra può essere distrutta in qualunque momento dopo il primo `close()` (lo fa
+        anche `qtbot`), e Qt distrugge i figli nell'ordine in cui sono nati, non quello che
+        serve al motore web. Se l'attesa scade i grafici restano vuoti.
         """
         if not self._closed:
             self._remember_window_state()
             self._controller.begin_shutdown()
+            self._dialogs.close_all()
+            self.release_web_engine()
             if not self._controller.has_stopped:
                 event.ignore()
                 self._wait_for_shutdown()
@@ -847,7 +1000,11 @@ class MainWindow(QMainWindow):
             self.tr("Wait a moment, then close the window again."),
         )
 
+    def release_web_engine(self) -> None:
+        """Distrugge pagine e profilo del motore web (idempotente): alla chiusura della finestra
+        e da `aboutToQuit`, prima che Qt distrugga gli oggetti."""
+        self._engine.dispose()
+
     def _finish_closing(self) -> None:
-        self._overview.chart.dispose()
         self.statusBar().clearMessage()
         self._closed = True

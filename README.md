@@ -6,9 +6,9 @@ cardiaca e mostra la forma (ATL, CTL, TSB). Genera un piano di allenamento
 adattivo verso uno o più obiettivi nel calendario e guida il recupero dagli
 infortuni.
 
-**Stato:** in sviluppo, fase 2 (sincronizzazione con Garmin, su profili,
-archivio e import). Non ci sono ancora versioni distribuite: si avvia da
-sorgente.
+**Stato:** in sviluppo, fase 3 (carico e grafici, su profili, archivio,
+import e sincronizzazione con Garmin). Non ci sono ancora versioni
+distribuite: si avvia da sorgente.
 
 ## Avviso: non è un dispositivo medico
 
@@ -33,7 +33,8 @@ disponibile.
 - Per provare l'app senza dati propri: `uv run python -m
   tests.fixtures.generators.demo_history <cartella>` crea uno storico
   sintetico di file FIT, da caricare in un profilo con "Importa da cartella".
-- Carico da frequenza cardiaca e grafici di ATL, CTL e TSB.
+- Carico da frequenza cardiaca e grafici di ATL, CTL e TSB (fase 3), carico
+  settimanale per sport, tempo nelle zone e dettaglio di ogni attività.
 - Test di soglia di 30 minuti e zone di allenamento.
 - Obiettivi (gare A/B/C, tempo obiettivo, livello di forma) e piano adattivo.
 - Percorso di recupero dagli infortuni.
@@ -58,9 +59,20 @@ Al primo avvio si apre il dialogo "Nuovo profilo". Servono:
    com'è, altrimenti crea dentro una sottocartella con il nome del profilo e
    mostra dove andranno i dati; meglio evitare cartelle sincronizzate come
    OneDrive (su Windows spesso anche Documenti);
-3. la frequenza cardiaca a riposo e la massima; la soglia è stimata al 90%
+3. altezza, peso e data di nascita;
+4. la frequenza cardiaca a riposo e la massima; la soglia è stimata al 90%
    della massima finché non la si fissa con il test;
-4. il sesso (serve alla formula del carico).
+5. il sesso (serve alla formula del carico).
+
+Altezza, peso e data di nascita sono dati di salute: restano nel database del
+profilo e non vanno mai nei log. Altezza e data di nascita non si cambiano più.
+Peso e frequenze cardiache si aggiornano con una data di validità da Profilo,
+Modifica profilo (Ctrl+E), dove si vede anche lo storico; un profilo creato
+prima della fase 3 completa altezza e data di nascita lì, una volta sola. Le
+regole sono nella specifica (sezione 5).
+
+Profilo, Pesi degli sport (Ctrl+Maiusc+W) cambia quanto pesa ogni sport nel
+carico; ogni attività si ricalcola da sola quando serve.
 
 Altri profili: File, Nuovo profilo (Ctrl+N). Un profilo spostato o copiato su
 un altro PC si apre con File, Apri profilo da cartella (Ctrl+O). Con File,
@@ -138,12 +150,28 @@ mancava o era alterato, reimportare lo stesso file lo rimette a posto: il
 riepilogo lo conta come "riparato". Le attività compaiono nella pagina Attività e nel
 grafico della Panoramica. I file TCX non sono supportati.
 
+## Grafici e dettaglio delle attività
+
+La Panoramica mostra la forma di oggi e tre grafici: forma e fatica (CTL, ATL,
+TSB), carico settimanale per sport e tempo nelle zone di frequenza cardiaca. Un
+doppio clic (o Invio) su un'attività della pagina Attività, o Profilo,
+Dettaglio attività (Ctrl+D), apre la curva della FC con le zone e il tempo in
+ciascuna. Tutti i grafici si esportano in SVG e PNG, nel tema chiaro o scuro, e
+non usano la rete. Le zone sono percentuali della soglia scelte dal progetto
+(vedi la specifica, sezione 6, e `docs/adr/007-dati-del-profilo-e-zone.md`).
+
+## Lingua
+
+L'interfaccia parte in inglese. Per l'italiano: menu Lingua, Italiano; la
+scelta si ricorda e vale dal prossimo avvio. `--lang it` o `--lang en` ha la
+precedenza.
+
 ## Dove stanno i dati
 
 Tutti i dati di un profilo stanno nella cartella scelta alla creazione:
 
-- `ponos.sqlite3`: il database (con i file `-wal` e `-shm` mentre l'app è
-  aperta);
+- `ponos.sqlite3`: il database, con attività, parametri, peso, dati personali
+  e pesi degli sport (con i file `-wal` e `-shm` mentre l'app è aperta);
 - `archivio/<anno>/`: i file originali, con il nome dato dal loro SHA-256;
 - `backup/`: le copie del database fatte prima di un aggiornamento del formato
   (`ponos-v{da}-v{a}.sqlite3`);
@@ -156,8 +184,8 @@ l'account Garmin").
 
 ## Dati e privacy
 
-I dati di ogni profilo (attività, frequenza cardiaca, posizioni GPS,
-infortuni) restano sul computer, nella cartella scelta per il profilo, non
+I dati di ogni profilo (attività, frequenza cardiaca, altezza, peso, data di
+nascita, posizioni GPS, infortuni) restano sul computer, nella cartella scelta per il profilo, non
 cifrati e leggibili solo dall'utente del sistema. Per proteggerli anche dal
 furto del disco attiva la cifratura del disco (BitLocker su Windows, LUKS su
 Ubuntu). Evita cartelle di rete o sincronizzate (OneDrive, NAS): se ne scegli
@@ -180,7 +208,7 @@ uv run ponos-coach
 ```
 
 Il comando `nox -s i18n` genera le traduzioni italiane (`.qm`); senza, l'app
-parte in inglese. `uv run ponos-coach --lang en` o `--lang it` forza la lingua.
+resta in inglese anche se si sceglie l'italiano.
 
 ## Controlli
 

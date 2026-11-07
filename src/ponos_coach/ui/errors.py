@@ -241,16 +241,24 @@ def _import_limit(error: ImportLimitExceededError) -> ErrorMessage:
     match error.limit:
         case ImportLimit.ACTIVITY_FILES:
             what = QCoreApplication.translate(
-                "Errors", "The folder has more than %n activity file(s).", "", error.maximum
+                "Errors",
+                "The folder has too many activity files: the limit is %n.",
+                "",
+                error.maximum,
             )
         case ImportLimit.EXAMINED_ENTRIES:
             what = QCoreApplication.translate(
-                "Errors", "The folder has more than %n file(s) and folder(s) in total.", "",
+                "Errors",
+                "The folder has too many files and folders: the limit is %n in total.",
+                "",
                 error.maximum,
-            )  # fmt: skip
+            )
         case ImportLimit.DEPTH:
             what = QCoreApplication.translate(
-                "Errors", "The folder has more than %n level(s) of subfolders.", "", error.maximum
+                "Errors",
+                "The folder has too many levels of subfolders: the limit is %n.",
+                "",
+                error.maximum,
             )
     return ErrorMessage(title, what, remedy)
 
@@ -373,6 +381,54 @@ def import_issue_text(issue: ImportIssue) -> str:
         ),
     }
     return texts[issue]
+
+
+def unavailable_detail_message(reason: ExclusionReason) -> ErrorMessage:
+    """Perché il dettaglio di un'attività non si può mostrare e che cosa fare."""
+    reimport = QCoreApplication.translate(
+        "Exclusions", "Import the original file again to see its detail."
+    )
+    messages = {
+        ExclusionReason.FILE_MISSING: (
+            QCoreApplication.translate(
+                "Exclusions", "The file of this activity is no longer in the archive."
+            ),
+            reimport,
+        ),
+        ExclusionReason.FILE_ALTERED: (
+            QCoreApplication.translate(
+                "Exclusions",
+                "The file of this activity changed after it was saved, so it cannot be trusted.",
+            ),
+            reimport,
+        ),
+        ExclusionReason.FILE_TOO_LARGE: (
+            QCoreApplication.translate(
+                "Exclusions", "The file of this activity is larger than Ponos Coach can read."
+            ),
+            QCoreApplication.translate("Exclusions", "This file cannot be opened."),
+        ),
+        ExclusionReason.UNREADABLE: (
+            QCoreApplication.translate(
+                "Exclusions", "Ponos Coach could not read the file of this activity."
+            ),
+            QCoreApplication.translate(
+                "Exclusions", "Check that you can read the profile folder, then try again."
+            ),
+        ),
+        ExclusionReason.DECODE_FAILED: (
+            QCoreApplication.translate(
+                "Exclusions", "The file of this activity is no longer a valid activity file."
+            ),
+            reimport,
+        ),
+    }
+    what, remedy = messages[reason]
+    return ErrorMessage(
+        QCoreApplication.translate("Exclusions", "The activity detail is not available"),
+        what,
+        remedy,
+    )
 
 
 def exclusion_reason_text(reason: ExclusionReason) -> str:

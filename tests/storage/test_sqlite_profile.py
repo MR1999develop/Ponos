@@ -53,9 +53,13 @@ from tests.contracts.contract_storage import (
     NAME,
     PROFILE_ID,
     ActivityIndexContract,
+    FixedDataStoreContract,
     LoadCacheContract,
+    LoadCacheZonesContract,
     PhysiologyStoreContract,
     ProfileStorageContract,
+    SportWeightStoreContract,
+    WeightStoreContract,
 )
 from tests.contracts.contract_sync import ActivityIndexGarminIdContract, SyncJournalContract
 from tests.contracts.harness import StorageHarness
@@ -107,6 +111,22 @@ class TestSqliteLoadCache(_DiskStorageFixture, LoadCacheContract):
     pass
 
 
+class TestSqliteLoadCacheZones(_DiskStorageFixture, LoadCacheZonesContract):
+    pass
+
+
+class TestSqliteWeightStore(_DiskStorageFixture, WeightStoreContract):
+    pass
+
+
+class TestSqliteFixedDataStore(_DiskStorageFixture, FixedDataStoreContract):
+    pass
+
+
+class TestSqliteSportWeightStore(_DiskStorageFixture, SportWeightStoreContract):
+    pass
+
+
 def _create(folder: Path) -> None:
     SqliteProfileStorage().create(folder, PROFILE_ID, NAME, "Europe/Rome").close()
 
@@ -133,6 +153,9 @@ def test_new_database_has_the_latest_schema_and_the_expected_tables(tmp_path: Pa
         "sync_journal",
         "sync_cursor",
         "sync_state",
+        "profile_body",
+        "weight",
+        "sport_weights",
     }
     assert meta == {
         "profile_id": str(PROFILE_ID),
@@ -547,7 +570,10 @@ def test_foreign_key_refuses_a_load_without_its_activity(
 ) -> None:
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
         raw_db.connection.execute(
-            "INSERT INTO load_cache VALUES (999, ?, 1, 1, 1, 0, 0, 0, 'estimate')", ("b" * 64,)
+            "INSERT INTO load_cache (activity_id, fingerprint, trimp, hr_tss, load, used_samples, "
+            "discarded_samples, excluded_seconds, source) "
+            "VALUES (999, ?, 1, 1, 1, 0, 0, 0, 'estimate')",
+            ("b" * 64,),
         )
 
 

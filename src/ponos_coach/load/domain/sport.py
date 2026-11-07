@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from ponos_coach.activities.domain import Sport
@@ -50,6 +51,21 @@ _TYPICAL_INTENSITY: dict[Sport, float] = {
 def default_weight(sport: Sport) -> SportWeight:
     """Peso di default dello sport."""
     return SportWeight(_DEFAULT_WEIGHTS[sport])
+
+
+def effective_weight(sport: Sport, saved: Mapping[Sport, SportWeight]) -> SportWeight:
+    """Il peso di uno sport: quello salvato dall'utente, altrimenti il default (unico punto)."""
+    return saved.get(sport, default_weight(sport))
+
+
+def effective_weights(saved: Mapping[Sport, SportWeight]) -> dict[Sport, SportWeight]:
+    """Il peso di ogni sport: quello salvato dall'utente, altrimenti il default."""
+    return {sport: effective_weight(sport, saved) for sport in Sport}
+
+
+def customised_weights(weights: Mapping[Sport, SportWeight]) -> dict[Sport, SportWeight]:
+    """Solo i pesi diversi dal default: ciò che vale la pena salvare (forma canonica)."""
+    return {sport: w for sport, w in weights.items() if w != default_weight(sport)}
 
 
 def typical_intensity(sport: Sport) -> float:

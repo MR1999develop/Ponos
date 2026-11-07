@@ -14,7 +14,7 @@ import pytest
 
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.load.domain import PhysiologyEntry
-from ponos_coach.load.ports import LoadCache, PhysiologyStore
+from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
     FolderKind,
@@ -24,6 +24,7 @@ from ponos_coach.profiles.domain import (
     RegistryEntry,
 )
 from ponos_coach.profiles.ports import (
+    FixedDataStore,
     FolderNotEmptyError,
     FolderUnavailableError,
     NotAProfileFolderError,
@@ -34,6 +35,7 @@ from ponos_coach.profiles.ports import (
     ProfileNotRegisteredError,
     ProfileRegistryError,
     ProfileStorageError,
+    WeightStore,
 )
 from ponos_coach.profiles.use_cases import (
     CreateProfile,
@@ -123,6 +125,18 @@ class _CountingProfile:
     @property
     def physiology(self) -> PhysiologyStore:
         return self._inner.physiology
+
+    @property
+    def weights(self) -> WeightStore:
+        return self._inner.weights
+
+    @property
+    def fixed_data(self) -> FixedDataStore:
+        return self._inner.fixed_data
+
+    @property
+    def sport_weights(self) -> SportWeightStore:
+        return self._inner.sport_weights
 
     @property
     def load_cache(self) -> LoadCache:

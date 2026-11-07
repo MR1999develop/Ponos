@@ -24,8 +24,9 @@ from typing import Self
 
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.load.domain import Physiology, PhysiologyEntry
-from ponos_coach.load.ports import LoadCache, PhysiologyStore
+from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.profiles.domain import (
+    FixedProfileData,
     FolderKind,
     FolderState,
     ProfileId,
@@ -33,8 +34,11 @@ from ponos_coach.profiles.domain import (
     ProfileName,
     ProfilePeek,
     RegistryEntry,
+    Weight,
+    WeightEntry,
 )
 from ponos_coach.profiles.ports import (
+    FixedDataStore,
     FolderNotEmptyError,
     FolderUnavailableError,
     NotAProfileFolderError,
@@ -45,6 +49,7 @@ from ponos_coach.profiles.ports import (
     ProfileNotRegisteredError,
     ProfileRegistry,
     ProfileStorage,
+    WeightStore,
 )
 from ponos_coach.profiles.timezones import require_known_timezone
 
@@ -119,6 +124,21 @@ class ProfileSession:
         return self._opened.physiology
 
     @property
+    def weights(self) -> WeightStore:
+        """Serie del peso con data di validità."""
+        return self._opened.weights
+
+    @property
+    def fixed_data(self) -> FixedDataStore:
+        """Altezza e data di nascita (fisse)."""
+        return self._opened.fixed_data
+
+    @property
+    def sport_weights(self) -> SportWeightStore:
+        """Pesi degli sport scelti dall'utente."""
+        return self._opened.sport_weights
+
+    @property
     def load_cache(self) -> LoadCache:
         """Cache dei carichi."""
         return self._opened.load_cache
@@ -174,8 +194,11 @@ def _require_absolute(folder: Path) -> None:
 class NewProfileRequest:
     """Dati per creare un profilo.
 
-    `folder` assoluta, mancante o vuota; `timezone_name` un nome IANA; `physiology` vale dal
-    giorno `today` (data di oggi nel fuso del profilo, decisa da chi chiama).
+    `folder` assoluta, mancante o vuota; `timezone_name` un nome IANA; `physiology` e `weight`
+    valgono dal giorno `today` (data di oggi nel fuso del profilo, decisa da chi chiama).
+    `fixed` (altezza e data di nascita) e `weight` sono dati personali che l'interfaccia chiede
+    sempre alla creazione; `None` lascia il profilo senza, da completare più tardi (serve a chi
+    crea profili solo per il calcolo del carico).
     """
 
     name: ProfileName
@@ -183,6 +206,8 @@ class NewProfileRequest:
     timezone_name: str
     physiology: Physiology
     today: date
+    fixed: FixedProfileData | None = None
+    weight: Weight | None = None
 
     def __post_init__(self) -> None:
         if not self.folder.is_absolute():
@@ -190,7 +215,8 @@ class NewProfileRequest:
 
 
 class CreateProfile:
-    """Crea un profilo: cartella privata, lock, database, parametri iniziali, voce nell'elenco.
+    """Crea un profilo: cartella privata, lock, database, misure iniziali (parametri fisiologici,
+    peso, altezza e data di nascita), voce nell'elenco.
 
     Se un passo fallisce non resta nessuna voce nell'elenco, il lock è rilasciato e si annulla
     solo ciò che ha fatto questa operazione. Se ha creato il database (la creazione è
@@ -249,7 +275,12 @@ class CreateProfile:
         opened = ports.storage.create(folder, profile_id, request.name, request.timezone_name)
         trace.opened = opened
         trace.database_created = True
-        opened.physiology.put(PhysiologyEntry(request.today, request.physiology))
+        with opened.activities.transaction():  # parametri, peso e dati fissi: tutti o nessuno
+            opened.physiology.put(PhysiologyEntry(request.today, request.physiology))
+            if request.weight is not None:
+                opened.weights.put(WeightEntry(request.today, request.weight))
+            if request.fixed is not None:
+                opened.fixed_data.set_once(request.fixed)
         ports.registry.add(RegistryEntry(profile_id, folder, request.name, self._now_utc()))
         return ProfileSession(opened, lock, folder, warnings_for(kind))
 

@@ -8,11 +8,11 @@ Le implementazioni condividono la connessione del profilo (`ActivityIndex.transa
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Protocol
 
-from ponos_coach.activities.domain import ActivityIdentity
-from ponos_coach.load.domain import ActivityLoad, LoadFingerprint, PhysiologyEntry
+from ponos_coach.activities.domain import ActivityIdentity, Sport
+from ponos_coach.load.domain import ActivityLoad, LoadFingerprint, PhysiologyEntry, SportWeight
 
 
 class LoadStoreError(Exception):
@@ -35,6 +35,21 @@ class PhysiologyStore(Protocol):
 
     def list_entries(self) -> Sequence[PhysiologyEntry]:
         """Tutte le voci per data di validità crescente (una sola per data)."""
+        ...
+
+
+class SportWeightStore(Protocol):
+    """Pesi degli sport scelti dall'utente (fonte di verità; i carichi derivati si ricalcolano).
+
+    Contiene solo i pesi diversi dal default: uno sport assente vale `default_weight`.
+    """
+
+    def load(self) -> Mapping[Sport, SportWeight]:
+        """I pesi salvati (vuoto se l'utente non ha cambiato nulla)."""
+        ...
+
+    def replace(self, weights: Mapping[Sport, SportWeight]) -> None:
+        """Sostituisce tutti i pesi salvati con questi, tutto o niente."""
         ...
 
 

@@ -119,16 +119,16 @@ def test_without_a_profile_the_garmin_commands_are_off_and_say_why(
     assert not garmin.stop_action.isEnabled()
 
 
-def test_the_garmin_menu_sits_between_file_and_help_with_every_command(
+def test_the_garmin_menu_sits_after_the_profile_menu_with_every_command(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
 
     titles = [action.text() for action in window.menuBar().actions()]
-    garmin_menu = window.menuBar().actions()[1].menu()
+    garmin_menu = window.menuBar().actions()[2].menu()
 
-    assert titles == ["File", "Garmin", "Help"]
+    assert titles == ["File", "Profile", "Garmin", "Language", "Help"]
     assert isinstance(garmin_menu, QMenu)
     assert [a.text() for a in garmin_menu.actions() if not a.isSeparator()] == [
         "Connect Garmin account...",
@@ -420,7 +420,7 @@ def test_the_notification_is_sent_once_with_the_number_of_new_activities(
     qtbot.waitUntil(lambda: len(fakes.notifier.calls) == 1, timeout=WAIT_MS)
     title, message = fakes.notifier.calls[0]
     assert title == "New activities from Garmin"
-    assert message == "4 new activity(ies) downloaded"
+    assert message == "New activities downloaded: 4"
     sync_and_wait(qtbot, window)  # niente di nuovo
     assert len(fakes.notifier.calls) == 1
 
@@ -454,10 +454,10 @@ def test_the_summary_names_what_was_not_downloaded_in_plain_words(
     link_account(qtbot, window, mfa=False)
 
     box = open_box(qtbot, window, "syncSummary")
-    assert box.text() == "Synchronised: 2 new activity(ies)"
-    assert "1 activity(ies) not downloaded:" in box.informativeText()
+    assert box.text() == "New activities synchronised: 2"
+    assert "Activities not downloaded: 1" in box.informativeText()
     assert "the file format is not supported" in box.informativeText()
-    assert "2 new activity(ies) downloaded" in box.informativeText()
+    assert "New activities downloaded: 2" in box.informativeText()
     wait_activities(qtbot, window, 2)
 
 

@@ -44,8 +44,8 @@ def remaining_text(seconds: float) -> str:
     if rounded.unit is RemainingUnit.UNDER_A_MINUTE:
         return QCoreApplication.translate("Sync", "less than a minute left")
     if rounded.unit is RemainingUnit.MINUTES:
-        return QCoreApplication.translate("Sync", "about %n minute(s) left", "", rounded.amount)
-    return QCoreApplication.translate("Sync", "about %n hour(s) left", "", rounded.amount)
+        return QCoreApplication.translate("Sync", "about %n min left", "", rounded.amount)
+    return QCoreApplication.translate("Sync", "about %n h left", "", rounded.amount)
 
 
 def progress_text(progress: SyncProgress) -> str:
@@ -182,11 +182,11 @@ def headline_text(result: SyncResult) -> str:
     if new == 0 and outcome.matched == 0:
         return QCoreApplication.translate("Sync", "Garmin is up to date")
     if outcome.matched == 0:
-        return QCoreApplication.translate("Sync", "Synchronised: %n new activity(ies)", "", new)
+        return QCoreApplication.translate("Sync", "New activities synchronised: %n", "", new)
     # %n: new activities; {matched}: activities already in the profile from imported files.
     return QCoreApplication.translate(
         "Sync",
-        "Synchronised: %n new activity(ies), {matched} matched with imported files",
+        "New activities synchronised: %n, matched with imported files: {matched}",
         "",
         new,
     ).format(matched=outcome.matched)
@@ -201,19 +201,19 @@ def summary_lines(result: SyncResult) -> tuple[str, ...]:
     if outcome.downloaded:
         lines.append(
             QCoreApplication.translate(
-                "Sync", "%n new activity(ies) downloaded", "", outcome.downloaded
+                "Sync", "New activities downloaded: %n", "", outcome.downloaded
             )
         )
     if outcome.matched:
         lines.append(
             QCoreApplication.translate(
-                "Sync", "%n activity(ies) matched with files you imported", "", outcome.matched
+                "Sync", "Activities matched with files you imported: %n", "", outcome.matched
             )
         )
     if outcome.already_present:
         lines.append(
             QCoreApplication.translate(
-                "Sync", "%n activity(ies) were already in the profile", "", outcome.already_present
+                "Sync", "Activities already in the profile: %n", "", outcome.already_present
             )
         )
     lines.extend(_failure_lines(result))
@@ -227,7 +227,7 @@ def _failure_lines(result: SyncResult) -> list[str]:
     if not counts:
         return []
     total = sum(count for _, count in counts)
-    lines = [QCoreApplication.translate("Sync", "%n activity(ies) not downloaded:", "", total)]
+    lines = [QCoreApplication.translate("Sync", "Activities not downloaded: %n", "", total)]
     for reason, count in counts:
         # {reason}: why they were not downloaded; {count}: how many activities.
         lines.append(
@@ -278,7 +278,7 @@ def notification_texts(count: int) -> tuple[str, str]:
     """Titolo e testo della notifica di sistema per `count` attività nuove."""
     return (
         QCoreApplication.translate("Sync", "New activities from Garmin"),
-        QCoreApplication.translate("Sync", "%n new activity(ies) downloaded", "", count),
+        QCoreApplication.translate("Sync", "New activities downloaded: %n", "", count),
     )
 
 

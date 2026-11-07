@@ -68,7 +68,7 @@ def test_t_dati_01_a_migration_that_fails_halfway_leaves_the_v1_database_as_it_w
     monkeypatch.undo()
     opened = SqliteProfileStorage().open(tmp_path)  # e il giro buono riesce
     try:
-        assert opened.info.format_version == 2
+        assert opened.info.format_version == sqlite_schema.SCHEMA_VERSION
         assert len(opened.activities.list_by_start()) == 1
     finally:
         opened.close()
@@ -105,7 +105,7 @@ def test_t_dati_01_a_v1_profile_syncs_after_the_migration_and_keeps_its_old_acti
 
     assert isinstance(result, SyncFinished) and result.outcome.completed
     assert result.outcome.downloaded == 3
-    assert user_version(tmp_path / PROFILE_DATABASE_NAME) == 2
+    assert user_version(tmp_path / PROFILE_DATABASE_NAME) == sqlite_schema.SCHEMA_VERSION
     opened = SqliteProfileStorage().open(tmp_path)
     try:
         records = opened.activities.list_by_start()

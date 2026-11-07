@@ -15,9 +15,11 @@ from datetime import date
 from ponos_coach.activities.domain import Sport
 from ponos_coach.load.domain.heart_rate import Physiology
 from ponos_coach.load.domain.sport import SportWeight
+from ponos_coach.load.domain.zones import ZONE_STARTS_PERCENT
 
-# Cambia quando cambia la formula del carico: invalida ogni carico salvato.
-LOAD_MODEL_VERSION = 1
+# Cambia quando cambia la formula del carico o la definizione delle zone: invalida ogni carico
+# salvato. 2: i carichi salvati portano anche i secondi in zona.
+LOAD_MODEL_VERSION = 2
 _SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 
 
@@ -46,7 +48,9 @@ def load_fingerprint(
     """Impronta dei parametri che determinano il carico di un'attività.
 
     Dipende dai limiti di FC, dalla soglia, dal sesso, dai pesi degli sport impostati
-    (l'ordine di inserimento non conta) e dalla versione del modello di carico. Deterministica:
+    (l'ordine di inserimento non conta), dalle percentuali delle zone e dalla versione del modello
+    di carico. Chi calcola il carico di uno sport passa solo il peso di quello sport, così
+    cambiare il peso della bici non invalida le corse. Deterministica:
     gli stessi parametri danno la stessa impronta, in ogni processo.
     """
     document = {
@@ -55,6 +59,7 @@ def load_fingerprint(
         "max_bpm": physiology.limits.max_bpm,
         "threshold_bpm": physiology.threshold.bpm,
         "sex": physiology.sex.value,
+        "zones": list(ZONE_STARTS_PERCENT),
         "weights": {sport.value: weight.value for sport, weight in sport_weights.items()},
     }
     text = json.dumps(document, sort_keys=True, separators=(",", ":"))

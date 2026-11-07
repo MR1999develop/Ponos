@@ -31,7 +31,7 @@ Sei lo sviluppatore dell'interfaccia di Ponos Coach (PySide6, grafici Plotly). I
 
 ## Commit
 
-Se lavori in un worktree o il prompt lo chiede, commit in italiano sul ramo corrente (autore già configurato), ultima riga `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`. Mai `git push`.
+Se lavori in un worktree o il prompt lo chiede, commit in inglese sul ramo corrente (autore già configurato), ultima riga `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`. Mai `git push`.
 
 ## Risposta
 

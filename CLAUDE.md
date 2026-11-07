@@ -5,11 +5,17 @@ Solo ciò che è specifico di questo progetto. Le decisioni e le fasi stanno in
 
 ## Lingue
 
-- Interfaccia in italiano e inglese con il meccanismo di traduzione di Qt
+- Interfaccia in inglese (lingua predefinita) e italiano (scelto dal menu
+  Lingua e ricordato), con il meccanismo di traduzione di Qt
   (`self.tr()`, file `.ts` in `src/ponos_coach/i18n/`); testi sorgente in
   inglese nel codice.
-- Identificatori nel codice in inglese; commenti, documenti e messaggi di
-  commit in italiano.
+- In inglese (regola dell'utente del 2026-11-07): identificatori, commenti,
+  docstring, test, messaggi di commit, descrizioni delle PR, `docs/`
+  (ADR, specifica, threat model, collaudo, dipendenze), README, `TIDY.md`,
+  `SECURITY.md`.
+- In italiano: `PLAN.md`, questo file, la skill del progetto
+  (`.claude/skills/ponos-allenamento/`) e le istruzioni degli agenti
+  (`.claude/agents/`).
 
 ## Comandi
 
@@ -95,11 +101,11 @@ parallelo sul codice nel suo worktree.
 
 - Autore e committer già nella configurazione del repository; nessuno script
   ne imposta un altro.
-- **Push automatico** (regola dell'utente del 2026-11-06): la sessione
-  principale fa il push da sola dopo ogni commit con `uv run --locked nox`
-  verde, sul ramo di lavoro della fase (`origin`, repository pubblico
-  `MR1999develop/Ponos`). Mai `--force` né riscrittura di commit già
-  pushati; su `main` si arriva solo con una PR. Gli agenti non fanno push.
+- **Mai `git push`** (regola dell'utente del 2026-11-07, che sostituisce il
+  push automatico del 2026-11-06): il push lo fa l'utente a mano. La
+  sessione principale fa i commit sul ramo di lavoro della fase e dice
+  quali sono da caricare; su `main` si arriva solo con una PR. Mai
+  `--force` né riscrittura di commit già pushati.
 
 ## Dominio
 

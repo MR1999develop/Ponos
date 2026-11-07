@@ -27,11 +27,23 @@ from ponos_coach.load.domain import (
     LoadFingerprint,
     LoadSource,
     PhysiologyEntry,
+    SportWeight,
+    ZoneSeconds,
+    default_weight,
     load_fingerprint,
 )
 from ponos_coach.load.ports import UnknownActivityError
-from ponos_coach.profiles.domain import ProfileId, ProfileName
+from ponos_coach.profiles.domain import (
+    BirthDate,
+    FixedProfileData,
+    Height,
+    ProfileId,
+    ProfileName,
+    Weight,
+    WeightEntry,
+)
 from ponos_coach.profiles.ports import (
+    FixedDataAlreadySetError,
     OpenProfile,
     ProfileAlreadyExistsError,
     ProfileNotFoundError,
@@ -403,3 +415,206 @@ class LoadCacheContract:
 
         with closing(harness.storage.open(folder)) as reopened:
             assert reopened.load_cache.get(fit_identity(), fingerprint) == LOAD
+
+
+class LoadCacheZonesContract:
+    """I secondi in zona viaggiano con il carico e con la sua impronta."""
+
+    def test_zone_seconds_are_stored_with_the_load(self, harness: StorageHarness) -> None:
+        zoned = ActivityLoad(
+            80.0, 75.0, 75.0, 3500, 4, 12.5, LoadSource.HEART_RATE,
+            ZoneSeconds((10.0, 20.5, 30.0, 40.25, 50.0)),
+        )  # fmt: skip
+        with closing(create(harness)) as profile:
+            profile.activities.add(make_record())
+            profile.load_cache.put(fit_identity(), FINGERPRINT, zoned)
+
+            found = profile.load_cache.get(fit_identity(), FINGERPRINT)
+
+            assert found == zoned
+            assert found is not None
+            assert found.zone_seconds.values == (10.0, 20.5, 30.0, 40.25, 50.0)
+
+    def test_a_load_without_zones_comes_back_with_zero_seconds(
+        self, harness: StorageHarness
+    ) -> None:
+        with closing(create(harness)) as profile:
+            profile.activities.add(make_record())
+            profile.load_cache.put(fit_identity(), FINGERPRINT, LOAD)
+
+            found = profile.load_cache.get(fit_identity(), FINGERPRINT)
+
+            assert found is not None
+            assert found.zone_seconds == ZoneSeconds.ZERO
+
+    def test_replacing_a_load_replaces_its_zones_too(self, harness: StorageHarness) -> None:
+        first = ActivityLoad(
+            1.0, 1.0, 1.0, 1, 0, 0.0, LoadSource.HEART_RATE, ZoneSeconds((1.0, 2.0, 3.0, 4.0, 5.0))
+        )
+        second = ActivityLoad(
+            1.0, 1.0, 1.0, 1, 0, 0.0, LoadSource.HEART_RATE, ZoneSeconds((5.0, 0.0, 0.0, 0.0, 1.0))
+        )
+        with closing(create(harness)) as profile:
+            profile.activities.add(make_record())
+            profile.load_cache.put(fit_identity(), FINGERPRINT, first)
+            profile.load_cache.put(fit_identity(), FINGERPRINT, second)
+
+            assert profile.load_cache.get(fit_identity(), FINGERPRINT) == second
+
+
+class WeightStoreContract:
+    """Serie del peso con data di validità."""
+
+    def test_new_store_is_empty(self, harness: StorageHarness) -> None:
+        with closing(create(harness)) as profile:
+            assert profile.weights.list_entries() == []
+
+    def test_entries_are_listed_by_date(self, harness: StorageHarness) -> None:
+        march = WeightEntry(date(2026, 3, 1), Weight(705))
+        january = WeightEntry(date(2026, 1, 1), Weight(712))
+        with closing(create(harness)) as profile:
+            profile.weights.put(march)
+            profile.weights.put(january)
+
+            assert profile.weights.list_entries() == [january, march]
+
+    def test_same_date_replaces_the_entry(self, harness: StorageHarness) -> None:
+        with closing(create(harness)) as profile:
+            profile.weights.put(WeightEntry(date(2026, 1, 1), Weight(700)))
+            profile.weights.put(WeightEntry(date(2026, 1, 1), Weight(698)))
+
+            assert profile.weights.list_entries() == [WeightEntry(date(2026, 1, 1), Weight(698))]
+
+    def test_the_limits_of_the_weight_range_are_kept_exactly(self, harness: StorageHarness) -> None:
+        lowest = WeightEntry(date(2026, 1, 1), Weight(200))
+        highest = WeightEntry(date(2026, 1, 2), Weight(3000))
+        with closing(create(harness)) as profile:
+            profile.weights.put(lowest)
+            profile.weights.put(highest)
+
+            assert profile.weights.list_entries() == [lowest, highest]
+
+    def test_entries_survive_closing_and_reopening(self, harness: StorageHarness) -> None:
+        folder = harness.new_folder()
+        entry = WeightEntry(date(2026, 1, 1), Weight(705))
+        profile = harness.storage.create(folder, PROFILE_ID, NAME, "Europe/Rome")
+        profile.weights.put(entry)
+        profile.close()
+
+        with closing(harness.storage.open(folder)) as reopened:
+            assert reopened.weights.list_entries() == [entry]
+
+    def test_a_cancelled_transaction_leaves_no_weight(self, harness: StorageHarness) -> None:
+        with closing(create(harness)) as profile:
+            with pytest.raises(RuntimeError, match="boom"), profile.activities.transaction():
+                profile.weights.put(WeightEntry(date(2026, 1, 1), Weight(705)))
+                raise RuntimeError("boom")
+
+            assert profile.weights.list_entries() == []
+
+
+class FixedDataStoreContract:
+    """Altezza e data di nascita: impostate una volta sola."""
+
+    DATA = FixedProfileData(Height(172), BirthDate(date(1990, 5, 17)))
+
+    def test_new_profile_has_no_fixed_data(self, harness: StorageHarness) -> None:
+        with closing(create(harness)) as profile:
+            assert profile.fixed_data.get() is None
+
+    def test_set_once_then_get(self, harness: StorageHarness) -> None:
+        with closing(create(harness)) as profile:
+            profile.fixed_data.set_once(self.DATA)
+
+            assert profile.fixed_data.get() == self.DATA
+
+    def test_a_second_write_is_refused_and_changes_nothing(self, harness: StorageHarness) -> None:
+        other = FixedProfileData(Height(180), BirthDate(date(1985, 1, 1)))
+        with closing(create(harness)) as profile:
+            profile.fixed_data.set_once(self.DATA)
+
+            with pytest.raises(FixedDataAlreadySetError):
+                profile.fixed_data.set_once(other)
+
+            assert profile.fixed_data.get() == self.DATA
+
+    def test_the_limits_are_kept_exactly(self, harness: StorageHarness) -> None:
+        extreme = FixedProfileData(Height(250), BirthDate(date(1900, 1, 1)))
+        with closing(create(harness)) as profile:
+            profile.fixed_data.set_once(extreme)
+
+            assert profile.fixed_data.get() == extreme
+
+    def test_data_survive_closing_and_reopening(self, harness: StorageHarness) -> None:
+        folder = harness.new_folder()
+        profile = harness.storage.create(folder, PROFILE_ID, NAME, "Europe/Rome")
+        profile.fixed_data.set_once(self.DATA)
+        profile.close()
+
+        with closing(harness.storage.open(folder)) as reopened:
+            assert reopened.fixed_data.get() == self.DATA
+
+    def test_a_cancelled_transaction_leaves_no_fixed_data(self, harness: StorageHarness) -> None:
+        with closing(create(harness)) as profile:
+            with pytest.raises(RuntimeError, match="boom"), profile.activities.transaction():
+                profile.fixed_data.set_once(self.DATA)
+                raise RuntimeError("boom")
+
+            assert profile.fixed_data.get() is None
+            profile.fixed_data.set_once(self.DATA)  # e si può ancora impostare
+
+
+class SportWeightStoreContract:
+    """Pesi degli sport scelti dall'utente."""
+
+    def test_new_profile_has_no_saved_weights(self, harness: StorageHarness) -> None:
+        with closing(create(harness)) as profile:
+            assert profile.sport_weights.load() == {}
+
+    def test_replace_then_load(self, harness: StorageHarness) -> None:
+        weights = {Sport.RUNNING: SportWeight(1.25), Sport.CYCLING: SportWeight(0.0)}
+        with closing(create(harness)) as profile:
+            profile.sport_weights.replace(weights)
+
+            assert dict(profile.sport_weights.load()) == weights
+
+    def test_replace_drops_the_sports_not_given(self, harness: StorageHarness) -> None:
+        with closing(create(harness)) as profile:
+            profile.sport_weights.replace({Sport.RUNNING: SportWeight(1.25)})
+            profile.sport_weights.replace({Sport.HIKING: SportWeight(0.5)})
+
+            assert dict(profile.sport_weights.load()) == {Sport.HIKING: SportWeight(0.5)}
+
+    def test_replace_with_nothing_clears_the_saved_weights(self, harness: StorageHarness) -> None:
+        with closing(create(harness)) as profile:
+            profile.sport_weights.replace({Sport.RUNNING: SportWeight(1.25)})
+            profile.sport_weights.replace({})
+
+            assert profile.sport_weights.load() == {}
+
+    def test_weights_are_stored_exactly(self, harness: StorageHarness) -> None:
+        exact = {Sport.TRAIL: default_weight(Sport.TRAIL), Sport.OTHER: SportWeight(5.0)}
+        with closing(create(harness)) as profile:
+            profile.sport_weights.replace(exact)
+
+            assert dict(profile.sport_weights.load()) == exact
+
+    def test_weights_survive_closing_and_reopening(self, harness: StorageHarness) -> None:
+        folder = harness.new_folder()
+        profile = harness.storage.create(folder, PROFILE_ID, NAME, "Europe/Rome")
+        profile.sport_weights.replace({Sport.STRENGTH: SportWeight(1.3)})
+        profile.close()
+
+        with closing(harness.storage.open(folder)) as reopened:
+            assert dict(reopened.sport_weights.load()) == {Sport.STRENGTH: SportWeight(1.3)}
+
+    def test_a_cancelled_transaction_keeps_the_previous_weights(
+        self, harness: StorageHarness
+    ) -> None:
+        with closing(create(harness)) as profile:
+            profile.sport_weights.replace({Sport.RUNNING: SportWeight(1.25)})
+            with pytest.raises(RuntimeError, match="boom"), profile.activities.transaction():
+                profile.sport_weights.replace({Sport.CYCLING: SportWeight(2.0)})
+                raise RuntimeError("boom")
+
+            assert dict(profile.sport_weights.load()) == {Sport.RUNNING: SportWeight(1.25)}

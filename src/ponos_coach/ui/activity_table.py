@@ -38,6 +38,8 @@ from PySide6.QtWidgets import (
 from ponos_coach.activities.domain import format_of
 from ponos_coach.load.use_cases import ProfileActivity
 from ponos_coach.ui.activity_text import (
+    ascent_m_text,
+    distance_km_text,
     duration_text,
     file_format_text,
     load_source_text,
@@ -47,8 +49,6 @@ from ponos_coach.ui.state_page import StatePage
 
 SORT_ROLE = Qt.ItemDataRole.UserRole
 _MISSING_SORT_KEY = -1.0  # una cella vuota viene prima di ogni valore, in ordine crescente
-_METERS_PER_KM = 1000.0
-_DISTANCE_DECIMALS = 2
 
 type _Key = float | str
 
@@ -161,6 +161,10 @@ class ActivityTableModel(QAbstractTableModel):
         }
         return headers[column]
 
+    def activity_at(self, row: int) -> ProfileActivity | None:
+        """L'attività di una riga del modello (non del proxy), o `None` se fuori intervallo."""
+        return self._activities[row] if 0 <= row < len(self._activities) else None
+
     def _text(self, activity: ProfileActivity, column: Column) -> str:
         return _TEXT_OF[column](activity, self._zone)
 
@@ -172,18 +176,6 @@ def _start_text(activity: ProfileActivity, zone: ZoneInfo) -> str:
     return QLocale().toString(_local_qdatetime(activity, zone), QLocale.FormatType.ShortFormat)
 
 
-def _distance_text(activity: ProfileActivity, _zone: ZoneInfo) -> str:
-    distance = activity.summary.distance_m
-    if distance is None:
-        return ""
-    return QLocale().toString(distance / _METERS_PER_KM, "f", _DISTANCE_DECIMALS)
-
-
-def _ascent_text(activity: ProfileActivity, _zone: ZoneInfo) -> str:
-    ascent = activity.summary.ascent_m
-    return "" if ascent is None else QLocale().toString(round(ascent))
-
-
 def _missing_as_key(value: float | None) -> float:
     return _MISSING_SORT_KEY if value is None else value
 
@@ -193,8 +185,8 @@ _TEXT_OF: dict[Column, Callable[[ProfileActivity, ZoneInfo], str]] = {
     Column.START: _start_text,
     Column.SPORT: lambda a, _z: sport_text(a.sport),
     Column.MOVING_TIME: lambda a, _z: duration_text(a.timer_s),
-    Column.DISTANCE: _distance_text,
-    Column.ASCENT: _ascent_text,
+    Column.DISTANCE: lambda a, _z: distance_km_text(a.summary.distance_m),
+    Column.ASCENT: lambda a, _z: ascent_m_text(a.summary.ascent_m),
     Column.LOAD: lambda a, _z: QLocale().toString(round(a.load.load)),
     Column.LOAD_SOURCE: lambda a, _z: load_source_text(a.load.source),
     Column.FORMAT: lambda a, _z: file_format_text(format_of(a.identity)),
@@ -228,6 +220,8 @@ class ActivitiesPage(QWidget):
     """Pagina "Attività": la tabella, o lo stato vuoto con il primo passo."""
 
     import_requested = Signal()
+    detail_requested = Signal(object)  # ActivityIdentity, con doppio clic o Invio
+    selection_changed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -239,6 +233,10 @@ class ActivitiesPage(QWidget):
         self._table.setModel(self._proxy)
         self._table.setSortingEnabled(True)
         self._table.sortByColumn(Column.START, Qt.SortOrder.DescendingOrder)
+        self._table.activated.connect(self._on_activated)
+        self._table.selectionModel().selectionChanged.connect(
+            lambda *_: self.selection_changed.emit()
+        )
         self._table.setShowGrid(False)  # niente linee verticali né orizzontali
         self._table.setAlternatingRowColors(True)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -281,6 +279,25 @@ class ActivitiesPage(QWidget):
     def empty_page(self) -> StatePage:
         """Lo stato vuoto."""
         return self._empty
+
+    def selected_activity(self) -> ProfileActivity | None:
+        """L'attività della riga selezionata (la corrente, se nessuna è selezionata)."""
+        rows = self._table.selectionModel().selectedRows()
+        index = rows[0] if rows else self._table.currentIndex()
+        if not index.isValid():
+            return None
+        return self._model.activity_at(self._proxy.mapToSource(index).row())
+
+    def request_detail(self) -> None:
+        """Chiede il dettaglio dell'attività selezionata (nessun effetto senza selezione)."""
+        activity = self.selected_activity()
+        if activity is not None:
+            self.detail_requested.emit(activity.identity)
+
+    def _on_activated(self, index: QModelIndex) -> None:
+        activity = self._model.activity_at(self._proxy.mapToSource(index).row())
+        if activity is not None:
+            self.detail_requested.emit(activity.identity)
 
     def show_activities(self, activities: Sequence[ProfileActivity], zone: ZoneInfo) -> None:
         """Mostra le attività, o lo stato vuoto se non ce ne sono."""

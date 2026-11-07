@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
-from ponos_coach.load.ports import LoadCache, PhysiologyStore
+from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
     ProfileId,
@@ -17,7 +17,13 @@ from ponos_coach.profiles.domain import (
     ProfileName,
     ProfilePeek,
 )
-from ponos_coach.profiles.ports import OpenProfile, ProfileCorruptError, ProfileStorageError
+from ponos_coach.profiles.ports import (
+    FixedDataStore,
+    OpenProfile,
+    ProfileCorruptError,
+    ProfileStorageError,
+    WeightStore,
+)
 from ponos_coach.profiles.timezones import require_known_timezone
 from ponos_coach.storage.sqlite_database import (
     SqliteDatabase,
@@ -26,6 +32,11 @@ from ponos_coach.storage.sqlite_database import (
     open_database,
     peek_database,
     read_meta,
+)
+from ponos_coach.storage.sqlite_profile_data import (
+    SqliteFixedDataStore,
+    SqliteSportWeightStore,
+    SqliteWeightStore,
 )
 from ponos_coach.storage.sqlite_stores import (
     SqliteActivityIndex,
@@ -65,7 +76,7 @@ def _read_info(db: SqliteDatabase) -> ProfileInfo:
 
 
 class SqliteOpenProfile:
-    """Un profilo aperto: i quattro store condividono la connessione di `SqliteDatabase`."""
+    """Un profilo aperto: gli store condividono la connessione di `SqliteDatabase`."""
 
     def __init__(self, database: SqliteDatabase, info: ProfileInfo) -> None:
         self._db = database
@@ -73,6 +84,9 @@ class SqliteOpenProfile:
         self._activities = SqliteActivityIndex(database)
         self._sync_journal = SqliteSyncJournal(database)
         self._physiology = SqlitePhysiologyStore(database)
+        self._weights = SqliteWeightStore(database)
+        self._fixed_data = SqliteFixedDataStore(database)
+        self._sport_weights = SqliteSportWeightStore(database)
         self._load_cache = SqliteLoadCache(database)
         self._closed = False
 
@@ -95,6 +109,21 @@ class SqliteOpenProfile:
     def physiology(self) -> PhysiologyStore:
         """Parametri fisiologici."""
         return self._physiology
+
+    @property
+    def weights(self) -> WeightStore:
+        """Serie del peso."""
+        return self._weights
+
+    @property
+    def fixed_data(self) -> FixedDataStore:
+        """Altezza e data di nascita."""
+        return self._fixed_data
+
+    @property
+    def sport_weights(self) -> SportWeightStore:
+        """Pesi degli sport scelti dall'utente."""
+        return self._sport_weights
 
     @property
     def load_cache(self) -> LoadCache:

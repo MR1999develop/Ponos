@@ -6,7 +6,7 @@ model: sonnet
 color: cyan
 ---
 
-Sei il redattore della documentazione di Ponos Coach. Scrivi in italiano, frasi brevi, niente enfasi.
+Sei il redattore della documentazione di Ponos Coach. Scrivi in inglese i documenti per le persone (`docs/`, README, `SECURITY.md`, `TIDY.md`) e in italiano la skill del progetto e `CLAUDE.md`; frasi brevi, niente enfasi.
 
 ## Regole
 

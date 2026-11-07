@@ -31,10 +31,12 @@ come "punto aperto" nei file `references/`.
 
 ## 1. Modello di carico
 
-TRIMP, hrTSS e carico per sport; parametri con data di validità; campioni
-fuori limiti, buchi, attività senza FC; pesi di default; PMC con TSB del
-mattino; esempi numerici verificabili a mano. Fonti: BAN, COG.
-Dettagli: `references/modello-carico.md`.
+TRIMP, hrTSS e carico per sport; parametri e misure con data di validità
+(regola "vale fino alla successiva"); campioni fuori limiti, buchi, attività
+senza FC; pesi di default e pesi salvati; zone di FC sulla soglia; PMC con TSB
+del mattino; esempi numerici verificabili a mano. Fonti: BAN, COG.
+Dettagli: `references/modello-carico.md`; decisioni in
+`docs/adr/007-dati-del-profilo-e-zone.md`.
 
 ## 2. Piano
 
@@ -60,8 +62,10 @@ Dettagli: `references/infortuni.md`.
 Cartella del profilo e elenco dei profili, SQLite, archivio dei file
 originali (FIT e GPX), identità (`file_id` o SHA-256), giornale della
 sincronizzazione, abbinamento, backoff, import di file, cartelle e ZIP con i
-tetti, esiti dell'import, lock. Dettagli: `references/dati-e-sincronizzazione.md`;
-schema e archivio: `docs/adr/005-schema-sqlite-e-archivio.md`.
+tetti, esiti dell'import, lock, dati personali e schema v3. Dettagli:
+`references/dati-e-sincronizzazione.md`; schema e archivio:
+`docs/adr/005-schema-sqlite-e-archivio.md`; dati del profilo:
+`docs/adr/007-dati-del-profilo-e-zone.md`.
 
 ## Checklist di revisione
 
@@ -77,7 +81,12 @@ schema e archivio: `docs/adr/005-schema-sqlite-e-archivio.md`.
 - Il piano non supera mai disponibilità, rampa, numero di sedute intense né
   tipologie scelte dall'utente.
 - Con un segnale d'allarme la zona si ferma: nessuna eccezione.
-- Dati di salute mai nei log.
+- Dati di salute mai nei log; altezza, peso e data di nascita compresi, anche
+  nei messaggi e nelle catene d'errore.
+- Altezza e data di nascita si scrivono una volta; il peso è un intero in
+  decimi di chilo; una misura vale fino alla voce successiva della sua serie.
+- Le percentuali delle zone stanno solo in `ZONE_STARTS_PERCENT`; se cambiano,
+  si alza `LOAD_MODEL_VERSION`.
 - Un file originale (FIT o GPX) si scrive su temporaneo, flush, rinomina; il
   record SQLite dopo il file; il token non sta mai nella cartella del profilo.
 - La cancellazione di una cartella di profilo tocca solo i nomi noti e mai un

@@ -4,47 +4,40 @@
 
 Due pannelli con lo stesso asse delle date: in alto CTL, ATL e carico giornaliero (barre da
 zero), in basso la forma (TSB), che puo essere negativa. La legenda segue l'ordine delle serie.
+CTL e ATL si distinguono anche senza il colore: ATL e tratteggiata e ogni linea porta il suo nome
+accanto all'ultimo punto.
 Il payload per la pagina e un JSON prodotto da `json.dumps` (`render_script`).
 """
 
 from __future__ import annotations
 
 import html
-import json
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
 import plotly.graph_objects as go
-import plotly.io as pio
 from plotly.subplots import make_subplots
 
 from ponos_coach.load.domain import PmcSeries
+from ponos_coach.ui.chart_payload import (
+    LEGEND_Y,
+    ChartChrome,
+    PreparedChart,
+    axis_style,
+    base_layout,
+    prepare_figure,
+)
 from ponos_coach.ui.tokens import ThemeTokens
 
-LOAD_UNIT = "hrTSS/day"  # unita del carico giornaliero e delle sue medie (CTL, ATL, TSB)
+LOAD_UNIT = "hrTSS per day"  # unita del carico giornaliero e delle sue medie (CTL, ATL, TSB)
 MAX_NAMES_PER_DAY = 5  # nomi di attivita mostrati nel suggerimento di una barra
 _LINE_WIDTH = 2
+_ATL_DASH = "dash"  # ATL e tratteggiata: CTL e ATL differiscono anche senza il colore
+_END_LABEL_SHIFT = 4  # pixel tra l'ultimo punto e il nome della linea
 _TOP_ROW_SHARE = 0.68
-_EXPORT_FILE_STEM = "ponos-coach-pmc"
-
-# Titoli dei bottoni della barra di Plotly: sono le chiavi del suo dizionario di lingua (il
-# testo inglese che Plotly cerca), non testi mostrati. La vista le traduce con `tr()`.
-PLOTLY_MODEBAR_KEYS: tuple[str, ...] = (
-    "Zoom",
-    "Pan",
-    "Zoom in",
-    "Zoom out",
-    "Autoscale",
-    "Reset axes",
-    "Toggle Spike Lines",
-    "Show closest data on hover",
-    "Compare data on hover",
-)
-PLOTLY_LOCALE_NAME = "ponos"
-
-type PmcFigure = go.Figure
+EXPORT_FILE_STEM = "ponos-coach-pmc"
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,10 +51,7 @@ class ChartActivity:
 
 @dataclass(frozen=True, slots=True)
 class PmcChartLabels:
-    """Testi del grafico, gia tradotti dalla vista.
-
-    `modebar` traduce i bottoni della barra di Plotly: una voce per ogni `PLOTLY_MODEBAR_KEYS`.
-    """
+    """Testi del grafico, già tradotti dalla vista."""
 
     x_axis: str
     load_axis: str
@@ -70,13 +60,8 @@ class PmcChartLabels:
     atl: str
     tsb: str
     daily_load: str
-    export_png: str
-    export_svg: str
-    modebar: Mapping[str, str]
-
-    def __post_init__(self) -> None:
-        if set(self.modebar) != set(PLOTLY_MODEBAR_KEYS):
-            raise ValueError("modebar must translate exactly the Plotly modebar titles")
+    chrome: ChartChrome
+    load_unit: str = LOAD_UNIT  # "hrTSS per day", tradotto come frase intera
 
 
 def daily_load_of(activities: Sequence[ChartActivity], days: Sequence[date]) -> list[float]:
@@ -101,17 +86,6 @@ def _day_hover_text(activities: Sequence[ChartActivity], days: Sequence[date]) -
     return texts
 
 
-def _axis_style(tokens: ThemeTokens, title: str) -> dict[str, object]:
-    return {
-        "title": {"text": title},
-        "gridcolor": tokens.grid,
-        "linecolor": tokens.axis_line,
-        "zerolinecolor": tokens.axis_line,
-        "tickfont": {"color": tokens.text_muted},
-        "title_font": {"color": tokens.text},
-    }
-
-
 def build_pmc_figure(
     pmc: PmcSeries,
     activities: Sequence[ChartActivity],
@@ -127,20 +101,21 @@ def build_pmc_figure(
         row_heights=[_TOP_ROW_SHARE, 1 - _TOP_ROW_SHARE],
         vertical_spacing=0.06,
     )
-    hover = f"%{{x|%Y-%m-%d}}<br>%{{y:.1f}} {LOAD_UNIT}<extra>%{{fullData.name}}</extra>"
+    unit = labels.load_unit
+    hover = f"%{{x|%Y-%m-%d}}<br>%{{y:.1f}} {unit}<extra>%{{fullData.name}}</extra>"
 
-    def line(name: str, values: object, color: str) -> go.Scatter:
+    def line(name: str, values: object, color: str, dash: str = "solid") -> go.Scatter:
         return go.Scatter(
             x=days,
             y=values,
             name=name,
             mode="lines",
-            line={"color": color, "width": _LINE_WIDTH},
+            line={"color": color, "width": _LINE_WIDTH, "dash": dash},
             hovertemplate=hover,
         )
 
     figure.add_trace(line(labels.ctl, pmc.ctl, tokens.ctl), row=1, col=1)
-    figure.add_trace(line(labels.atl, pmc.atl, tokens.atl), row=1, col=1)
+    figure.add_trace(line(labels.atl, pmc.atl, tokens.atl, _ATL_DASH), row=1, col=1)
     figure.add_trace(line(labels.tsb, pmc.tsb, tokens.tsb), row=2, col=1)
     figure.add_trace(
         go.Bar(
@@ -154,48 +129,53 @@ def build_pmc_figure(
         row=1,
         col=1,
     )
-    figure.update_xaxes(_axis_style(tokens, ""))
-    figure.update_xaxes(_axis_style(tokens, labels.x_axis), type="date", row=2, col=1)
+    figure.update_xaxes(axis_style(tokens, ""))
+    figure.update_xaxes(axis_style(tokens, labels.x_axis), type="date", row=2, col=1)
     figure.update_yaxes(
-        _axis_style(tokens, f"{labels.load_axis} ({LOAD_UNIT})"),
+        axis_style(tokens, f"{labels.load_axis} ({unit})"),
         rangemode="tozero",  # le barre partono da zero
         row=1,
         col=1,
     )
     figure.update_yaxes(
-        _axis_style(tokens, f"{labels.form_axis} ({LOAD_UNIT})"), zeroline=True, row=2, col=1
+        axis_style(tokens, f"{labels.form_axis} ({unit})"), zeroline=True, row=2, col=1
     )
     figure.update_layout(
-        paper_bgcolor=tokens.background,
-        plot_bgcolor=tokens.background,
-        font={"color": tokens.text},
-        legend={"orientation": "h", "traceorder": "normal", "y": 1.08, "x": 0},
+        **base_layout(tokens),
+        legend={"orientation": "h", "traceorder": "normal", "y": LEGEND_Y, "x": 0},
         margin={"l": 64, "r": 16, "t": 40, "b": 48},
         bargap=0.1,
         hovermode="x unified",
+        annotations=_end_labels(pmc, labels, tokens),
     )
     return figure
 
 
-def render_script(figure: go.Figure, labels: PmcChartLabels) -> str:
-    """Chiamata JavaScript che disegna la figura: l'argomento e un solo JSON (`json.dumps`)."""
-    payload = {
-        "figure": json.loads(pio.to_json(figure)),
-        "labels": {"png": labels.export_png, "svg": labels.export_svg},
-        # Dizionario di lingua di Plotly: la pagina lo registra, nessun testo si compone in JS.
-        "locale": {"name": PLOTLY_LOCALE_NAME, "dictionary": dict(labels.modebar)},
-        "filename": _EXPORT_FILE_STEM,
-    }
-    return f"ponosRender({json.dumps(payload, ensure_ascii=True, allow_nan=False)});"
-
-
-@dataclass(frozen=True, slots=True)
-class PreparedChart:
-    """Un grafico pronto da mostrare: figura, chiamata JavaScript e colore di fondo."""
-
-    figure: PmcFigure
-    script: str
-    background: str
+def _end_labels(
+    pmc: PmcSeries, labels: PmcChartLabels, tokens: ThemeTokens
+) -> list[dict[str, object]]:
+    """Il nome di CTL e di ATL accanto all'ultimo punto: la linea più alta ha il nome sopra, l'altra
+    sotto, così i due nomi non si sovrappongono; il colore del testo è quello del tema."""
+    if len(pmc) == 0:
+        return []
+    last_day = pmc.days[-1]
+    ends = ((labels.ctl, float(pmc.ctl[-1])), (labels.atl, float(pmc.atl[-1])))
+    higher = max(ends, key=lambda end: end[1])
+    return [
+        {
+            "xref": "x",
+            "yref": "y",
+            "x": last_day,
+            "y": value,
+            "text": name,
+            "showarrow": False,
+            "xanchor": "right",
+            "yanchor": "bottom" if (name, value) == higher else "top",
+            "yshift": _END_LABEL_SHIFT if (name, value) == higher else -_END_LABEL_SHIFT,
+            "font": {"color": tokens.text},
+        }
+        for name, value in ends
+    ]
 
 
 def prepare_chart(
@@ -207,4 +187,4 @@ def prepare_chart(
     """Costruisce figura e JSON: lavoro puro e pesante (circa 100 ms al primo grafico), adatto
     a un thread che non è quello della UI."""
     figure = build_pmc_figure(pmc, activities, labels, tokens)
-    return PreparedChart(figure, render_script(figure, labels), tokens.background)
+    return prepare_figure(figure, labels.chrome, EXPORT_FILE_STEM, tokens)
