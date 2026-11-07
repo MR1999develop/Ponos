@@ -177,6 +177,23 @@ class UpdateMeasurements:
             MissingPhysiologyError: the profile has no physiological parameters to rely on.
             LoadStoreError, ProfileDataError: write failed; nothing changes.
         """
+        self._check(update, fixed)
+        with self._activities.transaction():
+            return self._write(update, fixed)
+
+    def save_in_open_transaction(
+        self, update: MeasurementUpdate | None = None, fixed: FixedProfileData | None = None
+    ) -> SavedMeasurements:
+        """The same as calling the use case, inside a transaction the caller has already opened.
+
+        For a use case that must save the measurements together with something else of its own,
+        all or nothing, with the same rules (it does not open or close the transaction: if the
+        caller's transaction fails, so do these writes). Same errors as the call.
+        """
+        self._check(update, fixed)
+        return self._write(update, fixed)
+
+    def _check(self, update: MeasurementUpdate | None, fixed: FixedProfileData | None) -> None:
         if update is None and fixed is None:
             raise InvalidMeasurementsError(MeasurementProblem.NOTHING_TO_UPDATE)
         if update is not None:
@@ -184,10 +201,13 @@ class UpdateMeasurements:
                 raise InvalidMeasurementsError(MeasurementProblem.DATE_IN_FUTURE)
             if update.valid_from < MIN_MEASUREMENT_DATE:
                 raise InvalidMeasurementsError(MeasurementProblem.DATE_TOO_OLD)
-        with self._activities.transaction():
-            if fixed is not None:
-                self._fixed.set_once(fixed)
-            weight_period, heart_rate_period = self._save(update)
+
+    def _write(
+        self, update: MeasurementUpdate | None, fixed: FixedProfileData | None
+    ) -> SavedMeasurements:
+        if fixed is not None:
+            self._fixed.set_once(fixed)
+        weight_period, heart_rate_period = self._save(update)
         return SavedMeasurements(weight_period, heart_rate_period, fixed is not None)
 
     def _save(

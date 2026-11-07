@@ -71,7 +71,7 @@ def hour_at_threshold_trimp(sport: Sport, physiology: Physiology) -> float:
     return 60.0 * trimp_per_minute(hrr, physiology.sex.banister_k)
 
 
-def _sample_validity_s(seconds: NDArray[np.float64]) -> NDArray[np.float64]:
+def sample_validity_s(seconds: NDArray[np.float64]) -> NDArray[np.float64]:
     """Validity seconds of each sample: until the next; the last one takes the median."""
     if seconds.size == 1:
         return np.array([_SINGLE_SAMPLE_S])
@@ -147,7 +147,7 @@ def compute_activity_load(
         )
 
     limits = physiology.limits
-    validity = _sample_validity_s(series.seconds)
+    validity = sample_validity_s(series.seconds)
     in_range = _in_range(series, limits)
     counted = in_range & (validity <= MAX_GAP_S)
     discarded = int(np.count_nonzero(~in_range))

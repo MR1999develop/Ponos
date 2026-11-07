@@ -42,12 +42,18 @@ def reason_of(
 
 
 def assert_same_activity(actual: Activity, expected: Activity) -> None:
-    """Equal in every field; the HR series (NumPy columns) is compared by values."""
+    """Equal in every field; the HR and distance series (NumPy columns) are compared by values."""
     assert actual.heart_rate is not None or expected.heart_rate is None
     if expected.heart_rate is not None and actual.heart_rate is not None:
         assert np.array_equal(actual.heart_rate.seconds, expected.heart_rate.seconds)
         assert np.array_equal(actual.heart_rate.bpm, expected.heart_rate.bpm)
-    assert replace(actual, heart_rate=None) == replace(expected, heart_rate=None)
+    assert (actual.distance is None) == (expected.distance is None)
+    if expected.distance is not None and actual.distance is not None:
+        assert np.array_equal(actual.distance.seconds, expected.distance.seconds)
+        assert np.array_equal(actual.distance.meters, expected.distance.meters)
+    assert replace(actual, heart_rate=None, distance=None) == replace(
+        expected, heart_rate=None, distance=None
+    )
 
 
 def test_fit_and_gpx_are_recognised_from_the_content() -> None:

@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
+from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
 from ponos_coach.profiles.domain import (
@@ -26,6 +27,7 @@ from ponos_coach.profiles.ports import (
     WeightStore,
 )
 from ponos_coach.profiles.timezones import require_known_timezone
+from ponos_coach.storage.sqlite_assessment import SqliteThresholdTestStore
 from ponos_coach.storage.sqlite_database import (
     SqliteDatabase,
     create_database,
@@ -97,6 +99,7 @@ class SqliteOpenProfile:
         self._activity_levels = SqliteActivityLevelStore(database)
         self._meal_times = SqliteMealTimesStore(database)
         self._goal_periods = SqliteGoalPeriodStore(database)
+        self._threshold_tests = SqliteThresholdTestStore(database)
         self._closed = False
 
     @property
@@ -153,6 +156,11 @@ class SqliteOpenProfile:
     def goal_periods(self) -> GoalPeriodStore:
         """Nutrition goal periods."""
         return self._goal_periods
+
+    @property
+    def threshold_tests(self) -> ThresholdTestStore:
+        """Threshold test history."""
+        return self._threshold_tests
 
     def close(self) -> None:
         """Closes the connection (checkpoint included); repeating it has no effect.

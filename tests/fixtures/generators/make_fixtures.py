@@ -185,6 +185,68 @@ def build_gps(rng: random.Random) -> dict[str, bytes]:
     return out
 
 
+def _threshold_legs() -> list[tuple[int, int, float]]:
+    """Legs `(seconds, bpm, speed in m/s)` of a threshold test: 10' warm-up, 30' test (the
+    first 10' at 160 bpm, the last 20' at 168 bpm and 3.6 m/s) and 5' cool-down."""
+    return [(600, 125, 3.0), (600, 160, 3.4), (1200, 168, 3.6), (300, 120, 2.5)]
+
+
+def _threshold_samples(
+    first: int, *, distance: bool, speed: bool = False, pause: tuple[int, int] | None = None
+) -> list[fw.Sample]:
+    """One record a second from 0 to the end of the legs (included), HR and, as asked, cumulative
+    distance or speed. `pause=(after_s, gap_s)` leaves no record in the gap."""
+    samples: list[fw.Sample] = []
+    meters = 0.0
+    second = 0
+    for seconds, bpm, speed_ms in _threshold_legs():
+        for _ in range(seconds):
+            if pause is None or not pause[0] < second < pause[0] + pause[1]:
+                samples.append(
+                    fw.Sample(
+                        first + second,
+                        bpm,
+                        distance_m=round(meters, 2) if distance else None,
+                        speed_ms=speed_ms if speed else None,
+                    )
+                )
+                meters += speed_ms
+            second += 1
+    last_bpm = _threshold_legs()[-1][1]
+    samples.append(
+        fw.Sample(
+            first + second,
+            last_bpm,
+            distance_m=round(meters, 2) if distance else None,
+            speed_ms=_threshold_legs()[-1][2] if speed else None,
+        )
+    )
+    return samples
+
+
+def build_threshold() -> dict[str, bytes]:
+    """Runs for the threshold test, written without noise so the expected values are hand-computed.
+
+    Test segment from second 600 to 2400; threshold 168 bpm; in the last 20' 4320 m: 278 s/km.
+    """
+    run = fw.Sport.RUNNING
+    out: dict[str, bytes] = {}
+    variants = {
+        "run_threshold_test.fit": (12, 5000020, {"distance": True}),
+        "run_threshold_no_distance.fit": (13, 5000021, {"distance": False}),
+        "run_threshold_speed_only.fit": (14, 5000022, {"distance": False, "speed": True}),
+        "run_threshold_paused.fit": (15, 5000023, {"distance": True, "pause": (1200, 90)}),
+    }
+    for name, (day, serial, options) in variants.items():
+        start = BASE.replace(day=BASE.day + day)
+        samples = _threshold_samples(fw.datetime_to_fit(start), **options)  # type: ignore[arg-type]
+        spec = fw.ActivitySpec(
+            start, run, fw.SubSport.GENERIC, samples, serial_number=serial, product=serial % 100
+        )
+        out[name] = fw.build_activity(spec)
+    return out
+
+
 def build_hostile(valid: bytes) -> dict[str, bytes]:
     """File ostili derivati da un file valido piccolo."""
     return {
@@ -217,6 +279,7 @@ def main() -> None:
     # Same file_id and same bytes, different name: duplicate for T-IMP.
     valid["copy_of_run_constant_160.fit"] = valid["run_constant_160.fit"]
     valid.update(build_gps(random.Random(SEED + 1)))
+    valid.update(build_threshold())
     _write(DATA_DIR / "fit", valid)
     small = fw.build_activity(
         _spec(0, fw.Sport.RUNNING, fw.SubSport.GENERIC, hold(120, 5), 5000100)

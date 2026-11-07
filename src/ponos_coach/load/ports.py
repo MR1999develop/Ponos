@@ -9,6 +9,7 @@ The implementations share the profile's connection (`ActivityIndex.transaction`)
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import date
 from typing import Protocol
 
 from ponos_coach.activities.domain import ActivityIdentity, Sport
@@ -23,6 +24,10 @@ class UnknownActivityError(LoadStoreError):
     """The activity is not in the index: a load can only be saved for a known activity."""
 
 
+class PhysiologyEntryNotFoundError(LoadStoreError):
+    """There is no physiological parameter entry starting on that day."""
+
+
 class PhysiologyStore(Protocol):
     """Physiological parameters with validity date."""
 
@@ -30,6 +35,15 @@ class PhysiologyStore(Protocol):
         """Saves the parameters valid from `entry.valid_from`.
 
         An entry with the same date as an existing one replaces it (correction of a value).
+        """
+        ...
+
+    def remove(self, valid_from: date) -> None:
+        """Deletes the entry whose validity starts on `valid_from`.
+
+        Raises:
+            PhysiologyEntryNotFoundError: there is none; nothing changes.
+            LoadStoreError: write failed.
         """
         ...
 

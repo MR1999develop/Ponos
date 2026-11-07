@@ -70,9 +70,9 @@ class SubSport(IntEnum):
 @dataclass(frozen=True)
 class Sample:
     """A `record` message: FIT seconds, HR (None = invalid 0xFF) and, if present,
-    position in degrees, altitude in metres and cumulative distance in metres.
+    position in degrees, altitude in metres, cumulative distance in metres and speed in m/s.
 
-    The position, altitude and distance fields enter the record definition only if
+    The position, altitude, distance and speed fields enter the record definition only if
     at least one sample of the file has them; a sample without a value writes the invalid value.
     """
 
@@ -82,6 +82,7 @@ class Sample:
     lon_deg: float | None = None
     altitude_m: float | None = None
     distance_m: float | None = None
+    speed_ms: float | None = None
 
 
 @dataclass(frozen=True)
@@ -174,6 +175,7 @@ def _record_messages(samples: list[Sample]) -> bytes:
     has_position = any(s.lat_deg is not None or s.lon_deg is not None for s in samples)
     has_altitude = any(s.altitude_m is not None for s in samples)
     has_distance = any(s.distance_m is not None for s in samples)
+    has_speed = any(s.speed_ms is not None for s in samples)
     fields = [(253, 4, _UINT32), (3, 1, _UINT8)]
     fmt = "IB"
     if has_position:
@@ -182,6 +184,9 @@ def _record_messages(samples: list[Sample]) -> bytes:
     if has_distance:
         fields.append((5, 4, _UINT32))  # scale 100: centimetres
         fmt += "I"
+    if has_speed:
+        fields.append((6, 2, _UINT16))  # scale 1000
+        fmt += "H"
     if has_altitude:
         fields.append((2, 2, _UINT16))  # scale 5, offset 500
         fmt += "H"
@@ -195,6 +200,8 @@ def _record_messages(samples: list[Sample]) -> bytes:
             ]
         if has_distance:
             values.append(_opt(s.distance_m, 100, INVALID_UINT32))
+        if has_speed:
+            values.append(_opt(s.speed_ms, 1000, INVALID_UINT16))
         if has_altitude:
             values.append(_opt(s.altitude_m, 5, INVALID_UINT16, 500.0))
         out += _data(1, fmt, *values)

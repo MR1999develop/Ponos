@@ -39,6 +39,7 @@ from ponos_coach.activities.domain import (
     MAX_ACTIVITY_FILE_BYTES,
     Activity,
     ActivitySummary,
+    DistanceSeries,
     FileFormat,
     GeoPoint,
     GpxIdentity,
@@ -438,12 +439,16 @@ def _distance_m(
     lat_deg: NDArray[np.float64], lon_deg: NDArray[np.float64], same_segment: NDArray[np.bool_]
 ) -> float:
     """Sum of the distances (haversine) between consecutive points of the same segment."""
-    lat, lon = np.radians(lat_deg), np.radians(lon_deg)
+    steps = _haversine_steps_m(np.radians(lat_deg), np.radians(lon_deg))
+    return float(steps[same_segment].sum())
+
+
+def _haversine_steps_m(lat: NDArray[np.float64], lon: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Distance between consecutive points, in metres; coordinates in radians."""
     half_dlat, half_dlon = np.diff(lat) / 2.0, np.diff(lon) / 2.0
     a = np.sin(half_dlat) ** 2 + np.cos(lat[:-1]) * np.cos(lat[1:]) * np.sin(half_dlon) ** 2
     a = np.clip(a, 0.0, 1.0)
-    steps = 2.0 * EARTH_RADIUS_M * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
-    return float(steps[same_segment].sum())
+    return np.asarray(2.0 * EARTH_RADIUS_M * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a)))
 
 
 def _turning_points(ele: NDArray[np.float64]) -> list[float]:
@@ -566,6 +571,24 @@ def _heart_rate(
     return series, int(seconds.size - np.count_nonzero(keep))
 
 
+def _distance_series(
+    columns: _Columns, when_us: NDArray[np.int64], same_segment: NDArray[np.bool_]
+) -> DistanceSeries:
+    """Cumulative distance along the track (haversine, as the summary's total).
+
+    Simple and safe: every point has a valid position and a time. Steps between two segments add
+    nothing; a point with a time not greater than all the previous ones is left out, as for HR.
+    """
+    lat = np.radians(np.frombuffer(columns.lat, dtype=np.float64))
+    lon = np.radians(np.frombuffer(columns.lon, dtype=np.float64))
+    steps = _haversine_steps_m(lat, lon) * same_segment
+    meters = np.concatenate(([0.0], np.cumsum(steps)))
+    seconds = (when_us - when_us[0]) / 1e6
+    keep = np.ones(seconds.size, dtype=bool)
+    keep[1:] = seconds[1:] > np.maximum.accumulate(seconds)[:-1]
+    return DistanceSeries(seconds[keep], meters[keep])
+
+
 def _build(data: bytes, handler: _GpxHandler, limits: GpxLimits) -> Activity:
     columns = handler.columns
     if not columns.lat:
@@ -585,6 +608,7 @@ def _build(data: bytes, handler: _GpxHandler, limits: GpxLimits) -> Activity:
         series,
         _summary(columns, same_segment),
         discarded,
+        _distance_series(columns, when_us, same_segment),
     )
 
 

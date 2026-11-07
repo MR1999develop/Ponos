@@ -48,7 +48,11 @@ from ponos_coach.load.domain import (
     ThresholdHeartRate,
     ZoneSeconds,
 )
-from ponos_coach.load.ports import LoadStoreError, UnknownActivityError
+from ponos_coach.load.ports import (
+    LoadStoreError,
+    PhysiologyEntryNotFoundError,
+    UnknownActivityError,
+)
 from ponos_coach.storage.sqlite_database import SqliteDatabase
 
 _EPOCH: Final = datetime(1970, 1, 1, tzinfo=UTC)
@@ -298,6 +302,15 @@ class SqlitePhysiologyStore:
                     physiology.sex.value,
                 ),
             )
+
+    def remove(self, valid_from: date) -> None:
+        """Deletes the entry that starts on `valid_from`."""
+        with _translating(LoadStoreError):
+            cursor = self._db.connection.execute(
+                "DELETE FROM physiology WHERE valid_from = ?", (valid_from.isoformat(),)
+            )
+        if cursor.rowcount == 0:
+            raise PhysiologyEntryNotFoundError("no physiological parameters start on that day")
 
     def list_entries(self) -> Sequence[PhysiologyEntry]:
         """All the entries by ascending date."""

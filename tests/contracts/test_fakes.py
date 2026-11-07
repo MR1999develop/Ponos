@@ -22,6 +22,10 @@ from ponos_coach.profiles.ports import (
 )
 from tests.builders import absolute_path
 from tests.contracts.contract_archive import ActivityArchiveContract
+from tests.contracts.contract_assessment import (
+    PhysiologyRemovalContract,
+    ThresholdTestStoreContract,
+)
 from tests.contracts.contract_nutrition import (
     ActivityCaloriesContract,
     ActivityLevelStoreContract,
@@ -241,4 +245,12 @@ class TestFakeMealTimesStore(_FakeStorageFixture, MealTimesStoreContract):
 
 
 class TestFakeGoalPeriodStore(_FakeStorageFixture, GoalPeriodStoreContract):
+    pass
+
+
+class TestFakeThresholdTestStore(_FakeStorageFixture, ThresholdTestStoreContract):
+    pass
+
+
+class TestFakePhysiologyRemoval(_FakeStorageFixture, PhysiologyRemovalContract):
     pass

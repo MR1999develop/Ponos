@@ -3,10 +3,12 @@
 """Pure domain of the load feature (no I/O, Qt, network or logging)."""
 
 from ponos_coach.load.domain.activity_load import (
+    MAX_GAP_S,
     ActivityLoad,
     LoadSource,
     compute_activity_load,
     out_of_limits,
+    sample_validity_s,
 )
 from ponos_coach.load.domain.aggregation import (
     DayLoad,
@@ -51,6 +53,7 @@ from ponos_coach.load.domain.zones import (
 
 __all__ = [
     "LOAD_MODEL_VERSION",
+    "MAX_GAP_S",
     "ZONE_COUNT",
     "ZONE_STARTS_PERCENT",
     "ActivityLoad",
@@ -78,6 +81,7 @@ __all__ = [
     "load_fingerprint",
     "out_of_limits",
     "physiology_for_day",
+    "sample_validity_s",
     "seconds_per_zone",
     "threshold_for_sport",
     "typical_intensity",

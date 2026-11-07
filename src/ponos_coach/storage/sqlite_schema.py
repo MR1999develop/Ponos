@@ -51,6 +51,14 @@ Columns of v4 (nutrition, all `STRICT`):
 - `nutrition_goal`: goal periods (first day, last day included or NULL for open-ended) on a closed
   set of kinds; weight loss has a rate in grams per week and the others none; two triggers reject
   an insertion, and an update of the dates, that overlaps another period.
+
+Columns of v5 (threshold test, `STRICT`):
+
+- `threshold_test`: the history of the applied 30-minute threshold tests, one row per activity
+  (`activity_key` is the identity key). No foreign key to `activities`: the index is derived and
+  regenerable, and the history of the tests must survive a rebuild of it. Local day (existing ISO
+  date, not earlier than 1900-01-01), start of the segment in UTC milliseconds, threshold HR, pace
+  in whole seconds per kilometre or NULL (no distance), version of the method that computed them.
 """
 
 from __future__ import annotations
@@ -95,6 +103,9 @@ V4_MAX_ACTIVITY_KCAL = 50_000
 V4_MEAL_MINUTES = (0, 1439)
 V4_MIN_MEAL_GAP_MIN = 120
 V4_WEEKLY_LOSS_G = (100, 1000)
+# Limits of the threshold test data (the same as the domain types), frozen here on purpose.
+V5_THRESHOLD_BPM = (40, 250)
+V5_PACE_S_PER_KM = (90, 3600)
 ZONE_COLUMNS: Final = ("zone1_s", "zone2_s", "zone3_s", "zone4_s", "zone5_s")
 
 _ACTIVITY_LEVELS = "'sedentary','light','active','very_active'"
@@ -108,6 +119,7 @@ V1_TABLES: Final = frozenset({"meta", "activities", "physiology", "load_cache"})
 V2_TABLES: Final = frozenset({"sync_journal", "sync_cursor", "sync_state"})
 V3_TABLES: Final = frozenset({"profile_body", "weight", "sport_weights"})
 V4_TABLES: Final = frozenset({"activity_level", "meal_times", "nutrition_goal"})
+V5_TABLES: Final = frozenset({"threshold_test"})
 
 _V1_META = """
 CREATE TABLE meta (
@@ -331,6 +343,23 @@ BEGIN
 END
 """
 
+_V5_THRESHOLD_TEST = f"""
+CREATE TABLE threshold_test (
+    activity_key     TEXT    NOT NULL PRIMARY KEY
+                             CHECK (length(activity_key) BETWEEN 5 AND 128
+                                    AND substr(activity_key, 1, 4) IN ('fit:', 'gpx:')),
+    test_date        TEXT    NOT NULL CHECK (date(test_date) IS test_date
+                                             AND test_date >= '{V3_MIN_MEASUREMENT_DATE}'),
+    segment_start_ms INTEGER NOT NULL,
+    threshold_bpm    INTEGER NOT NULL CHECK (threshold_bpm BETWEEN {V5_THRESHOLD_BPM[0]}
+                                                               AND {V5_THRESHOLD_BPM[1]}),
+    pace_s_per_km    INTEGER CHECK (pace_s_per_km IS NULL
+                                    OR pace_s_per_km BETWEEN {V5_PACE_S_PER_KM[0]}
+                                                         AND {V5_PACE_S_PER_KM[1]}),
+    method_version   INTEGER NOT NULL CHECK (method_version >= 1)
+) STRICT
+"""
+
 # Migration i (index i-1): brings the schema from version i-1 to i.
 MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     (_V1_META, _V1_ACTIVITIES, _V1_ACTIVITIES_START_INDEX, _V1_PHYSIOLOGY, _V1_LOAD_CACHE),
@@ -352,6 +381,7 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
         _V4_NUTRITION_GOAL_NO_OVERLAP,
         _V4_NUTRITION_GOAL_NO_OVERLAP_ON_UPDATE,
     ),
+    (_V5_THRESHOLD_TEST,),
 )
 
 SCHEMA_VERSION: Final = len(MIGRATIONS)

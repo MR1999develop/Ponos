@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
+from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.load.domain import PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
@@ -154,6 +155,10 @@ class _CountingProfile:
     @property
     def goal_periods(self) -> GoalPeriodStore:
         return self._inner.goal_periods
+
+    @property
+    def threshold_tests(self) -> ThresholdTestStore:
+        return self._inner.threshold_tests
 
     def close(self) -> None:
         self._owner.closed += 1

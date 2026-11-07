@@ -54,8 +54,9 @@ Dettagli: `references/piano.md`.
 
 ## 3. Test di soglia
 
-Protocollo di 30', FC di soglia come media degli ultimi 20', retest ogni
-6–8 settimane, soglia in bici. Fonte: FRI.
+Protocollo di 30', segmento scelto per distanza (o FC), FC di soglia come
+media degli ultimi 20', ritmo, zone FC e di ritmo, rifiuti con motivo, retest
+tra 42 e 56 giorni, soglia in bici. Fonte: FRI.
 Dettagli: `references/test-soglia.md`.
 
 ## 4. Infortuni
@@ -78,7 +79,7 @@ valori in `nutrition/domain/defaults.py`.
 Cartella del profilo e elenco dei profili, SQLite, archivio dei file
 originali (FIT e GPX), identità (`file_id` o SHA-256), giornale della
 sincronizzazione, abbinamento, backoff, import di file, cartelle e ZIP con i
-tetti, esiti dell'import, lock, dati personali, schema v3 e v4. Dettagli:
+tetti, esiti dell'import, lock, dati personali, schema v3, v4 e v5. Dettagli:
 `references/dati-e-sincronizzazione.md`; schema e archivio:
 `docs/adr/005-schema-sqlite-e-archivio.md`; dati del profilo:
 `docs/adr/007-dati-del-profilo-e-zone.md`.

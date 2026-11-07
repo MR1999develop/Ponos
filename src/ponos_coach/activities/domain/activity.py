@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from ponos_coach.activities.domain.distance_series import DistanceSeries
 from ponos_coach.activities.domain.heart_rate_series import HeartRateSeries
 from ponos_coach.activities.domain.identity import ActivityIdentity, FileFormat, format_of
 from ponos_coach.activities.domain.sport import Sport
@@ -28,7 +29,9 @@ class Activity:
     rest).
     `file_format` must be that of the identity. The HR series has seconds from the first
     record; `discarded_hr_samples` counts the HR samples discarded because of
-    repeated or non-increasing timestamps. Start and end lie in [1990-01-01, 2100-01-01) UTC.
+    repeated or non-increasing timestamps. The optional distance series has the same time
+    axis (seconds from the first record); it is absent when the file has no usable distance.
+    Start and end lie in [1990-01-01, 2100-01-01) UTC.
     """
 
     identity: ActivityIdentity
@@ -40,6 +43,7 @@ class Activity:
     heart_rate: HeartRateSeries | None
     summary: ActivitySummary
     discarded_hr_samples: int = 0
+    distance: DistanceSeries | None = None
 
     def __post_init__(self) -> None:
         if format_of(self.identity) is not self.file_format:

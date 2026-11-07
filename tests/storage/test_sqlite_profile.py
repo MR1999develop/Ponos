@@ -47,6 +47,10 @@ from ponos_coach.storage.sqlite_database import create_database, open_database
 from ponos_coach.storage.sqlite_profile import SqliteProfileStorage
 from ponos_coach.storage.sqlite_schema import SCHEMA_VERSION
 from tests.builders import T0, fit_identity, gpx_identity, make_record
+from tests.contracts.contract_assessment import (
+    PhysiologyRemovalContract,
+    ThresholdTestStoreContract,
+)
 from tests.contracts.contract_nutrition import (
     ActivityCaloriesContract,
     ActivityLevelStoreContract,
@@ -149,6 +153,14 @@ class TestSqliteGoalPeriodStore(_DiskStorageFixture, GoalPeriodStoreContract):
     pass
 
 
+class TestSqliteThresholdTestStore(_DiskStorageFixture, ThresholdTestStoreContract):
+    pass
+
+
+class TestSqlitePhysiologyRemoval(_DiskStorageFixture, PhysiologyRemovalContract):
+    pass
+
+
 def _create(folder: Path) -> None:
     SqliteProfileStorage().create(folder, PROFILE_ID, NAME, "Europe/Rome").close()
 
@@ -181,6 +193,7 @@ def test_new_database_has_the_latest_schema_and_the_expected_tables(tmp_path: Pa
         "activity_level",
         "meal_times",
         "nutrition_goal",
+        "threshold_test",
     }
     assert meta == {
         "profile_id": str(PROFILE_ID),

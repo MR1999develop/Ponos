@@ -130,7 +130,7 @@ def test_t_dati_01_a_frozen_v3_database_is_migrated_to_v4_with_data_intact_and_a
 
     opened = SqliteProfileStorage().open(tmp_path)
     try:
-        assert opened.info.format_version == 4
+        assert opened.info.format_version == sqlite_schema.SCHEMA_VERSION
         (record,) = opened.activities.list_by_start()
         assert record.summary.calories_kcal is None  # the index is derived: not known before
     finally:
@@ -141,7 +141,7 @@ def test_t_dati_01_a_frozen_v3_database_is_migrated_to_v4_with_data_intact_and_a
     assert [row[:-1] for row in rows(path, "activities")] == before["activities"]
     assert table_names(path) >= V4_TABLES
     [copy] = sorted((tmp_path / "backup").glob("*"))
-    assert copy.name == "ponos-v3-v4.sqlite3"
+    assert copy.name == f"ponos-v3-v{sqlite_schema.SCHEMA_VERSION}.sqlite3"
     assert user_version(copy) == 3
     assert V4_TABLES.isdisjoint(table_names(copy))
     assert {table: rows(copy, table) for table in (*KEPT, "activities")} == before
@@ -209,7 +209,7 @@ def test_t_dati_01_a_v4_migration_that_fails_halfway_leaves_the_v3_database_as_i
     assert "calories_kcal" not in columns  # not even the new column
     monkeypatch.undo()
     SqliteProfileStorage().open(tmp_path).close()  # the good round succeeds
-    assert user_version(path) == 4
+    assert user_version(path) == sqlite_schema.SCHEMA_VERSION
 
 
 @pytest.mark.parametrize("kill_at", range(1, len(sqlite_schema.MIGRATIONS[3]) + 1))
@@ -226,7 +226,7 @@ def test_t_dati_01_a_v3_database_killed_at_every_migration_statement_is_still_v3
     assert V4_TABLES.isdisjoint(table_names(path))
     assert {table: rows(path, table) for table in (*KEPT, "activities")} == before
     SqliteProfileStorage().open(tmp_path).close()
-    assert user_version(path) == 4
+    assert user_version(path) == sqlite_schema.SCHEMA_VERSION
 
 
 # --- The database refuses what the domain refuses -----------------------------------------

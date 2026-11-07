@@ -133,6 +133,23 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
     istruzione, limiti dei CHECK e del trigger).
   - `OpenProfile` espone anche `activity_levels`, `meal_times` e
     `goal_periods`, sulla stessa connessione e transazione.
+- **Schema v5** (test di soglia, `STRICT`; regole in `references/test-soglia.md`):
+  - `threshold_test`: storico dei test applicati, una riga per attività
+    (`activity_key` chiave, l'`identity_key` dell'attività, prefisso `fit:` o
+    `gpx:`), `test_date` (giorno locale, data esistente non prima del
+    1900-01-01), `segment_start_ms` (inizio del segmento, millisecondi UTC),
+    `threshold_bpm` (40-250), `pace_s_per_km` (90-3600, NULL senza distanza),
+    `method_version` (>= 1). Nessuna chiave esterna verso `activities`: l'indice
+    è derivato e rigenerabile, lo storico dei test deve sopravvivere alla sua
+    ricostruzione.
+  - Migrazione v4 → v5 con copia in `backup/ponos-v4-v5.sqlite3`. T-DATI-01:
+    `tests/collaudo/test_fase4_migrazione.py` (v4 congelata, uccisione a ogni
+    istruzione, limiti dei CHECK). La copia porta il nome `ponos-v<da>-v<a>` con
+    la versione di destinazione dell'app: una v3 aperta oggi lascia
+    `ponos-v3-v5.sqlite3`.
+  - `OpenProfile` espone anche `threshold_tests` (porta `ThresholdTestStore` in
+    `assessment/ports.py`), sulla stessa connessione e transazione; la porta
+    `PhysiologyStore` ha `remove(valid_from)` per annullare un test.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.

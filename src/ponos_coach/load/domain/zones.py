@@ -3,7 +3,8 @@
 """Heart-rate zones on the threshold (five zones, after Friel).
 
 Z1 below 85% of the threshold, Z2 85-89%, Z3 90-94%, Z4 95-99%, Z5 from 100% up. Project default
-percentages, revised in phase 4; they live only here. The lower boundary belongs to
+percentages, reviewed in phase 4 (the pace zones of `assessment` are aligned with them); they live
+only here. The lower boundary belongs to
 the higher zone (`bpm >= 85% of the threshold` is Z2). Comparisons are on floating-point
 values but exact: `bpm * 100` against `percentage * threshold` (integer), never a
 floating-point percentage at the boundary.

@@ -42,9 +42,16 @@ from ponos_coach.activities.ports import (
     TransactionStateError,
     UnknownJournalEntryError,
 )
+from ponos_coach.assessment.domain import ThresholdTest
+from ponos_coach.assessment.ports import (
+    ThresholdTestAlreadyStoredError,
+    ThresholdTestNotFoundError,
+    ThresholdTestStore,
+)
 from ponos_coach.load.domain import ActivityLoad, LoadFingerprint, PhysiologyEntry, SportWeight
 from ponos_coach.load.ports import (
     LoadCache,
+    PhysiologyEntryNotFoundError,
     PhysiologyStore,
     SportWeightStore,
     UnknownActivityError,
@@ -78,7 +85,7 @@ from ponos_coach.profiles.ports import (
 )
 from ponos_coach.profiles.timezones import require_known_timezone
 
-FORMAT_VERSION = 4
+FORMAT_VERSION = 5
 
 
 @dataclass
@@ -96,6 +103,7 @@ class _Database:
     levels: dict[date, ActivityLevelEntry] = field(default_factory=dict)
     meal_times: MealTimes | None = None
     goals: dict[date, GoalPeriod] = field(default_factory=dict)
+    threshold_tests: dict[str, ThresholdTest] = field(default_factory=dict)  # by identity key
     cursors: dict[ListingKind, ListingCursor] = field(default_factory=dict)
     journal: dict[GarminActivityId, JournalEntry] = field(default_factory=dict)
     last_completed: datetime | None = None
@@ -115,6 +123,7 @@ class _Database:
                 self.levels,
                 self.meal_times,
                 self.goals,
+                self.threshold_tests,
                 self.cursors,
                 self.journal,
                 self.last_completed,
@@ -134,6 +143,7 @@ class _Database:
             self.levels,
             self.meal_times,
             self.goals,
+            self.threshold_tests,
             self.cursors,
             self.journal,
             self.last_completed,
@@ -306,6 +316,11 @@ class _Physiology:
     def put(self, entry: PhysiologyEntry) -> None:
         self._db.physiology[entry.valid_from] = entry
 
+    def remove(self, valid_from: date) -> None:
+        if valid_from not in self._db.physiology:
+            raise PhysiologyEntryNotFoundError("missing")
+        del self._db.physiology[valid_from]
+
     def list_entries(self) -> Sequence[PhysiologyEntry]:
         return [self._db.physiology[day] for day in sorted(self._db.physiology)]
 
@@ -413,6 +428,33 @@ class _GoalPeriods:
         del self._db.goals[first_day]
 
 
+class _ThresholdTests:
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def add(self, test: ThresholdTest) -> None:
+        key = identity_key(test.identity)
+        if key in self._db.threshold_tests:
+            raise ThresholdTestAlreadyStoredError("already a test")
+        self._db.threshold_tests[key] = test
+
+    def remove(self, identity: ActivityIdentity) -> None:
+        key = identity_key(identity)
+        if key not in self._db.threshold_tests:
+            raise ThresholdTestNotFoundError("missing")
+        del self._db.threshold_tests[key]
+
+    def get(self, identity: ActivityIdentity) -> ThresholdTest | None:
+        return self._db.threshold_tests.get(identity_key(identity))
+
+    def list_tests(self) -> Sequence[ThresholdTest]:
+        ordered = sorted(
+            self._db.threshold_tests.items(),
+            key=lambda item: (item[1].test_day, item[1].segment_start, item[0]),
+        )
+        return [test for _, test in ordered]
+
+
 class _OpenProfile:
     def __init__(self, database: _Database) -> None:
         self._db = database
@@ -426,6 +468,7 @@ class _OpenProfile:
         self._levels = _ActivityLevels(database)
         self._meal_times = _MealTimes(database)
         self._goals = _GoalPeriods(database)
+        self._threshold_tests = _ThresholdTests(database)
 
     @property
     def info(self) -> ProfileInfo:
@@ -470,6 +513,10 @@ class _OpenProfile:
     @property
     def goal_periods(self) -> GoalPeriodStore:
         return self._goals
+
+    @property
+    def threshold_tests(self) -> ThresholdTestStore:
+        return self._threshold_tests
 
     def close(self) -> None:
         """No effect: the data stay in the fake disk."""

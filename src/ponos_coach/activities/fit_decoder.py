@@ -21,12 +21,14 @@ from enum import Enum
 
 import fitdecode
 import numpy as np
+from numpy.typing import NDArray
 
 from ponos_coach.activities.domain import (
     MAX_ACTIVITY_FILE_BYTES,
     MAX_ACTIVITY_KCAL,
     Activity,
     ActivitySummary,
+    DistanceSeries,
     FileFormat,
     FileId,
     FitIdentity,
@@ -56,6 +58,7 @@ _SEMICIRCLES_QUARTER_TURN = 2**30  # 90 degrees
 _DEGREES_PER_SEMICIRCLE = 180.0 / _SEMICIRCLES_HALF_TURN
 _TIMER_EXCESS_TOLERANCE_MS = 1000  # moving time above elapsed: up to 1 s it is brought down
 _MS_PER_S = 1000
+_SPEED_GAP_S = 10.0  # longer intervals between records are pauses: no distance is integrated
 
 # `fitdecode` errors and the only Python exceptions observed inside its parser on `fit-ostili/`
 # and on random or mutated bytes (triggered, on hostile data, by a missing check in the
@@ -134,6 +137,10 @@ class _Parsed:
     record_times: list[datetime] = field(default_factory=list)
     hr_times: list[datetime] = field(default_factory=list)
     hr_values: list[int] = field(default_factory=list)
+    distance_times: list[datetime] = field(default_factory=list)
+    distance_values: list[float] = field(default_factory=list)  # cumulative metres
+    speed_times: list[datetime] = field(default_factory=list)
+    speed_values: list[float] = field(default_factory=list)  # m/s
     pos_lat: list[int] = field(default_factory=list)  # semicircles, valid pairs only
     pos_lon: list[int] = field(default_factory=list)
     messages: int = 0
@@ -194,6 +201,20 @@ def _declared_kcal(value: object) -> float | None:
     return number if number is not None and 0.0 < number <= MAX_ACTIVITY_KCAL else None
 
 
+def _take_motion(frame: fitdecode.FitDataMessage, when: datetime, parsed: _Parsed) -> None:
+    """Cumulative distance and speed of a record, when it has them."""
+    distance = _non_negative(_value(frame, "distance"))
+    if distance is not None:
+        parsed.distance_times.append(when)
+        parsed.distance_values.append(distance)
+    speed = _non_negative(_value(frame, "enhanced_speed"))
+    if speed is None:
+        speed = _non_negative(_value(frame, "speed"))
+    if speed is not None:
+        parsed.speed_times.append(when)
+        parsed.speed_values.append(speed)
+
+
 def _take_record(frame: fitdecode.FitDataMessage, parsed: _Parsed, limits: FitLimits) -> None:
     parsed.records += 1
     if parsed.records > limits.max_records:
@@ -210,6 +231,7 @@ def _take_record(frame: fitdecode.FitDataMessage, parsed: _Parsed, limits: FitLi
     if heart_rate is not None:
         parsed.hr_times.append(when)
         parsed.hr_values.append(heart_rate)
+    _take_motion(frame, when, parsed)
 
 
 def _take_message(frame: fitdecode.FitDataMessage, parsed: _Parsed, limits: FitLimits) -> None:
@@ -318,12 +340,53 @@ def _series(parsed: _Parsed) -> tuple[HeartRateSeries | None, int]:
     """
     if not parsed.hr_values:
         return None, 0
-    origin = parsed.record_times[0]
-    seconds = np.array([(t - origin).total_seconds() for t in parsed.hr_times])
+    seconds = _seconds_from_first_record(parsed, parsed.hr_times)
     bpm = np.array(parsed.hr_values, dtype=np.float64)
+    keep = _increasing_mask(seconds)
+    return HeartRateSeries(seconds[keep], bpm[keep]), int(seconds.size - np.count_nonzero(keep))
+
+
+def _seconds_from_first_record(parsed: _Parsed, times: list[datetime]) -> NDArray[np.float64]:
+    origin = parsed.record_times[0]
+    return np.array([(t - origin).total_seconds() for t in times], dtype=np.float64)
+
+
+def _increasing_mask(seconds: NDArray[np.float64]) -> NDArray[np.bool_]:
+    """Samples whose time is greater than all the previous ones (the first of a repetition
+    counts, a step backwards never enters)."""
     keep = np.ones(seconds.size, dtype=bool)
     keep[1:] = seconds[1:] > np.maximum.accumulate(seconds)[:-1]
-    return HeartRateSeries(seconds[keep], bpm[keep]), int(seconds.size - np.count_nonzero(keep))
+    return keep
+
+
+def _integrated(seconds: NDArray[np.float64], speed: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Cumulative metres from speed samples (trapezoid); an interval over 10 s adds nothing."""
+    interval = np.diff(seconds)
+    step = 0.5 * (speed[1:] + speed[:-1]) * interval
+    step[interval > _SPEED_GAP_S] = 0.0
+    return np.concatenate(([0.0], np.cumsum(step)))
+
+
+def _distance_series(parsed: _Parsed) -> DistanceSeries | None:
+    """Cumulative distance of the records: the `distance` field or, if no record has it, the
+    integral of `speed`. A distance that goes backwards is not usable: no series (never repaired).
+    """
+    if parsed.distance_values:
+        seconds = _seconds_from_first_record(parsed, parsed.distance_times)
+        meters = np.array(parsed.distance_values, dtype=np.float64)
+        keep = _increasing_mask(seconds)
+        seconds, meters = seconds[keep], meters[keep]
+    elif parsed.speed_values:
+        seconds = _seconds_from_first_record(parsed, parsed.speed_times)
+        speed = np.array(parsed.speed_values, dtype=np.float64)
+        keep = _increasing_mask(seconds)
+        seconds = seconds[keep]
+        meters = _integrated(seconds, speed[keep])
+    else:
+        return None
+    if not np.isfinite(meters).all() or (np.diff(meters) < 0).any():
+        return None
+    return DistanceSeries(seconds, meters)
 
 
 def _moving_time(elapsed_s: float, timer_s: float) -> float:
@@ -411,7 +474,7 @@ def _build(parsed: _Parsed, limits: FitLimits) -> Activity:
     series, discarded = _series(parsed)
     return Activity(
         FitIdentity(file_id), FileFormat.FIT, sport, start, elapsed_s, timer_s, series,
-        _summary(parsed), discarded,
+        _summary(parsed), discarded, _distance_series(parsed),
     )  # fmt: skip
 
 
@@ -421,7 +484,7 @@ def decode_activity(data: bytes, limits: FitLimits | None = None) -> Activity:
     Checks the size first, then reads verifying the CRCs and the record and duration
     limits. The identity (`FileId`) requires an activity-type `file_id` with manufacturer, product,
     serial number and creation time; without it, the file is not an activity. Seconds of the
-    HR series from the first record; samples with invalid HR (0xFF) omitted.
+    HR and distance series from the first record; samples with invalid HR (0xFF) omitted.
 
     Raises:
         FitDecodeError: the only error raised, with the reason in `reason`.

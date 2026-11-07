@@ -9,6 +9,7 @@ import hashlib
 import itertools
 import math
 import time
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -241,7 +242,12 @@ def test_sport_from_the_type_field(text: str | None, sport: Sport) -> None:
 def test_decoding_is_deterministic() -> None:
     data = gw.build_gpx(gw.GpxSpec([meridian(50, ele_m=[100.0 + i % 7 for i in range(50)])]))
 
-    assert decode_gpx(data) == decode_gpx(data)
+    first, second = decode_gpx(data), decode_gpx(data)
+
+    assert replace(first, distance=None) == replace(second, distance=None)
+    assert first.distance is not None
+    assert second.distance is not None
+    assert np.array_equal(first.distance.meters, second.distance.meters)
 
 
 # --- Non-activity and inconsistent files ------------------------------------------------------

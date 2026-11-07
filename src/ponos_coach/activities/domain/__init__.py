@@ -3,6 +3,7 @@
 """Pure domain of the activities feature (no I/O, Qt, network or logging)."""
 
 from ponos_coach.activities.domain.activity import Activity
+from ponos_coach.activities.domain.distance_series import DistanceSeries
 from ponos_coach.activities.domain.duplicates import (
     DUPLICATE_DURATION_TOLERANCE_PERCENT,
     DUPLICATE_START_TOLERANCE,
@@ -112,6 +113,7 @@ __all__ = [
     "ActivityRecord",
     "ActivitySummary",
     "ArchivedFile",
+    "DistanceSeries",
     "FailureReason",
     "FileFormat",
     "FileId",
