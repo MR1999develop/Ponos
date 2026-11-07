@@ -1,8 +1,8 @@
 # Piano di allenamento
 
 **Quando leggerlo:** scrivendo o rivedendo `planning` e `goals`, i test
-`T-PIANO`, o il calendario. Sezione 2 di `SKILL.md`. Fonti: COG, SEI, RIE
-(Riegel), FRI (zone); per distribuzione dell'intensità, scarico finale e lavoro a
+`T-PIANO`, o il calendario. Sezione 2 di `SKILL.md`. Fonti: COG, SEI10, RIE
+(Riegel), FRI5 (zone FC della 5ª edizione); per distribuzione dell'intensità, scarico finale e lavoro a
 ritmo gara TON24, HAU22, SAN25, KNO24, TON14, MUN15 (tabella in `SKILL.md`).
 Tutti i numeri sono default del progetto e stanno in un
 solo modulo, `planning/domain/defaults.py`; cambiarne uno cambia il piano di
@@ -191,8 +191,11 @@ picco):
 
 ## 7. Modelli di seduta (`defaults.py`, `sessions.py`)
 
-Zone FC e di ritmo sono quelle esistenti (`load.zones`, `assessment.pace_zones`);
-ogni blocco ha il suo intervallo in bpm e in s/km (ritmo solo per corsa con
+Zone FC e di ritmo sono quelle esistenti (`load.zones`, della 5ª edizione di Friel:
+Z1 sotto 78% della soglia, Z2 78–86%, Z3 87–93%, Z4 94–99%, Z5 da 100%;
+`assessment.pace_zones`, invariate); gli intervalli di FC di ogni blocco seguono da sole le
+zone, e così quelli di ritmo; le strutture della tabella qui sotto non cambiano, ma una zona
+è più larga (la Z2 va da 78% a 87%). Ogni blocco ha il suo intervallo in bpm e in s/km (ritmo solo per corsa con
 ritmo di soglia).
 
 | Tipologia | Durata | Struttura |
@@ -211,8 +214,9 @@ picco; VO2max 3×3 in costruzione, 4×3 in picco. Il recupero segue ogni
 ripetizione tranne l'ultima.
 
 **Carico stimato** con lo stesso modello del carico: hrTSS al minuto alla FC
-che rappresenta la zona (75, 87, 92, 97, 103% della soglia, limitata alla FC
-massima), con TRIMP di Banister e `TRIMP_1h_soglia` dello sport, per il peso
+che rappresenta la zona (70, 82, 90, 97, 103% della soglia, limitata alla FC
+massima: circa il mezzo di ogni zona delle zone nuove, 103 per la Z5, default del progetto;
+prima della versione 3 erano 75, 87, 92, 97, 103), con TRIMP di Banister e `TRIMP_1h_soglia` dello sport, per il peso
 dello sport; carico = Σ minuti per zona × tasso della zona. Gara: stessa
 formula con la miscela di zone per durata (fino a 60' Z3/Z4/Z5 al 20/60/20%;
 fino a 150' Z3/Z4 30/70; oltre Z2/Z3 40/60); durata prevista = tempo obiettivo,
@@ -281,10 +285,14 @@ settimanali inferiori ai minuti dei giorni disponibili, dopo infortunio, con CTL
 sotto 10 o senza tipologia facile: lì le ore o la rampa decidono quali sedute
 togliere).
 
-Versione del metodo: **2** (scarico a gradini, distribuzione 80/20 per sedute,
+Versione del metodo: **3** (zone FC della 5ª edizione e FC rappresentative delle zone
+per il carico stimato; la 2 aveva scarico a gradini, distribuzione 80/20 per sedute,
 giorni duri, ritmo gara, scarico del 3:1 al 70%). I piani salvati con la
 versione 1 non si rileggono (il formato ha campi in più): il guscio li
-ricalcola.
+ricalcola; quello della 2 resta leggibile (stesso formato) finché il piano non si
+rigenera (a ogni sincronizzazione e ogni giorno). Con le zone più larghe un minuto facile pesa meno nel
+carico stimato: per lo stesso CTL il piano chiede più minuti (o non arriva al livello se
+le ore sono poche; `test_a_plan_from_ctl_100…` tiene il CTL sopra 65).
 
 ## 13. Guscio: obiettivi, piano salvato, passato (fase 5)
 

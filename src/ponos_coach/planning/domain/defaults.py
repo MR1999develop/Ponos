@@ -18,7 +18,8 @@ from ponos_coach.goals.domain import SessionType
 from ponos_coach.planning.domain.phases import Phase, RaceClass
 
 # Saved with every plan; changes when the way a plan is computed changes.
-METHOD_VERSION: Final = 2
+# 3: heart-rate zones of the 5th edition (Z2 from 78%, Z3 from 87%, Z4 from 94% of the threshold).
+METHOD_VERSION: Final = 3
 
 # --- Horizon -----------------------------------------------------------------------------------
 HORIZON_DAYS: Final = 364  # a plan covers 52 weeks from tomorrow at most
@@ -214,8 +215,10 @@ INTERVAL_MODELS: Final[dict[tuple[SessionType, Phase], IntervalModel]] = {
     (SessionType.VO2MAX, Phase.TAPER): IntervalModel(10, 10, 3, 3, 5, 3, 3),
 }
 
-# Heart rate that stands for a zone when estimating a session's load, in percent of the threshold.
-ZONE_REPRESENTATIVE_PERCENT: Final = (75, 87, 92, 97, 103)
+# Heart rate that stands for a zone when estimating a session's load, in percent of the threshold:
+# about the middle of the zone of `load.ZONE_STARTS_PERCENT` (Z1 <78, Z2 78-86, Z3 87-93,
+# Z4 94-99), 103 for Z5 (project default).
+ZONE_REPRESENTATIVE_PERCENT: Final = (70, 82, 90, 97, 103)
 
 # Race effort: zone shares by expected duration, (up to minutes, shares of Z1..Z5).
 RACE_ZONE_MIX: Final = (

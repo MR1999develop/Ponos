@@ -11,12 +11,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ponos_coach.nutrition.domain import defaults
 from ponos_coach.nutrition.domain.advice import Advisory, DayLoadLevel, classify_day_load, ordered
 from ponos_coach.nutrition.domain.energy import Person, basal_metabolic_rate
 from ponos_coach.nutrition.domain.macros import Macros
 from ponos_coach.nutrition.domain.meals import MealItem, TrainingSession, schedule_meals
 from ponos_coach.nutrition.domain.settings import MealTimes, NutritionGoal
-from ponos_coach.nutrition.domain.targets import day_macros, energy_target
+from ponos_coach.nutrition.domain.targets import day_macros, energy_availability, energy_target
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,7 +26,8 @@ class DayInput:
 
     `sessions` are the day's training sessions in any order; `minutes_to_next_session` is the
     time from the end of the last of them to the next session (the following day's), if there is
-    one known.
+    one known. `weight_loss_days` is how long the weight-loss period the day belongs to has lasted,
+    in days (0 on its first day); None outside a weight-loss period.
     """
 
     person: Person
@@ -33,8 +35,11 @@ class DayInput:
     meal_times: MealTimes
     sessions: tuple[TrainingSession, ...] = ()
     minutes_to_next_session: float | None = None
+    weight_loss_days: int | None = None
 
     def __post_init__(self) -> None:
+        if self.weight_loss_days is not None and self.weight_loss_days < 0:
+            raise ValueError("a weight-loss period cannot have a negative duration")
         if self.minutes_to_next_session is not None and self.minutes_to_next_session < 0:
             raise ValueError("the next session cannot start before the last one ends")
 
@@ -57,6 +62,17 @@ class DayNutrition:
     advisories: tuple[Advisory, ...]
 
 
+def _long_weight_loss(day: DayInput, deficit_kcal: int, target_kcal: int, net_kcal: float) -> bool:
+    """True if a deficit is applied today, the weight-loss period has lasted over the limit and
+    the day's energy availability is under the balanced value (CSN, GJSN)."""
+    if day.weight_loss_days is None or deficit_kcal <= 0:
+        return False
+    if day.weight_loss_days <= defaults.LONG_WEIGHT_LOSS_WEEKS * defaults.DAYS_PER_WEEK:
+        return False
+    availability = energy_availability(day.person, target_kcal, net_kcal)
+    return availability < defaults.BALANCED_ENERGY_AVAILABILITY_KCAL_PER_KG_FFM
+
+
 def plan_day(day: DayInput) -> DayNutrition:
     """Energy target, macros and meal items for a day.
 
@@ -74,6 +90,8 @@ def plan_day(day: DayInput) -> DayNutrition:
         macros, person.weight_kg, day.meal_times, day.sessions, day.minutes_to_next_session
     )
     extra = [Advisory.INTAKES_SCALED] if scaled else []
+    if _long_weight_loss(day, target.deficit_kcal, target.target_kcal, net_kcal):
+        extra.append(Advisory.LONG_WEIGHT_LOSS)
     return DayNutrition(
         target.basal_kcal,
         target.expenditure_kcal,

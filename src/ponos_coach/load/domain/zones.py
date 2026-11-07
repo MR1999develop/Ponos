@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Heart-rate zones on the threshold (five zones, after Friel).
+"""Heart-rate zones on the threshold (five zones, after Friel, 5th edition: FRI5, table 4.1).
 
-Z1 below 85% of the threshold, Z2 85-89%, Z3 90-94%, Z4 95-99%, Z5 from 100% up. Project default
-percentages, reviewed in phase 4 (the pace zones of `assessment` are aligned with them); they live
-only here. The lower boundary belongs to
-the higher zone (`bpm >= 85% of the threshold` is Z2). Comparisons are on floating-point
+Z1 below 78% of the threshold, Z2 78-86%, Z3 87-93%, Z4 94-99%, Z5 from 100% up (the boundaries
+are whole percentages of the threshold: Z2 starts at 78, Z3 at 87, Z4 at 94, Z5 at 100). They
+live only here (the pace zones of `assessment` have their own, on the speed). The lower boundary
+belongs to the higher zone (`bpm >= 78% of the threshold` is Z2). Comparisons are on floating-point
 values but exact: `bpm * 100` against `percentage * threshold` (integer), never a
 floating-point percentage at the boundary.
 
@@ -27,7 +27,7 @@ from numpy.typing import NDArray
 
 ZONE_COUNT = 5
 # Threshold percentages from which each zone beyond the first starts (Z2, Z3, Z4, Z5).
-ZONE_STARTS_PERCENT: tuple[int, ...] = (85, 90, 95, 100)
+ZONE_STARTS_PERCENT: tuple[int, ...] = (78, 87, 94, 100)
 _PERCENT = 100
 
 

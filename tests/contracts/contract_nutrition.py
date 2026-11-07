@@ -18,6 +18,8 @@ from ponos_coach.nutrition.domain import (
     ActivityLevel,
     ActivityLevelEntry,
     GoalPeriod,
+    LeanMass,
+    LeanMassEntry,
     MaintenanceGoal,
     MealTimes,
     PerformanceGoal,
@@ -27,6 +29,7 @@ from ponos_coach.nutrition.ports import (
     ActivityLevelNotFoundError,
     GoalPeriodNotFoundError,
     GoalPeriodOverlapError,
+    LeanMassNotFoundError,
 )
 from tests.builders import fit_identity, make_record
 from tests.contracts.contract_storage import NAME, PROFILE_ID, create
@@ -127,6 +130,78 @@ class ActivityLevelStoreContract:
                 raise RuntimeError("boom")
 
             assert profile.activity_levels.list_entries() == []
+
+
+class LeanMassStoreContract:
+    """Measured lean mass: a dated series, one entry per date."""
+
+    def test_new_store_is_empty(self, harness: StorageHarness) -> None:
+        with closing(create(harness)) as profile:
+            assert profile.lean_masses.list_entries() == []
+
+    def test_entries_are_listed_by_date_and_kept_whole(self, harness: StorageHarness) -> None:
+        later = LeanMassEntry(D2, LeanMass(612))
+        earlier = LeanMassEntry(D1, LeanMass(605))
+        with closing(create(harness)) as profile:
+            profile.lean_masses.put(later)
+            profile.lean_masses.put(earlier)
+
+            assert list(profile.lean_masses.list_entries()) == [earlier, later]
+
+    def test_same_date_replaces_the_entry(self, harness: StorageHarness) -> None:
+        with closing(create(harness)) as profile:
+            profile.lean_masses.put(LeanMassEntry(D1, LeanMass(600)))
+            profile.lean_masses.put(LeanMassEntry(D1, LeanMass(610)))
+
+            assert list(profile.lean_masses.list_entries()) == [LeanMassEntry(D1, LeanMass(610))]
+
+    def test_the_limits_of_the_type_are_kept_exactly(self, harness: StorageHarness) -> None:
+        entries = [LeanMassEntry(D1, LeanMass(150)), LeanMassEntry(D2, LeanMass(2000))]
+        with closing(create(harness)) as profile:
+            for entry in entries:
+                profile.lean_masses.put(entry)
+
+            assert list(profile.lean_masses.list_entries()) == entries
+
+    def test_remove_deletes_only_the_entry_of_that_date(self, harness: StorageHarness) -> None:
+        first = LeanMassEntry(D1, LeanMass(600))
+        with closing(create(harness)) as profile:
+            profile.lean_masses.put(first)
+            profile.lean_masses.put(LeanMassEntry(D2, LeanMass(610)))
+
+            profile.lean_masses.remove(D2)
+
+            assert list(profile.lean_masses.list_entries()) == [first]
+
+    def test_removing_a_missing_entry_is_an_error_and_changes_nothing(
+        self, harness: StorageHarness
+    ) -> None:
+        entry = LeanMassEntry(D1, LeanMass(600))
+        with closing(create(harness)) as profile:
+            profile.lean_masses.put(entry)
+
+            with pytest.raises(LeanMassNotFoundError):
+                profile.lean_masses.remove(D2)
+
+            assert list(profile.lean_masses.list_entries()) == [entry]
+
+    def test_entries_survive_closing_and_reopening(self, harness: StorageHarness) -> None:
+        folder = harness.new_folder()
+        entry = LeanMassEntry(D1, LeanMass(655))
+        profile = harness.storage.create(folder, PROFILE_ID, NAME, "Europe/Rome")
+        profile.lean_masses.put(entry)
+        profile.close()
+
+        with closing(harness.storage.open(folder)) as reopened:
+            assert list(reopened.lean_masses.list_entries()) == [entry]
+
+    def test_a_cancelled_transaction_leaves_no_entry(self, harness: StorageHarness) -> None:
+        with closing(create(harness)) as profile:
+            with pytest.raises(RuntimeError, match="boom"), profile.activities.transaction():
+                profile.lean_masses.put(LeanMassEntry(D1, LeanMass(600)))
+                raise RuntimeError("boom")
+
+            assert profile.lean_masses.list_entries() == []
 
 
 class MealTimesStoreContract:

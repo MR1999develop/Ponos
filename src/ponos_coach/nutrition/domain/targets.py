@@ -62,13 +62,28 @@ def estimated_fat_free_mass_kg(person: Person) -> float:
     return min(person.weight_kg, max(defaults.MIN_FFM_FRACTION * person.weight_kg, estimate))
 
 
+def fat_free_mass_kg(person: Person) -> float:
+    """Fat-free mass in kg: the measured lean mass of the day if there is one (CSN: a
+    measurement beats an estimate), otherwise the Boer estimate."""
+    if person.lean_mass_kg is not None:
+        return person.lean_mass_kg
+    return estimated_fat_free_mass_kg(person)
+
+
+def energy_availability(person: Person, intake_kcal: float, net_activity_kcal: float) -> float:
+    """Energy availability of a day in kcal per kg of fat-free mass:
+    (intake - net exercise energy) / fat-free mass."""
+    return (intake_kcal - net_activity_kcal) / fat_free_mass_kg(person)
+
+
 def max_deficit_for_energy_availability(
     person: Person, expenditure_kcal: float, net_activity_kcal: float
 ) -> float:
     """Largest deficit that keeps the energy availability at 30 kcal/kg of fat-free mass or more
-    (ACSM); negative when even eating the whole expenditure stays under it."""
+    (ACSM; the measured lean mass of the day if there is one, else Boer's estimate); negative
+    when even eating the whole expenditure stays under it."""
     minimum_intake = (
-        defaults.MIN_ENERGY_AVAILABILITY_KCAL_PER_KG_FFM * estimated_fat_free_mass_kg(person)
+        defaults.MIN_ENERGY_AVAILABILITY_KCAL_PER_KG_FFM * fat_free_mass_kg(person)
         + net_activity_kcal
     )
     return expenditure_kcal - minimum_intake

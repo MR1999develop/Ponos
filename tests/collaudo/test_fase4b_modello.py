@@ -38,6 +38,7 @@ from ponos_coach.nutrition.domain import (
     WeightLossGoal,
     activity_energy,
     basal_metabolic_rate,
+    defaults,
     energy_target,
     keytel_kcal_per_minute,
     plan_day,
@@ -137,10 +138,13 @@ def check_day(day: DayInput, result: DayNutrition) -> None:
             assert item.hourly.sodium_mg > 0
     during = [s for s in day.sessions if s.duration_min > 75]
     assert sum(MealSlot.DURING_TRAINING in i.slots for i in result.meals) == len(during)
+    # one recovery per session: a single dose or, with another session within 8 hours, up to 4
+    # hourly intakes, each marked with its hour
     recoveries = sum(MealSlot.POST_TRAINING in i.slots for i in result.meals)
     long_enough = sum(s.duration_min >= 30 for s in day.sessions)
     assert (recoveries >= 1) is (long_enough >= 1)
-    assert recoveries <= long_enough
+    assert recoveries <= long_enough * defaults.REFUEL_HOURS
+    assert all(1 <= i.refuel_hour <= defaults.REFUEL_HOURS for i in result.meals if i.refuel_hour)
     # determinism
     assert plan_day(day) == result
 
@@ -548,10 +552,13 @@ def test_t_nut_04_two_sessions_a_few_hours_apart_each_get_their_recovery_carbohy
     result = plan_day(day_of(ADULT_MAN, sessions=(first, second)))
 
     posts = [i for i in result.meals if MealSlot.POST_TRAINING in i.slots]
-    assert len(posts) == 2
-    assert all(p.macros.protein_g > 0 for p in posts)
-    # 1.1 g/kg x 70 kg = 77 g of carbs go with the first one (another session within 8 h)
-    assert posts[0].macros.carbs_g >= 77
+    recoveries = [i for i in posts if i.refuel_hour in (None, 1)]
+    assert len(recoveries) == 2
+    assert all(p.macros.protein_g > 0 for p in recoveries)
+    # the first one is hourly (another session within 8 h): 1.1 g/kg x 70 kg = 77 g an hour
+    hourly = [i for i in posts if i.refuel_hour]
+    assert [i.refuel_hour for i in hourly] == [1, 2, 3, 4]
+    assert hourly[0].macros.carbs_g == 77
 
 
 def test_t_nut_04_three_sessions_with_the_same_start_do_not_break_the_day() -> None:

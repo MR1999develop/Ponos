@@ -20,6 +20,10 @@ Sources, by abbreviation:
 - ACSM: ACSM/AND/DC joint position statement on nutrition and athletic performance (2016).
 - BOER: Boer 1984, estimation of lean body mass from weight, height and sex.
 - IOC: IOC consensus statement on sports nutrition.
+- GJSN: Jeukendrup and Gleeson, Sport Nutrition 3rd ed. (rapid refuelling per hour, protein doses of
+  0.4 g/kg, energy availability, weight loss in athletes).
+- CSN: Burke and Deakin, Clinical Sports Nutrition 5th ed. (energy availability 30-45 only for
+  brief planned periods; measured lean mass over an estimate).
 - MININTAKE: the lower limits of daily energy for unsupervised weight loss that health
   organisations commonly quote (NHLBI and similar: 1,200 kcal for women, 1,500 kcal for men).
 """
@@ -109,6 +113,18 @@ MIN_ENERGY_AVAILABILITY_KCAL_PER_KG_FFM: Final = 30
 BOER_MALE: Final = (0.407, 0.267, -19.2)
 BOER_FEMALE: Final = (0.252, 0.473, -48.3)
 MIN_FFM_FRACTION: Final = 0.5
+# Measured lean mass (CSN: a measurement beats the estimate). Absolute limits in tenths of a kg,
+# and the plausible share of the body weight on the day it is used (project defaults): over 95%
+# means under 5% fat (GJSN: not below 5% for men, 12% for women), under 40% means over 60% fat.
+MIN_LEAN_MASS_TENTHS_KG: Final = 150
+MAX_LEAN_MASS_TENTHS_KG: Final = 2000
+MIN_LEAN_MASS_FRACTION: Final = 0.40
+MAX_LEAN_MASS_FRACTION: Final = 0.95
+# CSN, GJSN: an energy availability between 30 and 45 kcal/kg of fat-free mass is tolerable only for
+# a short, planned weight loss. Neither source gives the number of weeks (CSN says "8 to 12"):
+# project default 12 weeks, after which a weight-loss period in progress with an availability
+# under the balanced value gets an advisory suggesting a pause at maintenance.
+LONG_WEIGHT_LOSS_WEEKS: Final = 12
 
 # --- Day load level -----------------------------------------------------------------------------
 # A day's level is the higher of the one given by the load and by the training time. Project
@@ -151,12 +167,20 @@ DURING_CARBS_G_PER_H_LONG: Final = 60
 DURING_FLUID_ML_PER_H: Final = 600  # indicative, ACSM: 0.4-0.8 L/h
 DURING_SODIUM_MG_PER_H: Final = 300  # indicative, 0.5 g/L of sodium in the drink
 POST_LEAD_MIN: Final = 30  # within one hour of the end
-POST_PROTEIN_G_PER_KG: Final = 0.3
+POST_PROTEIN_G_PER_KG: Final = 0.4  # GJSN: 0.4 g/kg covers the individual variability
 POST_CARBS_G_PER_KG: Final = 1.1  # 1-1.2 g/kg
 # ACSM: rapid refuelling (1-1.2 g/kg/h in the first 4 h) when two demanding sessions are less than
 # 8 hours apart. Project choice: it applies to any following session within 8 h, however short,
 # because extra carbohydrates are not a risk and the rule stays simple.
 SPEEDY_REFUEL_WITHIN_MIN: Final = 8 * 60
+# Within that time the "after" is hourly (ACSM, ISSN, GJSN): 1.0-1.2 g/kg of carbohydrates every
+# hour for the first 4 hours after the end (project default: 1.1, the middle), one intake per hour
+# from POST_LEAD_MIN after the end, the last at least REFUEL_LAST_BEFORE_NEXT_MIN before the next
+# session. The first intake is always given. They count inside the day's carbohydrate budget.
+REFUEL_CARBS_G_PER_KG_H: Final = 1.1
+REFUEL_HOURS: Final = 4
+REFUEL_STEP_MIN: Final = 60
+REFUEL_LAST_BEFORE_NEXT_MIN: Final = 30
 # Lunch and dinner always keep at least this much carbohydrate (project default), however long the
 # training of the day: the intakes around it give way first (see `meals.py`).
 MAIN_MEAL_MIN_CARBS_G_PER_KG: Final = 1.0

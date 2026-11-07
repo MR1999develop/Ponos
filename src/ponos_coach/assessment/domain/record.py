@@ -14,6 +14,7 @@ from ponos_coach.assessment.domain.defaults import (
     METHOD_VERSION,
     MIN_PACE_S_PER_KM,
 )
+from ponos_coach.assessment.domain.protocol import DEFAULT_PROTOCOL, ThresholdProtocol
 from ponos_coach.assessment.domain.threshold_test import ThresholdTestResult
 
 MAX_THRESHOLD_BPM = 250
@@ -24,7 +25,7 @@ MIN_THRESHOLD_BPM = 40
 class ThresholdTest:
     """A test in the history: the activity (kept even if the index is rebuilt), its local day,
     the start of the segment (UTC), the threshold HR, the pace in s/km or `None`, and the version
-    of the method that computed them.
+    of the method that computed them, and the protocol the test was run with.
 
     Invariants: UTC start, HR between 40 and 250 bpm, pace within the plausible range, method
     version at least 1.
@@ -36,6 +37,7 @@ class ThresholdTest:
     threshold_bpm: int
     pace_s_per_km: int | None
     method_version: int = METHOD_VERSION
+    protocol: ThresholdProtocol = DEFAULT_PROTOCOL
 
     def __post_init__(self) -> None:
         check_utc(self.segment_start)
@@ -58,4 +60,5 @@ class ThresholdTest:
             result.threshold_bpm,
             result.pace_s_per_km,
             result.method_version,
+            result.protocol,
         )

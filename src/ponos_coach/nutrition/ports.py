@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Protocol
 
-from ponos_coach.nutrition.domain import ActivityLevelEntry, GoalPeriod, MealTimes
+from ponos_coach.nutrition.domain import ActivityLevelEntry, GoalPeriod, LeanMassEntry, MealTimes
 
 
 class NutritionStoreError(Exception):
@@ -30,6 +30,39 @@ class GoalPeriodNotFoundError(NutritionStoreError):
 
 class ActivityLevelNotFoundError(NutritionStoreError):
     """There is no activity level entry for that day."""
+
+
+class LeanMassNotFoundError(NutritionStoreError):
+    """There is no lean mass entry for that day."""
+
+
+class LeanMassStore(Protocol):
+    """Measured lean mass, with validity date (optional: the series can be empty)."""
+
+    def put(self, entry: LeanMassEntry) -> None:
+        """Saves the lean mass valid from `entry.valid_from`; the same date replaces the entry.
+
+        Raises:
+            NutritionStoreError: write failed.
+        """
+        ...
+
+    def remove(self, valid_from: date) -> None:
+        """Deletes the entry whose validity starts on `valid_from`.
+
+        Raises:
+            LeanMassNotFoundError: there is none; nothing changes.
+            NutritionStoreError: write failed.
+        """
+        ...
+
+    def list_entries(self) -> Sequence[LeanMassEntry]:
+        """All the entries by ascending validity date (only one per date).
+
+        Raises:
+            NutritionStoreError: unreadable or invalid data.
+        """
+        ...
 
 
 class ActivityLevelStore(Protocol):

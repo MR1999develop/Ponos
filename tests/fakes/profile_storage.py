@@ -66,13 +66,15 @@ from ponos_coach.load.ports import (
     SportWeightStore,
     UnknownActivityError,
 )
-from ponos_coach.nutrition.domain import ActivityLevelEntry, GoalPeriod, MealTimes
+from ponos_coach.nutrition.domain import ActivityLevelEntry, GoalPeriod, LeanMassEntry, MealTimes
 from ponos_coach.nutrition.ports import (
     ActivityLevelNotFoundError,
     ActivityLevelStore,
     GoalPeriodNotFoundError,
     GoalPeriodOverlapError,
     GoalPeriodStore,
+    LeanMassNotFoundError,
+    LeanMassStore,
     MealTimesStore,
 )
 from ponos_coach.planning.domain import Plan, PlanRefusal
@@ -113,6 +115,7 @@ class _Database:
     sport_weights: dict[Sport, SportWeight] = field(default_factory=dict)
     loads: dict[str, tuple[LoadFingerprint, ActivityLoad]] = field(default_factory=dict)
     levels: dict[date, ActivityLevelEntry] = field(default_factory=dict)
+    lean_masses: dict[date, LeanMassEntry] = field(default_factory=dict)
     meal_times: MealTimes | None = None
     goals: dict[date, GoalPeriod] = field(default_factory=dict)
     threshold_tests: dict[str, ThresholdTest] = field(default_factory=dict)  # by identity key
@@ -138,6 +141,7 @@ class _Database:
                 self.sport_weights,
                 self.loads,
                 self.levels,
+                self.lean_masses,
                 self.meal_times,
                 self.goals,
                 self.threshold_tests,
@@ -163,6 +167,7 @@ class _Database:
             self.sport_weights,
             self.loads,
             self.levels,
+            self.lean_masses,
             self.meal_times,
             self.goals,
             self.threshold_tests,
@@ -426,6 +431,22 @@ class _ActivityLevels:
         return [self._db.levels[day] for day in sorted(self._db.levels)]
 
 
+class _LeanMasses:
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def put(self, entry: LeanMassEntry) -> None:
+        self._db.lean_masses[entry.valid_from] = entry
+
+    def remove(self, valid_from: date) -> None:
+        if valid_from not in self._db.lean_masses:
+            raise LeanMassNotFoundError("missing")
+        del self._db.lean_masses[valid_from]
+
+    def list_entries(self) -> Sequence[LeanMassEntry]:
+        return [self._db.lean_masses[day] for day in sorted(self._db.lean_masses)]
+
+
 class _MealTimes:
     def __init__(self, database: _Database) -> None:
         self._db = database
@@ -578,6 +599,7 @@ class _OpenProfile:
         self._sport_weights = _SportWeights(database)
         self._cache = _Cache(database)
         self._levels = _ActivityLevels(database)
+        self._lean_masses = _LeanMasses(database)
         self._meal_times = _MealTimes(database)
         self._goals = _GoalPeriods(database)
         self._threshold_tests = _ThresholdTests(database)
@@ -621,6 +643,10 @@ class _OpenProfile:
     @property
     def activity_levels(self) -> ActivityLevelStore:
         return self._levels
+
+    @property
+    def lean_masses(self) -> LeanMassStore:
+        return self._lean_masses
 
     @property
     def meal_times(self) -> MealTimesStore:

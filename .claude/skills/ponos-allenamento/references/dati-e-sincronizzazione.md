@@ -182,6 +182,22 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
     (`planning/plan_codec.py`): dimensione, checksum, sintassi e forma dei tipi;
     ciò che non regge è `UnreadablePlan` (il piano è derivato, il ricalcolo lo
     sostituisce) o, per un giorno del passato, un giorno omesso.
+- **Schema v7** (protocollo del test di soglia e massa magra misurata, `STRICT`; regole in
+  `references/test-soglia.md` sezione 1 e `references/alimentazione.md` sezione 7):
+  - `threshold_test.protocol`: colonna aggiunta in fondo (`ALTER TABLE ... ADD COLUMN`),
+    insieme chiuso `thirty_minutes` / `twenty_minutes`, `NOT NULL DEFAULT 'thirty_minutes'`:
+    i test salvati prima erano tutti di 30'. `method_version` non si riscrive. Le
+    `INSERT` dirette nella tabella nominano le colonne.
+  - `lean_mass`: `valid_from` (data esistente non prima del 1900-01-01, chiave primaria) e
+    `tenths_kg` (150-2000). La plausibilità col peso del giorno è una regola del caso d'uso
+    (`profiles/lean_mass.py`) e di `PlanDayNutrition`, non dello schema.
+  - Migrazione v6 → v7 con copia in `backup/ponos-v6-v7.sqlite3` (da v5: una sola copia
+    `ponos-v5-v7.sqlite3`, le due migrazioni nella stessa transazione). T-DATI-01:
+    `tests/collaudo/test_fase5_migrazione_v7.py` (v6 congelata, v7 invariata dopo il rilascio,
+    uccisione a ogni istruzione, limiti dei CHECK).
+  - `OpenProfile` espone anche `lean_masses` (porta `LeanMassStore` in `nutrition/ports.py`),
+    sulla stessa connessione e transazione; fake e contract test accanto ai
+    livelli di attività.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.

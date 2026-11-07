@@ -163,7 +163,10 @@ def test_t_dati_01_a_frozen_v5_database_is_migrated_to_v6_with_data_intact_and_a
     finally:
         opened.close()
 
-    assert {table: rows(path, table) for table in KEPT_V5} == before
+    after = {table: rows(path, table) for table in KEPT_V5}
+    # v7 adds a column at the end of the test history: the v5 columns are what they were
+    after["threshold_test"] = [row[:6] for row in after["threshold_test"]]
+    assert after == before
     assert table_names(path) >= V6_TABLES
     [copy] = sorted((tmp_path / "backup").glob("*"))
     assert copy.name == f"ponos-v5-v{sqlite_schema.SCHEMA_VERSION}.sqlite3"

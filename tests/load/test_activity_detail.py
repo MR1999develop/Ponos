@@ -92,9 +92,13 @@ def test_detail_gives_trace_load_summary_and_zone_bounds_of_the_day() -> None:
     assert detail.summary == record.summary
     assert detail.threshold_bpm == 170
     assert (detail.limits.min_bpm, detail.limits.max_bpm) == (50, 190)
-    assert detail.zone_starts_bpm == zone_starts_bpm(170) == (144.5, 153.0, 161.5, 170.0)
+    assert (
+        detail.zone_starts_bpm
+        == zone_starts_bpm(170)
+        == pytest.approx((132.6, 147.9, 159.8, 170.0))
+    )
     assert detail.load.source is LoadSource.HEART_RATE
-    assert detail.load.zone_seconds.values == (0.0, 600.0, 0.0, 0.0, 0.0)  # 150 bpm: Z2
+    assert detail.load.zone_seconds.values == (0.0, 0.0, 600.0, 0.0, 0.0)  # 150 bpm: Z3
     assert detail.trace is not None
     assert detail.trace.seconds.tolist() == list(range(600))
     assert set(detail.trace.bpm.tolist()) == {150.0}
@@ -134,15 +138,15 @@ def test_limits_and_zones_are_the_ones_valid_on_the_activity_day() -> None:
     world = World()
     world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
     world.profile.physiology.put(physiology_entry(CHANGE_DAY, 160))
-    before = add_activity(world, [150] * 60, serial=1, start=datetime(2026, 1, 15, 7, tzinfo=UTC))
-    after = add_activity(world, [150] * 60, serial=2, start=datetime(2026, 2, 10, 7, tzinfo=UTC))
+    before = add_activity(world, [152] * 60, serial=1, start=datetime(2026, 1, 15, 7, tzinfo=UTC))
+    after = add_activity(world, [152] * 60, serial=2, start=datetime(2026, 2, 10, 7, tzinfo=UTC))
 
     detail_before, detail_after = detail_of(world, before), detail_of(world, after)
 
     assert (detail_before.threshold_bpm, detail_after.threshold_bpm) == (170, 160)
-    assert detail_after.zone_starts_bpm == (136.0, 144.0, 152.0, 160.0)
-    assert detail_before.load.zone_seconds.values == (0.0, 60.0, 0.0, 0.0, 0.0)  # 150 = 88%
-    assert detail_after.load.zone_seconds.values == (0.0, 0.0, 60.0, 0.0, 0.0)  # 150 = 93.75%
+    assert detail_after.zone_starts_bpm == pytest.approx((124.8, 139.2, 150.4, 160.0))
+    assert detail_before.load.zone_seconds.values == (0.0, 0.0, 60.0, 0.0, 0.0)  # 152 = 89.4%
+    assert detail_after.load.zone_seconds.values == (0.0, 0.0, 0.0, 60.0, 0.0)  # 152 = 95%
 
 
 def test_a_saved_sport_weight_changes_the_load_in_the_detail() -> None:

@@ -179,7 +179,8 @@ def row(
     version: int = 1,
 ) -> str:
     return (
-        "INSERT INTO threshold_test VALUES "  # noqa: S608 - test data
+        "INSERT INTO threshold_test (activity_key, test_date, segment_start_ms, threshold_bpm, "  # noqa: S608
+        "pace_s_per_km, method_version) VALUES "
         f"('{key}', '{day}', {start_ms}, {bpm}, {pace}, {version})"
     )
 

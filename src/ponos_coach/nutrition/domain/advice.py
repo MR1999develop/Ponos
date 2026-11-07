@@ -86,6 +86,9 @@ class Advisory(Enum):
     DEFICIT_REDUCED_FOR_LOAD = "deficit_reduced_for_load"  # heavy training day: smaller deficit
     CARBS_LIMITED_BY_ENERGY = "carbs_limited_by_energy"  # the energy does not allow the usual carbs
     INTAKES_SCALED = "intakes_scaled"  # training intakes cut to fit the day's totals
+    # a weight-loss period has lasted over 12 weeks with energy availability under 45 kcal/kg:
+    # suggest a pause at maintenance
+    LONG_WEIGHT_LOSS = "long_weight_loss"
 
 
 _ADVISORY_ORDER = tuple(Advisory)

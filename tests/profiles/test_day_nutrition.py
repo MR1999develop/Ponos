@@ -35,6 +35,8 @@ from ponos_coach.nutrition.domain import (
     DayLoadLevel,
     EnergySource,
     GoalPeriod,
+    LeanMass,
+    LeanMassEntry,
     MaintenanceGoal,
     MealSlot,
     MealTimes,
@@ -152,6 +154,7 @@ class Rig:
         sources = NutritionSources(
             p.activities, self.archive, p.load_cache, p.physiology, p.sport_weights,
             p.weights, p.fixed_data, p.activity_levels, p.meal_times, p.goal_periods,
+            p.lean_masses,
         )  # fmt: skip
         return PlanDayNutrition(sources, decode, ROME, FOODS)(day)  # type: ignore[arg-type]
 
@@ -361,24 +364,89 @@ def test_only_the_activities_of_the_local_day_count() -> None:
     assert len(rig.report(date(2026, 3, 3)).activities) == 1
 
 
-def evening_dinner_carbs(next_start: datetime | None) -> int:
+def evening_refuel_hours(next_start: datetime | None) -> list[int]:
+    """The hours of rapid refuelling after the evening session (none: a single dose)."""
     rig = Rig()
     rig.add_file(fit_bytes(at(18), 1, calories=500))
     if next_start is not None:
         rig.add_file(fit_bytes(next_start, 2, calories=500))
-    return next(
-        m.meal for m in rig.report().meals if MealSlot.DINNER in m.meal.slots
-    ).macros.carbs_g
+    return [m.meal.refuel_hour for m in rig.report().meals if m.meal.refuel_hour is not None]
 
 
-def test_a_session_within_8_hours_adds_recovery_carbohydrates_to_the_evening_one() -> None:
+def test_a_session_within_8_hours_makes_the_recovery_hourly_for_the_first_four_hours() -> None:
     # the evening session ends at 19:00 and the next starts at 02:00: 7 h later
-    assert evening_dinner_carbs(at(2, day=3)) > evening_dinner_carbs(None)
+    assert evening_refuel_hours(at(2, day=3)) == [1, 2, 3, 4]
 
 
 def test_a_session_the_next_morning_is_too_far_for_rapid_refuelling() -> None:
     # 19:00 to 07:00 is 12 h: more than the 8 h of rapid refuelling
-    assert evening_dinner_carbs(at(7, day=3)) == evening_dinner_carbs(None)
+    assert evening_refuel_hours(at(7, day=3)) == []
+    assert evening_refuel_hours(None) == []
+
+
+# --- Measured lean mass and the long weight-loss advisory ---------------------------------
+
+
+def loss_rig(*, since: date = date(2026, 3, 1)) -> Rig:
+    """A rig with a weight-loss period at the fastest pace from `since`, no end."""
+    rig = Rig()
+    rig.profile.goal_periods.add(GoalPeriod(since, None, WeightLossGoal(1000)))
+    return rig
+
+
+def deficit_with_lean_mass(tenths: int | None, since: date = date(2026, 3, 1)) -> int:
+    rig = loss_rig(since=since)
+    if tenths is not None:
+        rig.profile.lean_masses.put(LeanMassEntry(date(2026, 3, 1), LeanMass(tenths)))
+    return rig.report().nutrition.deficit_kcal
+
+
+def test_a_measured_lean_mass_replaces_the_boer_estimate_in_the_availability_limit() -> None:
+    # Rest day, 2492 kcal: with Boer (61.42 kg) the limit allows 649 kcal and the 20% cap of 498
+    # decides; with 70 kg measured the limit allows 2492 - 30 * 70 = 392 kcal
+    assert deficit_with_lean_mass(None) == 498
+    assert deficit_with_lean_mass(700) == 392
+    assert deficit_with_lean_mass(500) == 498
+
+
+def test_a_measurement_holds_only_from_its_own_day() -> None:
+    rig = loss_rig()
+    rig.profile.lean_masses.put(LeanMassEntry(date(2026, 3, 3), LeanMass(700)))
+
+    assert rig.report(date(2026, 3, 2)).nutrition.deficit_kcal == 498  # the day before: Boer
+    assert rig.report(date(2026, 3, 3)).nutrition.deficit_kcal == 392
+
+
+def test_a_measurement_that_no_longer_fits_the_weight_of_the_day_is_ignored() -> None:
+    rig = loss_rig()
+    rig.profile.lean_masses.put(LeanMassEntry(date(2026, 3, 1), LeanMass(700)))  # 87.5% of 80 kg
+    rig.profile.weights.put(WeightEntry(date(2026, 3, 20), Weight(700)))  # 70 kg: 70 is 100%
+
+    assert rig.report(date(2026, 3, 2)).nutrition.deficit_kcal == 392  # used
+    # from the 20th the measurement is above 95% of the weight (70 kg): Boer applies instead
+    # (basal 1680, expenditure 2352, 20% cap 470; with the 70 kg it would have been 252)
+    assert rig.report(date(2026, 3, 20)).nutrition.deficit_kcal == 470
+
+
+def test_the_long_weight_loss_advisory_needs_a_period_longer_than_12_weeks() -> None:
+    def advised(since: date) -> bool:
+        return Advisory.LONG_WEIGHT_LOSS in loss_rig(since=since).report().nutrition.advisories
+
+    assert not advised(date(2026, 3, 1))  # a day old
+    assert not advised(date(2025, 12, 8))  # 84 days: exactly 12 weeks
+    assert advised(date(2025, 12, 7))  # 85 days
+    assert advised(date(2025, 1, 1))
+
+
+def test_a_maintenance_period_inside_a_long_loss_period_is_not_a_loss_period() -> None:
+    rig = Rig()
+    rig.profile.goal_periods.add(
+        GoalPeriod(date(2025, 1, 1), date(2026, 3, 1), WeightLossGoal(500))
+    )
+    rig.profile.goal_periods.add(GoalPeriod(date(2026, 3, 2), None, MaintenanceGoal()))
+
+    assert Advisory.LONG_WEIGHT_LOSS not in rig.report().nutrition.advisories
+    assert Advisory.LONG_WEIGHT_LOSS in rig.report(date(2026, 3, 1)).nutrition.advisories
 
 
 # --- T-NUT-05: determinism and dated changes ----------------------------------------------

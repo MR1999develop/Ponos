@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from datetime import date
 
 from ponos_coach.activities.domain import ActivityIdentity, identity_from_key, identity_key
-from ponos_coach.assessment.domain import ThresholdTest
+from ponos_coach.assessment.domain import ThresholdProtocol, ThresholdTest
 from ponos_coach.assessment.ports import (
     AssessmentStoreError,
     ThresholdTestAlreadyStoredError,
@@ -23,26 +23,36 @@ from ponos_coach.storage.sqlite_database import SqliteDatabase
 from ponos_coach.storage.sqlite_stores import from_ms, to_ms
 
 # Only module constants in the composed queries: no external data (S608).
-_COLUMNS = "activity_key, test_date, segment_start_ms, threshold_bpm, pace_s_per_km, method_version"
+_COLUMNS = (
+    "activity_key, test_date, segment_start_ms, threshold_bpm, pace_s_per_km, "
+    "method_version, protocol"
+)
 _SELECT = "SELECT " + _COLUMNS + " FROM threshold_test "  # noqa: S608
-_INSERT = "INSERT INTO threshold_test (" + _COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?)"  # noqa: S608
+_INSERT = "INSERT INTO threshold_test (" + _COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?)"  # noqa: S608
 
 
 def _test_from(row: Sequence[object]) -> ThresholdTest:
     """A history entry from a row; a column of the wrong type or an invalid value is a
     `ValueError`."""
-    key, day, start_ms, bpm, pace, version = row
+    key, day, start_ms, bpm, pace, version, protocol = row
     if not (
         isinstance(key, str)
         and isinstance(day, str)
         and isinstance(start_ms, int)
         and isinstance(bpm, int)
         and isinstance(version, int)
+        and isinstance(protocol, str)
         and (pace is None or isinstance(pace, int))
     ):
         raise ValueError("unexpected column types")
     return ThresholdTest(
-        identity_from_key(key), date.fromisoformat(day), from_ms(start_ms), bpm, pace, version
+        identity_from_key(key),
+        date.fromisoformat(day),
+        from_ms(start_ms),
+        bpm,
+        pace,
+        version,
+        ThresholdProtocol(protocol),
     )
 
 
@@ -64,6 +74,7 @@ class SqliteThresholdTestStore:
                     test.threshold_bpm,
                     test.pace_s_per_km,
                     test.method_version,
+                    test.protocol.value,
                 ),
             )
         except sqlite3.IntegrityError as exc:

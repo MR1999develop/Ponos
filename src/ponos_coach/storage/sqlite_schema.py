@@ -76,6 +76,14 @@ Columns of v6 (goals, availability, session types and the plan, all `STRICT`):
 - `plan_past_day`: the days of the past as they were planned, one row per day (canonical JSON of
   the `PlanDay` and its SHA-256, and the date of the plan it came from, always before the day). Two
   triggers reject every `UPDATE` and every `DELETE`: the past stays history.
+
+Columns of v7 (threshold test protocol and measured lean mass):
+
+- `threshold_test.protocol`: how the test was run, on a closed set (`thirty_minutes`,
+  `twenty_minutes`); the tests saved before v7 were all of 30 minutes (the default).
+- `lean_mass`: the measured lean mass series (`STRICT`): validity date (existing ISO date, not
+  earlier than 1900-01-01, primary key) and whole tenths of a kilogram within the domain limits.
+  The plausibility against the weight of the day is a rule of the use case, not of the schema.
 """
 
 from __future__ import annotations
@@ -132,6 +140,10 @@ V6_WEEK_MINUTES = (0, 6000)
 V6_MAX_PLAN_JSON_CHARS = 16 * 1024 * 1024
 V6_MAX_DAY_JSON_CHARS = 64 * 1024
 V6_MAX_REFUSAL_IDS_CHARS = 65_536
+# Limits of the lean mass data (the same as the domain type), frozen here on purpose.
+V7_LEAN_MASS_TENTHS_KG = (150, 2000)
+_THRESHOLD_PROTOCOLS = "'thirty_minutes','twenty_minutes'"
+V7_THRESHOLD_PROTOCOLS: Final = frozenset(_THRESHOLD_PROTOCOLS.replace("'", "").split(","))
 ZONE_COLUMNS: Final = ("zone1_s", "zone2_s", "zone3_s", "zone4_s", "zone5_s")
 
 _GOAL_KINDS_V6 = "'race','fitness'"
@@ -163,6 +175,7 @@ V5_TABLES: Final = frozenset({"threshold_test"})
 V6_TABLES: Final = frozenset(
     {"goal", "weekly_availability", "session_choice", "plan_state", "plan_past_day"}
 )
+V7_TABLES: Final = frozenset({"lean_mass"})
 
 _V1_META = """
 CREATE TABLE meta (
@@ -503,6 +516,20 @@ BEGIN
 END
 """
 
+_V7_THRESHOLD_PROTOCOL = f"""
+ALTER TABLE threshold_test ADD COLUMN protocol TEXT NOT NULL DEFAULT 'thirty_minutes'
+    CHECK (protocol IN ({_THRESHOLD_PROTOCOLS}))
+"""
+
+_V7_LEAN_MASS = f"""
+CREATE TABLE lean_mass (
+    valid_from TEXT    NOT NULL PRIMARY KEY CHECK (date(valid_from) IS valid_from
+                                                   AND valid_from >= '{V3_MIN_MEASUREMENT_DATE}'),
+    tenths_kg  INTEGER NOT NULL CHECK (tenths_kg BETWEEN {V7_LEAN_MASS_TENTHS_KG[0]}
+                                                     AND {V7_LEAN_MASS_TENTHS_KG[1]})
+) STRICT
+"""
+
 # Migration i (index i-1): brings the schema from version i-1 to i.
 MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     (_V1_META, _V1_ACTIVITIES, _V1_ACTIVITIES_START_INDEX, _V1_PHYSIOLOGY, _V1_LOAD_CACHE),
@@ -536,6 +563,7 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
         _V6_PLAN_PAST_DAY_FIXED,
         _V6_PLAN_PAST_DAY_KEPT,
     ),
+    (_V7_THRESHOLD_PROTOCOL, _V7_LEAN_MASS),
 )
 
 SCHEMA_VERSION: Final = len(MIGRATIONS)

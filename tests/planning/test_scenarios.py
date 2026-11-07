@@ -296,7 +296,8 @@ def test_a_plan_from_ctl_zero_starts_gently() -> None:
 
 def test_a_plan_from_ctl_100_is_possible_and_holds_the_level() -> None:
     plan = _plan([race("a", _weeks_ahead(16), distance_m=5_000)], avail=BIG_WEEK, ctl=100, atl=100)
-    assert all(p.ctl > 70 for p in plan.projection)
+    # the zones of the 5th edition are wider, so an easy minute carries less estimated load
+    assert all(p.ctl > 65 for p in plan.projection)
 
 
 # --- Fitness goals, injury, horizon --------------------------------------------------------------

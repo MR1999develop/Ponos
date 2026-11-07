@@ -30,6 +30,7 @@ from tests.contracts.contract_nutrition import (
     ActivityCaloriesContract,
     ActivityLevelStoreContract,
     GoalPeriodStoreContract,
+    LeanMassStoreContract,
     MealTimesStoreContract,
 )
 from tests.contracts.contract_planning import (
@@ -243,6 +244,10 @@ class TestFakeActivityCalories(_FakeStorageFixture, ActivityCaloriesContract):
 
 
 class TestFakeActivityLevelStore(_FakeStorageFixture, ActivityLevelStoreContract):
+    pass
+
+
+class TestFakeLeanMassStore(_FakeStorageFixture, LeanMassStoreContract):
     pass
 
 

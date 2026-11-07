@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Every number of the 30-minute threshold test, in one place.
+"""Every number of the threshold tests (30 and 20 minutes), in one place.
 
 These are project defaults (see the project skill `ponos-allenamento`,
 `references/test-soglia.md`); the pace-zone percentages are derived from Friel's zones. Changing a
@@ -17,14 +17,21 @@ from ponos_coach.load.domain import MAX_GAP_S
 # --- The test -------------------------------------------------------------------------------
 # The sports that can be the test: a run, on road or on trail.
 THRESHOLD_TEST_SPORTS: Final = frozenset({Sport.RUNNING, Sport.TRAIL})
-TEST_DURATION_S: Final = 1800  # the segment: 30 minutes of elapsed time
+THIRTY_MINUTES_S: Final = 1800  # segment of the 30-minute protocol (FRI)
+TWENTY_MINUTES_S: Final = 1200  # segment of the 20-minute protocol (FRI5)
+TEST_DURATION_S: Final = THIRTY_MINUTES_S  # the segment of the default protocol
 THRESHOLD_WINDOW_S: Final = 1200  # the last 20 minutes of the segment give the threshold
+# 20-minute protocol (FRI5): threshold HR = mean HR x 95%; threshold pace = mean pace plus 5% of
+# the time per kilometre (FRI5 applies it to the time, not to the speed).
+TWENTY_MINUTE_HR_PERCENT: Final = 95
+TWENTY_MINUTE_PACE_ADD_PERCENT: Final = 5
 MAX_PAUSE_S: Final = 60  # pauses allowed in the segment, in total
 # A gap between two HR samples above this is a pause (the same limit the load uses).
 PAUSE_GAP_S: Final = MAX_GAP_S
 MIN_VALID_HR_PERCENT: Final = 90  # valid HR needed, as a share of the time of the last 20 minutes
 # Changes when the way the result is computed changes; saved with every test.
-METHOD_VERSION: Final = 1
+# 2: the 20-minute protocol and the protocol saved with the test.
+METHOD_VERSION: Final = 2
 
 # The last distance sample is valid until the next one, as an HR sample is: a distance series may
 # stop short of the end of the segment by one interval between samples, at most this long.

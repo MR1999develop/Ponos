@@ -2,7 +2,8 @@
 
 **Quando leggerlo:** scrivendo o rivedendo `nutrition`, `profiles/day_nutrition.py`,
 la tabella degli alimenti, i test `T-NUT` o la pagina "alimentazione" del
-giorno. Sezione 5 di `SKILL.md`. Fonti: ISSN, ACSM, IOC, MSJ, KEYTEL, COMPENDIUM, BOER.
+giorno. Sezione 5 di `SKILL.md`. Fonti: ISSN, ACSM, IOC, GJSN, CSN, MSJ, KEYTEL,
+COMPENDIUM, BOER.
 
 Sono indicazioni generali, mai consigli medici o nutrizionali personalizzati.
 Con patologie, gravidanza, disturbi alimentari o farmaci ci si rivolge a un
@@ -22,8 +23,10 @@ anche questo file e i test `T-NUT`.
 | COMPENDIUM | *Compendium of Physical Activities* (MET per attività) | calorie senza FC |
 | ISSN | International Society of Sports Nutrition, posizioni su tempi dei nutrienti, proteine, diete e composizione corporea | carboidrati per carico, proteine, momenti |
 | ACSM | ACSM, Academy of Nutrition and Dietetics e Dietitians of Canada, *Nutrition and Athletic Performance* (2016) | carboidrati, liquidi, ritmo di perdita (sotto l'1% del peso a settimana), rifornimento rapido (meno di 8 ore tra due sedute), disponibilità energetica (45 equilibrio, sotto 30 dannosa) |
-| BOER | Boer (1984), stima della massa magra da peso, altezza e sesso | massa magra per la disponibilità energetica |
+| BOER | Boer (1984), stima della massa magra da peso, altezza e sesso | massa magra per la disponibilità energetica, se manca una misura |
 | IOC | Consenso del CIO sulla nutrizione dello sportivo | carboidrati durante, recupero |
+| GJSN | Jeukendrup, Gleeson, *Sport Nutrition* 3ª ed. (Human Kinetics 2019) | rifornimento rapido orario (1,0–1,2 g/kg all'ora per 4 ore con meno di 8 ore alla seduta successiva), proteine in dosi da 0,4 g/kg, disponibilità energetica, dimagrimento negli atleti |
+| CSN | Burke, Deakin, *Clinical Sports Nutrition* 5ª ed. (McGraw-Hill 2015) | disponibilità energetica (30–45 tollerabile solo per brevi periodi di dimagrimento pianificato), massa magra misurata meglio di quella stimata |
 | FDC | USDA FoodData Central (dominio pubblico, CC0 1.0) | valori degli alimenti |
 
 ## 1. Calorie delle attività
@@ -104,9 +107,24 @@ anche questo file e i test `T-NUT`.
      la spesa somma, quindi il limite è `base · fattore − 30 · massa magra` e
      non cambia con l'allenamento. Massa magra stimata con **Boer (1984)**:
      uomo `0,407·kg + 0,267·cm − 19,2`, donna `0,252·kg + 0,473·cm − 48,3`,
-     limitata a `[0,5·peso, peso]`. Vale il limite più restrittivo; il deficit
-     non è mai negativo (`DEFICIT_LIMITED`). Per molte persone è questo, non il
-     metabolismo di base, a mordere per primo.
+     limitata a `[0,5·peso, peso]`. **Se l'utente ha una massa magra misurata
+     valida quel giorno (sezione 7), sostituisce la stima di Boer** (CSN: una
+     misura vale più di una stima; `fat_free_mass_kg(persona)`). Vale il limite
+     più restrittivo; il deficit non è mai negativo (`DEFICIT_LIMITED`). Per
+     molte persone è questo, non il metabolismo di base, a mordere per primo.
+  La disponibilità del giorno è `energy_availability(persona, apporto, energia
+  netta dell'esercizio)`; è una stima, non una misura.
+- **Dimagrimento lungo** (`Advisory.LONG_WEIGHT_LOSS`, in coda all'elenco degli
+  avvisi): se il periodo di dimagrimento in corso dura da **più di 12
+  settimane** (`LONG_WEIGHT_LOSS_WEEKS`; più di 84 giorni dal primo giorno del
+  periodo, che è il giorno 0), il giorno ha un deficit applicato e la
+  disponibilità del giorno `(apporto − energia netta dell'esercizio) / massa
+  magra` è **sotto 45** (`BALANCED_ENERGY_AVAILABILITY_KCAL_PER_KG_FFM`),
+  l'avviso invita a una pausa a mantenimento. CSN e GJSN dicono che 30–45 è
+  tollerabile solo per periodi brevi ma senza un numero di settimane (CSN: «8–12»):
+  **12 è un default del progetto**. Il dominio dà la categoria, il testo è dell'interfaccia
+  (neutro, nessuna diagnosi). `DayInput.weight_loss_days` dice da quanto dura il
+  periodo (`None` fuori da un dimagrimento); lo calcola `PlanDayNutrition`.
 - **Minorenni**: sotto i 18 anni il modello non produce kcal, macro né porzioni.
   `PlanDayNutrition` restituisce `NutritionUnavailable(UNDER_18)` (prima di
   chiedere peso o FC); la pagina non mostra numeri e invita a rivolgersi a un
@@ -126,7 +144,7 @@ anche questo file e i test `T-NUT`.
 - **Carboidrati**, g/kg/giorno: riposo e leggero 3–5; moderato 5–7; alto 6–10;
   molto alto 8–12. Dimagrimento: estremo basso; mantenimento: metà; performance:
   estremo alto.
-- **Proteine** 1,6 g/kg (2,0 in deficit). **Grassi** = il resto, almeno il 20%
+- **Proteine** 1,6 g/kg (2,0 in deficit); dopo la seduta 0,4 g/kg (GJSN, era 0,3). **Grassi** = il resto, almeno il 20%
   dell'energia. Se l'energia non basta, cedono i carboidrati
   (`CARBS_LIMITED_BY_ENERGY`). Grammi interi; 4/4/9 kcal per grammo.
 
@@ -140,13 +158,22 @@ Per ogni seduta di almeno 30 minuti (le più brevi non cambiano nulla):
   fino a 2,5 h, **60 g/h** oltre. Il tetto è 60 g/h: oltre (fino a 90 g/h, IOC)
   servono miscele glucosio-fruttosio, che la tabella non distingue. Liquidi
   600 ml/h e sodio 300 mg/h, indicativi (ACSM).
-- **Post**, 30 min dopo la fine: proteine 0,3 g/kg; carboidrati 1,1 g/kg se la
-  seduta dura almeno 90 min o un'altra arriva **a meno di 8 ore**
-  (`SPEEDY_REFUEL_WITHIN_MIN`, rifornimento rapido ACSM; a 8 h esatte no).
-  Scelta del progetto: scatta per qualunque seduta successiva entro 8 h, anche
-  breve (più carboidrati non è un rischio e la regola resta semplice). Una
-  seduta del giorno dopo si passa come `minutes_to_next_session` e di norma
-  supera le 8 ore.
+- **Post**, proteine 0,4 g/kg (GJSN). Due casi:
+  - **un'altra seduta a meno di 8 ore** (`SPEEDY_REFUEL_WITHIN_MIN`, ACSM,
+    ISSN, GJSN; a 8 h esatte no): rifornimento rapido **orario**, un apporto di
+    carboidrati ogni ora per le prime 4 ore (`REFUEL_HOURS`), **1,1 g/kg** ciascuno
+    (`REFUEL_CARBS_G_PER_KG_H`, il mezzo di 1,0–1,2), il primo 30 minuti dopo la
+    fine e poi ogni 60 minuti; l'ultimo almeno 30 minuti prima della seduta
+    successiva, il primo sempre. Le proteine stanno nel primo. Ogni apporto è un
+    `MealItem` con `refuel_hour` da 1 a 4, mai fuso con un pasto né con un altro
+    apporto orario. Stanno **dentro il budget dei carboidrati del giorno**: pranzo
+    e cena tengono i loro minimi e gli apporti si servono in ordine di tempo
+    (durante, dopo, prima); un'ora rimasta senza carboidrati e senza proteine
+    sparisce. Scelta del progetto: scatta per qualunque seduta successiva entro 8 h, anche
+    breve;
+  - **altrimenti** il «dopo» resta **una dose** 30 minuti dopo la fine: carboidrati
+    1,1 g/kg solo se la seduta dura almeno 90 min. Una seduta del giorno dopo si
+    passa come `minutes_to_next_session` e di norma supera le 8 ore.
 
 Il resto del giorno si divide in colazione 25%, pranzo 40%, cena 35% agli orari
 tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):
@@ -194,6 +221,22 @@ tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):
 
 ## 7. Dati e casi d'uso
 
+- **Massa magra misurata** (schema v7): misura datata facoltativa (da DXA o
+  bilancia impedenziometrica), in decimi di chilo tra 15,0 e 200,0 kg
+  (`LeanMass`, `LeanMassEntry`, tabella `lean_mass`); vale dal suo giorno fino
+  alla voce successiva, **non** per i giorni prima della prima misura. Ha senso solo
+  se compatibile col peso: tra il 40% e il 95% del peso del giorno
+  (`is_plausible_lean_mass`, default del progetto; GJSN non scendere sotto il 5%
+  di grasso per gli uomini e il 12% per le donne). `PlanDayNutrition` la usa solo
+  se è plausibile col peso di quel giorno, altrimenti vale Boer. Porta
+  `LeanMassStore` (`nutrition/ports.py`, `OpenProfile.lean_masses`); casi d'uso
+  in `profiles/lean_mass.py`: `SetLeanMass(attività, pesi, store, oggi)(massa,
+  dal_giorno) → AppliedLeanMass(entry, replaced)`, `UndoLeanMass(applied)` (annulla
+  esatto: toglie la voce e rimette quella sostituita; rifiuta con
+  `LeanMassChangedError` se la voce è cambiata dopo), `RemoveLeanMass(giorno) →
+  voce tolta`, `ListLeanMass`. `SetLeanMass` rifiuta una data futura, un peso
+  assente e una massa non plausibile.
+
 - Schema v4: `activities.calories_kcal`; `activity_level` (data di validità),
   `meal_times` (una riga), `nutrition_goal` (periodi, con trigger contro le
   sovrapposizioni). Migrazione con copia in `backup/ponos-v3-v4.sqlite3`.
@@ -201,6 +244,8 @@ tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):
   `GoalPeriodStore`); casi d'uso in `nutrition/use_cases.py`
   (`SetActivityLevel`, `SetMealTimes`, `AddGoalPeriod`, `ReplaceGoalPeriod`,
   `RemoveGoalPeriod`, `ReadNutritionSettings`).
+- `NutritionSources.lean_masses` è facoltativo (`None`: vale sempre Boer); il
+  Composition Root passa `profile.lean_masses`.
 - `profiles/day_nutrition.py`: `PlanDayNutrition(sources, decode, timezone,
   foods)(day)` raccoglie dal profilo aperto e restituisce `DayNutritionReport` o
   `NutritionUnavailable(reason)` (`MISSING_BODY_DATA`, `BEFORE_BIRTH`,

@@ -75,7 +75,7 @@ def test_t_piano_06_warm_up_30_minutes_cool_down_gives_the_window_hr_and_pace_by
     assert result.threshold_bpm == 165
     assert result.pace_s_per_km == PACE_AT_3_5_MS
     assert result.valid_hr_samples == 1200
-    assert result.hr_zone_starts_bpm == pytest.approx((140.25, 148.5, 156.75, 165.0))
+    assert result.hr_zone_starts_bpm == pytest.approx((128.7, 143.55, 155.1, 165.0))
     assert result.pace_zone_starts_s_per_km == pytest.approx(
         (1000 / 3.5 / 0.78, 1000 / 3.5 / 0.88, 1000 / 3.5 / 0.94, 1000 / 3.5), abs=1.0
     )

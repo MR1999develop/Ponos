@@ -33,6 +33,12 @@ from ponos_coach.nutrition.domain.foods import (
     suggest_examples,
     tolerance_g,
 )
+from ponos_coach.nutrition.domain.lean_mass import (
+    LeanMass,
+    LeanMassEntry,
+    is_plausible_lean_mass,
+    lean_mass_on,
+)
 from ponos_coach.nutrition.domain.macros import (
     Macros,
     split_integer,
@@ -59,8 +65,10 @@ from ponos_coach.nutrition.domain.settings import (
 from ponos_coach.nutrition.domain.targets import (
     EnergyTarget,
     day_macros,
+    energy_availability,
     energy_target,
     estimated_fat_free_mass_kg,
+    fat_free_mass_kg,
     max_deficit_for_energy_availability,
     permitted_weekly_loss_g,
     requested_deficit_kcal,
@@ -82,6 +90,8 @@ __all__ = [
     "FoodPortion",
     "GoalPeriod",
     "HourlyIntake",
+    "LeanMass",
+    "LeanMassEntry",
     "Macros",
     "MaintenanceGoal",
     "MealItem",
@@ -98,10 +108,14 @@ __all__ = [
     "basal_metabolic_rate",
     "classify_day_load",
     "day_macros",
+    "energy_availability",
     "energy_target",
     "estimated_fat_free_mass_kg",
+    "fat_free_mass_kg",
     "goal_for_day",
+    "is_plausible_lean_mass",
     "keytel_kcal_per_minute",
+    "lean_mass_on",
     "level_for_day",
     "max_deficit_for_energy_availability",
     "met_kcal",

@@ -55,6 +55,7 @@ from tests.contracts.contract_nutrition import (
     ActivityCaloriesContract,
     ActivityLevelStoreContract,
     GoalPeriodStoreContract,
+    LeanMassStoreContract,
     MealTimesStoreContract,
 )
 from tests.contracts.contract_planning import (
@@ -151,6 +152,10 @@ class TestSqliteActivityLevelStore(_DiskStorageFixture, ActivityLevelStoreContra
     pass
 
 
+class TestSqliteLeanMassStore(_DiskStorageFixture, LeanMassStoreContract):
+    pass
+
+
 class TestSqliteMealTimesStore(_DiskStorageFixture, MealTimesStoreContract):
     pass
 
@@ -205,6 +210,7 @@ def test_new_database_has_the_latest_schema_and_the_expected_tables(tmp_path: Pa
         "session_choice",
         "plan_state",
         "plan_past_day",
+        "lean_mass",
     }
     assert meta == {
         "profile_id": str(PROFILE_ID),

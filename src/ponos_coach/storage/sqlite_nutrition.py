@@ -16,6 +16,8 @@ from ponos_coach.nutrition.domain import (
     ActivityLevel,
     ActivityLevelEntry,
     GoalPeriod,
+    LeanMass,
+    LeanMassEntry,
     MaintenanceGoal,
     MealTimes,
     NutritionGoal,
@@ -26,6 +28,7 @@ from ponos_coach.nutrition.ports import (
     ActivityLevelNotFoundError,
     GoalPeriodNotFoundError,
     GoalPeriodOverlapError,
+    LeanMassNotFoundError,
     NutritionStoreError,
 )
 from ponos_coach.storage.sqlite_database import SqliteDatabase
@@ -75,6 +78,48 @@ class SqliteActivityLevelStore:
             return [ActivityLevelEntry(date.fromisoformat(r[0]), ActivityLevel(r[1])) for r in rows]
         except ValueError:  # the text read is not kept in the chain of causes
             raise NutritionStoreError("saved activity level invalid") from None
+
+
+class SqliteLeanMassStore:
+    """Measured lean mass series (`LeanMassStore` port) on SQLite."""
+
+    def __init__(self, database: SqliteDatabase) -> None:
+        self._db = database
+
+    def put(self, entry: LeanMassEntry) -> None:
+        """Saves the lean mass valid from `entry.valid_from`, replacing the same date."""
+        try:
+            self._db.connection.execute(
+                "INSERT INTO lean_mass (valid_from, tenths_kg) VALUES (?, ?) "
+                "ON CONFLICT (valid_from) DO UPDATE SET tenths_kg = excluded.tenths_kg",
+                (entry.valid_from.isoformat(), entry.lean_mass.tenths_kg),
+            )
+        except sqlite3.Error as exc:
+            raise NutritionStoreError("writing the lean mass failed") from exc
+
+    def remove(self, valid_from: date) -> None:
+        """Deletes the entry that starts on `valid_from`."""
+        try:
+            cursor = self._db.connection.execute(
+                "DELETE FROM lean_mass WHERE valid_from = ?", (valid_from.isoformat(),)
+            )
+        except sqlite3.Error as exc:
+            raise NutritionStoreError("deleting the lean mass failed") from exc
+        if cursor.rowcount == 0:
+            raise LeanMassNotFoundError("no lean mass starts on that day")
+
+    def list_entries(self) -> Sequence[LeanMassEntry]:
+        """All the entries by ascending date."""
+        try:
+            rows = self._db.connection.execute(
+                "SELECT valid_from, tenths_kg FROM lean_mass ORDER BY valid_from"
+            ).fetchall()
+        except sqlite3.Error as exc:
+            raise NutritionStoreError("reading the lean mass failed") from exc
+        try:
+            return [LeanMassEntry(date.fromisoformat(r[0]), LeanMass(r[1])) for r in rows]
+        except (ValueError, TypeError):  # the value read is not kept in the chain of causes
+            raise NutritionStoreError("saved lean mass invalid") from None
 
 
 class SqliteMealTimesStore:

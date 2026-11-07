@@ -67,8 +67,11 @@ def _plausible_meters(distance: DistanceSeries) -> NDArray[np.float64]:
     return np.concatenate(([0.0], np.cumsum(steps)))
 
 
-def best_start_by_distance(distance: DistanceSeries) -> float | None:
-    """Start (seconds) of the 30-minute window with the greatest distance covered.
+def best_start_by_distance(
+    distance: DistanceSeries, duration_s: int = TEST_DURATION_S
+) -> float | None:
+    """Start (seconds) of the window of `duration_s` (30 minutes by default) with the greatest
+    distance covered.
 
     The window lies inside the distance series, which counts one interval past its last record
     (see `_end_tolerance_s`). Steps faster than `MAX_PLAUSIBLE_SPEED_M_S` count for nothing. `None`
@@ -78,27 +81,28 @@ def best_start_by_distance(distance: DistanceSeries) -> float | None:
     """
     seconds = distance.seconds
     first, last = float(seconds[0]), float(seconds[-1]) + _end_tolerance_s(seconds)
-    if last - first < TEST_DURATION_S - _EPSILON_S:
+    if last - first < duration_s - _EPSILON_S:
         return None
-    starts = _candidate_starts(seconds, first, last, TEST_DURATION_S)
+    starts = _candidate_starts(seconds, first, last, duration_s)
     if starts.size == 0:
         return None
     meters = _plausible_meters(distance)
-    gain = np.interp(starts + TEST_DURATION_S, seconds, meters) - np.interp(starts, seconds, meters)
+    gain = np.interp(starts + duration_s, seconds, meters) - np.interp(starts, seconds, meters)
     gain = np.round(gain, _METER_DECIMALS)
     best = int(np.argmax(gain))
     if gain[best] <= 0:
         return None
     start = float(starts[best])
-    return start if _is_running_window(distance, start) else None
+    return start if _is_running_window(distance, start, duration_s) else None
 
 
-def _is_running_window(distance: DistanceSeries, start_s: float) -> bool:
-    """True if the 30 minutes from `start_s` have no implausible step and a plausible pace."""
-    meters = distance_between(distance, start_s, start_s + TEST_DURATION_S)
+def _is_running_window(distance: DistanceSeries, start_s: float, duration_s: int) -> bool:
+    """True if the `duration_s` seconds from `start_s` have no implausible step and a
+    plausible pace."""
+    meters = distance_between(distance, start_s, start_s + duration_s)
     if meters is None or meters <= 0:
         return False
-    pace_s_per_km = TEST_DURATION_S / (meters / METERS_PER_KM)
+    pace_s_per_km = duration_s / (meters / METERS_PER_KM)
     return MIN_PACE_S_PER_KM <= pace_s_per_km <= MAX_PACE_S_PER_KM
 
 
@@ -197,29 +201,30 @@ class HeartRateTimeline:
         overlapping = (self.starts < start_s + length_s) & (self.ends > start_s)
         return int(np.count_nonzero(overlapping & self.counted))
 
-    def _coverage(self, starts: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Counted seconds in the last 20 minutes of each 30-minute window."""
-        seconds, _ = self.window(
-            starts + (TEST_DURATION_S - THRESHOLD_WINDOW_S), THRESHOLD_WINDOW_S
-        )
+    def _coverage(self, starts: NDArray[np.float64], duration_s: int) -> NDArray[np.float64]:
+        """Counted seconds in the last 20 minutes of each window of `duration_s`."""
+        seconds, _ = self.window(starts + (duration_s - THRESHOLD_WINDOW_S), THRESHOLD_WINDOW_S)
         return seconds
 
-    def _with_coverage_limit(self, starts: NDArray[np.float64]) -> NDArray[np.float64]:
+    def _with_coverage_limit(
+        self, starts: NDArray[np.float64], duration_s: int
+    ) -> NDArray[np.float64]:
         """The sorted candidate starts plus the points where the counted seconds of the last 20
         minutes cross the 90% limit: between two candidates the coverage is linear, so the
         best usable window may sit exactly where the limit is reached."""
         limit = MIN_VALID_HR_PERCENT * THRESHOLD_WINDOW_S / _PERCENT
-        coverage = self._coverage(starts)
+        coverage = self._coverage(starts, duration_s)
         before, after = coverage[:-1] - limit, coverage[1:] - limit
         crossing = np.flatnonzero(before * after < 0)
         fraction = before[crossing] / (before[crossing] - after[crossing])
         roots = starts[crossing] + fraction * (starts[crossing + 1] - starts[crossing])
         return np.unique(np.concatenate((starts, roots)))
 
-    def best_start_by_mean_bpm(self) -> float | None:
-        """Start of the 30-minute window with the highest mean of the counted bpm, on time,
-        among the windows that the test would accept as to coverage (valid seconds at least 90%
-        of the last 20 minutes: a window with few valid seconds and a high HR does not win).
+    def best_start_by_mean_bpm(self, duration_s: int = TEST_DURATION_S) -> float | None:
+        """Start of the window of `duration_s` (30 minutes by default) with the highest mean of the
+        counted bpm, on time, among the windows that the test would accept as to coverage (valid
+        seconds at least 90% of the last 20 minutes: a window with few valid seconds and a high HR
+        does not win).
 
         The window lies between the first record of the activity (second 0, even if the HR starts
         later) and the end of the last HR sample. `None` if that is shorter than the window or no
@@ -228,22 +233,21 @@ class HeartRateTimeline:
         earliest.
         """
         first, last = min(0.0, float(self.starts[0])), float(self.ends[-1])
-        if last - first < TEST_DURATION_S - _EPSILON_S:
+        if last - first < duration_s - _EPSILON_S:
             return None
         breakpoints = np.concatenate((self.starts, self.ends))
-        # the last 20 minutes of a window start 10 minutes in: their breakpoints count too
-        breakpoints = np.concatenate(
-            (breakpoints, breakpoints - (TEST_DURATION_S - THRESHOLD_WINDOW_S))
-        )
-        starts = _candidate_starts(breakpoints, first, last, TEST_DURATION_S)
+        # the last 20 minutes of a window start 10 minutes in (0 for the 20-minute protocol):
+        # their breakpoints count too
+        breakpoints = np.concatenate((breakpoints, breakpoints - (duration_s - THRESHOLD_WINDOW_S)))
+        starts = _candidate_starts(breakpoints, first, last, duration_s)
         if starts.size == 0:
             return None
-        starts = self._with_coverage_limit(starts)
-        seconds, weighted = self.window(starts, TEST_DURATION_S)
+        starts = self._with_coverage_limit(starts, duration_s)
+        seconds, weighted = self.window(starts, duration_s)
         usable = seconds > 0
         if not usable.any():
             return None
-        covered = usable & enough_valid_seconds(self._coverage(starts))
+        covered = usable & enough_valid_seconds(self._coverage(starts, duration_s))
         usable = covered if covered.any() else usable  # none covered: rejected later, as before
         mean = np.full(starts.shape, -np.inf)
         mean[usable] = np.round(weighted[usable] / seconds[usable], _BPM_DECIMALS)

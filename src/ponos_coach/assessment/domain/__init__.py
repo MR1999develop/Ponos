@@ -4,6 +4,7 @@
 
 from ponos_coach.assessment.domain import defaults
 from ponos_coach.assessment.domain.pace_zones import pace_zone_indices, pace_zone_starts_s_per_km
+from ponos_coach.assessment.domain.protocol import DEFAULT_PROTOCOL, ThresholdProtocol
 from ponos_coach.assessment.domain.record import ThresholdTest
 from ponos_coach.assessment.domain.retest import (
     NoTest,
@@ -21,12 +22,14 @@ from ponos_coach.assessment.domain.threshold_test import (
 )
 
 __all__ = [
+    "DEFAULT_PROTOCOL",
     "NoTest",
     "NotYet",
     "Overdue",
     "Recommended",
     "RetestStatus",
     "SegmentSelection",
+    "ThresholdProtocol",
     "ThresholdRejection",
     "ThresholdTest",
     "ThresholdTestResult",

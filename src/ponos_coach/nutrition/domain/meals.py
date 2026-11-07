@@ -7,6 +7,10 @@ The day's totals are split exactly (whole grams): first the intakes around each 
 close to a session are moved after it (or before it when that would be too late), and intakes
 closer than 90 minutes become one. The sum of the items is always the day's total.
 
+When the next session is less than 8 hours after the end of one, the "after" is hourly instead of
+a single dose: one carbohydrate intake an hour for the first 4 hours (ACSM, ISSN, GJSN), inside
+the day's carbohydrate budget, the protein with the first one. Those intakes are never merged.
+
 When the day's carbohydrates do not cover all the intakes, lunch and dinner first keep a minimum
 (1 g/kg each) and the rest goes to the intakes in this order: during the session (so that the
 hourly guidance stays true), after it, before it. The cut is declared to the caller.
@@ -100,7 +104,9 @@ class MealItem:
 
     A regular meal moved because of training has `moved` set; an item that merges several
     occasions (for example a post-training intake and lunch) lists all their slots in display
-    order. `hourly` is only for a during-training item.
+    order. `hourly` is only for a during-training item. `refuel_hour` (1 to 4) marks one of the
+    hourly intakes after a session that is followed by another within 8 hours: it is the hour after
+    the end that the intake covers; only a post-training item has it.
     """
 
     slots: tuple[MealSlot, ...]
@@ -108,6 +114,7 @@ class MealItem:
     macros: Macros
     moved: bool = False
     hourly: HourlyIntake | None = None
+    refuel_hour: int | None = None
 
     def __post_init__(self) -> None:
         if not self.slots or len(set(self.slots)) != len(self.slots):
@@ -118,6 +125,11 @@ class MealItem:
             raise ValueError("an item is within the local day")
         if self.hourly is not None and self.slots != (MealSlot.DURING_TRAINING,):
             raise ValueError("only a during-training item has an hourly intake")
+        if self.refuel_hour is not None and (
+            self.slots != (MealSlot.POST_TRAINING,)
+            or not 1 <= self.refuel_hour <= defaults.REFUEL_HOURS
+        ):
+            raise ValueError("only a post-training item has a refuel hour, from 1 to 4")
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +142,7 @@ class _Moment:
     protein_g: int
     hourly: HourlyIntake | None = None
     duration_min: float = 0.0  # of the session, for a during-training intake
+    refuel_hour: int | None = None  # of the hourly refuel after a session, from 1
 
 
 def _clamp_minute(value: float) -> int:
@@ -157,16 +170,40 @@ def _during_moment(session: TrainingSession) -> _Moment | None:
     )
 
 
-def _post_moment(
+def _refuel_hours(minutes_to_next: float) -> int:
+    """How many hourly intakes fit before the next session: at most 4, the last at least 30
+    minutes before it, and always the first."""
+    room = minutes_to_next - defaults.REFUEL_LAST_BEFORE_NEXT_MIN
+    fitting = math.floor(room / defaults.REFUEL_STEP_MIN) + 1
+    return max(1, min(defaults.REFUEL_HOURS, fitting))
+
+
+def _post_moments(
     session: TrainingSession, weight_kg: float, minutes_to_next: float | None
-) -> _Moment:
-    needs_carbs = session.duration_min >= defaults.LONG_SESSION_MIN or (
-        minutes_to_next is not None and minutes_to_next < defaults.SPEEDY_REFUEL_WITHIN_MIN
-    )
-    carbs = round(defaults.POST_CARBS_G_PER_KG * weight_kg) if needs_carbs else 0
+) -> list[_Moment]:
+    """What to eat after a session: with another session within 8 hours, hourly carbohydrates for
+    the first hours (protein with the first); otherwise one dose, with carbohydrates only after a
+    long session."""
     protein = round(defaults.POST_PROTEIN_G_PER_KG * weight_kg)
-    minute = _clamp_minute(session.end_minute + defaults.POST_LEAD_MIN)
-    return _Moment(MealSlot.POST_TRAINING, minute, carbs, protein)
+    first = session.end_minute + defaults.POST_LEAD_MIN
+    if minutes_to_next is not None and minutes_to_next < defaults.SPEEDY_REFUEL_WITHIN_MIN:
+        carbs = round(defaults.REFUEL_CARBS_G_PER_KG_H * weight_kg)
+        return [
+            _Moment(
+                MealSlot.POST_TRAINING,
+                _clamp_minute(first + hour * defaults.REFUEL_STEP_MIN),
+                carbs,
+                protein if hour == 0 else 0,
+                refuel_hour=hour + 1,
+            )
+            for hour in range(_refuel_hours(minutes_to_next))
+        ]
+    carbs = (
+        round(defaults.POST_CARBS_G_PER_KG * weight_kg)
+        if session.duration_min >= defaults.LONG_SESSION_MIN
+        else 0
+    )
+    return [_Moment(MealSlot.POST_TRAINING, _clamp_minute(first), carbs, protein)]
 
 
 def _moments(
@@ -183,14 +220,9 @@ def _moments(
             else minutes_to_next
         )
         found += [
-            m
-            for m in (
-                _pre_moment(session, weight_kg),
-                _during_moment(session),
-                _post_moment(session, weight_kg, gap),
-            )
-            if m is not None
+            m for m in (_pre_moment(session, weight_kg), _during_moment(session)) if m is not None
         ]
+        found += _post_moments(session, weight_kg, gap)
     return found
 
 
@@ -239,6 +271,7 @@ def _fit_moments(
             math.floor(m.protein_g * protein_ratio),
             _hourly_after_cut(m, c),
             m.duration_min,
+            m.refuel_hour,
         )
         for m, c in zip(moments, carbs, strict=True)
     ]
@@ -287,14 +320,20 @@ def _merged(chain: list[MealItem]) -> MealItem:
     return MealItem(slots, chain[-1].minute, total, moved=any(i.moved for i in chain))
 
 
+def _never_merged(item: MealItem) -> bool:
+    """During-training items (eaten while training) and the hourly refuel intakes (one an hour by
+    design) stay as they are."""
+    return item.slots == (MealSlot.DURING_TRAINING,) or item.refuel_hour is not None
+
+
 def _fuse(items: list[MealItem]) -> list[MealItem]:
     """Merges items closer than 90 minutes (the merged item has the time of the latest one).
 
-    During-training items are never merged: they are eaten while training.
+    During-training items and hourly refuel intakes are never merged.
     """
-    during = [i for i in items if i.slots == (MealSlot.DURING_TRAINING,)]
+    apart = [i for i in items if _never_merged(i)]
     ordered = sorted(
-        (i for i in items if i.slots != (MealSlot.DURING_TRAINING,)),
+        (i for i in items if not _never_merged(i)),
         key=lambda i: (i.minute, i.slots[0].rank),
     )
     chains: list[list[MealItem]] = []
@@ -303,7 +342,7 @@ def _fuse(items: list[MealItem]) -> list[MealItem]:
             chains[-1].append(item)
         else:
             chains.append([item])
-    return [_merged(chain) for chain in chains] + during
+    return [_merged(chain) for chain in chains] + apart
 
 
 def _lift_main_meals(carbs: list[int], minimum: int) -> list[int]:
@@ -373,8 +412,15 @@ def schedule_meals(
     )
     items = _regular_meals(left, meal_times, _blocked_intervals(ordered), main_min)
     items += [
-        MealItem((m.slot,), m.minute, Macros(m.carbs_g, m.protein_g), hourly=m.hourly)
+        MealItem(
+            (m.slot,),
+            m.minute,
+            Macros(m.carbs_g, m.protein_g),
+            hourly=m.hourly,
+            refuel_hour=m.refuel_hour,
+        )
         for m in moments
+        if m.refuel_hour is None or m.carbs_g or m.protein_g  # a cut hourly intake is dropped
     ]
     result = sorted(_fuse(items), key=lambda i: (i.minute, i.slots[0].rank))
     return tuple(result), scaled

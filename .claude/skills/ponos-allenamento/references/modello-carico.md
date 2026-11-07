@@ -99,19 +99,20 @@ Motivo per la forza: la FC sottostima il suo carico. Peso 0 dà carico 0.
 ## 4b. Zone di FC
 
 Cinque zone sulla soglia dello sport (in bici la soglia della bici), secondo
-Friel; percentuali di default del progetto in un solo posto
-(`ZONE_STARTS_PERCENT` in `load/domain/zones.py`), da rivedere in fase 4:
+Friel, **5ª edizione** (FRI5, tab. 4.1; dalla fase 5; prima erano le zone di corsa delle
+edizioni precedenti, 85/90/95/100); percentuali in un solo posto
+(`ZONE_STARTS_PERCENT` in `load/domain/zones.py`):
 
 | Zona | FC in % della soglia |
 |---|---|
-| Z1 | sotto 85% |
-| Z2 | da 85% a 89% (sotto 90%) |
-| Z3 | da 90% a 94% (sotto 95%) |
-| Z4 | da 95% a 99% (sotto 100%) |
+| Z1 | sotto 78% |
+| Z2 | da 78% a 86% (sotto 87%) |
+| Z3 | da 87% a 93% (sotto 94%) |
+| Z4 | da 94% a 99% (sotto 100%) |
 | Z5 | 100% e oltre |
 
-- Il confine inferiore appartiene alla zona più alta (144,5 bpm con soglia 170 è
-  Z2; 153 è esattamente il 90%: Z3). Il confronto è su interi (`bpm * 100`
+- Il confine inferiore appartiene alla zona più alta (132,6 bpm con soglia 170 è
+  il confine di Z2: 133 è Z2, 132 è Z1; 170 è esattamente il 100%: Z5). Il confronto è su interi (`bpm * 100`
   contro `percentuale * soglia`), mai su percentuali in virgola mobile.
 - I **secondi in ogni zona** (`ActivityLoad.zone_seconds`, `ZoneSeconds`) sono
   quelli dei campioni contati dal carico: stessi scarti (FC fuori limiti) e
@@ -119,7 +120,12 @@ Friel; percentuali di default del progetto in un solo posto
   per una stima fatta con pochi campioni validi sono quelli misurati.
 - Si salvano nella cache dei carichi (colonne `zone1_s ... zone5_s`) legati alla
   stessa impronta del carico; l'impronta comprende le percentuali delle zone e
-  `LOAD_MODEL_VERSION` (2 dalla fase 3).
+  `LOAD_MODEL_VERSION` (2 dalla fase 3). Cambiando le percentuali (fase 5: dalle zone
+  85/90/95/100 a 78/87/94/100) l'impronta cambia, quindi i **secondi per zona si
+  ricalcolano** alla prossima panoramica, mentre TRIMP e hrTSS **restano identici**
+  (le zone classificano soltanto i secondi); `LOAD_MODEL_VERSION` non cambia perché la
+  formula del carico non cambia. Le zone di ritmo dell'`assessment` (78/88/94/100
+  della velocità di soglia) restano.
 - Aggregazioni per i grafici (`load/domain/aggregation.py`, pure e vettoriali):
   carico per settimana ISO (lunedì-domenica, giorni locali del profilo) e per
   sport, secondi per zona per settimana; le settimane senza attività, dalla

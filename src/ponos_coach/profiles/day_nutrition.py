@@ -10,7 +10,7 @@ never medical advice. Health data: never in logs or error messages.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from enum import Enum
@@ -44,21 +44,30 @@ from ponos_coach.nutrition.domain import (
     DayInput,
     DayNutrition,
     FoodExample,
+    GoalPeriod,
     MealItem,
     MealTimes,
     NutritionGoal,
     Person,
     TrainingSession,
+    WeightLossGoal,
     activity_energy,
     average_valid_bpm,
     defaults,
     goal_for_day,
+    is_plausible_lean_mass,
+    lean_mass_on,
     level_for_day,
     plan_day,
     suggest_examples,
 )
 from ponos_coach.nutrition.food_table import FoodTable
-from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
+from ponos_coach.nutrition.ports import (
+    ActivityLevelStore,
+    GoalPeriodStore,
+    LeanMassStore,
+    MealTimesStore,
+)
 from ponos_coach.profiles.domain import age_on, weight_on
 from ponos_coach.profiles.ports import FixedDataStore, WeightStore
 
@@ -150,6 +159,7 @@ class NutritionSources:
     activity_levels: ActivityLevelStore
     meal_times: MealTimesStore
     goal_periods: GoalPeriodStore
+    lean_masses: LeanMassStore | None = None  # optional: without it the estimate applies
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,9 +216,12 @@ class PlanDayNutrition:
         measured, next_gap = self._activities_of(day, person, physiology)
         saved_times = src.meal_times.get()
         meal_times = MealTimes.default() if saved_times is None else saved_times
-        goal = goal_for_day(src.goal_periods.list_periods(), day)
+        periods = src.goal_periods.list_periods()
+        goal = goal_for_day(periods, day)
         sessions = tuple(_session_of(m.activity) for m in measured)
-        nutrition = plan_day(DayInput(person, goal, meal_times, sessions, next_gap))
+        nutrition = plan_day(
+            DayInput(person, goal, meal_times, sessions, next_gap, _loss_days(periods, goal, day))
+        )
         suggestions = tuple(
             MealSuggestion(meal, suggest_examples(meal, self._foods.foods))
             for meal in nutrition.meals
@@ -242,8 +255,22 @@ class PlanDayNutrition:
         except MissingPhysiologyError:
             return NutritionUnavailable(UnavailableReason.MISSING_PHYSIOLOGY)
         level = level_for_day(src.activity_levels.list_entries(), day)
-        person = Person(physiology.sex, age, fixed.height.cm, float(weight.kg), level)
+        weight_kg = float(weight.kg)
+        lean_mass_kg = self._lean_mass_on(day, weight_kg)
+        person = Person(physiology.sex, age, fixed.height.cm, weight_kg, level, lean_mass_kg)
         return _Subject(person, physiology)
+
+    def _lean_mass_on(self, day: date, weight_kg: float) -> float | None:
+        """The measured lean mass valid on `day` in kg, if there is one that fits the weight of
+        that day (a later weight may have made an old measurement implausible: the estimate then
+        applies)."""
+        store = self._src.lean_masses
+        if store is None:
+            return None
+        measured = lean_mass_on(store.list_entries(), day)
+        if measured is None or not is_plausible_lean_mass(measured, weight_kg):
+            return None
+        return measured.kg
 
     def _activities_of(
         self, day: date, person: Person, physiology: Physiology
@@ -320,6 +347,17 @@ class PlanDayNutrition:
             _local_end_minute(record, local, start_minute, self._timezone),
         )
         return _Measured(day_activity, unreadable)
+
+
+def _loss_days(periods: Sequence[GoalPeriod], goal: NutritionGoal, day: date) -> int | None:
+    """Days since the weight-loss period that contains `day` began (0 on its first day), or None
+    if the day is not in a weight-loss period."""
+    if not isinstance(goal, WeightLossGoal):
+        return None
+    for period in periods:
+        if period.contains(day):
+            return (day - period.first_day).days
+    return None
 
 
 def _average_bpm(activity: Activity | None, physiology: Physiology) -> float | None:

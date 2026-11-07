@@ -1,13 +1,32 @@
 # Test di soglia
 
 **Quando leggerlo:** scrivendo o rivedendo `assessment`, le istruzioni del
-test nell'app o i test `T-PIANO-06`. Sezione 3 di `SKILL.md`. Fonte: FRI.
+test di soglia nell'app o i test `T-PIANO-06`. Sezione 3 di `SKILL.md`. Fonti: FRI
+(30 minuti, edizioni precedenti alla 5ª), FRI5 (20 minuti, 5ª edizione).
 Tutti i numeri sono default del progetto e stanno in un solo modulo,
 `assessment/domain/defaults.py`; cambiarne uno cambia l'esito di ogni test.
 
 ## 1. Protocollo
 
-- Test in corsa di 30 minuti a sforzo massimo sostenibile e costante, dopo
+Due protocolli a scelta (`ThresholdProtocol`, parametro di `EvaluateThresholdTest` e di
+`evaluate_threshold_test`, salvato con ogni test nello storico e nel risultato; default
+`THIRTY_MINUTES`):
+
+| | `THIRTY_MINUTES` (FRI) | `TWENTY_MINUTES` (FRI5) |
+|---|---|---|
+| Segmento | 30 minuti di tempo trascorso | 20 minuti |
+| FC di soglia | media degli **ultimi 20'** del segmento | media dei **20'** × 0,95, arrotondata |
+| Ritmo di soglia | ritmo medio degli ultimi 20' | ritmo medio dei 20' **+ 5% del tempo al km** |
+| Finestra di copertura FC (90%) | gli ultimi 20' | i 20' |
+| Rifiuto «troppo corto» | tempo trascorso sotto i 30' | sotto i 20' |
+
+Il 5% del test di 20' si applica al **tempo al km, non alla velocità** (FRI5): con 285,7
+s/km di media il ritmo di soglia è 300 s/km (applicandolo alla velocità sarebbe 301). Gli
+stessi default stanno in `assessment/domain/defaults.py` (`TWENTY_MINUTE_HR_PERCENT`,
+`TWENTY_MINUTE_PACE_ADD_PERCENT`). `METHOD_VERSION` è 2 (fase 5: protocollo); i test
+salvati prima valgono come test di 30' con la versione 1. Il retest non cambia (sezione 4).
+
+- Test in corsa a sforzo massimo sostenibile e costante, dopo
   riscaldamento. Se ne parla nell'app prima, con le istruzioni.
 - Frequenza: all'inizio e poi ogni 6–8 settimane (default del progetto), in
   una settimana di scarico del piano (la settimana di scarico arriva col
@@ -17,7 +36,9 @@ Tutti i numeri sono default del progetto e stanno in un solo modulo,
 
 ## 2. Calcolo (`evaluate_threshold_test`)
 
-Funzione pura e deterministica: stesse attività e stessi limiti, stesso esito.
+Funzione pura e deterministica: stesse attività, limiti e protocollo, stesso esito.
+Sotto, dove si dice «30 minuti» e «ultimi 20 minuti», col protocollo di 20' la finestra è
+di 20 minuti e coincide con il segmento.
 
 - **Segmento:** la finestra di 30 minuti (1800 s) di tempo trascorso con la
   maggiore distanza percorsa; senza una distanza utilizzabile (serie assente,
@@ -63,13 +84,14 @@ Funzione pura e deterministica: stesse attività e stessi limiti, stesso esito.
   valida): il ritmo non si ripara togliendo il salto.
 - **Giorno del test:** il giorno locale (fuso del profilo) dell'inizio
   dell'attività; i limiti FC sono quelli in vigore quel giorno.
-- **Zone FC:** quelle del carico (`load/domain/zones.py`: Z1 sotto 85% della
-  soglia, 85–90, 90–95, 95–100, Z5 da 100%), con `zone_starts_bpm(soglia)`.
+- **Zone FC:** quelle del carico (`load/domain/zones.py`, 5ª edizione: Z1 sotto 78%
+  della soglia, 78–87, 87–94, 94–100, Z5 da 100%), con `zone_starts_bpm(soglia)`.
 - **Zone di ritmo** (`assessment/domain/pace_zones.py`): cinque zone allineate
   alle zone FC, come percentuale della **velocità** di soglia: Z1 sotto 78%,
   Z2 78–88%, Z3 88–94%, Z4 94–100%, Z5 100% e oltre (nel ritmo, circa: più
   lento del 128% del ritmo di soglia, 114–128%, 106–114%, 100–106%, più veloce
-  del ritmo di soglia; default derivati da Friel). Il limite inferiore
+  del ritmo di soglia; default derivati da Friel; coincidono con FRI5, salvo il confine Z2/Z3 a 88% contro
+  87% delle zone FC). Il limite inferiore
   appartiene alla zona più veloce; confronti su interi (`ritmo_soglia × 100 >=
   percentuale × ritmo`), mai una percentuale in virgola mobile al confine.
 - Dopo il test si aggiornano soglia e zone con una data di validità (vedi
@@ -144,9 +166,12 @@ l'attività resta valida. Gli sport ammessi al test sono
 ## 8. Test attesi
 
 `T-PIANO-06` in `PLAN.md` sezione 7.4: tracciati sintetici
-(`tests/assessment/`: finestra e media giuste con riscaldamento, test
+(`tests/assessment/`, anche `test_threshold_twenty.py` per il protocollo di 20': FC × 0,95 con
+la metà verso l'alto, ritmo + 5% del tempo, copertura, pause, soglia fuori limiti, confronto
+con un'implementazione ingenua a frazioni; finestra e media giuste con riscaldamento, test
 interrotto, troppo corto, FC mancante o fuori limiti, senza distanza, pause,
 retest ai confini 41/42/56/57 giorni), property test (la FC di soglia sta tra
 minimo e massimo dei campioni validi della finestra; la finestra scelta ha la
 distanza massima, confronto con un'implementazione ingenua), fixture FIT con
-distanza (`run_threshold_*.fit`), migrazione v5 e contract test dello storico.
+distanza (`run_threshold_*.fit`), migrazione v5 e v7 (`tests/collaudo/`) e contract test dello
+storico, protocollo compreso.

@@ -14,6 +14,7 @@ from ponos_coach.assessment.domain import (
     Overdue,
     Recommended,
     SegmentSelection,
+    ThresholdProtocol,
     ThresholdRejection,
     ThresholdTest,
     ThresholdTestResult,
@@ -49,7 +50,23 @@ def test_the_chosen_activity_is_evaluated_with_the_local_day_and_the_limits_of_t
     assert result.test_day == TEST_DAY
     assert result.selection is SegmentSelection.BY_DISTANCE
     assert (result.threshold_bpm, result.pace_s_per_km) == (168, 278)
-    assert result.hr_zone_starts_bpm == pytest.approx((168 * 0.85, 168 * 0.9, 168 * 0.95, 168.0))
+    assert result.hr_zone_starts_bpm == pytest.approx((168 * 0.78, 168 * 0.87, 168 * 0.94, 168.0))
+
+
+def test_the_protocol_is_chosen_by_the_caller_and_kept_in_the_result() -> None:
+    world = ThresholdWorld()
+    record = world.add_fixture("run_threshold_test.fit")
+
+    thirty = world.evaluate(record.identity)
+    twenty = world.evaluate(record.identity, ThresholdProtocol.TWENTY_MINUTES)
+
+    assert isinstance(thirty, ThresholdTestResult)
+    assert isinstance(twenty, ThresholdTestResult)
+    assert (thirty.protocol, twenty.protocol) == (
+        ThresholdProtocol.THIRTY_MINUTES,
+        ThresholdProtocol.TWENTY_MINUTES,
+    )
+    assert twenty.threshold_bpm < thirty.threshold_bpm  # 95% of the mean of the 20 minutes
 
 
 def test_the_local_day_is_the_day_in_the_profile_time_zone() -> None:

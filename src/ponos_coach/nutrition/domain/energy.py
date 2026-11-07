@@ -27,7 +27,8 @@ class Person:
     """Who the advice is for, as of one day. Health data: never in logs or messages.
 
     `activity_level` is None when the user has not set one (the model then assumes the most
-    conservative and says so).
+    conservative and says so). `lean_mass_kg` is the lean mass measured for that day, if there is a
+    plausible one: it replaces the Boer estimate in the limit on energy availability.
     """
 
     sex: Sex
@@ -35,6 +36,7 @@ class Person:
     height_cm: int
     weight_kg: float
     activity_level: ActivityLevel | None = None
+    lean_mass_kg: float | None = None
 
     def __post_init__(self) -> None:
         if not defaults.MIN_AGE_YEARS <= self.age_years <= defaults.MAX_AGE_YEARS:
@@ -46,6 +48,10 @@ class Person:
             and defaults.MIN_WEIGHT_KG <= self.weight_kg <= defaults.MAX_WEIGHT_KG
         ):
             raise ValueError("weight outside the plausible range")
+        if self.lean_mass_kg is not None and not (
+            math.isfinite(self.lean_mass_kg) and 0 < self.lean_mass_kg <= self.weight_kg
+        ):
+            raise ValueError("lean mass outside the plausible range")
 
     @property
     def body_mass_index(self) -> float:

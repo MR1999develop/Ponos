@@ -12,7 +12,12 @@ from ponos_coach.activities.ports import ActivityIndex, SyncJournal
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
-from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
+from ponos_coach.nutrition.ports import (
+    ActivityLevelStore,
+    GoalPeriodStore,
+    LeanMassStore,
+    MealTimesStore,
+)
 from ponos_coach.planning.ports import PlanStore
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
@@ -46,6 +51,7 @@ from ponos_coach.storage.sqlite_goals import (
 from ponos_coach.storage.sqlite_nutrition import (
     SqliteActivityLevelStore,
     SqliteGoalPeriodStore,
+    SqliteLeanMassStore,
     SqliteMealTimesStore,
 )
 from ponos_coach.storage.sqlite_planning import SqlitePlanStore
@@ -105,6 +111,7 @@ class SqliteOpenProfile:
         self._sport_weights = SqliteSportWeightStore(database)
         self._load_cache = SqliteLoadCache(database)
         self._activity_levels = SqliteActivityLevelStore(database)
+        self._lean_masses = SqliteLeanMassStore(database)
         self._meal_times = SqliteMealTimesStore(database)
         self._goal_periods = SqliteGoalPeriodStore(database)
         self._threshold_tests = SqliteThresholdTestStore(database)
@@ -158,6 +165,11 @@ class SqliteOpenProfile:
     def activity_levels(self) -> ActivityLevelStore:
         """Activity level outside sport."""
         return self._activity_levels
+
+    @property
+    def lean_masses(self) -> LeanMassStore:
+        """Measured lean mass."""
+        return self._lean_masses
 
     @property
     def meal_times(self) -> MealTimesStore:

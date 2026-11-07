@@ -13,7 +13,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from ponos_coach.assessment.domain import ThresholdTest
+from ponos_coach.assessment.domain import ThresholdProtocol, ThresholdTest
 from ponos_coach.assessment.ports import ThresholdTestAlreadyStoredError, ThresholdTestNotFoundError
 from ponos_coach.load.ports import PhysiologyEntryNotFoundError
 from tests.builders import fit_identity, gpx_identity, physiology_entry
@@ -43,6 +43,19 @@ class ThresholdTestStoreContract:
 
     def test_a_test_is_kept_whole_and_found_by_its_activity(self, harness: StorageHarness) -> None:
         entry = a_test()
+        with closing(create(harness)) as profile:
+            profile.threshold_tests.add(entry)
+
+            assert profile.threshold_tests.get(entry.identity) == entry
+            assert profile.threshold_tests.list_tests() == [entry]
+
+    @pytest.mark.parametrize("protocol", list(ThresholdProtocol))
+    def test_the_protocol_of_the_test_is_kept(
+        self, harness: StorageHarness, protocol: ThresholdProtocol
+    ) -> None:
+        entry = ThresholdTest(
+            fit_identity(1), date(2026, 3, 2), START, 150, 310, method_version=2, protocol=protocol
+        )
         with closing(create(harness)) as profile:
             profile.threshold_tests.add(entry)
 

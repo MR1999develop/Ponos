@@ -20,7 +20,9 @@ from zoneinfo import ZoneInfo
 from ponos_coach.activities.domain import MAX_ACTIVITY_FILE_BYTES, ActivityIdentity
 from ponos_coach.activities.ports import ActivityArchive, ActivityIndex, ActivityNotFoundError
 from ponos_coach.assessment.domain import (
+    DEFAULT_PROTOCOL,
     RetestStatus,
+    ThresholdProtocol,
     ThresholdRejection,
     ThresholdTest,
     ThresholdTestResult,
@@ -44,7 +46,7 @@ reason its file cannot be read."""
 
 
 class EvaluateThresholdTest:
-    """Evaluates an activity of the open profile as the 30-minute threshold test.
+    """Evaluates an activity of the open profile as a threshold test (30 or 20 minutes).
 
     Dependencies: index, archive, physiological parameters, `decode` (from the Composition Root)
     and the profile's time zone. It only reads.
@@ -69,9 +71,12 @@ class EvaluateThresholdTest:
         self._timezone = timezone
         self._max_file_bytes = max_file_bytes
 
-    def __call__(self, activity: ActivityIdentity) -> ThresholdEvaluation:
-        """The result (segment, threshold HR and pace, HR and pace zones, number of samples), the
-        reason the activity is not valid as a test, or the reason its file cannot be used.
+    def __call__(
+        self, activity: ActivityIdentity, protocol: ThresholdProtocol = DEFAULT_PROTOCOL
+    ) -> ThresholdEvaluation:
+        """The result for the chosen protocol, 30 or 20 minutes (segment, threshold HR and pace, HR
+        and pace zones, number of samples), the reason the activity is not valid as a test, or the
+        reason its file cannot be used.
 
         The HR limits are those valid on the activity's local day.
 
@@ -88,7 +93,7 @@ class EvaluateThresholdTest:
             return ExcludedActivity(activity, original)
         day = local_day_of(record.start, self._timezone)
         physiology = physiology_for_day(self._physiology.list_entries(), day)
-        return evaluate_threshold_test(original, physiology.limits, day)
+        return evaluate_threshold_test(original, physiology.limits, day, protocol)
 
 
 class ListThresholdTests:

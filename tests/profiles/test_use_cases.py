@@ -17,7 +17,12 @@ from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.load.domain import PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
-from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
+from ponos_coach.nutrition.ports import (
+    ActivityLevelStore,
+    GoalPeriodStore,
+    LeanMassStore,
+    MealTimesStore,
+)
 from ponos_coach.planning.ports import PlanStore
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
@@ -149,6 +154,10 @@ class _CountingProfile:
     @property
     def activity_levels(self) -> ActivityLevelStore:
         return self._inner.activity_levels
+
+    @property
+    def lean_masses(self) -> LeanMassStore:
+        return self._inner.lean_masses
 
     @property
     def meal_times(self) -> MealTimesStore:

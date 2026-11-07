@@ -21,14 +21,23 @@ from ponos_coach.nutrition.domain import (
     WeightLossGoal,
 )
 
-persons = st.builds(
-    Person,
-    sex=st.sampled_from(Sex),
-    age_years=st.integers(5, 100),
-    height_cm=st.integers(100, 250),
-    weight_kg=st.integers(200, 3000).map(lambda tenths: tenths / 10.0),
-    activity_level=st.none() | st.sampled_from(ActivityLevel),
-)
+
+@st.composite
+def persons_fn(draw: st.DrawFn) -> Person:
+    """A person, with a measured lean mass (plausible for the weight) about half of the time."""
+    weight_kg = draw(st.integers(200, 3000).map(lambda tenths: tenths / 10.0))
+    lean_tenths = draw(st.none() | st.integers(40, 95))  # percent of the weight
+    return Person(
+        sex=draw(st.sampled_from(Sex)),
+        age_years=draw(st.integers(5, 100)),
+        height_cm=draw(st.integers(100, 250)),
+        weight_kg=weight_kg,
+        activity_level=draw(st.none() | st.sampled_from(ActivityLevel)),
+        lean_mass_kg=None if lean_tenths is None else round(weight_kg * lean_tenths / 100, 1),
+    )
+
+
+persons = persons_fn()
 
 goals: st.SearchStrategy[NutritionGoal] = st.one_of(
     st.just(MaintenanceGoal()),
@@ -65,4 +74,5 @@ days = st.builds(
     meal_times=meal_times(),
     sessions=st.lists(sessions, max_size=3).map(tuple),
     minutes_to_next_session=st.none() | st.integers(0, 3000).map(float),
+    weight_loss_days=st.none() | st.integers(0, 400),
 )

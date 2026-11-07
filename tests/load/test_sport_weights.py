@@ -171,7 +171,7 @@ def test_a_failed_save_leaves_the_previous_weights() -> None:
 def test_the_overview_gives_the_weekly_load_and_zone_seconds() -> None:
     world = World()
     world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
-    before, after = two_runs(world)  # 15 January and 10 February, 30 minutes at 150 bpm (Z2)
+    before, after = two_runs(world)  # 15 January and 10 February, 30 minutes at 150 bpm (Z3)
     overview = world.overview()
 
     weekly = overview.weekly_load(TODAY)
@@ -184,8 +184,8 @@ def test_the_overview_gives_the_weekly_load_and_zone_seconds() -> None:
     assert weekly.total_by_week[0] == pytest.approx(overview.activities[0].load.load)
     assert (weekly.weeks[-1] - weekly.weeks[0]).days % 7 == 0
     assert zones.weeks == weekly.weeks
-    assert zones.seconds[:, 1].sum() == pytest.approx(2 * 1800.0)  # Z2
-    assert zones.seconds[:, [0, 2, 3, 4]].sum() == 0.0
+    assert zones.seconds[:, 2].sum() == pytest.approx(2 * 1800.0)  # Z3
+    assert zones.seconds[:, [0, 1, 3, 4]].sum() == 0.0
     assert before.start.date() < after.start.date() < TODAY + timedelta(days=1)
 
 

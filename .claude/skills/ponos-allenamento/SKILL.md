@@ -25,8 +25,12 @@ come "punto aperto" nei file `references/`.
 |---|---|---|
 | BAN | Banister e altri, modello impulso-risposta e TRIMP (anni 1975–1991) | TRIMP, costanti di tempo, forma e fatica |
 | COG | Coggan e Allen, *Training and Racing with a Power Meter* | TSS, ATL, CTL, TSB, PMC |
-| FRI | Friel, *The Triathlete's Training Bible* | test di soglia di 30 minuti |
-| SEI | Seiler, distribuzione dell'intensità (2010) | distribuzione 80/20 |
+| FRI | Friel, edizioni precedenti alla 5ª di *The Triathlete's Training Bible* | test di soglia di 30 minuti (FC media degli ultimi 20') |
+| SEI10 | Seiler, distribuzione dell'intensità e della durata negli atleti di resistenza (IJSPP 2010) | distribuzione 80/20, conteggio per sedute |
+| ESL07 | Esteve-Lanao, Foster, Seiler, Lucia, distribuzione dell'intensità e prestazione (2007) | distribuzione dell'intensità |
+| FRI5 | Friel, *The Triathlete's Training Bible*, 5ª edizione (2024) | test di soglia di 20' (FC media × 0,95, ritmo + 5% del tempo al km), zone FC (tab. 4.1: 78/87/94/100%) e di ritmo |
+| PER | Bompa e Buzzichelli, *Periodization*, 6ª edizione | periodizzazione, scarico |
+| DRF | Daniels, *Daniels' Running Formula*, 4ª edizione | ritmi e sedute di corsa |
 | TON24 | Tønnessen, Sandbakk, Sandbakk, Seiler, Haugen, modelli di seduta, prospettiva norvegese (Sports Med 2024, PMC11560996) | zone, modelli di seduta, conteggio per sedute |
 | HAU22 | Haugen, Sandbakk, Seiler, Tønnessen, corridori di fondo di livello mondiale (Sports Med Open 2022, PMC8975965) | volumi, soglia, VO2max, periodizzazione, scarico |
 | SAN25 | Sandbakk e altri, buone pratiche negli sport di resistenza olimpici (Sports Med Open 2025, PMC12031707) | giorni chiave, settimane di scarico, scarico prima della gara |
@@ -39,6 +43,8 @@ come "punto aperto" nei file `references/`.
 | ISSN | International Society of Sports Nutrition, posizioni sulla nutrizione sportiva | carboidrati, proteine, momenti |
 | ACSM | ACSM e Academy of Nutrition and Dietetics, *Nutrition and Athletic Performance* | carboidrati, liquidi, ritmo di perdita di peso |
 | IOC | Consenso del CIO sulla nutrizione dello sportivo | carboidrati durante e dopo |
+| GJSN | Jeukendrup, Gleeson, *Sport Nutrition* 3ª ed. (Human Kinetics 2019) | rifornimento rapido orario, proteine 0,4 g/kg, disponibilità energetica |
+| CSN | Burke, Deakin, *Clinical Sports Nutrition* 5ª ed. (McGraw-Hill 2015) | disponibilità energetica 30–45 solo per brevi periodi, massa magra misurata |
 | MSJ | Mifflin e altri, equazione del metabolismo a riposo (1990) | metabolismo di base |
 | KEYTEL | Keytel e altri, spesa energetica dalla FC (2005) | calorie senza il dato del dispositivo |
 | COMPENDIUM | *Compendium of Physical Activities* | MET per sport |
@@ -57,14 +63,15 @@ Dettagli: `references/modello-carico.md`; decisioni in
 
 Ingressi, macrociclo all'indietro dalla gara, mesocicli 3:1, obiettivi
 A/B/C, settimana tipo, tipologie scelte dall'utente, tempo obiettivo,
-adattamento dopo ogni sincronizzazione, determinismo. Fonti: COG, SEI.
+adattamento dopo ogni sincronizzazione, determinismo. Fonti: COG, SEI10.
 Dettagli: `references/piano.md`.
 
 ## 3. Test di soglia
 
-Protocollo di 30', segmento scelto per distanza (o FC), FC di soglia come
-media degli ultimi 20', ritmo, zone FC e di ritmo, rifiuti con motivo, retest
-tra 42 e 56 giorni, soglia in bici. Fonte: FRI.
+Due protocolli a scelta: 30' (FC media degli ultimi 20', FRI) e 20' (FC media × 0,95,
+ritmo + 5% del tempo, FRI5); segmento scelto per distanza (o FC), ritmo, zone FC (5ª
+edizione) e di ritmo, rifiuti con motivo, retest tra 42 e 56 giorni, soglia in bici.
+Fonti: FRI, FRI5.
 Dettagli: `references/test-soglia.md`.
 
 ## 4. Infortuni
@@ -78,8 +85,8 @@ Dettagli: `references/infortuni.md`.
 Calorie delle attività (dichiarate, Keytel, MET), metabolismo di base,
 spesa del giorno, obiettivi per periodi, deficit con i limiti di sicurezza,
 macro per carico, pre/durante/post, pasti spostati o fusi, tabella degli
-alimenti. Indicazioni generali, mai consigli medici. Fonti: ISSN, ACSM, IOC,
-MSJ, KEYTEL, COMPENDIUM, FDC. Dettagli: `references/alimentazione.md`; tutti i
+alimenti, massa magra misurata, avviso di dimagrimento lungo. Indicazioni generali, mai consigli medici. Fonti: ISSN, ACSM, IOC,
+GJSN, CSN, MSJ, KEYTEL, COMPENDIUM, FDC. Dettagli: `references/alimentazione.md`; tutti i
 valori in `nutrition/domain/defaults.py`.
 
 ## 6. Dati e sincronizzazione
@@ -87,7 +94,7 @@ valori in `nutrition/domain/defaults.py`.
 Cartella del profilo e elenco dei profili, SQLite, archivio dei file
 originali (FIT e GPX), identità (`file_id` o SHA-256), giornale della
 sincronizzazione, abbinamento, backoff, import di file, cartelle e ZIP con i
-tetti, esiti dell'import, lock, dati personali, schema v3, v4 e v5. Dettagli:
+tetti, esiti dell'import, lock, dati personali, schema da v3 a v7. Dettagli:
 `references/dati-e-sincronizzazione.md`; schema e archivio:
 `docs/adr/005-schema-sqlite-e-archivio.md`; dati del profilo:
 `docs/adr/007-dati-del-profilo-e-zone.md`.
@@ -110,8 +117,10 @@ tetti, esiti dell'import, lock, dati personali, schema v3, v4 e v5. Dettagli:
   nei messaggi e nelle catene d'errore.
 - Altezza e data di nascita si scrivono una volta; il peso è un intero in
   decimi di chilo; una misura vale fino alla voce successiva della sua serie.
-- Le percentuali delle zone stanno solo in `ZONE_STARTS_PERCENT`; se cambiano,
-  si alza `LOAD_MODEL_VERSION`.
+- Le percentuali delle zone stanno solo in `ZONE_STARTS_PERCENT` (78/87/94/100,
+  FRI5); l'impronta dei carichi le contiene, quindi i secondi per zona si ricalcolano da
+  soli; `LOAD_MODEL_VERSION` si alza solo se cambia la formula del carico. Se cambiano le
+  zone si alza anche `METHOD_VERSION` del piano.
 - Un file originale (FIT o GPX) si scrive su temporaneo, flush, rinomina; il
   record SQLite dopo il file; il token non sta mai nella cartella del profilo.
 - La cancellazione di una cartella di profilo tocca solo i nomi noti e mai un
@@ -121,7 +130,8 @@ tetti, esiti dell'import, lock, dati personali, schema v3, v4 e v5. Dettagli:
 - Ogni valore scelto dal progetto è marcato "default del progetto".
 - Alimentazione: nessun deficit sotto i 18 anni o con IMC < 18,5; mai oltre il
   20% della spesa né 750 kcal, ritmo sotto l'1% del peso a settimana, mai sotto
-  il metabolismo di base né sotto 30 kcal/kg di massa magra di disponibilità
+  il metabolismo di base né sotto 30 kcal/kg di massa magra (misurata se c'è
+  una misura valida quel giorno, altrimenti Boer) di disponibilità
   energetica; il risultato
   porta sempre gli avvisi pertinenti; la somma dei pasti è il totale del giorno;
   nessun numero fuori da `defaults.py`; dati di salute mai nei log.

@@ -49,11 +49,13 @@ LEGS = [Leg(300, 110, 2.5), Leg(300, 150, 3.0), Leg(300, 160, 3.2), Leg(300, 172
         Leg(300, 185, 4.0), Leg(300, 125, 2.5)]  # fmt: skip
 
 # Frozen with the code of commit d5b7b3b (no distance series): (trimp, hrTSS, load, used samples,
-# excluded seconds, seconds per zone). The same files must give the same numbers.
+# excluded seconds, seconds per zone). The same files must give the same numbers: the load did not
+# change when the zones of the 5th edition came (78/87/94/100%), only the seconds per zone and the
+# fingerprint of the saved loads, which therefore recompute.
 FROZEN_LOAD = (62.81951672843588, 36.81167026367779, 36.81167026367779, 1801, 0.0,
-               (601.0, 300.0, 300.0, 0.0, 600.0))  # fmt: skip
-FROZEN_FINGERPRINT = "392c930e987d90d61b7d23f8757c44235e047e4bbdfa5b76582a37a6457972b1"
-FROZEN_FINGERPRINT_RUNNING_1_5 = "9179e92c37fb840f7700eb2b5b55bd84ac0333d6eb3c67e552c07b14a53db03d"
+               (601.0, 0.0, 300.0, 300.0, 600.0))  # fmt: skip
+FROZEN_FINGERPRINT = "78131d16434406fbb18452af3c02310d07980fc4e2d37838c316dbf6ec45a407"
+FROZEN_FINGERPRINT_RUNNING_1_5 = "354db832ad9f521720b96df2f6f099c802a25168455a1e0cbe103e876a9a0a89"
 
 
 def decode(data: bytes, name: str = "x.fit") -> Activity:
@@ -114,7 +116,7 @@ def test_the_load_with_gaps_is_the_one_computed_before() -> None:
     assert (trimp, hr_tss, load) == pytest.approx(
         (61.83044987934624, 36.23208601003227, 36.23208601003227), rel=1e-12
     )
-    assert (used, excluded, zones) == (1765, 31.0, (601.0, 269.0, 305.0, 0.0, 595.0))
+    assert (used, excluded, zones) == (1765, 31.0, (601.0, 0.0, 269.0, 305.0, 595.0))
 
 
 def test_the_heart_rate_series_does_not_depend_on_the_distance() -> None:

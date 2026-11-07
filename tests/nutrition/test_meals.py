@@ -133,21 +133,82 @@ def test_two_sessions_in_a_day_each_get_their_recovery_and_meals_move_around_the
     assert shape(items) == [(540, (B, POST)), (780, (L,)), (1200, (D, POST))]
     # 10 h separate the sessions (08:00 to 18:00), more than the 8 h of rapid refuelling: neither
     # recovery has carbohydrates, so the day's 400 g are split 25/40/35 = 100/160/140
+    # (the protein after a session is 0.4 g/kg: 32 g each, the rest of the 120 g is split 25/40/35)
     assert [item.macros for item in items] == [
-        Macros(100, 18 + 24, 20),
-        Macros(160, 29, 32),
-        Macros(140, 25 + 24, 28),
+        Macros(100, 14 + 32, 20),
+        Macros(160, 22, 32),
+        Macros(140, 20 + 32, 28),
     ]
     assert items[0].moved
     assert not items[2].moved
 
 
-def test_sessions_less_than_8_hours_apart_give_the_first_recovery_its_carbohydrates() -> None:
+def test_sessions_less_than_8_hours_apart_give_the_first_recovery_hourly_carbohydrates() -> None:
     items = schedule(session(7 * 60, 60.0), session(15 * 60, 60.0))
 
-    # 08:00 to 15:00 is 7 h: rapid refuelling, 88 g of carbohydrates (1.1 g/kg x 80 kg) in the
-    # recovery; the other 312 g are split 25/40/35 = 78/125/109 and the recovery is added back
-    assert [item.macros.carbs_g for item in items] == [78 + 88, 125, 0, 109]
+    # 08:00 to 15:00 is 7 h: rapid refuelling, 88 g of carbohydrates (1.1 g/kg x 80 kg) an hour for
+    # 4 hours would be 352 g, but lunch and dinner keep their 80 g each (1 g/kg) out of the day's
+    # 400 g: 240 g are left for the intakes, given in time order (88, 88, 64, none for the fourth
+    # hour); the main meals share the rest as they do today
+    assert [(i.minute, i.refuel_hour, i.macros.carbs_g) for i in items if i.refuel_hour] == [
+        (8 * 60 + 30, 1, 88),
+        (9 * 60 + 30, 2, 88),
+        (10 * 60 + 30, 3, 64),
+    ]
+    assert [i.macros.carbs_g for i in items if i.slots in ((B,), (L,), (D,))] == [0, 80, 80]
+    assert total(items) == DAY
+
+
+def test_the_hourly_recovery_is_one_intake_an_hour_with_the_protein_in_the_first() -> None:
+    big = Macros(900, 120, 80)
+
+    items = schedule(session(7 * 60, 60.0), session(15 * 60, 60.0), day=big)
+
+    refuel = [i for i in items if i.refuel_hour]
+    assert [(i.refuel_hour, i.minute) for i in refuel] == [(1, 510), (2, 570), (3, 630), (4, 690)]
+    assert [i.macros.carbs_g for i in refuel] == [88] * 4  # 1.1 g/kg x 80 kg, every hour
+    assert [i.macros.protein_g for i in refuel] == [32, 0, 0, 0]  # 0.4 g/kg once
+    assert all(i.slots == (POST,) for i in refuel)
+    assert total(items) == big
+
+
+def test_hourly_intakes_are_never_merged_with_a_meal_or_with_each_other() -> None:
+    # lunch (13:00) falls in the 4 hours after a session that ends at 10:30: it stays a meal
+    items = schedule(session(9 * 60 + 30, 60.0), session(16 * 60, 60.0), day=Macros(900, 120, 80))
+
+    refuel = [i for i in items if i.refuel_hour]
+    assert [i.minute for i in refuel] == [660, 720, 780, 840]  # 11:00, 12:00, 13:00, 14:00
+    assert all(i.slots == (POST,) for i in refuel)
+    assert any(L in i.slots and i.refuel_hour is None for i in items)
+
+
+@pytest.mark.parametrize(
+    ("next_in", "hours"),
+    [
+        (None, 0),  # no next session: one dose, no hourly intakes
+        (481.0, 0),
+        (480.0, 0),  # exactly 8 h: "less than 8 hours" is false
+        (479.0, 4),
+        (210.0, 4),  # four hours fit and the last is 30 minutes before the session
+        (209.0, 3),
+        (150.0, 3),
+        (90.0, 2),
+        (89.0, 1),
+        (60.0, 1),
+        (0.0, 1),  # the first intake is always given
+    ],
+)
+def test_hourly_intakes_stop_30_minutes_before_the_next_session_and_after_4_hours(
+    next_in: float | None, hours: int
+) -> None:
+    items = schedule(session(10 * 60, 60.0), day=Macros(1200, 120, 80), next_in=next_in)
+
+    refuel = [i for i in items if i.refuel_hour]
+    assert [i.refuel_hour for i in refuel] == list(range(1, hours + 1))
+    if hours == 0:
+        # a single dose after a short session: protein only
+        (post,) = [i for i in items if POST in i.slots]
+        assert post.macros.protein_g == 32
 
 
 def test_the_order_in_which_sessions_are_given_does_not_matter() -> None:
@@ -156,25 +217,13 @@ def test_the_order_in_which_sessions_are_given_does_not_matter() -> None:
     assert schedule(evening, morning) == schedule(morning, evening)
 
 
-def dinner_carbs(next_in: float | None) -> int:
-    items = schedule(session(18 * 60, 60.0), next_in=next_in)
-    return next(i for i in items if D in i.slots).macros.carbs_g  # dinner merged with recovery
+def test_the_hourly_intakes_come_out_of_the_budget_of_the_days_carbohydrates() -> None:
+    items = schedule(session(18 * 60, 60.0), next_in=479.0)  # a day of 400 g carbohydrates
 
-
-@pytest.mark.parametrize(
-    ("next_in", "expected"),
-    [
-        (None, 140),  # no recovery carbohydrates: dinner is 35% of the day's 400 g
-        (481.0, 140),  # 8 h 01: not rapid refuelling
-        (480.0, 140),  # exactly 8 h: "less than 8 hours" is false
-        (479.0, 197),  # 7 h 59: 88 g of recovery carbohydrates + 35% of the 312 g left
-        (60.0, 197),
-    ],
-)
-def test_recovery_carbohydrates_need_a_next_session_less_than_8_hours_away(
-    next_in: float | None, expected: int
-) -> None:
-    assert dinner_carbs(next_in) == expected
+    assert total(items) == DAY
+    refuel = [i for i in items if i.refuel_hour]
+    assert sum(i.macros.carbs_g for i in refuel) == 240  # 400 g minus 80 g each for lunch, dinner
+    assert [i.macros.carbs_g for i in items if i.slots in ((L,), (D,))] == [80, 80]
 
 
 # --- A long session --------------------------------------------------------------------------
@@ -232,7 +281,7 @@ def test_recovery_carbohydrates_start_with_a_long_session(minutes: float, carbs:
     items = schedule(session(16 * 60, minutes))
 
     (post,) = [i for i in items if i.slots == (POST,)]
-    assert post.macros == Macros(carbs, 24, 0)
+    assert post.macros == Macros(carbs, 32, 0)  # 0.4 g/kg of protein
 
 
 def test_intakes_are_cut_to_fit_a_day_that_cannot_hold_them() -> None:

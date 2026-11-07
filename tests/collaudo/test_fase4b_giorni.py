@@ -162,8 +162,13 @@ def test_t_nut_04_a_day_with_zero_one_two_or_three_files_is_complete_and_consist
     check_report(report)
     assert len(report.activities) == count
     assert (report.nutrition.level is DayLoadLevel.REST) is (count == 0)
-    slots = [slot for m in report.meals for slot in m.meal.slots]
-    assert slots.count(MealSlot.POST_TRAINING) == count
+    # one recovery per session: a single dose, or the first hour of the hourly refuelling
+    recoveries = [
+        m.meal
+        for m in report.meals
+        if MealSlot.POST_TRAINING in m.meal.slots and m.meal.refuel_hour in (None, 1)
+    ]
+    assert len(recoveries) == count
 
 
 def test_t_nut_04_a_run_at_dawn_before_breakfast_has_a_complete_day() -> None:
