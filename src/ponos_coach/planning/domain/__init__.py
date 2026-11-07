@@ -1,3 +1,70 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
 """Pure domain of the planning feature (no I/O, Qt, network or logging)."""
+
+from ponos_coach.planning.domain.adherence import DayAdherence, compare_with_actual
+from ponos_coach.planning.domain.engine import build_plan
+from ponos_coach.planning.domain.inputs import FitnessState, PlanInputs, PlanRefusal, RefusalReason
+from ponos_coach.planning.domain.phases import Phase
+from ponos_coach.planning.domain.plan import (
+    Block,
+    BlockRole,
+    CloseARaces,
+    CtlTargetNotReached,
+    GoalBeyondHorizon,
+    LongDayUnavailable,
+    MissingIntenseSessions,
+    MissingLongSession,
+    Plan,
+    PlanDay,
+    PlannedRace,
+    PlannedSession,
+    PlanWarning,
+    PlanWeek,
+    PmcPoint,
+    RecoveryInserted,
+    RetestBeforePlan,
+    RetestInUnloadWeek,
+    RetestNotPlaceable,
+    RetestProposal,
+    TargetAssessment,
+    TargetTimeUnreachable,
+    WeekKind,
+)
+from ponos_coach.planning.domain.target import TargetClass, classify_target
+
+__all__ = [
+    "Block",
+    "BlockRole",
+    "CloseARaces",
+    "CtlTargetNotReached",
+    "DayAdherence",
+    "FitnessState",
+    "GoalBeyondHorizon",
+    "LongDayUnavailable",
+    "MissingIntenseSessions",
+    "MissingLongSession",
+    "Phase",
+    "Plan",
+    "PlanDay",
+    "PlanInputs",
+    "PlanRefusal",
+    "PlanWarning",
+    "PlanWeek",
+    "PlannedRace",
+    "PlannedSession",
+    "PmcPoint",
+    "RecoveryInserted",
+    "RefusalReason",
+    "RetestBeforePlan",
+    "RetestInUnloadWeek",
+    "RetestNotPlaceable",
+    "RetestProposal",
+    "TargetAssessment",
+    "TargetClass",
+    "TargetTimeUnreachable",
+    "WeekKind",
+    "build_plan",
+    "classify_target",
+    "compare_with_actual",
+]
