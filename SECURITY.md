@@ -6,7 +6,7 @@ Do not open a public issue.
 
 1. Use "Report a vulnerability" in the Security tab of the GitHub repository
    (private vulnerability reporting).
-2. If it is not available, write to `MR1999develop@users.noreply.github.com`.
+2. If it is not available, write to `5869547+MR1999develop@users.noreply.github.com`.
 
 State the version, the steps to reproduce the problem and the effect. Do not
 attach real health data, passwords or tokens: if needed, use test data. There
