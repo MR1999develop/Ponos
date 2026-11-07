@@ -126,9 +126,18 @@ def test_the_garmin_menu_sits_after_the_calendar_menu_with_every_command(
     qtbot.addWidget(window)
 
     titles = [action.text() for action in window.menuBar().actions()]
-    garmin_menu = window.menuBar().actions()[3].menu()
+    garmin_menu = next(a.menu() for a in window.menuBar().actions() if a.text() == "Garmin")
 
-    assert titles == ["File", "Profile", "Calendar", "Garmin", "Language", "Help"]
+    assert titles == [
+        "File",
+        "Edit",
+        "Profile",
+        "Threshold test",
+        "Calendar",
+        "Garmin",
+        "Language",
+        "Help",
+    ]
     assert isinstance(garmin_menu, QMenu)
     assert [a.text() for a in garmin_menu.actions() if not a.isSeparator()] == [
         "Connect Garmin account...",

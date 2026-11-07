@@ -15,7 +15,7 @@ from collections.abc import Callable, Mapping
 from datetime import date
 from zoneinfo import ZoneInfo
 
-from PySide6.QtCore import QCoreApplication, QObject, Qt
+from PySide6.QtCore import QCoreApplication, QObject, Qt, Signal
 from PySide6.QtWidgets import QDialog, QWidget
 
 from ponos_coach.activities.domain import ActivityIdentity, Sport
@@ -44,6 +44,8 @@ from ponos_coach.ui.tokens import Theme, tokens_for
 
 class ProfileDialogs(QObject):
     """Own the profile data dialogs and connect them to the data thread jobs."""
+
+    threshold_test_requested = Signal(object)  # ActivityIdentity, from the detail window
 
     def __init__(  # noqa: PLR0913 - each argument is a dependency of the parent window
         self,
@@ -212,6 +214,7 @@ class ProfileDialogs(QObject):
             dialog = ActivityDetailDialog(self._engine, self._zone(), self._window)
             dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
             dialog.finished.connect(self._on_detail_closed)
+            dialog.threshold_test_requested.connect(self.threshold_test_requested)
             self._detail_dialog = dialog
         else:
             dialog.show_loading()

@@ -237,3 +237,129 @@ def test_the_history_survives_the_removal_of_the_activity_from_the_index(tmp_pat
         raw.execute("DELETE FROM activities")  # a rebuilt index: no foreign key holds the history
 
         assert raw.execute("SELECT COUNT(*) FROM threshold_test").fetchone() == (1,)
+
+
+# --- A v3 profile goes straight to v5 (two migrations in one transaction) ----------------------
+
+V4_AND_V5_TABLES = {"activity_level", "meal_times", "nutrition_goal", *V5_TABLES}
+V3_STATEMENTS = sum(len(statements) for statements in sqlite_schema.MIGRATIONS[3:])
+KEPT_FROM_V3 = (
+    "meta", "physiology", "load_cache", "sync_journal", "sync_cursor", "sync_state",
+    "profile_body", "weight", "sport_weights",
+)  # fmt: skip
+
+
+def test_t_dati_01_a_frozen_v3_database_is_migrated_to_v5_with_data_intact_and_a_copy(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / PROFILE_DATABASE_NAME
+    write_frozen_v3(path)
+    before = {table: rows(path, table) for table in (*KEPT_FROM_V3, "activities")}
+
+    opened = SqliteProfileStorage().open(tmp_path)
+    try:
+        assert opened.info.format_version == sqlite_schema.SCHEMA_VERSION
+        assert opened.threshold_tests.list_tests() == []
+    finally:
+        opened.close()
+
+    assert {table: rows(path, table) for table in KEPT_FROM_V3} == {
+        table: before[table] for table in KEPT_FROM_V3
+    }
+    assert [row[:-1] for row in rows(path, "activities")] == before["activities"]
+    assert table_names(path) >= V4_AND_V5_TABLES
+    [copy] = sorted((tmp_path / "backup").glob("*"))
+    assert copy.name == f"ponos-v3-v{sqlite_schema.SCHEMA_VERSION}.sqlite3"
+    assert user_version(copy) == 3
+    assert V4_AND_V5_TABLES.isdisjoint(table_names(copy))
+    assert {table: rows(copy, table) for table in (*KEPT_FROM_V3, "activities")} == before
+
+
+def test_t_dati_01_a_chain_of_migrations_that_fails_in_the_last_one_leaves_the_v3_database_whole(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / PROFILE_DATABASE_NAME
+    write_frozen_v3(path)
+    tables_before = table_names(path)
+    before = {table: rows(path, table) for table in KEPT_FROM_V3}
+    broken_v5 = (sqlite_schema.MIGRATIONS[4][0], "CREATE TABLE questa_no (")
+    monkeypatch.setattr(sqlite_database, "MIGRATIONS", (*sqlite_schema.MIGRATIONS[:4], broken_v5))
+
+    with pytest.raises((ProfileStorageError, sqlite3.Error)):
+        SqliteProfileStorage().open(tmp_path)
+
+    assert user_version(path) == 3  # not even the good v4 step stayed
+    assert table_names(path) == tables_before
+    assert {table: rows(path, table) for table in KEPT_FROM_V3} == before
+    monkeypatch.undo()
+    SqliteProfileStorage().open(tmp_path).close()
+    assert user_version(path) == sqlite_schema.SCHEMA_VERSION
+
+
+@pytest.mark.parametrize("kill_at", range(1, V3_STATEMENTS + 1))
+def test_t_dati_01_a_v3_database_killed_at_every_statement_of_the_chain_is_still_v3_then_migrates(
+    tmp_path: Path, kill_at: int
+) -> None:
+    path = tmp_path / PROFILE_DATABASE_NAME
+    write_frozen_v3(path)
+    before = {table: rows(path, table) for table in KEPT_FROM_V3}
+
+    assert run_worker_until_death(tmp_path, kill_at) == DIED
+
+    assert user_version(path) == 3
+    assert V4_AND_V5_TABLES.isdisjoint(table_names(path))
+    assert {table: rows(path, table) for table in KEPT_FROM_V3} == before
+    SqliteProfileStorage().open(tmp_path).close()
+    assert user_version(path) == sqlite_schema.SCHEMA_VERSION
+
+
+def test_t_dati_01_a_migrated_profile_opens_again_without_a_second_copy(tmp_path: Path) -> None:
+    write_frozen_v4(tmp_path / PROFILE_DATABASE_NAME)
+    SqliteProfileStorage().open(tmp_path).close()
+    first = sorted((tmp_path / "backup").glob("*"))
+
+    SqliteProfileStorage().open(tmp_path).close()
+
+    assert sorted((tmp_path / "backup").glob("*")) == first
+    assert user_version(tmp_path / PROFILE_DATABASE_NAME) == sqlite_schema.SCHEMA_VERSION
+
+
+# --- Damaged history rows are reported, never half-read ----------------------------------------
+
+
+def listing_error(tmp_path: Path, statement: str) -> BaseException | None:
+    """Writes one row by hand in a migrated database and lists the history."""
+    with closing(migrated(tmp_path)) as raw:
+        raw.execute(statement)
+        raw.commit()
+    opened = SqliteProfileStorage().open(tmp_path)
+    try:
+        opened.threshold_tests.list_tests()
+    except BaseException as exc:
+        return exc
+    finally:
+        opened.close()
+    return None
+
+
+def test_a_history_row_with_an_unreadable_activity_key_is_a_store_error(tmp_path: Path) -> None:
+    error = listing_error(tmp_path, row(key="fit:not-a-key"))
+
+    assert type(error).__name__ == "AssessmentStoreError"
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "D-F4-05: a history row whose `segment_start_ms` is outside the range of datetime "
+        "(the column has no CHECK) makes `list_tests` raise OverflowError instead of "
+        "AssessmentStoreError, so the screens that list the history or the retest crash"
+    ),
+)
+@pytest.mark.parametrize("start_ms", [9_000_000_000_000_000_000, -9_000_000_000_000_000_000])
+def test_a_history_row_with_an_impossible_start_instant_is_a_store_error(
+    tmp_path: Path, start_ms: int
+) -> None:
+    error = listing_error(tmp_path, row(start_ms=start_ms))
+
+    assert type(error).__name__ == "AssessmentStoreError"

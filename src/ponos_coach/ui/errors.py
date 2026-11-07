@@ -21,10 +21,15 @@ from ponos_coach.activities.ports import (
     ImportLimitExceededError,
     ImportSourceUnreadableError,
 )
+from ponos_coach.assessment.ports import (
+    ThresholdTestAlreadyStoredError,
+    ThresholdTestNotFoundError,
+)
 from ponos_coach.load.domain import MissingPhysiologyError
 from ponos_coach.load.use_cases import ExclusionReason
 from ponos_coach.nutrition.ports import GoalPeriodNotFoundError, GoalPeriodOverlapError
 from ponos_coach.nutrition.use_cases import LevelDateInFutureError
+from ponos_coach.profiles.measurements import InvalidMeasurementsError, MeasurementProblem
 from ponos_coach.profiles.ports import (
     FolderHasOtherContentError,
     FolderNotEmptyError,
@@ -36,6 +41,7 @@ from ponos_coach.profiles.ports import (
     ProfileNotFoundError,
     ProfileRegistryError,
 )
+from ponos_coach.profiles.threshold_tests import ThresholdTestChangedError
 from ponos_coach.profiles.use_cases import ProfileMismatchError
 
 # Contexts "Errors", "ImportIssues" and "Exclusions": lupdate only finds context and text written
@@ -315,6 +321,73 @@ def _level_in_future(_error: BaseException) -> ErrorMessage:
     )
 
 
+def _threshold_changed(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The threshold test cannot be taken back"),
+        QCoreApplication.translate(
+            "Errors", "The threshold was changed after the test, so it was left as it is."
+        ),
+        QCoreApplication.translate(
+            "Errors", "Nothing changed. To correct the threshold, use Profile > Edit profile."
+        ),
+    )
+
+
+def _threshold_already_stored(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "This activity is already a threshold test"),
+        QCoreApplication.translate("Errors", "The test of this activity was applied before."),
+        QCoreApplication.translate(
+            "Errors", "Choose another activity, or open Threshold test > Threshold tests."
+        ),
+    )
+
+
+def _threshold_not_found(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The threshold test is no longer saved"),
+        QCoreApplication.translate("Errors", "The test was already taken back."),
+        QCoreApplication.translate(
+            "Errors", "Open Threshold test > Threshold tests to see what is saved."
+        ),
+    )
+
+
+def _measurements_rejected(error: BaseException) -> ErrorMessage:
+    """A threshold that cannot be saved as a measurement (applying a test)."""
+    problem = error.problem if isinstance(error, InvalidMeasurementsError) else None
+    if problem is MeasurementProblem.DATE_IN_FUTURE:
+        return ErrorMessage(
+            QCoreApplication.translate("Errors", "The test day is in the future"),
+            QCoreApplication.translate(
+                "Errors", "A threshold can only hold from today or from a past day."
+            ),
+            QCoreApplication.translate("Errors", "Check the date of the activity."),
+        )
+    if problem is MeasurementProblem.DATE_TOO_OLD:
+        return ErrorMessage(
+            QCoreApplication.translate("Errors", "The test is too old"),
+            QCoreApplication.translate(
+                "Errors", "The activity is older than the oldest day the profile accepts."
+            ),
+            QCoreApplication.translate("Errors", "Choose a more recent activity."),
+        )
+    if problem is MeasurementProblem.INVALID_HEART_RATE:
+        return ErrorMessage(
+            QCoreApplication.translate("Errors", "The threshold does not fit your limits"),
+            QCoreApplication.translate(
+                "Errors",
+                "The threshold of the test is not between the minimum and the maximum heart "
+                "rate in force on that day.",
+            ),
+            QCoreApplication.translate(
+                "Errors",
+                "Correct the limits with Profile > Edit profile, then apply the test again.",
+            ),
+        )
+    return _generic(error)
+
+
 def _generic(_error: BaseException) -> ErrorMessage:
     return ErrorMessage(
         QCoreApplication.translate("Errors", "Something went wrong"),
@@ -342,6 +415,10 @@ _BUILDERS: tuple[tuple[type[BaseException], Callable[[BaseException], ErrorMessa
     (GoalPeriodOverlapError, _period_overlap),
     (GoalPeriodNotFoundError, _period_missing),
     (LevelDateInFutureError, _level_in_future),
+    (ThresholdTestChangedError, _threshold_changed),
+    (ThresholdTestAlreadyStoredError, _threshold_already_stored),
+    (ThresholdTestNotFoundError, _threshold_not_found),
+    (InvalidMeasurementsError, _measurements_rejected),
 )
 
 

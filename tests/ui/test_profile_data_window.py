@@ -131,7 +131,16 @@ def test_the_language_menu_offers_english_and_italian_with_english_checked_by_de
     menu = next(a.menu() for a in window.menuBar().actions() if a.text() == "Language")
     assert isinstance(menu, QMenu)
 
-    assert titles == ["File", "Profile", "Calendar", "Garmin", "Language", "Help"]
+    assert titles == [
+        "File",
+        "Edit",
+        "Profile",
+        "Threshold test",
+        "Calendar",
+        "Garmin",
+        "Language",
+        "Help",
+    ]
     assert [a.text() for a in menu.actions()] == ["English", "Italiano"]
     actions = window.language_actions
     assert actions[Language.ENGLISH].isChecked()

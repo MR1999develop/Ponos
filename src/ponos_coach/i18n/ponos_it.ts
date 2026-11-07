@@ -74,6 +74,10 @@
         <translation>Tempo in ogni zona</translation>
     </message>
     <message>
+        <source>Use as threshold test...</source>
+        <translation>Usa come test di soglia...</translation>
+    </message>
+    <message>
         <source>Started</source>
         <translation>Inizio</translation>
     </message>
@@ -110,8 +114,16 @@
         <translation>Limiti della frequenza cardiaca (bpm)</translation>
     </message>
     <message>
+        <source>The activity is still loading.</source>
+        <translation>L'attività è ancora in caricamento.</translation>
+    </message>
+    <message>
         <source>Loading the activity...</source>
         <translation>Caricamento dell&apos;attività...</translation>
+    </message>
+    <message>
+        <source>The activity detail is not available.</source>
+        <translation>Il dettaglio dell'attività non è disponibile.</translation>
     </message>
     <message>
         <source>No heart-rate data</source>
@@ -745,6 +757,78 @@
     <message>
         <source>Choose today or an earlier day.</source>
         <translation>Scegli oggi o un giorno precedente.</translation>
+    </message>
+    <message>
+        <source>The threshold test cannot be taken back</source>
+        <translation>Il test di soglia non può essere annullato</translation>
+    </message>
+    <message>
+        <source>The threshold was changed after the test, so it was left as it is.</source>
+        <translation>La soglia è stata modificata dopo il test, quindi è stata lasciata com'è.</translation>
+    </message>
+    <message>
+        <source>Nothing changed. To correct the threshold, use Profile &gt; Edit profile.</source>
+        <translation>Non è cambiato nulla. Per correggere la soglia usa Profilo &gt; Modifica profilo.</translation>
+    </message>
+    <message>
+        <source>This activity is already a threshold test</source>
+        <translation>Questa attività è già un test di soglia</translation>
+    </message>
+    <message>
+        <source>The test of this activity was applied before.</source>
+        <translation>Il test di questa attività è stato applicato in precedenza.</translation>
+    </message>
+    <message>
+        <source>Choose another activity, or open Threshold test &gt; Threshold tests.</source>
+        <translation>Scegli un'altra attività, oppure apri Test di soglia &gt; Storico dei test.</translation>
+    </message>
+    <message>
+        <source>The threshold test is no longer saved</source>
+        <translation>Il test di soglia non è più salvato</translation>
+    </message>
+    <message>
+        <source>The test was already taken back.</source>
+        <translation>Il test è già stato annullato.</translation>
+    </message>
+    <message>
+        <source>Open Threshold test &gt; Threshold tests to see what is saved.</source>
+        <translation>Apri Test di soglia &gt; Storico dei test per vedere cosa è salvato.</translation>
+    </message>
+    <message>
+        <source>The test day is in the future</source>
+        <translation>Il giorno del test è nel futuro</translation>
+    </message>
+    <message>
+        <source>A threshold can only hold from today or from a past day.</source>
+        <translation>Una soglia può valere solo da oggi o da un giorno passato.</translation>
+    </message>
+    <message>
+        <source>Check the date of the activity.</source>
+        <translation>Controlla la data dell'attività.</translation>
+    </message>
+    <message>
+        <source>The test is too old</source>
+        <translation>Il test è troppo vecchio</translation>
+    </message>
+    <message>
+        <source>The activity is older than the oldest day the profile accepts.</source>
+        <translation>L'attività è più vecchia del giorno più lontano che il profilo accetta.</translation>
+    </message>
+    <message>
+        <source>Choose a more recent activity.</source>
+        <translation>Scegli un'attività più recente.</translation>
+    </message>
+    <message>
+        <source>The threshold does not fit your limits</source>
+        <translation>La soglia non è compatibile con i tuoi limiti</translation>
+    </message>
+    <message>
+        <source>The threshold of the test is not between the minimum and the maximum heart rate in force on that day.</source>
+        <translation>La soglia del test non è compresa tra la frequenza cardiaca minima e massima in vigore quel giorno.</translation>
+    </message>
+    <message>
+        <source>Correct the limits with Profile &gt; Edit profile, then apply the test again.</source>
+        <translation>Correggi i limiti con Profilo &gt; Modifica profilo, poi applica di nuovo il test.</translation>
     </message>
     <message>
         <source>Something went wrong</source>
@@ -1391,6 +1475,18 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Dettaglio attività...</translation>
     </message>
     <message>
+        <source>Test instructions...</source>
+        <translation>Istruzioni del test...</translation>
+    </message>
+    <message>
+        <source>Use as threshold test...</source>
+        <translation>Usa come test di soglia...</translation>
+    </message>
+    <message>
+        <source>Threshold tests...</source>
+        <translation>Storico dei test...</translation>
+    </message>
+    <message>
         <source>About Ponos Coach</source>
         <translation>Informazioni su Ponos Coach</translation>
     </message>
@@ -1419,8 +1515,16 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Elimina cartella del profilo</translation>
     </message>
     <message>
+        <source>Edit</source>
+        <translation>Modifica</translation>
+    </message>
+    <message>
         <source>Profile</source>
         <translation>Profilo</translation>
+    </message>
+    <message>
+        <source>Threshold test</source>
+        <translation>Test di soglia</translation>
     </message>
     <message>
         <source>Help</source>
@@ -1501,6 +1605,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>The number of activities could not be read.</source>
         <translation>Non è stato possibile leggere il numero di attività.</translation>
+    </message>
+    <message>
+        <source>Ponos Coach is closing.</source>
+        <translation>Ponos Coach si sta chiudendo.</translation>
     </message>
     <message>
         <source>Open the Calendar section first.</source>
@@ -2739,6 +2847,338 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>No synchronisation is running.</source>
         <translation>Nessuna sincronizzazione è in corso.</translation>
+    </message>
+</context>
+<context>
+    <name>ThresholdHistoryDialog</name>
+    <message>
+        <source>Threshold tests</source>
+        <translation>Storico dei test di soglia</translation>
+    </message>
+    <message>
+        <source>No threshold tests yet</source>
+        <translation>Nessun test di soglia finora</translation>
+    </message>
+    <message>
+        <source>To add one, do the test, then choose the activity and use Threshold test &gt; Use as threshold test.</source>
+        <translation>Per aggiungerne uno, fai il test, poi scegli l'attività e usa Test di soglia &gt; Usa come test di soglia.</translation>
+    </message>
+    <message>
+        <source>When to repeat the test</source>
+        <translation>Quando ripetere il test</translation>
+    </message>
+</context>
+<context>
+    <name>ThresholdHistoryModel</name>
+    <message>
+        <source>Date</source>
+        <translation>Data</translation>
+    </message>
+    <message>
+        <source>Activity</source>
+        <translation>Attività</translation>
+    </message>
+    <message>
+        <source>Threshold heart rate (bpm)</source>
+        <translation>Frequenza cardiaca di soglia (bpm)</translation>
+    </message>
+    <message>
+        <source>Threshold pace (min:s per km)</source>
+        <translation>Ritmo di soglia (min:s al km)</translation>
+    </message>
+    <message>
+        <source>Method</source>
+        <translation>Metodo</translation>
+    </message>
+</context>
+<context>
+    <name>ThresholdInstructionsDialog</name>
+    <message>
+        <source>Test instructions</source>
+        <translation>Istruzioni del test</translation>
+    </message>
+    <message>
+        <source>Warm up for 10 to 15 minutes, running easily.</source>
+        <translation>Riscaldati per 10-15 minuti, correndo con facilità.</translation>
+    </message>
+    <message>
+        <source>Run for {minutes} minutes at the hardest effort you can keep steady for the whole time. Do not start too fast.</source>
+        <translation>Corri per {minutes} minuti al massimo sforzo che riesci a mantenere costante per tutto il tempo. Non partire troppo forte.</translation>
+    </message>
+    <message>
+        <source>Do it alone and on flat ground, so that nothing changes your effort.</source>
+        <translation>Fallo senza compagnia e su terreno pianeggiante, così nulla altera il tuo sforzo.</translation>
+    </message>
+    <message>
+        <source>Finish with an easy cool-down.</source>
+        <translation>Finisci con un defaticamento leggero.</translation>
+    </message>
+    <message>
+        <source>How to do the threshold test</source>
+        <translation>Come fare il test di soglia</translation>
+    </message>
+    <message>
+        <source>The {minutes}-minute test measures your threshold heart rate and pace. Record it with your watch.</source>
+        <translation>Il test di {minutes} minuti misura la tua frequenza cardiaca e il tuo ritmo di soglia. Registralo con l'orologio.</translation>
+    </message>
+    <message>
+        <source>Your threshold heart rate is the average of the last {minutes} minutes of the test.</source>
+        <translation>La tua frequenza cardiaca di soglia è la media degli ultimi {minutes} minuti del test.</translation>
+    </message>
+    <message>
+        <source>Repeat the test every {first} to {last} weeks, to keep your zones up to date.</source>
+        <translation>Ripeti il test ogni {first}-{last} settimane, per tenere aggiornate le zone.</translation>
+    </message>
+    <message>
+        <source>A test is not a diagnosis. If you have symptoms or any doubt about your health, talk to a doctor before you do it.</source>
+        <translation>Un test non è una diagnosi. Se hai disturbi o dubbi sulla tua salute, parlane con un medico prima di farlo.</translation>
+    </message>
+    <message>
+        <source>Afterwards, choose the activity in Activities and use Threshold test &gt; Use as threshold test.</source>
+        <translation>Dopo, scegli l'attività in Attività e usa Test di soglia &gt; Usa come test di soglia.</translation>
+    </message>
+</context>
+<context>
+    <name>ThresholdResultDialog</name>
+    <message>
+        <source>Threshold test</source>
+        <translation>Test di soglia</translation>
+    </message>
+    <message>
+        <source>Evaluating the activity...</source>
+        <translation>Valutazione dell'attività in corso...</translation>
+    </message>
+    <message>
+        <source>Evaluating the activity</source>
+        <translation>Valutazione dell'attività</translation>
+    </message>
+    <message>
+        <source>Test day</source>
+        <translation>Giorno del test</translation>
+    </message>
+    <message>
+        <source>Segment starts at</source>
+        <translation>Il segmento inizia alle</translation>
+    </message>
+    <message>
+        <source>Segment chosen as</source>
+        <translation>Segmento scelto come</translation>
+    </message>
+    <message>
+        <source>Threshold heart rate (bpm)</source>
+        <translation>Frequenza cardiaca di soglia (bpm)</translation>
+    </message>
+    <message>
+        <source>Threshold pace (min:s per km)</source>
+        <translation>Ritmo di soglia (min:s al km)</translation>
+    </message>
+    <message>
+        <source>Your current threshold (bpm)</source>
+        <translation>La tua soglia attuale (bpm)</translation>
+    </message>
+    <message>
+        <source>Zones of the test</source>
+        <translation>Zone del test</translation>
+    </message>
+    <message>
+        <source>Problem</source>
+        <translation>Problema</translation>
+    </message>
+    <message>
+        <source>Apply threshold</source>
+        <translation>Applica soglia</translation>
+    </message>
+    <message>
+        <source>The activity is still being evaluated.</source>
+        <translation>L'attività è ancora in valutazione.</translation>
+    </message>
+    <message>
+        <source>This activity cannot be applied as a threshold test.</source>
+        <translation>Questa attività non può essere applicata come test di soglia.</translation>
+    </message>
+    <message>
+        <source>The threshold is being saved...</source>
+        <translation>Salvataggio della soglia in corso...</translation>
+    </message>
+</context>
+<context>
+    <name>ThresholdTexts</name>
+    <message>
+        <source>Only a run can be used as a threshold test.</source>
+        <translation>Solo una corsa può essere usata come test di soglia.</translation>
+    </message>
+    <message>
+        <source>The {minutes} minutes in which you covered the most distance</source>
+        <translation>I {minutes} minuti in cui hai percorso più distanza</translation>
+    </message>
+    <message>
+        <source>The {minutes} minutes with the highest heart rate (the activity has no usable distance)</source>
+        <translation>I {minutes} minuti con la frequenza cardiaca più alta (l'attività non ha una distanza utilizzabile)</translation>
+    </message>
+    <message>
+        <source>Up to {high}</source>
+        <translation>Fino a {high}</translation>
+    </message>
+    <message>
+        <source>{low} to {high}</source>
+        <translation>Da {low} a {high}</translation>
+    </message>
+    <message>
+        <source>{low} or more</source>
+        <translation>{low} o più</translation>
+    </message>
+    <message>
+        <source>Slower than {pace}</source>
+        <translation>Più lento di {pace}</translation>
+    </message>
+    <message>
+        <source>{fast} to {slow}</source>
+        <translation>Da {fast} a {slow}</translation>
+    </message>
+    <message>
+        <source>{fast} or faster</source>
+        <translation>{fast} o più veloce</translation>
+    </message>
+    <message>
+        <source>Zone</source>
+        <translation>Zona</translation>
+    </message>
+    <message>
+        <source>Heart rate (bpm)</source>
+        <translation>Frequenza cardiaca (bpm)</translation>
+    </message>
+    <message>
+        <source>Not available: the activity has no usable distance.</source>
+        <translation>Non disponibile: l'attività non ha una distanza utilizzabile.</translation>
+    </message>
+    <message>
+        <source>Pace (min:s per km)</source>
+        <translation>Ritmo (min:s al km)</translation>
+    </message>
+    <message>
+        <source>Threshold test applied: {bpm} bpm.</source>
+        <translation>Test di soglia applicato: {bpm} bpm.</translation>
+    </message>
+    <message>
+        <source>The load is being recalculated.</source>
+        <translation>Il carico viene ricalcolato.</translation>
+    </message>
+    <message>
+        <source>This activity cannot be used as a threshold test</source>
+        <translation>Questa attività non può essere usata come test di soglia</translation>
+    </message>
+    <message>
+        <source>The activity is not a run.</source>
+        <translation>L'attività non è una corsa.</translation>
+    </message>
+    <message>
+        <source>Choose a running or trail running activity.</source>
+        <translation>Scegli un'attività di corsa o di trail running.</translation>
+    </message>
+    <message>
+        <source>The activity is shorter than {minutes} minutes.</source>
+        <translation>L'attività dura meno di {minutes} minuti.</translation>
+    </message>
+    <message>
+        <source>Choose an activity with at least {minutes} minutes of running, or repeat the test.</source>
+        <translation>Scegli un'attività con almeno {minutes} minuti di corsa, oppure ripeti il test.</translation>
+    </message>
+    <message>
+        <source>The activity has more than {seconds} seconds of pauses in the {minutes} minutes of the test.</source>
+        <translation>L'attività ha più di {seconds} secondi di pausa nei {minutes} minuti del test.</translation>
+    </message>
+    <message>
+        <source>A test needs a steady effort without stopping. Repeat it without pausing the watch.</source>
+        <translation>Un test richiede uno sforzo costante senza fermarsi. Ripetilo senza mettere in pausa l'orologio.</translation>
+    </message>
+    <message>
+        <source>The heart-rate data is missing or has gaps in the last {minutes} minutes of the test.</source>
+        <translation>I dati della frequenza cardiaca mancano o hanno buchi negli ultimi {minutes} minuti del test.</translation>
+    </message>
+    <message>
+        <source>Check that the heart-rate sensor is worn well, then repeat the test.</source>
+        <translation>Controlla che il sensore cardiaco sia indossato bene, poi ripeti il test.</translation>
+    </message>
+    <message>
+        <source>The heart rate of the test is not between your minimum and maximum heart rate.</source>
+        <translation>La frequenza cardiaca del test non è compresa tra la tua frequenza cardiaca minima e massima.</translation>
+    </message>
+    <message>
+        <source>Check the limits in Profile &gt; Edit profile, or repeat the test at a steady maximum effort.</source>
+        <translation>Controlla i limiti in Profilo &gt; Modifica profilo, oppure ripeti il test a sforzo massimo costante.</translation>
+    </message>
+    <message>
+        <source>No test yet</source>
+        <translation>Nessun test finora</translation>
+    </message>
+    <message>
+        <source>Next test from {first} to {last}</source>
+        <translation>Prossimo test dal {first} al {last}</translation>
+    </message>
+    <message>
+        <source>A new test is recommended from {first} to {last}</source>
+        <translation>Si consiglia un nuovo test dal {first} al {last}</translation>
+    </message>
+    <message numerus="yes">
+        <source>The last test is %n days old: a new test is recommended</source>
+        <translation>
+            <numerusform>L'ultimo test ha %n giorno: si consiglia un nuovo test</numerusform>
+            <numerusform>L'ultimo test ha %n giorni: si consiglia un nuovo test</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Threshold test: {status}</source>
+        <translation>Test di soglia: {status}</translation>
+    </message>
+    <message>
+        <source>No longer in the profile</source>
+        <translation>Non più nel profilo</translation>
+    </message>
+    <message>
+        <source>{sport}, {started}</source>
+        <translation>{sport}, {started}</translation>
+    </message>
+    <message>
+        <source>30-minute run, method {version}</source>
+        <translation>Corsa di 30 minuti, metodo {version}</translation>
+    </message>
+</context>
+<context>
+    <name>ThresholdUi</name>
+    <message>
+        <source>Undo</source>
+        <translation>Annulla</translation>
+    </message>
+    <message>
+        <source>Redo</source>
+        <translation>Ripeti</translation>
+    </message>
+    <message>
+        <source>The profile is busy</source>
+        <translation>Il profilo è occupato</translation>
+    </message>
+    <message>
+        <source>The threshold cannot be saved while the profile is being used.</source>
+        <translation>La soglia non può essere salvata mentre il profilo è in uso.</translation>
+    </message>
+    <message>
+        <source>Apply the test again when the operation has finished.</source>
+        <translation>Applica di nuovo il test quando l'operazione è finita.</translation>
+    </message>
+    <message>
+        <source>There is no threshold test to take back.</source>
+        <translation>Non c'è nessun test di soglia da annullare.</translation>
+    </message>
+    <message>
+        <source>There is no threshold test to apply again.</source>
+        <translation>Non c'è nessun test di soglia da applicare di nuovo.</translation>
+    </message>
+</context>
+<context>
+    <name>ThresholdUndo</name>
+    <message>
+        <source>Apply threshold test</source>
+        <translation>Applica test di soglia</translation>
     </message>
 </context>
 <context>

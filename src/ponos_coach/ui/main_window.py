@@ -46,6 +46,7 @@ from PySide6.QtWidgets import (
 )
 
 import ponos_coach
+from ponos_coach.activities.domain import ActivityIdentity
 from ponos_coach.load.use_cases import ProfileOverview
 from ponos_coach.profiles.domain import ProfileId, RegistryEntry
 from ponos_coach.profiles.use_cases import FolderWarning, NewProfileRequest
@@ -72,6 +73,8 @@ from ponos_coach.ui.overview_state import (
 )
 from ponos_coach.ui.profile_dialogs import ProfileDialogs
 from ponos_coach.ui.profile_editor import ProfileEditor
+from ponos_coach.ui.threshold_presentation import can_be_threshold_test, not_a_run_reason
+from ponos_coach.ui.threshold_ui import ThresholdUi
 from ponos_coach.ui.tokens import (
     MIN_WINDOW_HEIGHT,
     MIN_WINDOW_WIDTH,
@@ -195,6 +198,14 @@ class MainWindow(QMainWindow):
         return action
 
     def _build_actions(self) -> None:
+        self._threshold = ThresholdUi(
+            self,
+            self._controller,
+            zone=lambda: self._zone,
+            show_error=self._show_error,
+            notify=lambda text: self.statusBar().showMessage(text, _STATUS_MESSAGE_MS),
+        )
+        self._threshold.retest_text_changed.connect(self._on_retest_text_changed)
         self._new_action = self._action(self.tr("New profile..."), "Ctrl+N", self.show_new_profile)
         self._open_action = self._action(
             self.tr("Open profile from folder..."), "Ctrl+O", self.choose_profile_folder
@@ -232,6 +243,17 @@ class MainWindow(QMainWindow):
         self._detail_action = self._action(
             self.tr("Activity detail..."), "Ctrl+D", self.show_selected_activity_detail
         )
+        self._threshold_instructions_action = self._action(
+            self.tr("Test instructions..."), "Ctrl+Shift+H", self._threshold.show_instructions
+        )
+        self._use_as_test_action = self._action(
+            self.tr("Use as threshold test..."),
+            "Ctrl+Shift+T",
+            self.use_selected_as_threshold_test,
+        )
+        self._threshold_history_action = self._action(
+            self.tr("Threshold tests..."), "Ctrl+Shift+R", self._threshold.show_history
+        )
         self._about_action = self._action(self.tr("About Ponos Coach"), None, self.show_about)
         self._log_action = self._action(
             self.tr("Open the log folder"), "Ctrl+Shift+L", self.open_log_folder
@@ -253,12 +275,19 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self._stop_action)
         file_menu.addSeparator()
         file_menu.addAction(self._quit_action)
+        edit_menu = self.menuBar().addMenu(self.tr("Edit"))
+        edit_menu.addAction(self._threshold.undo_action)
+        edit_menu.addAction(self._threshold.redo_action)
         profile_menu = self.menuBar().addMenu(self.tr("Profile"))
         profile_menu.addAction(self._edit_profile_action)
         profile_menu.addAction(self._sport_weights_action)
         profile_menu.addAction(self._nutrition_action)
         profile_menu.addSeparator()
         profile_menu.addAction(self._detail_action)
+        threshold_menu = self.menuBar().addMenu(self.tr("Threshold test"))
+        threshold_menu.addAction(self._threshold_instructions_action)
+        threshold_menu.addAction(self._use_as_test_action)
+        threshold_menu.addAction(self._threshold_history_action)
         calendar_menu = self.menuBar().addMenu(self.tr("Calendar"))
         for action in (
             self._previous_month_action,
@@ -360,6 +389,7 @@ class MainWindow(QMainWindow):
             notify=lambda text: self.statusBar().showMessage(text, _STATUS_MESSAGE_MS),
         )
         self._activities.detail_requested.connect(self._dialogs.show_activity_detail)
+        self._dialogs.threshold_test_requested.connect(self._on_detail_threshold_test)
         self._nutrition = NutritionUi(
             self,
             self._controller,
@@ -387,6 +417,9 @@ class MainWindow(QMainWindow):
         self._days_label = self._status_label()
         for label in (self._activities_label, self._excluded_label, self._days_label):
             bar.addWidget(label)
+        self._retest_label = self._status_label()
+        self._retest_label.setVisible(False)
+        bar.addPermanentWidget(self._retest_label)
         self._warning_label = self._status_label()
         bar.addPermanentWidget(self._warning_label)
         self._import_label = self._status_label()
@@ -509,6 +542,31 @@ class MainWindow(QMainWindow):
         return self._detail_action
 
     @property
+    def threshold(self) -> ThresholdUi:
+        """The threshold test flow (dialogs, undo stack, retest status)."""
+        return self._threshold
+
+    @property
+    def threshold_instructions_action(self) -> QAction:
+        """Action "Test instructions..."."""
+        return self._threshold_instructions_action
+
+    @property
+    def use_as_test_action(self) -> QAction:
+        """Action "Use as threshold test..."."""
+        return self._use_as_test_action
+
+    @property
+    def threshold_history_action(self) -> QAction:
+        """Action "Threshold tests..."."""
+        return self._threshold_history_action
+
+    @property
+    def retest_status_text(self) -> str:
+        """The retest sentence in the status bar (empty while hidden)."""
+        return self._retest_label.text()
+
+    @property
     def controller(self) -> WorkspaceController:
         """The workspace controller."""
         return self._controller
@@ -628,6 +686,21 @@ class MainWindow(QMainWindow):
         if self._controller.profile is not None:
             self._nutrition.show_settings()
 
+    def use_selected_as_threshold_test(self) -> None:
+        """Evaluate the activity selected in the list as the threshold test (no effect if the
+        command is not available)."""
+        activity = self._activities.selected_activity()
+        if activity is not None and self._use_as_test_action.isEnabled():
+            self._threshold.start_test(activity.identity)
+
+    def _on_detail_threshold_test(self, identity: object) -> None:
+        if isinstance(identity, ActivityIdentity) and self._threshold_available():
+            self._threshold.start_test(identity)
+
+    def _on_retest_text_changed(self, text: str) -> None:
+        self._retest_label.setText(text)
+        self._retest_label.setVisible(bool(text))
+
     def _edit_profile_from_day(self) -> None:
         """Open "Edit profile" from the day page's missing-data message."""
         if self._controller.can_edit_profile:
@@ -737,6 +810,7 @@ class MainWindow(QMainWindow):
         self._zone = view.zone
         self._creating_form = None
         self._nutrition.profile_changed()
+        self._threshold.profile_changed()
         self.setWindowTitle(self.tr("{profile} - Ponos Coach").format(profile=view.name.value))
         self._warning_label.setText(self._warning_text(view.warnings))
         self._warning_label.setVisible(bool(view.warnings))
@@ -983,6 +1057,7 @@ class MainWindow(QMainWindow):
             self._activities.show_activities(state.overview.activities, self._zone)
             self._calendar.show_data(self._today(), state.overview.activities, system_theme())
             self._nutrition.data_changed()
+            self._threshold.data_changed()
         elif isinstance(state, Idle):
             self._activities.show_activities((), self._zone)
             self._calendar.show_data(self._today(), (), system_theme())
@@ -1029,11 +1104,40 @@ class MainWindow(QMainWindow):
             action.setEnabled(allowed)
             action.setToolTip(self._unavailable_reason(allowed))
         self._update_calendar_actions()
+        self._update_threshold_actions()
         has_selection = self._activities.selected_activity() is not None
         self._detail_action.setEnabled(has_selection)
         self._detail_action.setToolTip(
             "" if has_selection else self.tr("Select an activity in the Activities list first.")
         )
+
+    def _threshold_available(self) -> bool:
+        """The threshold test needs an open profile and a window that is not closing."""
+        return self._controller.profile is not None and not self._controller.is_closing
+
+    def _update_threshold_actions(self) -> None:
+        """Use as threshold test and Threshold tests, each with its reason if it cannot be
+        done."""
+        available = self._threshold_available()
+        if available:
+            reason = ""
+        elif self._controller.profile is None:
+            reason = self._unavailable_reason(False)
+        else:
+            reason = self.tr("Ponos Coach is closing.")
+        self._threshold_history_action.setEnabled(available)
+        self._threshold_history_action.setToolTip(reason)
+        selected = self._activities.selected_activity()
+        if not available:
+            allowed, why = False, reason
+        elif selected is None:
+            allowed, why = False, self.tr("Select an activity in the Activities list first.")
+        elif not can_be_threshold_test(selected.sport):
+            allowed, why = False, not_a_run_reason()
+        else:
+            allowed, why = True, ""
+        self._use_as_test_action.setEnabled(allowed)
+        self._use_as_test_action.setToolTip(why)
 
     def _update_calendar_actions(self) -> None:
         """Calendar commands work on the Calendar page; the day page only has "Back"."""
@@ -1121,6 +1225,7 @@ class MainWindow(QMainWindow):
             self._controller.begin_shutdown()
             self._dialogs.close_all()
             self._nutrition.close_dialogs()
+            self._threshold.close_dialogs()
             self.release_web_engine()
             if not self._controller.has_stopped:
                 event.ignore()

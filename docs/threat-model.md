@@ -1,8 +1,10 @@
 # Threat model
 
-Phase 4b version (2026-11-07): adds the nutrition of the day (activity
-calories, activity level, meal times, goal periods, the table of foods and the
-guidance itself). It builds on that of phase 3 (2026-11-06: height, weight and
+Phase 4 version (2026-11-07): adds the threshold test (the distance series
+read from FIT and GPX files, the history of the tests in schema v5, threshold
+HR and pace, pace zones). It builds on that of phase 4b (2026-11-07: the
+nutrition of the day: activity calories, activity level, meal times, goal
+periods, the table of foods and the guidance itself), on that of phase 3 (2026-11-06: height, weight and
 date of birth as personal health data, dated measurements, sport weights, HR
 zones and activity details), on that of phase 2 (2026-11-06: login in the app, token
 store, Garmin responses and downloads, library log and notifications), on that
@@ -74,6 +76,7 @@ Boundaries:
 | B10 | App → system notifications | fixed title and number of new activities |
 | B11 | Table of foods (`foods.json`, shipped with the app) → parser | values per 100 g, ids, names, portions. It is part of the package, but it is treated as input: a mistake or a change of source must not reach the guidance |
 | B12 | FIT `session.total_calories` (inside B1 and B2) → model | calories declared by the device: untrusted until checked against the duration |
+| B13 | FIT `record.distance` and `record.speed`, GPX track points (inside B1 and B2) → distance series → threshold test | cumulative distance and its time axis: untrusted until they form a valid series (finite, increasing time, non-decreasing metres) |
 
 ### Assets
 
@@ -83,6 +86,7 @@ Boundaries:
 | The user's Garmin account | block (429) or flagging for unusual use; modifiable calendar |
 | Health data: HR, injuries, pain, doctor's notes | confidentiality |
 | Height, weight and date of birth (with the weight history) | personal health data: they are only in the profile database; never in logs, messages or error chains; in plain text like the other profile data (accepted risk, section 5) |
+| Threshold HR and threshold pace, with the history of the tests | health data: only in the profile database; never in logs, messages or error chains. They move the zones and the load of every later activity, so their integrity matters too |
 | GPS positions of the activities | they reveal home and habits |
 | Integrity of the profile data (original files, database, parameters) | calculations and plan rely on them; a wrong plan can cause harm |
 | Availability of the app and the data | do not lose years of history |
@@ -200,6 +204,20 @@ service, E elevation of privilege.
 | B3 | Overlapping goal periods, also by an `UPDATE` of the dates; level, meal times or pace out of range | T | T-DATI-01, T-UI-01 |
 | B3 | Weight, age, HR, level, goals and meal times in logs, messages or error chains | I | T-SEC-08 (`tests/collaudo/test_fase4b_log_salute.py`) |
 | B3 | Activity indexed before v4 without calories that makes the day wrong | T | T-NUT-03, D-F4B-09 |
+| B13 | Distance that is NaN or infinite (FIT float field, speed, GPX coordinates) that breaks the window search or gives a nonsense pace | T, D | T-PIANO-06, D-F4 |
+| B13 | Distance that goes backwards (damaged file, odometer reset) read as a valid effort | T | T-PIANO-06, D-F4 |
+| B13 | Jumps of distance (GPS glitch, a record after a long gap) that make a window look like a world-record effort and set a wrong threshold pace | T | T-PIANO-06 (pace outside 90–3,600 s/km is left out), D-F4 |
+| B13 | Gaps in the records (pauses, missing distance) hidden by a distance that keeps growing, so a test with long stops is accepted | T | T-PIANO-06 (pauses over 60 s in the segment, HR and distance records together), D-F4 |
+| B13 | Speed integrated over a gap that invents distance | T | T-PIANO-06 (no distance over gaps above 10 s), D-F4 |
+| B13 | Series with millions of points or unsorted times that exhaust memory or time in the window search | D | T-SEC-01, T-SEC-02, T-PERF-02 (limits of the readers; the search tries only the breakpoints) |
+| B13 | Duplicate or backward timestamps that reorder the distance | T | T-PIANO-06 (samples not later than all the previous ones are dropped, as for HR), D-F4 |
+| B3 | Migration v4 → v5 interrupted midway, done by two instances, or without a copy | T, D | T-DATI-01 |
+| B3 | History of the tests with an absurd threshold or pace, a day in the future, a key that is not an activity key (altered file or direct SQL) | T | T-DATI-01 (`CHECK` constraints), T-PIANO-06 |
+| B3 | History of the tests lost when the activity index is rebuilt | T | T-PIANO-06 (no foreign key; contract test of the history) |
+| B3 | Applying a test half done: history without the threshold, or the reverse; undo that leaves the profile in another state | T | T-PIANO-06 (one transaction; exact undo; undo refused if the entry was changed) |
+| B3 | Threshold HR, threshold pace, test days and the history in logs, messages or error chains | I | T-SEC-08 (`tests/collaudo/` log of the health data) |
+| Plan | Test taken for another activity (a race, an interval session) that moves the zones | T | T-PIANO-06 (the user chooses the activity, running only; refusals with reasons; undo) |
+| Plan | A threshold applied by mistake changes the load of past activities | T | T-PIANO-06 (undo), T-CALC-05 (fingerprint of the parameters) |
 | Plan | Guidance that harms: deficit too large, intake under the minimum, low energy availability, heavy days, low body mass index | T | T-NUT-02, D-F4B-01 |
 | Plan | Numbers given to a minor | T | T-NUT-02, T-UI-01 |
 | Plan | Guidance taken as medical advice or a diagnosis | T | fixed notice always on screen (`tests/ui/test_day_window.py`); no diagnosis in the model |
@@ -390,6 +408,36 @@ service, E elevation of privilege.
     and `UPDATE`) and values outside the limits (`CHECK`).
   - The day is a query: it saves nothing and does not touch the index of the
     activities.
+- Threshold test (phase 4, ADR 009):
+  - Distance series (B13): built by the file readers, which already apply the
+    caps on size, records and time (T-SEC-01, T-SEC-02). Times that are not
+    later than all the previous ones are dropped, as for the HR. A series with
+    a value that is not finite or with metres that go backwards is not used and
+    not repaired: the activity stays valid, without pace. Speed is integrated
+    without inventing distance over gaps above 10 s; the GPX distance counts no
+    step between two segments. `DistanceSeries` checks its own invariants
+    (finite, strictly increasing time, non-negative non-decreasing metres).
+  - Evaluation: pure and deterministic. The window search tries only the
+    breakpoints of the series (no loop per second). A pace outside
+    90–3,600 s/km is left out; pauses over 60 s in the segment, valid HR under
+    90% of the last 20 minutes and a threshold outside the profile limits
+    refuse the test, always with an enumerated reason and never repaired.
+  - The activity is chosen by the user and must be a run; the test is applied
+    only on request. The file is read from the archive with the usual size and
+    SHA-256 checks; an unreadable file is an excluded activity.
+  - Apply and undo in one transaction, through the rules of the dated
+    measurements; the undo restores the exact previous state and is refused if
+    the entry was changed in the meantime.
+  - Schema v5 (`threshold_test`) goes through the same safety copy as the
+    others (`backup/ponos-v4-v5.sqlite3`), is tested interrupted at every
+    statement, and the database repeats the limits with `CHECK` (activity key
+    prefix and length, valid ISO day from 1900-01-01, threshold 40–250 bpm,
+    pace 90–3,600 s/km or NULL). It has no foreign key to the index, so the
+    history survives a rebuild.
+  - Health data: threshold HR and pace and the days of the tests stay in the
+    profile database. The assessment use cases write nothing to the log about
+    the person; a failure shows a generic message without the text of the
+    exception (T-SEC-08).
 
 ## 4. Did we do it right?
 
@@ -449,6 +497,10 @@ service, E elevation of privilege.
 | Migration v3 → v4 and the rules of the new tables | T-DATI-01 (`tests/collaudo/test_fase4b_migrazione.py`) |
 | Nutrition data in logs and messages | T-SEC-08 (`tests/collaudo/test_fase4b_log_salute.py`) |
 | Calendar and day page (accessibility, languages, memory of the settings) | T-UI-01, T-UI-06, T-UI-07 (`tests/collaudo/test_fase4b_interfaccia.py`) |
+| Threshold test: window, HR and pace, refusals, hostile distance series | T-PIANO-06, T-SEC-01, T-SEC-02 |
+| Threshold test: apply and undo, history, retest | T-PIANO-06 |
+| Migration v4 → v5 and the rules of `threshold_test` | T-DATI-01 |
+| Threshold HR and pace in logs and messages | T-SEC-08 |
 
 ### Cases closed by the phase 1 acceptance testing (D-F1)
 
@@ -540,6 +592,17 @@ behaviour that closes them. The defect tests have the id in the name
 All closed on 2026-11-07: their tests, born as expected-fail (strict `xfail`),
 pass without the mark.
 
+### Cases closed by the phase 4 acceptance testing (D-F4)
+
+Defects found by the phase 4 acceptance testing and the behaviour that closes
+them.
+
+| Id | Defect | Behaviour | Test (plan) | Test (file) |
+|---|---|---|---|---|
+| | | | | |
+
+Filled in by the acceptance tests.
+
 ## 5. Accepted risks
 
 | Risk | Reason |
@@ -562,6 +625,8 @@ pass without the mark.
 | Food values not yet verified against FoodData Central | The first version of the table was written without access to the source. Mitigations: `source.verified_on` is empty and the release waits for `experiments/verify_foods.py`; the parser checks energy against macros; the notice says the guidance is general. |
 | Guidance built on population formulas (Mifflin-St Jeor, Keytel, Boer, factors without sport) and on self-assessed level | Individual error of hundreds of kcal is possible, and an app cannot measure more. Mitigations: conservative limits of the deficit, no numbers under 18 years, fixed notice, no diagnosis (ADR 008). |
 | Declared calories that are wrong but plausible | Under 1,500 kcal per hour they cannot be told from a real effort. Only the net energy (without the rest rate) is added to the expenditure, which reduces the effect. |
+| A threshold that is wrong but plausible (a field test, a hard day, a fast downhill window) | It cannot be told from a real effort within the limits of the refusals. Mitigations: the user chooses the activity, the refusals with reasons, the exact undo, the retest every 6–8 weeks; the zones are a training indication, not medical advice (ADR 009). |
+| Distance from a GPS or a treadmill sensor with a systematic error | The pace is only as good as the distance; the app cannot measure more. The HR threshold does not depend on it. |
 | Food names and nutrition advice only in English until translated; no allergy or diet restriction | User decision of 2026-11-07. The examples are an illustration, not a menu. |
 
 ## Open points

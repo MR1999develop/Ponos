@@ -34,7 +34,9 @@ use: use it at your own risk. Manual import of FIT files is always available.
   history of FIT files, to load into a profile with "Import from folder...".
 - Load from heart rate and charts of ATL, CTL and TSB (phase 3), weekly load
   by sport, time in zones and the detail of each activity.
-- 30-minute threshold test and training zones.
+- 30-minute threshold test (phase 4): from a run you choose, threshold heart
+  rate and pace, heart-rate and pace zones, history of the tests and a retest
+  every 6–8 weeks; applying a test can be undone.
 - Goals (A/B/C races, target time, fitness level) and an adaptive plan.
 - Recovery path from injuries.
 - Sending workouts to the Garmin calendar (later phase).

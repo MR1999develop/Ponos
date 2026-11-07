@@ -403,12 +403,84 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 ## 7. Threshold test
 
 - The app proposes a 30-minute running threshold test at the start and
-  proposes it again every 6–8 weeks, in a recovery week.
-- The instructions are in the app. After the test the user says which activity
-  is the test.
-- The app computes threshold HR and pace, updates the zones and keeps the
-  history of the tests. An interrupted or too short test is rejected with the
-  reason.
+  proposes it again every 6–8 weeks, in a recovery week. Decision:
+  [ADR 009](adr/009-test-di-soglia.md).
+
+### Instructions
+
+- The instructions are in the app, before the test: a 30-minute run at the
+  maximum steady effort the runner can hold, after a warm-up, with the watch
+  recording heart rate and, outdoors, distance (interface in progress: exact
+  wording and place).
+
+### Using an activity as the test
+
+- The test is a recorded activity. The app does not recognise it: the user
+  says which activity is the test. Only running activities (run and trail run)
+  can be a test.
+- The test is the 30 minutes of the activity with the greatest distance; if
+  the activity has no usable distance, the 30 minutes with the highest mean
+  heart rate. Warm-up and cool-down fall outside it.
+
+### Result
+
+- Threshold HR: the mean of the valid heart-rate samples of the last 20
+  minutes of the test, weighted by time, in whole bpm. Valid samples are those
+  between the minimum and maximum HR in force on the day of the test.
+- Threshold pace: time over distance of the same 20 minutes, in whole seconds
+  per kilometre. It is left out if the activity has no distance for those 20
+  minutes or the pace is not plausible (outside 1:30 to 60:00 per km).
+- Five pace zones, aligned with the five HR zones, as a share of the threshold
+  speed: Z1 below 78%, Z2 78–88%, Z3 88–94%, Z4 94–100%, Z5 100% and over. A
+  value on the boundary belongs to the faster zone. The HR zones are those of
+  section 6.
+- The result is shown before it is applied (interface in progress: layout).
+
+### Rejection
+
+A test that is not reliable is rejected with the reason; the app never repairs
+it and changes nothing. In this order:
+
+1. the activity is not a run;
+2. it is shorter than 30 minutes (29:59 is too short, 30:00 is enough);
+3. it has no heart rate;
+4. pauses in the 30 minutes add up to more than 60 s (a gap of more than 10 s
+   between records counts as a pause; exactly 60 s is allowed);
+5. valid heart rate covers less than 90% of the last 20 minutes;
+6. the threshold HR is not between the minimum and the maximum HR of the
+   profile.
+
+If the file of the activity cannot be read (missing, altered, too large), the
+activity is reported as excluded, with the reason, not as a rejected test.
+
+### Apply and undo
+
+- Applying the result saves the test in the history and sets the threshold HR
+  as a measurement dated on the day of the test (local day of the start of
+  the activity), with the rules of the measurements of section 5: valid until
+  the next measurement, not in the future, consistent with minimum and maximum
+  HR. On a day that already has a measurement, the new threshold replaces it.
+  Both happen together or not at all.
+- An activity that is already a test in the history cannot be applied again.
+- The loads depend on the threshold: they are recalculated by themselves, as
+  for any change of the measurements.
+- Applying can be undone. Undoing removes the test from the history and puts
+  the measurement of that day back exactly as it was (or removes it, if the
+  test had created it). If the user changed that measurement after the test,
+  the undo is refused and nothing changes.
+
+### History and retest
+
+- The history lists the applied tests by day, with threshold HR, pace (if
+  any) and the version of the method. It is kept even if the index of the
+  activities is rebuilt.
+- A retest is recommended from 42 to 56 days after the last applied test
+  (both days included). Before day 42 the app only says when the window
+  opens; from day 57 it says the retest is overdue. With no test, it proposes
+  the first. Only the most recent test counts. The recovery week arrives with
+  the plan (phase 5): for now only the dates are used.
+- The history, the application of a result and the retest message are shown
+  in the interface (interface in progress: where and how).
 
 Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-soglia.md).
 

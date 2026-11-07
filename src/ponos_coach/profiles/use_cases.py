@@ -24,6 +24,7 @@ from types import TracebackType
 from typing import Self
 
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal
+from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.load.domain import Physiology, PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
@@ -159,6 +160,11 @@ class ProfileSession:
     def goal_periods(self) -> GoalPeriodStore:
         """Nutrition goal periods."""
         return self._opened.goal_periods
+
+    @property
+    def threshold_tests(self) -> ThresholdTestStore:
+        """History of the applied threshold tests."""
+        return self._opened.threshold_tests
 
     def close(self) -> None:
         """Closes the database and releases the lock."""

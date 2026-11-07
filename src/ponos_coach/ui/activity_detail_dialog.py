@@ -21,6 +21,7 @@ from PySide6.QtCore import (
     QPersistentModelIndex,
     Qt,
     QTime,
+    Signal,
 )
 from PySide6.QtWidgets import (
     QDialog,
@@ -28,12 +29,14 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHeaderView,
     QLabel,
+    QPushButton,
     QStackedWidget,
     QTableView,
     QVBoxLayout,
     QWidget,
 )
 
+from ponos_coach.activities.domain import ActivityIdentity
 from ponos_coach.load.activity_detail import ActivityDetail
 from ponos_coach.ui.activity_detail import (
     DetailOutcome,
@@ -52,6 +55,7 @@ from ponos_coach.ui.activity_text import (
 from ponos_coach.ui.chart_view import ChartEngine, ChartView
 from ponos_coach.ui.errors import ErrorMessage, unavailable_detail_message
 from ponos_coach.ui.state_page import StatePage
+from ponos_coach.ui.threshold_presentation import can_be_threshold_test, not_a_run_reason
 from ponos_coach.ui.tokens import SPACE_2, SPACE_4
 
 _ALIGN_RIGHT = int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -134,9 +138,12 @@ class ZoneTableModel(QAbstractTableModel):
 class ActivityDetailDialog(QDialog):
     """Summary, HR chart and time per zone of an activity."""
 
+    threshold_test_requested = Signal(object)  # ActivityIdentity
+
     def __init__(self, engine: ChartEngine, zone: ZoneInfo, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._zone = zone
+        self._identity: ActivityIdentity | None = None
         self.setWindowTitle(self.tr("Activity detail"))
         self.setModal(False)
         self.resize(*_DEFAULT_SIZE)
@@ -192,6 +199,11 @@ class ActivityDetailDialog(QDialog):
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
         buttons.rejected.connect(self.reject)
+        self._use_as_test = buttons.addButton(
+            self.tr("Use as threshold test..."), QDialogButtonBox.ButtonRole.ActionRole
+        )
+        self._use_as_test.setObjectName("detailUseAsTest")
+        self._use_as_test.clicked.connect(self._on_use_as_test)
         outer = QVBoxLayout(self)
         outer.setSpacing(SPACE_4)
         outer.addWidget(self._title)
@@ -245,6 +257,11 @@ class ActivityDetailDialog(QDialog):
         """The value of one summary row."""
         return self._summary_values[key].text()
 
+    @property
+    def use_as_test_button(self) -> QPushButton:
+        """The "Use as threshold test..." button."""
+        return self._use_as_test
+
     def shows_chart(self) -> bool:
         """True if the chart is the visible page."""
         return self._body.currentWidget() is self._chart
@@ -253,11 +270,13 @@ class ActivityDetailDialog(QDialog):
 
     def show_loading(self) -> None:
         """While the data thread is working."""
+        self._set_test_command(None, self.tr("The activity is still loading."))
         self._set_details_visible(False)
         self._show_message(self.tr("Loading the activity..."), "")
 
     def show_error(self, message: ErrorMessage) -> None:
         """An unexpected loading error."""
+        self._set_test_command(None, self.tr("The activity detail is not available."))
         self._set_details_visible(False)
         self._show_message(message.title, f"{message.what}\n\n{message.remedy}")
 
@@ -265,6 +284,7 @@ class ActivityDetailDialog(QDialog):
         """Show the detail, or the reason the file cannot be used."""
         if isinstance(outcome, DetailUnavailable):
             message = unavailable_detail_message(outcome.reason)
+            self._set_test_command(None, self.tr("The activity detail is not available."))
             self._set_details_visible(False)
             self._show_message(message.title, f"{message.what}\n\n{message.remedy}")
             return
@@ -272,6 +292,9 @@ class ActivityDetailDialog(QDialog):
 
     def _show_detail(self, ready: DetailReady) -> None:
         detail = ready.detail
+        self._set_test_command(
+            detail.identity if can_be_threshold_test(detail.sport) else None, not_a_run_reason()
+        )
         self._set_details_visible(True)
         self._fill_summary(detail)
         self._zone_model.set_rows(zone_rows(detail))
@@ -337,6 +360,16 @@ class ActivityDetailDialog(QDialog):
                 )
             )
         return " ".join(notes)
+
+    def _set_test_command(self, identity: ActivityIdentity | None, reason: str) -> None:
+        """Use as threshold test works on the activity shown, if it is a run."""
+        self._identity = identity
+        self._use_as_test.setEnabled(identity is not None)
+        self._use_as_test.setToolTip("" if identity is not None else reason)
+
+    def _on_use_as_test(self) -> None:
+        if self._identity is not None:
+            self.threshold_test_requested.emit(self._identity)
 
     def _set_details_visible(self, visible: bool) -> None:
         for label in self._summary_values.values():
