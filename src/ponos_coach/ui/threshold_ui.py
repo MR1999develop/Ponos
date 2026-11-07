@@ -16,12 +16,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from zoneinfo import ZoneInfo
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QUndoStack
 from PySide6.QtWidgets import QWidget
 
 from ponos_coach.activities.domain import ActivityIdentity
-from ponos_coach.assessment.domain import ThresholdRejection
+from ponos_coach.assessment.domain import ThresholdProtocol, ThresholdRejection
 from ponos_coach.load.use_cases import ExcludedActivity
 from ponos_coach.ui.errors import ErrorMessage, unavailable_detail_message
 from ponos_coach.ui.threshold_dialogs import (
@@ -30,6 +30,7 @@ from ponos_coach.ui.threshold_dialogs import (
     ThresholdResultDialog,
 )
 from ponos_coach.ui.threshold_loader import ThresholdApplied, ThresholdLoader
+from ponos_coach.ui.threshold_preferences import ProtocolPreference
 from ponos_coach.ui.threshold_presentation import (
     ThresholdHistory,
     ThresholdReview,
@@ -52,6 +53,7 @@ class ThresholdUi(QObject):
         window: QWidget,
         controller: WorkspaceController,
         *,
+        settings: QSettings,
         zone: Callable[[], ZoneInfo],
         show_error: Callable[[ErrorMessage], None],
         notify: Callable[[str], None],
@@ -62,6 +64,9 @@ class ThresholdUi(QObject):
         self._zone = zone
         self._show_error = show_error
         self._notify = notify
+        self._protocol = ProtocolPreference(settings)
+        self._protocol_shown = self._protocol.load()
+        self._identity: ActivityIdentity | None = None
         self._loader = ThresholdLoader(controller, self)
         self._stack = QUndoStack(self)
         self._undo_action = self._stack.createUndoAction(self, self.tr("Undo"))
@@ -133,12 +138,30 @@ class ThresholdUi(QObject):
             return
         dialog = ThresholdResultDialog(self._window)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        protocol = self._protocol.load()
+        dialog.set_protocol(protocol)
         dialog.apply_requested.connect(self._on_apply_requested)
+        dialog.protocol_chosen.connect(self._on_protocol_chosen)
         dialog.finished.connect(self._on_result_closed)
         self._result_dialog = dialog
+        self._identity = identity
+        self._protocol_shown = protocol
         self._review = None
         dialog.open()
-        if not self._loader.evaluate(identity):
+        if not self._loader.evaluate(identity, protocol):
+            dialog.close()
+
+    def _on_protocol_chosen(self, protocol: object) -> None:
+        """The user picked the other test: remember it and evaluate the activity again."""
+        dialog = self._result_dialog
+        identity = self._identity
+        if not isinstance(protocol, ThresholdProtocol) or dialog is None or identity is None:
+            return
+        self._protocol.save(protocol)
+        self._protocol_shown = protocol
+        self._review = None
+        dialog.show_loading()
+        if not self._loader.evaluate(identity, protocol):
             dialog.close()
 
     def _on_evaluated(self, verdict: object) -> None:
@@ -149,7 +172,7 @@ class ThresholdUi(QObject):
             self._review = verdict
             dialog.show_review(present_review(verdict, self._zone()))
         elif isinstance(verdict, ThresholdRejection):
-            dialog.show_message(rejection_message(verdict))
+            dialog.show_message(rejection_message(verdict, self._protocol_shown))
         elif isinstance(verdict, ExcludedActivity):
             dialog.show_message(unavailable_detail_message(verdict.reason))
 
@@ -192,6 +215,7 @@ class ThresholdUi(QObject):
 
     def _on_result_closed(self) -> None:
         self._result_dialog = None
+        self._identity = None
         self._review = None
         self._loader.cancel_evaluation()
 

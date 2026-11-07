@@ -117,8 +117,8 @@ def test_the_plan_menu_lists_every_command_with_its_shortcut(
         ("Change goal...", "Ctrl+Shift+E"),
         ("Remove goal", "Ctrl+Del"),
         ("Training settings...", "Ctrl+Shift+T"),
-        ("Undo", window.plan.actions["undo"].shortcut().toString()),
-        ("Redo", window.plan.actions["redo"].shortcut().toString()),
+        ("Undo", ""),  # like the threshold test: no global shortcut
+        ("Redo", ""),
     ]
 
 

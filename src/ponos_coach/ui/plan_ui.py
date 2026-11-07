@@ -199,11 +199,9 @@ class PlanUi(QObject):
             self.tr("Training settings..."), "Ctrl+Shift+T", self.show_training_settings
         )
         self._undo_action = self._stack.createUndoAction(self, self.tr("Undo"))
-        self._undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+        # "Undo <change>" / "Redo <change>" at the end of the Plan menu, like the threshold test:
+        # no global shortcut (a global Ctrl+Z would also act while a text field has the focus).
         self._redo_action = self._stack.createRedoAction(self, self.tr("Redo"))
-        self._redo_action.setShortcut(QKeySequence.StandardKey.Redo)
-        for action in (self._undo_action, self._redo_action):
-            action.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
         self._stack.canUndoChanged.connect(self._update_actions)
         self._stack.canRedoChanged.connect(self._update_actions)
 

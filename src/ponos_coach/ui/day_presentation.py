@@ -15,7 +15,7 @@ from datetime import date
 
 from PySide6.QtCore import QCoreApplication, QDate, QLocale, QTime
 
-from ponos_coach.nutrition.domain import FoodExample, HourlyIntake
+from ponos_coach.nutrition.domain import FoodExample, HourlyIntake, MealItem
 from ponos_coach.profiles.day_nutrition import (
     DayActivity,
     DayNutritionReport,
@@ -33,7 +33,9 @@ from ponos_coach.ui.nutrition_texts import (
     foods_unverified_text,
     goal_text,
     in_progress_text,
+    lean_mass_note_text,
     load_level_text,
+    refuel_hour_text,
     slots_text,
     unavailable_text,
 )
@@ -73,6 +75,7 @@ class DayView:
     unreadable_note: str  # empty if every activity file could be read
     in_progress_note: str  # empty unless the day is today
     foods_note: str  # empty once the food values are verified against their source
+    lean_mass_note: str  # which lean mass the energy availability limit uses; empty if unknown
     notice: str
 
 
@@ -171,6 +174,13 @@ def _hourly_text(hourly: HourlyIntake) -> str:
     )
 
 
+def _meal_title(meal: MealItem) -> str:
+    """The name of the moment; an hourly refuel intake says its hour instead of the slot."""
+    if meal.refuel_hour is not None:
+        return refuel_hour_text(meal.refuel_hour)
+    return slots_text(meal.slots)
+
+
 def _meal_card(suggestion: MealSuggestion) -> MealCardView:
     meal = suggestion.meal
     moved = (
@@ -179,7 +189,7 @@ def _meal_card(suggestion: MealSuggestion) -> MealCardView:
         else ""
     )
     return MealCardView(
-        slots_text(meal.slots),
+        _meal_title(meal),
         clock_text(meal.minute),
         moved,
         number_text(meal.macros.kcal),
@@ -202,7 +212,13 @@ def _unreadable_note(count: int) -> str:
     )
 
 
-def _present_report(report: DayNutritionReport, *, in_progress: bool, verified: bool) -> DayView:
+def _present_report(
+    report: DayNutritionReport,
+    *,
+    in_progress: bool,
+    verified: bool,
+    lean_mass_measured: bool | None,
+) -> DayView:
     return DayView(
         day_title(report.day),
         goal_text(report.goal),
@@ -214,6 +230,7 @@ def _present_report(report: DayNutritionReport, *, in_progress: bool, verified: 
         _unreadable_note(report.unreadable_activities),
         in_progress_text() if in_progress else "",
         "" if verified else foods_unverified_text(),
+        "" if lean_mass_measured is None else lean_mass_note_text(measured=lean_mass_measured),
         fixed_notice_text(),
     )
 
@@ -224,12 +241,20 @@ def present_day(
     *,
     today: date | None = None,
     foods_verified: bool = True,
+    lean_mass_measured: bool | None = None,
 ) -> DayContent:
     """The page content of a day from the use case's result.
 
     `today` (the profile's today) marks the current day as in progress; `foods_verified` is False
-    while the food table's values have not been checked against their source.
+    while the food table's values have not been checked against their source;
+    `lean_mass_measured` says whether the energy availability limit used a measured lean mass
+    (True) or the estimate (False); None leaves the note out.
     """
     if isinstance(result, NutritionUnavailable):
         return UnavailableView(day_title(day), unavailable_text(result.reason), fixed_notice_text())
-    return _present_report(result, in_progress=day == today, verified=foods_verified)
+    return _present_report(
+        result,
+        in_progress=day == today,
+        verified=foods_verified,
+        lean_mass_measured=lean_mass_measured,
+    )

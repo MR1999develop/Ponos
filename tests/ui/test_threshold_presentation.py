@@ -25,6 +25,7 @@ from ponos_coach.assessment.domain import (
     Overdue,
     Recommended,
     SegmentSelection,
+    ThresholdProtocol,
     ThresholdRejection,
     ThresholdTest,
     ThresholdTestResult,
@@ -49,6 +50,8 @@ from ponos_coach.ui.threshold_presentation import (
     pace_text,
     pace_zone_ranges,
     present_review,
+    protocol_choice_text,
+    protocol_method_text,
     rejection_message,
     retest_status_bar_text,
     retest_text,
@@ -71,7 +74,12 @@ def english_numbers(qtbot: QtBot) -> Iterator[None]:
     QLocale.setDefault(previous)
 
 
-def a_result(*, pace: int | None = THRESHOLD_PACE, number: int = 1) -> ThresholdTestResult:
+def a_result(
+    *,
+    pace: int | None = THRESHOLD_PACE,
+    number: int = 1,
+    protocol: ThresholdProtocol = ThresholdProtocol.THIRTY_MINUTES,
+) -> ThresholdTestResult:
     return ThresholdTestResult(
         identity=fit_identity(number),
         test_day=date(2026, 3, 14),
@@ -85,6 +93,7 @@ def a_result(*, pace: int | None = THRESHOLD_PACE, number: int = 1) -> Threshold
         valid_hr_samples=1200,
         hr_zone_starts_bpm=zone_starts_bpm(THRESHOLD_BPM),
         pace_zone_starts_s_per_km=None if pace is None else pace_zone_starts_s_per_km(pace),
+        protocol=protocol,
     )
 
 
@@ -95,20 +104,20 @@ def test_heart_rate_zones_are_whole_bpm_ranges_that_do_not_overlap() -> None:
     ranges = heart_rate_zone_ranges(zone_starts_bpm(THRESHOLD_BPM))
 
     assert ranges == (
-        "Up to 142",
-        "143 to 151",
-        "152 to 159",
-        "160 to 167",
+        "Up to 131",
+        "132 to 146",
+        "147 to 157",
+        "158 to 167",
         "168 or more",
     )
 
 
 def test_a_boundary_that_is_a_whole_bpm_belongs_to_the_faster_zone() -> None:
-    # 85% of 160 is 136 exactly: 136 is the first bpm of Z2, not the last of Z1
-    ranges = heart_rate_zone_ranges(zone_starts_bpm(160))
+    # 78% of 200 is 156 exactly: 156 is the first bpm of Z2, not the last of Z1
+    ranges = heart_rate_zone_ranges(zone_starts_bpm(200))
 
-    assert ranges[0] == "Up to 135"
-    assert ranges[1].startswith("136 to")
+    assert ranges[0] == "Up to 155"
+    assert ranges[1].startswith("156 to")
 
 
 def test_pace_zones_agree_with_the_domain_on_every_whole_second() -> None:
@@ -173,6 +182,24 @@ def test_without_distance_the_review_explains_the_missing_pace_and_has_no_pace_c
     assert all(len(row) == 2 for row in view.zone_rows)
 
 
+def test_the_review_says_which_protocol_it_was_and_uses_its_minutes() -> None:
+    thirty = present_review(ThresholdReview(a_result(), 171), ROME)
+    twenty = present_review(
+        ThresholdReview(a_result(protocol=ThresholdProtocol.TWENTY_MINUTES), 171), ROME
+    )
+
+    assert thirty.protocol == "30-minute test (last 20 minutes)"
+    assert twenty.protocol == "20-minute test (\u22125%)"
+    assert twenty.selection == "The 20 minutes in which you covered the most distance"
+
+
+def test_the_protocol_texts_are_the_same_in_the_choice_and_in_the_history() -> None:
+    assert protocol_choice_text(ThresholdProtocol.THIRTY_MINUTES) == (
+        "30-minute test (last 20 minutes)"
+    )
+    assert protocol_method_text(ThresholdProtocol.TWENTY_MINUTES, 2) == "20-minute test, method 2"
+
+
 # --- Rejections -------------------------------------------------------------------------------
 
 
@@ -189,6 +216,12 @@ def test_a_short_activity_is_told_in_plain_words_with_the_minutes_of_the_protoco
     message = rejection_message(ThresholdRejection.TOO_SHORT)
 
     assert message.what == "The activity is shorter than 30 minutes."
+
+
+def test_a_short_activity_for_the_twenty_minute_test_names_twenty_minutes() -> None:
+    message = rejection_message(ThresholdRejection.TOO_SHORT, ThresholdProtocol.TWENTY_MINUTES)
+
+    assert message.what == "The activity is shorter than 20 minutes."
 
 
 # --- Retest status ----------------------------------------------------------------------------
@@ -222,9 +255,24 @@ def test_a_history_row_has_texts_and_numeric_keys() -> None:
 
     assert row.cells[0] == "3/14/26"
     assert plain(row.cells[1]) == "Running, 3/14/26 8:10 AM"
-    assert row.cells[2:] == ("168", "4:38", "30-minute run, method 1")
+    assert row.cells[2:] == ("168", "4:38", "30-minute test, method 2")
     assert row.keys[0] == float(date(2026, 3, 14).toordinal())
     assert row.keys[2:4] == (168.0, 278.0)
+
+
+def test_a_history_row_names_the_protocol_of_the_test() -> None:
+    test = ThresholdTest(
+        fit_identity(1),
+        date(2026, 3, 14),
+        START,
+        168,
+        278,
+        protocol=ThresholdProtocol.TWENTY_MINUTES,
+    )
+
+    row = history_row(HistoryEntry(test, None), ROME)
+
+    assert row.cells[4] == "20-minute test, method 2"
 
 
 def test_a_test_without_pace_or_activity_leaves_the_pace_empty_and_says_the_activity_is_gone() -> (

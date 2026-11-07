@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from PySide6.QtCore import QObject, Signal
 
 from ponos_coach.activities.domain import ActivityIdentity
-from ponos_coach.assessment.domain import ThresholdTestResult
+from ponos_coach.assessment.domain import DEFAULT_PROTOCOL, ThresholdProtocol, ThresholdTestResult
 from ponos_coach.assessment.use_cases import EvaluateThresholdTest, ListThresholdTests, NextRetest
 from ponos_coach.load.domain import physiology_for_day
 from ponos_coach.profiles.measurements import UpdateMeasurements
@@ -56,7 +56,9 @@ class ThresholdApplied:
     cell: AppliedCell
 
 
-def _evaluate(identity: ActivityIdentity, access: ProfileAccess) -> ThresholdVerdict:
+def _evaluate(
+    identity: ActivityIdentity, protocol: ThresholdProtocol, access: ProfileAccess
+) -> ThresholdVerdict:
     session = access.session
     evaluation = EvaluateThresholdTest(
         session.activities,
@@ -64,7 +66,7 @@ def _evaluate(identity: ActivityIdentity, access: ProfileAccess) -> ThresholdVer
         session.physiology,
         access.decode,
         timezone=access.zone,
-    )(identity)
+    )(identity, protocol)
     if not isinstance(evaluation, ThresholdTestResult):
         return evaluation
     in_force = physiology_for_day(session.physiology.list_entries(), access.today())
@@ -124,13 +126,16 @@ class ThresholdLoader(QObject):
 
     # --- Evaluate -------------------------------------------------------------------------
 
-    def evaluate(self, identity: ActivityIdentity) -> bool:
-        """Start evaluating an activity as the test. False if no profile is open."""
+    def evaluate(
+        self, identity: ActivityIdentity, protocol: ThresholdProtocol = DEFAULT_PROTOCOL
+    ) -> bool:
+        """Start evaluating an activity as a test of this protocol (the answer of an earlier
+        evaluation is dropped). False if no profile is open."""
         self._evaluation += 1
         request = self._evaluation
 
         def work(access: ProfileAccess) -> ThresholdVerdict:
-            return _evaluate(identity, access)
+            return _evaluate(identity, protocol, access)
 
         def done(outcome: JobOutcome) -> None:
             if request != self._evaluation:

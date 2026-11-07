@@ -28,7 +28,12 @@ from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.load.domain import Physiology, PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
-from ponos_coach.nutrition.ports import ActivityLevelStore, GoalPeriodStore, MealTimesStore
+from ponos_coach.nutrition.ports import (
+    ActivityLevelStore,
+    GoalPeriodStore,
+    LeanMassStore,
+    MealTimesStore,
+)
 from ponos_coach.planning.ports import PlanStore
 from ponos_coach.profiles.domain import (
     FixedProfileData,
@@ -152,6 +157,11 @@ class ProfileSession:
     def activity_levels(self) -> ActivityLevelStore:
         """Activity level outside sport with validity date."""
         return self._opened.activity_levels
+
+    @property
+    def lean_masses(self) -> LeanMassStore:
+        """Measured lean mass series (optional)."""
+        return self._opened.lean_masses
 
     @property
     def meal_times(self) -> MealTimesStore:

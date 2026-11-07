@@ -734,8 +734,6 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Change goal...": QKeySequence("Ctrl+Shift+E").toString(),
         "Remove goal": QKeySequence("Ctrl+Delete").toString(),
         "Training settings...": QKeySequence("Ctrl+Shift+T").toString(),
-        "Undo": QKeySequence(QKeySequence.StandardKey.Undo).toString(),
-        "Redo": QKeySequence(QKeySequence.StandardKey.Redo).toString(),
     }
 
 

@@ -209,6 +209,7 @@ class MainWindow(QMainWindow):
         self._threshold = ThresholdUi(
             self,
             self._controller,
+            settings=self._settings,
             zone=lambda: self._zone,
             show_error=self._show_error,
             notify=lambda text: self.statusBar().showMessage(text, _STATUS_MESSAGE_MS),

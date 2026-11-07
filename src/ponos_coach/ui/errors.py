@@ -32,8 +32,19 @@ from ponos_coach.goals.ports import (
 )
 from ponos_coach.load.domain import MissingPhysiologyError
 from ponos_coach.load.use_cases import ExclusionReason
-from ponos_coach.nutrition.ports import GoalPeriodNotFoundError, GoalPeriodOverlapError
+from ponos_coach.nutrition.domain import defaults as nutrition_defaults
+from ponos_coach.nutrition.ports import (
+    GoalPeriodNotFoundError,
+    GoalPeriodOverlapError,
+    LeanMassNotFoundError,
+)
 from ponos_coach.nutrition.use_cases import LevelDateInFutureError
+from ponos_coach.profiles.lean_mass import (
+    LeanMassChangedError,
+    LeanMassDateInFutureError,
+    LeanMassImplausibleError,
+    LeanMassNeedsWeightError,
+)
 from ponos_coach.profiles.measurements import InvalidMeasurementsError, MeasurementProblem
 from ponos_coach.profiles.ports import (
     FolderHasOtherContentError,
@@ -48,6 +59,8 @@ from ponos_coach.profiles.ports import (
 )
 from ponos_coach.profiles.threshold_tests import ThresholdTestChangedError
 from ponos_coach.profiles.use_cases import ProfileMismatchError
+
+_PERCENT = 100
 
 # Contexts "Errors", "ImportIssues" and "Exclusions": lupdate only finds context and text written
 # as literals, so no aliases of `QCoreApplication.translate`.
@@ -352,6 +365,63 @@ def _level_in_future(_error: BaseException) -> ErrorMessage:
     )
 
 
+def _lean_mass_in_future(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The date is in the future"),
+        QCoreApplication.translate(
+            "Errors", "A lean mass can only hold from today or from a past day."
+        ),
+        QCoreApplication.translate("Errors", "Choose today or an earlier day."),
+    )
+
+
+def _lean_mass_needs_weight(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "A weight is needed first"),
+        QCoreApplication.translate(
+            "Errors",
+            "The lean mass is checked against your weight, and none is saved for that day.",
+        ),
+        QCoreApplication.translate(
+            "Errors", "Enter your weight with Profile > Edit profile, then set the lean mass."
+        ),
+    )
+
+
+def _lean_mass_implausible(_error: BaseException) -> ErrorMessage:
+    # {low} and {high}: the share of the weight the lean mass has to be between, as percentages.
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The lean mass does not fit your weight"),
+        QCoreApplication.translate(
+            "Errors", "The lean mass must be between {low}% and {high}% of your weight on that day."
+        ).format(
+            low=round(nutrition_defaults.MIN_LEAN_MASS_FRACTION * _PERCENT),
+            high=round(nutrition_defaults.MAX_LEAN_MASS_FRACTION * _PERCENT),
+        ),
+        QCoreApplication.translate(
+            "Errors", "Check the value, or the weight in Profile > Edit profile."
+        ),
+    )
+
+
+def _lean_mass_changed(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The lean mass cannot be taken back"),
+        QCoreApplication.translate(
+            "Errors", "It was changed after you set it, so it was left as it is."
+        ),
+        QCoreApplication.translate("Errors", "Nothing changed. Set the value you want again."),
+    )
+
+
+def _lean_mass_not_found(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The measurement is no longer saved"),
+        QCoreApplication.translate("Errors", "It was already removed."),
+        QCoreApplication.translate("Errors", "Open Nutrition settings to see what is saved."),
+    )
+
+
 def _threshold_changed(_error: BaseException) -> ErrorMessage:
     return ErrorMessage(
         QCoreApplication.translate("Errors", "The threshold test cannot be taken back"),
@@ -449,6 +519,11 @@ _BUILDERS: tuple[tuple[type[BaseException], Callable[[BaseException], ErrorMessa
     (GoalNotFoundError, _goal_missing),
     (GoalAlreadyExistsError, _goal_exists),
     (LevelDateInFutureError, _level_in_future),
+    (LeanMassDateInFutureError, _lean_mass_in_future),
+    (LeanMassNeedsWeightError, _lean_mass_needs_weight),
+    (LeanMassImplausibleError, _lean_mass_implausible),
+    (LeanMassChangedError, _lean_mass_changed),
+    (LeanMassNotFoundError, _lean_mass_not_found),
     (ThresholdTestChangedError, _threshold_changed),
     (ThresholdTestAlreadyStoredError, _threshold_already_stored),
     (ThresholdTestNotFoundError, _threshold_not_found),

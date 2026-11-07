@@ -13,24 +13,29 @@ from zoneinfo import ZoneInfo
 from PySide6.QtCore import QLocale, QSortFilterProxyModel, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QButtonGroup,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QHeaderView,
     QLabel,
     QProgressBar,
     QPushButton,
+    QRadioButton,
     QStackedWidget,
     QTableView,
     QVBoxLayout,
     QWidget,
 )
 
+from ponos_coach.assessment.domain import ThresholdProtocol
 from ponos_coach.assessment.domain.defaults import (
     RETEST_MAX_DAYS,
     RETEST_MIN_DAYS,
-    TEST_DURATION_S,
     THRESHOLD_WINDOW_S,
+    TWENTY_MINUTE_HR_PERCENT,
+    TWENTY_MINUTE_PACE_ADD_PERCENT,
 )
 from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.state_page import StatePage
@@ -39,6 +44,8 @@ from ponos_coach.ui.threshold_history_model import ThresholdHistoryModel, sorted
 from ponos_coach.ui.threshold_presentation import (
     ReviewView,
     ThresholdHistory,
+    protocol_choice_text,
+    protocol_minutes,
     retest_text,
 )
 from ponos_coach.ui.tokens import DIALOG_MIN_WIDTH, SPACE_2, SPACE_4
@@ -73,23 +80,21 @@ def _table(parent: QWidget, name: str, accessible_name: str) -> QTableView:
 
 
 class ThresholdInstructionsDialog(QDialog):
-    """How to do the 30-minute test."""
+    """How to do the threshold test, in either of its two protocols."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Test instructions"))
         self.setMinimumWidth(DIALOG_MIN_WIDTH)
         locale = QLocale()
-        minutes = locale.toString(TEST_DURATION_S // _SECONDS_PER_MINUTE)
-        last = locale.toString(THRESHOLD_WINDOW_S // _SECONDS_PER_MINUTE)
         first_week = locale.toString(RETEST_MIN_DAYS // _DAYS_PER_WEEK)
         last_week = locale.toString(RETEST_MAX_DAYS // _DAYS_PER_WEEK)
         steps = (
             self.tr("Warm up for 10 to 15 minutes, running easily."),
             self.tr(
-                "Run for {minutes} minutes at the hardest effort you can keep steady for the "
+                "Run one of the two tests below at the hardest effort you can keep steady for the "
                 "whole time. Do not start too fast."
-            ).format(minutes=minutes),
+            ),
             self.tr("Do it alone and on flat ground, so that nothing changes your effort."),
             self.tr("Finish with an easy cool-down."),
         )
@@ -99,9 +104,9 @@ class ThresholdInstructionsDialog(QDialog):
         title.setFont(font)
         intro = _label(
             self.tr(
-                "The {minutes}-minute test measures your threshold heart rate and pace. Record "
-                "it with your watch."
-            ).format(minutes=minutes),
+                "The threshold test measures your threshold heart rate and pace. Record it with "
+                "your watch, and choose the test that suits you."
+            ),
             self,
             "instructionsIntro",
         )
@@ -116,11 +121,29 @@ class ThresholdInstructionsDialog(QDialog):
         outer.addWidget(
             _label(
                 self.tr(
-                    "Your threshold heart rate is the average of the last {minutes} minutes of the "
-                    "test."
-                ).format(minutes=last),
+                    "30-minute test: run for {minutes} minutes. Your threshold heart rate and "
+                    "pace are the averages of the last {last} minutes."
+                ).format(
+                    minutes=locale.toString(protocol_minutes(ThresholdProtocol.THIRTY_MINUTES)),
+                    last=locale.toString(THRESHOLD_WINDOW_S // _SECONDS_PER_MINUTE),
+                ),
                 self,
-                "instructionsAverage",
+                "instructionsThirty",
+            )
+        )
+        outer.addWidget(
+            _label(
+                self.tr(
+                    "20-minute test: run for {minutes} minutes. Your threshold heart rate is "
+                    "{percent}% of the average of the whole test, and your threshold pace is the "
+                    "average pace made {add}% slower."
+                ).format(
+                    minutes=locale.toString(protocol_minutes(ThresholdProtocol.TWENTY_MINUTES)),
+                    percent=locale.toString(TWENTY_MINUTE_HR_PERCENT),
+                    add=locale.toString(TWENTY_MINUTE_PACE_ADD_PERCENT),
+                ),
+                self,
+                "instructionsTwenty",
             )
         )
         outer.addWidget(
@@ -146,7 +169,7 @@ class ThresholdInstructionsDialog(QDialog):
             _label(
                 self.tr(
                     "Afterwards, choose the activity in Activities and use Threshold test > "
-                    "Use as threshold test."
+                    "Use as threshold test, then say which test you did."
                 ),
                 self,
                 "instructionsNext",
@@ -161,6 +184,7 @@ class ThresholdResultDialog(QDialog):
     """The review of an activity as the threshold test: loading, a result to apply, or why not."""
 
     apply_requested = Signal()
+    protocol_chosen = Signal(object)  # ThresholdProtocol: the user picked the other test
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -192,6 +216,7 @@ class ThresholdResultDialog(QDialog):
         form.setVerticalSpacing(SPACE_2)
         rows = (
             ("day", self.tr("Test day")),
+            ("protocol", self.tr("Test")),
             ("start", self.tr("Segment starts at")),
             ("selection", self.tr("Segment chosen as")),
             ("threshold", self.tr("Threshold heart rate (bpm)")),
@@ -230,10 +255,52 @@ class ThresholdResultDialog(QDialog):
         self._buttons.rejected.connect(self.reject)
         outer = QVBoxLayout(self)
         outer.setSpacing(SPACE_4)
+        outer.addWidget(self._protocol_box())
         outer.addWidget(self._pages, stretch=1)
         outer.addWidget(self._buttons)
 
+    def _protocol_box(self) -> QWidget:
+        """Which test the activity was: two radio buttons, the choice is remembered."""
+        box = QWidget(self)
+        box.setObjectName("thresholdProtocol")
+        box.setAccessibleName(self.tr("Which test you did"))
+        self._protocol_buttons: dict[ThresholdProtocol, QRadioButton] = {}
+        group = QButtonGroup(box)
+        row = QHBoxLayout(box)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(SPACE_4)
+        row.addWidget(QLabel(self.tr("Which test did you do?"), box))
+        for protocol in ThresholdProtocol:
+            button = QRadioButton(protocol_choice_text(protocol), box)
+            button.setObjectName(f"thresholdProtocol-{protocol.value}")
+            button.toggled.connect(lambda on, p=protocol: self._on_protocol_toggled(p, on))
+            group.addButton(button)
+            self._protocol_buttons[protocol] = button
+            row.addWidget(button)
+        row.addStretch(1)
+        return box
+
+    def _on_protocol_toggled(self, protocol: ThresholdProtocol, checked: bool) -> None:
+        if checked:
+            self.protocol_chosen.emit(protocol)
+
     # --- Test accessors ---------------------------------------------------------------------
+
+    @property
+    def protocol(self) -> ThresholdProtocol:
+        """The test the radio buttons say."""
+        return next(p for p, b in self._protocol_buttons.items() if b.isChecked())
+
+    def protocol_button(self, protocol: ThresholdProtocol) -> QRadioButton:
+        """The radio button of one protocol."""
+        return self._protocol_buttons[protocol]
+
+    def set_protocol(self, protocol: ThresholdProtocol) -> None:
+        """Show the protocol without telling anyone (the opening choice)."""
+        for kind, button in self._protocol_buttons.items():
+            button.blockSignals(True)
+            button.setChecked(kind is protocol)
+            button.blockSignals(False)
 
     @property
     def apply_button(self) -> QPushButton:
@@ -294,6 +361,7 @@ class ThresholdResultDialog(QDialog):
         """A test that can be applied."""
         texts = {
             "day": view.day,
+            "protocol": view.protocol,
             "start": view.segment_start,
             "selection": view.selection,
             "threshold": view.threshold,

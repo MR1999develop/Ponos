@@ -20,12 +20,14 @@ from PySide6.QtCore import QCoreApplication, QDate, QDateTime, QLocale, QTime
 
 from ponos_coach.activities.domain import Sport
 from ponos_coach.assessment.domain import (
+    DEFAULT_PROTOCOL,
     NoTest,
     NotYet,
     Overdue,
     Recommended,
     RetestStatus,
     SegmentSelection,
+    ThresholdProtocol,
     ThresholdRejection,
     ThresholdTest,
     ThresholdTestResult,
@@ -33,7 +35,6 @@ from ponos_coach.assessment.domain import (
 from ponos_coach.assessment.domain.defaults import (
     MAX_PAUSE_S,
     RETEST_MAX_DAYS,
-    TEST_DURATION_S,
     THRESHOLD_TEST_SPORTS,
     THRESHOLD_WINDOW_S,
 )
@@ -140,6 +141,33 @@ def pace_text(seconds_per_km: int) -> str:
     return f"{minutes}:{seconds:02d}"
 
 
+# --- The two protocols -------------------------------------------------------------------------
+
+
+def protocol_minutes(protocol: ThresholdProtocol) -> int:
+    """Length of the test of a protocol, in minutes."""
+    return protocol.duration_s // _SECONDS_PER_MINUTE
+
+
+def protocol_choice_text(protocol: ThresholdProtocol) -> str:
+    """The protocol as the user chooses it (a radio button label)."""
+    translate = QCoreApplication.translate
+    if protocol is ThresholdProtocol.THIRTY_MINUTES:
+        return translate("ThresholdTexts", "30-minute test (last 20 minutes)")
+    return translate("ThresholdTexts", "20-minute test (−5%)")  # noqa: RUF001 - a real minus sign
+
+
+def protocol_method_text(protocol: ThresholdProtocol, method_version: int) -> str:
+    """Protocol and method version of a saved test, for the history table."""
+    translate = QCoreApplication.translate
+    version = QLocale().toString(method_version)
+    if protocol is ThresholdProtocol.THIRTY_MINUTES:
+        return translate("ThresholdTexts", "30-minute test, method {version}").format(
+            version=version
+        )
+    return translate("ThresholdTexts", "20-minute test, method {version}").format(version=version)
+
+
 # --- The review of a test ---------------------------------------------------------------------
 
 
@@ -148,6 +176,7 @@ class ReviewView:
     """Everything the review dialog shows for an accepted test."""
 
     day: str
+    protocol: str
     segment_start: str
     selection: str
     threshold: str
@@ -157,8 +186,8 @@ class ReviewView:
     zone_rows: ZoneRows
 
 
-def _selection_text(selection: SegmentSelection) -> str:
-    minutes = QLocale().toString(TEST_DURATION_S // _SECONDS_PER_MINUTE)
+def _selection_text(selection: SegmentSelection, protocol: ThresholdProtocol) -> str:
+    minutes = QLocale().toString(protocol_minutes(protocol))
     if selection is SegmentSelection.BY_DISTANCE:
         return QCoreApplication.translate(
             "ThresholdTexts", "The {minutes} minutes in which you covered the most distance"
@@ -239,8 +268,9 @@ def present_review(review: ThresholdReview, zone: ZoneInfo) -> ReviewView:
         columns.append(pace_zone_ranges(result.pace_zone_starts_s_per_km))
     return ReviewView(
         day=date_text(result.test_day),
+        protocol=protocol_choice_text(result.protocol),
         segment_start=_time_text(result.segment_start, zone),
-        selection=_selection_text(result.selection),
+        selection=_selection_text(result.selection, result.protocol),
         threshold=locale.toString(result.threshold_bpm),
         pace=pace,
         current=locale.toString(review.current_bpm),
@@ -267,10 +297,13 @@ def applied_text(result: ThresholdTestResult, period: ValidityPeriod) -> str:
 # --- Why a test is rejected -------------------------------------------------------------------
 
 
-def rejection_message(rejection: ThresholdRejection) -> ErrorMessage:
-    """What is wrong with the activity as a test, in plain words, and how to go on."""
+def rejection_message(
+    rejection: ThresholdRejection, protocol: ThresholdProtocol = DEFAULT_PROTOCOL
+) -> ErrorMessage:
+    """What is wrong with the activity as a test of this protocol, in plain words, and how to go
+    on."""
     translate = QCoreApplication.translate
-    minutes = QLocale().toString(TEST_DURATION_S // _SECONDS_PER_MINUTE)
+    minutes = QLocale().toString(protocol_minutes(protocol))
     average = QLocale().toString(THRESHOLD_WINDOW_S // _SECONDS_PER_MINUTE)
     seconds = QLocale().toString(MAX_PAUSE_S)
     title = translate("ThresholdTexts", "This activity cannot be used as a threshold test")
@@ -385,9 +418,7 @@ def history_row(entry: HistoryEntry, zone: ZoneInfo) -> HistoryRow:
     test = entry.test
     locale = QLocale()
     activity = _activity_text(entry.activity, zone)
-    method = QCoreApplication.translate("ThresholdTexts", "30-minute run, method {version}").format(
-        version=locale.toString(test.method_version)  # the 30 is the protocol, fixed in the name
-    )
+    method = protocol_method_text(test.protocol, test.method_version)
     pace = "" if test.pace_s_per_km is None else pace_text(test.pace_s_per_km)
     pace_key = -1.0 if test.pace_s_per_km is None else float(test.pace_s_per_km)
     return HistoryRow(

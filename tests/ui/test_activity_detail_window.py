@@ -118,7 +118,7 @@ def test_the_overview_shows_three_charts_pmc_weekly_load_and_zones(
     assert [t.name for t in load.data] == ["Running"]
     assert load.layout.yaxis.title.text == "Load (hrTSS per week)"
     assert load.layout.xaxis.title.text == "Week (starting Monday)"
-    assert zones.data[0].name == "Z1 <85%"
+    assert zones.data[0].name == "Z1 <78%"
     assert zones.layout.yaxis.title.text == "Time in zone (hours per week)"
     assert zones.layout.legend.title.text == "Heart-rate zone (% of threshold)"
     assert all(trace.type == "bar" for trace in (*load.data, *zones.data))

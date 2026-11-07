@@ -177,6 +177,11 @@ def advisory_text(advisory: Advisory) -> str:
         Advisory.INTAKES_SCALED: QCoreApplication.translate(
             "Nutrition", "The amounts around training were reduced to fit the day's totals."
         ),
+        Advisory.LONG_WEIGHT_LOSS: QCoreApplication.translate(
+            "Nutrition",
+            "This weight-loss period has lasted a long time. Long periods of weight loss are "
+            "best alternated with periods of maintenance.",
+        ),
     }
     return texts[advisory]
 
@@ -230,6 +235,28 @@ def slot_text(slot: MealSlot) -> str:
         MealSlot.POST_TRAINING: QCoreApplication.translate("Nutrition", "After training"),
     }
     return texts[slot]
+
+
+def refuel_hour_text(hour: int) -> str:
+    """The title of an hourly intake after a session that is followed by another soon (hour 1 to
+    4 after the end)."""
+    # {hour}: the hour after the end of the session, as a number.
+    return QCoreApplication.translate("Nutrition", "Refuel, hour {hour}").format(
+        hour=QLocale().toString(hour)
+    )
+
+
+def lean_mass_note_text(*, measured: bool) -> str:
+    """Which lean mass the limit on energy availability of the day uses."""
+    if measured:
+        return QCoreApplication.translate(
+            "Nutrition", "The limit on energy availability uses your measured lean mass."
+        )
+    return QCoreApplication.translate(
+        "Nutrition",
+        "The limit on energy availability uses an estimate of your lean mass. You can enter a "
+        "measured value in Nutrition settings.",
+    )
 
 
 def slots_text(slots: Sequence[MealSlot]) -> str:

@@ -10,6 +10,7 @@ Ctrl+Shift+Z). Problems are written on the field that has them.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date
 
 from PySide6.QtCore import QCoreApplication, QLocale, QModelIndex, Qt, QTime
@@ -36,6 +37,8 @@ from PySide6.QtWidgets import (
 from ponos_coach.nutrition.domain import (
     ActivityLevel,
     GoalPeriod,
+    LeanMass,
+    LeanMassEntry,
     MealTimes,
     WeightLossGoal,
     level_for_day,
@@ -46,6 +49,8 @@ from ponos_coach.ui.birth_date_edit import from_qdate, to_qdate
 from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.form_rows import add_field_row
 from ponos_coach.ui.goal_period_dialog import GoalPeriodDialog
+from ponos_coach.ui.lean_mass_section import LeanMassSection
+from ponos_coach.ui.nutrition_loader import LeanMassApplied
 from ponos_coach.ui.nutrition_settings_model import (
     MIN_MEAL_GAP_MIN,
     MealField,
@@ -56,9 +61,11 @@ from ponos_coach.ui.nutrition_settings_model import (
 from ponos_coach.ui.nutrition_texts import activity_level_text, goal_name_text
 from ponos_coach.ui.nutrition_undo import (
     AddPeriodCommand,
+    RemoveLeanMassCommand,
     RemovePeriodCommand,
     ReplacePeriodCommand,
     SetActivityLevelCommand,
+    SetLeanMassCommand,
     SetMealTimesCommand,
     SettingsOps,
 )
@@ -93,6 +100,8 @@ class NutritionSettingsDialog(QDialog):
         ops: SettingsOps,
         today: date,
         parent: QWidget | None = None,
+        *,
+        lean_masses: Sequence[LeanMassEntry] = (),
     ) -> None:
         super().__init__(parent)
         self._ops = ops
@@ -117,6 +126,7 @@ class NutritionSettingsDialog(QDialog):
         self.setWindowModality(Qt.WindowModality.WindowModal)
         self._build()
         self.apply(settings, reset_times=True)
+        self.apply_lean_masses(lean_masses)
 
     # --- Construction -------------------------------------------------------------------
 
@@ -132,6 +142,7 @@ class NutritionSettingsDialog(QDialog):
         outer = QVBoxLayout(self)
         outer.setSpacing(SPACE_4)
         outer.addWidget(self._level_group())
+        outer.addWidget(self._lean_mass_group())
         outer.addWidget(self._times_group())
         outer.addWidget(self._periods_group(), stretch=1)
         outer.addWidget(self._failure)
@@ -165,6 +176,13 @@ class NutritionSettingsDialog(QDialog):
         layout.addWidget(self._set_level, alignment=Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(self._levels_table)
         return box
+
+    def _lean_mass_group(self) -> LeanMassSection:
+        section = LeanMassSection(self._today, self)
+        section.set_requested.connect(self._on_set_lean_mass)
+        section.remove_requested.connect(self._on_remove_lean_mass)
+        self._lean_section = section
+        return section
 
     def _times_group(self) -> QGroupBox:
         box = QGroupBox(self.tr("Typical meal times"), self)
@@ -277,6 +295,11 @@ class NutritionSettingsDialog(QDialog):
         return self._stack
 
     @property
+    def lean_mass_section(self) -> LeanMassSection:
+        """The measured lean mass part of the dialog."""
+        return self._lean_section
+
+    @property
     def levels_model(self) -> TextTableModel:
         """The history of the activity levels."""
         return self._levels_model
@@ -386,6 +409,10 @@ class NutritionSettingsDialog(QDialog):
         self._update_times()
         self._update_period_buttons()
 
+    def apply_lean_masses(self, entries: Sequence[LeanMassEntry]) -> None:
+        """Show the measured lean mass the profile holds now (after a read or a change)."""
+        self._lean_section.apply(entries)
+
     def show_failure(self, message: ErrorMessage) -> None:
         """Say that a change did not go through; the stack is cleared, it no longer matches."""
         self._stack.clear()
@@ -420,6 +447,27 @@ class NutritionSettingsDialog(QDialog):
             if isinstance(command, SetActivityLevelCommand) and command.valid_from == valid_from:
                 return command.new_level
         return next((e.level for e in self._settings.levels if e.valid_from == valid_from), None)
+
+    # --- Lean mass --------------------------------------------------------------------------
+
+    def _on_set_lean_mass(self, lean_mass: object, valid_from: object) -> None:
+        if isinstance(lean_mass, LeanMass) and isinstance(valid_from, date):
+            self._ops.set_lean_mass(lean_mass, valid_from)
+
+    def lean_mass_applied(self, applied: LeanMassApplied) -> None:
+        """The first set went through: it becomes the undoable step."""
+        self._lean_section.show_problem("")
+        self._stack.push(
+            SetLeanMassCommand(self._ops, applied.lean_mass, applied.valid_from, applied.cell)
+        )
+
+    def show_lean_mass_problem(self, message: ErrorMessage) -> None:
+        """A rule refused the lean mass: say what and how to fix it, on the field."""
+        self._lean_section.show_problem(f"{message.title}. {message.what} {message.remedy}")
+
+    def _on_remove_lean_mass(self, entry: object) -> None:
+        if isinstance(entry, LeanMassEntry):
+            self._stack.push(RemoveLeanMassCommand(self._ops, entry))
 
     # --- Meal times -------------------------------------------------------------------------
 

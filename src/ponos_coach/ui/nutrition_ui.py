@@ -17,12 +17,13 @@ from datetime import date
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtWidgets import QWidget
 
+from ponos_coach.nutrition.domain import LeanMassEntry
 from ponos_coach.nutrition.use_cases import NutritionSettings
 from ponos_coach.ui.calendar_page import CalendarPage
 from ponos_coach.ui.day_page import DayPage, DayState
 from ponos_coach.ui.day_presentation import day_title, present_day
 from ponos_coach.ui.errors import ErrorMessage
-from ponos_coach.ui.nutrition_loader import DayLoaded, NutritionLoader
+from ponos_coach.ui.nutrition_loader import DayLoaded, LeanMassApplied, NutritionLoader
 from ponos_coach.ui.nutrition_settings_dialog import NutritionSettingsDialog
 from ponos_coach.ui.nutrition_texts import fixed_notice_text
 from ponos_coach.ui.workspace import WorkspaceController
@@ -56,9 +57,13 @@ class NutritionUi(QObject):
         self._day: date | None = None
         self._dialog: NutritionSettingsDialog | None = None
         self._waiting_for_settings = False
+        self._lean_masses: tuple[LeanMassEntry, ...] = ()
         self._loader.day_loaded.connect(self._on_day_loaded)
         self._loader.settings_loaded.connect(self._on_settings_loaded)
         self._loader.settings_changed.connect(self._on_settings_changed)
+        self._loader.lean_masses_loaded.connect(self._on_lean_masses_loaded)
+        self._loader.lean_mass_applied.connect(self._on_lean_mass_applied)
+        self._loader.lean_mass_refused.connect(self._on_lean_mass_refused)
         self._loader.command_failed.connect(self._on_command_failed)
         self._loader.failed.connect(self._on_failed)
         calendar.day_requested.connect(self._on_day_requested)
@@ -120,6 +125,7 @@ class NutritionUi(QObject):
                     loaded.result,
                     today=self._today(),
                     foods_verified=loaded.foods_verified,
+                    lean_mass_measured=loaded.lean_mass_measured,
                 )
             )
 
@@ -173,7 +179,9 @@ class NutritionUi(QObject):
             self._open_dialog(settings)
 
     def _open_dialog(self, settings: NutritionSettings) -> None:
-        dialog = NutritionSettingsDialog(settings, self._loader, self._today(), self._window)
+        dialog = NutritionSettingsDialog(
+            settings, self._loader, self._today(), self._window, lean_masses=self._lean_masses
+        )
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         dialog.finished.connect(self._on_dialog_closed)
         self._dialog = dialog
@@ -181,6 +189,21 @@ class NutritionUi(QObject):
 
     def _on_dialog_closed(self) -> None:
         self._dialog = None
+
+    def _on_lean_masses_loaded(self, entries: object) -> None:
+        if not isinstance(entries, tuple):
+            return
+        self._lean_masses = entries
+        if self._dialog is not None:
+            self._dialog.apply_lean_masses(entries)
+
+    def _on_lean_mass_applied(self, applied: object) -> None:
+        if isinstance(applied, LeanMassApplied) and self._dialog is not None:
+            self._dialog.lean_mass_applied(applied)
+
+    def _on_lean_mass_refused(self, message: object) -> None:
+        if isinstance(message, ErrorMessage) and self._dialog is not None:
+            self._dialog.show_lean_mass_problem(message)
 
     def _on_settings_changed(self, _settings: object) -> None:
         self.reload_day()
