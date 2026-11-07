@@ -4,12 +4,12 @@
 
 from datetime import UTC, datetime
 
-MAX_ACTIVITY_FILE_BYTES = 50 * 1024 * 1024  # FIT or GPX: beyond this, the file is not read
-MAX_TRACK_POINTS = 2000  # points of the simplified track saved in the index
-TRACK_TOLERANCE_M = 10.0  # maximum deviation of the simplified track from the original
-MAX_RAW_TRACK_POINTS = 1_000_000  # traccia completa letta dal file: come il tetto dei lettori
-TRACK_GAP_S = 30.0  # un buco di posizione più lungo spezza la traccia in due tratti
-MAX_TRACK_ZOOM = 22  # livello di zoom massimo di una mappa a tile
+MAX_ACTIVITY_FILE_BYTES = 50 * 1024 * 1024  # FIT o GPX: oltre, il file non si legge
+MAX_TRACK_POINTS = 2000  # punti della traccia semplificata salvata nell'indice
+TRACK_TOLERANCE_M = 10.0  # scostamento massimo della traccia semplificata dall'originale
+MAX_RAW_TRACK_POINTS = 1_000_000  # full track read from the file: same cap as the readers
+TRACK_GAP_S = 30.0  # a longer position gap splits the track into two segments
+MAX_TRACK_ZOOM = 22  # highest zoom level of a tile map
 
 # Window of times allowed for an activity, [start, end): outside it, the file is corrupt. A
 # zeroed clock (year 1) or a crazy one would inflate the load series to centuries of days.

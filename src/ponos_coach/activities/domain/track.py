@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Traccia completa di un'attività: posizioni e quota sull'asse dei secondi della FC.
+"""Full track of an activity: positions and altitude on the heart-rate time axis.
 
-La traccia completa non si salva nell'indice (ci sta la polyline semplificata di
-`ActivitySummary`): si rilegge dal file archiviato quando serve. Le posizioni sono dati
-personali sensibili: mai nei log. Un buco di posizione (record senza GPS, tratto GPX diverso o
-pausa più lunga di `TRACK_GAP_S`) spezza la traccia in tratti: tra due tratti non si disegna
-nessun segmento.
+The full track is not stored in the index (the simplified polyline of `ActivitySummary` is):
+it is read again from the archived file when needed. Positions are sensitive personal data:
+never in logs. A position gap (record without GPS, different GPX segment or a pause longer than
+`TRACK_GAP_S`) splits the track into segments: nothing is drawn between two segments.
 """
 
 from __future__ import annotations
@@ -34,8 +33,8 @@ from ponos_coach.activities.domain.limits import (
     TRACK_GAP_S,
 )
 
-_TILE_PIXELS = 256  # lato di una tile di mappa
-_SEGMENT_SEPARATOR = " "  # fuori dall'alfabeto dei polyline (ASCII 63-126)
+_TILE_PIXELS = 256  # side of a map tile
+_SEGMENT_SEPARATOR = " "  # outside the polyline alphabet (ASCII 63-126)
 _MAX_TOLERANCE_DOUBLINGS = 24
 _MIN_SEGMENT_POINTS = 2
 
@@ -48,11 +47,11 @@ def _frozen(values: object) -> NDArray[np.float64]:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class TrackSegment:
-    """Un tratto continuo: secondi dal primo record (come la serie di FC), posizione, quota.
+    """A continuous stretch: seconds from the first record (like the HR series), position, altitude.
 
-    Invarianti: almeno un punto; colonne della stessa lunghezza; secondi finiti e strettamente
-    crescenti; latitudine in [-90, 90] e longitudine in [-180, 180], finite; la quota, se c'è,
-    in metri, `NaN` dove manca ma mai infinita. Gli array sono copiati e di sola lettura.
+    Invariants: at least one point; columns of equal length; finite, strictly increasing
+    seconds; finite latitude in [-90, 90] and longitude in [-180, 180]; altitude, if present, in
+    metres, `NaN` where unknown but never infinite. Arrays are copied and read-only.
     """
 
     seconds: NDArray[np.float64]
@@ -64,17 +63,17 @@ class TrackSegment:
         seconds, lat, lon = _frozen(self.seconds), _frozen(self.lat_deg), _frozen(self.lon_deg)
         altitude = None if self.altitude_m is None else _frozen(self.altitude_m)
         if seconds.ndim != 1 or seconds.size == 0 or not (seconds.shape == lat.shape == lon.shape):
-            raise ValueError("tratto vuoto o con colonne di lunghezza diversa")
+            raise ValueError("empty segment or columns of different length")
         if altitude is not None and altitude.shape != seconds.shape:
-            raise ValueError("la quota ha una lunghezza diversa dalle posizioni")
+            raise ValueError("altitude has a different length from the positions")
         if not (np.isfinite(seconds).all() and np.isfinite(lat).all() and np.isfinite(lon).all()):
-            raise ValueError("secondi e coordinate devono essere finiti")
+            raise ValueError("seconds and coordinates must be finite")
         if (np.abs(lat) > 90.0).any() or (np.abs(lon) > 180.0).any():
-            raise ValueError("coordinate fuori dai limiti")
+            raise ValueError("coordinates out of range")
         if seconds.size > 1 and not (np.diff(seconds) > 0).all():
-            raise ValueError("i secondi devono essere strettamente crescenti")
+            raise ValueError("seconds must be strictly increasing")
         if altitude is not None and np.isinf(altitude).any():
-            raise ValueError("la quota non può essere infinita")
+            raise ValueError("altitude cannot be infinite")
         object.__setattr__(self, "seconds", seconds)
         object.__setattr__(self, "lat_deg", lat)
         object.__setattr__(self, "lon_deg", lon)
@@ -86,30 +85,30 @@ class TrackSegment:
 
 @dataclass(frozen=True, slots=True, eq=False)
 class ActivityTrack:
-    """Tratti della traccia di un'attività, in ordine di tempo.
+    """Segments of an activity track, in time order.
 
-    Invarianti: almeno un tratto; al massimo `MAX_RAW_TRACK_POINTS` punti in tutto; i tratti
-    non si sovrappongono nel tempo (il primo secondo di un tratto segue l'ultimo del precedente).
+    Invariants: at least one segment; at most `MAX_RAW_TRACK_POINTS` points overall; segments
+    do not overlap in time (the first second of a segment follows the last of the previous one).
     """
 
     segments: tuple[TrackSegment, ...]
 
     def __post_init__(self) -> None:
         if not self.segments:
-            raise ValueError("una traccia ha almeno un tratto")
+            raise ValueError("a track has at least one segment")
         if sum(len(s) for s in self.segments) > MAX_RAW_TRACK_POINTS:
-            raise ValueError("troppi punti nella traccia")
+            raise ValueError("too many points in the track")
         for before, after in zip(self.segments, self.segments[1:], strict=False):
             if after.seconds[0] <= before.seconds[-1]:
-                raise ValueError("i tratti si sovrappongono nel tempo")
+                raise ValueError("segments overlap in time")
 
     @property
     def point_count(self) -> int:
-        """Numero di punti in tutti i tratti."""
+        """Number of points across all segments."""
         return sum(len(s) for s in self.segments)
 
     def bounding_box(self) -> GeoBox:
-        """Riquadro minimo della traccia (antimeridiano compreso)."""
+        """Minimal box of the track (antimeridian included)."""
         lat = np.concatenate([s.lat_deg for s in self.segments])
         lon = np.concatenate([s.lon_deg for s in self.segments])
         return GeoBox.of_points(lat, lon)
@@ -123,19 +122,19 @@ def build_track(
     run_id: NDArray[np.intp],
     max_gap_s: float = TRACK_GAP_S,
 ) -> ActivityTrack | None:
-    """Traccia dalle colonne dei soli punti con posizione valida, o `None` se non ce ne sono.
+    """Track from the columns of the points with a valid position, or `None` if there are none.
 
-    `run_id` identifica il tratto d'origine di ogni punto (per esempio il `trkseg` di un GPX,
-    o il numero di buchi di posizione già visti in un FIT): cambiando, il tratto si spezza.
-    Si spezza anche quando due punti consecutivi distano più di `max_gap_s` secondi. Un punto
-    con secondi non maggiori di tutti i precedenti (ripetuto o all'indietro) si scarta, come
-    per la serie di FC: vale il primo di una ripetizione.
+    `run_id` identifies the source stretch of each point (for example the `trkseg` of a GPX, or
+    the number of position gaps already seen in a FIT): when it changes, the segment is split.
+    It also splits when two consecutive points are more than `max_gap_s` seconds apart. A point
+    whose seconds are not greater than all previous ones (repeated or going back) is dropped,
+    as for the HR series: the first of a repetition wins.
 
     Raises:
-        ValueError: colonne di lunghezza diversa o valori non validi per un `TrackSegment`.
+        ValueError: columns of different length or values invalid for a `TrackSegment`.
     """
     if not (seconds.shape == lat_deg.shape == lon_deg.shape == run_id.shape):
-        raise ValueError("colonne di lunghezza diversa")
+        raise ValueError("columns of different length")
     if seconds.size == 0:
         return None
     keep = np.ones(seconds.size, dtype=bool)
@@ -154,17 +153,17 @@ def build_track(
 
 
 def zoom_tolerance_m(zoom: int, lat_deg: float) -> float:
-    """Tolleranza di semplificazione per un livello di zoom: un pixel della mappa, in metri.
+    """Simplification tolerance for a zoom level: one map pixel, in metres.
 
-    Metri per pixel di una mappa a tile da 256 px alla latitudine data (proiezione di
-    Web Mercator): `2π R cos(lat) / (256 · 2^zoom)`. Lo zoom si limita a [0, `MAX_TRACK_ZOOM`];
-    vicino ai poli la tolleranza non scende sotto quella a 85 gradi.
+    Metres per pixel of a 256 px tile map at the given latitude (Web Mercator):
+    `2π R cos(lat) / (256 · 2^zoom)`. Zoom is clamped to [0, `MAX_TRACK_ZOOM`]; near the poles
+    the tolerance does not go below the one at 85 degrees.
 
     Raises:
-        ValueError: latitudine non finita.
+        ValueError: non-finite latitude.
     """
     if not math.isfinite(lat_deg):
-        raise ValueError("la latitudine deve essere finita")
+        raise ValueError("latitude must be finite")
     level = max(0, min(MAX_TRACK_ZOOM, zoom))
     scale = math.cos(math.radians(min(abs(lat_deg), 85.0)))
     return 2.0 * math.pi * EARTH_RADIUS_M * scale / (_TILE_PIXELS * 2.0**level)
@@ -174,7 +173,7 @@ def _simplified_segments(track: ActivityTrack, tolerance_m: float) -> list[tuple
     result: list[tuple[GeoPoint, ...]] = []
     for segment in track.segments:
         kept = simplify_indices(segment.lat_deg, segment.lon_deg, tolerance_m, MAX_TRACK_POINTS)
-        if len(kept) >= _MIN_SEGMENT_POINTS:  # un punto solo non disegna nulla
+        if len(kept) >= _MIN_SEGMENT_POINTS:  # a single point draws nothing
             result.append(
                 tuple(GeoPoint(float(segment.lat_deg[i]), float(segment.lon_deg[i])) for i in kept)
             )
@@ -182,7 +181,7 @@ def _simplified_segments(track: ActivityTrack, tolerance_m: float) -> list[tuple
 
 
 def _fit_budget(segments: list[tuple[GeoPoint, ...]]) -> list[tuple[GeoPoint, ...]]:
-    """Tiene i tratti più lunghi finché il totale sta in `MAX_TRACK_POINTS` (ordine di tempo)."""
+    """Keeps the longest segments until the total fits `MAX_TRACK_POINTS` (time order kept)."""
     order = sorted(range(len(segments)), key=lambda i: (-len(segments[i]), i))
     chosen: set[int] = set()
     total = 0
@@ -194,12 +193,12 @@ def _fit_budget(segments: list[tuple[GeoPoint, ...]]) -> list[tuple[GeoPoint, ..
 
 
 def simplify_for_zoom(track: ActivityTrack, zoom: int) -> tuple[tuple[GeoPoint, ...], ...]:
-    """Tratti semplificati (Douglas-Peucker) con la tolleranza di un pixel al livello di zoom.
+    """Segments simplified (Douglas-Peucker) with a one-pixel tolerance at the zoom level.
 
-    Ogni tratto tiene primo e ultimo punto; i tratti con un solo punto sono omessi. Se il
-    totale supera `MAX_TRACK_POINTS` la tolleranza raddoppia fino a farcelo stare (al più 24
-    volte), poi si tengono i tratti più lunghi: il risultato è sempre codificabile con
-    `encode_segments`. Deterministica; una traccia che sparisce del tutto dà una tupla vuota.
+    Each segment keeps its first and last point; single-point segments are omitted. If the total
+    exceeds `MAX_TRACK_POINTS` the tolerance doubles until it fits (at most 24 times), then the
+    longest segments are kept: the result can always be encoded with `encode_segments`.
+    Deterministic; a track that vanishes entirely gives an empty tuple.
     """
     lat = float(np.mean(np.concatenate([s.lat_deg for s in track.segments])))
     tolerance = zoom_tolerance_m(zoom, lat)
@@ -213,33 +212,33 @@ def simplify_for_zoom(track: ActivityTrack, zoom: int) -> tuple[tuple[GeoPoint, 
 
 
 def encode_segments(segments: Sequence[Sequence[GeoPoint]]) -> str:
-    """Codifica compatta dei tratti: un polyline (1e-5 gradi, circa 1 m) per tratto, separati
-    da uno spazio. Nessun tratto dà la stringa vuota.
+    """Compact encoding of segments: one polyline (1e-5 degrees, about 1 m) per segment,
+    separated by a space. No segments gives the empty string.
 
     Raises:
-        ValueError: più di `MAX_TRACK_POINTS` punti in tutto o un tratto vuoto.
+        ValueError: more than `MAX_TRACK_POINTS` points overall, or an empty segment.
     """
     if sum(len(s) for s in segments) > MAX_TRACK_POINTS:
-        raise ValueError("troppi punti per una traccia codificata")
+        raise ValueError("too many points for an encoded track")
     if any(len(s) == 0 for s in segments):
-        raise ValueError("tratto vuoto")
+        raise ValueError("empty segment")
     return _SEGMENT_SEPARATOR.join(encode_polyline(s) for s in segments)
 
 
 def decode_segments(encoded: str) -> tuple[tuple[GeoPoint, ...], ...]:
-    """Tratti di una stringa prodotta da `encode_segments` (valida l'input come un confine).
+    """Segments of a string produced by `encode_segments` (validated like a trust boundary).
 
     Raises:
-        ValueError: stringa troppo lunga, tratto vuoto, caratteri o valori non validi, più di
-            `MAX_TRACK_POINTS` punti in tutto.
+        ValueError: string too long, empty segment, invalid characters or values, more than
+            `MAX_TRACK_POINTS` points overall.
     """
     if len(encoded) > MAX_POLYLINE_CHARS + MAX_TRACK_POINTS:
-        raise ValueError("traccia codificata troppo lunga")
+        raise ValueError("encoded track too long")
     if not encoded:
         return ()
     segments = tuple(decode_polyline(part) for part in encoded.split(_SEGMENT_SEPARATOR))
     if any(len(s) == 0 for s in segments):
-        raise ValueError("tratto vuoto")
+        raise ValueError("empty segment")
     if sum(len(s) for s in segments) > MAX_TRACK_POINTS:
-        raise ValueError("troppi punti in una traccia codificata")
+        raise ValueError("too many points in an encoded track")
     return segments

@@ -145,8 +145,8 @@ class _Parsed:
     speed_values: list[float] = field(default_factory=list)  # m/s
     pos_lat: list[int] = field(default_factory=list)  # semicircles, valid pairs only
     pos_lon: list[int] = field(default_factory=list)
-    pos_record: list[int] = field(default_factory=list)  # indice del record di ogni posizione
-    pos_altitude: list[float] = field(default_factory=list)  # metri, NaN se manca
+    pos_record: list[int] = field(default_factory=list)  # index of the record of each position
+    pos_altitude: list[float] = field(default_factory=list)  # metres, NaN if unknown
     messages: int = 0
     records: int = 0
 
@@ -522,9 +522,9 @@ def decode_activity(data: bytes, limits: FitLimits | None = None) -> Activity:
 
 
 def _track(parsed: _Parsed) -> ActivityTrack | None:
-    """Traccia completa dai record con posizione; un record senza GPS spezza il tratto.
+    """Full track from the records with a position; a record without GPS splits the segment.
 
-    I secondi partono dal primo record, come la serie di FC.
+    Seconds start from the first record, like the HR series.
     """
     if not parsed.pos_record:
         return None
@@ -544,14 +544,14 @@ def _track(parsed: _Parsed) -> ActivityTrack | None:
 
 
 def decode_track(data: bytes, limits: FitLimits | None = None) -> ActivityTrack | None:
-    """Traccia completa (posizioni e quota) di un file FIT, o `None` se non ha posizioni.
+    """Full track (positions and altitude) of a FIT file, `None` if it has no positions.
 
-    Pensata per un file già accettato da `decode_activity` e archiviato: stessi controlli di
-    dimensione, record e CRC, ma nessuna delle verifiche sull'identità o sulla durata. Il
-    carico e la serie di FC non dipendono da questa funzione.
+    Meant for a file already accepted by `decode_activity` and archived: same size, record and
+    CRC checks, but none of the identity or duration checks. Load and the HR series do not
+    depend on this function.
 
     Raises:
-        FitDecodeError: file vuoto, troppo grande, corrotto o con troppi record.
+        FitDecodeError: empty, too large, corrupt file or too many records.
     """
     limits = limits or FitLimits()
     if not data:

@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Filtri dell'elenco delle attività: tipi validi per costruzione e input tolleranti.
+"""Activity list filters: types valid by construction and tolerant input parsing.
 
-Un solo `ActivityFilter` serve la tabella e la mappa. Un filtro vuoto lascia passare tutto;
-minimo e massimo sono facoltativi; se invertiti si scambiano. Le unità del dominio sono quelle
-dell'indice (secondi, metri); chi mostra il filtro converte (minuti, chilometri).
+A single `ActivityFilter` serves both the table and the map. An empty filter lets everything
+through; minimum and maximum are optional; if inverted they are swapped. Domain units are those
+of the index (seconds, metres); whoever shows the filter converts (minutes, kilometres).
 """
 
 from __future__ import annotations
@@ -20,17 +20,17 @@ from ponos_coach.activities.domain.record import ActivityRecord
 from ponos_coach.activities.domain.sport import Sport
 
 _UNICODE_MINUS = chr(0x2212)
-_MAX_INPUT_CHARS = 32  # la lunghezza si controlla prima di ogni espressione regolare
+_MAX_INPUT_CHARS = 32  # the length is checked before any regular expression
 _NUMBER = re.compile(r"(\d{1,9})(?:[.,](\d{1,6}))?")
 _CLOCK = re.compile(r"(\d{1,6}):([0-5]?\d)(?::([0-5]?\d))?")
 _SECONDS_PER_MINUTE = 60.0
 _SECONDS_PER_HOUR = 3600.0
 _METERS_PER_KM = 1000.0
-MAX_FILTER_VALUE = 1_000_000_000.0  # tetto di qualunque limite numerico (finito e sensato)
+MAX_FILTER_VALUE = 1_000_000_000.0  # cap of any numeric limit (finite and sensible)
 
 
 class FilterInputReason(Enum):
-    """Perché un testo non è un limite valido. Il valore è stabile."""
+    """Why a text is not a valid limit. The value is stable."""
 
     NOT_A_NUMBER = "not_a_number"
     NEGATIVE = "negative"
@@ -38,7 +38,7 @@ class FilterInputReason(Enum):
 
 
 class FilterInputError(ValueError):
-    """Il testo di un limite non è valido; `reason` dice perché (il testo non si ripete)."""
+    """The text of a limit is not valid; `reason` says why (the text is never repeated)."""
 
     def __init__(self, reason: FilterInputReason) -> None:
         super().__init__(reason.value)
@@ -46,7 +46,7 @@ class FilterInputError(ValueError):
 
 
 def _number(text: str) -> float:
-    """Numero non negativo con virgola o punto decimale (nessun separatore delle migliaia)."""
+    """Non-negative number with comma or point as decimal separator (no thousands separator)."""
     body = text.strip()
     if len(body) > _MAX_INPUT_CHARS:
         raise FilterInputError(FilterInputReason.TOO_LARGE)
@@ -59,12 +59,12 @@ def _number(text: str) -> float:
 
 
 def parse_amount(text: str, scale: float = 1.0) -> float | None:
-    """Quantità testuale → valore moltiplicato per la scala; testo vuoto = nessun limite.
+    """Text quantity multiplied by `scale`; empty text means no limit.
 
-    Con `scale = 1000` "10,5" (chilometri) dà 10500.0 metri.
+    With `scale = 1000`, "10,5" (kilometres) gives 10500.0 metres.
 
     Raises:
-        FilterInputError: testo non numerico, negativo o troppo grande.
+        FilterInputError: non-numeric, negative or too large text.
     """
     if not text.strip():
         return None
@@ -75,22 +75,22 @@ def parse_amount(text: str, scale: float = 1.0) -> float | None:
 
 
 def parse_distance_km(text: str) -> float | None:
-    """Chilometri testuali ("10", "10,5", "10.5") → metri; vuoto = nessun limite.
+    """Kilometres as text ("10", "10,5", "10.5") to metres; empty means no limit.
 
     Raises:
-        FilterInputError: testo non numerico, negativo o troppo grande.
+        FilterInputError: non-numeric, negative or too large text.
     """
     return parse_amount(text, _METERS_PER_KM)
 
 
 def parse_duration(text: str) -> float | None:
-    """Durata testuale → secondi; vuoto = nessun limite.
+    """Duration as text to seconds; empty means no limit.
 
-    "90" e "90,5" sono minuti; "1:30" è un'ora e 30 minuti; "1:30:15" ore, minuti e secondi.
-    Minuti e secondi dopo i due punti stanno in 0-59.
+    "90" and "90,5" are minutes; "1:30" is one hour and 30 minutes; "1:30:15" hours, minutes
+    and seconds. Minutes and seconds after a colon are in 0-59.
 
     Raises:
-        FilterInputError: testo non valido, negativo o troppo grande.
+        FilterInputError: invalid, negative or too large text.
     """
     body = text.strip()
     if not body:
@@ -107,10 +107,10 @@ def parse_duration(text: str) -> float | None:
 
 @dataclass(frozen=True, slots=True)
 class NumericRange:
-    """Intervallo chiuso `[minimum, maximum]` con estremi facoltativi (`None` = senza limite).
+    """Closed interval `[minimum, maximum]` with optional ends (`None` = no limit).
 
-    Estremi finiti, non negativi e al più `MAX_FILTER_VALUE`; se `minimum > maximum` la
-    costruzione tramite `of` li scambia (il costruttore diretto invece li rifiuta).
+    Ends are finite, non-negative and at most `MAX_FILTER_VALUE`; `of` swaps inverted ends,
+    while the direct constructor rejects them.
     """
 
     minimum: float | None = None
@@ -118,27 +118,26 @@ class NumericRange:
 
     def __post_init__(self) -> None:
         for bound in (self.minimum, self.maximum):
-            if bound is not None and not (
-                math.isfinite(bound) and 0.0 <= bound <= MAX_FILTER_VALUE
-            ):
-                raise ValueError("i limiti devono essere finiti e non negativi")
+            valid = bound is None or (math.isfinite(bound) and 0.0 <= bound <= MAX_FILTER_VALUE)
+            if not valid:
+                raise ValueError("limits must be finite and non-negative")
         if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
-            raise ValueError("il minimo supera il massimo")
+            raise ValueError("the minimum exceeds the maximum")
 
     @classmethod
     def of(cls, first: float | None, second: float | None) -> NumericRange:
-        """Intervallo da due estremi in qualunque ordine: se invertiti si scambiano."""
+        """Interval from two ends in either order: if inverted they are swapped."""
         if first is not None and second is not None and first > second:
             return cls(second, first)
         return cls(first, second)
 
     @property
     def is_open(self) -> bool:
-        """Senza nessun limite."""
+        """Whether there is no limit at all."""
         return self.minimum is None and self.maximum is None
 
     def accepts(self, value: float | None) -> bool:
-        """Se il valore sta nei limiti. Un valore ignoto passa solo se non ci sono limiti."""
+        """Whether the value is within the limits. An unknown value passes only if unlimited."""
         if self.is_open:
             return True
         if value is None:
@@ -149,12 +148,12 @@ class NumericRange:
 
 @dataclass(frozen=True, slots=True)
 class ActivityFilter:
-    """Criteri di ricerca sulle attività; tutti facoltativi e combinati con "e".
+    """Search criteria on activities; all optional and combined with "and".
 
-    `date_from` e `date_to` sono giorni inclusi (nel fuso passato a `matches`); se invertiti
-    si scambiano. `duration_s` riguarda il tempo in movimento; `distance_m` e `ascent_m`
-    (dislivello positivo) riguardano il riepilogo: un'attività che non li dichiara non passa
-    un filtro che li limita. `sports` vuoto = tutti gli sport.
+    `date_from` and `date_to` are inclusive days (in the time zone given to `matches`); if
+    inverted they are swapped. `duration_s` is the moving time; `distance_m` and `ascent_m`
+    (positive ascent) come from the summary: an activity that does not declare them fails a
+    filter that limits them. Empty `sports` means all sports.
     """
 
     date_from: date | None = None
@@ -165,18 +164,14 @@ class ActivityFilter:
     sports: frozenset[Sport] = frozenset()
 
     def __post_init__(self) -> None:
-        if (
-            self.date_from is not None
-            and self.date_to is not None
-            and self.date_from > self.date_to
-        ):
-            first, second = self.date_to, self.date_from
-            object.__setattr__(self, "date_from", first)
-            object.__setattr__(self, "date_to", second)
+        first, second = self.date_from, self.date_to
+        if first is not None and second is not None and first > second:
+            object.__setattr__(self, "date_from", second)
+            object.__setattr__(self, "date_to", first)
 
     @property
     def is_empty(self) -> bool:
-        """Se il filtro lascia passare qualunque attività."""
+        """Whether the filter lets any activity through."""
         return (
             self.date_from is None
             and self.date_to is None
@@ -187,7 +182,7 @@ class ActivityFilter:
         )
 
     def matches(self, record: ActivityRecord, tz: tzinfo = UTC) -> bool:
-        """Se l'attività passa tutti i criteri."""
+        """Whether the activity passes every criterion."""
         day = record.start.astimezone(tz).date()
         return (
             (self.date_from is None or day >= self.date_from)
@@ -202,5 +197,5 @@ class ActivityFilter:
 def filter_activities(
     records: Iterable[ActivityRecord], criteria: ActivityFilter, tz: tzinfo = UTC
 ) -> list[ActivityRecord]:
-    """Le attività che passano il filtro, nello stesso ordine. Filtro vuoto = tutte."""
+    """The activities that pass the filter, in the same order. Empty filter = all of them."""
     return [r for r in records if criteria.matches(r, tz)]

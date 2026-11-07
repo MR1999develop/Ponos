@@ -167,12 +167,12 @@ def _decode_as(data: bytes, file_format: FileFormat, limits: ActivityFileLimits)
 def decode_stored_track(
     data: bytes, file_format: FileFormat, limits: ActivityFileLimits | None = None
 ) -> ActivityTrack | None:
-    """Traccia completa (posizioni e quota) di un file già archiviato, o `None` senza posizioni.
+    """Full track (positions and altitude) of an already archived file, `None` without positions.
 
-    Come `decode_stored_activity`, ma non tocca il carico né la serie di FC. Nessun I/O.
+    Like `decode_stored_activity`, but it does not touch the load or the HR series. No I/O.
 
     Raises:
-        ActivityFileError: EMPTY, TOO_LARGE, CORRUPT o TOO_MANY_RECORDS.
+        ActivityFileError: EMPTY, TOO_LARGE, CORRUPT or TOO_MANY_RECORDS.
     """
     limits = limits or ActivityFileLimits()
     try:

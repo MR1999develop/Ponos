@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Attività con la partenza in un'area della mappa, con i totali per l'elenco a destra."""
+"""Activities starting inside a map area, with the totals for the list on the right."""
 
 from __future__ import annotations
 
@@ -21,9 +21,9 @@ _METERS_PER_KM = 1000.0
 
 @dataclass(frozen=True, slots=True)
 class AreaTotals:
-    """Totali di un gruppo di attività: numero, chilometri, dislivello (m) e ore in movimento.
+    """Totals of a group of activities: count, kilometres, ascent (m) and moving hours.
 
-    Distanza e dislivello sommano solo le attività che li dichiarano.
+    Distance and ascent add up only the activities that declare them.
     """
 
     count: int
@@ -33,7 +33,7 @@ class AreaTotals:
 
     @classmethod
     def of(cls, records: Sequence[ActivityRecord]) -> AreaTotals:
-        """Totali delle attività date (somma esatta con `math.fsum`)."""
+        """Totals of the given activities (exact sum with `math.fsum`)."""
         distance = math.fsum(r.summary.distance_m or 0.0 for r in records)
         ascent = math.fsum(r.summary.ascent_m or 0.0 for r in records)
         moving = math.fsum(r.timer_s for r in records)
@@ -42,11 +42,11 @@ class AreaTotals:
 
 @dataclass(frozen=True, slots=True)
 class AreaResult:
-    """Esito di una ricerca per area: attività nell'area, totali e attività senza posizione.
+    """Outcome of an area search: activities in the area, totals and activities without position.
 
-    `activities` conserva l'ordine d'ingresso. `without_position` conta, tra le attività date,
-    quelle che non hanno una posizione di partenza (indoor, forza): non stanno sulla mappa,
-    qualunque sia l'area, e non sono comprese in `activities` né nei totali.
+    `activities` keeps the input order. `without_position` counts, among the given activities,
+    those with no start position (indoor, strength): they are not on the map whatever the
+    area, and are not part of `activities` or of the totals.
     """
 
     activities: tuple[ActivityRecord, ...]
@@ -55,11 +55,10 @@ class AreaResult:
 
 
 class StartIndex:
-    """Posizioni di partenza di un insieme di attività, in colonne, per interrogarle in fretta.
+    """Start positions of a set of activities, in columns, for fast querying.
 
-    Si costruisce una volta (per esempio a ogni cambio di filtro) e si interroga a ogni
-    spostamento della mappa: la maschera dell'area è vettoriale, senza cicli per attività.
-    Immutabile dopo la costruzione.
+    Built once (for example at every filter change) and queried at every map move: the area
+    mask is vectorised, with no per-activity loop. Immutable after construction.
     """
 
     def __init__(self, records: Sequence[ActivityRecord]) -> None:
@@ -80,35 +79,35 @@ class StartIndex:
 
     @property
     def without_position(self) -> int:
-        """Attività senza posizione di partenza."""
+        """Activities without a start position."""
         return self._without_position
 
     def mask_in(self, area: GeoBox) -> NDArray[np.bool_]:
-        """Maschera, sulle sole attività con posizione, di quelle che partono nell'area."""
+        """Mask, over the located activities only, of those that start in the area."""
         return area.contains_many(self._lat, self._lon)
 
     def in_area(self, area: GeoBox) -> AreaResult:
-        """Le attività che partono nell'area (bordi inclusi), con i totali."""
+        """The activities that start in the area (edges included), with totals."""
         chosen = self._located[self.mask_in(area)]
         found = tuple(self._records[int(i)] for i in chosen)
         return AreaResult(found, AreaTotals.of(found), self._without_position)
 
 
 def activities_in_area(records: Sequence[ActivityRecord], area: GeoBox) -> AreaResult:
-    """Attività (già filtrate) con la partenza nell'area, con totali e conteggio senza posizione.
+    """Activities (already filtered) starting in the area, with totals and the unlocated count.
 
-    Per interrogare più aree sullo stesso insieme conviene costruire un `StartIndex`.
+    To query several areas on the same set, build a `StartIndex` instead.
     """
     return StartIndex(records).in_area(area)
 
 
 def track_touches_area(track_polyline: str, area: GeoBox) -> bool:
-    """Se almeno un punto della traccia semplificata (polyline) cade nell'area.
+    """Whether at least one point of the simplified track (polyline) falls in the area.
 
-    Per la ricerca "con partenza o traccia nell'area" sulle poche attività vicine al bordo.
+    For the "start or track in the area" search on the few activities near the edge.
 
     Raises:
-        ValueError: la traccia non è un polyline valido.
+        ValueError: the track is not a valid polyline.
     """
     for segment in decode_segments(track_polyline):
         lat = np.array([p.lat_deg for p in segment], dtype=np.float64)

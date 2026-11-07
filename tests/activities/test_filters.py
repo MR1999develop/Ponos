@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Filtri delle attività (T-FILT-01...03) e ricerca per area (T-MAP-02, 03, 04, 07)."""
+"""Activity filters (T-FILT-01...03) and area search (T-MAP-02, 03, 04, 07)."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ def record(
     )
 
 
-# --- T-FILT-01: ogni filtro da solo ----------------------------------------------------------
+# --- T-FILT-01: each filter on its own ----------------------------------------------------------
 
 
 def test_empty_filter_lets_everything_through_even_unknown_values() -> None:
@@ -99,7 +99,7 @@ def test_date_limits_are_whole_days_and_inclusive(
 
 
 def test_the_day_is_taken_in_the_given_time_zone() -> None:
-    late = datetime(2026, 5, 10, 23, 30, tzinfo=UTC)  # a Roma sono già le 01:30 dell'11
+    late = datetime(2026, 5, 10, 23, 30, tzinfo=UTC)  # in Rome it is already 01:30 on the 11th
     rome = timezone(timedelta(hours=2))
     criteria = ActivityFilter(date_to=date(2026, 5, 10))
 
@@ -165,23 +165,23 @@ def test_inverted_limits_are_swapped() -> None:
 
 @pytest.mark.parametrize("bad", [-1.0, math.nan, math.inf, 2e9])
 def test_invalid_range_limits_are_rejected(bad: float) -> None:
-    with pytest.raises(ValueError, match="finiti"):
+    with pytest.raises(ValueError, match="finite"):
         NumericRange(bad, None)
 
 
 def test_direct_construction_with_inverted_limits_is_an_error() -> None:
-    with pytest.raises(ValueError, match="supera"):
+    with pytest.raises(ValueError, match="exceeds"):
         NumericRange(10.0, 5.0)
 
 
-# --- T-FILT-02: filtri combinati contro un filtro ingenuo -------------------------------------
+# --- T-FILT-02: combined filters against a naive filter -------------------------------------
 
 bounds = st.one_of(st.none(), st.floats(0.0, 50_000.0))
 days = st.dates(date(2026, 1, 1), date(2026, 3, 31))
 
 
 def naive_match(r: ActivityRecord, c: ActivityFilter) -> bool:  # noqa: PLR0911
-    """Filtro scritto per esteso, senza `accepts` né `is_open`."""
+    """Filter written out in full, without `accepts` or `is_open`."""
     if c.date_from is not None and r.start.date() < c.date_from:
         return False
     if c.date_to is not None and r.start.date() > c.date_to:
@@ -236,7 +236,7 @@ def test_t_filt_02_combined_filters_agree_with_a_naive_filter(
     assert filter_activities(items, criteria) == [r for r in items if naive_match(r, criteria)]
 
 
-# --- T-FILT-03: input tolleranti ---------------------------------------------------------------
+# --- T-FILT-03: tolerant input ---------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -280,16 +280,16 @@ def test_comma_and_point_are_the_same_number() -> None:
     ("text", "reason"),
     [
         ("-5", FilterInputReason.NEGATIVE),
-        (chr(0x2212) + "5", FilterInputReason.NEGATIVE),  # segno meno tipografico
+        (chr(0x2212) + "5", FilterInputReason.NEGATIVE),  # typographic minus sign
         ("abc", FilterInputReason.NOT_A_NUMBER),
         ("1,2,3", FilterInputReason.NOT_A_NUMBER),
         ("1e5", FilterInputReason.NOT_A_NUMBER),
         ("nan", FilterInputReason.NOT_A_NUMBER),
         ("inf", FilterInputReason.NOT_A_NUMBER),
-        ("1:75", FilterInputReason.NOT_A_NUMBER),  # minuti oltre 59
+        ("1:75", FilterInputReason.NOT_A_NUMBER),  # minutes above 59
         ("1:", FilterInputReason.NOT_A_NUMBER),
         ("9" * 40, FilterInputReason.TOO_LARGE),
-        ("9" * 12, FilterInputReason.NOT_A_NUMBER),  # più cifre del tetto della sintassi
+        ("9" * 12, FilterInputReason.NOT_A_NUMBER),  # more digits than the syntax allows
     ],
 )
 def test_invalid_duration_and_amount_texts_are_rejected_with_a_reason(
@@ -298,7 +298,7 @@ def test_invalid_duration_and_amount_texts_are_rejected_with_a_reason(
     with pytest.raises(FilterInputError) as caught:
         parse_duration(text)
     assert caught.value.reason is reason
-    assert text not in str(caught.value)  # l'input non si ripete nel messaggio
+    assert text not in str(caught.value)  # the input is not repeated in the message
 
 
 def test_huge_values_are_too_large() -> None:
@@ -317,7 +317,7 @@ def test_parsers_only_raise_filter_input_errors(text: str) -> None:
         assert value is None or 0.0 <= value <= 1_000_000_000.0
 
 
-# --- T-MAP-02, 03, 04, 07: attività nell'area --------------------------------------------------
+# --- T-MAP-02, 03, 04, 07: activities in the area ---------------------------------------
 
 AREA = GeoBox(40.0, 8.0, 46.0, 12.0)
 
@@ -326,13 +326,13 @@ def test_only_activities_starting_in_the_area_are_listed_with_their_totals() -> 
     inside_a = record(1, start=(43.0, 10.0), distance_m=10_000.0, ascent_m=100.0, timer_s=3600.0)
     inside_b = record(
         2, start=(40.0, 12.0), distance_m=5_500.0, ascent_m=40.0, timer_s=1800.0
-    )  # bordo
+    )  # edge
     outside = record(3, start=(50.0, 10.0))
     indoor = record(4, start=None, distance_m=None, ascent_m=None)
 
     result = activities_in_area([inside_a, outside, inside_b, indoor], AREA)
 
-    assert result.activities == (inside_a, inside_b)  # ordine d'ingresso
+    assert result.activities == (inside_a, inside_b)  # input order
     assert result.totals.count == 2
     assert result.totals.distance_km == pytest.approx(15.5)
     assert result.totals.ascent_m == pytest.approx(140.0)
@@ -373,7 +373,7 @@ def test_t_map_03_area_across_the_antimeridian() -> None:
 def test_t_map_03_many_activities_at_the_same_point() -> None:
     items = [record(n, start=(43.0, 10.0)) for n in range(1, 501)]
 
-    result = activities_in_area(items, GeoBox(43.0, 10.0, 43.0, 10.0))  # area di un punto
+    result = activities_in_area(items, GeoBox(43.0, 10.0, 43.0, 10.0))  # one-point area
 
     assert result.totals.count == 500
 
@@ -400,15 +400,15 @@ starts = st.none() | st.tuples(st.floats(-90.0, 90.0), st.floats(-180.0, 180.0))
 
 
 def naive_inside(point: tuple[float, float], area: GeoBox) -> bool:
-    """Contenimento scritto per esteso su un cerchio di 360 gradi, senza `contains_many`."""
+    """Containment written out on a 360-degree circle, without `contains_many`."""
     lat, lon = point
     if not area.south <= lat <= area.north:
         return False
-    span = (area.east - area.west) % 360.0
     if area.west == -180.0 and area.east == 180.0:
         return True
-    offset = (lon - area.west) % 360.0
-    return offset <= span or math.isclose(offset, 360.0)
+    span = (area.east - area.west) % 360.0
+    # the same meridian has three names on the unrolled circle
+    return any(area.west <= lon + turn <= area.west + span for turn in (-360.0, 0.0, 360.0))
 
 
 @given(area_boxes, st.lists(starts, max_size=40))

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Traccia completa, riquadro con antimeridiano, semplificazione per zoom e lettura dai file."""
+"""Full track, box with antimeridian, simplification by zoom and reading from files."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from tests.fixtures.generators import fit_writer as fw
 from tests.fixtures.generators import gpx_writer as gw
 
 START = datetime(2026, 3, 2, 7, 0, tzinfo=UTC)
-SEA = (-30.0, -20.0)  # coordinate inventate, in mare aperto
+SEA = (-30.0, -20.0)  # invented coordinates, in open sea
 DEG_PER_M = 1.0 / 111_195.08
 
 
@@ -49,7 +49,7 @@ def segment(
     )
 
 
-# --- TrackSegment e ActivityTrack ------------------------------------------------------------
+# --- TrackSegment and ActivityTrack ------------------------------------------------------------
 
 
 def test_segment_arrays_are_copied_and_read_only() -> None:
@@ -65,16 +65,16 @@ def test_segment_arrays_are_copied_and_read_only() -> None:
 @pytest.mark.parametrize(
     ("seconds", "lat", "lon", "altitude"),
     [
-        ([], [], [], None),  # vuoto
-        ([0.0, 1.0], [1.0], [1.0, 2.0], None),  # lunghezze diverse
-        ([0.0, 1.0], [1.0, 2.0], [1.0, 2.0], [1.0]),  # quota di lunghezza diversa
-        ([0.0, 0.0], [1.0, 2.0], [1.0, 2.0], None),  # secondi non crescenti
+        ([], [], [], None),  # empty
+        ([0.0, 1.0], [1.0], [1.0, 2.0], None),  # different lengths
+        ([0.0, 1.0], [1.0, 2.0], [1.0, 2.0], [1.0]),  # altitude of a different length
+        ([0.0, 0.0], [1.0, 2.0], [1.0, 2.0], None),  # non-increasing seconds
         ([1.0, 0.0], [1.0, 2.0], [1.0, 2.0], None),
         ([0.0, math.nan], [1.0, 2.0], [1.0, 2.0], None),
         ([0.0, 1.0], [math.inf, 2.0], [1.0, 2.0], None),
-        ([0.0, 1.0], [91.0, 2.0], [1.0, 2.0], None),  # latitudine fuori
-        ([0.0, 1.0], [1.0, 2.0], [1.0, 181.0], None),  # longitudine fuori
-        ([0.0, 1.0], [1.0, 2.0], [1.0, 2.0], [1.0, math.inf]),  # quota infinita
+        ([0.0, 1.0], [91.0, 2.0], [1.0, 2.0], None),  # latitude out of range
+        ([0.0, 1.0], [1.0, 2.0], [1.0, 181.0], None),  # longitude out of range
+        ([0.0, 1.0], [1.0, 2.0], [1.0, 2.0], [1.0, math.inf]),  # infinite altitude
     ],
 )
 def test_invalid_segments_are_rejected(
@@ -98,17 +98,17 @@ def test_unknown_altitude_is_nan_and_allowed() -> None:
 
 
 def test_track_needs_a_segment_and_segments_in_time_order() -> None:
-    with pytest.raises(ValueError, match="almeno un tratto"):
+    with pytest.raises(ValueError, match="at least one segment"):
         ActivityTrack(())
-    with pytest.raises(ValueError, match="sovrappongono"):
+    with pytest.raises(ValueError, match="overlap"):
         ActivityTrack((segment(3), segment(3)))
 
 
-# --- build_track: buchi e tempo ---------------------------------------------------------------
+# --- build_track: gaps and time ---------------------------------------------------------------
 
 
 def test_a_gap_over_the_limit_splits_the_track() -> None:
-    seconds = np.array([0.0, 1.0, 2.0, 40.0, 41.0])  # 38 s di buco
+    seconds = np.array([0.0, 1.0, 2.0, 40.0, 41.0])  # 38 s gap
     lat = np.linspace(1.0, 2.0, 5)
     track = build_track(seconds, lat, lat, None, np.zeros(5, dtype=np.intp))
 
@@ -165,7 +165,7 @@ def test_segments_partition_the_points_in_order(steps: list[float], cuts: list[b
     assert track.point_count == len(steps)
 
 
-# --- Riquadro e antimeridiano -----------------------------------------------------------------
+# --- Box and antimeridian -----------------------------------------------------------------
 
 
 def test_bounding_box_of_a_track_across_the_antimeridian_is_narrow() -> None:
@@ -205,7 +205,7 @@ def test_view_wider_than_the_globe_is_the_whole_globe() -> None:
 
 
 def test_view_beyond_the_antimeridian_is_wrapped() -> None:
-    box = GeoBox.from_view(0.0, 170.0, 10.0, 190.0)  # mondo "copia" a est
+    box = GeoBox.from_view(0.0, 170.0, 10.0, 190.0)  # "copy" of the world to the east
 
     assert (box.west, box.east) == (170.0, -170.0)
     assert box.contains(5.0, -175.0)
@@ -213,19 +213,19 @@ def test_view_beyond_the_antimeridian_is_wrapped() -> None:
 
 
 def test_invalid_views_and_boxes_are_rejected() -> None:
-    with pytest.raises(ValueError, match="precede"):
+    with pytest.raises(ValueError, match="precedes"):
         GeoBox.from_view(0.0, 10.0, 1.0, 5.0)
-    with pytest.raises(ValueError, match="finiti"):
+    with pytest.raises(ValueError, match="finite"):
         GeoBox.from_view(math.nan, 0.0, 1.0, 5.0)
-    with pytest.raises(ValueError, match="latitudini"):
+    with pytest.raises(ValueError, match="latitudes"):
         GeoBox(10.0, 0.0, 5.0, 1.0)
 
 
-# --- Tolleranza per zoom e semplificazione ----------------------------------------------------
+# --- Tolerance by zoom and simplification ----------------------------------------------------
 
 
 def test_zoom_tolerance_at_the_equator_by_hand() -> None:
-    # 2 pi R / 256 = 156368,08 m per pixel a zoom 0; si dimezza a ogni livello.
+    # 2 pi R / 256 = 156368.08 m per pixel at zoom 0; it halves at every level.
     assert zoom_tolerance_m(0, 0.0) == pytest.approx(156_368.08, rel=1e-6)
     assert zoom_tolerance_m(10, 0.0) == pytest.approx(152.7032, rel=1e-5)
     assert zoom_tolerance_m(10, 60.0) == pytest.approx(152.7032 / 2.0, rel=1e-5)
@@ -235,12 +235,12 @@ def test_zoom_is_clamped_and_poles_do_not_reach_zero() -> None:
     assert zoom_tolerance_m(99, 0.0) == zoom_tolerance_m(22, 0.0)
     assert zoom_tolerance_m(-5, 0.0) == zoom_tolerance_m(0, 0.0)
     assert zoom_tolerance_m(5, 90.0) > 0.0
-    with pytest.raises(ValueError, match="finita"):
+    with pytest.raises(ValueError, match="finite"):
         zoom_tolerance_m(5, math.nan)
 
 
 def wiggly_track(count: int = 600) -> ActivityTrack:
-    """Percorso con scostamenti da 1 a 40 m su 3 km: la forma dipende dal livello di zoom."""
+    """Path with deviations of 1 to 40 m over 3 km: the shape depends on the zoom level."""
     i = np.arange(count, dtype=np.float64)
     lon = 20.0 + i * (5.0 * DEG_PER_M)
     lat = 10.0 + 40.0 * DEG_PER_M * np.sin(i / 7.0) * np.exp(-((i % 100) / 80.0))
@@ -272,19 +272,19 @@ def replace_start(seg: TrackSegment, offset_s: float) -> TrackSegment:
 
 
 def test_track_across_the_antimeridian_is_simplified_without_a_jump() -> None:
-    lon = np.linspace(179.99, -179.99, 50) % 360.0  # attraversa da est a ovest
+    lon = np.linspace(179.99, -179.99, 50) % 360.0  # crosses from east to west
     lon = np.where(lon > 180.0, lon - 360.0, lon)
     track = ActivityTrack((TrackSegment(np.arange(50.0), np.full(50, 5.0), lon),))
 
     (only,) = simplify_for_zoom(track, 10)
 
-    assert len(only) == 2  # una retta si riduce agli estremi, senza passare per Greenwich
+    assert len(only) == 2  # a straight line reduces to its ends, without going through Greenwich
 
 
 def test_a_budget_overflow_still_gives_an_encodable_track() -> None:
     rng = np.random.default_rng(7)
     segments = []
-    for k in range(30):  # 30 tratti molto rumorosi da 400 punti
+    for k in range(30):  # 30 very noisy segments of 400 points
         lat = 10.0 + k * 0.01 + rng.normal(0, 3e-4, 400)
         lon = 20.0 + rng.normal(0, 3e-4, 400)
         segments.append(
@@ -293,10 +293,10 @@ def test_a_budget_overflow_still_gives_an_encodable_track() -> None:
     result = simplify_for_zoom(ActivityTrack(tuple(segments)), 22)
 
     assert 0 < sum(len(s) for s in result) <= MAX_TRACK_POINTS
-    assert decode_segments(encode_segments(result))  # non solleva
+    assert decode_segments(encode_segments(result))  # does not raise
 
 
-# --- Codifica compatta ------------------------------------------------------------------------
+# --- Compact encoding ------------------------------------------------------------------------
 
 
 def test_segments_round_trip_within_the_polyline_precision() -> None:
@@ -344,13 +344,13 @@ def test_hostile_encoded_tracks_are_rejected(hostile: str) -> None:
 
 def test_encoding_refuses_too_many_points_and_empty_segments() -> None:
     point = GeoPoint(1.0, 1.0)
-    with pytest.raises(ValueError, match="troppi"):
+    with pytest.raises(ValueError, match="too many"):
         encode_segments([[point] * (MAX_TRACK_POINTS + 1)])
-    with pytest.raises(ValueError, match="vuoto"):
+    with pytest.raises(ValueError, match="empty"):
         encode_segments([[]])
 
 
-# --- Lettura dai file -------------------------------------------------------------------------
+# --- Reading from files -------------------------------------------------------------------------
 
 
 def fit_with_gps(positions: list[tuple[float, float] | None]) -> bytes:
@@ -397,7 +397,7 @@ def test_gpx_track_splits_by_segment_and_by_pause() -> None:
     track = decode_stored_track(data, FileFormat.GPX)
 
     assert track is not None
-    assert [len(s) for s in track.segments] == [3, 2, 2]  # trkseg, poi la pausa di 190 s
+    assert [len(s) for s in track.segments] == [3, 2, 2]  # trkseg, then the 190 s pause
     assert track.segments[0].altitude_m is not None
     assert track.segments[0].altitude_m[:2].tolist() == [1.0, 2.0]
     assert math.isnan(track.segments[0].altitude_m[2])

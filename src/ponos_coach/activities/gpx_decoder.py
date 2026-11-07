@@ -638,14 +638,14 @@ def decode_gpx(data: bytes, limits: GpxLimits | None = None) -> Activity:
 
 
 def decode_gpx_track(data: bytes, limits: GpxLimits | None = None) -> ActivityTrack | None:
-    """Traccia completa (posizioni e quota) di un file GPX, o `None` se non ha punti.
+    """Full track (positions and altitude) of a GPX file, `None` if it has no points.
 
-    Per un file già accettato da `decode_gpx`: ogni `trkseg` è un tratto e una pausa più lunga
-    di `TRACK_GAP_S` lo spezza ancora. I secondi partono dal primo punto, come la serie di FC.
+    For a file already accepted by `decode_gpx`: each `trkseg` is a segment and a pause longer
+    than `TRACK_GAP_S` splits it again. Seconds start from the first point, like the HR series.
 
     Raises:
-        GpxDecodeError: file vuoto, troppo grande, XML non valido o ostile, orari incompleti
-            o all'indietro, limiti superati.
+        GpxDecodeError: empty or too large file, invalid or hostile XML, incomplete or
+            backwards times, limits exceeded.
     """
     limits = limits or GpxLimits()
     if not data:
