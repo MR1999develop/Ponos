@@ -1,11 +1,11 @@
 # 010. Map view: library, tile source, cache and page isolation
 
-- Status: Proposed (draft, to be accepted when phase 9 starts)
+- Status: Proposed (decision taken, to be accepted when the interface is built)
 - Date: 2026-11-07
 
 ## Context
 
-Phase 9 adds the Map view: activities shown as start points grouped in numbered
+Phase 5b adds the Map view: activities shown as start points grouped in numbered
 circles that split and merge with the zoom, a click on a group zooms into its
 area, a click on an activity selects it and draws its track, and a list of the
 visible activities sits on the right (PLAN, sections 4.x and 4.9). Five choices
@@ -150,63 +150,68 @@ Drawing every track is impossible for both and is not part of the design.
 
 ## Decision
 
-Proposed, to confirm when phase 9 starts:
+Decided by the project owner on 2026-11-07; the status stays Proposed until the
+interface is built and the measurements are repeated on it.
 
 - **Library: Leaflet 1.9.4 with Leaflet.markercluster 1.5.3**, vendored with the
-  hash recorded in `docs/dependencies.md`. Reasons: the measured budget is met
-  with a wide margin, it needs no GPU, it is the lighter one in memory, and it
-  provides out of the box what the PLAN describes (numbered circles, animated
-  split and merge, click to zoom). MapLibre GL JS stays the documented way out
-  if an offline vector map or rotation is ever wanted; the page-to-Python
-  messages are written library-independent so that the swap touches one
-  script.
-- **Tile source: Tracestrack Topo raster**, key in the operating-system key
-  store (a new entry next to the Garmin tokens, same adapter), entered in a
-  settings dialog; without a key the map shows the neutral background and a
-  line explaining how to add one. A `TILE_URL_TEMPLATE` and the allowed host
-  are constants in one module.
-- **Network**: option 1 (the page loads the tiles; interceptor and CSP allow
-  only `https://tile.tracestrack.com`), because it is the smallest change that
-  works; the key is passed to the page by Python after load, never written in
-  the HTML. If the review of the terms of use or of the key exposure says
-  otherwise, option 2 (proxy) replaces it without changing the rest.
-- **Cache**: the engine's HTTP cache, 4 GB cap, in the operating-system cache
-  folder, with a "Clear map cache" command in the settings.
+  hash recorded in `docs/dipendenze.md`. No GPU is required, the measured budget
+  is met with a wide margin, and numbered circles, animated split and merge and
+  click to zoom are built in. MapLibre GL JS stays the documented way out for an
+  offline vector map; page-to-Python messages are library-independent.
+- **Tile source: Tracestrack Topo raster**; the key lives in the operating-system
+  key store (same adapter as the Garmin tokens) and is entered in the settings.
+  Without a key, without network or with the credit exhausted the map shows the
+  neutral background and a line saying why and what to do.
+- **Network: the page has none. Tile proxy in Python.** The page asks
+  `ponos://tiles/{z}/{x}/{y}`; a scheme handler in the shell validates z, x, y
+  (integers within the limits of the zoom level), downloads
+  `https://tile.tracestrack.com/...` with the key from the key store, a timeout
+  on every request, no unbounded retry, and a generic User-Agent of the app, and
+  answers the page. The CSP and the request interceptor of the page allow only
+  `ponos://`. The key is never in the page, in logs, in the profile folder or in
+  the cache.
+- **Cache: own disk cache with an exact cap and LRU eviction, default 4 GB**, in
+  the operating-system cache folder (not in the profile folder), with a "Clear
+  map cache" command. Only tiles that were looked at are stored; no prefetch.
 - **Page content**: option 1 of "What the page receives". Two messages from the
-  page to Python only, both validated: the visible area (four finite numbers,
-  the latitudes in [-90, 90]) and the clicked activity (an id that exists in
-  the filtered set); Python answers with the list, the totals and the tracks
-  of the visible activities.
-- **Attribution and User-Agent**: the provider's required attribution is shown
-  on the map; the engine's User-Agent is replaced by a generic one for the
-  map page (no version of the app, no machine detail).
+  page to Python, both validated: the visible area (four finite numbers, latitudes
+  in [-90, 90]) and the clicked activity (an id in the filtered set); Python
+  answers with the list, the totals and the tracks in view.
+- The provider's attribution is shown on the map.
 
 ## Consequences
 
-- The threat model gains the map channel (T-SEC-14) and the network exception
-  (T-SEC-15) and declares the accepted risk: the tile host sees the areas
-  viewed.
-- A new secret (the tile key) in the key store and a new setting; both are
-  absent from backups of the profile folder.
-- The tile cache is derived and regenerable: deleting it loses nothing.
-- Schema v8 (done separately) stores what the search needs without opening
-  files: the track box of each activity (four values, antimeridian aware) and
-  nothing else; tracks are re-read from the archived file on demand with
-  `decode_stored_track`.
+- The threat model gains the map channel (T-SEC-14) and the tile proxy
+  (T-SEC-15) and declares the accepted risk: the tile host sees the areas viewed.
+  The page itself has no network access to review.
+- The shell needs an HTTP client with timeouts (a decision for the dependency
+  register: standard library `urllib` or a small library, validated like every
+  dependency) and a scheme handler that answers asynchronously without blocking
+  the interface thread.
+- A new secret (the tile key) in the key store and a new setting, both absent
+  from backups of the profile folder.
+- The tile cache is a durable-data surface of our own (atomic writes, cap and
+  LRU, behaviour on a full disk, stale files) and needs its own tests (T-MAP-11).
+  It is derived and regenerable: deleting it loses nothing.
+- Schema v8 (separate step, after v7) stores the track box of each activity
+  (four values, antimeridian aware) so that "start or track in the area" needs no
+  file access; tracks are re-read with `decode_stored_track`.
 - Libraries are updated by changing the pinned version and hash in one script
-  and re-running the prototype's measurements.
+  and re-running the prototype.
 
 ## How compliance is verified
 
 - T-FILT-01..03 and T-MAP-02, 03, 04, 07 (pure part): `tests/activities/test_filters.py`
   and `tests/activities/test_track.py`; T-MAP-01, 05, 06 on the page and the
-  list with the real window in phase 9.
+  list with the real window in phase 5b.
 - T-MAP-05 repeated in `nox -s collaudo` with the same scenario as the
   prototype (design scenario, p95 under 0.4 s).
 - T-SEC-14: malformed messages (non-numeric or out-of-range coordinates, huge
   payloads, unknown ids) are rejected without effects.
-- T-SEC-15: requests to any other host, or over HTTP, are blocked; no GPS
-  position in logs or in files outside the profile folder.
+- T-SEC-15: the page makes no network request; the proxy calls only
+  `https://tile.tracestrack.com` and rejects other hosts, HTTP and out-of-range
+  z/x/y; no GPS position or key in logs or in files outside the profile folder.
+- T-MAP-11: the cache never exceeds its cap and evicts least recently used tiles.
 - The vendored files match the hashes recorded in `docs/dependencies.md`
   (checked by `experiments/map_prototype/fetch_vendor.py` today, by the build
-  in phase 9).
+  in phase 5b).
