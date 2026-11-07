@@ -101,11 +101,14 @@ parallelo sul codice nel suo worktree.
 
 - Autore e committer già nella configurazione del repository; nessuno script
   ne imposta un altro.
-- **Mai `git push`** (regola dell'utente del 2026-11-07, che sostituisce il
-  push automatico del 2026-11-06): il push lo fa l'utente a mano. La
-  sessione principale fa i commit sul ramo di lavoro della fase e dice
-  quali sono da caricare; su `main` si arriva solo con una PR. Mai
-  `--force` né riscrittura di commit già pushati.
+- **Push solo del ramo di lavoro, con il comando delle regole generali**
+  (regola dell'utente del 2026-11-07, che sostituisce il "mai `git push`"
+  dello stesso giorno): passati i controlli, la sessione principale
+  pubblica il ramo della fase con quel comando, che rifiuta `main`, non
+  forza e non pubblica tag, e la CI parte a ogni push di un ramo. Mai
+  `git push` diretto. Su `main` si arriva solo con una PR, che l'utente
+  apre e unisce quando la CI del ramo è verde. Mai `--force` né riscrittura
+  di commit già pushati.
 
 ## Dominio
 
