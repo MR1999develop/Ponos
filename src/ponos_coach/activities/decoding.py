@@ -13,16 +13,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from ponos_coach.activities.domain import Activity, FileFormat
+from ponos_coach.activities.domain import Activity, ActivityTrack, FileFormat
 from ponos_coach.activities.fit_decoder import (
     FitDecodeError,
     FitLimits,
     decode_activity,
+    decode_track,
 )
 from ponos_coach.activities.gpx_decoder import (
     GpxDecodeError,
     GpxLimits,
     decode_gpx,
+    decode_gpx_track,
     read_xml_root,
 )
 
@@ -158,5 +160,24 @@ def _decode_as(data: bytes, file_format: FileFormat, limits: ActivityFileLimits)
         if file_format is FileFormat.FIT:
             return decode_activity(data, limits.fit)
         return decode_gpx(data, limits.gpx)
+    except (FitDecodeError, GpxDecodeError) as exc:
+        raise ActivityFileError(ActivityFileReason(exc.reason.value)) from exc
+
+
+def decode_stored_track(
+    data: bytes, file_format: FileFormat, limits: ActivityFileLimits | None = None
+) -> ActivityTrack | None:
+    """Traccia completa (posizioni e quota) di un file già archiviato, o `None` senza posizioni.
+
+    Come `decode_stored_activity`, ma non tocca il carico né la serie di FC. Nessun I/O.
+
+    Raises:
+        ActivityFileError: EMPTY, TOO_LARGE, CORRUPT o TOO_MANY_RECORDS.
+    """
+    limits = limits or ActivityFileLimits()
+    try:
+        if file_format is FileFormat.FIT:
+            return decode_track(data, limits.fit)
+        return decode_gpx_track(data, limits.gpx)
     except (FitDecodeError, GpxDecodeError) as exc:
         raise ActivityFileError(ActivityFileReason(exc.reason.value)) from exc
