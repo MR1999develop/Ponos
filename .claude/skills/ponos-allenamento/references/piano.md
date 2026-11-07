@@ -2,7 +2,9 @@
 
 **Quando leggerlo:** scrivendo o rivedendo `planning` e `goals`, i test
 `T-PIANO`, o il calendario. Sezione 2 di `SKILL.md`. Fonti: COG, SEI, RIE
-(Riegel), FRI (zone). Tutti i numeri sono default del progetto e stanno in un
+(Riegel), FRI (zone); per distribuzione dell'intensità, scarico finale e lavoro a
+ritmo gara TON24, HAU22, SAN25, KNO24, TON14, MUN15 (tabella in `SKILL.md`).
+Tutti i numeri sono default del progetto e stanno in un
 solo modulo, `planning/domain/defaults.py`; cambiarne uno cambia il piano di
 ogni utente e fa salire `METHOD_VERSION`.
 
@@ -28,7 +30,8 @@ invia. Nessun I/O nel motore.
   negli ingressi e dà l'avviso `GoalBeyondHorizon`.
 - `Plan`: versione del metodo, parametri usati (`parameter_snapshot`), data di
   generazione, ingressi normalizzati, giorni (fase, seduta o gara, carico),
-  settimane (tipo, minuti, carico), proiezione del PMC (CTL, ATL, TSB per
+  settimane (tipo, minuti, carico, numero di sedute, quota di tempo in Z1–Z2 e
+  quota di sedute intense: le due quote dell'80/20), proiezione del PMC (CTL, ATL, TSB per
   giorno), giudizi sui tempi obiettivo, avvisi, proposta di retest.
   `Plan.to_json()` è la forma canonica.
 - Sport del piano: quello del primo obiettivo A (altrimenti della prima
@@ -81,8 +84,14 @@ sovrascritta (la gara vince su tutto).
 All'indietro da ogni A (e da ogni obiettivo di forma, che non ha scarico né
 picco):
 
-- **Scarico finale** (giorni prima della gara): fino a 10 km 7, fino alla
-  mezza (21 097 m) 10, oltre 14.
+- **Scarico finale** (giorni prima della gara), a gradini di una settimana
+  contando all'indietro dalla gara, ciascuno una quota del carico della
+  settimana di riferimento (l'ultima settimana di carico, come realizzata):
+  fino a 10 km 7 giorni (−40%: 0,60); fino alla mezza (21 097 m) 14 giorni
+  (−25% poi −45%: 0,75, 0,55; valori del progetto tra le due fonti HAU22 e
+  KNO24); oltre (maratona e più) 21 giorni (circa −25% a settimana, ultima
+  settimana circa −50%: 0,75, 0,625, 0,50; KNO24, HAU22). Il mini scarico delle
+  B (4 giorni) prende la quota dello scarico del 3:1.
 - **Recupero dopo la gara A:** 3 / 5 / 7 giorni con le stesse soglie.
 - **Picco** 14 giorni; **costruzione** fino a 8 settimane; **base** fino a 12
   settimane; il resto prima è **mantenimento** (quindi oltre 22 settimane
@@ -115,26 +124,65 @@ picco):
 
 ## 6. Mesocicli e settimana
 
-- 3:1: tre settimane di carico e una di scarico al **65%** (60–70%) del
-  carico giornaliero dell'ultima settimana di carico, come realizzato. Si
+- 3:1: tre settimane di carico e una di scarico al **70%** (−30%; SAN25:
+  −25…−35%) del carico giornaliero dell'ultima settimana di carico, come realizzato. Si
   conta dall'inizio del piano; una settimana con meno di 4 giorni normali non
   conta; nessuno scarico nelle settimane di picco.
 - Scarico prima di A (giorni di scarico finale) e B (mini scarico): sedute
-  facili al 65% dello stesso riferimento; la sera prima di una gara al massimo
-  30 minuti. Nessuna seduta dura.
+  facili con le quote di sopra del riferimento (il mini scarico al 70%); la sera
+  prima di una gara al massimo 30 minuti. **La frequenza si mantiene**: una
+  seduta per ogni giorno disponibile, anche da un carico di partenza nullo (il
+  budget ha come minimo il costo delle sedute più brevi, finché ore e rampa lo
+  permettono). **Una seduta di qualità accorciata a settimana** nello scarico
+  finale (TON14, SAN25): al massimo 45 minuti, struttura ridotta (soglia 10' + 2
+  × 8' + 10', VO2max 10' + 3 × 3' + 10'; il medio è il più corto), mai nelle
+  ultime 72 ore prima di una gara (valore del progetto: si guarda a ogni gara,
+  A, B e C), non accanto a un giorno duro; tipologia a ritmo gara (vedi sotto).
+  Nessun lungo. Il mini scarico delle B non ha qualità.
 - Il carico settimanale va nei giorni disponibili; ogni giorno al massimo i
   minuti dell'utente e ogni settimana al massimo le sue ore (le gare non
   contano).
 - **Dure** = lungo, medio, soglia, VO2max; **intense** = medio, soglia,
   VO2max. Mai due dure di seguito (nemmeno tra settimane, né accanto a una
-  gara); al massimo 3 intense a settimana (2 in base).
+  gara); mai una intensa nelle 72 ore prima di una gara (valore del progetto).
+  **Distribuzione della settimana** (`week.week_ok`, `defaults`):
+  - al massimo il **25%** delle sedute con obiettivo intenso (TON24: LIT 75–80%
+    delle sedute; soglia, VO2max e medio contano, il lungo no), ma da 3 sedute
+    in su sempre almeno 1 (KNO24: 1–2 ad alta intensità per amatori), con meno
+    di 3 nessuna: tetto `max(1, ⌊25% · sedute⌋)`. Con al massimo una seduta al
+    giorno vuol dire 1 intensa con 3–7 sedute e nessuna con 1–2;
+  - al massimo **3 giorni duri** a settimana, lungo compreso (SAN25: 2–3 giorni
+    chiave) e al massimo 2 sedute intense se le sedute sono meno di 6 (KNO24:
+    1–2 HIT per amatori); con il 25% sopra sono limiti ridondanti, tenuti come
+    cinture di sicurezza;
+  - tetti per numero invariati: 3 intense (2 in base);
+  - il motore toglie le intense, l'ultima per prima (poi la qualità dello
+    scarico), finché la settimana rispetta tutto.
 - Composizione: lungo nel giorno scelto; qualità per fase: mantenimento
-  soglia; base soglia e medio; costruzione e picco soglia e VO2max; le
-  intense si distanziano il più possibile; forza una volta a settimana se
+  soglia; base soglia e medio; costruzione soglia e VO2max; le tipologie della
+  fase **si alternano di settimana in settimana** (una per settimana per il
+  limite del 25%); le intense si distanziano il più possibile; forza una volta a settimana se
   scelta; gli altri giorni disponibili facile (altrimenti alternativa,
   altrimenti recupero). Nelle settimane di scarico solo lungo e facili.
 - **80/20 per tempo:** in base e mantenimento almeno l'80% dei minuti in
   Z1–Z2; se non regge si tolgono le sedute intense, l'ultima per prima.
+  `PlanWeek.low_zone_share` e `PlanWeek.intense_session_share` espongono le due
+  quote di ogni settimana (1,0 e 0,0 senza sedute).
+- **Picco e scarico per gara lunga (MUN15)**, classe di gara per distanza
+  (`RaceClass`: fino a 10 km, mezza, maratona e oltre; nessuna nuova tipologia):
+  - maratona e oltre: **niente VO2max nel picco**; la qualità è il **medio** con
+    blocchi al ritmo previsto di maratona (zona 3), altrimenti la soglia (che
+    non è ritmo maratona e non è marcata ritmo gara);
+  - mezza: niente VO2max nel picco; la **soglia** con blocchi al ritmo mezza
+    (zona 4), altrimenti il medio;
+  - fino a 10 km: il picco alterna VO2max e soglia a ritmo gara (zona 4);
+  - lo scarico finale usa la stessa tipologia a ritmo gara (fino a 10 km:
+    soglia, altrimenti VO2max).
+  Il ritmo gara (`Block.race_pace_s_per_km`, sui blocchi di lavoro nella zona
+  della gara; `PlannedSession.race_pace` marca la seduta) viene dal tempo
+  obiettivo o, senza, dal tempo previsto (Riegel con il miglioramento) e vale
+  solo per le gare di corsa con il ritmo di soglia o il tempo obiettivo; senza
+  nessuno dei due la seduta va per zona e il ritmo è `None`.
 - Dimensionamento (`week.Sizer`): ogni seduta ha almeno la sua durata minima;
   se il budget di carico non le paga tutte si tolgono le meno importanti
   (forza e recupero, poi facile, medio, VO2max, soglia, lungo); il resto si
@@ -221,7 +269,22 @@ valgono.
 `T-PIANO-01…05` in `PLAN.md` sezione 7.4: `tests/planning/` (determinismo,
 proprietà con Hypothesis su ingressi casuali con `invariants.violations`,
 scenari, adattamento, classi del tempo obiettivo ai confini, modelli di
-seduta, prestazioni: 52 settimane in meno di 1 s).
+seduta, distribuzione e scarico in `test_distribution.py`, prestazioni: 52
+settimane in meno di 1 s, nella pratica circa 10 ms).
+
+Invarianti di `invariants.py` oltre a quelli di prima: al massimo
+`max(1, ⌊25%⌋)` sedute intense a settimana da 3 sedute in su, nessuna con meno (e 2 con meno di 6 sedute), al massimo 3 giorni
+duri, nessuna intensa nei 3 giorni prima di una gara, nessun VO2max nel picco
+di mezza e maratona, quote esposte coerenti con le sedute, settimana intera di
+scarico con una seduta per ogni giorno disponibile (non controllato con ore
+settimanali inferiori ai minuti dei giorni disponibili, dopo infortunio, con CTL
+sotto 10 o senza tipologia facile: lì le ore o la rampa decidono quali sedute
+togliere).
+
+Versione del metodo: **2** (scarico a gradini, distribuzione 80/20 per sedute,
+giorni duri, ritmo gara, scarico del 3:1 al 70%). I piani salvati con la
+versione 1 non si rileggono (il formato ha campi in più): il guscio li
+ricalcola.
 
 ## 13. Guscio: obiettivi, piano salvato, passato (fase 5)
 

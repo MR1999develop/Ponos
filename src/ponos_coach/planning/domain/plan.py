@@ -33,6 +33,8 @@ class Block:
 
     The HR range is in whole bpm (both ends included); the pace range in whole s/km, slowest
     first, and `None` where the zone has no end (or without a threshold pace, or off running).
+    `race_pace_s_per_km` is the pace of the race the block rehearses (whole s/km), only on the
+    work blocks of a race-pace session and only when the race time can be expected.
     """
 
     role: BlockRole
@@ -43,6 +45,7 @@ class Block:
     hr_high_bpm: int
     pace_slow_s_per_km: int | None
     pace_fast_s_per_km: int | None
+    race_pace_s_per_km: int | None = None
 
     def __post_init__(self) -> None:
         if self.minutes < 1 or self.repeats < 1 or not 1 <= self.zone <= 5:
@@ -53,13 +56,18 @@ class Block:
 
 @dataclass(frozen=True, slots=True)
 class PlannedSession:
-    """A training session of a day: sport, type, duration, structure and estimated load."""
+    """A training session of a day: sport, type, duration, structure and estimated load.
+
+    `race_pace` marks a session of the peak or the taper whose work is at the pace of the A race
+    (medium for a marathon, threshold for a half marathon or a 10 km or shorter race).
+    """
 
     sport: Sport
     session_type: SessionType
     minutes: int
     blocks: tuple[Block, ...]
     load: float
+    race_pace: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,12 +108,20 @@ class WeekKind(Enum):
 
 @dataclass(frozen=True, slots=True)
 class PlanWeek:
-    """A week (Monday to Sunday, the first one possibly partial) of the plan."""
+    """A week (Monday to Sunday, the first one possibly partial) of the plan.
+
+    The two 80/20 shares of the week: `low_zone_share` is the share of the session time in
+    zones 1-2 (1.0 without sessions), `intense_session_share` the share of the sessions that
+    have an intense goal (threshold, VO2max, medium; 0.0 without sessions).
+    """
 
     week_start: date
     kind: WeekKind
     session_minutes: int
     load: float
+    session_count: int = 0
+    low_zone_share: float = 1.0
+    intense_session_share: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)

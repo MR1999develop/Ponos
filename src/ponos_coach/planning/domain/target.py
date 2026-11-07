@@ -8,6 +8,7 @@ from bisect import bisect_right
 from enum import Enum
 
 from ponos_coach.planning.domain import defaults
+from ponos_coach.planning.domain.phases import RaceClass
 
 
 class TargetClass(Enum):
@@ -31,22 +32,23 @@ def target_ctl_for_distance(distance_m: int) -> float:
     return c0 + (c1 - c0) * (distance_m - d0) / (d1 - d0)
 
 
+def race_class_for(distance_m: int) -> RaceClass:
+    """Length class of a race of this distance (the half marathon belongs to `HALF`)."""
+    if distance_m <= defaults.SHORT_RACE_MAX_M:
+        return RaceClass.SHORT
+    if distance_m <= defaults.HALF_MARATHON_M:
+        return RaceClass.HALF
+    return RaceClass.LONG
+
+
 def taper_days_for(distance_m: int) -> int:
     """Days of final unload before an A race of this distance."""
-    if distance_m <= defaults.SHORT_RACE_MAX_M:
-        return defaults.TAPER_DAYS_SHORT
-    if distance_m <= defaults.HALF_MARATHON_M:
-        return defaults.TAPER_DAYS_HALF
-    return defaults.TAPER_DAYS_LONG
+    return defaults.TAPER_DAYS[race_class_for(distance_m)]
 
 
 def recovery_days_for(distance_m: int) -> int:
     """Easy days after an A race of this distance."""
-    if distance_m <= defaults.SHORT_RACE_MAX_M:
-        return defaults.RECOVERY_DAYS_SHORT
-    if distance_m <= defaults.HALF_MARATHON_M:
-        return defaults.RECOVERY_DAYS_HALF
-    return defaults.RECOVERY_DAYS_LONG
+    return defaults.RECOVERY_DAYS[race_class_for(distance_m)]
 
 
 def predicted_time_today_s(threshold_pace_s_per_km: int, distance_m: int) -> float:

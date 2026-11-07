@@ -49,10 +49,10 @@ def test_ctl_target_by_distance(distance: int, ctl: float) -> None:
     [
         (5_000, 7, 3),
         (10_000, 7, 3),
-        (10_001, 10, 5),
-        (21_097, 10, 5),
-        (21_098, 14, 7),
-        (42_195, 14, 7),
+        (10_001, 14, 5),
+        (21_097, 14, 5),
+        (21_098, 21, 7),
+        (42_195, 21, 7),
     ],
 )
 def test_taper_and_recovery_by_distance(distance: int, taper: int, recovery: int) -> None:

@@ -17,11 +17,17 @@ from datetime import date, timedelta
 
 from ponos_coach.activities.domain import Sport
 from ponos_coach.assessment.domain import NoTest, Overdue
-from ponos_coach.goals.domain import HARD_TYPES, Priority, RaceGoal, SessionType
+from ponos_coach.goals.domain import HARD_TYPES, INTENSE_TYPES, Priority, RaceGoal, SessionType
 from ponos_coach.planning.domain import defaults
 from ponos_coach.planning.domain.inputs import PlanInputs, PlanRefusal, RefusalReason
 from ponos_coach.planning.domain.macrocycle import Anchor, Macrocycle, build_macrocycle
-from ponos_coach.planning.domain.phases import LOADED_PHASES, PHASE_RANK, TAPER_PHASES, Phase
+from ponos_coach.planning.domain.phases import (
+    LOADED_PHASES,
+    PHASE_RANK,
+    TAPER_PHASES,
+    Phase,
+    RaceClass,
+)
 from ponos_coach.planning.domain.plan import (
     CloseARaces,
     CtlTargetNotReached,
@@ -46,6 +52,7 @@ from ponos_coach.planning.domain.plan import (
 )
 from ponos_coach.planning.domain.projection import Fitness, ctl_after, decay, step
 from ponos_coach.planning.domain.sessions import (
+    RacePace,
     ZoneRanges,
     ZoneRates,
     make_session,
@@ -59,6 +66,7 @@ from ponos_coach.planning.domain.target import (
     TargetClass,
     best_time_by_race_s,
     classify_target,
+    race_class_for,
     recovery_days_for,
     taper_days_for,
     target_ctl_for_distance,
@@ -90,6 +98,15 @@ class _Run:
 
 
 @dataclass(frozen=True, slots=True)
+class _RaceTarget:
+    """An A race as the weeks before it see it: its length class and the pace it is run at."""
+
+    day: date
+    race_class: RaceClass
+    pace_s_per_km: int | None
+
+
+@dataclass(frozen=True, slots=True)
 class _Context:
     """The fixed things every week needs."""
 
@@ -102,6 +119,7 @@ class _Context:
     ranges: dict[Sport, ZoneRanges]
     races: dict[date, PlannedRace]
     max_ramp: float
+    targets: tuple[_RaceTarget, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,7 +273,49 @@ def _context(inputs: PlanInputs, macro: Macrocycle, today: date, max_ramp: float
             expected,
             race_load(expected, rates[race.sport]),
         )
-    return _Context(inputs, macro, sport, Sizer(rates_of), rates_of, rates, ranges, races, max_ramp)
+    pace = inputs.threshold_pace_s_per_km
+    targets = tuple(
+        _RaceTarget(
+            r.day,
+            race_class_for(r.distance_m),
+            _race_pace_s_per_km(r, pace, (r.day - today).days),
+        )
+        for r in inputs.races
+        if r.priority is Priority.A
+    )
+    return _Context(
+        inputs, macro, sport, Sizer(rates_of), rates_of, rates, ranges, races, max_ramp, targets
+    )
+
+
+def _race_pace_s_per_km(race: RaceGoal, pace: int | None, days_to_race: int) -> int | None:
+    """Pace the race is expected to be run at, whole s/km: from the target time, else from the
+    best time possible (Riegel's prediction from the threshold pace); `None` for a race that is
+    not a run or when neither is known (the session then goes by its zone alone)."""
+    if race.sport not in _RUNNING:
+        return None
+    if race.target_time_s is not None:
+        time_s = float(race.target_time_s)
+    elif pace is not None:
+        time_s = best_time_by_race_s(pace, race.distance_m, days_to_race)
+    else:
+        return None
+    return round(time_s * 1000 / race.distance_m)
+
+
+def _next_target(context: _Context, day: date) -> _RaceTarget | None:
+    """The first A race after `day`."""
+    return next((t for t in context.targets if t.day > day), None)
+
+
+def _taper_fraction(phase: Phase, target: _RaceTarget | None, day: date) -> float:
+    """Share of the reference load that a day of the taper takes: the step of its week counted
+    back from the race (see `defaults.TAPER_FRACTIONS`); a mini taper takes the unload fraction."""
+    if phase is Phase.TAPER and target is not None:
+        steps = defaults.TAPER_FRACTIONS[target.race_class]
+        weeks_before = ((target.day - day).days - 1) // defaults.TAPER_STEP_DAYS
+        return steps[max(len(steps) - 1 - weeks_before, 0)]
+    return defaults.UNLOAD_FRACTION if phase in TAPER_PHASES else 0.0
 
 
 def _week_groups(start: date, end: date) -> list[list[date]]:
@@ -305,18 +365,34 @@ def _setup(
 ) -> WeekSetup:
     availability = context.inputs.availability
     race_days = frozenset(context.races)
-    infos = tuple(
-        DayInfo(
-            day,
-            context.macro.phase_on(day),
-            availability.minutes_on(day.weekday()),
-            day + timedelta(days=1) in race_days,
-        )
-        for day in week
-    )
+    infos = tuple(_day_info(context, day) for day in week)
     seed = race_days | ({run.last_hard} if run.last_hard is not None else set())
     chosen = context.inputs.choices.for_sport(context.sport)
-    return WeekSetup(infos, week_phase, unload, availability.long_day, chosen, frozenset(seed))
+    monday = week[0] - timedelta(days=week[0].weekday())
+    return WeekSetup(
+        infos,
+        week_phase,
+        unload,
+        availability.long_day,
+        chosen,
+        frozenset(seed),
+        race_days,
+        monday.toordinal() // _DAYS_PER_WEEK,
+    )
+
+
+def _day_info(context: _Context, day: date) -> DayInfo:
+    phase = context.macro.phase_on(day)
+    target = _next_target(context, day)
+    return DayInfo(
+        day,
+        phase,
+        context.inputs.availability.minutes_on(day.weekday()),
+        day + timedelta(days=1) in context.races,
+        _taper_fraction(phase, target, day),
+        None if target is None else target.race_class,
+        None if target is None else (target.day - day).days,
+    )
 
 
 def _loads_of(context: _Context, week: Sequence[date], placed: dict[date, Placed]) -> list[float]:
@@ -375,7 +451,13 @@ def _fit_week(
     the recovery sessions, and if even those do not fit, a rest week."""
     scale = 1.0
     for _ in range(defaults.SCALE_ATTEMPTS):
-        placed = plan_week(setup, context.sizer, budgets[0] * scale, budgets[1] * scale)
+        placed = plan_week(
+            setup,
+            context.sizer,
+            budgets[0] * scale,
+            budgets[1] * scale,
+            keep_frequency=scale == 1.0,
+        )
         factor = _fit_factor(context, run, week, placed)
         if factor >= 1.0:
             return placed
@@ -402,9 +484,9 @@ def _plan_one_week(context: _Context, run: _Run, week: Sequence[date]) -> _WeekR
     run.loaded_weeks += int(counted)
     ramping = any(context.macro.phase_on(d) in (Phase.BASE, Phase.BUILD) for d in week)
     level = _daily_level(context, run, week, ramping=ramping, unload=unload)
-    taper_days = sum(context.macro.phase_on(d) in TAPER_PHASES for d in week)
-    budgets = (level * loaded_days, defaults.UNLOAD_FRACTION * run.ref_daily * taper_days)
     setup = _setup(context, run, week, week_phase, unload)
+    taper_share = sum(d.taper_fraction for d in setup.days)
+    budgets = (level * loaded_days, run.ref_daily * taper_share)
     placed = _fit_week(context, run, setup, week, budgets)
     if counted and not unload:
         run.ref_daily = _realised_daily_load(context, week, placed, loaded_days)
@@ -424,7 +506,12 @@ def _advance(
         if item is not None:
             sport = _session_sport(item.shape.session_type, context.sport)
             session = make_session(
-                item.shape, item.phase, sport, context.rates[sport], context.ranges[sport]
+                item.shape,
+                item.phase,
+                sport,
+                context.rates[sport],
+                context.ranges[sport],
+                _race_pace_of(context, day) if item.race_pace else None,
             )
         race = context.races.get(day)
         load = (session.load if session else 0.0) + (race.load if race else 0.0)
@@ -438,13 +525,37 @@ def _advance(
     return _WeekResult(tuple(days), tuple(points), unload)
 
 
+def _race_pace_of(context: _Context, day: date) -> RacePace | None:
+    """The race a race-pace session of this day rehearses: the next A race."""
+    target = _next_target(context, day)
+    if target is None:
+        return None
+    return RacePace(defaults.RACE_PACE_ZONE[target.race_class], target.pace_s_per_km)
+
+
+def _shares(days: Sequence[PlanDay]) -> tuple[int, float, float]:
+    """Sessions of the days, and the two 80/20 shares: time in Z1-Z2 and intense sessions."""
+    sessions = [day.session for day in days if day.session]
+    total = low = 0
+    for session in sessions:
+        for block in session.blocks:
+            minutes = block.minutes * block.repeats
+            total += minutes
+            low += minutes if block.zone <= 2 else 0
+    intense = sum(session.session_type in INTENSE_TYPES for session in sessions)
+    count = len(sessions)
+    return count, (low / total if total else 1.0), (intense / count if count else 0.0)
+
+
 def _summary(result: _WeekResult) -> PlanWeek:
     phases = Counter(day.phase for day in result.days)
     dominant = max(phases, key=lambda p: (phases[p], PHASE_RANK[p]))
     kind = WeekKind.UNLOAD if result.unload else _KIND_OF_PHASE[dominant]
     minutes = sum(day.session.minutes for day in result.days if day.session)
     week_start = result.days[0].day - timedelta(days=result.days[0].day.weekday())
-    return PlanWeek(week_start, kind, minutes, sum(day.load for day in result.days))
+    count, low_zone, intense = _shares(result.days)
+    load = sum(day.load for day in result.days)
+    return PlanWeek(week_start, kind, minutes, load, count, low_zone, intense)
 
 
 # --- Verdicts and warnings ---------------------------------------------------------------------

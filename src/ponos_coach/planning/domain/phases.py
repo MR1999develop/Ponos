@@ -35,3 +35,11 @@ PHASE_RANK: dict[Phase, int] = {
 # Days that carry the normal training load (the others are unloaded or are a race).
 LOADED_PHASES = frozenset({Phase.MAINTENANCE, Phase.BASE, Phase.BUILD, Phase.PEAK})
 TAPER_PHASES = frozenset({Phase.TAPER, Phase.MINI_TAPER})
+
+
+class RaceClass(Enum):
+    """Length class of a race, which decides its taper and its race-pace work."""
+
+    SHORT = "short"  # up to a 10 km
+    HALF = "half"  # up to the half marathon
+    LONG = "long"  # the marathon and beyond

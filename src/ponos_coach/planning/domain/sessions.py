@@ -169,27 +169,52 @@ def zone_ranges(physiology: Physiology, sport: Sport, pace_s_per_km: int | None)
     return ZoneRanges(hr, tuple(zip(slow, fast, strict=True)))
 
 
-def attach_ranges(blocks: Sequence[RawBlock], ranges: ZoneRanges) -> tuple[Block, ...]:
-    """Blocks with the HR and pace range of their zone."""
+@dataclass(frozen=True, slots=True)
+class RacePace:
+    """The race a session rehearses: its work is in `zone`, at `pace_s_per_km` when known."""
+
+    zone: int
+    pace_s_per_km: int | None
+
+
+_RACE_PACE_ROLES = (BlockRole.WORK, BlockRole.STEADY)
+
+
+def attach_ranges(
+    blocks: Sequence[RawBlock], ranges: ZoneRanges, race_pace: RacePace | None = None
+) -> tuple[Block, ...]:
+    """Blocks with the HR and pace range of their zone; with `race_pace`, the work blocks in the
+    race zone also carry the race pace."""
     out: list[Block] = []
     for raw in blocks:
         low, high = ranges.hr[raw.zone - 1]
         slow, fast = ranges.pace[raw.zone - 1]
-        out.append(Block(raw.role, raw.minutes, raw.zone, raw.repeats, low, high, slow, fast))
+        at_race_pace = (
+            race_pace is not None and raw.zone == race_pace.zone and raw.role in _RACE_PACE_ROLES
+        )
+        pace = race_pace.pace_s_per_km if race_pace is not None and at_race_pace else None
+        out.append(Block(raw.role, raw.minutes, raw.zone, raw.repeats, low, high, slow, fast, pace))
     return tuple(out)
 
 
 def make_session(
-    shape: Shape, phase: Phase, sport: Sport, rates: ZoneRates, ranges: ZoneRanges
+    shape: Shape,
+    phase: Phase,
+    sport: Sport,
+    rates: ZoneRates,
+    ranges: ZoneRanges,
+    race_pace: RacePace | None = None,
 ) -> PlannedSession:
-    """The planned session of a shape: structure with zone ranges, and estimated load."""
+    """The planned session of a shape: structure with zone ranges, and estimated load. With
+    `race_pace` it is a race-pace session: its work blocks carry the race pace."""
     raw = raw_blocks(shape, phase)
     return PlannedSession(
         sport,
         shape.session_type,
         shape.minutes,
-        attach_ranges(raw, ranges),
+        attach_ranges(raw, ranges, race_pace),
         session_load(raw, rates),
+        race_pace is not None,
     )
 
 

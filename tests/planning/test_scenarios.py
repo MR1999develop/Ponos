@@ -79,12 +79,13 @@ def test_one_a_race_is_built_backwards_from_its_date() -> None:
 
 
 def test_taper_is_longer_for_longer_races_and_less_load_than_before() -> None:
-    plan = _plan([race("a", _weeks_ahead(20), distance_m=42_195)], avail=BIG_WEEK, ctl=40, atl=40)
+    plan = _plan([race("a", _weeks_ahead(24), distance_m=42_195)], avail=BIG_WEEK, ctl=40, atl=40)
     taper = [d for d in plan.days if d.phase is Phase.TAPER]
-    assert len(taper) == 14
+    assert len(taper) == 21
     before = [d for d in plan.days if d.phase is Phase.PEAK][-7:]
-    assert sum(d.load for d in taper) / 14 <= 0.7 * sum(d.load for d in before) / 7
-    assert all(d.session is None or d.session.session_type is SessionType.EASY for d in taper)
+    assert sum(d.load for d in taper) / 21 <= 0.7 * sum(d.load for d in before) / 7
+    easy_or_quality = {SessionType.EASY, SessionType.MEDIUM}
+    assert all(d.session is None or d.session.session_type in easy_or_quality for d in taper)
 
 
 def test_ctl_climbs_to_the_target_when_it_is_reachable() -> None:

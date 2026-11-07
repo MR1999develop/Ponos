@@ -548,7 +548,7 @@ def test_a_plan_whose_checksum_does_not_match_is_unreadable(tmp_path: Path) -> N
     assert stored == UnreadablePlan()
 
 
-@pytest.mark.parametrize(("version", "generated_on"), [(2, "2026-03-02"), (1, "2026-03-03")])
+@pytest.mark.parametrize(("version", "generated_on"), [(99, "2026-03-02"), (2, "2026-03-03")])
 def test_a_plan_whose_columns_disagree_with_its_text_is_unreadable(
     tmp_path: Path, version: int, generated_on: str
 ) -> None:

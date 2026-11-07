@@ -8,10 +8,19 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import timedelta
 
-from ponos_coach.goals.domain import HARD_TYPES, INTENSE_TYPES, Priority
+from ponos_coach.goals.domain import HARD_TYPES, INTENSE_TYPES, Priority, SessionType
 from ponos_coach.planning.domain import Phase, Plan, PlanDay
 
 MAX_RAMP = 5.0
+MAX_INTENSE_SHARE_PERCENT = 25
+MIN_SESSIONS_FOR_INTENSE = 3
+MAX_HARD_DAYS = 3
+FEW_SESSIONS = 6
+MAX_INTENSE_FEW_SESSIONS = 2
+NO_QUALITY_DAYS = 3
+# The taper is made of the first of these that is chosen, with its shortest duration in minutes.
+FILLER_MINUTES = ((SessionType.EASY, 20), (SessionType.ALTERNATIVE, 30), (SessionType.RECOVERY, 20))
+SHORT_RACE_M = 10_000
 MAX_RAMP_AFTER_INJURY = 3.0
 CTL_DAYS = 42.0
 EPSILON = 1e-6
@@ -60,11 +69,107 @@ def _check_weeks(plan: Plan) -> list[str]:
             problems.append(f"week {start}: {minutes} min over the maximum {cap}")
         if intense > 3:
             problems.append(f"week {start}: {intense} intense sessions")
+        problems.extend(_check_distribution(start, days))
         if (
             all(d.phase is Phase.BASE for d in days if d.phase is not Phase.RECOVERY)
             and intense > 2
         ):
             problems.append(f"week {start}: {intense} intense sessions in base")
+    return problems
+
+
+def _check_distribution(start: object, days: list[PlanDay]) -> list[str]:
+    """80/20 by sessions and hard days: at most 25% of the sessions intense, at most 2 intense
+    if there are fewer than 6 sessions, at most 3 hard days (the long run counts)."""
+    types = [d.session.session_type for d in days if d.session]
+    intense = sum(t in INTENSE_TYPES for t in types)
+    hard = sum(t in HARD_TYPES for t in types)
+    problems: list[str] = []
+    allowed = (
+        0
+        if len(types) < MIN_SESSIONS_FOR_INTENSE
+        else max(1, len(types) * MAX_INTENSE_SHARE_PERCENT // 100)
+    )
+    if intense > allowed:
+        problems.append(f"week {start}: {intense} intense of {len(types)} sessions")
+    if len(types) < FEW_SESSIONS and intense > MAX_INTENSE_FEW_SESSIONS:
+        problems.append(f"week {start}: {intense} intense with only {len(types)} sessions")
+    if hard > MAX_HARD_DAYS:
+        problems.append(f"week {start}: {hard} hard days")
+    return problems
+
+
+def _check_week_quotas(plan: Plan) -> list[str]:
+    """The quotas exposed by each week are the ones of its sessions."""
+    problems: list[str] = []
+    for week in plan.weeks:
+        days = [d for d in plan.days if week.week_start <= d.day < week.week_start + timedelta(7)]
+        sessions = [d.session for d in days if d.session]
+        total = sum(b.minutes * b.repeats for s in sessions for b in s.blocks)
+        low = sum(b.minutes * b.repeats for s in sessions for b in s.blocks if b.zone <= 2)
+        intense = sum(s.session_type in INTENSE_TYPES for s in sessions)
+        if week.session_count != len(sessions):
+            problems.append(f"week {week.week_start}: session count")
+        if abs(week.low_zone_share - (low / total if total else 1.0)) > 1e-3:
+            problems.append(f"week {week.week_start}: low-zone share")
+        share = intense / len(sessions) if sessions else 0.0
+        if abs(week.intense_session_share - share) > 1e-3:
+            problems.append(f"week {week.week_start}: intense share")
+    return problems
+
+
+def _check_quality_before_races(plan: Plan) -> list[str]:
+    """No intense session in the 72 hours before a race, and no VO2max in the peak of a half
+    marathon or a marathon."""
+    problems: list[str] = []
+    by_day = {d.day: d for d in plan.days}
+    for race in plan.inputs.races:
+        for back in range(1, NO_QUALITY_DAYS + 1):
+            day = by_day.get(race.day - timedelta(days=back))
+            if day is not None and day.session and day.session.session_type in INTENSE_TYPES:
+                problems.append(
+                    f"{day.day}: intense session {back} days before {race.goal_id.value}"
+                )
+    a_races = sorted((r.day, r.distance_m) for r in plan.inputs.races if r.priority is Priority.A)
+    for day in plan.days:
+        session = day.session
+        if day.phase is not Phase.PEAK or session is None:
+            continue
+        if session.session_type is not SessionType.VO2MAX:
+            continue
+        distance = next((m for d, m in a_races if d > day.day), 0)
+        if distance > SHORT_RACE_M:
+            problems.append(f"{day.day}: VO2max in the peak of a {distance} m race")
+    return problems
+
+
+def _check_taper_frequency(plan: Plan) -> list[str]:
+    """A full week of taper keeps the number of sessions: every day with time for one has it.
+    Not checked when the weekly hours are fewer than the minutes the user has on all his days
+    (the hours decide which sessions to drop), after an injury, from almost no fitness, or when
+    no easy type is chosen (the taper is made of easy sessions)."""
+    inputs = plan.inputs
+    available = inputs.availability
+    chosen = inputs.choices.for_sport(inputs.plan_sport())
+    shortest = next((m for t, m in FILLER_MINUTES if t in chosen), None)
+    if (
+        inputs.after_injury
+        or inputs.fitness.ctl < 10
+        or shortest is None
+        or available.max_week_minutes < sum(available.minutes_on(w) for w in range(7))
+    ):
+        return []
+    problems: list[str] = []
+    for start, days in _weeks(plan).items():
+        if len(days) < 7 or any(d.phase is not Phase.TAPER for d in days):
+            continue
+        free = [
+            d
+            for d in days
+            if d.session is None and available.minutes_on(d.day.weekday()) >= shortest
+        ]
+        if free:
+            problems.append(f"week {start}: {len(free)} taper days without a session")
     return problems
 
 
@@ -130,6 +235,9 @@ def violations(plan: Plan) -> list[str]:
         *_check_days(plan),
         *_check_weeks(plan),
         *_check_hard_days(plan),
+        *_check_week_quotas(plan),
+        *_check_quality_before_races(plan),
+        *_check_taper_frequency(plan),
         *_check_ramp(plan),
         *_check_unloads(plan),
         *_check_projection(plan),
