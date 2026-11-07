@@ -32,7 +32,7 @@ completata e verificata.
 | Import da cartella | Oltre alla sincronizzazione, su richiesta: si sceglie una cartella e si aggiungono i file FIT e GPX che contiene |
 | Formati dei file | FIT e GPX, anche dentro archivi ZIP (come quelli scaricati dal sito Garmin), sia nell'import sia nella sincronizzazione con Garmin |
 | Dati di salute sul disco | In chiaro nella cartella del profilo, protetti dai permessi del sistema (solo l'utente); il README consiglia la cifratura del disco; nessuna password dell'app |
-| Ricerca e mappa (fase 9) | Filtri delle attività per data, durata, distanza e dislivello; mappa zoomabile con le attività raggruppate in cerchi numerati che cambiano con lo zoom e, a destra, l'elenco delle attività visibili nell'area |
+| Ricerca e mappa (fase 5b) | Filtri delle attività per data, durata, distanza e dislivello; mappa in stile Komoot con le tracce delle attività svolte (linee per sport; a zoom basso partenze raggruppate in cerchi numerati), sfondo Tracestrack Topo (dati OpenStreetMap) con chiave personale nel portachiavi del sistema ed etichette nella lingua dell'app, sfondo neutro con avviso senza chiave, rete o credito, cache delle tile su disco con dimensione scelta nelle impostazioni (default 4 GB); accanto alla mappa profilo altimetrico collegato alla traccia, traccia colorabile per zone FC, elenco e totali delle attività nell'area. Subito dopo la fase 5 (decisioni del 2026-11-07; prima era la fase 9, dopo il rilascio) |
 | Sincronizzazione | All'avvio e con il pulsante Sincronizza; la prima scarica tutto lo storico, le successive solo le attività mancanti; riprende da dove era rimasta dopo una chiusura; notifica a fine sincronizzazione; niente area di notifica |
 | Calendario Garmin | In una fase successiva: invio degli allenamenti a scelta dell'utente ed eliminazione degli allenamenti futuri programmati |
 | Lingue | Inglese come lingua predefinita, italiano scelto dal menu Lingua e ricordato (decisione del 2026-11-06; prima seguiva la lingua del sistema) |
@@ -267,7 +267,7 @@ src/ponos_coach/
   scelte, infortuni attivi, ultimo test (FC e ritmo di soglia), pesi degli
   sport.
 - **Macrociclo** per ogni obiettivo A, all'indietro dalla data: scarico
-  (7–14 giorni secondo la distanza), picco, costruzione, base. CTL obiettivo
+  (7 giorni fino a 10 km, 14 per la mezza, 21 a gradini per la maratona e oltre: KNO24, HAU22), picco, costruzione, base. CTL obiettivo
   dal livello di forma richiesto o da una stima per distanza e tempo, limitato
   dalla rampa massima (default +5 CTL a settimana, +3 dopo un infortunio).
 - **Mesocicli 3:1:** tre settimane di carico e una di scarico (60–70%).
@@ -318,12 +318,15 @@ src/ponos_coach/
 - Menu File: Nuovo profilo, Apri profilo da cartella, Cambia profilo,
   Rimuovi profilo dall'elenco; il nome del profilo attivo sta nel titolo
   della finestra.
-- Fase 9: filtri delle attività (data, durata, distanza, dislivello, sport),
-  con un solo stato condiviso da tabella e mappa; vista Mappa con la mappa
-  zoomabile al centro, le attività raggruppate in cerchi numerati che si
-  dividono o si uniscono con lo zoom, e a destra l'elenco delle attività
-  visibili nell'area, con selezione sincronizzata. Il modello d'interazione
-  è quello delle viste mappa delle app outdoor per smartphone; l'aspetto
+- Fase 5b: filtri delle attività (data, durata, distanza, dislivello, sport),
+  con un solo stato condiviso da tabella e mappa; vista Mappa in stile
+  Komoot: mappa topografica al centro con le tracce delle attività svolte
+  (linee colorate per sport, con legenda), che a zoom basso diventano
+  partenze raggruppate in cerchi numerati; a destra l'elenco delle attività
+  nell'area con i totali; sotto, per l'attività selezionata, il profilo
+  altimetrico collegato alla traccia (passando sul profilo si vede il punto
+  sulla mappa) e la scelta del colore della traccia (sport o zone FC). Il
+  modello d'interazione è quello delle app outdoor come Komoot; l'aspetto
   resta quello di Ponos Coach.
 - Menu completi con scorciatoie (Sincronizza: F5), annulla e ripeti
   (`QUndoStack`) per obiettivi e calendario, barra di stato con l'ultima
@@ -365,13 +368,19 @@ src/ponos_coach/
   dimensione reale ricontrollata, nomi delle voci mai usati come percorsi,
   ZIP annidati e voci cifrate rifiutati, CRC verificato (default del
   progetto).
-- Pagina della mappa (fase 9): unica eccezione al blocco della rete, solo
-  HTTPS verso l'host delle mappe scelto, con un User-Agent generico dell'app
-  e l'attribuzione richiesta; cache delle tile con tetto di dimensione e
-  comando per svuotarla; `QWebChannel` con due soli messaggi dalla pagina
-  (area visibile, attività cliccata), validati. L'host delle mappe vede le
-  aree consultate: rischio da dichiarare nel threat model, assente con una
-  mappa offline.
+- Pagina della mappa (fase 5b): unica eccezione al blocco della rete, solo
+  HTTPS verso `tile.tracestrack.com` (tile Tracestrack Topo), con un
+  User-Agent generico dell'app e l'attribuzione richiesta dalle condizioni
+  (dati © OpenStreetMap contributors e le altre fonti, mappe © Tracestrack).
+  La chiave personale sta nel portachiavi del sistema (DPAPI su Windows,
+  Secret Service su Linux), mai nella cartella del profilo, nella pagina o
+  nei log: la aggiunge l'intercettore delle richieste di Qt. Cache delle
+  tile su disco nella cartella dati locale dell'app (privata), con tetto
+  scelto nelle impostazioni (default 4 GB), scadenza dalle intestazioni
+  HTTP e comando per svuotarla; solo le tile guardate, mai scaricamenti in
+  massa. `QWebChannel` con pochi messaggi dalla pagina (area visibile,
+  attività cliccata, punto del profilo), validati. Tracestrack vede le aree
+  consultate: rischio dichiarato nel threat model e accettato dall'utente.
 
 ## 5. Fasi
 
@@ -425,7 +434,7 @@ Agenti: `generatore-fixture`, `sviluppatore-nucleo`, `sviluppatore-interfaccia`,
 - [x] Casi d'uso "Importa file" FIT, GPX e ZIP (menu e trascinamento) e "Importa da
       cartella" (sottocartelle, duplicati saltati per `file_id`, riepilogo
       finale), tabella delle attività con ordinamento (i filtri sono della
-      fase 9).
+      fase 5b).
 - [x] Dal FIT anche distanza, dislivello positivo, tempo in movimento,
       punto di partenza e traccia semplificata, salvati nell'indice: la fase
       9 non dovrà rileggere l'archivio né migrare lo schema per averli.
@@ -560,6 +569,47 @@ posto e documentati nella skill del progetto; non sono consigli medici.
       scarico che la precede (ACSM 2016: dimagrire lontano dalle gare), con
       un avviso quando un periodo di dimagrimento si sovrappone.
 
+### Fase 5b — Ricerca e mappa delle attività (stile Komoot)
+
+Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
+
+- [ ] ADR della mappa, dopo un prototipo misurato con 50.000 attività e le
+      loro tracce: libreria (MapLibre GL JS, che disegna molte linee sulla
+      GPU e raggruppa le partenze, oppure Leaflet con canvas e
+      raggruppamento dei marcatori), sfondo raster Tracestrack Topo nella
+      lingua dell'app (`topo_it`/`topo_en`, nomi locali dove manca), libreria
+      inclusa nel pacchetto e servita dallo schema `ponos://`. Aggiornati
+      threat model, specifica e registro delle dipendenze (licenze della
+      libreria e condizioni Tracestrack).
+- [ ] Dati: traccia semplificata (Douglas-Peucker con tolleranza per zoom) e
+      riquadro di ogni attività nell'indice, rigenerabili dal FIT o dal GPX;
+      serie della quota per il profilo; nessuna posizione nei log.
+- [ ] Impostazioni › Mappa: chiave Tracestrack (nel portachiavi, con verifica
+      e messaggio chiaro se rifiutata), dimensione della cache (default
+      4 GB), "Svuota cache"; senza chiave, senza rete o con il credito
+      esaurito la mappa resta usabile su sfondo neutro con un avviso che dice
+      perché e cosa fare.
+- [ ] Filtri dell'elenco attività: data (da–a), durata, distanza, dislivello
+      positivo, sport. Minimo e massimo facoltativi (vuoto = nessun limite),
+      input tolleranti (virgola o punto, "1:30" o "90" per la durata),
+      minimo e massimo invertiti scambiati. Un solo stato dei filtri,
+      condiviso da tabella e mappa; l'app ricorda gli ultimi filtri.
+- [ ] Vista Mappa: tracce delle attività filtrate come linee colorate per
+      sport (legenda, mai il solo colore); a zoom basso partenze raggruppate
+      in cerchi con il numero, che si dividono o si uniscono a ogni livello;
+      clic su un gruppo → zoom sull'area; clic su una traccia → selezione,
+      traccia evidenziata e riga dell'elenco selezionata.
+- [ ] Elenco a destra delle attività visibili nell'area inquadrata (dopo i
+      filtri), con conteggio e totali (km, dislivello, ore), aggiornato a
+      ogni spostamento o zoom; selezione sincronizzata con la mappa; attività
+      senza posizione (indoor, forza) contate a parte.
+- [ ] Dettaglio dell'attività selezionata: profilo altimetrico (quota sulla
+      distanza) collegato alla traccia nei due sensi; traccia colorabile per
+      zone FC con la legenda delle zone del giorno dell'attività.
+- [ ] Pagina della mappa isolata come quella dei grafici, con la sola
+      eccezione della sezione 4.9.
+- [ ] Test T-FILT e T-MAP (sezione 7.11), T-SEC-14 e T-SEC-15; collaudo.
+
 ### Fase 6 — Infortuni e recupero
 
 - [ ] Questionario, segnali d'allarme, percorso a gradini, check-in
@@ -593,31 +643,6 @@ posto e documentati nella skill del progetto; non sono consigli medici.
       nessun dato personale né percorso locale nel pacchetto.
 - [ ] README con installazione, verifica dell'hash, avviso di SmartScreen,
       messaggio di responsabilità medica.
-
-### Fase 9 — Ricerca e mappa delle attività (dopo il primo rilascio)
-
-- [ ] ADR della mappa, dopo un prototipo misurato con 50.000 attività: sorgente
-      della mappa (tile raster OpenStreetMap online, mappa vettoriale
-      offline di una regione scaricata una volta, fornitore configurabile) e
-      libreria (Leaflet con il raggruppamento dei marcatori, oppure MapLibre
-      GL JS con i cluster integrati). Aggiornati threat model e specifica.
-- [ ] Filtri dell'elenco attività: data (da–a), durata, distanza, dislivello
-      positivo, sport. Minimo e massimo facoltativi (vuoto = nessun limite),
-      input tolleranti (virgola o punto, "1:30" o "90" per la durata),
-      minimo e massimo invertiti scambiati. Un solo stato dei filtri,
-      condiviso da tabella e mappa; l'app ricorda gli ultimi filtri.
-- [ ] Vista Mappa: attività come punti di partenza, raggruppate in cerchi
-      con il numero di attività che si dividono o si uniscono a ogni livello
-      di zoom; clic su un gruppo → zoom sull'area; clic su un'attività →
-      selezione e traccia sulla mappa.
-- [ ] Elenco a destra delle attività visibili nell'area inquadrata (dopo i
-      filtri), con il conteggio, aggiornato a ogni spostamento o zoom;
-      selezione sincronizzata con la mappa; attività senza posizione
-      (indoor, forza) contate a parte.
-- [ ] Pagina della mappa isolata come quella dei grafici, con la sola
-      eccezione della sezione 4.9.
-- [ ] Test T-FILT e T-MAP (sezione 7.11), T-SEC-14 e T-SEC-15; collaudo e
-      rilascio ripetuti come in fase 8.
 
 ## 6. Squadra di agenti e modelli
 
@@ -848,12 +873,13 @@ model e gli esiti del collaudo possono citarlo.
 - **T-SEC-13** Revisione manuale finale: threat model riletto con un
   giudizio scritto, percorso dei dati non fidati (FIT, JSON, cartelle)
   seguito a mano nel codice, rischi accettati riconfermati.
-- **T-SEC-14** Canale della mappa (fase 9): messaggi malformati (coordinate
+- **T-SEC-14** Canale della mappa (fase 5b): messaggi malformati (coordinate
   non numeriche o fuori intervallo, payload enormi, id inesistenti)
   rifiutati senza effetti; la pagina non può chiamare altro.
-- **T-SEC-15** Rete della mappa (fase 9): richieste verso host diversi da
-  quello delle mappe, o in HTTP, bloccate; nessuna posizione GPS nei log né
-  in file fuori dalle cartelle previste.
+- **T-SEC-15** Rete della mappa (fase 5b): richieste verso host diversi da
+  `tile.tracestrack.com`, o in HTTP, bloccate; nessuna posizione GPS nei log
+  né in file fuori dalle cartelle previste; la chiave Tracestrack mai nella
+  pagina, nei log, nella cartella del profilo o nella cache.
 
 ### 7.8 Prestazioni e durata (T-PERF)
 
@@ -896,7 +922,7 @@ riportano p50, p95 e massimo, mai la sola media, con l'ambiente di misura.
   descrivere un infortunio); problemi registrati e corretti prima del
   rilascio.
 
-### 7.11 Ricerca e mappa (T-FILT, T-MAP, fase 9)
+### 7.11 Ricerca e mappa (T-FILT, T-MAP, fase 5b)
 
 - **T-FILT-01** Ogni filtro da solo: confini inclusi e valore appena fuori;
   filtro vuoto = tutte le attività.
@@ -920,6 +946,22 @@ riportano p50, p95 e massimo, mai la sola media, con l'ambiente di misura.
   elenco aggiornato entro 0,4 s (p95).
 - **T-MAP-06** Selezione sincronizzata: clic nell'elenco → attività
   evidenziata e traccia sulla mappa; clic sulla mappa → riga selezionata.
+- **T-MAP-07** Tracce: semplificazione con errore entro la tolleranza del
+  livello di zoom (property test contro la traccia piena), tracce spezzate
+  dai buchi del GPS, attività a cavallo dell'antimeridiano; con 50.000
+  tracce il primo disegno entro 2 s e lo spostamento entro 0,4 s (p95).
+- **T-MAP-08** Profilo altimetrico: punto del profilo e punto sulla mappa
+  coincidono nei due sensi; attività senza quota → profilo assente con il
+  motivo.
+- **T-MAP-09** Traccia per zone FC: zona di ogni tratto uguale a quella del
+  calcolo del carico per lo stesso campione; legenda e motivo oltre al
+  colore.
+- **T-MAP-10** Ripiego: senza chiave, con chiave rifiutata, senza rete e con
+  credito esaurito (risposte simulate) → sfondo neutro, tracce visibili,
+  avviso con il rimedio; nessun ritentativo senza limite.
+- **T-MAP-11** Cache: il tetto scelto non si supera, le tile scadute si
+  rinnovano, "Svuota cache" la porta a zero; nessun prefetch fuori dall'area
+  guardata.
 
 ### 7.12 Alimentazione (T-NUT, fase 4b)
 
