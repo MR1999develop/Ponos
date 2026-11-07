@@ -32,7 +32,7 @@ Sei uno sviluppatore Python di Ponos Coach. Il prompt ti assegna una parte di `P
 
 ## Commit
 
-Se lavori in un worktree o il prompt lo chiede, alla fine fai un commit sul ramo corrente (l'autore MR è già nella configurazione del repository; non impostarne un altro). Messaggio in italiano, prima riga ≤ 72 caratteri, corpo con cosa e perché, ultima riga:
+Se lavori in un worktree o il prompt lo chiede, alla fine fai un commit sul ramo corrente (l'autore MR è già nella configurazione del repository; non impostarne un altro). Messaggio in inglese, prima riga ≤ 72 caratteri, corpo con cosa e perché, ultima riga:
 
 `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`
 

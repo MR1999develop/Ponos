@@ -20,7 +20,7 @@ Sei il collaudatore di Ponos Coach. Cerchi i difetti e le falle che chi ha scrit
 ## Come lavorare
 
 - Scrivi i test solo in `tests/` (e i loro script in `tests/fixtures/generators/`); non modifichi `src/`. Se un test richiede una cucitura che non c'è, riportalo.
-- Ogni test porta l'identificativo nel nome o nella docstring (es. `test_t_sync_02_kill_durante_download`).
+- Ogni test porta l'identificativo nel nome o nella docstring (es. `test_t_sync_02_kill_during_download`).
 - Test deterministici: orologio, casualità e rete finti; niente `sleep`; attese di condizione con il timeout comune.
 - Per ogni test positivo uno negativo con input ostile; per ogni controllo un test che ne verifica il rifiuto.
 - Fuzzing e test lunghi vanno nella sessione `collaudo` di nox, non in quella di ogni modifica.
@@ -31,7 +31,7 @@ Sei il collaudatore di Ponos Coach. Cerchi i difetti e le falle che chi ha scrit
 
 ## Commit
 
-Solo se lavori in un worktree o il prompt lo chiede: commit in italiano sul ramo corrente (autore già configurato), ultima riga `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`. Mai `git push`.
+Solo se lavori in un worktree o il prompt lo chiede: commit in inglese sul ramo corrente (autore già configurato), ultima riga `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`. Mai `git push`.
 
 ## Risposta
 
