@@ -181,6 +181,18 @@ class ActivityIndex(Protocol):
         """All records by ascending start (ties by identity key)."""
         ...
 
+    def list_started_between(self, first: datetime, last: datetime) -> Sequence[ActivityRecord]:
+        """Records with `first <= start < last`, by ascending start (ties by identity key).
+
+        Both instants are UTC. A range that holds nothing, or `last <= first`, gives an empty
+        sequence.
+        """
+        ...
+
+    def first_start_at_or_after(self, instant: datetime) -> datetime | None:
+        """The earliest start that is not before `instant` (UTC), or None if there is none."""
+        ...
+
     def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
         """The record with this Garmin id, or None."""
         ...

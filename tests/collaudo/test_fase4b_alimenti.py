@@ -38,10 +38,10 @@ from ponos_coach.nutrition.domain import (
 )
 from ponos_coach.nutrition.food_table import (
     FoodTableError,
-    load_food_table,
     parse_food_table,
 )
 from tests.collaudo.test_fase4b_modello import GOALS, PEOPLE, SCENARIOS, day_of
+from tests.food_support import load_food_table
 
 TABLE = load_food_table()
 FOOD_KEYS = (
@@ -242,10 +242,6 @@ def test_t_nut_06_the_lower_and_upper_bounds_of_the_number_of_foods_are_accepted
         assert len(parse_food_table(json.dumps(document).encode("utf-8")).foods) == count
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F4B-06: a deeply nested document escapes as RecursionError, not FoodTableError",
-)
 @pytest.mark.parametrize("depth", [100_000])
 def test_d_f4b_06_a_deeply_nested_document_is_refused_with_the_table_error(depth: int) -> None:
     with pytest.raises(FoodTableError):

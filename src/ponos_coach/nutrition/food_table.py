@@ -1,24 +1,28 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""The curated food table shipped with the app (`foods.json`) and its reader.
+"""The curated food table shipped with the app (`foods.json`) and its parser.
 
-The file is versioned with the code and read as a packaged resource. It is parsed at the
-boundary into domain types: a table that does not parse is an error, never repaired. The size is
-checked before reading.
+The file is versioned with the code and packaged as a resource; reading it is the job of the
+Composition Root (once, at start-up), which hands the bytes to `parse_food_table`. The parser
+turns them into domain types at the boundary: a table that does not parse is an error, never
+repaired. Size and nesting depth are checked before the JSON decoder runs.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import date
-from importlib import resources
 from typing import Final
 
 from ponos_coach.nutrition.domain import Food, FoodGroup, MealRole
 
 FOOD_TABLE_RESOURCE: Final = "foods.json"
 MAX_FOOD_TABLE_BYTES: Final = 256 * 1024
+MAX_FOOD_TABLE_DEPTH: Final = 8  # the real table nests 4 levels (document, foods, food, roles)
+# A string, or one bracket: enough to follow the nesting without decoding anything.
+_TOKEN: Final = re.compile(rb'"(?:[^"\\]|\\.)*"|[\[\]{}]')
 FOOD_TABLE_FORMAT: Final = 1
 _MIN_FOODS: Final = 40
 _MAX_FOODS: Final = 200
@@ -48,6 +52,19 @@ class FoodTable:
 
     source: FoodSource
     foods: tuple[Food, ...]
+
+
+def _check_depth(data: bytes) -> None:
+    """Refuses a document nested deeper than `MAX_FOOD_TABLE_DEPTH` before it is decoded (the
+    decoder would exhaust the stack on a deep one)."""
+    depth = 0
+    for token in _TOKEN.finditer(data):
+        if token.group() in (b"[", b"{"):
+            depth += 1
+            if depth > MAX_FOOD_TABLE_DEPTH:
+                raise FoodTableError("the food table is nested too deeply")
+        elif token.group() in (b"]", b"}"):
+            depth -= 1
 
 
 def _require_mapping(value: object) -> dict[str, object]:
@@ -114,11 +131,12 @@ def parse_food_table(data: bytes) -> FoodTable:
     """Food table from the bytes of the file.
 
     Raises:
-        FoodTableError: too large, not JSON, wrong format version, an invalid entry, repeated ids
-            or too few or too many foods.
+        FoodTableError: too large, nested too deeply, not JSON, wrong format version, an invalid
+            entry, repeated ids or too few or too many foods.
     """
     if len(data) > MAX_FOOD_TABLE_BYTES:
         raise FoodTableError("the food table is too large")
+    _check_depth(data)
     try:
         document = _require_mapping(json.loads(data))
     except ValueError as exc:
@@ -132,21 +150,3 @@ def parse_food_table(data: bytes) -> FoodTable:
     if len({f.food_id for f in foods}) != len(foods):
         raise FoodTableError("food ids must be unique")
     return FoodTable(_source(document.get("source")), foods)
-
-
-def load_food_table() -> FoodTable:
-    """The table shipped in the package.
-
-    Raises:
-        FoodTableError: the resource is missing, too large or invalid.
-    """
-    try:
-        with (
-            resources.files("ponos_coach.nutrition")
-            .joinpath(FOOD_TABLE_RESOURCE)
-            .open("rb") as handle
-        ):
-            data = handle.read(MAX_FOOD_TABLE_BYTES + 1)
-    except OSError as exc:
-        raise FoodTableError("the food table cannot be read") from exc
-    return parse_food_table(data)

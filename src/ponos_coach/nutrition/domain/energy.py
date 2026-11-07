@@ -113,18 +113,21 @@ def activity_energy(
 ) -> ActivityEnergy:
     """Energy of an activity.
 
-    The device's total when declared; otherwise Keytel's estimate if there is a usable average
-    HR; otherwise the sport's METs. `duration_s` is the moving time. Net energy is the total minus
-    the basal metabolism of that time, never below zero. Pure and deterministic.
+    The device's total when declared and credible (at most 1,500 kcal per hour of `duration_s`;
+    a larger figure is discarded, never trusted nor capped); otherwise Keytel's estimate if there
+    is a usable average HR; otherwise the sport's METs. `duration_s` is the moving time. Net
+    energy is the total minus the basal metabolism of that time, never below zero. Pure and
+    deterministic.
 
     Raises:
         ValueError: `duration_s` is not finite and positive, or `declared_kcal` is not positive.
     """
     if not math.isfinite(duration_s) or duration_s <= 0:
         raise ValueError("the duration must be finite and positive")
-    if declared_kcal is not None:
-        if not math.isfinite(declared_kcal) or declared_kcal <= 0:
-            raise ValueError("declared calories must be finite and positive")
+    if declared_kcal is not None and (not math.isfinite(declared_kcal) or declared_kcal <= 0):
+        raise ValueError("declared calories must be finite and positive")
+    max_declared = defaults.MAX_ACTIVITY_KCAL_PER_HOUR * duration_s / 3600.0
+    if declared_kcal is not None and declared_kcal <= max_declared:
         total, source = declared_kcal, EnergySource.DECLARED
     elif (
         average_bpm is not None

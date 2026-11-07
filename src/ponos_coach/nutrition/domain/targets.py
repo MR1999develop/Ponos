@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from ponos_coach.load.domain import Sex
 from ponos_coach.nutrition.domain import defaults
 from ponos_coach.nutrition.domain.advice import Advisory, DayLoadLevel, ordered
 from ponos_coach.nutrition.domain.energy import Person
@@ -25,7 +26,8 @@ from ponos_coach.nutrition.domain.settings import (
 
 @dataclass(frozen=True, slots=True)
 class EnergyTarget:
-    """Energy budget of a day, whole kcal: `target = expenditure - deficit >= basal`."""
+    """Energy budget of a day, whole kcal: `target = expenditure - deficit`, and with a deficit the
+    target stays at or above `max(basal, absolute minimum for the sex)`."""
 
     basal_kcal: int
     expenditure_kcal: int
@@ -37,6 +39,15 @@ class EnergyTarget:
 def requested_deficit_kcal(goal: WeightLossGoal) -> float:
     """Daily deficit that produces the requested weekly loss (7700 kcal per kg)."""
     return goal.weekly_loss_g / 1000.0 * defaults.KCAL_PER_KG_BODY_MASS / defaults.DAYS_PER_WEEK
+
+
+def minimum_intake_kcal(person: Person, basal: int) -> int:
+    """The least a deficit may leave: the larger of the basal metabolic rate and the absolute
+    minimum for the sex (1,200 kcal women, 1,500 kcal men)."""
+    absolute = (
+        defaults.MIN_INTAKE_KCAL_MALE if person.sex is Sex.MALE else defaults.MIN_INTAKE_KCAL_FEMALE
+    )
+    return max(basal, absolute)
 
 
 def _person_advisories(person: Person) -> list[Advisory]:
@@ -62,7 +73,7 @@ def _applied_deficit(
     cap = min(defaults.MAX_DEFICIT_FRACTION * expenditure, float(defaults.MAX_DEFICIT_KCAL))
     capped = min(requested, cap)
     reduced = capped * level.deficit_factor
-    allowed = max(0, expenditure - basal)
+    allowed = max(0, expenditure - minimum_intake_kcal(person, basal))
     applied = math.floor(min(reduced, allowed))
     found = []
     if min(reduced, allowed) < reduced or capped < requested:
@@ -83,8 +94,9 @@ def energy_target(
 
     Expenditure is the basal rate times the activity-level factor plus the net activity energy.
     Only weight loss has a deficit, and it is limited: never above 20% of the expenditure or
-    750 kcal, never leaving the target under the basal rate, reduced on heavy days, and none at
-    all under 18 or with a body mass index under 18.5.
+    750 kcal, never leaving the target under the larger of the basal rate and 1,200 kcal (women)
+    or 1,500 kcal (men), reduced on heavy days, and none at all under 18 or with a body mass index
+    under 18.5.
     """
     advisories = _person_advisories(person)
     if person.activity_level is None:
@@ -121,7 +133,9 @@ def day_macros(
     per_kg = (
         defaults.PROTEIN_G_PER_KG_DEFICIT if target.deficit_kcal > 0 else defaults.PROTEIN_G_PER_KG
     )
-    protein_cap = (kcal - defaults.KCAL_PER_G_FAT * fat_min_g) / defaults.KCAL_PER_G_PROTEIN
+    protein_cap = max(
+        0.0, (kcal - defaults.KCAL_PER_G_FAT * fat_min_g) / defaults.KCAL_PER_G_PROTEIN
+    )
     protein = min(per_kg * person.weight_kg, protein_cap)
     low, high = level.carbs_g_per_kg
     if isinstance(goal, WeightLossGoal):
@@ -131,9 +145,11 @@ def day_macros(
     else:
         band = (low + high) / 2.0
     wanted = band * person.weight_kg
-    room = (
-        kcal - defaults.KCAL_PER_G_PROTEIN * protein - defaults.KCAL_PER_G_FAT * fat_min_g
-    ) / defaults.KCAL_PER_G_CARBS
+    room = max(
+        0.0,
+        (kcal - defaults.KCAL_PER_G_PROTEIN * protein - defaults.KCAL_PER_G_FAT * fat_min_g)
+        / defaults.KCAL_PER_G_CARBS,
+    )  # never below zero: float rounding at the protein cap can leave a tiny negative number
     carbs = min(wanted, room)
     protein_g, carbs_g = math.floor(protein), math.floor(carbs)
     remaining = kcal - defaults.KCAL_PER_G_PROTEIN * (protein_g + carbs_g)

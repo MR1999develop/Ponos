@@ -130,6 +130,12 @@ class _BlockingIndex:
     def list_by_start(self) -> Sequence[ActivityRecord]:
         return self._inner.list_by_start()
 
+    def list_started_between(self, first: datetime, last: datetime) -> Sequence[ActivityRecord]:
+        return self._inner.list_started_between(first, last)
+
+    def first_start_at_or_after(self, instant: datetime) -> datetime | None:
+        return self._inner.first_start_at_or_after(instant)
+
     def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
         return self._inner.find_by_garmin_id(garmin_id)
 

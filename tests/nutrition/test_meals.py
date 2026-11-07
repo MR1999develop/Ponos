@@ -183,8 +183,8 @@ def test_a_long_session_has_pre_during_and_post_with_hourly_guidance() -> None:
         (1200, (D,)),
     ]
     assert items[0].macros == Macros(80, 0, 0)  # 1 g/kg
-    assert items[1].macros == Macros(225, 0, 0)  # 75 g/h for 3 h
-    assert items[1].hourly == HourlyIntake(75, 600, 300)
+    assert items[1].macros == Macros(180, 0, 0)  # 60 g/h for 3 h
+    assert items[1].hourly == HourlyIntake(60, 600, 300)
     assert items[2].macros.carbs_g >= 88  # recovery: 1.1 g/kg carbohydrates, plus the two meals
     assert items[2].moved
     assert total(items) == day
@@ -196,7 +196,7 @@ def test_a_long_session_has_pre_during_and_post_with_hourly_guidance() -> None:
         (75.0, False, None),  # on the threshold: not longer than 75 minutes
         (76.0, True, 45),
         (150.0, True, 45),  # up to 2.5 h
-        (151.0, True, 75),  # beyond 2.5 h
+        (151.0, True, 60),  # beyond 2.5 h: the 60 g/h ceiling of a single carbohydrate
     ],
 )
 def test_the_intake_during_the_session_starts_beyond_75_minutes(
@@ -233,6 +233,76 @@ def test_intakes_are_cut_to_fit_a_day_that_cannot_hold_them() -> None:
 
     assert scaled
     assert total(items) == small
+
+
+def test_a_day_too_small_for_every_intake_serves_the_hours_during_first_and_keeps_dinner() -> None:
+    # 4 h from 08:00 would ask 240 g during (60 g/h), 80 before and 88 after: 408 g out of 300.
+    # Lunch and dinner keep 80 g each (1 g/kg), so 140 g are left for the intakes: all of them to
+    # the hours during (the box becomes 140 / 4 h = 35 g/h), none to the recovery and the pre.
+    day = Macros(300, 100, 60)
+
+    items, scaled = schedule_meals(day, KG, DEFAULT_TIMES, (session(8 * 60, 240.0),), None)
+
+    assert scaled
+    assert total(items) == day
+    (during,) = [i for i in items if DURING in i.slots]
+    assert during.macros == Macros(140, 0, 0)
+    assert during.hourly == HourlyIntake(35, 600, 300)
+    assert during.macros.carbs_g == during.hourly.carbs_g * 4  # the box and the sum agree
+    (dinner,) = [i for i in items if D in i.slots]
+    assert dinner.macros.carbs_g == 80
+    lunch_carbs = sum(i.macros.carbs_g for i in items if L in i.slots)
+    assert lunch_carbs == 80
+
+
+def test_a_day_with_room_for_every_intake_is_not_cut() -> None:
+    items, scaled = schedule_meals(
+        Macros(800, 130, 90), KG, DEFAULT_TIMES, (session(8 * 60, 180.0),), None
+    )
+
+    assert not scaled
+    (during,) = [i for i in items if DURING in i.slots]
+    assert during.macros.carbs_g == 180
+    assert during.hourly == HourlyIntake(60, 600, 300)
+
+
+def test_the_main_meals_keep_at_least_1_g_per_kg_of_carbohydrates_taking_from_breakfast() -> None:
+    # 200 g, 80 kg: split 50 / 80 / 70 would leave dinner under 80 g; breakfast gives 10
+    items = schedule(day=Macros(200, 60, 40))
+
+    carbs = {item.slots: item.macros.carbs_g for item in items}
+    assert carbs == {(B,): 40, (L,): 80, (D,): 80}
+
+
+def test_the_main_meal_minimum_gives_way_when_the_day_has_less_carbohydrate_than_two_minimums() -> (
+    None
+):
+    items = schedule(day=Macros(100, 60, 40))  # 100 g: 50 g each for lunch and dinner at most
+
+    carbs = {item.slots: item.macros.carbs_g for item in items}
+    assert carbs == {(B,): 0, (L,): 50, (D,): 50}
+
+
+def test_a_session_ends_where_the_wall_clock_says_not_after_the_moving_time() -> None:
+    # 10:00, 60 min moving, but on the clock until 14:00 (long stops): the recovery comes at
+    # 14:30 and lunch (13:00) is inside the hour around the session, so it goes after it, to
+    # 15:00, and merges with the recovery
+    stopped = TrainingSession(10 * 60, 60.0, 300.0, 50.0, local_end_minute=14 * 60.0)
+    plain = TrainingSession(10 * 60, 60.0, 300.0, 50.0)
+
+    with_stops = {i.slots: i for i in schedule(stopped)}
+    without = {i.slots: i for i in schedule(plain)}
+
+    assert with_stops[(L, POST)].minute == 15 * 60
+    assert with_stops[(L, POST)].moved
+    assert without[(POST,)].minute == 11 * 60 + 30  # the moving time alone ends at 11:00
+    assert without[(L,)].minute == 780
+
+
+@pytest.mark.parametrize("end", [599.0, float("nan"), float("inf")])
+def test_a_session_cannot_end_before_it_starts_nor_at_a_non_finite_minute(end: float) -> None:
+    with pytest.raises(ValueError, match="end"):
+        TrainingSession(600, 60.0, 300.0, 50.0, local_end_minute=end)
 
 
 # --- Invariants (property tests) -------------------------------------------------------------

@@ -41,7 +41,6 @@ from ponos_coach.nutrition.domain import (
     PerformanceGoal,
     WeightLossGoal,
 )
-from ponos_coach.nutrition.food_table import load_food_table
 from ponos_coach.profiles.day_nutrition import (
     DayNutritionReport,
     DayNutritionResult,
@@ -66,6 +65,7 @@ from tests.builders import IMPORTED_AT, absolute_path
 from tests.fakes.archive import InMemoryActivityArchive
 from tests.fakes.profile_storage import InMemoryProfileStorage
 from tests.fixtures.generators import fit_writer as fw
+from tests.food_support import load_food_table
 
 ROME = ZoneInfo("Europe/Rome")
 DAY = date(2026, 3, 2)
@@ -214,7 +214,7 @@ def test_a_rest_day_gets_the_three_meals_with_example_foods() -> None:
 
     assert report.activities == ()
     assert report.nutrition.level is DayLoadLevel.REST
-    assert (report.nutrition.basal_kcal, report.nutrition.expenditure_kcal) == (1780, 2759)
+    assert (report.nutrition.basal_kcal, report.nutrition.expenditure_kcal) == (1780, 2492)
     assert [m.meal.slots for m in report.meals] == [
         (MealSlot.BREAKFAST,),
         (MealSlot.LUNCH,),
@@ -242,7 +242,7 @@ def test_the_energy_declared_by_the_device_is_used_and_no_file_is_read_with_a_ca
     assert activity.load == 90.0
     assert rig.archive.reads == 0
     # the resting part is not counted twice: expenditure = basal x level + net, not + total
-    assert report.nutrition.expenditure_kcal == round(1780 * 1.55 + 700.0 - 1780.0 / 24.0)
+    assert report.nutrition.expenditure_kcal == round(1780 * 1.4 + 700.0 - 1780.0 / 24.0)
 
 
 def test_without_declared_energy_the_average_heart_rate_gives_a_keytel_estimate() -> None:
@@ -395,8 +395,9 @@ def test_a_goal_period_applies_from_its_first_day_to_its_last() -> None:
     rig.profile.goal_periods.add(GoalPeriod(date(2026, 3, 21), None, PerformanceGoal()))
 
     assert rig.report(date(2026, 3, 9)).nutrition.deficit_kcal == 0
-    assert rig.report(date(2026, 3, 10)).nutrition.deficit_kcal == 550
-    assert rig.report(date(2026, 3, 20)).nutrition.deficit_kcal == 550
+    # 500 g a week asks 550 kcal; on a rest day 20% of the expenditure (2492) is 498
+    assert rig.report(date(2026, 3, 10)).nutrition.deficit_kcal == 498
+    assert rig.report(date(2026, 3, 20)).nutrition.deficit_kcal == 498
     assert rig.report(date(2026, 3, 21)).nutrition.deficit_kcal == 0
     assert rig.report(date(2026, 3, 21)).goal == PerformanceGoal()
 
@@ -407,8 +408,8 @@ def test_the_activity_level_in_force_that_day_changes_the_expenditure() -> None:
         ActivityLevelEntry(date(2026, 3, 10), ActivityLevel.VERY_ACTIVE)
     )
 
-    assert rig.report(date(2026, 3, 9)).nutrition.expenditure_kcal == 2759
-    assert rig.report(date(2026, 3, 10)).nutrition.expenditure_kcal == 3070
+    assert rig.report(date(2026, 3, 9)).nutrition.expenditure_kcal == 2492  # 1780 x 1.4
+    assert rig.report(date(2026, 3, 10)).nutrition.expenditure_kcal == 2670  # 1780 x 1.5
 
 
 def test_before_the_first_level_entry_sedentary_is_assumed_and_the_user_is_told() -> None:
@@ -432,21 +433,76 @@ def test_the_saved_meal_times_are_the_ones_used() -> None:
     assert [m.meal.minute for m in report.meals] == [6 * 60 + 30, 12 * 60, 19 * 60]
 
 
-def test_a_minor_gets_the_advisories_and_no_deficit_with_a_weight_loss_goal() -> None:
+def test_a_minor_gets_no_numbers_at_all_only_the_under_18_outcome() -> None:
     rig = Rig(born=date(2008, 6, 1))  # 17 years old on the day
     rig.profile.goal_periods.add(GoalPeriod(date(2026, 3, 1), None, WeightLossGoal(500)))
 
-    nutrition = rig.report().nutrition
+    assert rig.plan() == NutritionUnavailable(UnavailableReason.UNDER_18)
 
-    assert nutrition.deficit_kcal == 0
-    assert nutrition.advisories == (
-        Advisory.UNDER_18,
-        Advisory.DEFICIT_NOT_APPLIED,
-    )
+
+def test_the_day_before_the_eighteenth_birthday_is_still_under_18_and_the_birthday_is_not() -> None:
+    rig = Rig(born=date(2008, 3, 3))
+
+    assert rig.plan(date(2026, 3, 2)) == NutritionUnavailable(UnavailableReason.UNDER_18)
+    assert isinstance(rig.plan(date(2026, 3, 3)), DayNutritionReport)
+
+
+def test_a_minor_is_told_so_even_when_the_weight_is_missing() -> None:
+    rig = Rig(born=date(2008, 6, 1), weight=False)
+
+    assert rig.plan() == NutritionUnavailable(UnavailableReason.UNDER_18)
+
+
+@pytest.mark.parametrize(("day", "reason"), [
+    (date(2127, 3, 1), UnavailableReason.AGE_OUT_OF_RANGE),  # 131 years
+    (date(9999, 12, 31), UnavailableReason.AGE_OUT_OF_RANGE),
+])  # fmt: skip
+def test_a_day_beyond_130_years_from_the_birth_is_unavailable_not_an_error(
+    day: date, reason: UnavailableReason
+) -> None:
+    assert Rig().plan(day) == NutritionUnavailable(reason)
+
+
+def test_the_age_of_130_is_still_planned() -> None:
+    assert isinstance(Rig(born=date(1900, 1, 1)).plan(date(2030, 1, 1)), DayNutritionReport)
 
 
 def test_an_adult_with_the_same_goal_gets_the_deficit() -> None:
     rig = Rig()
     rig.profile.goal_periods.add(GoalPeriod(date(2026, 3, 1), None, WeightLossGoal(500)))
 
-    assert rig.report().nutrition.deficit_kcal == 550
+    assert rig.report().nutrition.deficit_kcal == 498  # the 20% cap of 2492 kcal
+
+
+# --- The day is read with range queries, not by listing the whole index ---------------------------
+
+
+def test_a_day_is_read_with_range_queries_and_never_by_listing_the_whole_index(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rig = Rig()
+    rig.add_file(fit_bytes(at(18), 1))
+    rig.add_file(fit_bytes(at(10, day=5), 2))  # three days later
+    index_type = type(rig.profile.activities)
+    monkeypatch.setattr(index_type, "list_by_start", lambda _self: pytest.fail("whole index"))
+
+    report = rig.report()
+
+    assert len(report.activities) == 1
+
+
+def test_activities_either_side_of_the_local_midnight_belong_to_their_own_day() -> None:
+    rig = Rig()
+    rig.add_file(fit_bytes(at(23, 30), 1, minutes=10))
+    rig.add_file(fit_bytes(datetime(2026, 3, 2, 23, 30, tzinfo=UTC), 2, minutes=10))  # 00:30 local
+
+    assert len(rig.report(DAY).activities) == 1
+    assert len(rig.report(date(2026, 3, 3)).activities) == 1
+
+
+def test_the_next_activity_is_found_even_days_after_the_day() -> None:
+    rig = Rig()
+    rig.add_file(fit_bytes(at(18), 1, minutes=60))
+    rig.add_file(fit_bytes(at(7, day=9), 2, minutes=60))
+
+    assert len(rig.report().activities) == 1

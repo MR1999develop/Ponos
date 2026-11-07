@@ -49,8 +49,8 @@ Columns of v4 (nutrition, all `STRICT`):
 - `meal_times`: a single row (`id = 1`) with the typical breakfast, lunch and dinner times in
   minutes after midnight, in increasing order at least two hours apart; absent means the defaults.
 - `nutrition_goal`: goal periods (first day, last day included or NULL for open-ended) on a closed
-  set of kinds; weight loss has a rate in grams per week and the others none; a trigger rejects
-  an insertion that overlaps an existing period.
+  set of kinds; weight loss has a rate in grams per week and the others none; two triggers reject
+  an insertion, and an update of the dates, that overlaps another period.
 """
 
 from __future__ import annotations
@@ -317,6 +317,20 @@ BEGIN
 END
 """
 
+# The same when a period is moved by an UPDATE: it is compared with every OTHER row.
+_V4_NUTRITION_GOAL_NO_OVERLAP_ON_UPDATE = """
+CREATE TRIGGER nutrition_goal_no_overlap_on_update BEFORE UPDATE ON nutrition_goal
+WHEN EXISTS (
+    SELECT 1 FROM nutrition_goal AS g
+    WHERE g.start_date <> OLD.start_date
+      AND g.start_date <= COALESCE(NEW.end_date, '9999-12-31')
+      AND COALESCE(g.end_date, '9999-12-31') >= NEW.start_date
+)
+BEGIN
+    SELECT RAISE(ABORT, 'nutrition goal periods overlap');
+END
+"""
+
 # Migration i (index i-1): brings the schema from version i-1 to i.
 MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     (_V1_META, _V1_ACTIVITIES, _V1_ACTIVITIES_START_INDEX, _V1_PHYSIOLOGY, _V1_LOAD_CACHE),
@@ -336,6 +350,7 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
         _V4_MEAL_TIMES,
         _V4_NUTRITION_GOAL,
         _V4_NUTRITION_GOAL_NO_OVERLAP,
+        _V4_NUTRITION_GOAL_NO_OVERLAP_ON_UPDATE,
     ),
 )
 

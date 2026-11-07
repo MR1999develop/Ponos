@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from enum import Enum
 from zoneinfo import ZoneInfo
 
@@ -51,6 +51,7 @@ from ponos_coach.nutrition.domain import (
     TrainingSession,
     activity_energy,
     average_valid_bpm,
+    defaults,
     goal_for_day,
     level_for_day,
     plan_day,
@@ -72,11 +73,15 @@ class UnavailableReason(Enum):
     MISSING_WEIGHT = "missing_weight"  # no weight entered
     MISSING_PHYSIOLOGY = "missing_physiology"  # no heart-rate parameters (they carry the sex)
     BEFORE_BIRTH = "before_birth"  # the day is before the date of birth
+    AGE_OUT_OF_RANGE = "age_out_of_range"  # the day is more than 130 years after the birth
+    UNDER_18 = "under_18"  # younger than 18: the model gives no numbers, only a referral
 
 
 @dataclass(frozen=True, slots=True)
 class NutritionUnavailable:
-    """No guidance for the day; `reason` says what is missing."""
+    """No guidance for the day; `reason` says what is missing (or, for `UNDER_18`, why the model
+    gives none: under 18 the app shows no calories, macros or portions and invites the user to
+    talk to a doctor or a dietitian)."""
 
     reason: UnavailableReason
 
@@ -88,6 +93,8 @@ class DayActivity:
     `start` is in UTC, `local_start_minute` the minutes after local midnight, `duration_s` the
     moving time, `load` the weighted load (0 if it could not be computed) and `energy` its
     energy (declared by the device, or estimated: `energy.source` says which).
+    `local_end_minute` is the wall-clock end in minutes after the local midnight of the start:
+    start plus the elapsed time, worked out in UTC and then shown in local time.
     """
 
     identity: ActivityIdentity
@@ -97,6 +104,7 @@ class DayActivity:
     duration_s: float
     load: float
     energy: ActivityEnergy
+    local_end_minute: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,6 +153,14 @@ class NutritionSources:
 
 
 @dataclass(frozen=True, slots=True)
+class _Subject:
+    """Who the guidance is for on a day: the person and the heart-rate parameters."""
+
+    person: Person
+    physiology: Physiology
+
+
+@dataclass(frozen=True, slots=True)
 class _Measured:
     """A day's activity before it becomes a session."""
 
@@ -183,26 +199,10 @@ class PlanDayNutrition:
                 could not be read.
         """
         src = self._src
-        fixed = src.fixed_data.get()
-        if fixed is None:
-            return NutritionUnavailable(UnavailableReason.MISSING_BODY_DATA)
-        age = age_on(fixed.birth_date, day)
-        if age < 0:
-            return NutritionUnavailable(UnavailableReason.BEFORE_BIRTH)
-        weight = weight_on(src.weights.list_entries(), day)
-        if weight is None:
-            return NutritionUnavailable(UnavailableReason.MISSING_WEIGHT)
-        try:
-            physiology = physiology_for_day(src.physiology.list_entries(), day)
-        except MissingPhysiologyError:
-            return NutritionUnavailable(UnavailableReason.MISSING_PHYSIOLOGY)
-        person = Person(
-            physiology.sex,
-            age,
-            fixed.height.cm,
-            float(weight.kg),
-            level_for_day(src.activity_levels.list_entries(), day),
-        )
+        subject = self._subject_on(day)
+        if isinstance(subject, NutritionUnavailable):
+            return subject
+        person, physiology = subject.person, subject.physiology
         measured, next_gap = self._activities_of(day, person, physiology)
         saved_times = src.meal_times.get()
         meal_times = MealTimes.default() if saved_times is None else saved_times
@@ -223,21 +223,52 @@ class PlanDayNutrition:
             sum(m.unreadable for m in measured),
         )
 
+    def _subject_on(self, day: date) -> _Subject | NutritionUnavailable:
+        """The person as of `day` with the heart-rate parameters, or what is missing. The age
+        decides first: nobody under 18 or over 130 gets numbers, whatever else is missing."""
+        src = self._src
+        fixed = src.fixed_data.get()
+        if fixed is None:
+            return NutritionUnavailable(UnavailableReason.MISSING_BODY_DATA)
+        age = age_on(fixed.birth_date, day)
+        age_problem = _age_problem(age)
+        if age_problem is not None:
+            return NutritionUnavailable(age_problem)
+        weight = weight_on(src.weights.list_entries(), day)
+        if weight is None:
+            return NutritionUnavailable(UnavailableReason.MISSING_WEIGHT)
+        try:
+            physiology = physiology_for_day(src.physiology.list_entries(), day)
+        except MissingPhysiologyError:
+            return NutritionUnavailable(UnavailableReason.MISSING_PHYSIOLOGY)
+        level = level_for_day(src.activity_levels.list_entries(), day)
+        person = Person(physiology.sex, age, fixed.height.cm, float(weight.kg), level)
+        return _Subject(person, physiology)
+
     def _activities_of(
         self, day: date, person: Person, physiology: Physiology
     ) -> tuple[list[_Measured], float | None]:
         """The day's activities with energy and load, and the minutes from the end of the last
         one to the next activity after it (None if there is none or the day is empty)."""
-        records = self._src.index.list_by_start()
-        todays = [r for r in records if local_day_of(r.start, self._timezone) == day]
+        todays = self._records_of(day)
         if not todays:
             return [], None
         saved_weights = self._src.sport_weights.load()
         measured = [self._measure(r, person, physiology, saved_weights) for r in todays]
-        last_end = max(r.start.timestamp() + r.elapsed_s for r in todays)
-        later = [r.start.timestamp() for r in records if r.start.timestamp() >= last_end]
-        gap = (min(later) - last_end) / _SECONDS_PER_MINUTE if later else None
+        last_end = max(_end_of(r) for r in todays)
+        later = self._src.index.first_start_at_or_after(last_end)
+        gap = None if later is None else (later - last_end).total_seconds() / _SECONDS_PER_MINUTE
         return measured, gap
+
+    def _records_of(self, day: date) -> list[ActivityRecord]:
+        """The records that start on the local `day`: one range query on the start index over a
+        window a day wider on each side (a local day is 23 to 25 hours long), then the exact
+        local-day filter."""
+        zone = self._timezone
+        first = datetime.combine(day - timedelta(days=1), time.min, tzinfo=zone).astimezone(UTC)
+        last = datetime.combine(day + timedelta(days=2), time.min, tzinfo=zone).astimezone(UTC)
+        found = self._src.index.list_started_between(first, last)
+        return [r for r in found if local_day_of(r.start, zone) == day]
 
     def _measure(
         self,
@@ -259,6 +290,9 @@ class PlanDayNutrition:
             )
         unreadable = isinstance(original, ExclusionReason)
         activity = None if isinstance(original, ExclusionReason) else original
+        if declared is None and activity is not None:
+            # indexed before schema v4 (or never declared): the file says what the device wrote
+            declared = activity.summary.calories_kcal
         if cached is not None:
             load = cached.load
         else:
@@ -270,14 +304,16 @@ class PlanDayNutrition:
         average_bpm = None if declared is not None else _average_bpm(activity, physiology)
         energy = activity_energy(person, record.sport, record.timer_s, declared, average_bpm)
         local = record.start.astimezone(self._timezone)
+        start_minute = local.hour * _MINUTES_PER_HOUR + local.minute
         day_activity = DayActivity(
             record.identity,
             record.sport,
             record.start,
-            local.hour * _MINUTES_PER_HOUR + local.minute,
+            start_minute,
             record.timer_s,
             load,
             energy,
+            _local_end_minute(record, local, start_minute, self._timezone),
         )
         return _Measured(day_activity, unreadable)
 
@@ -290,10 +326,39 @@ def _average_bpm(activity: Activity | None, physiology: Physiology) -> float | N
     return average_valid_bpm(activity.heart_rate.bpm, limits.min_bpm, limits.max_bpm)
 
 
+def _age_problem(age: int) -> UnavailableReason | None:
+    """Why nobody of this age (in years) gets guidance, if so."""
+    if age < 0:
+        return UnavailableReason.BEFORE_BIRTH
+    if age > defaults.MAX_AGE_YEARS:
+        return UnavailableReason.AGE_OUT_OF_RANGE
+    if age < defaults.ADULT_AGE_YEARS:
+        return UnavailableReason.UNDER_18
+    return None
+
+
+def _end_of(record: ActivityRecord) -> datetime:
+    """The one criterion for the end of an activity: its start plus the elapsed time (UTC)."""
+    return record.start + timedelta(seconds=record.elapsed_s)
+
+
+def _local_end_minute(
+    record: ActivityRecord, local_start: datetime, start_minute: int, zone: ZoneInfo
+) -> float:
+    """Wall-clock end in minutes after the local midnight of the start. The end is worked out in
+    UTC and only then shown in local time, so a change of daylight saving time during the activity
+    moves the clock but not the recovery; on a fall-back it never goes before the start."""
+    midnight = datetime.combine(local_start.date(), time.min)
+    wall_end = _end_of(record).astimezone(zone).replace(tzinfo=None)
+    minutes = (wall_end - midnight).total_seconds() / _SECONDS_PER_MINUTE
+    return max(minutes, float(start_minute))
+
+
 def _session_of(activity: DayActivity) -> TrainingSession:
     return TrainingSession(
         activity.local_start_minute,
         activity.duration_s / _SECONDS_PER_MINUTE,
         activity.energy.net_kcal,
         activity.load,
+        activity.local_end_minute,
     )

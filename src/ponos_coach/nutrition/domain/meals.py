@@ -6,6 +6,10 @@ The day's totals are split exactly (whole grams): first the intakes around each 
 (pre, during, post), then the remainder over the three regular meals. Regular meals that fall
 close to a session are moved after it (or before it when that would be too late), and intakes
 closer than 90 minutes become one. The sum of the items is always the day's total.
+
+When the day's carbohydrates do not cover all the intakes, lunch and dinner first keep a minimum
+(1 g/kg each) and the rest goes to the intakes in this order: during the session (so that the
+hourly guidance stays true), after it, before it. The cut is declared to the caller.
 """
 
 from __future__ import annotations
@@ -43,15 +47,22 @@ _SLOT_ORDER = tuple(MealSlot)
 class TrainingSession:
     """A training session as the meal plan needs it.
 
-    `start_minute` is the local start in minutes after midnight, `duration_min` the moving time,
-    `net_kcal` the energy net of the basal metabolism (already in the day's expenditure) and
-    `load` the weighted training load.
+    `start_minute` is the local start in minutes after midnight, `duration_min` the moving time
+    (it decides which intakes the session needs and how much to eat during it), `net_kcal` the
+    energy net of the basal metabolism (already in the day's expenditure) and `load` the weighted
+    training load.
+
+    `local_end_minute` is where the session ends on the wall clock, in minutes after the local
+    midnight of the start (it can pass 1440): start plus the elapsed time, worked out in UTC and
+    then shown in local time, so that a change of daylight saving time does not move the recovery.
+    Without it the session ends one moving time after the start.
     """
 
     start_minute: int
     duration_min: float
     net_kcal: float
     load: float
+    local_end_minute: float | None = None
 
     def __post_init__(self) -> None:
         if not 0 <= self.start_minute <= defaults.LAST_MINUTE_OF_DAY:
@@ -62,10 +73,15 @@ class TrainingSession:
             raise ValueError("net energy must be finite and not negative")
         if not (math.isfinite(self.load) and self.load >= 0):
             raise ValueError("the load must be finite and not negative")
+        end = self.local_end_minute
+        if end is not None and not (math.isfinite(end) and end >= self.start_minute):
+            raise ValueError("the end must be finite and not before the start")
 
     @property
     def end_minute(self) -> float:
         """Minutes after midnight at which the session ends (can pass midnight)."""
+        if self.local_end_minute is not None:
+            return self.local_end_minute
         return self.start_minute + self.duration_min
 
 
@@ -113,6 +129,7 @@ class _Moment:
     carbs_g: int
     protein_g: int
     hourly: HourlyIntake | None = None
+    duration_min: float = 0.0  # of the session, for a during-training intake
 
 
 def _clamp_minute(value: float) -> int:
@@ -135,7 +152,9 @@ def _during_moment(session: TrainingSession) -> _Moment | None:
     rate = defaults.DURING_CARBS_G_PER_H_LONG if long_effort else defaults.DURING_CARBS_G_PER_H
     hourly = HourlyIntake(rate, defaults.DURING_FLUID_ML_PER_H, defaults.DURING_SODIUM_MG_PER_H)
     carbs = round(rate * session.duration_min / 60.0)
-    return _Moment(MealSlot.DURING_TRAINING, session.start_minute, carbs, 0, hourly)
+    return _Moment(
+        MealSlot.DURING_TRAINING, session.start_minute, carbs, 0, hourly, session.duration_min
+    )
 
 
 def _post_moment(
@@ -175,23 +194,53 @@ def _moments(
     return found
 
 
-def _scale_to_fit(moments: list[_Moment], day: Macros) -> tuple[list[_Moment], bool]:
-    """Moments cut (rounding down) so that their sum fits the day's carbohydrates and protein."""
-    carbs_sum = sum(m.carbs_g for m in moments)
+_CARBS_PRIORITY = (MealSlot.DURING_TRAINING, MealSlot.POST_TRAINING, MealSlot.PRE_TRAINING)
+
+
+def _carbs_within(moments: list[_Moment], budget: int) -> list[int]:
+    """Carbohydrates of each moment when only `budget` grams are available: during-training
+    intakes first, then post, then pre (earlier sessions first within each kind)."""
+    order = sorted(range(len(moments)), key=lambda i: (_CARBS_PRIORITY.index(moments[i].slot), i))
+    given = [0] * len(moments)
+    left = max(0, budget)
+    for i in order:
+        given[i] = min(moments[i].carbs_g, left)
+        left -= given[i]
+    return given
+
+
+def _hourly_after_cut(moment: _Moment, carbs_g: int) -> HourlyIntake | None:
+    """The hourly guidance of a during-training intake, kept in step with the grams it carries
+    (None when no carbohydrate is left to give)."""
+    hourly = moment.hourly
+    if hourly is None or carbs_g == moment.carbs_g:
+        return hourly
+    per_hour = math.floor(carbs_g * 60.0 / moment.duration_min)
+    if per_hour <= 0:
+        return None
+    return HourlyIntake(per_hour, hourly.fluid_ml, hourly.sodium_mg)
+
+
+def _fit_moments(
+    moments: list[_Moment], day: Macros, reserved_carbs: int
+) -> tuple[list[_Moment], bool]:
+    """Moments cut so that they fit the day: protein proportionally (rounding down), carbohydrates
+    by priority within what is left after `reserved_carbs`, which the main meals keep."""
     protein_sum = sum(m.protein_g for m in moments)
-    carbs_ratio = min(1.0, day.carbs_g / carbs_sum) if carbs_sum else 1.0
     protein_ratio = min(1.0, day.protein_g / protein_sum) if protein_sum else 1.0
-    if carbs_ratio == 1.0 and protein_ratio == 1.0:
+    carbs = _carbs_within(moments, day.carbs_g - reserved_carbs)
+    if protein_ratio == 1.0 and carbs == [m.carbs_g for m in moments]:
         return moments, False
     scaled = [
         _Moment(
             m.slot,
             m.minute,
-            math.floor(m.carbs_g * carbs_ratio),
+            c,
             math.floor(m.protein_g * protein_ratio),
-            m.hourly,
+            _hourly_after_cut(m, c),
+            m.duration_min,
         )
-        for m in moments
+        for m, c in zip(moments, carbs, strict=True)
     ]
     return scaled, True
 
@@ -257,12 +306,34 @@ def _fuse(items: list[MealItem]) -> list[MealItem]:
     return [_merged(chain) for chain in chains] + during
 
 
+def _lift_main_meals(carbs: list[int], minimum: int) -> list[int]:
+    """Carbohydrates of breakfast, lunch and dinner with lunch and dinner at least `minimum`: the
+    difference comes from breakfast first, then from the other main meal (never below `minimum`).
+    The total does not change."""
+    lifted = list(carbs)
+    for target in (1, 2):
+        need = minimum - lifted[target]
+        for donor in (0, 3 - target):
+            if need <= 0:
+                break
+            floor = 0 if donor == 0 else minimum
+            taken = min(need, max(0, lifted[donor] - floor))
+            lifted[donor] -= taken
+            lifted[target] += taken
+            need -= taken
+    return lifted
+
+
 def _regular_meals(
-    left: Macros, meal_times: MealTimes, blocked: Sequence[tuple[int, int]]
+    left: Macros,
+    meal_times: MealTimes,
+    blocked: Sequence[tuple[int, int]],
+    main_meal_min_carbs_g: int,
 ) -> list[MealItem]:
-    """Breakfast, lunch and dinner sharing `left`, moved out of the blocked intervals."""
+    """Breakfast, lunch and dinner sharing `left`, moved out of the blocked intervals; lunch and
+    dinner keep at least `main_meal_min_carbs_g` of carbohydrates."""
     shares = defaults.MEAL_SHARES
-    carbs = split_integer(left.carbs_g, shares)
+    carbs = _lift_main_meals(split_integer(left.carbs_g, shares), main_meal_min_carbs_g)
     protein = split_integer(left.protein_g, shares)
     fat = split_integer(left.fat_g, shares)
     slots = (MealSlot.BREAKFAST, MealSlot.LUNCH, MealSlot.DINNER)
@@ -282,18 +353,25 @@ def schedule_meals(
 ) -> tuple[tuple[MealItem, ...], bool]:
     """Splits the day's macros into items, and says whether training intakes had to be cut.
 
-    The result is sorted by time; its macros sum exactly to `day`; no amount is negative.
+    The result is sorted by time; its macros sum exactly to `day`; no amount is negative; lunch
+    and dinner keep at least 1 g/kg of carbohydrates whenever the day has that much; the hourly
+    guidance of a during-training item always matches its grams.
     `minutes_to_next_session` is the time from the end of the last session to the first one of
     the following day, if known.
     """
     ordered = sorted(sessions, key=lambda s: s.start_minute)
-    moments, scaled = _scale_to_fit(_moments(ordered, weight_kg, minutes_to_next_session), day)
+    main_min = min(
+        round(defaults.MAIN_MEAL_MIN_CARBS_G_PER_KG * weight_kg), day.carbs_g // 2
+    )  # lunch and dinner each; never more than the day can give
+    moments, scaled = _fit_moments(
+        _moments(ordered, weight_kg, minutes_to_next_session), day, 2 * main_min
+    )
     left = Macros(
         day.carbs_g - sum(m.carbs_g for m in moments),
         day.protein_g - sum(m.protein_g for m in moments),
         day.fat_g,
     )
-    items = _regular_meals(left, meal_times, _blocked_intervals(ordered))
+    items = _regular_meals(left, meal_times, _blocked_intervals(ordered), main_min)
     items += [
         MealItem((m.slot,), m.minute, Macros(m.carbs_g, m.protein_g), hourly=m.hourly)
         for m in moments

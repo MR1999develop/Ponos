@@ -16,7 +16,8 @@ anche questo file e i test `T-NUT`.
 | Sigla | Fonte | Per che cosa |
 |---|---|---|
 | MSJ | Mifflin e altri, *A new predictive equation for resting energy expenditure* (1990) | metabolismo di base |
-| PAL | Moltiplicatori classici del metabolismo di base per livello di attività (famiglia Harris-Benedict) | fattore del livello fuori dallo sport |
+| PAL | Moltiplicatori del metabolismo di base per livello di attività. Qui **senza sport** (default del progetto): quelli classici di Harris-Benedict (1,375, 1,55, 1,725) includono già l'esercizio | fattore del livello fuori dallo sport |
+| MININTAKE | Limiti minimi di energia giornaliera per una dieta senza supervisione che le organizzazioni sanitarie citano di norma: 1.200 kcal donne, 1.500 kcal uomini (default del progetto) | minimo assoluto del deficit |
 | KEYTEL | Keytel e altri, *Prediction of energy expenditure from heart rate monitoring during submaximal exercise* (2005) | calorie da FC media, età, peso, sesso |
 | COMPENDIUM | *Compendium of Physical Activities* (MET per attività) | calorie senza FC |
 | ISSN | International Society of Sports Nutrition, posizioni su tempi dei nutrienti, proteine, diete e composizione corporea | carboidrati per carico, proteine, momenti |
@@ -31,6 +32,10 @@ anche questo file e i test `T-NUT`.
   `activities.calories_kcal`, schema v4). Zero e il valore non valido del FIT
   significano "non calcolato"; sopra 50.000 kcal non è credibile. Con più sedute
   nel file si somma solo se tutte lo dichiarano. Il GPX non ha calorie.
+- Il totale dichiarato si usa solo se è credibile per la durata: **al massimo
+  1.500 kcal per ora** di tempo in movimento (`MAX_ACTIVITY_KCAL_PER_HOUR`,
+  default del progetto). Oltre, si scarta (mai si taglia al tetto) e si stima
+  come se mancasse.
 - Se mancano, in quest'ordine (`activity_energy`):
   1. **Keytel** con la FC media dei campioni dentro `[FCmin, FCmax]` (e tra 40 e
      250 bpm), peso, età e sesso:
@@ -44,8 +49,14 @@ anche questo file e i test `T-NUT`.
 - **Calorie nette** = totali − metabolismo di base della durata
   (`BMR/86400 · secondi`), mai sotto zero. La spesa del giorno usa le nette, così
   il riposo non si conta due volte.
-- Le attività già indicizzate prima della v4 hanno NULL: finché non si rilegge
-  il file si stimano.
+- Le attività già indicizzate prima della v4 hanno NULL nell'indice. Il caso
+  d'uso del giorno legge comunque il file originale (serve al carico) e ne usa
+  le calorie dichiarate; l'indice non si aggiorna (è una query che non salva
+  nulla).
+- La **fine** di una seduta è sempre inizio + tempo trascorso (`elapsed_s`),
+  calcolata in UTC e poi mostrata in ora locale: così il cambio dell'ora legale
+  non sposta il recupero. Il tempo in movimento serve per le soglie e per il
+  "durante".
 
 ## 2. Spesa del giorno
 
@@ -53,9 +64,12 @@ anche questo file e i test `T-NUT`.
   `10·kg + 6,25·cm − 5·età + 5` (uomo), `… − 161` (donna). L'età è in anni
   compiuti nel giorno; il peso è quello valido quel giorno (un cambio vale dal
   suo giorno; prima della prima voce vale la prima, come per la FC).
-- **Livello fuori dallo sport** (con data di validità): sedentario 1,2; leggero
-  1,375; attivo 1,55; molto attivo 1,725 (PAL). Senza livello: sedentario e
-  avviso `ACTIVITY_LEVEL_ASSUMED`.
+- **Livello fuori dallo sport** (con data di validità), fattori **senza sport**
+  (default del progetto: lo sport registrato dall'app si somma a parte, i
+  fattori classici 1,375/1,55/1,725 lo contano già e lo conterebbero due volte):
+  sedentario 1,2 (vita da scrivania); leggero 1,3 (un po' di cammino); attivo
+  1,4 (lavoro in piedi o a passo); molto attivo 1,5 (lavoro manuale pesante).
+  Senza livello: sedentario e avviso `ACTIVITY_LEVEL_ASSUMED`.
 - **Spesa** = `base · fattore + Σ calorie nette`, arrotondata al kcal intero.
 
 ## 3. Obiettivo e deficit
@@ -68,14 +82,24 @@ anche questo file e i test `T-NUT`.
 - Deficit richiesto = `g/settimana / 1000 · 7700 / 7` kcal al giorno (500 g →
   550 kcal; default del progetto: 7700 kcal per kg).
 - **Limiti di sicurezza** (sempre, in quest'ordine, su interi):
-  1. nessun deficit sotto i 18 anni né con IMC < 18,5 (avvisi `UNDER_18` e
-     `LOW_BMI`, più `DEFICIT_NOT_APPLIED`);
+  1. nessun deficit con IMC < 18,5 (avvisi `LOW_BMI` e
+     `DEFICIT_NOT_APPLIED`); sotto i 18 anni il modello non dà numeri (vedi
+     sotto);
   2. al massimo il 20% della spesa e 750 kcal;
   3. ridotto nei giorni di carico alto: × 0,5 (alto), × 0,25 (molto alto)
      (`DEFICIT_REDUCED_FOR_LOAD`);
-  4. mai sotto il metabolismo di base: `apporto ≥ base` (`DEFICIT_LIMITED`
-     quando un limite taglia la richiesta).
-- Un minorenne o un IMC basso ricevono l'avviso anche con altri obiettivi.
+  4. mai sotto il **massimo tra il metabolismo di base e il minimo assoluto per
+     sesso** (MININTAKE: 1.200 kcal donne, 1.500 kcal uomini):
+     `apporto ≥ max(base, minimo)` (`DEFICIT_LIMITED` quando un limite taglia la
+     richiesta). Se la spesa è già sotto il minimo il deficit è 0 e l'avviso c'è.
+- **Minorenni**: sotto i 18 anni il modello non produce kcal, macro né porzioni.
+  `PlanDayNutrition` restituisce `NutritionUnavailable(UNDER_18)` (prima di
+  chiedere peso o FC) e la pagina invita a rivolgersi a un medico o a un
+  dietista. Le funzioni pure del dominio (`plan_day`, `energy_target`) mantengono
+  l'avviso `UNDER_18` e non applicano deficit, ma non vengono chiamate per
+  i minorenni.
+- Età oltre 130 anni dalla nascita (giorno lontano nel futuro):
+  `NutritionUnavailable(AGE_OUT_OF_RANGE)`, mai un'eccezione.
 
 ## 4. Livello del giorno e macro
 
@@ -97,9 +121,10 @@ Per ogni seduta di almeno 30 minuti (le più brevi non cambiano nulla):
 
 - **Pre** (oltre 60 min): carboidrati 1 g/kg, 2 ore prima (1 ora se 2 ore prima
   sarebbe prima delle 05:00).
-- **Durante** (oltre 75 min): 45 g/h di carboidrati fino a 2,5 h, 75 g/h oltre
-  (fino a 90 g/h in letteratura: IOC); liquidi 600 ml/h e sodio 300 mg/h,
-  indicativi (ACSM).
+- **Durante** (oltre 75 min, sul tempo in movimento): 45 g/h di carboidrati
+  fino a 2,5 h, **60 g/h** oltre. Il tetto è 60 g/h: oltre (fino a 90 g/h, IOC)
+  servono miscele glucosio-fruttosio, che la tabella non distingue. Liquidi
+  600 ml/h e sodio 300 mg/h, indicativi (ACSM).
 - **Post**, 30 min dopo la fine: proteine 0,3 g/kg; carboidrati 1,1 g/kg se la
   seduta dura almeno 90 min o un'altra arriva entro 24 h (un'altra del giorno
   dopo si passa come `minutes_to_next_session`).
@@ -112,19 +137,36 @@ tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):
 - gli apporti a meno di 90 minuti l'uno dall'altro si **fondono** (l'elemento
   ha più `slots` e l'ora dell'ultimo);
 - i totali sono ripartiti con il metodo del resto più grande: la somma degli
-  elementi è sempre il totale del giorno, mai quantità negative.
+  elementi è sempre il totale del giorno, mai quantità negative;
+- **se i carboidrati del giorno non bastano a tutti gli apporti**: pranzo e cena
+  tengono prima almeno 1 g/kg ciascuno (`MAIN_MEAL_MIN_CARBS_G_PER_KG`, default
+  del progetto; la colazione cede per prima); il resto va agli apporti in
+  quest'ordine: durante, dopo, prima (avviso `INTAKES_SCALED`). Il riquadro
+  orario del "durante" si riallinea ai grammi dell'elemento (g/h = grammi / ore,
+  arrotondati per difetto; senza carboidrati resta senza riquadro): riquadro e
+  somma coincidono sempre.
 
 ## 6. Alimenti (`nutrition/foods.json`, `food_table.py`)
 
-- 43 alimenti comuni con kcal e macro per 100 g e l'id di USDA FoodData Central
+- 42 alimenti comuni con kcal e macro per 100 g e l'id di USDA FoodData Central
   di ciascuno; sorgente dichiarata nel file (`source`, licenza CC0-1.0).
+- Il pacchetto `nutrition` ha solo il **parsing** (`parse_food_table(bytes)`):
+  il file lo legge il Composition Root una volta (alla prima richiesta) e passa il
+  `FoodTable`. Prima del decoder JSON si controllano dimensione (256 KiB) e
+  profondità di annidamento (al massimo 8): un documento troppo annidato è un
+  `FoodTableError`.
 - **Da verificare**: valori e id sono stati scritti senza accesso a FDC;
   `source.verified_on` è `null` finché qualcuno non li controlla voce per voce e
   scrive la data. Il test `T-NUT-06` ricorda che manca.
 - Ogni alimento ha gruppo (carboidrati, proteine, grassi, verdure), pasti adatti,
-  passo e massimo della porzione. Il caricatore rifiuta energia incoerente con i
-  macro (±15% o 15 kcal), file oltre 256 KiB, id ripetuti, meno di 40 o più di 200
-  voci.
+  passo e massimo della porzione. Il parser rifiuta energia incoerente con i
+  macro (±15% o 15 kcal), file oltre 256 KiB, annidamento oltre 8 livelli, id
+  ripetuti, meno di 40 o più di 200 voci.
+- **Durante lo sforzo** gli esempi vengono solo dagli alimenti con il ruolo
+  `during` (banana, datteri, uvetta, succo d'arancia); mai zucchero, pane o
+  miele. Mancano bevande o gel sportivi e barrette: servono voci verificate
+  contro FDC (nessun dato inventato). Con porzioni grandi i datteri e l'uvetta
+  portano proteine oltre la tolleranza: in quel caso nessun esempio.
 - **Esempi**: per ogni pasto 2–3 combinazioni (carboidrato + proteina, eventuale
   grasso, contorno di verdura per pranzo e cena) con porzioni arrotondate al passo;
   ogni macro dell'esempio dista dal pasto al massimo il 15% (almeno 5 g).
@@ -142,10 +184,26 @@ tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):
   `RemoveGoalPeriod`, `ReadNutritionSettings`).
 - `profiles/day_nutrition.py`: `PlanDayNutrition(sources, decode, timezone,
   foods)(day)` raccoglie dal profilo aperto e restituisce `DayNutritionReport` o
-  `NutritionUnavailable(reason)`. È una query: non salva nulla.
+  `NutritionUnavailable(reason)` (`MISSING_BODY_DATA`, `BEFORE_BIRTH`,
+  `AGE_OUT_OF_RANGE`, `UNDER_18`, `MISSING_WEIGHT`, `MISSING_PHYSIOLOGY`). È una
+  query: non salva nulla.
+- Le attività del giorno si leggono con una query per intervallo sull'indice
+  (`ActivityIndex.list_started_between`, finestra di un giorno per lato, poi il
+  filtro esatto sul giorno locale) e la seduta successiva con
+  `first_start_at_or_after`: mai la lista intera a ogni giorno.
+- Il trigger `nutrition_goal_no_overlap_on_update` (accanto a quello su
+  `INSERT`) impedisce la sovrapposizione anche con un `UPDATE` delle date.
+- `experiments/verify_foods.py --apply`: rifiutato se un alimento ha problemi (id
+  mancante, voce scartata, differenza oltre il 10%, descrizione sospetta) a meno
+  di `--force`; il documento nuovo si rivalida con il parser prima di scriverlo;
+  `verified_on` solo se tutti gli alimenti sono verificati.
 
 ## Punti aperti
 
 - Verifica degli alimenti contro FDC (vedi sopra) e traduzione dei loro nomi.
+- Alimenti per il "durante" (bevanda o gel sportivo, barretta) con voci FDC
+  verificate.
+- Le calorie lette dal file per le attività indicizzate prima della v4 non
+  aggiornano l'indice (la pagina usa il valore letto).
 - Allergie e restrizioni alimentari: non per ora (decisione del 2026-11-07).
 - Giorni futuri: arrivano con il piano (fase 5).

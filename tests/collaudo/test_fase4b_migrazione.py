@@ -76,6 +76,16 @@ FROZEN_V4 = (
     BEGIN
         SELECT RAISE(ABORT, 'nutrition goal periods overlap');
     END""",
+    """CREATE TRIGGER nutrition_goal_no_overlap_on_update BEFORE UPDATE ON nutrition_goal
+    WHEN EXISTS (
+        SELECT 1 FROM nutrition_goal AS g
+        WHERE g.start_date <> OLD.start_date
+          AND g.start_date <= COALESCE(NEW.end_date, '9999-12-31')
+          AND COALESCE(g.end_date, '9999-12-31') >= NEW.start_date
+    )
+    BEGIN
+        SELECT RAISE(ABORT, 'nutrition goal periods overlap');
+    END""",
 )
 
 V4_TABLES = {"activity_level", "meal_times", "nutrition_goal"}
@@ -301,3 +311,33 @@ def test_the_database_itself_rejects_overlapping_goal_periods(
                 raw.execute(insert, second)
         else:
             raw.execute(insert, second)
+
+
+@pytest.mark.parametrize(
+    ("new_start", "new_end", "overlaps"),
+    [
+        ("2026-03-15", "2026-04-25", True),  # slides into the second period
+        ("2026-03-01", None, True),  # becomes open-ended over the second
+        ("2026-04-01", "2026-04-10", False),  # moves to the free gap
+        ("2026-03-01", "2026-03-31", False),  # unchanged by itself
+    ],
+)
+def test_the_database_rejects_a_goal_period_moved_over_another_by_an_update(
+    tmp_path: Path, new_start: str, new_end: str | None, overlaps: bool
+) -> None:
+    insert = "INSERT INTO nutrition_goal VALUES (?, ?, 'maintenance', NULL)"
+    update = "UPDATE nutrition_goal SET start_date = ?, end_date = ? WHERE start_date = ?"
+    with closing(migrated(tmp_path)) as raw:
+        raw.execute(insert, ("2026-03-01", "2026-03-31"))
+        raw.execute(insert, ("2026-04-20", "2026-04-30"))
+
+        if overlaps:
+            with pytest.raises(sqlite3.IntegrityError, match="overlap"):
+                raw.execute(update, (new_start, new_end, "2026-03-01"))
+            assert rows_of(raw) == [("2026-03-01", "2026-03-31"), ("2026-04-20", "2026-04-30")]
+        else:
+            raw.execute(update, (new_start, new_end, "2026-03-01"))
+
+
+def rows_of(raw: sqlite3.Connection) -> list[tuple[str, str | None]]:
+    return list(raw.execute("SELECT start_date, end_date FROM nutrition_goal ORDER BY start_date"))

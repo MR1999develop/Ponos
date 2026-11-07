@@ -49,8 +49,9 @@ def test_a_man_burns_166_kcal_more_than_a_woman_of_the_same_build() -> None:
     assert basal_metabolic_rate(MAN) - basal_metabolic_rate(same_build) == pytest.approx(166.0)
 
 
-def test_activity_levels_have_the_classic_factors() -> None:
-    assert [level.factor for level in ActivityLevel] == [1.2, 1.375, 1.55, 1.725]
+def test_activity_levels_have_the_factors_without_sport() -> None:
+    # the classic 1.375 / 1.55 / 1.725 already include exercise, which the app adds on its own
+    assert [level.factor for level in ActivityLevel] == [1.2, 1.3, 1.4, 1.5]
 
 
 @pytest.mark.parametrize(
@@ -170,3 +171,37 @@ def test_the_average_heart_rate_only_counts_samples_inside_the_limits() -> None:
 
 def test_there_is_no_average_heart_rate_when_every_sample_is_out_of_range() -> None:
     assert average_valid_bpm(np.array([10.0, 300.0]), 40, 250) is None
+
+
+# --- Declared calories must be credible for the time (1,500 kcal an hour at most) ------------
+
+
+def test_declared_calories_at_the_hourly_ceiling_are_still_taken() -> None:
+    # 30 minutes at the ceiling: 1,500 / 2 = 750 kcal
+    result = activity_energy(MAN, Sport.RUNNING, 1800.0, 750.0, None)
+
+    assert result.source is EnergySource.DECLARED
+    assert result.total_kcal == 750.0
+
+
+def test_declared_calories_above_the_hourly_ceiling_are_discarded_and_estimated() -> None:
+    # 751 kcal in 30 minutes is just over the ceiling: the METs estimate is used instead
+    result = activity_energy(MAN, Sport.RUNNING, 1800.0, 751.0, None)
+
+    assert result.source is EnergySource.MET
+    assert result.total_kcal == pytest.approx(9.8 * 80.0 * 0.5)  # 392 kcal
+
+
+def test_discarded_calories_leave_room_for_the_heart_rate_estimate() -> None:
+    result = activity_energy(MAN, Sport.RUNNING, 1200.0, 50_000.0, 150.0)
+
+    assert result.source is EnergySource.HEART_RATE
+    assert result.total_kcal < 1500.0 / 3.0  # under the ceiling for 20 minutes
+
+
+@pytest.mark.parametrize("declared", [0.0, -5.0, float("nan"), float("inf")])
+def test_declared_calories_that_are_not_positive_numbers_are_still_an_error(
+    declared: float,
+) -> None:
+    with pytest.raises(ValueError, match="declared"):
+        activity_energy(MAN, Sport.RUNNING, 1800.0, declared, None)

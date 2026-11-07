@@ -49,8 +49,7 @@
    "group": "carb",
    "roles": [
     "breakfast",
-    "pre",
-    "during"
+    "pre"
    ],
    "kcal_100g": 266,
    "carbs_100g": 49.4,
@@ -243,8 +242,7 @@
    "group": "carb",
    "roles": [
     "breakfast",
-    "pre",
-    "during"
+    "pre"
    ],
    "kcal_100g": 304,
    "carbs_100g": 82.4,
@@ -286,21 +284,6 @@
    "fat_100g": 0.2,
    "portion_step_g": 50,
    "max_portion_g": 1500
-  },
-  {
-   "id": "sugar_granulated",
-   "name": "Sugar, granulated (in the drink)",
-   "fdc_id": 169655,
-   "group": "carb",
-   "roles": [
-    "during"
-   ],
-   "kcal_100g": 387,
-   "carbs_100g": 100.0,
-   "protein_100g": 0.0,
-   "fat_100g": 0.0,
-   "portion_step_g": 5,
-   "max_portion_g": 300
   },
   {
    "id": "egg_hard_boiled",

@@ -202,6 +202,14 @@ class _Index:
     def list_by_start(self) -> Sequence[ActivityRecord]:
         return sorted(self._db.records.values(), key=lambda r: (r.start, identity_key(r.identity)))
 
+    def list_started_between(self, first: datetime, last: datetime) -> Sequence[ActivityRecord]:
+        inside = [r for r in self._db.records.values() if first <= r.start < last]
+        return sorted(inside, key=lambda r: (r.start, identity_key(r.identity)))
+
+    def first_start_at_or_after(self, instant: datetime) -> datetime | None:
+        starts = [r.start for r in self._db.records.values() if r.start >= instant]
+        return min(starts, default=None)
+
     def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
         for record in self._db.records.values():
             if record.garmin_activity_id == garmin_id.value:

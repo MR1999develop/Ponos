@@ -178,9 +178,9 @@ def test_t_nut_01_the_body_mass_index_of_the_extreme_profiles() -> None:
     ("level", "expenditure"),
     [
         (ActivityLevel.SEDENTARY, 1584),  # 1320.25 x 1.2 = 1584.3
-        (ActivityLevel.LIGHT, 1815),  # x 1.375 = 1815.34
-        (ActivityLevel.ACTIVE, 2046),  # x 1.55 = 2046.39
-        (ActivityLevel.VERY_ACTIVE, 2277),  # x 1.725 = 2277.43
+        (ActivityLevel.LIGHT, 1716),  # x 1.3 = 1716.33
+        (ActivityLevel.ACTIVE, 1848),  # x 1.4 = 1848.35
+        (ActivityLevel.VERY_ACTIVE, 1980),  # x 1.5 = 1980.38
     ],
 )
 def test_t_nut_01_expenditure_of_a_rest_day_by_activity_level(
@@ -196,14 +196,14 @@ def test_t_nut_01_expenditure_of_a_rest_day_by_activity_level(
 
 
 def test_t_nut_01_the_energy_of_a_day_with_an_activity_does_not_count_rest_twice() -> None:
-    # man 35 y, 180 cm, 70 kg, active: basal 700 + 1125 - 175 + 5 = 1655; x 1.55 = 2565.25.
-    # A 60 minute run of 700 kcal (device) nets 700 - 1655 / 24 = 631.04 -> 3196.29 -> 3196
+    # man 35 y, 180 cm, 70 kg, active: basal 700 + 1125 - 175 + 5 = 1655; x 1.4 = 2317.
+    # A 60 minute run of 700 kcal (device) nets 700 - 1655 / 24 = 631.04 -> 2948.04 -> 2948
     person = man(35, 180, 70.0, ActivityLevel.ACTIVE)
     net = 700.0 - 1655.0 / 24.0
 
     result = plan_day(day_of(person, sessions=(run(18 * 60, 60.0, net, 90.0),)))
 
-    assert result.expenditure_kcal == 3196
+    assert result.expenditure_kcal == 2948
     assert result.level is DayLoadLevel.MODERATE  # 60 min
 
 
@@ -211,36 +211,37 @@ def test_t_nut_01_the_energy_of_a_day_with_an_activity_does_not_count_rest_twice
 
 
 def test_t_nut_01_macros_of_a_rest_day_for_each_goal() -> None:
-    # man 35 y, 180 cm, 70 kg, active: expenditure 2565; rest day: carbohydrates 3-5 g/kg
+    # man 35 y, 180 cm, 70 kg, active: expenditure 2317; rest day: carbohydrates 3-5 g/kg
     person = man(35, 180, 70.0, ActivityLevel.ACTIVE)
 
     maintenance = plan_day(day_of(person))
     performance = plan_day(day_of(person, PerformanceGoal()))
     loss = plan_day(day_of(person, WeightLossGoal(500)))
 
-    # maintenance: carbs 4 g/kg = 280, protein 1.6 g/kg = 112, fat (2565 - 1568) / 9 = 110.8
+    # maintenance: carbs 4 g/kg = 280, protein 1.6 g/kg = 112, fat (2317 - 1568) / 9 = 83.2
     assert (maintenance.macros.carbs_g, maintenance.macros.protein_g) == (280, 112)
-    assert maintenance.macros.fat_g == 111
-    # performance: carbs 5 g/kg = 350, protein 112, fat (2565 - 1848) / 9 = 79.7
+    assert maintenance.macros.fat_g == 83
+    # performance: carbs 5 g/kg = 350, protein 112, fat (2317 - 1848) / 9 = 52.1
     assert (performance.macros.carbs_g, performance.macros.protein_g) == (350, 112)
-    assert performance.macros.fat_g == 80
-    # loss 500 g/week: asks 550 kcal, but 20% of 2565 = 513; carbs 3 g/kg = 210, protein 2.0 g/kg
-    # = 140, fat (2052 - 1400) / 9 = 72.4
-    assert (loss.deficit_kcal, loss.target_kcal) == (513, 2052)
-    assert (loss.macros.carbs_g, loss.macros.protein_g, loss.macros.fat_g) == (210, 140, 72)
+    assert performance.macros.fat_g == 52
+    # loss 500 g/week: asks 550 kcal, but 20% of 2317 = 463.4 -> 463; carbs 3 g/kg = 210, protein
+    # 2.0 g/kg = 140, fat (1854 - 1400) / 9 = 50.4
+    assert (loss.deficit_kcal, loss.target_kcal) == (463, 1854)
+    assert (loss.macros.carbs_g, loss.macros.protein_g, loss.macros.fat_g) == (210, 140, 50)
     assert loss.advisories == (Advisory.DEFICIT_LIMITED,)
     assert maintenance.advisories == ()
 
 
 def test_t_nut_01_a_low_energy_target_makes_carbohydrates_give_way_and_says_so() -> None:
-    # woman 30 y, 165 cm, 60 kg, light, loss 500 g: expenditure 1815, 20% = 363 -> target 1452.
-    # protein 120 g, fat floor 0.2 x 1452 / 9 = 32.3 g -> 33; carbs (1452 - 480 - 290.4) / 4 = 170
+    # woman 30 y, 165 cm, 60 kg, light, loss 500 g: expenditure 1716, 20% = 343.2 -> 343, target
+    # 1373 (basal 1320 is not reached). Protein 120 g, fat floor 0.2 x 1373 / 9 = 30.5 g -> 31;
+    # carbs (1373 - 480 - 274.6) / 4 = 154.6 -> 154 of the 180 g wanted; fat 277 / 9 = 30.8
     person = woman(30, 165, 60.0, ActivityLevel.LIGHT)
 
     result = plan_day(day_of(person, WeightLossGoal(500)))
 
-    assert (result.deficit_kcal, result.target_kcal) == (363, 1452)
-    assert (result.macros.carbs_g, result.macros.protein_g, result.macros.fat_g) == (170, 120, 33)
+    assert (result.deficit_kcal, result.target_kcal) == (343, 1373)
+    assert (result.macros.carbs_g, result.macros.protein_g, result.macros.fat_g) == (154, 120, 31)
     assert result.advisories == (
         Advisory.DEFICIT_LIMITED,
         Advisory.CARBS_LIMITED_BY_ENERGY,
@@ -262,16 +263,16 @@ def test_t_nut_02_the_deficit_never_takes_the_target_below_the_basal_rate() -> N
 
 
 def test_t_nut_02_the_deficit_is_capped_at_750_kcal_on_a_very_large_expenditure() -> None:
-    # man 30 y, 190 cm, 110 kg, very active: basal 1100 + 1187.5 - 150 + 5 = 2142.5 x 1.725 =
-    # 3696.06; with 1000 kcal of net activity 4696. 20% is 939 but the cap is 750
+    # man 30 y, 190 cm, 110 kg, very active: basal 1100 + 1187.5 - 150 + 5 = 2142.5 x 1.5 =
+    # 3213.75; with 1000 kcal of net activity 4214. 20% is 842.8 but the cap is 750
     person = man(30, 190, 110.0, ActivityLevel.VERY_ACTIVE)
 
     target = energy_target(
         person, WeightLossGoal(1000), DayLoadLevel.MODERATE, basal_metabolic_rate(person), 1000.0
     )
 
-    assert (target.expenditure_kcal, target.deficit_kcal) == (4696, 750)
-    assert target.target_kcal == 3946
+    assert (target.expenditure_kcal, target.deficit_kcal) == (4214, 750)
+    assert target.target_kcal == 3464
     assert Advisory.DEFICIT_LIMITED in target.advisories
 
 
@@ -285,7 +286,9 @@ def test_t_nut_02_the_cap_is_exactly_one_fifth_of_the_expenditure_at_every_kcal(
             person, WeightLossGoal(1000), DayLoadLevel.REST, 1000.0, expenditure - 1200.0
         )
         assert target.expenditure_kcal == expenditure
-        if target.deficit_kcal != expenditure // 5:
+        # a man is never left under 1,500 kcal: below 1,875 that, not the fifth, is the limit
+        expected = min(expenditure // 5, max(0, expenditure - 1500))
+        if target.deficit_kcal != expected:
             wrong.append(expenditure)
     assert wrong == []
 
@@ -336,16 +339,16 @@ def test_t_nut_02_a_body_mass_index_of_17_gets_no_deficit_and_the_advisory() -> 
 
 
 def test_t_nut_02_a_body_mass_index_of_40_still_gets_a_limited_deficit() -> None:
-    # man 40 y, 175 cm, 122.5 kg, light: basal 2124, expenditure 2123.75 x 1.375 = 2920;
-    # 20% = 584 -> target 2336; protein 2 g/kg = 245 g and the fat floor leave 222 g of the 367 g
-    # of carbohydrates a loss day would want
+    # man 40 y, 175 cm, 122.5 kg, light: basal 2124, expenditure 2123.75 x 1.3 = 2760.9 -> 2761;
+    # 20% = 552 -> target 2209; protein 2 g/kg = 245 g and the fat floor leave 196 g of the 367 g
+    # of carbohydrates a loss day would want: (2209 - 980 - 441.8) / 4 = 196.8
     person = man(40, 175, 122.5, ActivityLevel.LIGHT)
 
     result = plan_day(day_of(person, WeightLossGoal(1000)))
 
-    assert (result.expenditure_kcal, result.deficit_kcal, result.target_kcal) == (2920, 584, 2336)
+    assert (result.expenditure_kcal, result.deficit_kcal, result.target_kcal) == (2761, 552, 2209)
     assert result.advisories == (Advisory.DEFICIT_LIMITED, Advisory.CARBS_LIMITED_BY_ENERGY)
-    assert result.macros.carbs_g == 222
+    assert result.macros.carbs_g == 196
 
 
 def test_t_nut_02_a_minor_and_a_thin_adult_are_warned_even_on_maintenance() -> None:
@@ -534,7 +537,8 @@ def test_t_nut_04_three_sessions_with_the_same_start_do_not_break_the_day() -> N
 
 def test_t_nut_04_an_eight_hour_ultra_gets_the_during_box_with_hourly_guidance_and_caps() -> None:
     # 06:00-14:00, carbohydrates on the day sized for performance: pre 1 g/kg at 05:00 (two hours
-    # before would be before 05:00 -> one hour), during 75 g/h from 2.5 h on, post after the end
+    # before would be before 05:00 -> one hour), during 60 g/h from 2.5 h on (the ceiling of a
+    # single carbohydrate), post after the end
     day = day_of(ADULT_MAN, PerformanceGoal(), (run(6 * 60, 480.0, 4488.33, 420.0),))
     result = plan_day(day)
     check_day(day, result)
@@ -542,12 +546,12 @@ def test_t_nut_04_an_eight_hour_ultra_gets_the_during_box_with_hourly_guidance_a
     (during,) = (i for i in result.meals if i.hourly is not None)
     assert during.hourly is not None
     assert (during.hourly.carbs_g, during.hourly.fluid_ml, during.hourly.sodium_mg) == (
-        75,
+        60,
         600,
         300,
     )
     assert during.minute == 6 * 60
-    assert during.macros.carbs_g == 600  # 75 g/h x 8 h
+    assert during.macros.carbs_g == 480  # 60 g/h x 8 h
     by_slot = {slot: item for item in result.meals for slot in item.slots}
     assert by_slot[MealSlot.PRE_TRAINING].minute == 5 * 60
     assert by_slot[MealSlot.PRE_TRAINING].macros.carbs_g == 70
@@ -555,7 +559,7 @@ def test_t_nut_04_an_eight_hour_ultra_gets_the_during_box_with_hourly_guidance_a
     assert result.level is DayLoadLevel.VERY_HIGH
 
 
-@pytest.mark.parametrize(("minutes", "rate"), [(75.0, None), (75.5, 45), (150.0, 45), (151.0, 75)])
+@pytest.mark.parametrize(("minutes", "rate"), [(75.0, None), (75.5, 45), (150.0, 45), (151.0, 60)])
 def test_t_nut_04_the_hourly_rate_changes_at_75_minutes_and_at_two_and_a_half_hours(
     minutes: float, rate: int | None
 ) -> None:
@@ -593,11 +597,11 @@ def test_t_nut_05_changing_level_weight_and_goal_changes_the_guidance_as_expecte
     before = plan_day(day_of(man(30, 180, 80.0, ActivityLevel.ACTIVE), MaintenanceGoal()))
     after = plan_day(day_of(man(30, 180, 75.0, ActivityLevel.VERY_ACTIVE), WeightLossGoal(500)))
 
-    assert (before.basal_kcal, before.expenditure_kcal) == (1780, 2759)  # 1780 x 1.55 = 2759
-    # basal 750 + 1125 - 150 + 5 = 1730; x 1.725 = 2984.25; deficit 550 (20% = 596 is not reached)
-    assert (after.basal_kcal, after.expenditure_kcal) == (1730, 2984)
-    assert (after.deficit_kcal, after.target_kcal) == (550, 2434)
-    assert after.advisories == ()
+    assert (before.basal_kcal, before.expenditure_kcal) == (1780, 2492)  # 1780 x 1.4 = 2492
+    # basal 750 + 1125 - 150 + 5 = 1730; x 1.5 = 2595; the 550 asked meet the 20% cap: 519
+    assert (after.basal_kcal, after.expenditure_kcal) == (1730, 2595)
+    assert (after.deficit_kcal, after.target_kcal) == (519, 2076)
+    assert Advisory.DEFICIT_LIMITED in after.advisories
 
 
 # --- Properties (long campaign) ------------------------------------------------------------
@@ -663,10 +667,6 @@ def test_t_nut_02_04_every_day_keeps_every_invariant(
 # --- Defects found -------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F4B-01: float rounding at the protein cap makes the carbohydrates negative",
-)
 def test_d_f4b_01_an_extreme_but_allowed_person_does_not_crash_the_day() -> None:
     """Woman of 98 y, 100 cm, 20.1 kg (inside the limits of `Person`), loss 100 g a week."""
     person = woman(98, 100, 20.1, ActivityLevel.LIGHT)
@@ -675,17 +675,13 @@ def test_d_f4b_01_an_extreme_but_allowed_person_does_not_crash_the_day() -> None
     check_day(day, plan_day(day))  # ValueError: macronutrient grams cannot be negative
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F4B-03: in an 8 hour effort the intakes are cut and the dinner gets no carbs",
-)
 @pytest.mark.parametrize(
     "goal", [MaintenanceGoal(), WeightLossGoal(500)], ids=lambda g: type(g).__name__
 )
 def test_d_f4b_03_the_during_box_agrees_with_its_hourly_guidance_in_an_eight_hour_ultra(
     goal: NutritionGoal,
 ) -> None:
-    """The box says 75 g of carbohydrates an hour; for 8 hours the item must carry about 600 g
+    """The box says 60 g of carbohydrates an hour; for 8 hours the item must carry about 480 g
     (and the dinner after the effort keep some carbohydrates), or the hourly line is wrong."""
     result = plan_day(day_of(ADULT_MAN, goal, (run(6 * 60, 480.0, 4488.33, 420.0),)))
 

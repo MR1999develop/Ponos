@@ -51,7 +51,6 @@ FOOD_NAMES: dict[str, object] = {
     "honey": QT_TRANSLATE_NOOP("Foods", "Honey"),
     "raisins": QT_TRANSLATE_NOOP("Foods", "Raisins"),
     "orange_juice": QT_TRANSLATE_NOOP("Foods", "Orange juice"),
-    "sugar_granulated": QT_TRANSLATE_NOOP("Foods", "Sugar, granulated (in the drink)"),
     "egg_hard_boiled": QT_TRANSLATE_NOOP("Foods", "Egg, hard-boiled"),
     "chicken_breast_roasted": QT_TRANSLATE_NOOP("Foods", "Chicken breast, roasted"),
     "tuna_light_canned_water": QT_TRANSLATE_NOOP("Foods", "Tuna, light, canned in water"),
@@ -122,6 +121,20 @@ def unavailable_text(reason: UnavailableReason) -> MissingDataText:
             QCoreApplication.translate("Nutrition", "This day is before the date of birth"),
             QCoreApplication.translate(
                 "Nutrition", "The date of birth in the profile is after this day."
+            ),
+        ),
+        UnavailableReason.AGE_OUT_OF_RANGE: (
+            QCoreApplication.translate("Nutrition", "This day is too far from the date of birth"),
+            QCoreApplication.translate(
+                "Nutrition", "Nutrition guidance covers ages up to 130 years."
+            ),
+        ),
+        UnavailableReason.UNDER_18: (
+            QCoreApplication.translate("Nutrition", "No guidance under 18"),
+            QCoreApplication.translate(
+                "Nutrition",
+                "Calories, macronutrients and portions are not given under 18. "
+                "Please talk to a doctor or a dietitian.",
             ),
         ),
     }

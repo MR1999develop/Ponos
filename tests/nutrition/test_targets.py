@@ -31,7 +31,7 @@ from ponos_coach.nutrition.domain import (
 from tests.nutrition.strategies import days, goals, persons
 
 REST = DayLoadLevel.REST
-MAN = Person(Sex.MALE, 30, 180, 80.0, ActivityLevel.ACTIVE)  # basal 1780, expenditure 2759
+MAN = Person(Sex.MALE, 30, 180, 80.0, ActivityLevel.ACTIVE)  # basal 1780, expenditure 2492
 BASAL = 1780.0
 TIMES = MealTimes.default()
 
@@ -46,7 +46,7 @@ def day_of(person: Person, goal: NutritionGoal, *sessions: TrainingSession) -> D
 def test_expenditure_is_basal_times_the_level_factor_on_a_rest_day() -> None:
     result = plan_day(day_of(MAN, MaintenanceGoal()))
 
-    assert (result.basal_kcal, result.expenditure_kcal, result.target_kcal) == (1780, 2759, 2759)
+    assert (result.basal_kcal, result.expenditure_kcal, result.target_kcal) == (1780, 2492, 2492)
     assert result.level is DayLoadLevel.REST
 
 
@@ -54,9 +54,9 @@ def test_expenditure_is_basal_times_the_level_factor_on_a_rest_day() -> None:
     ("level", "expected"),
     [
         (ActivityLevel.SEDENTARY, 2136),  # 1780 * 1.2
-        (ActivityLevel.LIGHT, 2448),  # 1780 * 1.375 = 2447.5, rounded to even
-        (ActivityLevel.ACTIVE, 2759),  # 1780 * 1.55
-        (ActivityLevel.VERY_ACTIVE, 3070),  # 1780 * 1.725 = 3070.5, rounded to even
+        (ActivityLevel.LIGHT, 2314),  # 1780 * 1.3
+        (ActivityLevel.ACTIVE, 2492),  # 1780 * 1.4
+        (ActivityLevel.VERY_ACTIVE, 2670),  # 1780 * 1.5
         (None, 2136),  # not set: sedentary, with an advisory
     ],
 )
@@ -73,7 +73,7 @@ def test_net_activity_energy_is_added_to_the_expenditure() -> None:
 
     result = plan_day(day_of(MAN, MaintenanceGoal(), session))
 
-    assert result.expenditure_kcal == 3259  # 2759 + 500
+    assert result.expenditure_kcal == 2992  # 2492 + 500
 
 
 def test_a_missing_activity_level_is_assumed_sedentary_and_said_so() -> None:
@@ -86,11 +86,19 @@ def test_a_missing_activity_level_is_assumed_sedentary_and_said_so() -> None:
 
 def test_weight_loss_of_500_g_a_week_is_a_550_kcal_deficit() -> None:
     assert requested_deficit_kcal(WeightLossGoal(500)) == pytest.approx(550.0)
+    session = TrainingSession(18 * 60, 60.0, 500.0, 50.0)  # expenditure 2992: 20% is 598
 
-    result = plan_day(day_of(MAN, WeightLossGoal(500)))
+    result = plan_day(day_of(MAN, WeightLossGoal(500), session))
 
-    assert (result.deficit_kcal, result.target_kcal) == (550, 2209)
-    assert result.advisories == ()
+    assert (result.deficit_kcal, result.target_kcal) == (550, 2442)
+    assert Advisory.DEFICIT_LIMITED not in result.advisories
+
+
+def test_on_a_rest_day_the_same_request_meets_the_20_percent_cap() -> None:
+    result = plan_day(day_of(MAN, WeightLossGoal(500)))  # expenditure 2492: 20% is 498.4
+
+    assert (result.deficit_kcal, result.target_kcal) == (498, 1994)
+    assert Advisory.DEFICIT_LIMITED in result.advisories
 
 
 def test_macros_of_a_rest_day_by_goal() -> None:
@@ -100,9 +108,14 @@ def test_macros_of_a_rest_day_by_goal() -> None:
     performance = plan_day(day_of(MAN, PerformanceGoal())).macros
     loss = plan_day(day_of(MAN, WeightLossGoal(500))).macros
 
-    assert (maintenance.carbs_g, maintenance.protein_g, maintenance.fat_g) == (320, 128, 107)
-    assert (performance.carbs_g, performance.protein_g, performance.fat_g) == (400, 128, 72)
-    assert (loss.carbs_g, loss.protein_g, loss.fat_g) == (240, 160, 68)
+    # maintenance: 2492 kcal; carbohydrates 4 g/kg = 320; fat (2492 - 4 * 448) / 9 = 77.8 -> 78
+    assert (maintenance.carbs_g, maintenance.protein_g, maintenance.fat_g) == (320, 128, 78)
+    # performance: 5 g/kg = 400 g would need more energy than the fat floor leaves: the room is
+    # (2492 - 4 * 128 - 9 * 55.38) / 4 = 370.4 -> 370; fat (2492 - 4 * 498) / 9 = 55.6 -> 56
+    assert (performance.carbs_g, performance.protein_g, performance.fat_g) == (370, 128, 56)
+    # loss: target 1994 (deficit capped at 498); protein 2 g/kg = 160; the room for carbohydrates
+    # is (1994 - 640 - 9 * 44.3) / 4 = 238.8 -> 238; fat (1994 - 4 * 398) / 9 = 44.7 -> 45
+    assert (loss.carbs_g, loss.protein_g, loss.fat_g) == (238, 160, 45)
 
 
 @pytest.mark.parametrize(
@@ -181,15 +194,15 @@ def target_for(
 
 
 def test_the_deficit_is_capped_at_20_percent_of_the_expenditure() -> None:
-    # 20% of 2759 is 551.8 kcal, below the 1100 kcal that 1 kg/week asks
+    # 20% of 2492 is 498.4 kcal, below the 1100 kcal that 1 kg/week asks
     expenditure, deficit, _, advisories = target_for(MAN, WeightLossGoal(1000))
 
-    assert (expenditure, deficit) == (2759, 551)
+    assert (expenditure, deficit) == (2492, 498)
     assert Advisory.DEFICIT_LIMITED in advisories
 
 
 def test_the_deficit_is_capped_at_750_kcal() -> None:
-    expenditure, deficit, target, advisories = target_for(MAN, WeightLossGoal(1000), net=3241.0)
+    expenditure, deficit, target, advisories = target_for(MAN, WeightLossGoal(1000), net=3508.0)
 
     assert (expenditure, deficit, target) == (6000, 750, 5250)  # 20% would be 1200
     assert advisories == (Advisory.DEFICIT_LIMITED,)
@@ -205,6 +218,41 @@ def test_the_target_never_goes_below_the_basal_rate() -> None:
     assert Advisory.DEFICIT_LIMITED in advisories
 
 
+def test_a_woman_is_never_taken_below_1200_kcal_when_her_basal_rate_is_lower() -> None:
+    # basal 10 * 50 + 6.25 * 160 - 5 * 30 - 161 = 1189 kcal; sedentary 1426.8 -> 1427; the cap
+    # would allow 285, but only 1427 - 1200 = 227 keeps her at the absolute minimum
+    woman = Person(Sex.FEMALE, 30, 160, 50.0, ActivityLevel.SEDENTARY)
+
+    target = energy_target(woman, WeightLossGoal(1000), REST, basal_metabolic_rate(woman), 0.0)
+
+    assert (target.basal_kcal, target.expenditure_kcal) == (1189, 1427)
+    assert (target.deficit_kcal, target.target_kcal) == (227, 1200)
+    assert Advisory.DEFICIT_LIMITED in target.advisories
+
+
+def test_a_man_is_never_taken_below_1500_kcal_when_his_basal_rate_is_lower() -> None:
+    # basal 600 + 1031.25 - 150 + 5 = 1486.25; sedentary 1783.5 -> 1784; 1784 - 1500 = 284
+    man = Person(Sex.MALE, 30, 165, 60.0, ActivityLevel.SEDENTARY)
+
+    target = energy_target(man, WeightLossGoal(1000), REST, basal_metabolic_rate(man), 0.0)
+
+    assert (target.basal_kcal, target.expenditure_kcal) == (1486, 1784)
+    assert (target.deficit_kcal, target.target_kcal) == (284, 1500)
+    assert Advisory.DEFICIT_LIMITED in target.advisories
+
+
+def test_no_deficit_at_all_when_the_expenditure_is_already_under_the_absolute_minimum() -> None:
+    # basal 500 + 1000 - 300 + 5 = 1205; sedentary 1446 kcal, under the 1500 of a man
+    small_man = Person(Sex.MALE, 60, 160, 50.0, ActivityLevel.SEDENTARY)
+
+    target = energy_target(
+        small_man, WeightLossGoal(500), REST, basal_metabolic_rate(small_man), 0.0
+    )
+
+    assert (target.expenditure_kcal, target.deficit_kcal, target.target_kcal) == (1446, 0, 1446)
+    assert target.advisories == (Advisory.DEFICIT_LIMITED,)
+
+
 def test_a_heavy_day_halves_the_deficit_and_a_very_heavy_day_quarters_it() -> None:
     _, high, _, high_advisories = target_for(MAN, WeightLossGoal(500), DayLoadLevel.HIGH)
     _, very_high, _, _ = target_for(MAN, WeightLossGoal(500), DayLoadLevel.VERY_HIGH)
@@ -212,7 +260,8 @@ def test_a_heavy_day_halves_the_deficit_and_a_very_heavy_day_quarters_it() -> No
         MAN, WeightLossGoal(500), DayLoadLevel.MODERATE
     )
 
-    assert (moderate, high, very_high) == (550, 275, 137)
+    # the 20% cap (498.4) comes first: 498, half of it 249, a quarter of it 124
+    assert (moderate, high, very_high) == (498, 249, 124)
     assert Advisory.DEFICIT_REDUCED_FOR_LOAD in high_advisories
     assert Advisory.DEFICIT_REDUCED_FOR_LOAD not in moderate_advisories
 
@@ -224,7 +273,7 @@ def test_no_deficit_under_18_and_the_user_is_told(age: int) -> None:
     _, deficit, target, advisories = target_for(person, WeightLossGoal(500))
 
     assert deficit == 0
-    assert target == round(BASAL * 1.55)
+    assert target == round(BASAL * 1.4)
     assert advisories == (Advisory.UNDER_18, Advisory.DEFICIT_NOT_APPLIED)
 
 
@@ -285,6 +334,9 @@ def test_the_deficit_always_respects_every_safety_limit(
     assert 0 <= target.deficit_kcal <= 750
     assert target.deficit_kcal <= 0.2 * target.expenditure_kcal
     assert target.target_kcal >= target.basal_kcal
+    if target.deficit_kcal > 0:
+        minimum = 1500 if person.sex is Sex.MALE else 1200
+        assert target.target_kcal >= minimum
     assert target.target_kcal == target.expenditure_kcal - target.deficit_kcal
     if not isinstance(goal, WeightLossGoal):
         assert target.deficit_kcal == 0

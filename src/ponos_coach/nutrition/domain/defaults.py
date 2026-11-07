@@ -10,13 +10,17 @@ package holds a number of this kind.
 Sources, by abbreviation:
 
 - MSJ: Mifflin et al. 1990, resting energy expenditure equation.
-- PAL: classic activity multipliers of the basal metabolic rate (Harris-Benedict family).
+- PAL: activity multipliers of the basal metabolic rate, here WITHOUT sport (project defaults:
+  the classic Harris-Benedict factors 1.375-1.725 already include exercise, and the app adds the
+  recorded sport on top, so they would count it twice).
 - KEYTEL: Keytel et al. 2005, energy expenditure from heart rate, age, weight and sex.
 - COMPENDIUM: Compendium of Physical Activities (METs by activity).
 - ISSN: International Society of Sports Nutrition position stands on nutrient timing,
   protein and diets/body composition.
 - ACSM: ACSM/AND/DC joint position statement on nutrition and athletic performance.
 - IOC: IOC consensus statement on sports nutrition.
+- MININTAKE: the lower limits of daily energy for unsupervised weight loss that health
+  organisations commonly quote (NHLBI and similar: 1,200 kcal for women, 1,500 kcal for men).
 """
 
 from __future__ import annotations
@@ -41,10 +45,12 @@ MSJ_MALE_OFFSET: Final = 5.0
 MSJ_FEMALE_OFFSET: Final = -161.0
 
 # --- Activity level outside sport: multiplier of the basal metabolic rate (PAL) -----------------
+# Project defaults for a day WITHOUT the sport recorded by the app: desk life, some walking, a
+# standing or walking job, a heavy manual job.
 PAL_SEDENTARY: Final = 1.2
-PAL_LIGHT: Final = 1.375
-PAL_ACTIVE: Final = 1.55
-PAL_VERY_ACTIVE: Final = 1.725
+PAL_LIGHT: Final = 1.3
+PAL_ACTIVE: Final = 1.4
+PAL_VERY_ACTIVE: Final = 1.5
 DEFAULT_ACTIVITY_PAL: Final = PAL_SEDENTARY  # no level set: the most conservative
 
 # --- Activity energy ----------------------------------------------------------------------------
@@ -53,6 +59,10 @@ KJ_PER_KCAL: Final = 4.184
 # KEYTEL: kJ/min from heart rate (bpm), weight (kg) and age (years).
 KEYTEL_MALE: Final = (-55.0969, 0.6309, 0.1988, 0.2017)  # constant, HR, weight, age
 KEYTEL_FEMALE: Final = (-20.4022, 0.4472, -0.1263, 0.074)
+# A declared total above this many kcal per hour of moving time is not credible (the highest
+# Compendium value is about 23 METs: 23 x 100 kg = 2,300 kcal/h for a very large person; 1,500 is
+# a generous project default for the people the app is for) and is replaced by an estimate.
+MAX_ACTIVITY_KCAL_PER_HOUR: Final = 1500.0
 MIN_USABLE_BPM: Final = 40.0  # an average HR outside this range is ignored (MET estimate instead)
 MAX_USABLE_BPM: Final = 250.0
 # COMPENDIUM (gross METs; 1 MET = 1 kcal per kg per hour): running 6 mph 9.8; running cross
@@ -75,8 +85,12 @@ MIN_WEEKLY_LOSS_G: Final = 100
 MAX_WEEKLY_LOSS_G: Final = 1000  # ACSM: 0.5-1 kg per week is the usual upper range
 MAX_DEFICIT_FRACTION: Final = 0.20  # of the day's expenditure
 MAX_DEFICIT_KCAL: Final = 750
-ADULT_AGE_YEARS: Final = 18  # no deficit below this age
+ADULT_AGE_YEARS: Final = 18  # below this age the model gives no numbers at all
 MIN_BMI_FOR_DEFICIT: Final = 18.5  # no deficit below this body mass index (WHO underweight limit)
+# MININTAKE: the deficit never takes the target below the larger of the basal metabolic rate and
+# this absolute minimum (project defaults, by sex).
+MIN_INTAKE_KCAL_FEMALE: Final = 1200
+MIN_INTAKE_KCAL_MALE: Final = 1500
 
 # --- Day load level -----------------------------------------------------------------------------
 # A day's level is the higher of the one given by the load and by the training time. Project
@@ -113,13 +127,18 @@ DURING_MIN_SESSION_MIN: Final = 75.0  # strictly longer sessions get an intake d
 LONG_SESSION_MIN: Final = 90.0  # "long": post-training carbohydrates and more
 LONG_EFFORT_MIN: Final = 150.0  # 2.5 h
 DURING_CARBS_G_PER_H: Final = 45  # 30-60 g/h up to 2.5 h
-DURING_CARBS_G_PER_H_LONG: Final = 75  # up to 90 g/h beyond 2.5 h
+# Beyond 2.5 h the IOC range reaches 90 g/h, but only with glucose-fructose blends, which the food
+# table does not tell apart: the ceiling is the 60 g/h of a single carbohydrate.
+DURING_CARBS_G_PER_H_LONG: Final = 60
 DURING_FLUID_ML_PER_H: Final = 600  # indicative, ACSM: 0.4-0.8 L/h
 DURING_SODIUM_MG_PER_H: Final = 300  # indicative, 0.5 g/L of sodium in the drink
 POST_LEAD_MIN: Final = 30  # within one hour of the end
 POST_PROTEIN_G_PER_KG: Final = 0.3
 POST_CARBS_G_PER_KG: Final = 1.1  # 1-1.2 g/kg
 NEXT_SESSION_WITHIN_MIN: Final = 24 * 60
+# Lunch and dinner always keep at least this much carbohydrate (project default), however long the
+# training of the day: the intakes around it give way first (see `meals.py`).
+MAIN_MEAL_MIN_CARBS_G_PER_KG: Final = 1.0
 
 # --- Meals --------------------------------------------------------------------------------------
 MINUTES_PER_DAY: Final = 1440

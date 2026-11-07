@@ -205,6 +205,45 @@ class ActivityIndexContract:
         # On equal start the order of the identity keys applies: "fit:" comes before "gpx:".
         assert listed == [earlier, same_start_gpx, later]
 
+    def test_range_query_includes_the_first_bound_and_excludes_the_last(
+        self, harness: StorageHarness
+    ) -> None:
+        records = [make_record(fit_identity(i), start=T0 + timedelta(hours=i)) for i in range(1, 5)]
+        with closing(create(harness)) as profile:
+            for record in reversed(records):
+                profile.activities.add(record)
+
+            found = profile.activities.list_started_between(
+                T0 + timedelta(hours=2), T0 + timedelta(hours=4)
+            )
+
+        assert found == records[1:3]  # starting at 2 h and 3 h; the one at 4 h is out
+
+    def test_range_query_with_equal_or_reversed_bounds_is_empty(
+        self, harness: StorageHarness
+    ) -> None:
+        with closing(create(harness)) as profile:
+            profile.activities.add(make_record(fit_identity(1), start=T0))
+
+            assert not profile.activities.list_started_between(T0, T0)
+            assert not profile.activities.list_started_between(T0 + timedelta(hours=1), T0)
+
+    def test_first_start_at_or_after_is_the_earliest_start_not_before_the_instant(
+        self, harness: StorageHarness
+    ) -> None:
+        with closing(create(harness)) as profile:
+            profile.activities.add(make_record(fit_identity(1), start=T0 + timedelta(hours=3)))
+            profile.activities.add(make_record(fit_identity(2), start=T0 + timedelta(hours=1)))
+
+            index = profile.activities
+
+            assert index.first_start_at_or_after(T0) == T0 + timedelta(hours=1)
+            assert index.first_start_at_or_after(T0 + timedelta(hours=1)) == T0 + timedelta(hours=1)
+            assert index.first_start_at_or_after(
+                T0 + timedelta(hours=1, microseconds=1)
+            ) == T0 + timedelta(hours=3)
+            assert index.first_start_at_or_after(T0 + timedelta(hours=3, milliseconds=1)) is None
+
     def test_fit_and_gpx_identities_are_different_activities(self, harness: StorageHarness) -> None:
         with closing(create(harness)) as profile:
             profile.activities.add(make_record(fit_identity(1)))

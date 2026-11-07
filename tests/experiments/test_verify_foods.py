@@ -159,7 +159,8 @@ def test_apply_rewrites_values_and_keeps_the_rest() -> None:
     }
     foods, _ = vf.parse_fdc_response([_entry(1, nutrients=_nutrients(379.4, 67.74, 13.26, 6.5))])
     updated = vf.apply_fdc_values(document, foods, date(2026, 11, 7))
-    assert updated["source"] == {"verified_on": "2026-11-07", "name": "x"}
+    # the second food has no FDC entry: the table as a whole is not verified
+    assert updated["source"] == {"verified_on": None, "name": "x"}
     first = updated["foods"][0]
     assert (first["kcal_100g"], first["carbs_100g"], first["protein_100g"]) == (379, 67.7, 13.3)
     assert first["fdc_dataset"] == "SR Legacy"
@@ -167,3 +168,113 @@ def test_apply_rewrites_values_and_keeps_the_rest() -> None:
     assert [f["id"] for f in updated["foods"]] == ["oats", "oats"]
     assert document["source"]["verified_on"] is None  # input not mutated
     json.dumps(updated)
+
+
+# --- Nutrient numbers as integers or strings --------------------------------------------------
+
+
+def test_nutrient_numbers_given_as_integers_are_accepted() -> None:
+    nutrients = [
+        {"number": 208, "unitName": "kcal", "amount": 100},
+        {"number": 205, "unitName": "g", "amount": 20},
+        {"number": "203", "unitName": "g", "amount": 5},
+        {"nutrientNumber": 204, "unitName": "g", "value": 1},
+    ]
+
+    foods, rejected = vf.parse_fdc_response([_entry(nutrients=nutrients)])
+
+    assert rejected == {}
+    assert (foods[1].kcal, foods[1].carbs, foods[1].protein, foods[1].fat) == (100, 20, 5, 1)
+
+
+@pytest.mark.parametrize("number", [True, 208.0, None, [208], "0208"])
+def test_nutrient_numbers_of_the_wrong_kind_are_not_taken(number: Any) -> None:
+    nutrients = _nutrients()
+    nutrients[0] = {"number": number, "unitName": "KCAL", "value": 100}
+
+    foods, rejected = vf.parse_fdc_response([_entry(nutrients=nutrients)])
+
+    assert foods == {}
+    assert "kcal" in rejected[1]
+
+
+# --- --apply: refused with problems, revalidated, verified only when everything is ------------
+
+SHIPPED = json.loads(vf.FOODS_PATH.read_text(encoding="utf-8"))
+TODAY = date(2026, 11, 7)
+
+
+def _fdc_like_the_table(document: dict[str, Any]) -> Any:
+    """FDC entries identical to the table's own values: nothing differs, nothing is suspicious."""
+    return [
+        {
+            "fdcId": food["fdc_id"],
+            "description": food["name"],
+            "dataType": "SR Legacy",
+            "foodNutrients": _nutrients(
+                food["kcal_100g"], food["carbs_100g"], food["protein_100g"], food["fat_100g"]
+            ),
+        }
+        for food in document["foods"]
+    ]
+
+
+def _compare(document: dict[str, Any], entries: list[Any]) -> tuple[Any, list[Any]]:
+    batches = [entries[i : i + vf.MAX_ENTRIES] for i in range(0, len(entries), vf.MAX_ENTRIES)]
+    found: dict[int, Any] = {}
+    rejected: dict[int, str] = {}
+    for batch in batches:
+        ok, bad = vf.parse_fdc_response(batch)
+        found.update(ok)
+        rejected.update(bad)
+    return found, vf.compare_foods(document["foods"], found, rejected)
+
+
+def test_applying_a_table_without_problems_writes_it_verified_and_valid() -> None:
+    fdc, rows = _compare(SHIPPED, _fdc_like_the_table(SHIPPED))
+
+    text = vf.render_applied_document(SHIPPED, fdc, rows, TODAY)
+
+    assert json.loads(text)["source"]["verified_on"] == "2026-11-07"
+    assert text.endswith("\n")
+
+
+@pytest.mark.parametrize(
+    ("problem", "verified_after_force"),
+    [("missing id", False), ("discarded", False), ("over 10%", True), ("suspicious", False)],
+)
+def test_applying_is_refused_when_a_food_has_a_problem_unless_forced(
+    problem: str, verified_after_force: bool
+) -> None:
+    entries = _fdc_like_the_table(SHIPPED)
+    if problem == "missing id":
+        del entries[3]
+    elif problem == "discarded":
+        entries[3]["foodNutrients"] = _nutrients()[:2]
+    elif problem == "over 10%":
+        entries[3]["foodNutrients"] = _nutrients(
+            kcal=SHIPPED["foods"][3]["kcal_100g"] * 1.2,
+            carbs=SHIPPED["foods"][3]["carbs_100g"] * 1.2,
+            protein=SHIPPED["foods"][3]["protein_100g"] * 1.2,
+            fat=SHIPPED["foods"][3]["fat_100g"] * 1.2,
+        )
+    else:
+        entries[3]["description"] = "Zzzzz qqqqq"
+    fdc, rows = _compare(SHIPPED, entries)
+
+    with pytest.raises(vf.ApplyRefusedError, match="--force"):
+        vf.render_applied_document(SHIPPED, fdc, rows, TODAY)
+    forced = json.loads(vf.render_applied_document(SHIPPED, fdc, rows, TODAY, force=True))
+
+    # forced: verified only if every food now holds FDC's own values for an entry that fits it
+    # (a difference over 10% is cured by the write itself; a missing or odd entry is not)
+    assert (forced["source"]["verified_on"] == "2026-11-07") is verified_after_force
+
+
+def test_the_updated_document_is_revalidated_with_the_parser_of_the_table() -> None:
+    entries = _fdc_like_the_table(SHIPPED)
+    entries[0]["foodNutrients"] = _nutrients(kcal=900, carbs=1, protein=1, fat=1)  # not Atwater
+    fdc, rows = _compare(SHIPPED, entries)
+
+    with pytest.raises(vf.ApplyRefusedError, match="not valid"):
+        vf.render_applied_document(SHIPPED, fdc, rows, TODAY, force=True)

@@ -39,11 +39,12 @@ from ponos_coach.nutrition.domain.foods import FoodPortion
 from ponos_coach.nutrition.food_table import (
     FOOD_TABLE_FORMAT,
     MAX_FOOD_TABLE_BYTES,
+    MAX_FOOD_TABLE_DEPTH,
     FoodTable,
     FoodTableError,
-    load_food_table,
     parse_food_table,
 )
+from tests.food_support import load_food_table
 
 TABLE = load_food_table()
 LUNCH = MealItem((MealSlot.LUNCH,), 780, Macros(112, 45, 44))
@@ -234,14 +235,22 @@ def test_the_examples_of_a_main_meal_have_a_vegetable_side_and_distinct_main_foo
     assert all(mains[i].isdisjoint(mains[j]) for i in range(3) for j in range(i))
 
 
-def test_a_long_session_intake_during_is_covered_by_sugar_in_the_drink() -> None:
-    during = MealItem((MealSlot.DURING_TRAINING,), 480, Macros(225, 0, 0))
+NOT_DURING_A_SESSION = {"sugar_granulated", "bread_white", "bread_whole_wheat", "honey"}
 
-    examples = suggest_examples(during, TABLE.foods)
 
-    assert examples
-    assert all(abs(e.carbs_g - 225) <= tolerance_g(225) for e in examples)
-    assert all(abs(e.protein_g) <= tolerance_g(0) for e in examples)
+def test_the_examples_during_a_session_come_only_from_foods_marked_for_it() -> None:
+    during_foods = {f.food_id for f in TABLE.foods if MealRole.DURING in f.roles}
+    assert during_foods
+    assert during_foods.isdisjoint(NOT_DURING_A_SESSION)  # never sugar, bread or honey
+
+    for carbs in (30, 60, 100, 180):
+        item = MealItem((MealSlot.DURING_TRAINING,), 480, Macros(carbs, 0, 0))
+        examples = suggest_examples(item, TABLE.foods)
+
+        assert examples, carbs
+        assert all({p.food.food_id for p in e.portions} <= during_foods for e in examples), carbs
+        assert all(abs(e.carbs_g - carbs) <= tolerance_g(carbs) for e in examples)
+        assert all(abs(e.protein_g) <= tolerance_g(0) for e in examples)
 
 
 @pytest.mark.parametrize(
@@ -330,3 +339,30 @@ def test_foods_and_the_table_are_immutable_values() -> None:
 def test_role_of_is_total_over_the_slots() -> None:
     for slot in MealSlot:
         assert isinstance(role_of((slot,)), MealRole)
+
+
+# --- Nesting depth is limited before the JSON is decoded (D-F4B-06) -----------------------------
+
+
+def _document_nested(depth: int) -> bytes:
+    return b"[" * depth + b"]" * depth
+
+
+@pytest.mark.parametrize("depth", [9, 50, 100_000])
+def test_a_document_nested_deeper_than_the_limit_is_refused_before_decoding(depth: int) -> None:
+    with pytest.raises(FoodTableError, match="nested"):
+        parse_food_table(_document_nested(depth))
+
+
+def test_brackets_inside_strings_do_not_count_as_nesting() -> None:
+    document = raw_document()
+    document["foods"][0]["name"] = "[[[[[[[[[[[[[[[[[[[[ \\" + '"' + "]]]]]]]]]]]]]]]]]]]]"
+
+    table = parse_food_table(json.dumps(document).encode("utf-8"))
+
+    assert len(table.foods) == len(TABLE.foods)
+
+
+def test_the_shipped_table_is_well_inside_the_depth_limit() -> None:
+    assert MAX_FOOD_TABLE_DEPTH >= 4
+    assert parse_food_table(json.dumps(raw_document()).encode("utf-8")).foods == TABLE.foods

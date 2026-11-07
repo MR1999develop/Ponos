@@ -2,13 +2,18 @@
 # Copyright (C) 2026 MR
 """Verifies `nutrition/foods.json` against USDA FoodData Central (FDC).
 
-Usage: `uv run --locked python experiments/verify_foods.py [--api-key KEY] [--apply]`
+Usage: `uv run --locked python experiments/verify_foods.py [--api-key KEY] [--apply [--force]]`
 
 Prints, for each food, the difference from FDC in percent for each value; flags
 missing ids, suspicious descriptions and differences over 10%. With `--apply`
-rewrites `foods.json` with the FDC values. Without network the script exits
-with 1 and touches no file. Parsing and comparison are pure functions (no
-I/O); the HTTP response is untrusted data and is validated.
+rewrites `foods.json` with the FDC values, but only if no food has a problem
+(missing id, entry discarded, difference over 10%, suspicious description):
+otherwise it refuses and touches nothing, unless `--force` says that the
+changes were looked at. The new document is always validated with the table's
+own parser before it is written, and `source.verified_on` is set only when
+every food was verified. Without network the script exits with 1 and touches
+no file. Parsing and comparison are pure functions (no I/O); the HTTP response
+is untrusted data and is validated.
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from ponos_coach.fsio.durable import write_file_atomically
+from ponos_coach.nutrition.food_table import FoodTableError, parse_food_table
 
 FOODS_PATH = Path(__file__).resolve().parents[1] / "src/ponos_coach/nutrition/foods.json"
 API_URL = "https://api.nal.usda.gov/fdc/v1/foods"
@@ -54,6 +60,10 @@ _FOOD_FIELDS = (
 
 class FdcFormatError(ValueError):
     """The response is not a list of foods (unusable as a whole)."""
+
+
+class ApplyRefusedError(Exception):
+    """The FDC values must not be written to the table (the reason is in the message)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +95,12 @@ class Row:
         """True if any value differs by more than the threshold."""
         return any(d > DIFF_THRESHOLD_PCT for d in self.diffs_pct)
 
+    @property
+    def has_problem(self) -> bool:
+        """True if the food is not verified: no usable FDC entry, a difference over the threshold
+        or a description that does not look like the food."""
+        return self.problem is not None or self.over_threshold or self.suspicious_description
+
 
 def _number(value: object) -> float | None:
     """A finite non-negative number within bounds, else None (bool excluded)."""
@@ -102,6 +118,8 @@ def _nutrient_entry(item: object) -> tuple[str, float] | None:
         return None
     number = item.get("nutrientNumber", item.get("number"))
     unit = item.get("unitName")
+    if isinstance(number, int) and not isinstance(number, bool):  # FDC gives it as either
+        number = str(number)
     if not isinstance(number, str) or number not in _NUTRIENT_FIELDS:
         return None
     if number == "208" and (not isinstance(unit, str) or unit.upper() != "KCAL"):
@@ -229,12 +247,16 @@ def apply_fdc_values(
 ) -> dict[str, Any]:
     """New document with FDC values (kcal integer, macros 1 decimal) and dataset.
 
-    Foods without a valid FDC entry are left unchanged. Order and other
-    fields are kept; `source.verified_on` is set to `today`.
+    Foods without a valid FDC entry are left unchanged. Order and other fields are kept.
+    `source.verified_on` is `today` only if every food has a valid FDC entry whose description
+    looks like the food; otherwise it is None (the table is not verified as a whole).
     """
     result: dict[str, Any] = json.loads(json.dumps(document))
+    verified = True
     for food in result["foods"]:
         ref = fdc.get(int(food["fdc_id"]))
+        if ref is None or is_suspicious_description(food["name"], ref.description):
+            verified = False
         if ref is None:
             continue
         food["kcal_100g"] = round(ref.kcal)
@@ -242,8 +264,36 @@ def apply_fdc_values(
         food["protein_100g"] = round(ref.protein, 1)
         food["fat_100g"] = round(ref.fat, 1)
         food["fdc_dataset"] = ref.data_type
-    result["source"]["verified_on"] = today.isoformat()
+    result["source"]["verified_on"] = today.isoformat() if verified else None
     return result
+
+
+def render_applied_document(
+    document: Mapping[str, Any],
+    fdc: Mapping[int, FdcFood],
+    rows: Sequence[Row],
+    today: date,
+    *,
+    force: bool = False,
+) -> str:
+    """Text of the table to write with the FDC values applied.
+
+    Raises:
+        ApplyRefusedError: some food has a problem and `force` is false, or the new document does
+            not pass the parser of the table (nothing is to be written).
+    """
+    problems = [row.food_id for row in rows if row.has_problem]
+    if problems and not force:
+        raise ApplyRefusedError(
+            f"{len(problems)} foods have problems ({', '.join(problems[:5])}...): "
+            "look at the report, then use --force or fix the table"
+        )
+    text = json.dumps(apply_fdc_values(document, fdc, today), indent=1, ensure_ascii=False) + "\n"
+    try:
+        parse_food_table(text.encode("utf-8"))
+    except FoodTableError as error:
+        raise ApplyRefusedError("the updated table is not valid for the app") from error
+    return text
 
 
 def batches(ids: Sequence[int], size: int = BATCH_SIZE) -> list[list[int]]:
@@ -281,6 +331,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Verify foods.json against USDA FDC.")
     parser.add_argument("--api-key", default="DEMO_KEY")
     parser.add_argument("--apply", action="store_true", help="rewrite foods.json with FDC values")
+    parser.add_argument(
+        "--force", action="store_true", help="with --apply: write even if some food has problems"
+    )
     args = parser.parse_args(argv)
     document = json.loads(FOODS_PATH.read_text(encoding="utf-8"))
     try:
@@ -291,10 +344,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     except FdcFormatError as error:
         print(f"verify_foods: response: {error}", file=sys.stderr)
         return 1
-    print(format_report(compare_foods(document["foods"], fdc, rejected)))
+    rows = compare_foods(document["foods"], fdc, rejected)
+    print(format_report(rows))
     if args.apply:
-        updated = apply_fdc_values(document, fdc, datetime.now(UTC).date())
-        text = json.dumps(updated, indent=1, ensure_ascii=False) + "\n"
+        today = datetime.now(UTC).date()
+        try:
+            text = render_applied_document(document, fdc, rows, today, force=args.force)
+        except ApplyRefusedError as error:
+            print(f"verify_foods: not applied: {error}", file=sys.stderr)
+            return 1
         write_file_atomically(FOODS_PATH, text.encode("utf-8"))
         print(f"foods.json updated ({len(fdc)} foods)")
     return 0

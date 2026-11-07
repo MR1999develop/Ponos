@@ -289,7 +289,7 @@ def test_t_nut_03_the_day_total_counts_each_activity_net_energy_once() -> None:
     report = lab.report()
 
     net = (600.0 - 1780.0 / 24.0) + (900.0 - 1780.0 * 1.5 / 24.0)
-    assert report.nutrition.expenditure_kcal == round(1780 * 1.55 + net)
+    assert report.nutrition.expenditure_kcal == round(1780 * 1.4 + net)
 
 
 # --- T-NUT-03/04: time zone and daylight saving time ---------------------------------------
@@ -349,11 +349,6 @@ def test_t_nut_04_spring_forward_and_fall_back_keep_the_local_minutes_and_the_da
     check_report(fall_report)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F4B-07: the end of a session is start + duration in wall-clock minutes, an hour "
-    "early across the spring change",
-)
 def test_d_f4b_07_a_session_across_the_spring_change_has_its_recovery_after_it_ends() -> None:
     lab = Lab()
     lab.add_fit(datetime(2026, 3, 29, 0, 10, tzinfo=UTC), 120.0)  # 01:10 CET to 04:10 CEST
@@ -378,15 +373,16 @@ def test_t_nut_05_weight_level_and_goal_changing_on_the_same_day_apply_from_that
     on_day = lab.report(change).nutrition
     day_after = lab.report(change + timedelta(days=1)).nutrition
 
-    # before: 80 kg, active: basal 1780, 1780 x 1.55 = 2759, no goal -> maintenance
-    assert (day_before.basal_kcal, day_before.expenditure_kcal) == (1780, 2759)
-    assert (day_before.deficit_kcal, day_before.target_kcal) == (0, 2759)
-    # that day: 75 kg, very active: basal 1730, x 1.725 = 2984.25, loss 500 g -> 550 kcal
-    assert (on_day.basal_kcal, on_day.expenditure_kcal) == (1730, 2984)
-    assert (on_day.deficit_kcal, on_day.target_kcal) == (550, 2434)
+    # before: 80 kg, active: basal 1780, 1780 x 1.4 = 2492, no goal -> maintenance
+    assert (day_before.basal_kcal, day_before.expenditure_kcal) == (1780, 2492)
+    assert (day_before.deficit_kcal, day_before.target_kcal) == (0, 2492)
+    # that day: 75 kg, very active: basal 1730, x 1.5 = 2595, loss 500 g -> 550 kcal asked, 20%
+    # of 2595 = 519 allowed
+    assert (on_day.basal_kcal, on_day.expenditure_kcal) == (1730, 2595)
+    assert (on_day.deficit_kcal, on_day.target_kcal) == (519, 2076)
     # next day: the goal period is over, weight and level stay
-    assert (day_after.basal_kcal, day_after.expenditure_kcal) == (1730, 2984)
-    assert (day_after.deficit_kcal, day_after.target_kcal) == (0, 2984)
+    assert (day_after.basal_kcal, day_after.expenditure_kcal) == (1730, 2595)
+    assert (day_after.deficit_kcal, day_after.target_kcal) == (0, 2595)
 
 
 def test_t_nut_05_the_goal_changing_on_a_day_with_a_session_changes_the_whole_day() -> None:
@@ -429,10 +425,6 @@ def test_t_nut_05_a_day_planned_twice_is_identical() -> None:
 # --- Defects found -------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F4B-02: calories of any size are accepted: 50,000 kcal for a 20 minute activity",
-)
 def test_d_f4b_02_an_energy_the_duration_cannot_explain_is_not_taken_at_face_value() -> None:
     lab = Lab()
     lab.add_fit(local(18, 0), 20.0, calories=50_000)  # 150,000 kcal an hour
@@ -445,10 +437,6 @@ def test_d_f4b_02_an_energy_the_duration_cannot_explain_is_not_taken_at_face_val
     assert report.nutrition.target_kcal < 6000
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F4B-09: the calories of an activity indexed before v4 are never read from its FIT",
-)
 def test_d_f4b_09_a_migrated_activity_takes_its_declared_calories_from_the_original_file() -> None:
     lab = Lab()
     lab.add_fit(local(18, 0), 60.0, bpm=150, calories=700, indexed_before_v4=True)
@@ -460,10 +448,6 @@ def test_d_f4b_09_a_migrated_activity_takes_its_declared_calories_from_the_origi
     assert activity.energy.total_kcal == 700.0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F4B-04: the recovery is placed from the moving time, not from the elapsed time",
-)
 def test_d_f4b_04_the_recovery_comes_after_the_end_of_a_session_with_long_stops() -> None:
     lab = Lab()
     # 06:00 to 11:00 on the clock, of which 3 hours moving (long stops at the refuges)
@@ -475,10 +459,6 @@ def test_d_f4b_04_the_recovery_comes_after_the_end_of_a_session_with_long_stops(
     assert post.minute >= 11 * 60  # eaten at 09:30 today, while the person is still out
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F4B-05: a person over 130 years old makes the day raise instead of being unavailable",
-)
 def test_d_f4b_05_a_very_old_date_of_birth_does_not_crash_a_far_future_day() -> None:
     lab = Lab(born=date(1900, 1, 1))  # a valid date of birth for the profile
 

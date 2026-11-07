@@ -381,7 +381,7 @@
     </message>
     <message>
         <source>Meals and training intakes</source>
-        <translation>Pasti e assunzioni per l'allenamento</translation>
+        <translation>Pasti e assunzioni per l&apos;allenamento</translation>
     </message>
     <message>
         <source>Things to know</source>
@@ -485,13 +485,13 @@
     </message>
     <message>
         <source>Moved from its usual time because of training.</source>
-        <translation>Spostato dal suo orario abituale a causa dell'allenamento.</translation>
+        <translation>Spostato dal suo orario abituale a causa dell&apos;allenamento.</translation>
     </message>
     <message numerus="yes">
         <source>Activity files that could not be read: %n. The guidance may be less exact.</source>
         <translation>
-            <numerusform>File di attività non leggibili: %n. L'indicazione potrebbe essere meno precisa.</numerusform>
-            <numerusform>File di attività non leggibili: %n. L'indicazione potrebbe essere meno precisa.</numerusform>
+            <numerusform>File di attività non leggibili: %n. L&apos;indicazione potrebbe essere meno precisa.</numerusform>
+            <numerusform>File di attività non leggibili: %n. L&apos;indicazione potrebbe essere meno precisa.</numerusform>
         </translation>
     </message>
 </context>
@@ -818,7 +818,7 @@
     <name>Foods</name>
     <message>
         <source>Rolled oats, dry</source>
-        <translation>Fiocchi d'avena, secchi</translation>
+        <translation>Fiocchi d&apos;avena, secchi</translation>
     </message>
     <message>
         <source>Whole-wheat bread</source>
@@ -882,11 +882,7 @@
     </message>
     <message>
         <source>Orange juice</source>
-        <translation>Succo d'arancia</translation>
-    </message>
-    <message>
-        <source>Sugar, granulated (in the drink)</source>
-        <translation>Zucchero semolato (nella bevanda)</translation>
+        <translation>Succo d&apos;arancia</translation>
     </message>
     <message>
         <source>Egg, hard-boiled</source>
@@ -902,7 +898,7 @@
     </message>
     <message>
         <source>Salmon, farmed, cooked</source>
-        <translation>Salmone d'allevamento, cotto</translation>
+        <translation>Salmone d&apos;allevamento, cotto</translation>
     </message>
     <message>
         <source>Greek yogurt, plain, nonfat</source>
@@ -938,7 +934,7 @@
     </message>
     <message>
         <source>Olive oil</source>
-        <translation>Olio d'oliva</translation>
+        <translation>Olio d&apos;oliva</translation>
     </message>
     <message>
         <source>Almonds</source>
@@ -1155,7 +1151,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>The last day cannot be before the first day.</source>
-        <translation>L'ultimo giorno non può precedere il primo.</translation>
+        <translation>L&apos;ultimo giorno non può precedere il primo.</translation>
     </message>
     <message>
         <source>These days overlap the period that starts on {first} and has no end date.</source>
@@ -1884,7 +1880,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>Nutrition guidance needs your height and date of birth.</source>
-        <translation>L'indicazione alimentare richiede altezza e data di nascita.</translation>
+        <translation>L&apos;indicazione alimentare richiede altezza e data di nascita.</translation>
     </message>
     <message>
         <source>No weight is saved</source>
@@ -1892,7 +1888,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>Nutrition guidance needs your weight.</source>
-        <translation>L'indicazione alimentare richiede il peso.</translation>
+        <translation>L&apos;indicazione alimentare richiede il peso.</translation>
     </message>
     <message>
         <source>Heart-rate settings are missing</source>
@@ -1900,7 +1896,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>Nutrition guidance needs your heart-rate settings (they include sex).</source>
-        <translation>L'indicazione alimentare richiede le impostazioni della frequenza cardiaca (comprendono il sesso).</translation>
+        <translation>L&apos;indicazione alimentare richiede le impostazioni della frequenza cardiaca (comprendono il sesso).</translation>
     </message>
     <message>
         <source>This day is before the date of birth</source>
@@ -1909,6 +1905,22 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>The date of birth in the profile is after this day.</source>
         <translation>La data di nascita nel profilo è successiva a questo giorno.</translation>
+    </message>
+    <message>
+        <source>This day is too far from the date of birth</source>
+        <translation>Questo giorno è troppo lontano dalla data di nascita</translation>
+    </message>
+    <message>
+        <source>Nutrition guidance covers ages up to 130 years.</source>
+        <translation>L&apos;indicazione alimentare copre età fino a 130 anni.</translation>
+    </message>
+    <message>
+        <source>No guidance under 18</source>
+        <translation>Nessuna indicazione sotto i 18 anni</translation>
+    </message>
+    <message>
+        <source>Calories, macronutrients and portions are not given under 18. Please talk to a doctor or a dietitian.</source>
+        <translation>Sotto i 18 anni non si indicano calorie, macronutrienti né porzioni. Rivolgiti a un medico o a un dietista.</translation>
     </message>
     <message>
         <source>You are under 18: this is general guidance only. Ask a doctor or a dietitian before changing how you eat.</source>
@@ -1924,7 +1936,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>You asked to lose weight, but no calorie deficit is safe for this day: the target equals what you burn.</source>
-        <translation>Hai chiesto di dimagrire, ma per questo giorno nessun deficit calorico è sicuro: l'obiettivo coincide con ciò che consumi.</translation>
+        <translation>Hai chiesto di dimagrire, ma per questo giorno nessun deficit calorico è sicuro: l&apos;obiettivo coincide con ciò che consumi.</translation>
     </message>
     <message>
         <source>A safety limit made the calorie deficit smaller than you asked.</source>
@@ -1932,15 +1944,15 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>The calorie deficit is smaller because today&apos;s training is heavy.</source>
-        <translation>Il deficit calorico è più piccolo perché l'allenamento di oggi è impegnativo.</translation>
+        <translation>Il deficit calorico è più piccolo perché l&apos;allenamento di oggi è impegnativo.</translation>
     </message>
     <message>
         <source>The energy target is too low for the usual amount of carbohydrates, so carbohydrates are lower than today&apos;s training would suggest.</source>
-        <translation>L'obiettivo di energia è troppo basso per la quantità abituale di carboidrati: i carboidrati sono meno di quelli che l'allenamento di oggi suggerirebbe.</translation>
+        <translation>L&apos;obiettivo di energia è troppo basso per la quantità abituale di carboidrati: i carboidrati sono meno di quelli che l&apos;allenamento di oggi suggerirebbe.</translation>
     </message>
     <message>
         <source>The amounts around training were reduced to fit the day&apos;s totals.</source>
-        <translation>Le quantità attorno all'allenamento sono state ridotte per rientrare nei totali della giornata.</translation>
+        <translation>Le quantità attorno all&apos;allenamento sono state ridotte per rientrare nei totali della giornata.</translation>
     </message>
     <message>
         <source>General guidance, not medical or personalised nutrition advice. If you have a medical condition, are pregnant, have an eating disorder or take medication, please consult a professional.</source>
@@ -1972,15 +1984,15 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>Before training</source>
-        <translation>Prima dell'allenamento</translation>
+        <translation>Prima dell&apos;allenamento</translation>
     </message>
     <message>
         <source>During training</source>
-        <translation>Durante l'allenamento</translation>
+        <translation>Durante l&apos;allenamento</translation>
     </message>
     <message>
         <source>After training</source>
-        <translation>Dopo l'allenamento</translation>
+        <translation>Dopo l&apos;allenamento</translation>
     </message>
     <message>
         <source>Rest day</source>
@@ -2110,7 +2122,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>Problem with {meal} time</source>
-        <translation>Problema con l'orario di {meal}</translation>
+        <translation>Problema con l&apos;orario di {meal}</translation>
     </message>
     <message>
         <source>Save meal times</source>

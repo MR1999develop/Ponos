@@ -33,7 +33,6 @@ from ponos_coach.nutrition.domain import (
     plan_day,
     suggest_examples,
 )
-from ponos_coach.nutrition.food_table import load_food_table
 from ponos_coach.profiles.day_nutrition import (
     DayActivity,
     DayNutritionReport,
@@ -54,6 +53,7 @@ from ponos_coach.ui.nutrition_texts import (
     unavailable_text,
 )
 from ponos_coach.ui.translations import APP_CATALOG
+from tests.food_support import load_food_table
 from tests.ui.nutrition_support import plain
 from tests.ui.test_translations import build_real_catalog
 

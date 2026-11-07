@@ -87,6 +87,12 @@ def floor_ms(moment: datetime) -> int:
     return (moment - _EPOCH) // _MILLISECOND
 
 
+def _ceil_ms(moment: datetime) -> int:
+    """Whole UTC milliseconds since the epoch, rounded up."""
+    whole, rest = divmod(moment - _EPOCH, _MILLISECOND)
+    return whole + (1 if rest else 0)
+
+
 def from_ms(milliseconds: int) -> datetime:
     """UTC instant from whole milliseconds."""
     return _EPOCH + timedelta(milliseconds=milliseconds)
@@ -217,6 +223,28 @@ class SqliteActivityIndex:
                 _SELECT_ACTIVITIES + "ORDER BY start_ms, identity_key"
             ).fetchall()
         return _records(rows)
+
+    def list_started_between(self, first: datetime, last: datetime) -> Sequence[ActivityRecord]:
+        """Records with `first <= start < last` by ascending start (uses the start index).
+
+        The stored starts are whole milliseconds, so the bounds are rounded up to the next
+        millisecond for the comparison to be exact.
+        """
+        with _translating(ActivityIndexError):
+            rows = self._db.connection.execute(
+                _SELECT_ACTIVITIES
+                + "WHERE start_ms >= ? AND start_ms < ? ORDER BY start_ms, identity_key",
+                (_ceil_ms(first), _ceil_ms(last)),
+            ).fetchall()
+        return _records(rows)
+
+    def first_start_at_or_after(self, instant: datetime) -> datetime | None:
+        """The earliest start not before `instant`, or None."""
+        with _translating(ActivityIndexError):
+            row = self._db.connection.execute(
+                "SELECT MIN(start_ms) FROM activities WHERE start_ms >= ?", (_ceil_ms(instant),)
+            ).fetchone()
+        return None if row is None or row[0] is None else from_ms(row[0])
 
     def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
         """The record with this Garmin id, or None."""
