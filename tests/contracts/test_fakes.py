@@ -54,6 +54,7 @@ from tests.contracts.contract_storage import (
 )
 from tests.contracts.contract_sync import ActivityIndexGarminIdContract, SyncJournalContract
 from tests.contracts.contract_tokens import TokenStoreContract
+from tests.contracts.contract_track_boxes import TrackBoxIndexContract
 from tests.contracts.harness import (
     ArchiveHarness,
     FoldersHarness,
@@ -173,6 +174,10 @@ class TestFakeActivityIndex(_FakeStorageFixture, ActivityIndexContract):
 
 
 class TestFakeActivityIndexGarminIds(_FakeStorageFixture, ActivityIndexGarminIdContract):
+    pass
+
+
+class TestFakeTrackBoxIndex(_FakeStorageFixture, TrackBoxIndexContract):
     pass
 
 

@@ -8,6 +8,7 @@ from ponos_coach.activities.domain.area_query import (
     AreaTotals,
     StartIndex,
     activities_in_area,
+    track_box_of,
     track_touches_area,
 )
 from ponos_coach.activities.domain.distance_series import DistanceSeries
@@ -208,6 +209,7 @@ __all__ = [
     "simplify_indices",
     "simplify_track",
     "sport_from_garmin_key",
+    "track_box_of",
     "track_touches_area",
     "truncate_to_millisecond",
     "zoom_tolerance_m",

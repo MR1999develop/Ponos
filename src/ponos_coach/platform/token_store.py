@@ -51,6 +51,24 @@ _SECRET_SERVICE_MODULE: Final = "keyring.backends.SecretService"  # noqa: S105
 _IS_WINDOWS: bool = sys.platform == "win32"  # bool, not Literal: mypy does not drop a branch
 
 
+def ensure_secrets_dir(base_dir: Path) -> Path:
+    """The private `secrets` folder under `base_dir`, created if missing.
+
+    Raises:
+        FileExistsError: `secrets` exists and is not a folder.
+        FolderUnavailableError: private permissions not applicable.
+        OSError: creation failed.
+    """
+    secrets_dir = base_dir / SECRETS_FOLDER_NAME
+    base_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        make_private_directory(secrets_dir)
+    except FileExistsError:
+        if not secrets_dir.is_dir():
+            raise
+    return secrets_dir
+
+
 class DpapiTokenStore:
     """`TokenStore` for Windows: per-profile files encrypted with DPAPI.
 
@@ -73,12 +91,7 @@ class DpapiTokenStore:
         return _ENTROPY_PREFIX + str(profile_id).encode("ascii")
 
     def _ensure_secrets_dir(self) -> None:
-        self._base_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            make_private_directory(self._secrets_dir)
-        except FileExistsError:
-            if not self._secrets_dir.is_dir():
-                raise
+        ensure_secrets_dir(self._base_dir)
 
     def save(self, profile_id: ProfileId, tokens: SessionTokens) -> None:
         """See `TokenStore.save`."""
@@ -164,7 +177,7 @@ def _is_secret_service(backend: KeyringBackend) -> bool:
     return type(backend).__module__ == _SECRET_SERVICE_MODULE and backend.priority > 0
 
 
-def _secret_service_backend() -> KeyringBackend:
+def secret_service_backend() -> KeyringBackend:
     """The active `keyring` backend, if it is the Secret Service and works.
 
     If `keyring` chose the `ChainerBackend` (several backends usable together), the Secret
@@ -196,4 +209,4 @@ def create_token_store(base_dir: Path) -> TokenStore:
     """
     if _IS_WINDOWS:
         return DpapiTokenStore(base_dir)
-    return KeyringTokenStore(_secret_service_backend())
+    return KeyringTokenStore(secret_service_backend())

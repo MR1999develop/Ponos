@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Protocol
 
 from ponos_coach.activities.domain import SessionTokens
-from ponos_coach.activities.ports import ActivityIndex, SyncJournal
+from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxIndex
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
@@ -322,10 +322,10 @@ class WeightStore(Protocol):
 class OpenProfile(Protocol):
     """An open profile: its information and the stores that share a connection.
 
-    The transactions of `activities.transaction()` also cover `sync_journal`, `physiology`,
-    `weights`, `fixed_data`, `sport_weights`, `load_cache`, `activity_levels`, `lean_masses`,
-    `meal_times`, `goal_periods`, `threshold_tests`, `goals`, `availability`, `session_choices`
-    and `plans`.
+    The transactions of `activities.transaction()` also cover `track_boxes`, `sync_journal`,
+    `physiology`, `weights`, `fixed_data`, `sport_weights`, `load_cache`, `activity_levels`,
+    `lean_masses`, `meal_times`, `goal_periods`, `threshold_tests`, `goals`, `availability`,
+    `session_choices` and `plans`.
     It must be closed with `close()`; after closing the stores are no longer used.
     """
 
@@ -337,6 +337,11 @@ class OpenProfile(Protocol):
     @property
     def activities(self) -> ActivityIndex:
         """Activity index."""
+        ...
+
+    @property
+    def track_boxes(self) -> TrackBoxIndex:
+        """Track boxes of the indexed activities (same connection and transaction)."""
         ...
 
     @property

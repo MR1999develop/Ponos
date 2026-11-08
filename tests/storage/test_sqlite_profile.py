@@ -79,6 +79,7 @@ from tests.contracts.contract_storage import (
     WeightStoreContract,
 )
 from tests.contracts.contract_sync import ActivityIndexGarminIdContract, SyncJournalContract
+from tests.contracts.contract_track_boxes import TrackBoxIndexContract
 from tests.contracts.harness import StorageHarness
 
 
@@ -113,6 +114,10 @@ class TestSqliteActivityIndex(_DiskStorageFixture, ActivityIndexContract):
 
 
 class TestSqliteActivityIndexGarminIds(_DiskStorageFixture, ActivityIndexGarminIdContract):
+    pass
+
+
+class TestSqliteTrackBoxIndex(_DiskStorageFixture, TrackBoxIndexContract):
     pass
 
 

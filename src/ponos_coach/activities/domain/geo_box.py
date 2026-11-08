@@ -121,6 +121,42 @@ class GeoBox:
             return (lon_deg >= self.west) & (lon_deg <= self.east)
         return (lon_deg >= self.west) | (lon_deg <= self.east)
 
+    def intersects_many(
+        self,
+        south: NDArray[np.float64],
+        west: NDArray[np.float64],
+        north: NDArray[np.float64],
+        east: NDArray[np.float64],
+    ) -> NDArray[np.bool_]:
+        """Mask of the boxes (columns of equal length, antimeridian aware) that touch this one.
+
+        Edges count as touching. Each longitude interval is split into pieces that do not cross
+        the antimeridian and the pieces are compared two by two. A contact exactly on the
+        antimeridian line (180 on one side, -180 on the other) is not seen: a box that really
+        crosses it has pieces on both sides.
+        """
+        in_lat = (south <= self.north) & (north >= self.south)
+        crossing = west > east
+        mine = [(self.west, 180.0 if self.crosses_antimeridian else self.east)]
+        if self.crosses_antimeridian:
+            mine.append((-180.0, self.east))
+        first_end = np.where(crossing, 180.0, east)
+        touches = np.zeros(south.shape, dtype=bool)
+        for low, high in mine:
+            touches |= (west <= high) & (first_end >= low)
+            touches |= crossing & (east >= low)  # second piece starts at -180: below any `high`
+        return in_lat & touches
+
+    def intersects(self, other: GeoBox) -> bool:
+        """Whether the two boxes share at least one point (see `intersects_many`)."""
+        mask = self.intersects_many(
+            np.array([other.south]),
+            np.array([other.west]),
+            np.array([other.north]),
+            np.array([other.east]),
+        )
+        return bool(mask[0])
+
     def center(self) -> tuple[float, float]:
         """Centre (latitude, longitude), also across the antimeridian."""
         width = self.east - self.west + (_FULL_TURN if self.crosses_antimeridian else 0.0)

@@ -198,6 +198,34 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   - `OpenProfile` espone anche `lean_masses` (porta `LeanMassStore` in `nutrition/ports.py`),
     sulla stessa connessione e transazione; fake e contract test accanto ai
     livelli di attività.
+- **Schema v8** (riquadro della traccia per la mappa; ADR 010):
+  - `activities.track_south`, `track_west`, `track_north`, `track_east`: quattro colonne `REAL`
+    aggiunte in fondo (`ALTER TABLE ... ADD COLUMN`), tutte NULL o tutte presenti (CHECK
+    sull'ultima colonna: intervalli, `south <= north`, tutto o niente). `west > east` = il
+    riquadro attraversa l'antimeridiano. NULL = attività senza posizione, oppure riga non ancora
+    riempita. Derivato e rigenerabile.
+  - Il riquadro è quello di **partenza + polyline semplificata** della stessa riga
+    (`track_box_of`, dominio): non rilegge mai il file archiviato. Può essere più piccolo di quello
+    della traccia piena al massimo della tolleranza dell'indice (`TRACK_TOLERANCE_M`, 10 m). Lo
+    scrive `SqliteActivityIndex.add` (quindi import e sincronizzazione senza altre modifiche); una
+    polyline illeggibile dà "nessun riquadro" e la riga resta da riempire.
+  - Le attività indicizzate prima della v8 restano senza riquadro finché non gira
+    `backfill_track_boxes(index, batch_size, report, is_cancelled)` (`activities/map_queries.py`):
+    lotti da 500 righe, ciascuno una transazione propria (riprendibile: ciò che è fatto resta),
+    `is_cancelled()` prima di ogni lotto, `report(fatte, totale)`; usa solo l'indice. Una polyline
+    rovinata ripiega sul solo punto di partenza; senza nemmeno quello la riga conta come
+    `unresolved` e la passata successiva la ritrova. Sul thread dei dati come l'import
+    (`DataThread`, un job annullabile).
+  - Porta `TrackBoxIndex` (`activities/ports.py`; `OpenProfile.track_boxes`, stessa connessione
+    e transazione): `revision()`, `list_by_start()` (record + riquadro), `count_without_box()`,
+    `candidates_without_box(after_row_id, limit)`, `store_boxes({row_id: GeoBox})` (non
+    sovrascrive un riquadro già presente). Fake e contract test in
+    `tests/contracts/contract_track_boxes.py`.
+  - Migrazione v7 → v8 con copia in `backup/ponos-v7-v8.sqlite3`. T-DATI-01:
+    `tests/collaudo/test_fase5b_migrazione_v8.py` (v7 congelata scritta a mano, v8 invariata dopo
+    il rilascio, uccisione a ogni istruzione, limiti dei CHECK, riempimento riprendibile). Gli
+    altri test congelati leggono `activities` con l'helper `rows()` che nasconde le colonne
+    aggiunte dopo (`LATER_COLUMNS`).
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.
@@ -323,7 +351,82 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   dà `AreaResult` (attività nell'area in ordine d'ingresso, `AreaTotals`
   con numero, km, dislivello, ore, e le attività senza posizione contate a
   parte, indipendenti dall'area). `track_touches_area` decide su una
-  polyline per le attività vicine al bordo.
+  polyline per le attività vicine al bordo. `StartIndex` espone anche `located`,
+  `lat_deg`, `lon_deg` (colonne delle sole attività con partenza).
+- `GeoBox.intersects(altro)` e `intersects_many(south, west, north, east)` (vettoriale,
+  antimeridiano compreso; il contatto esatto sulla linea ±180 non si vede).
+
+### Casi d'uso della mappa (`activities/map_queries.py`, `load/activity_profile.py`)
+
+Tutti sul thread dei dati (la connessione è di un solo thread), nessun log (posizioni).
+
+- `ActivitySnapshots(track_boxes, fuso)` legge l'indice **una volta per revisione**
+  (`TrackBoxIndex.revision()`: conteggio, ultimo id, riquadri riempiti: una query leggera) e
+  tiene l'ultima selezione per filtro; nuove attività o riquadri riempiti si notano da soli.
+- `SearchActivities(snapshots)(filtro) -> SearchResult`: `activities` (per partenza crescente),
+  `totals` (`AreaTotals`), `without_position`, e le colonne `start_indices`, `start_lat_deg`,
+  `start_lon_deg` (sola lettura) per i cerchi numerati: nessun oggetto per partenza.
+- `ActivitiesInArea(snapshots, archivio, decode_track)(filtro, GeoBox, zoom) -> AreaView`:
+  `in_area` (`AreaResult`: attività filtrate con partenza nell'area, totali, senza posizione),
+  `tracks` e `tracks_omitted`. Lo zoom si limita a 0-22. Sotto lo zoom 11
+  (`TRACK_MIN_ZOOM`) nessuna traccia. Da 11: le attività filtrate la cui partenza **o** il cui
+  riquadro tocca l'area, le più recenti, **al massimo 300** (`MAX_MAP_TRACKS`), ciascuna di al
+  massimo 2000 punti. Sorgente della traccia: se la tolleranza di un pixel a quello zoom e
+  latitudine è almeno quella dell'indice (10 m) si usa la polyline dell'indice (un solo tratto);
+  se è più fine si rilegge il file (`archive.read` con hash e tetto di byte,
+  `decode_stored_track`, `simplify_for_zoom`: i buchi del GPS spezzano la linea) con una cache
+  LRU di 600 tracce per (identità, zoom); un file inutilizzabile ripiega sulla polyline. In
+  ogni caso una linea si taglia dove salta l'antimeridiano.
+- `GetActivityProfile(index, archivio, physiology, decode, decode_track, timezone)(identità)`:
+  `ActivityProfileData` | `NoTrack` | `ExcludedActivity`. Colonne (al massimo 2000 punti, primo
+  e ultimo inclusi): `segment` (cambia dove c'è un buco), `distance_m` (serie del dispositivo
+  interpolata, altrimenti lungo la traccia), `lat_deg`, `lon_deg`, `altitude_m` (`None` se il
+  file non ha quota: profilo assente), `zone` (0-4 o `NO_ZONE` = -1; il tratto che parte dal punto
+  i prende `zone[i]`) e `zone_absence` (`NO_HEART_RATE`, `NO_PARAMETERS`) quando `zone` è `None`,
+  `threshold_bpm` e `zone_starts_bpm` del giorno locale dell'attività. La zona di un istante è
+  quella del campione di FC in vigore (fino al successivo) **se il carico lo conta** (dentro i
+  limiti di FC, intervallo al massimo `MAX_GAP_S`): `zones_at`; i test confrontano i secondi per
+  zona con `compute_activity_load`.
+
+### Sfondo della mappa (`maps/`, `platform/tile_*.py`)
+
+- `maps/domain.py`: `TileAddress(z, x, y)` (z 0-19, x e y in `[0, 2^z)`), `parse_tile_path`
+  (`/z/x/y` o `z/x/y.png`, lunghezza prima, solo cifre), `tile_style(lingua)` (`it`, `en`, altrimenti
+  `__`), `TileKey` (segreto: `repr` nascosto, non hashable né serializzabile, 8-128 caratteri
+  `A-Za-z0-9_-`), `CacheLimit` (64 MiB - 64 GiB, default 4 GiB), `parse_cache_limit_gib`
+  ("4", "0,5"), `MapSettings(has_key, cache_limit)`.
+- `maps/ports.py`: `TileSource.fetch(z, x, y, language) -> TileImage | TileUnavailable` (un solo
+  tentativo, mai eccezioni per rete o fornitore; `TileAddressError` per coordinate non valide),
+  `TileProblem` (`NO_KEY`, `KEY_REJECTED`, `NETWORK_UNAVAILABLE`, `CREDIT_EXHAUSTED`,
+  `INVALID_RESPONSE`), `TileKeyStore`, `TileCache`.
+- `maps/use_cases.py`: `TileProxy(source, cache, now_utc, monotonic)`: `serve(percorso, lingua)`
+  / `tile(indirizzo, lingua) -> TileAnswer(png, problem)`; prima la cache (fresca), poi il
+  fornitore; dopo un problema non richiede per un po' (`COOLDOWN_S`: chiave rifiutata e credito
+  300 s, rete e risposta non valida 15 s) finché non cambia la chiave (`key_changed()`); una
+  tile scaduta si serve comunque con il problema se il fornitore non risponde. Mai prefetch.
+  `TileKeySettings`: `set_key(testo) -> KeyCheck` (verifica con la tile 0/0/0; chiave rifiutata
+  non si tiene e torna la precedente), `remove_key()`, `settings(cache_limit) -> MapSettings`.
+- `platform/tile_http.py`: `HttpTileSource` su `http.client` (nessun reindirizzamento seguito,
+  nessun proxy di sistema, nessun ritentativo). Solo `TRACESTRACK` (`https://tile.tracestrack.com`)
+  nell'app (`create_tracestrack_source`); un endpoint `http` solo su loopback. Timeout per
+  operazione (8 s) e scadenza totale (20 s); risposta: stato, `Content-Length` ed
+  `image/png`, al massimo 1 MiB, PNG completo con IHDR di lato 1-1024. Scadenza da
+  `Cache-Control` (`max-age`; `no-store`/`no-cache` = non tenere), poi `Expires`, altrimenti
+  24 h, mai oltre 30 giorni. La chiave sta solo nella query della richiesta: mai in log,
+  eccezioni, risultati; nemmeno l'indirizzo della tile nei log.
+- `platform/tile_cache.py`: `DiskTileCache(cartella, limite)` su un file SQLite
+  (`tiles.sqlite3`, WAL) nella cartella cache dell'app (non nel profilo; cartella privata).
+  Tetto sul **conteggio per pagine** (`accounted_bytes`: byte + 160 di riga, arrotondati a 4096):
+  il file non supera il tetto più poche decine di KiB; rimozione LRU per contatore d'uso (non
+  per orologio); `clear()` cancella e ricrea il file; un file illeggibile o di altra versione si
+  ricostruisce vuoto. Thread-safe (un lock).
+- `platform/tile_key_store.py`: `DpapiTileKeyStore` (file `secrets/tracestrack-key.bin`, entropia
+  propria) / `KeyringTileKeyStore` (servizio "PonosCoach", utente "tracestrack-key");
+  `create_tile_key_store(base_dir)`. Stessa cartella `secrets` dei token, voce separata, fuori da
+  profilo e backup.
+- Pagina della mappa: chiede `ponos://tiles/{z}/{x}/{y}`; il gestore dello schema chiama
+  `TileProxy.serve(percorso, lingua)` (fuori dal thread GUI), risponde 200 con il PNG, 400 per
+  `TileAddressError`, 204/404 senza PNG; `problem` va all'avviso della vista (non nell'URL).
 
 ## 4. Identità dell'attività
 

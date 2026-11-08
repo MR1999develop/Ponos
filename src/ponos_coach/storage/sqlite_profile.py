@@ -8,7 +8,7 @@ import sqlite3
 from collections.abc import Mapping
 from pathlib import Path
 
-from ponos_coach.activities.ports import ActivityIndex, SyncJournal
+from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxIndex
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
@@ -66,6 +66,7 @@ from ponos_coach.storage.sqlite_stores import (
     SqlitePhysiologyStore,
 )
 from ponos_coach.storage.sqlite_sync import SqliteSyncJournal
+from ponos_coach.storage.sqlite_track_boxes import SqliteTrackBoxIndex
 
 _META_ID = "profile_id"
 _META_NAME = "name"
@@ -104,6 +105,7 @@ class SqliteOpenProfile:
         self._db = database
         self._info = info
         self._activities = SqliteActivityIndex(database)
+        self._track_boxes = SqliteTrackBoxIndex(database)
         self._sync_journal = SqliteSyncJournal(database)
         self._physiology = SqlitePhysiologyStore(database)
         self._weights = SqliteWeightStore(database)
@@ -130,6 +132,11 @@ class SqliteOpenProfile:
     def activities(self) -> ActivityIndex:
         """Activity index."""
         return self._activities
+
+    @property
+    def track_boxes(self) -> TrackBoxIndex:
+        """Track boxes of the indexed activities (for the map)."""
+        return self._track_boxes
 
     @property
     def sync_journal(self) -> SyncJournal:

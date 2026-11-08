@@ -24,6 +24,8 @@ from ponos_coach.activities.domain import (
     ArchivedFile,
     FileFormat,
     GarminActivityId,
+    GeoBox,
+    GeoPoint,
     JournalEntry,
     ListingCursor,
     ListingKind,
@@ -209,6 +211,73 @@ class ActivityIndex(Protocol):
             already has
                 a different Garmin id; nothing changes.
         """
+        ...
+
+
+# --- Track boxes for the map (schema v8) ------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class BoxCandidate:
+    """An indexed activity with a position but no stored track box yet.
+
+    `row_id` is the position of the row in the index (opaque to the caller, increasing). Start
+    point and polyline are position data: never in logs.
+    """
+
+    row_id: int
+    start_point: GeoPoint | None
+    track_polyline: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class IndexedActivity:
+    """An index record with the box of its track (`None` without positions or not yet filled)."""
+
+    record: ActivityRecord
+    track_box: GeoBox | None
+
+
+@dataclass(frozen=True, slots=True)
+class IndexRevision:
+    """Cheap fingerprint of the index: changes when an activity or a box is added or removed."""
+
+    activities: int
+    last_row_id: int
+    boxes: int
+
+
+class TrackBoxIndex(Protocol):
+    """Track boxes of the indexed activities: reading for the map and the resumable fill.
+
+    Shares the profile's connection and transaction with `ActivityIndex`. The box is derived data
+    (from the start point and the simplified polyline of the same row): a box that is missing is
+    only a track the map cannot find by area yet.
+    """
+
+    def transaction(self) -> AbstractContextManager[None]:
+        """Same transaction as `ActivityIndex.transaction`."""
+        ...
+
+    def revision(self) -> IndexRevision:
+        """Fingerprint of the index, to know whether a cached copy is still valid."""
+        ...
+
+    def list_by_start(self) -> Sequence[IndexedActivity]:
+        """All the records with their boxes, by ascending start, ties by identity key."""
+        ...
+
+    def count_without_box(self) -> int:
+        """Activities that have a position but no box yet."""
+        ...
+
+    def candidates_without_box(self, after_row_id: int, limit: int) -> Sequence[BoxCandidate]:
+        """At most `limit` such activities with `row_id > after_row_id`, by ascending `row_id`."""
+        ...
+
+    def store_boxes(self, boxes: Mapping[int, GeoBox]) -> None:
+        """Saves the boxes by `row_id`; a row that already has one keeps it. Call inside a
+        transaction."""
         ...
 
 
