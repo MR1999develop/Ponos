@@ -48,6 +48,20 @@ group and the build backend. Validation: **2026-11-05**.
   the repository is active. `desktop-notifier` has its last release on 8
   August 2025, with a push on 16 September 2026.
 
+## Validation result (2026-11-08)
+
+- **Audit** (`uv run --locked pip-audit`, same check as `nox -s audit`):
+  `No known vulnerabilities found`. The `ponos-coach` package is skipped
+  because it is not on PyPI: this is expected.
+- **Licence reviewed and approved**: `pyinstaller` 6.22.3,
+  `GPL-2.0-or-later WITH Bootloader-exception`. "Or later" lets it be used
+  under GPL-3.0, the licence of this project; it is a build tool, and the
+  only part shipped is the bootloader, which the exception covers. See the
+  entry below.
+- **New direct dependency**: `pyinstaller` (dev group), added to
+  `pyproject.toml` before this validation. Released 2026-09-12, so it is not a
+  new release under the waiting period.
+
 ## Entries
 
 ### pyside6 (runtime)
@@ -265,6 +279,30 @@ group and the build backend. Validation: **2026-11-05**.
 - Alternatives: `tox`; a `Makefile` with scripts. Not discussed in the
   project.
 - Validated: 2026-11-05.
+
+### pyinstaller (dev group)
+
+- Pinned version: **6.22.3** (released 2026-09-12).
+- Licence: `GPLv2-or-later with a special exception` (installed metadata, free
+  text; `licenses/COPYING.txt` gives the SPDX form `GPL-2.0-or-later WITH
+  Bootloader-exception`). **To report**: `GPL-2.0-or-later` is not in the list
+  of allowed licences, so it is not approved. Decision needed.
+- Reasoning to evaluate: the exception allows to embed the compiled bootloader
+  and related files in programs distributed under any licence. PyInstaller is
+  used only to build the package (`nox -s dist`); the bootloader is the part
+  that ends up in the distributed executable. The PyInstaller Python code is
+  not part of the application. This must be verified on the built artefact in
+  phase 8 (the bootloader files and the licence files in the package).
+- Purpose: build of the PyInstaller executable (`uv run --locked nox -s dist`),
+  with smoke test and `SHA256SUMS`. Dev group only: not a runtime dependency.
+- Last release: 6.22.3 (2026-09-12); repository `pyinstaller/pyinstaller` with
+  a push on 2026-11-08, not archived, 118 open issues.
+- Alternatives considered (not adopted): **Nuitka** (licence on PyPI:
+  AGPL-3.0, to report; compiles to C, slower builds); **cx_Freeze** (no
+  licence in the PyPI metadata, not evaluated); **briefcase** (no licence in
+  the PyPI metadata, not evaluated; packages for store and installers, more
+  than needed here).
+- Validated: 2026-11-08, with the licence to report above.
 
 ### USDA FoodData Central (data, not a package)
 
