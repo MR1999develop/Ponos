@@ -10,12 +10,23 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
+from ponos_coach.activities.domain import Sport
 from ponos_coach.goals.domain import Priority, SessionType
-from ponos_coach.planning.domain import Plan, build_plan
+from ponos_coach.planning.domain import (
+    Phase,
+    Plan,
+    PlanDay,
+    PlannedRace,
+    PlannedSession,
+    build_plan,
+)
 from ponos_coach.planning.domain.serialization import canonical_json
 from ponos_coach.planning.plan_codec import (
     MAX_PLAN_DAY_JSON_CHARS,
+    MAX_PLAN_DAY_VALUES,
+    MAX_PLAN_DEPTH,
     MAX_PLAN_JSON_CHARS,
+    MAX_PLAN_VALUES,
     PlanDecodingError,
     decode_plan,
     decode_plan_day,
@@ -117,6 +128,39 @@ def test_text_beyond_the_size_cap_is_refused_before_it_is_parsed() -> None:
         decode_plan_day("0" * (MAX_PLAN_DAY_JSON_CHARS + 1), digest("0"))
 
 
+def test_a_checksummed_text_nested_deeper_than_any_plan_is_refused() -> None:
+    depth = MAX_PLAN_DEPTH + 1  # well inside what the JSON parser itself accepts
+    text = '{"a":' * depth + "1" + "}" * depth
+
+    with pytest.raises(PlanDecodingError, match="not valid"):
+        decode_plan(text, digest(text))
+
+
+def test_a_checksummed_array_with_millions_of_values_is_refused_inside_the_size_cap() -> None:
+    values = MAX_PLAN_VALUES + 1
+    text = "[" + "0," * values + "0]"
+    assert len(text) < MAX_PLAN_JSON_CHARS  # the size cap alone does not stop it
+
+    with pytest.raises(PlanDecodingError, match="not valid"):
+        decode_plan(text, digest(text))
+
+
+def test_a_checksummed_day_with_too_many_values_is_refused() -> None:
+    text = "[" + "0," * MAX_PLAN_DAY_VALUES + "0]"
+    assert len(text) < MAX_PLAN_DAY_JSON_CHARS
+
+    with pytest.raises(PlanDecodingError, match="not valid"):
+        decode_plan_day(text, digest(text))
+
+
+@pytest.mark.parametrize("plan", PLANS, ids=range(len(PLANS)))
+def test_the_caps_leave_a_wide_margin_over_a_real_plan(plan: Plan) -> None:
+    text = plan.to_json()
+
+    assert len(text) < MAX_PLAN_JSON_CHARS // 8
+    assert text.count(",") < MAX_PLAN_VALUES // 4  # values are at least as many as the commas
+
+
 def test_a_day_is_not_a_plan_and_a_plan_is_not_a_day() -> None:
     day_text = canonical_json(PLANS[0].days[0])
     plan_text = PLANS[0].to_json()
@@ -143,3 +187,70 @@ def test_a_plan_damaged_in_one_place_is_either_read_as_a_valid_plan_or_refused(
         return
     # whatever was accepted is a whole plan that writes itself again as canonical text
     assert decode_plan(plan.to_json(), digest(plan.to_json())).to_json() == plan.to_json()
+
+
+# --- The values of a plan are valid by construction (D-F5-01) ------------------------------------
+def _a_session(**changes: object) -> PlannedSession:
+    fields: dict[str, object] = {
+        "sport": Sport.RUNNING,
+        "session_type": SessionType.EASY,
+        "minutes": 45,
+        "blocks": (),
+        "load": 40.0,
+    }
+    return PlannedSession(**{**fields, **changes})  # type: ignore[arg-type]
+
+
+def _a_race(**changes: object) -> PlannedRace:
+    fields: dict[str, object] = {
+        "goal_id": "r1",
+        "priority": Priority.A,
+        "sport": Sport.RUNNING,
+        "distance_m": 10_000,
+        "expected_time_s": 3000,
+        "load": 90.0,
+    }
+    return PlannedRace(**{**fields, **changes})  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"minutes": 0},
+        {"minutes": -30},
+        {"load": -0.1},
+        {"load": float("nan")},
+        {"load": float("inf")},
+    ],
+)
+def test_a_session_with_impossible_numbers_cannot_be_built(changes: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match="session"):
+        _a_session(**changes)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"goal_id": ""},
+        {"distance_m": 0},
+        {"expected_time_s": 0},
+        {"expected_time_s": -1},
+        {"load": -1.0},
+        {"load": float("nan")},
+    ],
+)
+def test_a_race_with_impossible_numbers_cannot_be_built(changes: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match="race"):
+        _a_race(**changes)
+
+
+@pytest.mark.parametrize("load", [-5.0, float("nan"), float("-inf")])
+def test_a_day_with_an_impossible_load_cannot_be_built(load: float) -> None:
+    with pytest.raises(ValueError, match="day"):
+        PlanDay(TODAY, Phase.BASE, None, None, load)
+
+
+def test_the_limits_themselves_are_valid() -> None:
+    assert _a_session(minutes=1, load=0.0).minutes == 1
+    assert _a_race(expected_time_s=1, distance_m=1, load=0.0).expected_time_s == 1
+    assert PlanDay(TODAY, Phase.BASE, None, None, 0.0).load == 0.0

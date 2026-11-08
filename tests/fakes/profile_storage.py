@@ -131,6 +131,7 @@ class _Database:
     session_choices: SessionChoices = field(default_factory=lambda: SessionChoices.of({}))
     plan_state: tuple[Plan | PlanRefusal, date] | None = None
     past_days: dict[date, FrozenDay] = field(default_factory=dict)
+    unreadable_past_days: set[date] = field(default_factory=set)  # frozen, lost: set by a test
     cursors: dict[ListingKind, ListingCursor] = field(default_factory=dict)
     journal: dict[GarminActivityId, JournalEntry] = field(default_factory=dict)
     last_completed: datetime | None = None
@@ -600,7 +601,14 @@ class _Plans:
             self._db.past_days.setdefault(frozen.day.day, frozen)
 
     def past_days(self, first: date, last: date) -> Sequence[FrozenDay]:
-        return [f for d, f in sorted(self._db.past_days.items()) if first <= d <= last]
+        return [
+            f
+            for d, f in sorted(self._db.past_days.items())
+            if first <= d <= last and d not in self._db.unreadable_past_days
+        ]
+
+    def unreadable_past_days(self, first: date, last: date) -> Sequence[date]:
+        return sorted(d for d in self._db.unreadable_past_days if first <= d <= last)
 
 
 class _TrackBoxes:

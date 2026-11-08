@@ -748,8 +748,6 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Clear filters": QKeySequence("Ctrl+Shift+K").toString(),
         "Map settings...": QKeySequence("Ctrl+Shift+M").toString(),
         "Clear map cache...": QKeySequence("Ctrl+Shift+Backspace").toString(),
-        "Undo": QKeySequence(QKeySequence.StandardKey.Undo).toString(),
-        "Redo": QKeySequence(QKeySequence.StandardKey.Redo).toString(),
     }
 
 

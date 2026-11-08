@@ -9,6 +9,7 @@ up (no real data).
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -49,6 +50,7 @@ from ponos_coach.ui.nutrition_texts import (
     fixed_notice_text,
     goal_text,
     load_level_text,
+    refuel_hour_text,
     slot_text,
     unavailable_text,
 )
@@ -187,7 +189,9 @@ def test_what_is_missing_says_what_and_how_to_complete_it(reason: UnavailableRea
     assert view.missing.title
     assert view.missing.what
     assert view.missing.remedy
-    assert view.missing.can_edit_profile is (reason is not UnavailableReason.UNDER_18)
+    assert view.missing.can_edit_profile is (
+        reason not in (UnavailableReason.UNDER_18, UnavailableReason.NO_PLAN_FOR_DAY)
+    )
 
 
 def test_every_category_of_the_domain_has_a_text() -> None:
@@ -293,6 +297,61 @@ def test_a_date_of_birth_out_of_range_invites_to_check_it(reason: UnavailableRea
     assert isinstance(view, UnavailableView)
     assert view.missing.remedy == "Check the date of birth with Edit profile."
     assert view.missing.can_edit_profile is True
+
+
+def test_the_long_weight_loss_advisory_is_neutral_and_suggests_maintenance_periods() -> None:
+    text = advisory_text(Advisory.LONG_WEIGHT_LOSS)
+
+    assert text == (
+        "This weight-loss period has lasted a long time. Long periods of weight loss are best "
+        "alternated with periods of maintenance."
+    )
+    assert "doctor" not in text  # no medical judgement
+
+
+def test_the_hourly_intakes_after_a_session_say_their_hour() -> None:
+    nutrition = plan_day(
+        DayInput(
+            ADULT,
+            MaintenanceGoal(),
+            MealTimes.default(),
+            (LONG_RIDE,),
+            minutes_to_next_session=240.0,  # another session four hours after the end
+        )
+    )
+    foods = load_food_table().foods
+    report = DayNutritionReport(
+        DAY,
+        nutrition,
+        MaintenanceGoal(),
+        MealTimes.default(),
+        tuple(MealSuggestion(m, suggest_examples(m, foods)) for m in nutrition.meals),
+        (),
+        0,
+    )
+
+    view = present_day(DAY, report)
+
+    assert isinstance(view, DayView)
+    hours = [card.title for card in view.meals if card.title.startswith("Refuel")]
+    assert hours == [f"Refuel, hour {hour}" for hour in range(1, len(hours) + 1)]
+    assert len(hours) >= 2
+    assert refuel_hour_text(1) == "Refuel, hour 1"
+
+
+def test_the_day_says_which_lean_mass_the_energy_availability_limit_uses() -> None:
+    report = report_for(ADULT, MaintenanceGoal())
+
+    estimated = present_day(DAY, replace(report, lean_mass_measured=False))
+    measured = present_day(DAY, replace(report, lean_mass_measured=True))
+
+    assert isinstance(estimated, DayView)
+    assert isinstance(measured, DayView)
+    assert "estimate of your lean mass" in estimated.lean_mass_note
+    assert "Nutrition settings" in estimated.lean_mass_note
+    assert measured.lean_mass_note == (
+        "The limit on energy availability uses your measured lean mass."
+    )
 
 
 def test_only_today_is_in_progress() -> None:

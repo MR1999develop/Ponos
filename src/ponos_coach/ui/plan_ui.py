@@ -20,7 +20,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 from functools import partial
 
-from PySide6.QtCore import QCoreApplication, QObject, Qt, Signal
+from PySide6.QtCore import QCoreApplication, QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence, QUndoStack
 from PySide6.QtWidgets import QWidget
 
@@ -32,13 +32,27 @@ from ponos_coach.goals.domain import (
     WeeklyAvailability,
 )
 from ponos_coach.goals.ports import Goal
+from ponos_coach.goals.use_cases import (
+    AvailabilityChanged,
+    GoalChanged,
+    GoalRemoved,
+    SessionChoicesChanged,
+)
 from ponos_coach.load.use_cases import ProfileOverview
 from ponos_coach.profiles.rebuild_plan import PlanBuilt, PlanNotBuilt, PlanRefused
 from ponos_coach.ui.calendar_model import plan_layer_of
 from ponos_coach.ui.calendar_page import CalendarPage
 from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.goal_dialog import GoalDialog
-from ponos_coach.ui.goal_draft import GoalDraft, GoalFormKind, default_draft, goal_of
+from ponos_coach.ui.goal_draft import (
+    GoalDraft,
+    GoalFormKind,
+    default_draft,
+    goal_of,
+)
+from ponos_coach.ui.goal_draft import (
+    draft_of as draft_of_goal,
+)
 from ponos_coach.ui.goals_page import GoalsPage, GoalsPageActions
 from ponos_coach.ui.overview_page import OverviewPage
 from ponos_coach.ui.overview_state import OverviewState, Ready
@@ -58,6 +72,7 @@ from ponos_coach.ui.plan_texts import label_lookup, race_short_name, retest_prop
 from ponos_coach.ui.plan_undo import (
     AddGoalCommand,
     ChangeGoalCommand,
+    OutcomeCell,
     RemoveGoalCommand,
     SetAvailabilityCommand,
     SetChoicesCommand,
@@ -102,21 +117,41 @@ class CountedJobs:
         """Add a goal."""
         return self._start(partial(self._loader.add_goal, goal))
 
-    def change_goal(self, goal: Goal) -> bool:
+    def change_goal(self, goal: Goal, cell: OutcomeCell[GoalChanged]) -> bool:
         """Replace the goal with the same id."""
-        return self._start(partial(self._loader.change_goal, goal))
+        return self._start(partial(self._loader.change_goal, goal, cell))
 
-    def remove_goal(self, goal_id: GoalId) -> bool:
+    def restore_goal(self, cell: OutcomeCell[GoalChanged]) -> bool:
+        """Put back the replaced version."""
+        return self._start(partial(self._loader.restore_goal, cell))
+
+    def remove_goal(self, goal_id: GoalId, cell: OutcomeCell[GoalRemoved]) -> bool:
         """Remove a goal."""
-        return self._start(partial(self._loader.remove_goal, goal_id))
+        return self._start(partial(self._loader.remove_goal, goal_id, cell))
 
-    def set_availability(self, availability: WeeklyAvailability | None) -> bool:
+    def restore_removed_goal(self, cell: OutcomeCell[GoalRemoved]) -> bool:
+        """Add back the removed goal."""
+        return self._start(partial(self._loader.restore_removed_goal, cell))
+
+    def set_availability(
+        self, availability: WeeklyAvailability | None, cell: OutcomeCell[AvailabilityChanged]
+    ) -> bool:
         """Set the weekly availability."""
-        return self._start(partial(self._loader.set_availability, availability))
+        return self._start(partial(self._loader.set_availability, availability, cell))
 
-    def set_choices(self, choices: SessionChoices) -> bool:
+    def restore_availability(self, cell: OutcomeCell[AvailabilityChanged]) -> bool:
+        """Set the previous availability."""
+        return self._start(partial(self._loader.restore_availability, cell))
+
+    def set_choices(
+        self, choices: SessionChoices, cell: OutcomeCell[SessionChoicesChanged]
+    ) -> bool:
         """Set the session types."""
-        return self._start(partial(self._loader.set_choices, choices))
+        return self._start(partial(self._loader.set_choices, choices, cell))
+
+    def restore_choices(self, cell: OutcomeCell[SessionChoicesChanged]) -> bool:
+        """Set the previous session types."""
+        return self._start(partial(self._loader.restore_choices, cell))
 
 
 class PlanUi(QObject):
@@ -199,11 +234,9 @@ class PlanUi(QObject):
             self.tr("Training settings..."), "Ctrl+Shift+T", self.show_training_settings
         )
         self._undo_action = self._stack.createUndoAction(self, self.tr("Undo"))
-        self._undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+        # "Undo <change>" / "Redo <change>" at the end of the Plan menu, like the threshold test:
+        # no global shortcut (a global Ctrl+Z would also act while a text field has the focus).
         self._redo_action = self._stack.createRedoAction(self, self.tr("Redo"))
-        self._redo_action.setShortcut(QKeySequence.StandardKey.Redo)
-        for action in (self._undo_action, self._redo_action):
-            action.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
         self._stack.canUndoChanged.connect(self._update_actions)
         self._stack.canRedoChanged.connect(self._update_actions)
 
@@ -300,7 +333,7 @@ class PlanUi(QObject):
         """Remove a goal; the removal can be undone, so nothing is asked first."""
         goal = self._goal_with_id(goal_id)
         if goal is not None:
-            self._stack.push(RemoveGoalCommand(self._jobs, goal))
+            self._stack.push(RemoveGoalCommand(self._jobs, goal.goal_id))
 
     def remove_selected_goal(self) -> None:
         """Remove the goal selected in the Goals section."""
@@ -325,12 +358,23 @@ class PlanUi(QObject):
             return
         today = self._today()
         if editing is not None:
-            dialog = GoalDialog.for_goal(editing, snapshot.goals, today, self._window)
-        else:
-            if kind is None:
-                return
+            draft = draft_of_goal(editing)
+        elif kind is not None:
             draft = self._new_draft(kind, day or today + timedelta(days=_DEFAULT_LEAD_DAYS))
-            dialog = GoalDialog(draft, snapshot.goals, today, None, self._window)
+        else:
+            return
+        self._show_goal_dialog(draft, snapshot, editing)
+
+    def _show_goal_dialog(
+        self, draft: GoalDraft, snapshot: PlanSnapshot, editing: Goal | None
+    ) -> None:
+        dialog = GoalDialog(
+            draft,
+            snapshot.goals,
+            self._today(),
+            None if editing is None else editing.goal_id,
+            self._window,
+        )
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         dialog.accepted.connect(partial(self._on_goal_accepted, dialog, editing))
         dialog.finished.connect(self._on_goal_dialog_closed)
@@ -349,13 +393,22 @@ class PlanUi(QObject):
         if snapshot is None:
             return
         goal_id = editing.goal_id if editing is not None else GoalId(self._make_goal_id())
-        goal = goal_of(dialog.draft(), snapshot.goals, self._today(), goal_id)
+        draft = dialog.draft()
+        goal = goal_of(draft, snapshot.goals, self._today(), goal_id)
         if goal is None:
+            # What the goals are now no longer agrees with the form (another race took the day
+            # meanwhile): the dialog stays, with the problem written under its field.
+            QTimer.singleShot(0, partial(self._reopen_goal_dialog, draft, editing))
             return
         if editing is None:
             self._stack.push(AddGoalCommand(self._jobs, goal))
         elif goal != editing:
-            self._stack.push(ChangeGoalCommand(self._jobs, editing, goal))
+            self._stack.push(ChangeGoalCommand(self._jobs, goal))
+
+    def _reopen_goal_dialog(self, draft: GoalDraft, editing: Goal | None) -> None:
+        snapshot = self._snapshot
+        if self._goal_dialog is None and snapshot is not None:
+            self._show_goal_dialog(draft, snapshot, editing)
 
     def _on_goal_dialog_closed(self) -> None:
         self._goal_dialog = None
@@ -385,9 +438,9 @@ class PlanUi(QObject):
         availability = after.availability()
         steps: list[SetAvailabilityCommand | SetChoicesCommand] = []
         if availability != before.availability:
-            steps.append(SetAvailabilityCommand(self._jobs, before.availability, availability))
+            steps.append(SetAvailabilityCommand(self._jobs, availability))
         if after.choices != before.choices:
-            steps.append(SetChoicesCommand(self._jobs, before.choices, after.choices))
+            steps.append(SetChoicesCommand(self._jobs, after.choices))
         if len(steps) == 1:
             self._stack.push(steps[0])
         elif steps:

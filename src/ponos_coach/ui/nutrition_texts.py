@@ -132,6 +132,15 @@ def unavailable_text(reason: UnavailableReason) -> MissingDataText:
             translate("Nutrition", "Nutrition guidance covers ages up to 130 years."),
             check_birth_date,
         ),
+        UnavailableReason.NO_PLAN_FOR_DAY: (
+            translate("Nutrition", "The plan does not cover this day"),
+            translate(
+                "Nutrition",
+                "Guidance for a day ahead comes from the training plan, and the plan has "
+                "nothing saved for this day.",
+            ),
+            translate("Nutrition", "Update the plan in the Goals section."),
+        ),
         UnavailableReason.UNDER_18: (
             translate("Nutrition", "No guidance under 18"),
             translate("Nutrition", "Calories, macronutrients and portions are not given under 18."),
@@ -139,7 +148,8 @@ def unavailable_text(reason: UnavailableReason) -> MissingDataText:
         ),
     }
     title, what, remedy = texts[reason]
-    return MissingDataText(title, what, remedy, reason is not UnavailableReason.UNDER_18)
+    can_edit = reason not in (UnavailableReason.UNDER_18, UnavailableReason.NO_PLAN_FOR_DAY)
+    return MissingDataText(title, what, remedy, can_edit)
 
 
 def advisory_text(advisory: Advisory) -> str:
@@ -151,7 +161,7 @@ def advisory_text(advisory: Advisory) -> str:
         ),
         Advisory.LOW_BMI: QCoreApplication.translate(
             "Nutrition",
-            "Your body mass index is below 18.5. "
+            "Your weight is low for your height. "
             "Please talk to a doctor or a dietitian before changing how you eat.",
         ),
         Advisory.ACTIVITY_LEVEL_ASSUMED: QCoreApplication.translate(
@@ -169,6 +179,11 @@ def advisory_text(advisory: Advisory) -> str:
         Advisory.DEFICIT_REDUCED_FOR_LOAD: QCoreApplication.translate(
             "Nutrition", "The calorie deficit is smaller because today's training is heavy."
         ),
+        Advisory.DEFICIT_PAUSED_FOR_RACE: QCoreApplication.translate(
+            "Nutrition",
+            "No calorie deficit in the week of a race or in the taper before it: "
+            "weight loss is best kept away from races.",
+        ),
         Advisory.CARBS_LIMITED_BY_ENERGY: QCoreApplication.translate(
             "Nutrition",
             "The energy target is too low for the usual amount of carbohydrates, "
@@ -176,6 +191,11 @@ def advisory_text(advisory: Advisory) -> str:
         ),
         Advisory.INTAKES_SCALED: QCoreApplication.translate(
             "Nutrition", "The amounts around training were reduced to fit the day's totals."
+        ),
+        Advisory.LONG_WEIGHT_LOSS: QCoreApplication.translate(
+            "Nutrition",
+            "This weight-loss period has lasted a long time. Long periods of weight loss are "
+            "best alternated with periods of maintenance.",
         ),
     }
     return texts[advisory]
@@ -197,6 +217,13 @@ def in_progress_text() -> str:
         "Nutrition",
         "This day is not over yet: the values are partial and change as activities "
         "and the energy spent are added.",
+    )
+
+
+def estimate_from_plan_text() -> str:
+    """The note for a day ahead: the activities are the planned sessions, not recorded ones."""
+    return QCoreApplication.translate(
+        "Nutrition", "Estimate from the plan: the activities are the planned sessions."
     )
 
 
@@ -230,6 +257,28 @@ def slot_text(slot: MealSlot) -> str:
         MealSlot.POST_TRAINING: QCoreApplication.translate("Nutrition", "After training"),
     }
     return texts[slot]
+
+
+def refuel_hour_text(hour: int) -> str:
+    """The title of an hourly intake after a session that is followed by another soon (hour 1 to
+    4 after the end)."""
+    # {hour}: the hour after the end of the session, as a number.
+    return QCoreApplication.translate("Nutrition", "Refuel, hour {hour}").format(
+        hour=QLocale().toString(hour)
+    )
+
+
+def lean_mass_note_text(*, measured: bool) -> str:
+    """Which lean mass the limit on energy availability of the day uses."""
+    if measured:
+        return QCoreApplication.translate(
+            "Nutrition", "The limit on energy availability uses your measured lean mass."
+        )
+    return QCoreApplication.translate(
+        "Nutrition",
+        "The limit on energy availability uses an estimate of your lean mass. You can enter a "
+        "measured value in Nutrition settings.",
+    )
 
 
 def slots_text(slots: Sequence[MealSlot]) -> str:

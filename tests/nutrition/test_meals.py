@@ -189,11 +189,12 @@ def test_hourly_intakes_are_never_merged_with_a_meal_or_with_each_other() -> Non
         (481.0, 0),
         (480.0, 0),  # exactly 8 h: "less than 8 hours" is false
         (479.0, 4),
-        (210.0, 4),  # four hours fit and the last is 30 minutes before the session
-        (209.0, 3),
-        (150.0, 3),
-        (90.0, 2),
-        (89.0, 1),
+        (240.0, 4),  # the first waits 30 minutes, the fourth is 30 minutes before the session
+        (239.0, 3),
+        (180.0, 3),
+        (179.0, 2),
+        (120.0, 2),
+        (119.0, 1),
         (60.0, 1),
         (0.0, 1),  # the first intake is always given
     ],
@@ -440,3 +441,32 @@ def test_splitting_follows_the_weights_and_gives_the_leftover_to_the_largest_rem
 def test_splitting_rejects_impossible_requests(total_g: int, weights: list[float]) -> None:
     with pytest.raises(ValueError, match="needed"):
         split_integer(total_g, weights)
+
+
+# --- Edge of the day and nothing to give (phase 5 review) ---------------------------------------
+def test_hourly_intakes_that_would_fall_after_midnight_are_left_out_not_piled_on_23_59() -> None:
+    items = schedule(session(21 * 60 + 30, 60.0), next_in=330.0)  # ends 22:30: 23:00, then 24:00
+
+    hourly = [i for i in items if i.refuel_hour is not None]
+
+    assert [(i.minute, i.refuel_hour) for i in hourly] == [(23 * 60, 1)]
+    assert total(items) == DAY  # the grams of the left-out hours stay in the day
+
+
+def test_the_first_intake_after_a_session_is_kept_even_when_it_falls_after_midnight() -> None:
+    items = schedule(session(22 * 60 + 40, 60.0), next_in=300.0)  # ends 23:40: the first at 00:10
+
+    hourly = [i for i in items if i.refuel_hour is not None]
+
+    assert [i.refuel_hour for i in hourly] == [1]
+    assert hourly[0].minute == 1439
+
+
+def test_a_pre_training_intake_cut_down_to_nothing_is_not_listed() -> None:
+    poor = Macros(100, 120, 80)  # the two main meals keep all of it: nothing left for the intakes
+
+    items = schedule(session(10 * 60, 90.0), day=poor)
+
+    assert PRE not in {slot for item in items for slot in item.slots}
+    assert all(item.macros.carbs_g + item.macros.protein_g > 0 for item in items)
+    assert total(items) == poor

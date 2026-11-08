@@ -216,6 +216,7 @@ class MainWindow(QMainWindow):
         self._threshold = ThresholdUi(
             self,
             self._controller,
+            settings=self._settings,
             zone=lambda: self._zone,
             show_error=self._show_error,
             notify=lambda text: self.statusBar().showMessage(text, _STATUS_MESSAGE_MS),
@@ -1260,7 +1261,7 @@ class MainWindow(QMainWindow):
         if can_open:
             open_reason = ""
         elif on_calendar:
-            open_reason = self.tr("Select a day up to today first: later days have no day page.")
+            open_reason = self.tr("Select a day up to today, or a day of the plan, first.")
         else:
             open_reason = not_here
         self._open_day_action.setToolTip(open_reason)

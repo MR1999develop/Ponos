@@ -528,8 +528,10 @@ def test_t_sec_05_no_sql_in_the_application_is_built_from_text(tmp_path: Path) -
             if not _is_constant_sql(node.args[0], constants[path.name]):
                 suspicious.append(f"{path.name}: {ast.unparse(node.args[0])[:80]}")
     # The only compositions allowed: PRAGMA with integer constants of the module and the
-    # migration statements, which are constants of `sqlite_schema`. Any other must be reviewed.
+    # migration statements, which are constants of `sqlite_schema`, and the creation
+    # statements of the tile cache, a constant tuple of `tile_cache`. Any other must be reviewed.
     assert suspicious == [
+        "tile_cache.py: statement",
         "sqlite_database.py: f'PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}'",
         "sqlite_database.py: f'PRAGMA user_version = {int(SCHEMA_VERSION)}'",
         "sqlite_database.py: statement",

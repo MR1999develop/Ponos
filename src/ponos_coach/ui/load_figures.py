@@ -93,7 +93,7 @@ def _percent_text(value: float) -> str:
 def zone_label(index: int, starts: Sequence[float] = ZONE_STARTS_PERCENT) -> str:
     """Short name of a zone with its bounds as a percentage of the threshold (index from 0).
 
-    `Z1 <85%`, `Z2 85-89%`, ..., `Z5 ≥100%`. The bounds come from `ZONE_STARTS_PERCENT`, the only
+    `Z1 <78%`, `Z2 78-86%`, ..., `Z5 ≥100%`. The bounds come from `ZONE_STARTS_PERCENT`, the only
     source; acronyms and symbols are the same in every language. With integer bounds a middle zone
     ends
     one point before the next bound; with non-integer bounds (87.5) it says "from 85 to less than

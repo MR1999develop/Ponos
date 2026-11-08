@@ -521,6 +521,13 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
 - The plan is deterministic: same data and parameters, same plan.
 - After every synchronisation the app compares done and planned and
   recalculates from tomorrow. The past remains history.
+- The frozen history of the plan is not erased (decision of phase 5): the days that
+  became past stay as they were planned, in a table that the database itself
+  refuses to update or delete. There is no "clear the history" command and none
+  will be added; the only way to remove it is to delete the profile, which is
+  the user's own data folder. A frozen day that cannot be read back (damaged
+  file) is shown as such in the adherence, with what was done and without the
+  planned load, and the current plan never replaces it.
 - In case of strong fatigue the app inserts recovery. Lost load is not made up
   beyond the maximum ramp.
 - Every session has duration, zones and estimated load.

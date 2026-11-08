@@ -567,7 +567,7 @@ posto e documentati nella skill del progetto; non sono consigli medici.
 - [ ] Vista calendario: pianificato contro fatto; proiezione del PMC nel
       grafico.
 - [ ] Ricalcolo del piano dopo ogni sincronizzazione.
-- [ ] Alimentazione dei giorni futuri dal piano, con lo stesso modello della
+- [x] Alimentazione dei giorni futuri dal piano (ADR 011, T-NUT-07 e 08), con lo stesso modello della
       fase 4b; nessun deficit nella settimana di una gara A o B e nello
       scarico che la precede (ACSM 2016: dimagrire lontano dalle gare), con
       un avviso quando un periodo di dimagrimento si sovrappone.
@@ -991,3 +991,11 @@ riportano p50, p95 e massimo, mai la sola media, con l'ambiente di misura.
   peso o dell'obiettivo a una data che vale solo dal suo giorno.
 - **T-NUT-06** Alimenti: porzioni coerenti con i grammi del pasto entro una
   tolleranza dichiarata; tabella con licenza registrata.
+- **T-NUT-07** Giorni futuri (fase 5, ADR 011): le sedute e la gara del
+  piano diventano le attività del giorno (ora tipica o 18:00, energia dai
+  MET, momenti intorno all'allenamento); senza piano, con un rifiuto o oltre
+  l'orizzonte nessuna indicazione, con il motivo; determinismo.
+- **T-NUT-08** Nessun deficit nella settimana di una gara A o B e nello
+  scarico che la precede (anche dopo la gara nella stessa settimana), deficit
+  di nuovo fuori, nessuna pausa per le C o senza obiettivo di dimagrimento;
+  avviso; property test sul modello puro.

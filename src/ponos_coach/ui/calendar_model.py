@@ -103,8 +103,8 @@ class CalendarDay:
     `sports` are the distinct sports of the day's activities in order of start; `goal` is the kind
     of the period covering the day (`None` when no period covers it). `plan` is the day as
     planned, `adherence` how it went (past days) and `goals` the goals of the day. A day outside
-    the shown month has no data and cannot be selected; a day after today can be selected but has
-    no day page.
+    the shown month has no data and cannot be selected; a day after today can be selected and has
+    a day page only if the plan covers it.
     """
 
     day: date
@@ -121,8 +121,9 @@ class CalendarDay:
 
     @property
     def can_open(self) -> bool:
-        """The day belongs to the month and is not after today: it holds a day page."""
-        return self.in_month and not self.is_future
+        """The day belongs to the month and is not after today, or is a day of the plan: it holds
+        a day page (for a future day, an estimate from the plan)."""
+        return self.in_month and (not self.is_future or self.plan is not None)
 
     @property
     def can_select(self) -> bool:

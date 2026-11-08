@@ -14,6 +14,7 @@ import pytest
 
 from ponos_coach.maps.domain import TileAddress
 from ponos_coach.maps.ports import TileCache, TileCacheError, TileImage
+from ponos_coach.platform import tile_cache
 from ponos_coach.platform.tile_cache import CACHE_FILE_NAME, DiskTileCache, accounted_bytes
 from tests.contracts.contract_tiles import STYLE, TileCacheContract, png_of
 from tests.fakes.tiles import InMemoryTileCache
@@ -218,3 +219,8 @@ def test_a_closed_cache_reports_an_error_instead_of_crashing(tmp_path: Path) -> 
         cache.get(STYLE, TileAddress(1, 0, 0), NOW)
     with pytest.raises(TileCacheError):
         cache.put(STYLE, TileAddress(1, 0, 0), TileImage(png_of(3000), 60), NOW)
+
+
+def test_the_schema_version_statement_matches_the_schema_version() -> None:
+    expected = f"PRAGMA user_version = {tile_cache._SCHEMA_VERSION}"
+    assert expected == tile_cache._SET_SCHEMA_VERSION

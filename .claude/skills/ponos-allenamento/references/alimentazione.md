@@ -234,8 +234,12 @@ tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):
   dal_giorno) → AppliedLeanMass(entry, replaced)`, `UndoLeanMass(applied)` (annulla
   esatto: toglie la voce e rimette quella sostituita; rifiuta con
   `LeanMassChangedError` se la voce è cambiata dopo), `RemoveLeanMass(giorno) →
-  voce tolta`, `ListLeanMass`. `SetLeanMass` rifiuta una data futura, un peso
-  assente e una massa non plausibile.
+  voce tolta`, `RestoreLeanMass(voce, attesa=None) → AppliedLeanMass` (rimette la
+  voce esatta in una transazione, senza ricontrollare il peso, se il giorno contiene
+  `attesa`, cioè libero per default; è l'annulla di `RemoveLeanMass` e il redo di un
+  `SetLeanMass`), `ListLeanMass`. `SetLeanMass` rifiuta una data futura, un peso
+  assente e una massa non plausibile. `DayNutritionReport.lean_mass_measured` dice
+  se il giorno ha usato la massa misurata; la pagina legge quel campo.
 
 - Schema v4: `activities.calories_kcal`; `activity_level` (data di validità),
   `meal_times` (una riga), `nutrition_goal` (periodi, con trigger contro le
@@ -249,7 +253,7 @@ tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):
 - `profiles/day_nutrition.py`: `PlanDayNutrition(sources, decode, timezone,
   foods)(day)` raccoglie dal profilo aperto e restituisce `DayNutritionReport` o
   `NutritionUnavailable(reason)` (`MISSING_BODY_DATA`, `BEFORE_BIRTH`,
-  `AGE_OUT_OF_RANGE`, `UNDER_18`, `MISSING_WEIGHT`, `MISSING_PHYSIOLOGY`). È una
+  `AGE_OUT_OF_RANGE`, `UNDER_18`, `MISSING_WEIGHT`, `MISSING_PHYSIOLOGY`, `NO_PLAN_FOR_DAY`). È una
   query: non salva nulla.
 - Le attività del giorno si leggono con una query per intervallo sull'indice
   (`ActivityIndex.list_started_between`, finestra di un giorno per lato, poi il
@@ -262,6 +266,49 @@ tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):
   di `--force`; il documento nuovo si rivalida con il parser prima di scriverlo;
   `verified_on` solo se tutti gli alimenti sono verificati.
 
+## 8. Giorni futuri dal piano (fase 5, ADR 011)
+
+- `PlanDayNutrition(..., plan_context=PlanContext(plans, oggi))`: per un giorno
+  **dopo oggi** le attività sono le sedute del piano salvato (`CurrentPlan`):
+  la seduta e/o la gara del giorno, con durata, carico e sport del piano e
+  l'energia dai MET dello sport (nessuna FC, `EnergySource.MET`; i MET sono uno
+  per sport, non per zona). Il risultato ha `from_plan=True`, la pagina scrive
+  «Estimate from the plan: the activities are the planned sessions.». Senza
+  `plan_context` ogni giorno si calcola dalle attività registrate, come prima.
+- **Ora della seduta**: media (minuti dalla mezzanotte, arrotondata) degli inizi
+  delle attività degli ultimi 60 giorni fino a oggi nello stesso giorno della
+  settimana; senza attività 18:00 (`TYPICAL_TIME_LOOKBACK_DAYS`,
+  `DEFAULT_TRAINING_MINUTE`, default del progetto). La seduta successiva
+  (`minutes_to_next_session`) è la prima seduta del piano nei giorni dopo, alla
+  sua ora tipica.
+- Peso, livello, massa magra, obiettivo e pasti: come per i giorni passati
+  (l'ultimo valore valido quel giorno).
+- **Nessun deficit attorno alle gare** (ACSM 2016: dimagrire lontano dalle
+  gare): `DayInput.deficit_paused` è vero nei giorni di fase `TAPER` (scarico
+  finale dell'A) o `MINI_TAPER` (B) e in tutta la settimana lunedì-domenica di una
+  gara A o B (anche dopo la gara). Le gare C non fermano nulla. Con obiettivo di
+  dimagrimento il modello calcola energia e macro come per il mantenimento
+  (deficit 0) e aggiunge `Advisory.DEFICIT_PAUSED_FOR_RACE` (dopo
+  `DEFICIT_REDUCED_FOR_LOAD`); con altri obiettivi non cambia nulla e non c'è
+  avviso. L'obiettivo mostrato resta quello scelto. **Anche oggi**, che non è
+  nel piano (parte da domani), non ha deficit se cade nella settimana
+  lunedì-domenica di una gara A o B del piano salvato o se il primo giorno del
+  piano (domani) è in `TAPER` o `MINI_TAPER`; i giorni prima di oggi non cambiano
+  (`_deficit_paused` in `profiles/day_nutrition.py`; la settimana si legge da
+  `Plan.inputs.races`, che comprende anche le gare già passate della settimana).
+- `NutritionUnavailable(NO_PLAN_FOR_DAY)`: nessun piano salvato, un rifiuto, un
+  piano illeggibile o un giorno oltre l'orizzonte (il piano arriva all'ultimo
+  obiettivo). Prima si controllano i dati del corpo e l'età.
+- **Rifornimento orario** (`nutrition/domain/meals.py`): la prima assunzione
+  aspetta 30' dopo la fine (`POST_LEAD_MIN`), le successive sono una ogni ora, l'ultima
+  almeno 30' prima della seduta dopo: quante ne stanno =
+  `floor((minuti_alla_prossima - 30 - 30) / 60) + 1`, da 1 a 4. Quelle che cadrebbero
+  dopo la mezzanotte si omettono (il giorno dopo non le eredita; la prima resta anche
+  se cade oltre, fissata a 23:59). Un apporto ridotto a 0 g di carboidrati e proteine
+  (per esempio il «prima» di un giorno con pochi carboidrati) non si genera.
+- Il calendario apre la pagina di un giorno futuro solo se il piano ha quel
+  giorno (`CalendarDay.can_open`).
+
 ## Punti aperti
 
 - Verifica degli alimenti contro FDC (vedi sopra) e traduzione dei loro nomi.
@@ -270,4 +317,3 @@ tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):
 - Le calorie lette dal file per le attività indicizzate prima della v4 non
   aggiornano l'indice (la pagina usa il valore letto).
 - Allergie e restrizioni alimentari: non per ora (decisione del 2026-11-07).
-- Giorni futuri: arrivano con il piano (fase 5).

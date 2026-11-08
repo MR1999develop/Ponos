@@ -84,6 +84,8 @@ class Advisory(Enum):
     DEFICIT_NOT_APPLIED = "deficit_not_applied"  # weight loss asked but no deficit is safe
     DEFICIT_LIMITED = "deficit_limited"  # a safety limit cut the requested deficit
     DEFICIT_REDUCED_FOR_LOAD = "deficit_reduced_for_load"  # heavy training day: smaller deficit
+    # a weight-loss goal overlaps a race week or the taper before one: no deficit that day
+    DEFICIT_PAUSED_FOR_RACE = "deficit_paused_for_race"
     CARBS_LIMITED_BY_ENERGY = "carbs_limited_by_energy"  # the energy does not allow the usual carbs
     INTAKES_SCALED = "intakes_scaled"  # training intakes cut to fit the day's totals
     # a weight-loss period has lasted over 12 weeks with energy availability under 45 kcal/kg:

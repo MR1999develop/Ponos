@@ -13,15 +13,23 @@ from ponos_coach.planning.domain.plan import Plan
 
 @dataclass(frozen=True, slots=True)
 class DayAdherence:
-    """The load planned for a day against the load actually done (0 if nothing)."""
+    """The load planned for a day against the load actually done (0 if nothing).
+
+    `plan_unreadable` marks a frozen day whose saved plan cannot be read back: what was planned
+    is lost (`planned_load` is 0 and nothing is missed), `actual_load` is still true.
+    """
 
     day: date
     planned_load: float
     actual_load: float
+    plan_unreadable: bool = False
 
     @property
     def missed_load(self) -> float:
-        """Load planned and not done (never negative: extra work does not cancel a skipped day)."""
+        """Load planned and not done (never negative: extra work does not cancel a skipped day;
+        0 when the plan of the day is unreadable)."""
+        if self.plan_unreadable:
+            return 0.0
         return max(0.0, self.planned_load - self.actual_load)
 
 

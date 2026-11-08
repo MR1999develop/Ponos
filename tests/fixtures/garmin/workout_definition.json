@@ -1,0 +1,48 @@
+{
+  "workoutId": 1000000001,
+  "ownerId": 3000000001,
+  "workoutName": "Ponos · Easy 30 min",
+  "createdDate": "2026-05-01T10:00:00.0",
+  "updatedDate": "2026-05-01T10:00:00.0",
+  "sportType": {
+    "sportTypeId": 1,
+    "sportTypeKey": "running",
+    "displayOrder": 1
+  },
+  "estimatedDurationInSecs": 1800,
+  "workoutSegments": [
+    {
+      "segmentOrder": 1,
+      "sportType": {
+        "sportTypeId": 1,
+        "sportTypeKey": "running",
+        "displayOrder": 1
+      },
+      "workoutSteps": [
+        {
+          "type": "ExecutableStepDTO",
+          "stepOrder": 1,
+          "stepType": {
+            "stepTypeId": 3,
+            "stepTypeKey": "interval",
+            "displayOrder": 3
+          },
+          "endCondition": {
+            "conditionTypeId": 2,
+            "conditionTypeKey": "time",
+            "displayOrder": 2,
+            "displayable": true
+          },
+          "endConditionValue": 1800.0,
+          "targetType": {
+            "workoutTargetTypeId": 4,
+            "workoutTargetTypeKey": "heart.rate.zone",
+            "displayOrder": 1
+          },
+          "targetValueOne": 120.0,
+          "targetValueTwo": 140.0
+        }
+      ]
+    }
+  ]
+}

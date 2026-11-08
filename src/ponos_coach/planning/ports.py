@@ -92,7 +92,17 @@ class PlanStore(Protocol):
     def past_days(self, first: date, last: date) -> Sequence[FrozenDay]:
         """The frozen days from `first` to `last` included, by ascending day.
 
-        A day whose saved text is unreadable (checksum or content) is left out.
+        A day whose saved text is unreadable (checksum or content) is not here: it is in
+        `unreadable_past_days`, so that the history is never short without saying so.
+
+        Raises:
+            PlanStoreError: the database cannot be read.
+        """
+        ...
+
+    def unreadable_past_days(self, first: date, last: date) -> Sequence[date]:
+        """The days from `first` to `last` included that are frozen but cannot be read back
+        (checksum or content), by ascending day. The frozen history cannot be rebuilt.
 
         Raises:
             PlanStoreError: the database cannot be read.

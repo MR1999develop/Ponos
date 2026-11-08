@@ -18,12 +18,14 @@ from PySide6.QtCore import QLocale, QSettings, Qt
 from PySide6.QtWidgets import QLabel, QMenu
 from pytestqt.qtbot import QtBot
 
+from ponos_coach.assessment.domain import ThresholdProtocol
 from ponos_coach.profiles.domain import PROFILE_ARCHIVE_DIR
 from ponos_coach.profiles.measurements import MeasurementUpdate, UpdateMeasurements
 from ponos_coach.ui.data_thread import JobOutcome, JobSucceeded
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.overview_state import Ready
 from ponos_coach.ui.threshold_dialogs import ThresholdInstructionsDialog
+from ponos_coach.ui.threshold_preferences import ProtocolPreference
 from ponos_coach.ui.workspace import ProfileAccess, WorkspaceController
 from tests.ui.test_main_window import open_message_box
 from tests.ui.threshold_support import (
@@ -159,9 +161,13 @@ def test_the_instructions_give_the_protocol_and_the_health_notice(
     assert dialog is not None
     text = " ".join(label.text() for label in dialog.findChildren(QLabel))
     assert "Warm up for 10 to 15 minutes" in text
-    assert "Run for 30 minutes at the hardest effort you can keep steady" in text
+    assert "hardest effort you can keep steady" in text
+    assert "30-minute test: run for 30 minutes." in text
+    assert "averages of the last 20 minutes" in text
+    assert "20-minute test: run for 20 minutes." in text
+    assert "95% of the average of the whole test" in text
+    assert "average pace made 5% slower" in text
     assert "alone and on flat ground" in text
-    assert "average of the last 20 minutes" in text
     assert "every 6 to 8 weeks" in text
     assert "not a diagnosis" in text
     assert "talk to a doctor" in text
@@ -204,6 +210,80 @@ def test_the_review_shows_day_segment_threshold_pace_current_threshold_and_the_z
         assert int(alignment) & int(Qt.AlignmentFlag.AlignRight)
     dialog.close_button.click()
     assert window.threshold.result_dialog is None
+
+
+def test_the_review_offers_both_protocols_and_starts_with_the_30_minute_test(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with(qtbot, tmp_path, settings, THRESHOLD_RUN)
+    select_run(window)
+
+    dialog = open_review(qtbot, window)
+
+    assert dialog.protocol is ThresholdProtocol.THIRTY_MINUTES
+    assert dialog.protocol_button(ThresholdProtocol.THIRTY_MINUTES).text() == (
+        "30-minute test (last 20 minutes)"
+    )
+    assert dialog.protocol_button(ThresholdProtocol.TWENTY_MINUTES).text() == (
+        "20-minute test (\u22125%)"
+    )
+    assert dialog.value_text("protocol") == "30-minute test (last 20 minutes)"
+    dialog.close_button.click()
+
+
+def test_choosing_the_20_minute_test_evaluates_again_and_is_remembered(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with(qtbot, tmp_path, settings, THRESHOLD_RUN)
+    select_run(window)
+    dialog = open_review(qtbot, window)
+    thirty_bpm = dialog.value_text("threshold")
+
+    dialog.protocol_button(ThresholdProtocol.TWENTY_MINUTES).click()
+
+    assert dialog.is_loading  # the activity is evaluated again with the other protocol
+    qtbot.waitUntil(lambda: dialog.is_reviewing, timeout=WAIT_MS)
+    assert dialog.value_text("protocol") == "20-minute test (\u22125%)"
+    assert dialog.value_text("selection") == "The 20 minutes in which you covered the most distance"
+    assert dialog.value_text("threshold") != thirty_bpm  # 95% of the mean, not the last 20 minutes
+    assert settings.value("threshold/protocol") == "twenty_minutes"
+    dialog.close_button.click()
+
+    reopened = open_review(qtbot, window)  # the last choice is the starting one
+
+    assert reopened.protocol is ThresholdProtocol.TWENTY_MINUTES
+    assert reopened.value_text("protocol") == "20-minute test (\u22125%)"
+    reopened.close_button.click()
+
+
+def test_a_run_too_short_for_the_30_minute_test_can_be_the_20_minute_test(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with(qtbot, tmp_path, settings, SHORT_RUN)  # 20 minutes of running
+    select_run(window)
+    dialog = open_review(qtbot, window)
+    assert not dialog.is_reviewing
+    assert "The activity is shorter than 30 minutes." in dialog.message_page.body_text
+
+    dialog.protocol_button(ThresholdProtocol.TWENTY_MINUTES).click()
+
+    qtbot.waitUntil(lambda: dialog.is_reviewing, timeout=WAIT_MS)
+    assert dialog.apply_button.isEnabled()
+    dialog.close_button.click()
+
+
+def test_the_history_names_the_protocol_the_test_was_applied_with(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with(qtbot, tmp_path, settings, THRESHOLD_RUN)
+    ProtocolPreference(settings).save(ThresholdProtocol.TWENTY_MINUTES)
+
+    apply_test(qtbot, window)
+    dialog = open_history(qtbot, window)
+
+    qtbot.waitUntil(lambda: dialog.model.rowCount() == 1, timeout=WAIT_MS)
+    assert dialog.proxy.index(0, 4).data() == "20-minute test, method 2"
+    dialog.close()
 
 
 def test_a_run_without_distance_is_evaluated_by_heart_rate_and_has_no_pace(
@@ -429,7 +509,7 @@ def test_the_history_lists_the_test_with_the_activity_pace_and_method_and_the_re
     cells = [dialog.proxy.index(0, c).data() for c in range(5)]
     assert cells[0] == "3/14/26"
     assert plain(cells[1]) == "Running, 3/14/26 8:00 AM"  # 07:00 UTC is 08:00 in Rome
-    assert cells[2:] == ["168", "4:38", "30-minute run, method 1"]
+    assert cells[2:] == ["168", "4:38", "30-minute test, method 2"]
     assert dialog.retest_label_text == "The last test is 108 days old: a new test is recommended"
     dialog.close()
 

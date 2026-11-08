@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -20,7 +21,7 @@ from PySide6.QtWidgets import QLabel, QMenu, QMessageBox
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.activities.domain import Sport
-from ponos_coach.goals.domain import GoalId, Priority, RaceGoal, SessionType
+from ponos_coach.goals.domain import GoalId, Priority, RaceGoal, SessionType, WeeklyAvailability
 from ponos_coach.planning.domain import Block, BlockRole, Phase, PlanDay, PlannedSession
 from ponos_coach.planning.ports import FrozenDay
 from ponos_coach.ui.birth_date_edit import to_qdate
@@ -29,7 +30,9 @@ from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.goal_draft import GoalField
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.plan_presentation import NoPlanYet, PlanRefusedNow
+from ponos_coach.ui.plan_undo import OutcomeCell
 from tests.ui.goals_support import (
+    EVERY_DAY,
     RACE_DAY,
     SECTION_CALENDAR,
     SECTION_GOALS,
@@ -117,8 +120,8 @@ def test_the_plan_menu_lists_every_command_with_its_shortcut(
         ("Change goal...", "Ctrl+Shift+E"),
         ("Remove goal", "Ctrl+Del"),
         ("Training settings...", "Ctrl+Shift+T"),
-        ("Undo", window.plan.actions["undo"].shortcut().toString()),
-        ("Redo", window.plan.actions["redo"].shortcut().toString()),
+        ("Undo", ""),  # like the threshold test: no global shortcut
+        ("Redo", ""),
     ]
 
 
@@ -236,6 +239,85 @@ def test_changing_a_race_and_taking_it_back_restores_the_old_version_exactly(
     wait_for(qtbot, lambda: window.plan.is_idle and races_of(window)[0] == original)
     redo(window)
     wait_for(qtbot, lambda: window.plan.is_idle and races_of(window)[0] == changed)
+
+
+def test_taking_a_change_back_restores_the_real_old_version_not_the_one_the_dialog_saw(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = plan_window(qtbot, tmp_path, settings)
+    add_race(qtbot, window, RACE_DAY)
+    (original,) = races_of(window)
+    window.sidebar.setCurrentRow(SECTION_GOALS)
+    window.plan.change_goal(original.goal_id.value)
+    wait_for(qtbot, lambda: window.plan.goal_dialog is not None)
+    dialog = window.plan.goal_dialog
+    assert dialog is not None
+    dialog.target_time_edit.setText("3:15:00")
+    # The goal is changed meanwhile, not through the dialog.
+    outside = replace(original, priority=Priority.C)
+    assert window.plan._jobs.change_goal(outside, OutcomeCell())
+    wait_for(qtbot, lambda: window.plan.is_idle and races_of(window)[0] == outside)
+
+    dialog.save_button.click()
+    wait_for(qtbot, lambda: window.plan.is_idle and races_of(window)[0].target_time_s == 11_700)
+    undo(window)
+
+    wait_for(qtbot, lambda: window.plan.is_idle and races_of(window)[0] == outside)
+
+
+def test_taking_back_the_training_time_restores_the_real_previous_one(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = plan_window(qtbot, tmp_path, settings)
+    window.plan.actions["training"].trigger()
+    wait_for(qtbot, lambda: window.plan.training_dialog is not None)
+    dialog = window.plan.training_dialog
+    assert dialog is not None
+    outside = WeeklyAvailability(EVERY_DAY, 6, 300)
+    assert window.plan._jobs.set_availability(outside, OutcomeCell())
+    wait_for(qtbot, lambda: window.plan.is_idle and _availability_of(window) == outside)
+
+    dialog.week_hours_spin.setValue(9.0)
+    dialog.save_button.click()
+    wait_for(qtbot, lambda: window.plan.is_idle and _availability_of(window) != outside)
+    undo(window)
+
+    wait_for(qtbot, lambda: window.plan.is_idle and _availability_of(window) == outside)
+
+
+def _availability_of(window: MainWindow) -> WeeklyAvailability | None:
+    snapshot = window.plan.snapshot
+    return None if snapshot is None else snapshot.availability
+
+
+def test_a_race_that_loses_its_day_meanwhile_keeps_the_dialog_open_with_the_problem_written(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = plan_window(qtbot, tmp_path, settings)
+    window.plan.actions["add_race"].trigger()
+    wait_for(qtbot, lambda: window.plan.goal_dialog is not None)
+    dialog = window.plan.goal_dialog
+    assert dialog is not None
+    dialog.date_edit.setDate(to_qdate(RACE_DAY))
+    other = RaceGoal(GoalId("outside"), RACE_DAY, Priority.B, Sport.RUNNING, 10_000, None)
+    assert window.plan._jobs.add_goal(other)
+    wait_for(qtbot, lambda: window.plan.is_idle and len(goals_of(window)) == 1)
+    pushed = window.plan.undo_stack.count()
+
+    dialog.save_button.click()
+
+    def reopened() -> bool:
+        current = window.plan.goal_dialog
+        return current is not None and current is not dialog
+
+    wait_for(qtbot, reopened)
+    again = window.plan.goal_dialog
+    assert again is not None
+    assert again.error_text(GoalField.DATE) == (
+        "Another race is already on this day. Choose another day."
+    )
+    assert window.plan.undo_stack.count() == pushed
+    again.reject()
 
 
 def test_saving_a_race_without_changing_anything_adds_nothing_to_the_stack(

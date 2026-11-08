@@ -113,7 +113,9 @@ class DayPage(QWidget):
         self._advisory_labels: list[QLabel] = []
         self._summary_line = ""
         self._in_progress_note = ""
+        self._estimate_note = ""
         self._foods_note = ""
+        self._lean_mass_note = ""
         self._build()
 
     # --- Construction -------------------------------------------------------------------
@@ -252,6 +254,16 @@ class DayPage(QWidget):
         return self._in_progress_note
 
     @property
+    def estimate_text(self) -> str:
+        """The note that the day is an estimate from the plan (empty for any other day)."""
+        return self._estimate_note
+
+    @property
+    def lean_mass_note_text(self) -> str:
+        """Which lean mass the energy availability limit uses (empty if the page says nothing)."""
+        return self._lean_mass_note
+
+    @property
     def foods_note_text(self) -> str:
         """The note that the food values are not verified (empty once they are)."""
         return self._foods_note
@@ -319,7 +331,9 @@ class DayPage(QWidget):
         self._meal_boxes = []
         self._advisory_labels = []
         self._in_progress_note = ""
+        self._estimate_note = ""
         self._foods_note = ""
+        self._lean_mass_note = ""
         self._scroll.takeWidget()
         self._set_state(DayState.EMPTY)
 
@@ -337,17 +351,31 @@ class DayPage(QWidget):
         self._meal_boxes = []
         self._advisory_labels = []
         self._in_progress_note = ""
+        self._estimate_note = ""
         self._foods_note = ""
+        self._lean_mass_note = ""
         if view.in_progress_note:
             self._in_progress_note = view.in_progress_note
             progress = _label(view.in_progress_note, root, bold=True)
             progress.setObjectName("dayInProgress")
             progress.setMaximumWidth(_MAX_TEXT_WIDTH)
             column.addWidget(progress)
+        if view.estimate_note:
+            self._estimate_note = view.estimate_note
+            estimate = _label(view.estimate_note, root, bold=True)
+            estimate.setObjectName("dayEstimate")
+            estimate.setMaximumWidth(_MAX_TEXT_WIDTH)
+            column.addWidget(estimate)
         notes = [*view.advisories, *([view.unreadable_note] if view.unreadable_note else [])]
         if notes:
             column.addWidget(self._build_advisories(notes, root))
         column.addWidget(self._build_summary(view, root))
+        if view.lean_mass_note:
+            self._lean_mass_note = view.lean_mass_note
+            lean = _label(view.lean_mass_note, root)
+            lean.setObjectName("dayLeanMassNote")
+            lean.setMaximumWidth(_MAX_TEXT_WIDTH)
+            column.addWidget(lean)
         column.addWidget(self._build_activities(view, root))
         column.addWidget(_label(self.tr("Meals and training intakes"), root, bold=True))
         if view.foods_note:

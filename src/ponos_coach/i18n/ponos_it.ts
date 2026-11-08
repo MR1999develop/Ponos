@@ -905,6 +905,58 @@
         <translation>Scegli oggi o un giorno precedente.</translation>
     </message>
     <message>
+        <source>A lean mass can only hold from today or from a past day.</source>
+        <translation>Una massa magra può valere solo da oggi o da un giorno passato.</translation>
+    </message>
+    <message>
+        <source>A weight is needed first</source>
+        <translation>Serve prima un peso</translation>
+    </message>
+    <message>
+        <source>The lean mass is checked against your weight, and none is saved for that day.</source>
+        <translation>La massa magra viene confrontata con il tuo peso, e per quel giorno non ce n&apos;è uno salvato.</translation>
+    </message>
+    <message>
+        <source>Enter your weight with Profile &gt; Edit profile, then set the lean mass.</source>
+        <translation>Inserisci il peso con Profilo &gt; Modifica profilo, poi imposta la massa magra.</translation>
+    </message>
+    <message>
+        <source>The lean mass does not fit your weight</source>
+        <translation>La massa magra non è coerente con il tuo peso</translation>
+    </message>
+    <message>
+        <source>The lean mass must be between {low}% and {high}% of your weight on that day.</source>
+        <translation>La massa magra deve essere tra il {low}% e il {high}% del tuo peso in quel giorno.</translation>
+    </message>
+    <message>
+        <source>Check the value, or the weight in Profile &gt; Edit profile.</source>
+        <translation>Controlla il valore, oppure il peso in Profilo &gt; Modifica profilo.</translation>
+    </message>
+    <message>
+        <source>The lean mass cannot be taken back</source>
+        <translation>La massa magra non si può annullare</translation>
+    </message>
+    <message>
+        <source>It was changed after you set it, so it was left as it is.</source>
+        <translation>È stata modificata dopo averla impostata, quindi è stata lasciata com&apos;è.</translation>
+    </message>
+    <message>
+        <source>Nothing changed. Set the value you want again.</source>
+        <translation>Nulla è cambiato. Imposta di nuovo il valore che vuoi.</translation>
+    </message>
+    <message>
+        <source>The measurement is no longer saved</source>
+        <translation>La misurazione non è più salvata</translation>
+    </message>
+    <message>
+        <source>It was already removed.</source>
+        <translation>È già stata rimossa.</translation>
+    </message>
+    <message>
+        <source>Open Nutrition settings to see what is saved.</source>
+        <translation>Apri le impostazioni alimentari per vedere cosa è salvato.</translation>
+    </message>
+    <message>
         <source>The threshold test cannot be taken back</source>
         <translation>Il test di soglia non può essere annullato</translation>
     </message>
@@ -1839,6 +1891,52 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
 </context>
 <context>
+    <name>LeanMass</name>
+    <message>
+        <source>Enter the lean mass in kilograms.</source>
+        <translation>Scrivi la massa magra in chilogrammi.</translation>
+    </message>
+    <message>
+        <source>Enter the lean mass in kilograms with at most one decimal, from {low} to {high}.</source>
+        <translation>Scrivi la massa magra in chilogrammi con al massimo un decimale, da {low} a {high}.</translation>
+    </message>
+</context>
+<context>
+    <name>LeanMassSection</name>
+    <message>
+        <source>Measured lean mass</source>
+        <translation>Massa magra misurata</translation>
+    </message>
+    <message>
+        <source>Valid from</source>
+        <translation>Valido dal</translation>
+    </message>
+    <message>
+        <source>Lean mass (kg)</source>
+        <translation>Massa magra (kg)</translation>
+    </message>
+    <message>
+        <source>Problem with the lean mass</source>
+        <translation>Problema con la massa magra</translation>
+    </message>
+    <message>
+        <source>Set lean mass</source>
+        <translation>Imposta massa magra</translation>
+    </message>
+    <message>
+        <source>Remove measurement</source>
+        <translation>Rimuovi misurazione</translation>
+    </message>
+    <message>
+        <source>Optional. A body scan or an impedance scale gives it. When there is one, the limit on energy availability uses it instead of an estimate.</source>
+        <translation>Facoltativa. La dà una scansione corporea o una bilancia a impedenza. Quando c&apos;è, il limite sulla disponibilità energetica usa questa invece di una stima.</translation>
+    </message>
+    <message>
+        <source>Select a measurement in the list first.</source>
+        <translation>Seleziona prima una misurazione nell&apos;elenco.</translation>
+    </message>
+</context>
+<context>
     <name>LoadingPage</name>
     <message>
         <source>Stop</source>
@@ -2063,10 +2161,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Apri prima la sezione Calendario.</translation>
     </message>
     <message>
-        <source>Select a day up to today first: later days have no day page.</source>
-        <translation>Seleziona prima un giorno fino a oggi: i giorni successivi non hanno una pagina del giorno.</translation>
-    </message>
-    <message>
         <source>No day is open.</source>
         <translation>Nessuna giornata aperta.</translation>
     </message>
@@ -2150,6 +2244,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Select an activity in the Activities list first.</source>
         <translation>Seleziona prima un&apos;attività nell&apos;elenco Attività.</translation>
+    </message>
+    <message>
+        <source>Select a day up to today, or a day of the plan, first.</source>
+        <translation>Seleziona prima un giorno fino a oggi o un giorno del piano.</translation>
     </message>
     <message>
         <source>Closing the profile...</source>
@@ -2863,8 +2961,20 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Sotto i 18 anni non si indicano calorie, macronutrienti né porzioni.</translation>
     </message>
     <message>
-        <source>Your body mass index is below 18.5. Please talk to a doctor or a dietitian before changing how you eat.</source>
-        <translation>Il tuo indice di massa corporea è inferiore a 18,5. Parla con un medico o con un dietista prima di cambiare come mangi.</translation>
+        <source>The plan does not cover this day</source>
+        <translation>Il piano non copre questo giorno</translation>
+    </message>
+    <message>
+        <source>Guidance for a day ahead comes from the training plan, and the plan has nothing saved for this day.</source>
+        <translation>L&apos;alimentazione di un giorno futuro viene dal piano di allenamento, e il piano non ha niente di salvato per questo giorno.</translation>
+    </message>
+    <message>
+        <source>Update the plan in the Goals section.</source>
+        <translation>Aggiorna il piano nella sezione Obiettivi.</translation>
+    </message>
+    <message>
+        <source>Your weight is low for your height. Please talk to a doctor or a dietitian before changing how you eat.</source>
+        <translation>Il tuo peso è basso per la tua altezza. Parla con un medico o con un dietista prima di cambiare come mangi.</translation>
     </message>
     <message>
         <source>This app does not suggest a calorie deficit for this day.</source>
@@ -2879,6 +2989,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Il deficit calorico è più piccolo perché l&apos;allenamento di oggi è impegnativo.</translation>
     </message>
     <message>
+        <source>No calorie deficit in the week of a race or in the taper before it: weight loss is best kept away from races.</source>
+        <translation>Nessun deficit calorico nella settimana di una gara e nello scarico che la precede: il dimagrimento va tenuto lontano dalle gare.</translation>
+    </message>
+    <message>
         <source>The energy target is too low for the usual amount of carbohydrates, so carbohydrates are lower than today&apos;s training would suggest.</source>
         <translation>L&apos;obiettivo di energia è troppo basso per la quantità abituale di carboidrati: i carboidrati sono meno di quelli che l&apos;allenamento di oggi suggerirebbe.</translation>
     </message>
@@ -2887,12 +3001,20 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Le quantità attorno all&apos;allenamento sono state ridotte per rientrare nei totali della giornata.</translation>
     </message>
     <message>
+        <source>This weight-loss period has lasted a long time. Long periods of weight loss are best alternated with periods of maintenance.</source>
+        <translation>Questo periodo di dimagrimento dura da molto tempo. I periodi lunghi di dimagrimento è meglio alternarli a periodi di mantenimento.</translation>
+    </message>
+    <message>
         <source>General guidance, not medical or personalised nutrition advice. If you have a medical condition, are pregnant, have an eating disorder or take medication, please consult a professional.</source>
         <translation>Indicazioni generali, non consigli medici né alimentari personalizzati. Se hai patologie, sei in gravidanza, hai disturbi alimentari o prendi farmaci, rivolgiti a un professionista.</translation>
     </message>
     <message>
         <source>This day is not over yet: the values are partial and change as activities and the energy spent are added.</source>
         <translation>Questo giorno non è ancora finito: i valori sono parziali e cambiano man mano che si aggiungono attività ed energia spesa.</translation>
+    </message>
+    <message>
+        <source>Estimate from the plan: the activities are the planned sessions.</source>
+        <translation>Stima dal piano: le attività sono le sedute pianificate.</translation>
     </message>
     <message>
         <source>Food values not yet verified against the source.</source>
@@ -2933,6 +3055,18 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>After training</source>
         <translation>Dopo l&apos;allenamento</translation>
+    </message>
+    <message>
+        <source>Refuel, hour {hour}</source>
+        <translation>Rifornimento, ora {hour}</translation>
+    </message>
+    <message>
+        <source>The limit on energy availability uses your measured lean mass.</source>
+        <translation>Il limite sulla disponibilità energetica usa la tua massa magra misurata.</translation>
+    </message>
+    <message>
+        <source>The limit on energy availability uses an estimate of your lean mass. You can enter a measured value in Nutrition settings.</source>
+        <translation>Il limite sulla disponibilità energetica usa una stima della tua massa magra. Puoi inserire un valore misurato nelle impostazioni alimentari.</translation>
     </message>
     <message>
         <source>Rest day</source>
@@ -3142,6 +3276,14 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Set activity level</source>
         <translation>Imposta il livello di attività</translation>
+    </message>
+    <message>
+        <source>Set lean mass</source>
+        <translation>Imposta massa magra</translation>
+    </message>
+    <message>
+        <source>Remove lean mass</source>
+        <translation>Rimuovi massa magra</translation>
     </message>
 </context>
 <context>
@@ -4178,8 +4320,8 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Riscaldati per 10-15 minuti, correndo con facilità.</translation>
     </message>
     <message>
-        <source>Run for {minutes} minutes at the hardest effort you can keep steady for the whole time. Do not start too fast.</source>
-        <translation>Corri per {minutes} minuti al massimo sforzo che riesci a mantenere costante per tutto il tempo. Non partire troppo forte.</translation>
+        <source>Run one of the two tests below at the hardest effort you can keep steady for the whole time. Do not start too fast.</source>
+        <translation>Esegui uno dei due test qui sotto al massimo sforzo che riesci a mantenere costante per tutto il tempo. Non partire troppo forte.</translation>
     </message>
     <message>
         <source>Do it alone and on flat ground, so that nothing changes your effort.</source>
@@ -4194,12 +4336,20 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Come fare il test di soglia</translation>
     </message>
     <message>
-        <source>The {minutes}-minute test measures your threshold heart rate and pace. Record it with your watch.</source>
-        <translation>Il test di {minutes} minuti misura la tua frequenza cardiaca e il tuo ritmo di soglia. Registralo con l&apos;orologio.</translation>
+        <source>The threshold test measures your threshold heart rate and pace. Record it with your watch, and choose the test that suits you.</source>
+        <translation>Il test di soglia misura la tua frequenza cardiaca e il tuo ritmo di soglia. Registralo con l&apos;orologio e scegli il test che preferisci.</translation>
     </message>
     <message>
-        <source>Your threshold heart rate is the average of the last {minutes} minutes of the test.</source>
-        <translation>La tua frequenza cardiaca di soglia è la media degli ultimi {minutes} minuti del test.</translation>
+        <source>30-minute test: run for {minutes} minutes. Your threshold heart rate and pace are the averages of the last {last} minutes.</source>
+        <translation>Test da 30 minuti: corri per {minutes} minuti. La tua frequenza cardiaca e il tuo ritmo di soglia sono le medie degli ultimi {last} minuti.</translation>
+    </message>
+    <message>
+        <source>20-minute test: run for {minutes} minutes. Your threshold heart rate is {percent}% of the average of the whole test, and your threshold pace is the average pace made {add}% slower.</source>
+        <translation>Test da 20 minuti: corri per {minutes} minuti. La tua frequenza cardiaca di soglia è il {percent}% della media dell&apos;intero test, e il tuo ritmo di soglia è il ritmo medio reso più lento del {add}%.</translation>
+    </message>
+    <message>
+        <source>Afterwards, choose the activity in Activities and use Threshold test &gt; Use as threshold test, then say which test you did.</source>
+        <translation>Poi scegli l&apos;attività in Attività e usa Test di soglia &gt; Usa come test di soglia, indicando quale test hai fatto.</translation>
     </message>
     <message>
         <source>Repeat the test every {first} to {last} weeks, to keep your zones up to date.</source>
@@ -4208,10 +4358,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>A test is not a diagnosis. If you have symptoms or any doubt about your health, talk to a doctor before you do it.</source>
         <translation>Un test non è una diagnosi. Se hai disturbi o dubbi sulla tua salute, parlane con un medico prima di farlo.</translation>
-    </message>
-    <message>
-        <source>Afterwards, choose the activity in Activities and use Threshold test &gt; Use as threshold test.</source>
-        <translation>Dopo, scegli l&apos;attività in Attività e usa Test di soglia &gt; Usa come test di soglia.</translation>
     </message>
 </context>
 <context>
@@ -4231,6 +4377,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Test day</source>
         <translation>Giorno del test</translation>
+    </message>
+    <message>
+        <source>Test</source>
+        <translation>Test</translation>
     </message>
     <message>
         <source>Segment starts at</source>
@@ -4265,6 +4415,14 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Applica soglia</translation>
     </message>
     <message>
+        <source>Which test you did</source>
+        <translation>Quale test hai fatto</translation>
+    </message>
+    <message>
+        <source>Which test did you do?</source>
+        <translation>Quale test hai fatto?</translation>
+    </message>
+    <message>
         <source>The activity is still being evaluated.</source>
         <translation>L&apos;attività è ancora in valutazione.</translation>
     </message>
@@ -4282,6 +4440,22 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Only a run can be used as a threshold test.</source>
         <translation>Solo una corsa può essere usata come test di soglia.</translation>
+    </message>
+    <message>
+        <source>30-minute test (last 20 minutes)</source>
+        <translation>Test da 30 minuti (ultimi 20 minuti)</translation>
+    </message>
+    <message>
+        <source>20-minute test (−5%)</source>
+        <translation>Test da 20 minuti (−5%)</translation>
+    </message>
+    <message>
+        <source>30-minute test, method {version}</source>
+        <translation>Test da 30 minuti, metodo {version}</translation>
+    </message>
+    <message>
+        <source>20-minute test, method {version}</source>
+        <translation>Test da 20 minuti, metodo {version}</translation>
     </message>
     <message>
         <source>The {minutes} minutes in which you covered the most distance</source>
@@ -4413,10 +4587,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>{sport}, {started}</source>
         <translation>{sport}, {started}</translation>
-    </message>
-    <message>
-        <source>30-minute run, method {version}</source>
-        <translation>Corsa di 30 minuti, metodo {version}</translation>
     </message>
 </context>
 <context>

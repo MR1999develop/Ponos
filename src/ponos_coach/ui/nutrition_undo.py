@@ -16,7 +16,26 @@ from typing import Protocol
 from PySide6.QtCore import QCoreApplication
 from PySide6.QtGui import QUndoCommand
 
-from ponos_coach.nutrition.domain import ActivityLevel, GoalPeriod, MealTimes
+from ponos_coach.nutrition.domain import (
+    ActivityLevel,
+    GoalPeriod,
+    LeanMass,
+    LeanMassEntry,
+    MealTimes,
+)
+from ponos_coach.profiles.lean_mass import AppliedLeanMass
+
+
+class LeanMassCell:
+    """Where the data thread keeps what the last set of a lean mass did, for the job that takes it
+    back (`UndoLeanMass` needs it).
+
+    Only jobs on the data thread write and read it, one after the other, so it needs no lock. It is
+    empty until the set has run, and again if a set failed.
+    """
+
+    def __init__(self) -> None:
+        self.value: AppliedLeanMass | None = None
 
 
 class SettingsOps(Protocol):
@@ -44,6 +63,26 @@ class SettingsOps(Protocol):
 
     def set_level(self, level: ActivityLevel, valid_from: date) -> bool:
         """Set the activity level from a day (the same day replaces the entry)."""
+        ...
+
+    def set_lean_mass(self, lean_mass: LeanMass, valid_from: date) -> bool:
+        """Set the lean mass from a day (the first set; a refusal comes back as a signal)."""
+        ...
+
+    def redo_lean_mass(self, cell: LeanMassCell) -> bool:
+        """Put back the set that `cell` holds, exactly (redo after an undo)."""
+        ...
+
+    def restore_lean_mass(self, entry: LeanMassEntry) -> bool:
+        """Put back a removed measurement exactly, whatever the weight is now."""
+        ...
+
+    def undo_lean_mass(self, cell: LeanMassCell) -> bool:
+        """Take a set lean mass back, exactly."""
+        ...
+
+    def remove_lean_mass(self, valid_from: date) -> bool:
+        """Remove the measurement of a day."""
         ...
 
 
@@ -157,3 +196,50 @@ class SetActivityLevelCommand(QUndoCommand):
             self._ops.remove_level(self._valid_from)
         else:
             self._ops.set_level(self._previous, self._valid_from)
+
+
+class SetLeanMassCommand(QUndoCommand):
+    """Set the measured lean mass from a day; undoing puts back what the day held.
+
+    The command is created when the first set has already gone through (the section sets it and
+    only then pushes the command, so that the problems of the domain stay on the field): the first
+    `redo` does nothing.
+    """
+
+    def __init__(
+        self, ops: SettingsOps, lean_mass: LeanMass, valid_from: date, cell: LeanMassCell
+    ) -> None:
+        super().__init__(QCoreApplication.translate("NutritionUndo", "Set lean mass"))
+        self._ops = ops
+        self._lean_mass = lean_mass
+        self._valid_from = valid_from
+        self._cell = cell
+        self._already_set = True
+
+    def redo(self) -> None:
+        """Set the lean mass (the first time it is already set: nothing to do)."""
+        if self._already_set:
+            self._already_set = False
+            return
+        self._ops.redo_lean_mass(self._cell)
+
+    def undo(self) -> None:
+        """Put back the measurement of that day, or remove it if there was none."""
+        self._ops.undo_lean_mass(self._cell)
+
+
+class RemoveLeanMassCommand(QUndoCommand):
+    """Remove a measurement of the lean mass; undoing sets it back."""
+
+    def __init__(self, ops: SettingsOps, entry: LeanMassEntry) -> None:
+        super().__init__(QCoreApplication.translate("NutritionUndo", "Remove lean mass"))
+        self._ops = ops
+        self._entry = entry
+
+    def redo(self) -> None:
+        """Remove the measurement."""
+        self._ops.remove_lean_mass(self._entry.valid_from)
+
+    def undo(self) -> None:
+        """Put the measurement back exactly as it was."""
+        self._ops.restore_lean_mass(self._entry)
