@@ -531,10 +531,10 @@ def test_t_sec_05_no_sql_in_the_application_is_built_from_text(tmp_path: Path) -
     # migration statements, which are constants of `sqlite_schema`, and the creation
     # statements of the tile cache, a constant tuple of `tile_cache`. Any other must be reviewed.
     assert suspicious == [
+        "tile_cache.py: statement",
         "sqlite_database.py: f'PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}'",
         "sqlite_database.py: f'PRAGMA user_version = {int(SCHEMA_VERSION)}'",
         "sqlite_database.py: statement",
-        "tile_cache.py: statement",
     ]
 
 
