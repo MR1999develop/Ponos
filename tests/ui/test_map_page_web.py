@@ -430,15 +430,15 @@ def test_when_the_provider_fails_the_tracks_stay_and_the_notice_says_what_to_do(
     expected: tuple[str, str],
 ) -> None:
     keys = InMemoryTileKeyStore()
+    keys.save(TileKey(FakeTileSource.ACCEPTED_KEY))  # a key: the notice is the provider's problem
     tiles = TileFakes(keys, FakeTileSource(keys, script=[TileUnavailable(problem)]))
     window, view = window_with_page(qtbot, tmp_path, settings, tiles)
     show_view(qtbot, window, NEAR)
     page = window.map_page
 
-    qtbot.waitUntil(lambda: page.notice_visible, timeout=WAIT_MS)
-
     what, remedy = expected
-    assert what in page.notice_text
+    qtbot.waitUntil(lambda: page.notice_visible and what in page.notice_text, timeout=WAIT_MS)
+
     assert remedy in page.notice_text  # not only what is wrong: what to do about it
     qtbot.waitUntil(lambda: page_state(qtbot, view)["tracks"] == 8, timeout=WAIT_MS)  # tracks stay
     if problem is not TileProblem.INVALID_RESPONSE:  # that one is per tile, the others global

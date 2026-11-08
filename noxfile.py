@@ -43,6 +43,7 @@ def arch(session: nox.Session) -> None:
 @nox.session(python=False)
 def tests(session: nox.Session) -> None:
     """pytest (Qt in offscreen mode), excluding the acceptance campaign tests."""
+    _compile_catalog(session)  # the app loads the `.qm`, which git does not keep
     session.run(
         "uv",
         "run",
@@ -84,6 +85,7 @@ def audit(session: nox.Session) -> None:
 @nox.session(python=False, default=False)
 def collaudo(session: nox.Session) -> None:
     """Long campaign: tests marked `collaudo` with the long hypothesis profile."""
+    _compile_catalog(session)
     session.run(
         "uv",
         "run",
