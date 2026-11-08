@@ -1,8 +1,9 @@
 name: Release
 
-# Runs on version tags pushed by the maintainer. Builds the package on Windows and Ubuntu with
-# `nox -s dist` (build, smoke test of the executable, scan for local paths, SHA256SUMS), then
-# attaches archives and the combined SHA256SUMS to a DRAFT release: publishing it is a manual step.
+# Runs on version tags pushed by the maintainer. First all the checks (`nox`) on Windows and
+# Ubuntu; then builds the package on both with `nox -s dist` (build, smoke test of the executable, scan for local paths, SHA256SUMS), then
+# attests the provenance of the archives, makes a CycloneDX SBOM from the lockfile, and attaches
+# archives, SHA256SUMS and SBOM to a DRAFT release: publishing it is a manual step.
 
 on:
   push:
@@ -12,8 +13,65 @@ on:
 permissions: {}
 
 jobs:
+  checks:
+    name: checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+
+      - name: System packages for Qt and QtWebEngine
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y             libegl1 libgl1 libopengl0 libglib2.0-0 libdbus-1-3 libfontconfig1             libxkbcommon0 libxkbcommon-x11-0 libnss3 libxcomposite1 libxdamage1             libxrandr2 libxtst6 libxcursor1 libasound2t64 libxcb-cursor0             libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0             libxcb-shape0 libxcb-xinerama0
+
+      - name: All the mandatory checks
+        run: uv run --locked nox
+
+  sbom:
+    name: SBOM
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+
+      - name: CycloneDX SBOM from the lockfile (runtime dependencies)
+        run: |
+          mkdir sbom
+          uv export --locked --no-dev --no-emit-project --format cyclonedx1.5 --preview-features sbom-export             --output-file sbom/PonosCoach-sbom.cdx.json
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom
+          path: sbom/*
+          if-no-files-found: error
+          retention-days: 7
+
   package:
     name: package (${{ matrix.os }})
+    needs: checks
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     permissions:
@@ -52,9 +110,30 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  attest:
+    name: provenance
+    needs: [package, sbom]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # the signing identity of the attestation; only this job has it
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: "{package-*,sbom}"
+          path: parts
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            parts/package-*/PonosCoach-*
+            parts/sbom/PonosCoach-sbom.cdx.json
+
   publish:
     name: draft release
-    needs: package
+    needs: [package, sbom, attest]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -62,16 +141,16 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: package-*
+          pattern: "{package-*,sbom}"
           path: parts
 
       - name: Combine SHA256SUMS and verify the archives against it
         run: |
           mkdir release
-          cp parts/*/PonosCoach-* release/
-          cat parts/*/SHA256SUMS | sort -k 2 > release/SHA256SUMS
+          cp parts/*/PonosCoach-* release/  # archives and SBOM
+          cat parts/package-*/SHA256SUMS | sort -k 2 > release/SHA256SUMS
           cd release
-          sha256sum --check --strict SHA256SUMS
+          sha256sum --check --strict SHA256SUMS  # the SBOM is attested, not in the sums
           ls -l
 
       - name: Create the draft release

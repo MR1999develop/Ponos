@@ -195,5 +195,5 @@ def test_the_ramp_is_lower_for_four_weeks_after_closing_and_not_before_or_after(
     assert recently_returned([closed], DAY0 + timedelta(days=window))
     assert not recently_returned([closed], DAY0 + timedelta(days=window + 1))
     assert not recently_returned([injury()], DAY0)  # still open: that is the open injury's own rule
-    assert not recently_returned([closed], DAY0 - timedelta(days=1))
+    assert recently_returned([closed], DAY0 - timedelta(days=1))  # closing dated ahead: D-F6-01
     assert recently_returned([illness().recovered(DAY0)], DAY0 + timedelta(days=3))

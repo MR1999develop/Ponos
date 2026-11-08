@@ -752,7 +752,6 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Report illness...": QKeySequence("Ctrl+Shift+J").toString(),
         "Daily check-in...": QKeySequence("Ctrl+K").toString(),
         "Medical review done": QKeySequence("Ctrl+Shift+V").toString(),
-        "Close": QKeySequence("Ctrl+Shift+Q").toString(),
         "Show map": QKeySequence("Ctrl+M").toString(),
         "Show all activities": QKeySequence("Ctrl+0").toString(),
         "Zoom in": QKeySequence(QKeySequence.StandardKey.ZoomIn).toString(),

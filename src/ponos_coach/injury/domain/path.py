@@ -13,8 +13,9 @@ The rules of one day (`advance`), all numbers in `defaults`:
   by one, never more. A day with no check-in breaks the run: no check-in, no step up.
 - the first running step also needs the days with no pain at all (`required_pain_free_days`).
 
-The base level is the lowest pain the morning after seen so far (the questionnaire's, to begin
-with): it only goes down. Pure and deterministic: same check-ins, same state.
+The base level is the lowest pain the morning after seen so far on any active day (the
+questionnaire's, to begin with): it only goes down. Pure and deterministic: same check-ins, same
+state.
 """
 
 from __future__ import annotations
@@ -181,7 +182,10 @@ def advance(state: PathState, checkin: CheckIn, questionnaire: Questionnaire) ->
     if state.status is PathStatus.HALTED:
         return replace(state, last_checkin=checkin.day, last_verdict=Verdict.HALT)
     state = _runs(state, checkin)
-    if _worse(state, checkin):
+    worse = _worse(state, checkin)
+    # The base level is the lowest morning seen on any active day (also hold and back days).
+    state = replace(state, baseline=min(state.baseline, checkin.pain_morning))
+    if worse:
         step = Step(max(state.step - 1, FIRST_STEP))
         entered = checkin.day if step != state.step else state.entered_on
         return replace(
@@ -196,7 +200,6 @@ def advance(state: PathState, checkin: CheckIn, questionnaire: Questionnaire) ->
         return replace(state, good_days=0, active_days=0, last_verdict=Verdict.HOLD)
     good = replace(
         state,
-        baseline=min(state.baseline, checkin.pain_morning),
         good_days=state.good_days + 1,
         active_days=state.active_days + (checkin.pain_during is not None),
         last_verdict=Verdict.GOOD,

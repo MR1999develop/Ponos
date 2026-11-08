@@ -257,10 +257,6 @@ def test_while_the_injury_is_open_every_week_of_the_plan_respects_the_ramp_of_3(
     assert violations(plan) == []  # includes the ramp check against `max_ramp_per_week`
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F6-01: an injury closed on a future day is neither open nor 'recently returned'",
-)
 def test_closing_with_a_day_after_today_still_lowers_the_ramp(world: World) -> None:
     """D-F6-01 (low): `recently_returned` needs `0 <= today - closed_on`, and an injury with a
     `closed_on` is not open, so closing on a future day leaves the plan at +5 for those days."""

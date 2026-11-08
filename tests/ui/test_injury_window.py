@@ -131,7 +131,7 @@ def test_the_injuries_menu_lists_every_command_with_its_shortcut(
         ("Report illness...", "Ctrl+Shift+J"),
         ("Daily check-in...", "Ctrl+K"),
         ("Medical review done", "Ctrl+Shift+V"),
-        ("Close", "Ctrl+Shift+Q"),
+        ("Close injury or illness...", ""),
         ("Undo", ""),  # like the plan: no global shortcut
         ("Redo", ""),
     ]

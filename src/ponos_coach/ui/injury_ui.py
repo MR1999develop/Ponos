@@ -203,7 +203,9 @@ class InjuryUi(QObject):
         self._review_action = self._action(
             self.tr("Medical review done"), "Ctrl+Shift+V", self.confirm_review
         )
-        self._close_action = self._action(self.tr("Close"), "Ctrl+Shift+Q", self.close_problem)
+        self._close_action = self._action(
+            self.tr("Close injury or illness..."), None, self.close_problem
+        )
         self._undo_action = self._stack.createUndoAction(self, self.tr("Undo"))
         # "Undo <change>" / "Redo <change>" at the end of the menu, like the plan: no global
         # shortcut (a global Ctrl+Z would also act while a text field has the focus).

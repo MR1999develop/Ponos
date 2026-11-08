@@ -99,10 +99,11 @@ def plan_injuries(problems: Iterable[Problem]) -> tuple[PlanInjury, ...]:
 
 def recently_returned(problems: Iterable[Problem], today: date) -> bool:
     """True if a problem was closed within the window after which the weekly ramp is lower again
-    (CSM1 cap. 12)."""
+    (CSM1 cap. 12). A closing dated after `today` still counts: until that day the problem was
+    open, so the ramp stays low (D-F6-01)."""
     for problem in problems:
         end = problem_end(problem)
-        if end is not None and 0 <= (today - end).days <= defaults.RAMP_AFTER_RETURN_DAYS:
+        if end is not None and (today - end).days <= defaults.RAMP_AFTER_RETURN_DAYS:
             return True
     return False
 

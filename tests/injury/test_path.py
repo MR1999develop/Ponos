@@ -94,6 +94,18 @@ def test_a_morning_above_the_base_level_steps_back_even_if_the_activity_did_not_
     assert state.last_verdict is Verdict.BACK
 
 
+def test_the_base_level_also_follows_the_mornings_of_hold_and_back_days() -> None:
+    q = questionnaire(morning=4)
+    held = fold(injury(q=q), [checkin(1, 4, 0)])  # a hold day with a calm morning
+    assert held.last_verdict is Verdict.HOLD
+    assert held.baseline == pain(0)
+    state = fold(injury(q=q), [checkin(1, 4, 0), checkin(2, 0, 1)])
+    assert state.last_verdict is Verdict.BACK  # not a false worsening: 1 is above the 0 seen
+
+    stepped_back = fold(injury(q=q), [checkin(1, 8, 0)])
+    assert stepped_back.baseline == pain(0)
+
+
 def test_stepping_back_goes_to_the_last_completed_step_not_further() -> None:
     days = climb(injury(), Step.CONTINUOUS_EASY)
     state = fold(injury(checkins=days), [checkin(len(days) + 1, during=7)])
