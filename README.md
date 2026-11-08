@@ -245,7 +245,9 @@ All the data of a profile is in the folder chosen at creation:
 - `ponos.lock`: prevents opening the same profile twice.
 
 A profile can be saved to a single versioned backup file and restored into a
-new folder, never over an existing profile (`docs/backup-format.md`).
+new folder, never over an existing profile (`docs/backup-format.md`). The
+backup file is not encrypted: it holds your health data and GPS positions, so
+keep it somewhere private and not in a folder synchronized with the cloud.
 
 Do not move or edit these files by hand while the app is open. The list of
 profiles is in the app's configuration folder (`profiles.json`). The Garmin

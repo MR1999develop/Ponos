@@ -256,10 +256,6 @@ def test_a_restore_into_an_empty_existing_folder_works(backup_file: Path, tmp_pa
     assert (empty / database_name()).is_file()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F8-03: a failed restore deletes an empty folder the user had created",
-)
 def test_a_failed_restore_keeps_an_empty_folder_the_user_had_created(tmp_path: Path) -> None:
     """D-F8-03 (low): `docs/backup-format.md` says the folder is removed "if the restore created
     it"; `RestoreProfile` removes any empty folder, also one that existed before the call."""

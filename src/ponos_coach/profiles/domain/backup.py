@@ -34,7 +34,8 @@ MANIFEST_NAME: Final = "manifest.json"
 
 _MIB = 1024 * 1024
 _GIB = 1024 * _MIB
-_ARCHIVE_ENTRY = re.compile(rf"{PROFILE_ARCHIVE_DIR}/\d{{4}}/[0-9a-f]{{64}}\.(?:fit|gpx)")
+_ARCHIVE_YEAR = re.compile(r"[0-9]{4}")  # ASCII digits only: `\d` would accept any Unicode digit
+_ARCHIVE_ENTRY = re.compile(rf"{PROFILE_ARCHIVE_DIR}/[0-9]{{4}}/[0-9a-f]{{64}}\.(?:fit|gpx)")
 _SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 _APP_VERSION_MAX_CHARS = 32
 _REQUIRED_KEYS = (
@@ -71,6 +72,11 @@ class BackupLimits:
         for item in fields(self):
             if getattr(self, item.name) <= 0:
                 raise ValueError(f"the limit {item.name} must be positive")
+
+
+def is_archive_year(name: str) -> bool:
+    """True for the name of a year folder of the archive: exactly four ASCII digits."""
+    return _ARCHIVE_YEAR.fullmatch(name) is not None
 
 
 def is_backup_entry_path(path: str) -> bool:

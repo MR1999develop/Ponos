@@ -268,8 +268,9 @@ class BackupUi(QObject):
                 (
                     backup_done_text(done.summary),
                     self.tr(
-                        "It holds your health data and no Garmin password or token: keep it "
-                        "somewhere private."
+                        "The file is not encrypted and holds your health data and GPS "
+                        "positions (no Garmin password or token): keep it somewhere private, "
+                        "not in a folder synchronized with the cloud."
                     ),
                 )
             )

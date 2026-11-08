@@ -4,8 +4,9 @@
 
 The format is in `profiles.domain.backup`; reading and writing the file is the job of a
 `ProfileBackupStorage`. The use cases decide what is allowed: a backup never overwrites a file
-or lands inside the profile it copies, a restore only ever goes to a new folder (never over an
-existing profile) and leaves nothing behind when it fails.
+or lands inside the profile it copies (the paths are compared after resolving links and
+junctions), a restore only ever goes to a new folder (never over an existing profile) and leaves
+the destination exactly as it was when it fails.
 """
 
 from __future__ import annotations
@@ -44,7 +45,7 @@ class BackupProfile:
 
         Raises:
             ValueError: `destination` is relative, has another suffix or is inside `folder`
-                (nothing was touched).
+                (also through a link or a junction; nothing was touched).
             BackupFileExistsError: `destination` exists.
             BackupWriteError: reading the profile or writing the file failed; no file is left.
         """
@@ -52,7 +53,7 @@ class BackupProfile:
             raise ValueError("paths must be absolute")
         if destination.suffix != BACKUP_SUFFIX:
             raise ValueError(f"a backup file ends with {BACKUP_SUFFIX}")
-        if destination.is_relative_to(folder):
+        if destination.resolve().is_relative_to(folder.resolve()):
             raise ValueError("the backup cannot be written inside the profile folder")
         return self._storage.write(folder, destination, self._now_utc(), self._app_version)
 
@@ -65,17 +66,18 @@ class RestoreProfile:
         self._folders = folders
 
     def __call__(self, source: Path, folder: Path) -> BackupSummary:
-        """Restores the backup `source` into `folder`, which is created or must be empty.
+        """Restores the backup `source` into `folder`, which must not exist or be empty.
 
+        The profile is built in a private temporary folder next to `folder`, checked, and renamed
+        to `folder` as the very last step: if anything fails, or the process dies, `folder` is
+        as it was (an empty folder the user had created stays) and no profile is half written.
         The restored profile keeps its id and is not registered in the profile list: whoever
-        calls opens it from its folder afterwards. If anything fails the folder is removed when
-        empty and only what this call wrote is deleted.
+        calls opens it from its folder afterwards.
 
         Raises:
             ValueError: a path is relative (nothing was touched).
             FolderNotEmptyError: `folder` exists and is not empty; nothing was written.
-            FolderUnavailableError: the folder cannot be created or locked.
-            ProfileInUseError: the folder is locked by another instance.
+            FolderUnavailableError: the folder cannot be read.
             BackupInvalidError: `source` is not a restorable backup.
             BackupTooNewError: the backup is newer than this app knows.
             BackupWriteError: reading `source` or writing `folder` failed.
@@ -84,13 +86,4 @@ class RestoreProfile:
             raise ValueError("paths must be absolute")
         if self._folders.inspect(folder).state is FolderState.NOT_EMPTY:
             raise FolderNotEmptyError(folder.name)
-        self._folders.create_private_folder(folder)
-        lock = self._folders.acquire_lock(folder)
-        try:
-            return self._storage.restore(source, folder)
-        except BaseException:
-            lock.release()
-            self._folders.remove_if_empty(folder)
-            raise
-        finally:
-            lock.release()  # idempotent
+        return self._storage.restore(source, folder)

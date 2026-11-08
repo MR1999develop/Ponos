@@ -139,7 +139,7 @@ def test_a_backup_whose_publication_fails_leaves_no_file_and_no_temporary_folder
     def broken(source: Path, destination: Path) -> None:
         raise OSError("simulated rename failure")
 
-    monkeypatch.setattr(profile_backup, "replace_file", broken)
+    monkeypatch.setattr(profile_backup, "rename_exclusive", broken)
     with pytest.raises(BackupWriteError):
         backup_use_case()(world.profile.folder, tmp_path / f"b{BACKUP_SUFFIX}")
 
@@ -161,10 +161,6 @@ def test_a_backup_killed_at_every_file_never_leaves_a_file_with_the_backup_name(
         assert not (out / f"b{BACKUP_SUFFIX}").exists(), f"killed at file {kill} of {total}"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F8-02: a killed backup leaves a temporary folder with a partial copy that is never removed",
-)
 def test_a_backup_killed_midway_leaves_nothing_next_to_the_destination_after_the_next_backup(
     rich: tuple[World, Path], tmp_path: Path
 ) -> None:
@@ -196,10 +192,6 @@ def test_a_restore_killed_at_every_file_never_leaves_an_openable_profile(
         assert not (target / database_name()).exists(), f"killed at file {kill} of {total}"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F8-01: a killed restore leaves a half-filled folder that the next restore refuses",
-)
 def test_a_restore_killed_midway_can_be_repeated_into_the_same_folder(
     rich: tuple[World, Path], tmp_path: Path
 ) -> None:

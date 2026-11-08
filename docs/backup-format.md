@@ -16,6 +16,13 @@ The file is a ZIP archive (deflate) with exactly these entries and no others:
 | `archivio/<year>/<sha256>.fit` or `.gpx` | The original activity files, as in the profile's archive. |
 | `manifest.json` | UTF-8 JSON, described below. |
 
+**The file is not encrypted.** It holds the same health data and GPS positions as
+the profile (activities with heart rate and tracks, weight, injuries). Keep it
+somewhere private, and not in a folder synchronized with the cloud (OneDrive,
+Dropbox, Google Drive): the provider would get a copy of it. For protection
+against theft of the disk or the drive, use disk encryption (BitLocker, LUKS).
+The file has no password: whoever can read it can read the data.
+
 Never in a backup: the Garmin tokens (they live in the system keyring, not in the
 profile folder), the lock file, the `backup/` folder with the pre-migration copies,
 temporary files and anything with a name outside the list above.
@@ -47,10 +54,25 @@ temporary files and anything with a name outside the list above.
 
 ## Writing
 
-The ZIP is built in a private temporary folder next to the destination and
-renamed to its name only when complete (flush, `fsync`, rename, directory
-sync). A backup never overwrites a file and is never written inside the profile
-folder. If anything fails no file is left.
+The ZIP is built in a private temporary folder next to the destination
+(`.ponos-backup-<process id>-<8 characters>`) and renamed to its name only when
+complete (flush, `fsync`, rename, directory sync). The rename is exclusive: if a
+file with that name appears in the meantime it is not replaced and the backup
+fails (Windows: `MoveFileExW` without `REPLACE_EXISTING`; POSIX: `link` and
+`unlink`, or, on file systems without hard links, the name is created
+exclusively and then replaced). A backup never overwrites a file and is never
+written inside the profile folder; the check compares the paths after resolving
+links and junctions. If anything fails no file is left. If the process dies
+halfway, only the temporary folder is left (a partial copy, in the folder the
+user chose): the next backup into the same folder removes it, but only a real
+folder whose name is exactly the generated one and whose process is no longer
+running (or that is more than a day old).
+
+Permissions: on POSIX the file is `0600`. On Windows the temporary folder is
+created with a protected descriptor (only the user, SYSTEM and the
+administrators), and the file, renamed inside the same volume, keeps it: it does
+not inherit the permissions of the destination folder. File systems without
+permissions (FAT, exFAT) cannot protect it; there the advice above matters more.
 
 ## Restoring
 
@@ -58,17 +80,26 @@ A backup is restored only into a folder that does not exist or is empty (apart
 from the lock file), never over an existing profile. The restored profile keeps
 its id and is not added to the profile list by the restore itself.
 
+The restore works in a private temporary folder next to the destination
+(`.ponos-restore-<process id>-<8 characters>`, same volume) and gives it the
+name of the destination as its very last step, with an exclusive rename. Until
+then the destination is untouched: if the restore fails, or the process dies,
+the destination is as it was (an empty folder created by the user stays, and so
+does its absence), and nothing half written is ever a profile. A dead restore
+leaves only its temporary folder, which the next restore into the same parent
+folder removes (same rule as for backups).
+
 The file is untrusted input. Before extracting anything the reader checks the
 central directory, the number of entries, the declared sizes, the compression
 ratio and duplicate names (the same rules as for the ZIPs downloaded from
 Garmin), then that the entries are exactly those of the manifest with the sizes
 it declares. Entry names come from a closed list (`ponos.sqlite3` and
-`archivio/<4 digits>/<64 hex digits>.fit|gpx`); a name from the file is never
+`archivio/<4 digits>/<64 hex digits>.fit|gpx`, the digits being ASCII `0-9` only); a name from the file is never
 used as a path. Each file is streamed to an exclusive temporary file, checked
 against its SHA-256, flushed and renamed; the database goes last and is then
 opened as the app opens a profile (integrity check, format version, migration
-with its own pre-migration copy). If anything fails, everything the restore wrote
-is removed and the folder is removed if the restore created it.
+with its own pre-migration copy). If anything fails, the temporary folder is
+removed.
 
 | Limit | Value |
 |---|---|

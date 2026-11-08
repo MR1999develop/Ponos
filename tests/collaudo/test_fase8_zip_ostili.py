@@ -154,7 +154,6 @@ def test_t_sec_an_entry_outside_the_closed_list_is_refused_whether_or_not_the_ma
     refuse(tmp_path, listed, BackupInvalidError, PROBLEM.NOT_A_BACKUP)
 
 
-@pytest.mark.xfail(strict=True, reason="D-F8-04: the entry-name pattern accepts Unicode digits")
 def test_t_sec_the_year_folder_of_an_entry_is_made_of_ascii_digits_only(
     good: Entries, tmp_path: Path
 ) -> None:

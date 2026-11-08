@@ -5,26 +5,35 @@
 Writing: the database is copied with the SQLite backup API (a consistent snapshot even while the
 app has the profile open), checked with `quick_check`, and added to the ZIP with the activity
 files; the manifest (sizes and SHA-256 of every file) is the last entry; the ZIP is built in a
-private temporary folder next to the destination and renamed only when complete.
+private temporary folder next to the destination and renamed only when complete, without ever
+replacing a file that appeared meanwhile. A backup killed halfway leaves only its temporary
+folder (`.ponos-backup-<pid>-*`), which the next backup in that folder removes.
 
 Reading (untrusted input): the central directory, entry count, sizes and compression ratios are
 checked before anything is extracted (`zipread`); the entries must be exactly those of the
 manifest, each from the closed list of names of `profiles.domain.backup`, so no name from the
 file is ever used as a path; every file is streamed to an exclusive temporary, checked against
 its SHA-256 and renamed; the database goes last and is then opened as the app will open it.
-Anything that fails removes what the call wrote.
+All of it happens in a private temporary folder next to the destination (`.ponos-restore-<pid>-*`)
+that takes the name of the destination only at the very end: a failure or a death leaves the
+destination as it was (a folder the user had created stays), and the leftovers of a dead restore
+are removed by the next one in the same parent folder.
 """
 
 from __future__ import annotations
 
 import contextlib
+import ctypes
 import hashlib
 import os
+import re
 import secrets
 import shutil
 import sqlite3
 import stat
+import sys
 import tempfile
+import time
 import zipfile
 import zlib
 from collections.abc import Iterator
@@ -36,7 +45,6 @@ from typing import BinaryIO, Final
 from ponos_coach.fsio import make_subdirectory, replace_file, sync_directory
 from ponos_coach.profiles.domain import (
     PROFILE_ARCHIVE_DIR,
-    PROFILE_BACKUP_DIR,
     PROFILE_DATABASE_NAME,
     PROFILE_LOCK_NAME,
 )
@@ -51,6 +59,7 @@ from ponos_coach.profiles.domain.backup import (
     ManifestTooNewError,
     decode_manifest,
     encode_manifest,
+    is_archive_year,
     is_backup_entry_path,
     summarize,
 )
@@ -81,7 +90,20 @@ _ZIP_EPOCH: Final = (1980, 1, 1, 0, 0, 0)  # no local time in the file
 _ZIP_ZIP64_FROM: Final = 1 << 30  # the database may exceed what plain ZIP stores
 _FILE_MODE: Final = 0o600
 _REPARSE_POINT: Final = 0x400  # FILE_ATTRIBUTE_REPARSE_POINT
-_YEAR_DIGITS: Final = 4
+_MOVEFILE_WRITE_THROUGH: Final = 0x8
+_RENAME_ATTEMPTS: Final = 5  # antivirus and indexers cause transient PermissionError
+_RENAME_PAUSE_S: Final = 0.05
+_STALE_AGE_S: Final = 24 * 3600  # a temporary folder this old is a leftover whatever its pid says
+_STILL_ACTIVE: Final = 259  # GetExitCodeProcess of a running process
+_ERROR_INVALID_PARAMETER: Final = 87  # OpenProcess: no process with that id
+_PROCESS_QUERY_LIMITED_INFORMATION: Final = 0x1000
+_IS_WINDOWS: Final[bool] = sys.platform == "win32"  # bool, not Literal: mypy does not drop a branch
+_BACKUP_PREFIX: Final = ".ponos-backup-"
+_RESTORE_PREFIX: Final = ".ponos-restore-"
+# `<prefix><pid>-<8 random characters>`: what `tempfile.mkdtemp` makes with the prefix above.
+_TEMPORARY_NAME: Final = re.compile(
+    r"\.ponos-(?:backup|restore)-([0-9]{1,10})-[a-z0-9_]{8}", re.ASCII
+)
 _OPEN_FLAGS: Final = (
     os.O_RDONLY
     | getattr(os, "O_BINARY", 0)
@@ -133,6 +155,130 @@ def _open_plain_file(path: Path) -> BinaryIO:
     return handle
 
 
+# --- Temporaries and renames -----------------------------------------------------------------
+
+
+if sys.platform == "win32":
+
+    def _process_is_alive(pid: int) -> bool:
+        """True if a process with this id is running (or cannot be told apart from running)."""
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+        kernel.OpenProcess.restype = ctypes.c_void_p
+        kernel.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
+        kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+        handle = kernel.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, 0, pid)
+        if not handle:
+            return ctypes.get_last_error() != _ERROR_INVALID_PARAMETER
+        try:
+            code = ctypes.c_uint32()
+            return not kernel.GetExitCodeProcess(handle, ctypes.byref(code)) or (
+                code.value == _STILL_ACTIVE
+            )
+        finally:
+            kernel.CloseHandle(handle)
+
+    def _move_without_replacing(source: Path, destination: Path) -> None:
+        move = ctypes.WinDLL("kernel32", use_last_error=True).MoveFileExW
+        move.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32]
+        move.restype = ctypes.c_int
+        # No MOVEFILE_REPLACE_EXISTING: an existing name makes it fail (FileExistsError).
+        if not move(str(source), str(destination), _MOVEFILE_WRITE_THROUGH):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+else:
+
+    def _process_is_alive(pid: int) -> bool:
+        """True if a process with this id is running (or cannot be told apart from running)."""
+        try:
+            os.kill(pid, 0)  # signal 0 only checks that the process exists
+        except (ProcessLookupError, OverflowError):
+            return False
+        except OSError:
+            return True  # exists, but it is not ours
+        return True
+
+    def _move_without_replacing(source: Path, destination: Path) -> None:
+        raise NotImplementedError("Windows only")
+
+
+def _claim_then_replace(source: Path, destination: Path) -> None:
+    """For file systems without hard links: the name is created exclusively, then replaced."""
+    os.close(os.open(destination, _CREATE_FLAGS, _FILE_MODE))
+    try:
+        source.replace(destination)
+    except BaseException:
+        destination.unlink(missing_ok=True)  # the empty file this call created
+        raise
+
+
+def _rename_windows(source: Path, destination: Path) -> None:
+    """`MoveFileExW` without replacing, retried a few times on a transient `PermissionError`."""
+    for attempt in range(_RENAME_ATTEMPTS):
+        try:
+            _move_without_replacing(source, destination)
+        except PermissionError:
+            if attempt == _RENAME_ATTEMPTS - 1:
+                raise
+            time.sleep(_RENAME_PAUSE_S)
+        else:
+            return
+
+
+def rename_exclusive(source: Path, destination: Path) -> None:
+    """Gives `source` (a file or a folder, same volume) the name `destination`, never replacing.
+
+    If `destination` exists, or appears while this runs, nothing is replaced and `FileExistsError`
+    is raised. Windows: `MoveFileExW` without `REPLACE_EXISTING`. POSIX files: `os.link` then
+    `os.unlink` (the link fails if the name exists). POSIX folders have no atomic exclusive rename:
+    the name is checked first and `os.rename` cannot replace a folder that has content.
+
+    Raises:
+        FileExistsError: `destination` exists.
+        OSError: the rename failed; `source` stays where it was.
+    """
+    if _IS_WINDOWS:
+        _rename_windows(source, destination)
+    elif source.is_dir():
+        if os.path.lexists(destination):
+            raise FileExistsError(destination.name)
+        source.rename(destination)
+    else:
+        try:
+            os.link(source, destination)
+        except FileExistsError:
+            raise
+        except OSError:
+            _claim_then_replace(source, destination)
+        else:
+            source.unlink()
+
+
+def remove_stale_temporaries(parent: Path, prefix: str) -> None:
+    """Removes the temporary folders of a backup or restore that died, from `parent`.
+
+    Only a real folder whose name is exactly what this module generates (`prefix`, a process id,
+    eight random characters) and that is not in use: its process is not running, or it is older
+    than a day (the id may have been reused). Anything else is left alone. Best effort, never
+    raises.
+    """
+    try:
+        with os.scandir(parent) as scan:
+            candidates = [entry for entry in scan if entry.name.startswith(prefix)]
+        now = time.time()
+        for entry in candidates:
+            found = _TEMPORARY_NAME.fullmatch(entry.name)
+            status = entry.stat(follow_symlinks=False)
+            if found is None or not _is_plain(status, directory=True):
+                continue
+            pid = int(found.group(1))
+            in_use = pid == os.getpid() or _process_is_alive(pid)
+            if not in_use or now - status.st_mtime > _STALE_AGE_S:
+                shutil.rmtree(entry.path, ignore_errors=True)
+    except OSError:
+        return
+
+
 # --- Writing ---------------------------------------------------------------------------------
 
 
@@ -181,7 +327,7 @@ def _archive_sources(folder: Path) -> list[tuple[str, Path]]:
         return []
     found: list[tuple[str, Path]] = []
     for year in _plain_entries(root, directory=True):
-        if len(year.name) != _YEAR_DIGITS or not year.name.isdecimal():
+        if not is_archive_year(year.name):
             continue
         for item in _plain_entries(Path(year.path), directory=False):
             name = f"{PROFILE_ARCHIVE_DIR}/{year.name}/{item.name}"
@@ -234,8 +380,11 @@ class FileProfileBackup:
         """See `ProfileBackupStorage.write`."""
         if os.path.lexists(destination):
             raise BackupFileExistsError("the backup file already exists")
+        remove_stale_temporaries(destination.parent, _BACKUP_PREFIX)
         try:
-            work = Path(tempfile.mkdtemp(dir=destination.parent, prefix=".ponos-backup-"))
+            work = Path(
+                tempfile.mkdtemp(dir=destination.parent, prefix=f"{_BACKUP_PREFIX}{os.getpid()}-")
+            )
         except OSError as exc:
             raise BackupWriteError("the backup folder cannot be used") from exc
         try:
@@ -296,9 +445,10 @@ class FileProfileBackup:
     @staticmethod
     def _publish(finished: Path, destination: Path) -> None:
         """The complete file takes its name; if someone created it meanwhile it is not replaced."""
-        if os.path.lexists(destination):
-            raise BackupFileExistsError("the backup file already exists")
-        replace_file(finished, destination)
+        try:
+            rename_exclusive(finished, destination)
+        except FileExistsError as exc:
+            raise BackupFileExistsError("the backup file already exists") from exc
         sync_directory(destination.parent)
 
     # --- restore -----------------------------------------------------------------------------
@@ -306,14 +456,23 @@ class FileProfileBackup:
     def restore(self, source: Path, folder: Path) -> BackupSummary:
         """See `ProfileBackupStorage.restore`."""
         _require_only_lock(folder)
-        created: list[Path] = []
+        remove_stale_temporaries(folder.parent, _RESTORE_PREFIX)
         try:
-            return summarize(self._restore_into(source, folder, created))
+            folder.parent.mkdir(parents=True, exist_ok=True)
+            staging = Path(
+                tempfile.mkdtemp(dir=folder.parent, prefix=f"{_RESTORE_PREFIX}{os.getpid()}-")
+            )
+        except OSError as exc:
+            raise BackupWriteError("the destination folder cannot be created") from exc
+        try:
+            manifest = self._restore_into(source, staging)
+            _install(staging, folder)
         except BaseException:
-            _roll_back(folder, created)
+            shutil.rmtree(staging, ignore_errors=True)
             raise
+        return summarize(manifest)
 
-    def _restore_into(self, source: Path, folder: Path, created: list[Path]) -> BackupManifest:
+    def _restore_into(self, source: Path, staging: Path) -> BackupManifest:
         try:
             handle = _open_plain_file(source)
         except OSError as exc:
@@ -329,8 +488,8 @@ class FileProfileBackup:
                 manifest = self._read_manifest(archive)
                 self._check_entries(archive, manifest)
                 for file in (*manifest.archive_files, manifest.database):  # database last
-                    _extract(archive, file, folder, created)
-        _verify_database(folder, manifest)
+                    _extract(archive, file, staging)
+        _verify_database(staging, manifest)
         return manifest
 
     def _read_manifest(self, archive: zipfile.ZipFile) -> BackupManifest:
@@ -390,25 +549,22 @@ def _read_entry(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> Iterator[byt
         raise BackupInvalidError(BackupProblem.NOT_A_BACKUP)
 
 
-def _make_parents(target: Path, folder: Path, created: list[Path]) -> None:
+def _make_parents(target: Path, folder: Path) -> None:
     """Creates the missing folders between `folder` and the parent of `target`."""
     for part in reversed(target.relative_to(folder).parents):
-        if part == Path():
-            continue
-        if make_subdirectory(folder / part):
-            created.append(folder / part)
+        if part != Path():
+            make_subdirectory(folder / part)
 
 
-def _extract(archive: zipfile.ZipFile, file: BackupFile, folder: Path, created: list[Path]) -> None:
-    """One file of the backup into the profile folder, verified, durable, under its final name."""
+def _extract(archive: zipfile.ZipFile, file: BackupFile, folder: Path) -> None:
+    """One file of the backup into the staging folder, verified, durable, under its final name."""
     info = archive.getinfo(file.path)
     target = folder / PurePosixPath(file.path)  # the name is from the closed list
     try:
-        _make_parents(target, folder, created)
+        _make_parents(target, folder)
         if os.path.lexists(target):
             raise BackupWriteError("the destination already has a file")
         temporary = target.parent / f".{secrets.token_hex(8)}.tmp"
-        created.append(temporary)
         digest = hashlib.sha256()
         with os.fdopen(os.open(temporary, _CREATE_FLAGS, _FILE_MODE), "wb") as sink:
             for chunk in _read_entry(archive, info):
@@ -419,7 +575,6 @@ def _extract(archive: zipfile.ZipFile, file: BackupFile, folder: Path, created: 
         if digest.hexdigest() != file.sha256_hex:
             raise BackupInvalidError(BackupProblem.CHECKSUM)
         replace_file(temporary, target)
-        created.append(target)
         sync_directory(target.parent)
     except OSError as exc:
         raise BackupWriteError("writing the restored files failed") from exc
@@ -441,6 +596,15 @@ def _verify_database(folder: Path, manifest: BackupManifest) -> None:
 
 
 def _require_only_lock(folder: Path) -> None:
+    """The destination is missing, or an empty real folder (the lock file alone does not count)."""
+    try:
+        status = folder.lstat()
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise BackupWriteError("the destination folder cannot be read") from exc
+    if not _is_plain(status, directory=True):
+        raise BackupWriteError("the destination is not a folder")
     try:
         with os.scandir(folder) as scan:
             names = [entry.name for entry in scan]
@@ -450,15 +614,23 @@ def _require_only_lock(folder: Path) -> None:
         raise FolderNotEmptyError(folder.name)
 
 
-def _roll_back(folder: Path, created: list[Path]) -> None:
-    """Removes what the restore wrote (and the pre-migration copies the check may have made)."""
-    for side in ("", "-wal", "-shm", "-journal"):
-        with contextlib.suppress(OSError):
-            (folder / (PROFILE_DATABASE_NAME + side)).unlink(missing_ok=True)
-    for path in reversed(created):
-        with contextlib.suppress(OSError):
-            if path.is_dir():
-                path.rmdir()
-            else:
-                path.unlink(missing_ok=True)
-    shutil.rmtree(folder / PROFILE_BACKUP_DIR, ignore_errors=True)
+def _install(staging: Path, folder: Path) -> None:
+    """The finished staging folder takes the name of the destination; nothing is replaced.
+
+    An existing (empty) destination is removed just before, and put back if the rename fails.
+    """
+    try:
+        existed = folder.exists()
+        if existed:
+            (folder / PROFILE_LOCK_NAME).unlink(missing_ok=True)
+            folder.rmdir()
+        try:
+            rename_exclusive(staging, folder)
+        except OSError:
+            if existed:
+                with contextlib.suppress(OSError):
+                    folder.mkdir()
+            raise
+        sync_directory(folder.parent)
+    except OSError as exc:
+        raise BackupWriteError("the restored profile could not take its folder") from exc
