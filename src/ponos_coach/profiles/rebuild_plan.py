@@ -4,7 +4,8 @@
 
 - `RebuildPlan`: gathers what the plan engine needs (the PMC of what was really done, the goals, the
   availability, the session types, the day's physiology, the sport weights, the last threshold
-  pace, the retest status), calls `build_plan` and saves the result if it differs from the last one.
+  pace, the retest status, the open injuries and illnesses), calls `build_plan` and saves the
+  result if it differs from the last one.
 - `PlanAdherence`: planned against done for a range of days, using what was planned *at the time*.
 
 The past stays history. A plan only covers the days after the day it was generated, so when a new
@@ -30,6 +31,8 @@ from ponos_coach.assessment.domain import retest_status
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.domain import FitnessGoal, RaceGoal, WeeklyAvailability
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
+from ponos_coach.injury.domain import plan_injuries, recently_returned
+from ponos_coach.injury.ports import InjuryStore
 from ponos_coach.load.domain import (
     MissingPhysiologyError,
     compute_pmc,
@@ -65,6 +68,7 @@ class PlanSources:
     sport_weights: SportWeightStore
     threshold_tests: ThresholdTestStore
     plans: PlanStore
+    injuries: InjuryStore
 
 
 def plan_sources_of(session: ProfileSession) -> PlanSources:
@@ -78,6 +82,7 @@ def plan_sources_of(session: ProfileSession) -> PlanSources:
         session.sport_weights,
         session.threshold_tests,
         session.plans,
+        session.injuries,
     )
 
 
@@ -157,8 +162,8 @@ class RebuildPlan:
 
         Raises:
             OverviewCancelledError: the overview was cancelled; nothing is saved.
-            LoadStoreError, AssessmentStoreError, GoalStoreError, PlanStoreError: a store could
-                not be read or written; nothing is saved.
+            LoadStoreError, AssessmentStoreError, GoalStoreError, InjuryStoreError,
+                PlanStoreError: a store could not be read or written; nothing is saved.
         """
         src = self._src
         try:  # first: without parameters the overview itself cannot be computed
@@ -169,6 +174,7 @@ class RebuildPlan:
         goals = src.goals.list_goals()
         saved_availability = src.availability.get()
         tests = [t for t in src.threshold_tests.list_tests() if t.test_day <= today]
+        problems = src.injuries.list_problems()
         inputs = PlanInputs(
             races=tuple(g for g in goals if isinstance(g, RaceGoal)),
             fitness_goals=tuple(g for g in goals if isinstance(g, FitnessGoal)),
@@ -181,6 +187,8 @@ class RebuildPlan:
                 (t.pace_s_per_km for t in reversed(tests) if t.pace_s_per_km is not None), None
             ),
             retest=retest_status((t.test_day for t in tests), today),
+            injuries=plan_injuries(problems),
+            after_injury=recently_returned(problems, today),
         )
         built = build_plan(inputs, today)
         saved = self._save(built, today)

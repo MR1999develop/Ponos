@@ -51,6 +51,7 @@ from tests.contracts.contract_assessment import (
     PhysiologyRemovalContract,
     ThresholdTestStoreContract,
 )
+from tests.contracts.contract_injury import InjuryStoreContract
 from tests.contracts.contract_nutrition import (
     ActivityCaloriesContract,
     ActivityLevelStoreContract,
@@ -216,6 +217,10 @@ def test_new_database_has_the_latest_schema_and_the_expected_tables(tmp_path: Pa
         "plan_state",
         "plan_past_day",
         "lean_mass",
+        "injury",
+        "injury_pain_free",
+        "injury_checkin",
+        "injury_sign",
     }
     assert meta == {
         "profile_id": str(PROFILE_ID),
@@ -943,6 +948,10 @@ def test_r15_an_older_database_is_checked_even_when_the_checks_are_skipped(
 
     assert calls == ["x"]
     migrating.close()
+
+
+class TestSqliteInjuryStore(_DiskStorageFixture, InjuryStoreContract):
+    pass
 
 
 class TestSqliteGoalStore(_DiskStorageFixture, GoalStoreContract):
