@@ -93,7 +93,7 @@ Columns of v8 (track box for the map):
   indexed, by a resumable pass that reads only the index (never the archived files). Derived and
   rebuildable: `NULL` for an activity without positions, and until the pass reaches the row.
 
-Columns of v9 (injuries and illnesses, all `STRICT`; health data, in clear like the rest of the
+Columns of v10 (injuries and illnesses, all `STRICT`; health data, in clear like the rest of the
 profile):
 
 - `injury`: one row per injury or illness (`kind` on a closed set), the id chosen by the caller.
@@ -112,6 +112,8 @@ profile):
 from __future__ import annotations
 
 from typing import Final
+
+from ponos_coach.storage.schema_workout_backup import WORKOUT_BACKUP_MIGRATION
 
 # Closed sets of v1 (stable values of the saved data); frozen here on purpose.
 _SPORTS = "'running','trail','cycling','strength','hiking','walking','other'"
@@ -183,7 +185,7 @@ V6_SESSION_TYPES: Final = frozenset(_SESSION_TYPES.replace("'", "").split(","))
 V6_PLAN_KINDS: Final = frozenset(_PLAN_KINDS.replace("'", "").split(","))
 V6_REFUSAL_REASONS: Final = frozenset(_REFUSAL_REASONS.replace("'", "").split(","))
 
-# Closed sets and limits of the injury data (v9), frozen here on purpose.
+# Closed sets and limits of the injury data (v10), frozen here on purpose.
 _INJURY_KINDS = "'injury','illness'"
 _BODY_ZONES = (
     "'foot','ankle','achilles','calf','shin','knee','thigh','hip','lower_back','upper_body'"
@@ -198,16 +200,16 @@ _WARNING_SIGNS = (
     "'chest_pain','palpitations','fainting','disproportionate_breathlessness'"
 )
 _ILLNESS_KINDS = "'neck_up','systemic'"
-V9_MAX_NOTES_CHARS = 2000
+V10_MAX_NOTES_CHARS = 2000
 
-V9_INJURY_KINDS: Final = frozenset(_INJURY_KINDS.replace("'", "").split(","))
-V9_BODY_ZONES: Final = frozenset(_BODY_ZONES.replace("'", "").split(","))
-V9_SIDES: Final = frozenset(_SIDES.replace("'", "").split(","))
-V9_ONSETS: Final = frozenset(_ONSETS.replace("'", "").split(","))
-V9_PAIN_FREE_ACTIVITIES: Final = frozenset(_PAIN_FREE_ACTIVITIES.replace("'", "").split(","))
-V9_WARNING_SIGNS: Final = frozenset(_WARNING_SIGNS.replace("'", "").split(","))
-V9_ILLNESS_KINDS: Final = frozenset(_ILLNESS_KINDS.replace("'", "").split(","))
-V9_TABLES: Final = frozenset({"injury", "injury_pain_free", "injury_checkin", "injury_sign"})
+V10_INJURY_KINDS: Final = frozenset(_INJURY_KINDS.replace("'", "").split(","))
+V10_BODY_ZONES: Final = frozenset(_BODY_ZONES.replace("'", "").split(","))
+V10_SIDES: Final = frozenset(_SIDES.replace("'", "").split(","))
+V10_ONSETS: Final = frozenset(_ONSETS.replace("'", "").split(","))
+V10_PAIN_FREE_ACTIVITIES: Final = frozenset(_PAIN_FREE_ACTIVITIES.replace("'", "").split(","))
+V10_WARNING_SIGNS: Final = frozenset(_WARNING_SIGNS.replace("'", "").split(","))
+V10_ILLNESS_KINDS: Final = frozenset(_ILLNESS_KINDS.replace("'", "").split(","))
+V10_TABLES: Final = frozenset({"injury", "injury_pain_free", "injury_checkin", "injury_sign"})
 
 _ACTIVITY_LEVELS = "'sedentary','light','active','very_active'"
 _GOAL_KINDS = "'weight_loss','maintenance','performance'"
@@ -612,7 +614,7 @@ def _pain(column: str, *, nullable: bool) -> str:
     return f"{column} INTEGER CHECK ({null}{column} BETWEEN 0 AND 10)"
 
 
-_V9_INJURY = f"""
+_V10_INJURY = f"""
 CREATE TABLE injury (
     injury_id     TEXT    NOT NULL PRIMARY KEY
                           CHECK (length(injury_id) BETWEEN 1 AND 64
@@ -633,7 +635,7 @@ CREATE TABLE injury (
     {_pain("pain_running", nullable=True)},
     {_pain("pain_morning", nullable=True)},
     doctor_notes  TEXT    CHECK (doctor_notes IS NULL
-                                 OR length(doctor_notes) <= {V9_MAX_NOTES_CHARS}),
+                                 OR length(doctor_notes) <= {V10_MAX_NOTES_CHARS}),
     reviewed_on   TEXT    CHECK (reviewed_on IS NULL OR (date(reviewed_on) IS reviewed_on
                                                          AND reviewed_on >= started_on)),
     illness_kind  TEXT    CHECK (illness_kind IS NULL OR illness_kind IN ({_ILLNESS_KINDS})),
@@ -650,9 +652,9 @@ CREATE TABLE injury (
 ) STRICT
 """
 
-_V9_INJURY_BY_START = "CREATE INDEX injury_by_start ON injury (started_on, injury_id)"
+_V10_INJURY_BY_START = "CREATE INDEX injury_by_start ON injury (started_on, injury_id)"
 
-_V9_INJURY_PAIN_FREE = f"""
+_V10_INJURY_PAIN_FREE = f"""
 CREATE TABLE injury_pain_free (
     injury_id TEXT NOT NULL REFERENCES injury (injury_id) ON DELETE CASCADE,
     activity  TEXT NOT NULL CHECK (activity IN ({_PAIN_FREE_ACTIVITIES})),
@@ -660,7 +662,7 @@ CREATE TABLE injury_pain_free (
 ) STRICT
 """
 
-_V9_INJURY_CHECKIN = f"""
+_V10_INJURY_CHECKIN = f"""
 CREATE TABLE injury_checkin (
     injury_id   TEXT    NOT NULL REFERENCES injury (injury_id) ON DELETE CASCADE,
     day         TEXT    NOT NULL CHECK (date(day) IS day AND day >= '{V3_MIN_MEASUREMENT_DATE}'),
@@ -671,7 +673,7 @@ CREATE TABLE injury_checkin (
 """
 
 # A sign of a check-in refers to it and goes with it; one of the questionnaire has no day.
-_V9_INJURY_SIGN = f"""
+_V10_INJURY_SIGN = f"""
 CREATE TABLE injury_sign (
     injury_id   TEXT NOT NULL REFERENCES injury (injury_id) ON DELETE CASCADE,
     checkin_day TEXT,
@@ -681,7 +683,7 @@ CREATE TABLE injury_sign (
 ) STRICT
 """
 
-_V9_INJURY_SIGN_UNIQUE = (
+_V10_INJURY_SIGN_UNIQUE = (
     "CREATE UNIQUE INDEX injury_sign_once "
     "ON injury_sign (injury_id, COALESCE(checkin_day, ''), sign)"
 )
@@ -721,13 +723,15 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     ),
     (_V7_THRESHOLD_PROTOCOL, _V7_LEAN_MASS),
     (_V8_TRACK_SOUTH, _V8_TRACK_WEST, _V8_TRACK_NORTH, _V8_TRACK_EAST),
+    # v9: the Garmin calendar's workout backup (ADR 013).
+    WORKOUT_BACKUP_MIGRATION,
     (
-        _V9_INJURY,
-        _V9_INJURY_BY_START,
-        _V9_INJURY_PAIN_FREE,
-        _V9_INJURY_CHECKIN,
-        _V9_INJURY_SIGN,
-        _V9_INJURY_SIGN_UNIQUE,
+        _V10_INJURY,
+        _V10_INJURY_BY_START,
+        _V10_INJURY_PAIN_FREE,
+        _V10_INJURY_CHECKIN,
+        _V10_INJURY_SIGN,
+        _V10_INJURY_SIGN_UNIQUE,
     ),
 )
 

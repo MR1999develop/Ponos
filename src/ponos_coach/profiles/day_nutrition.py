@@ -4,7 +4,8 @@
 
 For a day after today the activities are the sessions the saved plan has for it, at a typical
 time, with the energy of the sport's METs (no heart rate): an estimate from the plan. In the week
-of an A or B race and in the taper before it a weight-loss goal gets no deficit (ACSM 2016).
+of an A or B race and in the taper before it a weight-loss goal gets no deficit (ACSM 2016);
+today, which is not in the plan, follows the same rule (race week, or the plan starts in a taper).
 
 It gathers what the nutrition model needs (body data valid that day, activity level, goal, typical
 meal times, the day's activities with their energy and load) and hands it to `nutrition.plan_day`;
@@ -148,6 +149,8 @@ class DayNutritionReport:
     they are still included (with the energy and load that do not need the file) but the guidance
     may be less exact. `meal_times` and `goal` are the ones that applied that day. `from_plan` marks
     an estimate for a day after today: its activities are the plan's sessions, not recorded ones.
+    `lean_mass_measured` says whether the limit on energy availability used a measured lean mass
+    (valid on the day and plausible for the weight of the day) instead of the estimate.
     """
 
     day: date
@@ -158,6 +161,7 @@ class DayNutritionReport:
     activities: tuple[DayActivity, ...]
     unreadable_activities: int
     from_plan: bool = False
+    lean_mass_measured: bool = False
 
 
 type DayNutritionResult = DayNutritionReport | NutritionUnavailable
@@ -255,6 +259,10 @@ class PlanDayNutrition:
             paused = _deficit_paused(plan, day)
             measured, next_gap = self._planned_activities(plan, planned_day, person, context.today)
         else:
+            if context is not None and day == context.today:
+                # today is not in the plan (it starts tomorrow) but the rule is the same
+                plan = _saved_plan(context.plans)
+                paused = plan is not None and _deficit_paused(plan, day)
             measured, next_gap = self._activities_of(day, person, physiology)
         saved_times = src.meal_times.get()
         meal_times = MealTimes.default() if saved_times is None else saved_times
@@ -285,6 +293,7 @@ class PlanDayNutrition:
             tuple(m.activity for m in measured),
             sum(m.unreadable for m in measured),
             planned_day is not None,
+            person.lean_mass_kg is not None,
         )
 
     def _subject_on(self, day: date) -> _Subject | NutritionUnavailable:
@@ -490,16 +499,19 @@ def _gap_to_next_session(
 
 def _deficit_paused(plan: Plan, day: date) -> bool:
     """True if `day` is in the taper before an A or B race, or in the Monday-to-Sunday week of one
-    (ACSM 2016: lose weight away from races)."""
+    (ACSM 2016: lose weight away from races). Today is not in the plan, which starts tomorrow: it
+    counts as taper when the first day of the plan is, so that the deficit does not stop only
+    tomorrow."""
     entry = _day_of(plan, day)
+    if entry is None and plan.days and plan.days[0].day == day + timedelta(days=1):
+        entry = plan.days[0]
     if entry is not None and entry.phase in _DEFICIT_PAUSE_PHASES:
         return True
     week_start = day - timedelta(days=day.weekday())
     return any(
-        e.race is not None
-        and e.race.priority in _DEFICIT_PAUSE_PRIORITIES
-        and 0 <= (e.day - week_start).days < _DAYS_PER_WEEK
-        for e in plan.days
+        race.priority in _DEFICIT_PAUSE_PRIORITIES
+        and 0 <= (race.day - week_start).days < _DAYS_PER_WEEK
+        for race in plan.inputs.races
     )
 
 

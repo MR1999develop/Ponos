@@ -234,8 +234,12 @@ tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):
   dal_giorno) → AppliedLeanMass(entry, replaced)`, `UndoLeanMass(applied)` (annulla
   esatto: toglie la voce e rimette quella sostituita; rifiuta con
   `LeanMassChangedError` se la voce è cambiata dopo), `RemoveLeanMass(giorno) →
-  voce tolta`, `ListLeanMass`. `SetLeanMass` rifiuta una data futura, un peso
-  assente e una massa non plausibile.
+  voce tolta`, `RestoreLeanMass(voce, attesa=None) → AppliedLeanMass` (rimette la
+  voce esatta in una transazione, senza ricontrollare il peso, se il giorno contiene
+  `attesa`, cioè libero per default; è l'annulla di `RemoveLeanMass` e il redo di un
+  `SetLeanMass`), `ListLeanMass`. `SetLeanMass` rifiuta una data futura, un peso
+  assente e una massa non plausibile. `DayNutritionReport.lean_mass_measured` dice
+  se il giorno ha usato la massa misurata; la pagina legge quel campo.
 
 - Schema v4: `activities.calories_kcal`; `activity_level` (data di validità),
   `meal_times` (una riga), `nutrition_goal` (periodi, con trigger contro le
@@ -286,10 +290,22 @@ tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):
   dimagrimento il modello calcola energia e macro come per il mantenimento
   (deficit 0) e aggiunge `Advisory.DEFICIT_PAUSED_FOR_RACE` (dopo
   `DEFICIT_REDUCED_FOR_LOAD`); con altri obiettivi non cambia nulla e non c'è
-  avviso. L'obiettivo mostrato resta quello scelto.
+  avviso. L'obiettivo mostrato resta quello scelto. **Anche oggi**, che non è
+  nel piano (parte da domani), non ha deficit se cade nella settimana
+  lunedì-domenica di una gara A o B del piano salvato o se il primo giorno del
+  piano (domani) è in `TAPER` o `MINI_TAPER`; i giorni prima di oggi non cambiano
+  (`_deficit_paused` in `profiles/day_nutrition.py`; la settimana si legge da
+  `Plan.inputs.races`, che comprende anche le gare già passate della settimana).
 - `NutritionUnavailable(NO_PLAN_FOR_DAY)`: nessun piano salvato, un rifiuto, un
   piano illeggibile o un giorno oltre l'orizzonte (il piano arriva all'ultimo
   obiettivo). Prima si controllano i dati del corpo e l'età.
+- **Rifornimento orario** (`nutrition/domain/meals.py`): la prima assunzione
+  aspetta 30' dopo la fine (`POST_LEAD_MIN`), le successive sono una ogni ora, l'ultima
+  almeno 30' prima della seduta dopo: quante ne stanno =
+  `floor((minuti_alla_prossima - 30 - 30) / 60) + 1`, da 1 a 4. Quelle che cadrebbero
+  dopo la mezzanotte si omettono (il giorno dopo non le eredita; la prima resta anche
+  se cade oltre, fissata a 23:59). Un apporto ridotto a 0 g di carboidrati e proteine
+  (per esempio il «prima» di un giorno con pochi carboidrati) non si genera.
 - Il calendario apre la pagina di un giorno futuro solo se il piano ha quel
   giorno (`CalendarDay.can_open`).
 

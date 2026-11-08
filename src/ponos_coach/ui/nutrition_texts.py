@@ -161,7 +161,7 @@ def advisory_text(advisory: Advisory) -> str:
         ),
         Advisory.LOW_BMI: QCoreApplication.translate(
             "Nutrition",
-            "Your body mass index is below 18.5. "
+            "Your weight is low for your height. "
             "Please talk to a doctor or a dietitian before changing how you eat.",
         ),
         Advisory.ACTIVITY_LEVEL_ASSUMED: QCoreApplication.translate(

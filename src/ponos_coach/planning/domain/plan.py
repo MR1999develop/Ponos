@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import date
 from enum import Enum
@@ -55,6 +56,10 @@ class Block:
             raise ValueError("the HR range of a block is inverted")
 
 
+def _is_load(value: float) -> bool:
+    return math.isfinite(value) and value >= 0
+
+
 @dataclass(frozen=True, slots=True)
 class PlannedSession:
     """A training session of a day: sport, type, duration, structure and estimated load.
@@ -70,6 +75,12 @@ class PlannedSession:
     load: float
     race_pace: bool = False
 
+    def __post_init__(self) -> None:
+        if self.minutes < 1 or not _is_load(self.load):
+            raise ValueError(
+                "a session lasts at least a minute and has a finite load, not negative"
+            )
+
 
 @dataclass(frozen=True, slots=True)
 class PlannedRace:
@@ -82,6 +93,12 @@ class PlannedRace:
     expected_time_s: int
     load: float
 
+    def __post_init__(self) -> None:
+        if not self.goal_id or self.distance_m < 1 or self.expected_time_s < 1:
+            raise ValueError("a race has an id, a distance and an expected time above zero")
+        if not _is_load(self.load):
+            raise ValueError("the load of a race is finite and not negative")
+
 
 @dataclass(frozen=True, slots=True)
 class PlanDay:
@@ -92,6 +109,10 @@ class PlanDay:
     session: PlannedSession | None
     race: PlannedRace | None
     load: float
+
+    def __post_init__(self) -> None:
+        if not _is_load(self.load):
+            raise ValueError("the load of a day is finite and not negative")
 
 
 class WeekKind(Enum):

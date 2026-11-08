@@ -53,8 +53,8 @@ After a medical review the path starts again from the first step. The app never 
 
 ## Consequences
 
-- Saved format: schema v9 (`injury`, `injury_pain_free`, `injury_checkin`, `injury_sign`), copy
-  `backup/ponos-v8-v9.sqlite3`. The plan carries a snapshot without free text (`PlanInjury`), so
+- Saved format: schema v10 (`injury`, `injury_pain_free`, `injury_checkin`, `injury_sign`), copy
+  `backup/ponos-v9-v10.sqlite3`. The plan carries a snapshot without free text (`PlanInjury`), so
   the doctor's notes and the pain scores never go into the saved plan. `METHOD_VERSION` is 4.
 - Health data stay in the profile database in clear (the decision recorded in PLAN.md, section 1); never in logs
   or error messages (T-SEC-08 for injuries).

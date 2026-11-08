@@ -73,7 +73,13 @@ competitive season; low energy availability harms performance and recovery.
 
 - A change of the plan changes the guidance of the days ahead; nothing is
   stored, so no migration is needed.
-- Days up to today are unchanged.
+- Days before today are unchanged. Today follows the same rule for the deficit
+  (decision of phase 5, `PLAN.md` wins): it is not a day of the plan (the plan
+  starts tomorrow), but it has no deficit when it falls in the Monday-to-Sunday
+  week of an A or B race of the saved plan, or when the first day of the plan
+  (tomorrow) is in the taper or the mini taper. Without this the deficit would
+  stop tomorrow and not today, in the very week that it must not apply. Recorded
+  activities, weight and the rest of today are computed as for any past day.
 - The week and taper rule changes the numbers of every plan with an A or B
   race; changing it means a new ADR.
 
@@ -83,7 +89,8 @@ competitive season; low energy availability harms performance and recovery.
   time and the default one, the MET energy, the intakes around training, no
   guidance without a plan or beyond it, determinism
   (`tests/profiles/test_day_nutrition_future.py`).
-- T-NUT-08: no deficit in the taper, in the race week (also after the race)
+- T-NUT-08: today inside the race week or before a taper has no deficit either
+  (`tests/collaudo/test_fase5_alimentazione_futura.py`); no deficit in the taper, in the race week (also after the race)
   and in the mini taper of a B race; a deficit again the week after and before
   the week; no pause for a C race or without a weight-loss goal; property test
   on the pure model (`tests/nutrition/test_paused_deficit.py`).

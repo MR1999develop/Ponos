@@ -33,6 +33,7 @@ from ponos_coach.activities.ports import (
     TransactionStateError,
 )
 from ponos_coach.load.domain import LoadSource, Sex
+from ponos_coach.planning.ports import FrozenDay
 from ponos_coach.profiles.domain import PROFILE_DATABASE_NAME, ProfileId, ProfileName
 from ponos_coach.profiles.ports import (
     OpenProfile,
@@ -64,6 +65,7 @@ from tests.contracts.contract_planning import (
     GoalStoreContract,
     PlanStoreContract,
     SessionChoicesStoreContract,
+    a_plan,
 )
 from tests.contracts.contract_storage import (
     FINGERPRINT,
@@ -214,6 +216,7 @@ def test_new_database_has_the_latest_schema_and_the_expected_tables(tmp_path: Pa
         "goal",
         "weekly_availability",
         "session_choice",
+        "workout_backup",
         "plan_state",
         "plan_past_day",
         "lean_mass",
@@ -968,3 +971,28 @@ class TestSqliteSessionChoicesStore(_DiskStorageFixture, SessionChoicesStoreCont
 
 class TestSqlitePlanStore(_DiskStorageFixture, PlanStoreContract):
     pass
+
+
+def test_a_frozen_day_that_cannot_be_read_is_told_apart_not_dropped(tmp_path: Path) -> None:
+    plan = a_plan()
+    days = plan.days[:3]
+    storage = SqliteProfileStorage()
+    with closing(storage.create(tmp_path, PROFILE_ID, NAME, "Europe/Rome")) as profile:
+        profile.plans.freeze([FrozenDay(plan.generated_on, day) for day in days])
+    with closing(sqlite3.connect(_db_path(tmp_path))) as raw:
+        raw.execute("DROP TRIGGER plan_past_day_is_fixed")  # the history is fixed; tamper by hand
+        raw.execute(
+            "UPDATE plan_past_day SET day_sha256 = ? WHERE day = ?",
+            ("0" * 64, days[1].day.isoformat()),
+        )
+        raw.commit()
+
+    with closing(storage.open(tmp_path)) as profile:
+        first, last = days[0].day, days[2].day
+        readable = profile.plans.past_days(first, last)
+        lost = profile.plans.unreadable_past_days(first, last)
+        outside = profile.plans.unreadable_past_days(last, last)
+
+    assert [f.day.day for f in readable] == [days[0].day, days[2].day]
+    assert lost == [days[1].day]
+    assert outside == []

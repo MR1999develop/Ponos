@@ -125,7 +125,6 @@ class NutritionUi(QObject):
                     loaded.result,
                     today=self._today(),
                     foods_verified=loaded.foods_verified,
-                    lean_mass_measured=loaded.lean_mass_measured,
                 )
             )
 

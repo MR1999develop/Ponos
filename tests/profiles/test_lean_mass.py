@@ -12,12 +12,14 @@ from ponos_coach.nutrition.domain import LeanMass, LeanMassEntry
 from ponos_coach.nutrition.ports import LeanMassNotFoundError, NutritionStoreError
 from ponos_coach.profiles.domain import ProfileId, ProfileName, Weight, WeightEntry
 from ponos_coach.profiles.lean_mass import (
+    AppliedLeanMass,
     LeanMassChangedError,
     LeanMassDateInFutureError,
     LeanMassImplausibleError,
     LeanMassNeedsWeightError,
     ListLeanMass,
     RemoveLeanMass,
+    RestoreLeanMass,
     SetLeanMass,
     UndoLeanMass,
 )
@@ -43,6 +45,7 @@ class Rig:
         self.set = SetLeanMass(p.activities, p.weights, p.lean_masses, lambda: TODAY)
         self.undo = UndoLeanMass(p.activities, p.lean_masses)
         self.remove = RemoveLeanMass(p.activities, p.lean_masses)
+        self.restore = RestoreLeanMass(p.activities, p.lean_masses)
         self.list = ListLeanMass(p.lean_masses)
 
 
@@ -198,3 +201,47 @@ def test_a_failed_write_changes_nothing() -> None:
         failing(LeanMass(650), D1)
 
     assert rig.list() == (LeanMassEntry(D1, LeanMass(612)),)
+
+
+# --- Restore: the exact entry comes back whatever the weight is now ---------------------------
+def test_restoring_a_removed_entry_puts_it_back_even_if_the_weight_made_it_implausible() -> None:
+    rig = Rig()
+    entry = rig.set(LeanMass(612), D1).entry  # 61.2 kg of 80 kg
+    removed = rig.remove(D1)
+    rig.profile.weights.put(
+        WeightEntry(date(2026, 2, 20), Weight(500))
+    )  # now 50 kg: 61.2 is too much
+    with pytest.raises(LeanMassImplausibleError):
+        rig.set(removed.lean_mass, D1)  # a new set refuses it...
+
+    applied = rig.restore(removed)  # ...the undo of the removal does not
+
+    assert rig.list() == (entry,)
+    assert applied == AppliedLeanMass(entry, None)
+
+
+def test_restoring_over_a_day_that_holds_something_else_changes_nothing() -> None:
+    rig = Rig()
+    removed = rig.set(LeanMass(612), D1).entry
+    rig.remove(D1)
+    other = rig.set(LeanMass(620), D1).entry
+
+    with pytest.raises(LeanMassChangedError):
+        rig.restore(removed)
+
+    assert rig.list() == (other,)
+
+
+def test_restoring_a_set_that_replaced_an_entry_expects_the_entry_it_replaced() -> None:
+    rig = Rig()
+    first = rig.set(LeanMass(612), D1)
+    second = rig.set(LeanMass(650), D1)
+    rig.undo(second)  # the day holds the first value again
+
+    with pytest.raises(LeanMassChangedError):
+        rig.restore(second.entry)  # expects a free day
+    redone = rig.restore(second.entry, second.replaced)  # redo of the second set
+
+    assert redone == second
+    assert rig.list() == (second.entry,)
+    assert first.entry != second.entry

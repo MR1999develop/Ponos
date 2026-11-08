@@ -28,7 +28,7 @@ Tutti i numeri sono in `injury/domain/defaults.py`, ognuno con la fonte o
   (piede, caviglia, Achille, polpaccio, tibia, ginocchio, coscia, anca,
   schiena, parte alta); lato; insorgenza; attività senza dolore (camminata,
   bici, nuoto, corsa in acqua).
-- Schema v9 (`injury`, `injury_pain_free`, `injury_checkin`, `injury_sign`).
+- Schema v10 (`injury`, `injury_pain_free`, `injury_checkin`, `injury_sign`).
   Il piano riceve solo un'istantanea senza testo libero (`PlanInjury`).
 
 ## 2. Segnali d'allarme

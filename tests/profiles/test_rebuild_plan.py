@@ -76,6 +76,9 @@ class SpyPlans:
     def past_days(self, first: date, last: date) -> Sequence[FrozenDay]:
         return self._inner.past_days(first, last)
 
+    def unreadable_past_days(self, first: date, last: date) -> Sequence[date]:
+        return self._inner.unreadable_past_days(first, last)
+
 
 class PlanWorld(World):
     """A profile with parameters, three weeks of runs, an A race in 16 weeks and the use cases."""
@@ -453,3 +456,69 @@ def test_an_illness_stops_the_plan_and_the_end_of_it_brings_the_training_back() 
     )
     world.today = TODAY + timedelta(days=5)
     assert any(d.session for d in world.built().plan.days)
+
+
+# --- A frozen day that cannot be read is told, and the current plan never stands in for it --------
+class LossyPlans:
+    """A plan store whose history has lost some frozen days (the checksum no longer matches)."""
+
+    def __init__(self, inner: PlanStore, lost: set[date]) -> None:
+        self._inner = inner
+        self._lost = lost
+
+    def current(self) -> StoredPlan | UnreadablePlan | None:
+        return self._inner.current()
+
+    def replace_current(self, state: Plan | PlanRefusal, generated_on: date) -> None:
+        self._inner.replace_current(state, generated_on)
+
+    def freeze(self, days: Sequence[FrozenDay]) -> None:
+        self._inner.freeze(days)
+
+    def past_days(self, first: date, last: date) -> Sequence[FrozenDay]:
+        return [f for f in self._inner.past_days(first, last) if f.day.day not in self._lost]
+
+    def unreadable_past_days(self, first: date, last: date) -> Sequence[date]:
+        return sorted(d for d in self._lost if first <= d <= last)
+
+
+def test_an_unreadable_frozen_day_is_in_the_adherence_marked_and_with_no_missed_load() -> None:
+    world = PlanWorld()
+    first = world.built().plan
+    world.today = TODAY + timedelta(days=4)
+    world.built()  # freezes the four days that became past
+    lost = TODAY + timedelta(days=2)
+    adherence = PlanAdherence(
+        LossyPlans(world.profile.plans, {lost}), world.overview_now, lambda: world.today
+    )
+
+    rows = adherence(TODAY + timedelta(days=1), TODAY + timedelta(days=4))
+
+    assert [r.day for r in rows] == [TODAY + timedelta(days=n) for n in range(1, 5)]
+    assert [r.plan_unreadable for r in rows] == [False, True, False, False]
+    assert rows[1].planned_load == 0.0
+    assert rows[1].missed_load == 0.0
+    assert [r.planned_load for r in rows if not r.plan_unreadable] == [
+        d.load for d in (first.days[0], first.days[2], first.days[3])
+    ]
+
+
+def test_the_current_plan_only_stands_in_after_the_last_frozen_day() -> None:
+    world = PlanWorld()
+    first = world.built().plan  # the current plan covers the days from TODAY + 1
+    world.today = TODAY + timedelta(days=4)  # nothing was frozen: no second rebuild
+    lost = TODAY + timedelta(days=2)
+    adherence = PlanAdherence(
+        LossyPlans(world.profile.plans, {lost}), world.overview_now, lambda: world.today
+    )
+
+    rows = adherence(TODAY + timedelta(days=1), TODAY + timedelta(days=4))
+
+    # day 1 is before the last frozen day (2) and not frozen: nobody planned it; day 2 is lost
+    # and the current plan, which does cover it, does not replace it; days 3 and 4 come after
+    assert [(r.day.toordinal() - TODAY.toordinal(), r.plan_unreadable) for r in rows] == [
+        (2, True),
+        (3, False),
+        (4, False),
+    ]
+    assert [r.planned_load for r in rows[1:]] == [first.days[2].load, first.days[3].load]

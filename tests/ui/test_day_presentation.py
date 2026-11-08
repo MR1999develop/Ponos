@@ -9,6 +9,7 @@ up (no real data).
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -341,14 +342,11 @@ def test_the_hourly_intakes_after_a_session_say_their_hour() -> None:
 def test_the_day_says_which_lean_mass_the_energy_availability_limit_uses() -> None:
     report = report_for(ADULT, MaintenanceGoal())
 
-    unknown = present_day(DAY, report)
-    estimated = present_day(DAY, report, lean_mass_measured=False)
-    measured = present_day(DAY, report, lean_mass_measured=True)
+    estimated = present_day(DAY, replace(report, lean_mass_measured=False))
+    measured = present_day(DAY, replace(report, lean_mass_measured=True))
 
-    assert isinstance(unknown, DayView)
     assert isinstance(estimated, DayView)
     assert isinstance(measured, DayView)
-    assert unknown.lean_mass_note == ""
     assert "estimate of your lean mass" in estimated.lean_mass_note
     assert "Nutrition settings" in estimated.lean_mass_note
     assert measured.lean_mass_note == (

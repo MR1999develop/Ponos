@@ -1,0 +1,82 @@
+[
+  "not an object",
+  7,
+  null,
+  [],
+  {
+    "workoutScheduleId": 2000000004,
+    "calendarDate": "2026-06-10"
+  },
+  {
+    "workoutScheduleId": "2000000005",
+    "calendarDate": "2026-06-10",
+    "workout": {
+      "workoutId": 1000000005,
+      "workoutName": "id as text"
+    }
+  },
+  {
+    "workoutScheduleId": -3,
+    "calendarDate": "2026-06-10",
+    "workout": {
+      "workoutId": 1000000006,
+      "workoutName": "negative id"
+    }
+  },
+  {
+    "workoutScheduleId": 2000000007,
+    "calendarDate": "2026-13-45",
+    "workout": {
+      "workoutId": 1000000007,
+      "workoutName": "impossible date"
+    }
+  },
+  {
+    "workoutScheduleId": 2000000008,
+    "calendarDate": "../../etc",
+    "workout": {
+      "workoutId": 1000000008,
+      "workoutName": "path as date"
+    }
+  },
+  {
+    "workoutScheduleId": 2000000009,
+    "calendarDate": "2026-06-10",
+    "workout": {
+      "workoutId": 1000000009,
+      "workoutName": "line\nbreak"
+    }
+  },
+  {
+    "workoutScheduleId": 2000000010,
+    "calendarDate": "2026-06-10",
+    "workout": {
+      "workoutId": 1000000010,
+      "workoutName": ""
+    }
+  },
+  {
+    "workoutScheduleId": 2000000011,
+    "calendarDate": "2026-06-10",
+    "workout": {
+      "workoutId": 1000000011,
+      "workoutName": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  {
+    "workoutScheduleId": 2000000012,
+    "calendarDate": "2026-06-10",
+    "workout": {
+      "workoutId": 1000000012,
+      "workoutName": "<script>alert(1)</script> ' OR 1=1"
+    }
+  },
+  {
+    "workoutScheduleId": true,
+    "calendarDate": "2026-06-10",
+    "workout": {
+      "workoutId": 1000000013,
+      "workoutName": "bool id"
+    }
+  }
+]

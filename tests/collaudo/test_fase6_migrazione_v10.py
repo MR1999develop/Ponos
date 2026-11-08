@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-DATI-01 for schema v9: from the frozen v8 database to v9 (injuries and illnesses).
+"""T-DATI-01 for schema v10: from the frozen v9 database to v9 (injuries and illnesses).
 
-The v8 database is written by hand, independent of the code (v1 to v8 are in the earlier files).
-It is shown that v9 does not change after release, that a v8 profile migrates without losing
-anything and keeps a copy (`backup/ponos-v8-v9.sqlite3`), that the migration is one transaction
-(killed at every statement the database is still v8), that the closed sets of v9 are the domain
+The v9 database is written by hand (v1 to v8 in the earlier files, v9 is the calendar's workout
+backup). It is shown that v10 does not change after release, that a v9 profile migrates with no loss
+anything and keeps a copy (`backup/ponos-v9-v10.sqlite3`), that the migration is one transaction
+(killed at every statement the database is still v9), that the closed sets of v10 are the domain
 enums, and that the database itself refuses a record that is not valid.
 """
 
@@ -36,8 +36,8 @@ from tests.collaudo.test_fase3_migrazione import table_names, user_version
 from tests.collaudo.test_fase5b_migrazione_v8 import FROZEN_V8, KEPT_V7, write_frozen_v7
 from tests.fixtures.generators.collaudo_fase3_worker import DIED
 
-# Migration v9 as it was released. It does not change, like v1 to v8.
-FROZEN_V9 = (
+# Migration v10 as it was released. It does not change, like v1 to v9.
+FROZEN_V10 = (
     """CREATE TABLE injury (
     injury_id     TEXT    NOT NULL PRIMARY KEY
                           CHECK (length(injury_id) BETWEEN 1 AND 64
@@ -124,43 +124,43 @@ FROZEN_V9 = (
     ON injury_sign (injury_id, COALESCE(checkin_day, ''), sign)""",
 )
 
-KEPT_V8 = (*KEPT_V7,)
-V9_TABLES = {"injury", "injury_pain_free", "injury_checkin", "injury_sign"}
+KEPT_V9 = (*KEPT_V7, "workout_backup")
+V10_TABLES = {"injury", "injury_pain_free", "injury_checkin", "injury_sign"}
 
 
-def write_frozen_v8(path: Path) -> None:
-    """A v8 database as the phase 5b app wrote it (the track boxes added, none filled)."""
+def write_frozen_v9(path: Path) -> None:
+    """A v9 database: the phase 5b one (track boxes) plus the calendar's workout backup."""
     write_frozen_v7(path)
     with closing(sqlite3.connect(path)) as raw:
-        for statement in FROZEN_V8:
+        for statement in (*FROZEN_V8, *sqlite_schema.MIGRATIONS[8]):  # v8, then the calendar's v9
             raw.execute(statement)
-        raw.execute("PRAGMA user_version = 8")
+        raw.execute("PRAGMA user_version = 9")
         raw.commit()
 
 
-def test_t_dati_01_the_released_v9_migration_has_not_changed() -> None:
-    released = tuple(squash(statement) for statement in sqlite_schema.MIGRATIONS[8])
+def test_t_dati_01_the_released_v10_migration_has_not_changed() -> None:
+    released = tuple(squash(statement) for statement in sqlite_schema.MIGRATIONS[9])
 
-    assert released == tuple(squash(statement) for statement in FROZEN_V9)
-    assert sqlite_schema.SCHEMA_VERSION >= 9
-
-
-def test_t_dati_01_the_closed_sets_of_v9_are_the_domain_enums() -> None:
-    assert {z.value for z in BodyZone} == sqlite_schema.V9_BODY_ZONES
-    assert {s.value for s in Side} == sqlite_schema.V9_SIDES
-    assert {o.value for o in Onset} == sqlite_schema.V9_ONSETS
-    assert {a.value for a in PainFreeActivity} == sqlite_schema.V9_PAIN_FREE_ACTIVITIES
-    assert {s.value for s in WarningSign} == sqlite_schema.V9_WARNING_SIGNS
-    assert {k.value for k in IllnessKind} == sqlite_schema.V9_ILLNESS_KINDS
-    assert defaults.MAX_NOTES_CHARS == sqlite_schema.V9_MAX_NOTES_CHARS
+    assert released == tuple(squash(statement) for statement in FROZEN_V10)
+    assert sqlite_schema.SCHEMA_VERSION >= 10
 
 
-def test_t_dati_01_a_frozen_v8_database_is_migrated_to_v9_with_data_intact_and_a_copy(
+def test_t_dati_01_the_closed_sets_of_v10_are_the_domain_enums() -> None:
+    assert {z.value for z in BodyZone} == sqlite_schema.V10_BODY_ZONES
+    assert {s.value for s in Side} == sqlite_schema.V10_SIDES
+    assert {o.value for o in Onset} == sqlite_schema.V10_ONSETS
+    assert {a.value for a in PainFreeActivity} == sqlite_schema.V10_PAIN_FREE_ACTIVITIES
+    assert {s.value for s in WarningSign} == sqlite_schema.V10_WARNING_SIGNS
+    assert {k.value for k in IllnessKind} == sqlite_schema.V10_ILLNESS_KINDS
+    assert defaults.MAX_NOTES_CHARS == sqlite_schema.V10_MAX_NOTES_CHARS
+
+
+def test_t_dati_01_a_frozen_v9_database_is_migrated_to_v10_with_data_intact_and_a_copy(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / PROFILE_DATABASE_NAME
-    write_frozen_v8(path)
-    before = {table: rows(path, table) for table in KEPT_V8}
+    write_frozen_v9(path)
+    before = {table: rows(path, table) for table in KEPT_V9}
 
     opened = SqliteProfileStorage().open(tmp_path)
     try:
@@ -170,15 +170,15 @@ def test_t_dati_01_a_frozen_v8_database_is_migrated_to_v9_with_data_intact_and_a
         opened.close()
 
     assert {table: rows(path, table) for table in before} == before
-    assert table_names(path) >= V9_TABLES
+    assert table_names(path) >= V10_TABLES
     [copy] = sorted((tmp_path / "backup").glob("*"))
-    assert copy.name == f"ponos-v8-v{sqlite_schema.SCHEMA_VERSION}.sqlite3"
-    assert user_version(copy) == 8
-    assert V9_TABLES.isdisjoint(table_names(copy))
-    assert {table: rows(copy, table) for table in KEPT_V8} == before
+    assert copy.name == f"ponos-v9-v{sqlite_schema.SCHEMA_VERSION}.sqlite3"
+    assert user_version(copy) == 9
+    assert V10_TABLES.isdisjoint(table_names(copy))
+    assert {table: rows(copy, table) for table in KEPT_V9} == before
 
 
-def test_t_dati_01_a_v7_database_goes_through_v8_and_v9_in_one_round_with_one_copy(
+def test_t_dati_01_a_v7_database_goes_through_v8_v9_and_v10_in_one_round_with_one_copy(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / PROFILE_DATABASE_NAME
@@ -189,40 +189,40 @@ def test_t_dati_01_a_v7_database_goes_through_v8_and_v9_in_one_round_with_one_co
     assert user_version(path) == sqlite_schema.SCHEMA_VERSION
     [copy] = sorted((tmp_path / "backup").glob("*"))
     assert copy.name == f"ponos-v7-v{sqlite_schema.SCHEMA_VERSION}.sqlite3"
-    assert table_names(path) >= V9_TABLES
+    assert table_names(path) >= V10_TABLES
 
 
-def test_t_dati_01_a_v9_migration_that_fails_halfway_leaves_the_v8_database_as_it_was(
+def test_t_dati_01_a_v10_migration_that_fails_halfway_leaves_the_v9_database_as_it_was(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = tmp_path / PROFILE_DATABASE_NAME
-    write_frozen_v8(path)
-    broken_v9 = (sqlite_schema.MIGRATIONS[8][0], "CREATE TABLE questa_no (")
-    monkeypatch.setattr(sqlite_database, "MIGRATIONS", (*sqlite_schema.MIGRATIONS[:8], broken_v9))
+    write_frozen_v9(path)
+    broken_v10 = (sqlite_schema.MIGRATIONS[9][0], "CREATE TABLE questa_no (")
+    monkeypatch.setattr(sqlite_database, "MIGRATIONS", (*sqlite_schema.MIGRATIONS[:9], broken_v10))
 
     with pytest.raises((ProfileStorageError, sqlite3.Error)):
         SqliteProfileStorage().open(tmp_path)
 
-    assert user_version(path) == 8
-    assert V9_TABLES.isdisjoint(table_names(path))  # not even the table that had succeeded
+    assert user_version(path) == 9
+    assert V10_TABLES.isdisjoint(table_names(path))  # not even the table that had succeeded
     monkeypatch.undo()
     SqliteProfileStorage().open(tmp_path).close()  # the good round succeeds
     assert user_version(path) == sqlite_schema.SCHEMA_VERSION
 
 
-@pytest.mark.parametrize("kill_at", range(1, len(sqlite_schema.MIGRATIONS[8]) + 1))
-def test_t_dati_01_a_v8_database_killed_at_every_migration_statement_is_still_v8_then_migrates(
+@pytest.mark.parametrize("kill_at", range(1, len(sqlite_schema.MIGRATIONS[9]) + 1))
+def test_t_dati_01_a_v9_database_killed_at_every_migration_statement_is_still_v9_then_migrates(
     tmp_path: Path, kill_at: int
 ) -> None:
     path = tmp_path / PROFILE_DATABASE_NAME
-    write_frozen_v8(path)
-    before = {table: rows(path, table) for table in KEPT_V8}
+    write_frozen_v9(path)
+    before = {table: rows(path, table) for table in KEPT_V9}
 
     assert run_worker_until_death(tmp_path, kill_at) == DIED
 
-    assert user_version(path) == 8  # the transaction was not committed
-    assert V9_TABLES.isdisjoint(table_names(path))  # not even the statements that had succeeded
-    assert {table: rows(path, table) for table in KEPT_V8} == before
+    assert user_version(path) == 9  # the transaction was not committed
+    assert V10_TABLES.isdisjoint(table_names(path))  # not even the statements that had succeeded
+    assert {table: rows(path, table) for table in KEPT_V9} == before
     SqliteProfileStorage().open(tmp_path).close()
     assert user_version(path) == sqlite_schema.SCHEMA_VERSION
 
@@ -231,7 +231,7 @@ def test_t_dati_01_a_v8_database_killed_at_every_migration_statement_is_still_v8
 
 
 def migrated(tmp_path: Path) -> sqlite3.Connection:
-    write_frozen_v8(tmp_path / PROFILE_DATABASE_NAME)
+    write_frozen_v9(tmp_path / PROFILE_DATABASE_NAME)
     SqliteProfileStorage().open(tmp_path).close()
     connection = sqlite3.connect(tmp_path / PROFILE_DATABASE_NAME)
     connection.execute("PRAGMA foreign_keys = ON")

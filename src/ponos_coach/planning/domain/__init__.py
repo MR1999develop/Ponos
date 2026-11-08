@@ -35,8 +35,17 @@ from ponos_coach.planning.domain.plan import (
     WeekKind,
 )
 from ponos_coach.planning.domain.target import TargetClass, classify_target
+from ponos_coach.planning.domain.workouts import (
+    WORKOUT_PREFIX,
+    ScheduledWorkout,
+    StepKind,
+    WorkoutSpec,
+    WorkoutStep,
+    workout_from_session,
+)
 
 __all__ = [
+    "WORKOUT_PREFIX",
     "Block",
     "BlockRole",
     "CloseARaces",
@@ -66,11 +75,16 @@ __all__ = [
     "RetestInUnloadWeek",
     "RetestNotPlaceable",
     "RetestProposal",
+    "ScheduledWorkout",
+    "StepKind",
     "TargetAssessment",
     "TargetClass",
     "TargetTimeUnreachable",
     "WeekKind",
+    "WorkoutSpec",
+    "WorkoutStep",
     "build_plan",
     "classify_target",
     "compare_with_actual",
+    "workout_from_session",
 ]

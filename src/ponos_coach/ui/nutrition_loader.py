@@ -23,8 +23,6 @@ from ponos_coach.nutrition.domain import (
     LeanMass,
     LeanMassEntry,
     MealTimes,
-    is_plausible_lean_mass,
-    lean_mass_on,
 )
 from ponos_coach.nutrition.food_table import FoodTable
 from ponos_coach.nutrition.use_cases import (
@@ -38,16 +36,15 @@ from ponos_coach.nutrition.use_cases import (
     SetMealTimes,
 )
 from ponos_coach.profiles.day_nutrition import (
-    DayNutritionReport,
     DayNutritionResult,
     NutritionSources,
     PlanContext,
     PlanDayNutrition,
 )
-from ponos_coach.profiles.domain import weight_on
 from ponos_coach.profiles.lean_mass import (
     ListLeanMass,
     RemoveLeanMass,
+    RestoreLeanMass,
     SetLeanMass,
     UndoLeanMass,
 )
@@ -65,7 +62,6 @@ class DayLoaded:
     day: date
     result: DayNutritionResult
     foods_verified: bool  # the food table's values were checked against their source
-    lean_mass_measured: bool | None  # a measured lean mass was used; None without guidance
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +70,13 @@ class SettingsRead:
 
     settings: NutritionSettings
     lean_masses: tuple[LeanMassEntry, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _SavedNotRead:
+    """A change was saved but the settings could not be read back."""
+
+    error: Exception
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +102,7 @@ class _Cases:
     remove_period: RemoveGoalPeriod
     set_lean_mass: SetLeanMass
     undo_lean_mass: UndoLeanMass
+    restore_lean_mass: RestoreLeanMass
     remove_lean_mass: RemoveLeanMass
     list_lean_masses: ListLeanMass
 
@@ -115,6 +119,7 @@ def _cases_of(access: ProfileAccess) -> _Cases:
         RemoveGoalPeriod(session.activities, session.goal_periods),
         SetLeanMass(session.activities, session.weights, session.lean_masses, access.today),
         UndoLeanMass(session.activities, session.lean_masses),
+        RestoreLeanMass(session.activities, session.lean_masses),
         RemoveLeanMass(session.activities, session.lean_masses),
         ListLeanMass(session.lean_masses),
     )
@@ -144,22 +149,7 @@ def _plan_day(foods: FoodTableSource, day: date, access: ProfileAccess) -> DayLo
     table = foods()
     context = PlanContext(session.plans, access.today())
     plan = PlanDayNutrition(sources, access.decode, access.zone, table, plan_context=context)
-    result = plan(day)
-    measured = _lean_mass_measured(access, day) if isinstance(result, DayNutritionReport) else None
-    return DayLoaded(day, result, table.source.verified_on is not None, measured)
-
-
-def _lean_mass_measured(access: ProfileAccess, day: date) -> bool:
-    """True if the day's guidance used a measured lean mass: one valid on the day that fits the
-    weight of the day (the same rule the model applies; otherwise the estimate is used)."""
-    session = access.session
-    measured = lean_mass_on(session.lean_masses.list_entries(), day)
-    weight = weight_on(session.weights.list_entries(), day)
-    return (
-        measured is not None
-        and weight is not None
-        and is_plausible_lean_mass(measured, float(weight.kg))
-    )
+    return DayLoaded(day, plan(day), table.source.verified_on is not None)
 
 
 class NutritionLoader(QObject):
@@ -231,41 +221,62 @@ class NutritionLoader(QObject):
 
     def set_lean_mass(self, lean_mass: LeanMass, valid_from: date) -> bool:
         """Set the measured lean mass from a day. A rule of the domain that refuses it comes back
-        as `lean_mass_refused` (it belongs on the field); success as `lean_mass_applied`."""
+        as `lean_mass_refused` (it belongs on the field); success as `lean_mass_applied`.
+
+        If the change is saved but the re-read fails, the change still counts (`lean_mass_applied`,
+        so the command enters the undo stack) and the failure comes back as `failed`, followed by
+        a new read of the settings."""
         cell = LeanMassCell()
 
-        def work(access: ProfileAccess) -> SettingsRead:
+        def work(access: ProfileAccess) -> SettingsRead | _SavedNotRead:
             cases = _cases_of(access)
             cell.value = cases.set_lean_mass(lean_mass, valid_from)
-            return _read(cases)
+            try:
+                return _read(cases)
+            except Exception as error:  # the write is done: the read failure is reported apart
+                return _SavedNotRead(error)
 
         def done(outcome: JobOutcome) -> None:
             if isinstance(outcome, JobSucceeded) and isinstance(outcome.value, SettingsRead):
                 self._emit_read(outcome.value)
                 self.settings_changed.emit(outcome.value.settings)
                 self.lean_mass_applied.emit(LeanMassApplied(lean_mass, valid_from, cell))
+            elif isinstance(outcome, JobSucceeded) and isinstance(outcome.value, _SavedNotRead):
+                self.lean_mass_applied.emit(LeanMassApplied(lean_mass, valid_from, cell))
+                self.failed.emit(self._controller.describe_failure(outcome.value.error))
+                self.load_settings()
             elif isinstance(outcome, JobFailed):
                 self.lean_mass_refused.emit(self._controller.describe_failure(outcome.error))
 
         return self._controller.run_on_profile(work, done)
 
-    def reset_lean_mass(self, lean_mass: LeanMass, valid_from: date, cell: LeanMassCell) -> bool:
-        """Set a lean mass again (redo, or undoing a removal); `cell` receives what to undo."""
+    def redo_lean_mass(self, cell: LeanMassCell) -> bool:
+        """Put back the set that `cell` holds (redo after an undo): the exact entry, if the day
+        holds what it held before the set."""
 
         def change(cases: _Cases) -> None:
-            cell.value = None
-            cell.value = cases.set_lean_mass(lean_mass, valid_from)
+            applied = cell.value
+            if applied is not None:
+                cell.value = cases.restore_lean_mass(applied.entry, applied.replaced)
+
+        return self._change(change)
+
+    def restore_lean_mass(self, entry: LeanMassEntry) -> bool:
+        """Put back a removed measurement exactly (undo of a removal)."""
+
+        def change(cases: _Cases) -> None:
+            cases.restore_lean_mass(entry)
 
         return self._change(change)
 
     def undo_lean_mass(self, cell: LeanMassCell) -> bool:
-        """Take a set lean mass back; nothing to do if the set before it failed."""
+        """Take a set lean mass back; nothing to do if the set before it failed. The cell keeps
+        what was set, so that a redo can put it back."""
 
         def change(cases: _Cases) -> None:
             applied = cell.value
             if applied is not None:
                 cases.undo_lean_mass(applied)
-                cell.value = None
 
         return self._change(change)
 

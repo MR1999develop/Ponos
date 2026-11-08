@@ -261,6 +261,7 @@ def test_t_dati_01_a_frozen_v1_database_gets_exactly_the_latest_tables(tmp_path:
         "goal",
         "weekly_availability",
         "session_choice",
+        "workout_backup",
         "plan_state",
         "plan_past_day",
         "lean_mass",
