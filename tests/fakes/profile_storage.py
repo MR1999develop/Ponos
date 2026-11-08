@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Collection, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from pathlib import Path
@@ -22,6 +22,7 @@ from ponos_coach.activities.domain import (
     ActivityRecord,
     FailureReason,
     GarminActivityId,
+    GeoBox,
     InvalidTransitionError,
     JournalEntry,
     ListingCursor,
@@ -33,12 +34,17 @@ from ponos_coach.activities.domain import (
     identity_key,
     is_possible_duplicate,
     pending_entry,
+    track_box_of,
 )
 from ponos_coach.activities.ports import (
     ActivityIndex,
     ActivityNotFoundError,
+    BoxCandidate,
     DuplicateActivityError,
+    IndexedActivity,
+    IndexRevision,
     SyncJournal,
+    TrackBoxIndex,
     TransactionStateError,
     UnknownJournalEntryError,
 )
@@ -108,6 +114,7 @@ class _Database:
 
     info: ProfileInfo
     records: dict[str, ActivityRecord] = field(default_factory=dict)  # by identity key
+    track_boxes: dict[str, GeoBox] = field(default_factory=dict)  # by identity key
     garmin_ids: set[int] = field(default_factory=set)
     physiology: dict[date, PhysiologyEntry] = field(default_factory=dict)
     weights: dict[date, WeightEntry] = field(default_factory=dict)
@@ -134,6 +141,7 @@ class _Database:
         return copy.deepcopy(
             (
                 self.records,
+                self.track_boxes,
                 self.garmin_ids,
                 self.physiology,
                 self.weights,
@@ -160,6 +168,7 @@ class _Database:
         """Put the data back as they were in the copy."""
         (
             self.records,
+            self.track_boxes,
             self.garmin_ids,
             self.physiology,
             self.weights,
@@ -239,6 +248,12 @@ class _Index:
         if key in self._db.records or (garmin_id is not None and garmin_id in self._db.garmin_ids):
             raise DuplicateActivityError(key)
         self._db.records[key] = record
+        try:  # like the real index: a polyline that cannot be read gives no box
+            box = track_box_of(record.summary.start_point, record.summary.track_polyline)
+        except ValueError:
+            box = None
+        if box is not None:
+            self._db.track_boxes[key] = box
         if garmin_id is not None:
             self._db.garmin_ids.add(garmin_id)
 
@@ -588,10 +603,56 @@ class _Plans:
         return [f for d, f in sorted(self._db.past_days.items()) if first <= d <= last]
 
 
+class _TrackBoxes:
+    """Track boxes keyed by identity key; the row id is the 1-based insertion order."""
+
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def transaction(self) -> AbstractContextManager[None]:
+        return _Index(self._db).transaction()
+
+    def revision(self) -> IndexRevision:
+        records = self._db.records
+        return IndexRevision(len(records), len(records), len(self._db.track_boxes))
+
+    def list_by_start(self) -> Sequence[IndexedActivity]:
+        ordered = _Index(self._db).list_by_start()
+        return [
+            IndexedActivity(r, self._db.track_boxes.get(identity_key(r.identity))) for r in ordered
+        ]
+
+    def _missing(self) -> list[tuple[int, str, ActivityRecord]]:
+        return [
+            (row_id, key, record)
+            for row_id, (key, record) in enumerate(self._db.records.items(), start=1)
+            if key not in self._db.track_boxes
+            and (
+                record.summary.start_point is not None or record.summary.track_polyline is not None
+            )
+        ]
+
+    def count_without_box(self) -> int:
+        return len(self._missing())
+
+    def candidates_without_box(self, after_row_id: int, limit: int) -> Sequence[BoxCandidate]:
+        return [
+            BoxCandidate(row_id, r.summary.start_point, r.summary.track_polyline)
+            for row_id, _, r in self._missing()
+            if row_id > after_row_id
+        ][:limit]
+
+    def store_boxes(self, boxes: Mapping[int, GeoBox]) -> None:
+        keys = list(self._db.records)
+        for row_id, box in boxes.items():
+            self._db.track_boxes.setdefault(keys[row_id - 1], box)
+
+
 class _OpenProfile:
     def __init__(self, database: _Database) -> None:
         self._db = database
         self._index = _Index(database)
+        self._boxes = _TrackBoxes(database)
         self._journal = _Journal(database)
         self._physiology = _Physiology(database)
         self._weights = _Weights(database)
@@ -615,6 +676,10 @@ class _OpenProfile:
     @property
     def activities(self) -> ActivityIndex:
         return self._index
+
+    @property
+    def track_boxes(self) -> TrackBoxIndex:
+        return self._boxes
 
     @property
     def sync_journal(self) -> SyncJournal:

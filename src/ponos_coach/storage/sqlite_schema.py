@@ -84,6 +84,14 @@ Columns of v7 (threshold test protocol and measured lean mass):
 - `lean_mass`: the measured lean mass series (`STRICT`): validity date (existing ISO date, not
   earlier than 1900-01-01, primary key) and whole tenths of a kilogram within the domain limits.
   The plausibility against the weight of the day is a rule of the use case, not of the schema.
+
+Columns of v8 (track box for the map):
+
+- `activities.track_south`, `track_west`, `track_north`, `track_east`: the box of the indexed track
+  (start point and simplified polyline), `REAL`, all `NULL` or all present; `west > east` means the
+  box crosses the antimeridian. Filled when an activity is added and, for the activities already
+  indexed, by a resumable pass that reads only the index (never the archived files). Derived and
+  rebuildable: `NULL` for an activity without positions, and until the pass reaches the row.
 """
 
 from __future__ import annotations
@@ -530,6 +538,32 @@ CREATE TABLE lean_mass (
 ) STRICT
 """
 
+_V8_TRACK_SOUTH = """
+ALTER TABLE activities ADD COLUMN track_south REAL
+    CHECK (track_south IS NULL OR track_south BETWEEN -90 AND 90)
+"""
+
+_V8_TRACK_WEST = """
+ALTER TABLE activities ADD COLUMN track_west REAL
+    CHECK (track_west IS NULL OR track_west BETWEEN -180 AND 180)
+"""
+
+_V8_TRACK_NORTH = """
+ALTER TABLE activities ADD COLUMN track_north REAL
+    CHECK (track_north IS NULL OR track_north BETWEEN -90 AND 90)
+"""
+
+# The last column carries the constraints that tie the four together.
+_V8_TRACK_EAST = """
+ALTER TABLE activities ADD COLUMN track_east REAL
+    CHECK (track_east IS NULL OR (
+        track_east BETWEEN -180 AND 180
+        AND track_south IS NOT NULL AND track_west IS NOT NULL AND track_north IS NOT NULL
+        AND track_south <= track_north))
+    CHECK (track_east IS NOT NULL OR (
+        track_south IS NULL AND track_west IS NULL AND track_north IS NULL))
+"""
+
 # Migration i (index i-1): brings the schema from version i-1 to i.
 MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     (_V1_META, _V1_ACTIVITIES, _V1_ACTIVITIES_START_INDEX, _V1_PHYSIOLOGY, _V1_LOAD_CACHE),
@@ -564,6 +598,7 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
         _V6_PLAN_PAST_DAY_KEPT,
     ),
     (_V7_THRESHOLD_PROTOCOL, _V7_LEAN_MASS),
+    (_V8_TRACK_SOUTH, _V8_TRACK_WEST, _V8_TRACK_NORTH, _V8_TRACK_EAST),
 )
 
 SCHEMA_VERSION: Final = len(MIGRATIONS)

@@ -26,11 +26,13 @@ from ponos_coach.activities.domain import (
     ArchivedFile,
     FileFormat,
     GarminActivityId,
+    GeoBox,
     GeoPoint,
     Sport,
     identity_from_key,
     identity_key,
     is_possible_duplicate,
+    track_box_of,
 )
 from ponos_coach.activities.ports import (
     ActivityIndexError,
@@ -58,18 +60,21 @@ from ponos_coach.storage.sqlite_database import SqliteDatabase
 _EPOCH: Final = datetime(1970, 1, 1, tzinfo=UTC)
 _MILLISECOND: Final = timedelta(milliseconds=1)
 
-_ACTIVITY_COLUMNS: Final = (
+ACTIVITY_COLUMNS: Final = (
     "identity_key, file_format, sport, start_ms, elapsed_s, timer_s, distance_m, ascent_m, "
     "start_lat, start_lon, track_polyline, archive_path, archive_sha256, archive_size_bytes, "
     "origin, imported_ms, garmin_activity_id, calories_kcal"
 )
 # Only module constants in the composed queries: no external data (S608).
-_SELECT_ACTIVITIES: Final = "SELECT " + _ACTIVITY_COLUMNS + " FROM activities "  # noqa: S608
+_SELECT_ACTIVITIES: Final = "SELECT " + ACTIVITY_COLUMNS + " FROM activities "  # noqa: S608
+_BOX_COLUMNS: Final = "track_south, track_west, track_north, track_east"
 _INSERT_ACTIVITY: Final = (
     "INSERT INTO activities ("  # noqa: S608
-    + _ACTIVITY_COLUMNS
+    + ACTIVITY_COLUMNS
+    + ", "
+    + _BOX_COLUMNS
     + ") VALUES ("
-    + ", ".join("?" * 18)
+    + ", ".join("?" * 22)
     + ")"
 )
 
@@ -103,7 +108,7 @@ def from_ms(milliseconds: int) -> datetime:
 
 
 @contextmanager
-def _translating(error: type[Exception]) -> Iterator[None]:
+def translating(error: type[Exception]) -> Iterator[None]:
     """SQLite errors become the port's error, with the cause but without data."""
     try:
         yield
@@ -113,6 +118,21 @@ def _translating(error: type[Exception]) -> Iterator[None]:
 
 def _is_unique_violation(exc: sqlite3.Error) -> bool:
     return getattr(exc, "sqlite_errorcode", None) == sqlite3.SQLITE_CONSTRAINT_UNIQUE
+
+
+def box_values(box: GeoBox | None) -> tuple[float | None, ...]:
+    """The four columns of a track box (all `None` without a box), in column order."""
+    if box is None:
+        return (None, None, None, None)
+    return (box.south, box.west, box.north, box.east)
+
+
+def _derived_box(summary: ActivitySummary) -> GeoBox | None:
+    """Box saved with a new row; an unreadable polyline gives no box (the fill retries it)."""
+    try:
+        return track_box_of(summary.start_point, summary.track_polyline)
+    except ValueError:
+        return None
 
 
 def _activity_params(record: ActivityRecord) -> tuple[Any, ...]:
@@ -137,6 +157,7 @@ def _activity_params(record: ActivityRecord) -> tuple[Any, ...]:
         to_ms(record.imported_at),
         record.garmin_activity_id,
         summary.calories_kcal,
+        *box_values(_derived_box(summary)),
     )
 
 
@@ -157,7 +178,7 @@ def _record_from_row(row: Sequence[Any]) -> ActivityRecord:
     )
 
 
-def _records(rows: Sequence[Sequence[Any]]) -> list[ActivityRecord]:
+def records_from_rows(rows: Sequence[Sequence[Any]]) -> list[ActivityRecord]:
     try:
         return [_record_from_row(row) for row in rows]
     except ValueError as exc:
@@ -176,7 +197,7 @@ class SqliteActivityIndex:
 
     def exists(self, identity: ActivityIdentity) -> bool:
         """True if there is a record with this identity."""
-        with _translating(ActivityIndexError):
+        with translating(ActivityIndexError):
             row = self._db.connection.execute(
                 "SELECT 1 FROM activities WHERE identity_key = ?", (identity_key(identity),)
             ).fetchone()
@@ -184,11 +205,11 @@ class SqliteActivityIndex:
 
     def get(self, identity: ActivityIdentity) -> ActivityRecord | None:
         """The record with this identity, or None."""
-        with _translating(ActivityIndexError):
+        with translating(ActivityIndexError):
             row = self._db.connection.execute(
                 _SELECT_ACTIVITIES + "WHERE identity_key = ?", (identity_key(identity),)
             ).fetchone()
-        return None if row is None else _records([row])[0]
+        return None if row is None else records_from_rows([row])[0]
 
     def find_possible_duplicates(
         self, start: datetime, elapsed_s: float
@@ -196,7 +217,7 @@ class SqliteActivityIndex:
         """SQL prefilter on the start (a slightly wider window), then `is_possible_duplicate`."""
         margin_ms = DUPLICATE_START_TOLERANCE // _MILLISECOND + 1
         centre = floor_ms(start)
-        with _translating(ActivityIndexError):
+        with translating(ActivityIndexError):
             rows = self._db.connection.execute(
                 _SELECT_ACTIVITIES
                 + "WHERE start_ms BETWEEN ? AND ? ORDER BY start_ms, identity_key",
@@ -204,7 +225,7 @@ class SqliteActivityIndex:
             ).fetchall()
         return [
             record
-            for record in _records(rows)
+            for record in records_from_rows(rows)
             if is_possible_duplicate(start, elapsed_s, record.start, record.elapsed_s)
         ]
 
@@ -222,11 +243,11 @@ class SqliteActivityIndex:
 
     def list_by_start(self) -> Sequence[ActivityRecord]:
         """All the records by ascending start, ties by identity key."""
-        with _translating(ActivityIndexError):
+        with translating(ActivityIndexError):
             rows = self._db.connection.execute(
                 _SELECT_ACTIVITIES + "ORDER BY start_ms, identity_key"
             ).fetchall()
-        return _records(rows)
+        return records_from_rows(rows)
 
     def list_started_between(self, first: datetime, last: datetime) -> Sequence[ActivityRecord]:
         """Records with `first <= start < last` by ascending start (uses the start index).
@@ -234,17 +255,17 @@ class SqliteActivityIndex:
         The stored starts are whole milliseconds, so the bounds are rounded up to the next
         millisecond for the comparison to be exact.
         """
-        with _translating(ActivityIndexError):
+        with translating(ActivityIndexError):
             rows = self._db.connection.execute(
                 _SELECT_ACTIVITIES
                 + "WHERE start_ms >= ? AND start_ms < ? ORDER BY start_ms, identity_key",
                 (_ceil_ms(first), _ceil_ms(last)),
             ).fetchall()
-        return _records(rows)
+        return records_from_rows(rows)
 
     def first_start_at_or_after(self, instant: datetime) -> datetime | None:
         """The earliest start not before `instant`, or None."""
-        with _translating(ActivityIndexError):
+        with translating(ActivityIndexError):
             row = self._db.connection.execute(
                 "SELECT MIN(start_ms) FROM activities WHERE start_ms >= ?", (_ceil_ms(instant),)
             ).fetchone()
@@ -252,11 +273,11 @@ class SqliteActivityIndex:
 
     def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
         """The record with this Garmin id, or None."""
-        with _translating(ActivityIndexError):
+        with translating(ActivityIndexError):
             row = self._db.connection.execute(
                 _SELECT_ACTIVITIES + "WHERE garmin_activity_id = ?", (garmin_id.value,)
             ).fetchone()
-        return None if row is None else _records([row])[0]
+        return None if row is None else records_from_rows([row])[0]
 
     def link_garmin_id(self, identity: ActivityIdentity, garmin_id: GarminActivityId) -> None:
         """Links the Garmin id to a record that does not have one yet (idempotent)."""
@@ -288,7 +309,7 @@ class SqlitePhysiologyStore:
     def put(self, entry: PhysiologyEntry) -> None:
         """Saves the parameters valid from `entry.valid_from`, replacing the same date."""
         physiology = entry.physiology
-        with _translating(LoadStoreError):
+        with translating(LoadStoreError):
             self._db.connection.execute(
                 "INSERT INTO physiology (valid_from, min_bpm, max_bpm, threshold_bpm, sex) "
                 "VALUES (?, ?, ?, ?, ?) ON CONFLICT (valid_from) DO UPDATE SET "
@@ -305,7 +326,7 @@ class SqlitePhysiologyStore:
 
     def remove(self, valid_from: date) -> None:
         """Deletes the entry that starts on `valid_from`."""
-        with _translating(LoadStoreError):
+        with translating(LoadStoreError):
             cursor = self._db.connection.execute(
                 "DELETE FROM physiology WHERE valid_from = ?", (valid_from.isoformat(),)
             )
@@ -314,7 +335,7 @@ class SqlitePhysiologyStore:
 
     def list_entries(self) -> Sequence[PhysiologyEntry]:
         """All the entries by ascending date."""
-        with _translating(LoadStoreError):
+        with translating(LoadStoreError):
             rows = self._db.connection.execute(
                 "SELECT valid_from, min_bpm, max_bpm, threshold_bpm, sex "
                 "FROM physiology ORDER BY valid_from"
@@ -341,7 +362,7 @@ class SqliteLoadCache:
 
     def get(self, identity: ActivityIdentity, fingerprint: LoadFingerprint) -> ActivityLoad | None:
         """The saved load, only if produced with this fingerprint."""
-        with _translating(LoadStoreError):
+        with translating(LoadStoreError):
             row = self._db.connection.execute(
                 "SELECT c.trimp, c.hr_tss, c.load, c.used_samples, c.discarded_samples, "
                 "c.excluded_seconds, c.source, c.zone1_s, c.zone2_s, c.zone3_s, c.zone4_s, "
@@ -364,7 +385,7 @@ class SqliteLoadCache:
         self, identity: ActivityIdentity, fingerprint: LoadFingerprint, load: ActivityLoad
     ) -> None:
         """Saves or replaces the load; unknown activity → `UnknownActivityError`."""
-        with _translating(LoadStoreError):
+        with translating(LoadStoreError):
             cursor = self._db.connection.execute(
                 "INSERT INTO load_cache (activity_id, fingerprint, trimp, hr_tss, load, "
                 "used_samples, discarded_samples, excluded_seconds, source, "
@@ -397,7 +418,7 @@ class SqliteLoadCache:
 
     def invalidate(self, identity: ActivityIdentity) -> None:
         """Forgets the load of an activity (no effect if there is none)."""
-        with _translating(LoadStoreError):
+        with translating(LoadStoreError):
             self._db.connection.execute(
                 "DELETE FROM load_cache WHERE activity_id IN "
                 "(SELECT id FROM activities WHERE identity_key = ?)",
@@ -406,5 +427,5 @@ class SqliteLoadCache:
 
     def clear(self) -> None:
         """Forgets all the loads."""
-        with _translating(LoadStoreError):
+        with translating(LoadStoreError):
             self._db.connection.execute("DELETE FROM load_cache")

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from ponos_coach.activities.domain.geo import GeoPoint, decode_polyline
 from ponos_coach.activities.domain.geo_box import GeoBox
 from ponos_coach.activities.domain.record import ActivityRecord
 from ponos_coach.activities.domain.track import decode_segments
@@ -82,6 +83,21 @@ class StartIndex:
         """Activities without a start position."""
         return self._without_position
 
+    @property
+    def located(self) -> NDArray[np.intp]:
+        """Positions (in the input order) of the activities that have a start position."""
+        return self._located
+
+    @property
+    def lat_deg(self) -> NDArray[np.float64]:
+        """Start latitudes of the located activities (column aligned with `located`)."""
+        return self._lat
+
+    @property
+    def lon_deg(self) -> NDArray[np.float64]:
+        """Start longitudes of the located activities (column aligned with `located`)."""
+        return self._lon
+
     def mask_in(self, area: GeoBox) -> NDArray[np.bool_]:
         """Mask, over the located activities only, of those that start in the area."""
         return area.contains_many(self._lat, self._lon)
@@ -115,3 +131,22 @@ def track_touches_area(track_polyline: str, area: GeoBox) -> bool:
         if area.contains_many(lat, lon).any():
             return True
     return False
+
+
+def track_box_of(start_point: GeoPoint | None, track_polyline: str | None) -> GeoBox | None:
+    """Box of the indexed track: the start point and the points of the simplified polyline.
+
+    This is what the index stores (schema v8) to find the tracks that touch a map area without
+    reading files. It is derived from data already in the index, so it can always be rebuilt;
+    being built on the simplified track (tolerance `TRACK_TOLERANCE_M`) it can be smaller than the
+    box of the full track by at most that tolerance. `None` without any position.
+
+    Raises:
+        ValueError: the track is not a valid polyline.
+    """
+    points: list[GeoPoint] = [] if start_point is None else [start_point]
+    if track_polyline is not None:
+        points.extend(decode_polyline(track_polyline))
+    if not points:
+        return None
+    return GeoBox.of_points([p.lat_deg for p in points], [p.lon_deg for p in points])

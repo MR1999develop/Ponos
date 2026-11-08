@@ -169,9 +169,20 @@ def write_frozen_v1(path: Path) -> None:
         raw.commit()
 
 
+# Columns added by migrations after the ones these frozen tests describe (v8: the track box).
+# The tests of those migrations read them with their own queries.
+LATER_COLUMNS = frozenset({"track_south", "track_west", "track_north", "track_east"})
+
+
 def rows(path: Path, table: str) -> list[tuple[object, ...]]:
+    """The rows of a table with the columns the earlier migrations gave it (`SELECT *` before
+    the later columns were added)."""
     with closing(sqlite3.connect(path)) as raw:
-        return raw.execute(f"SELECT * FROM {table}").fetchall()  # noqa: S608 - fixed names
+        columns = [
+            r[1] for r in raw.execute(f"PRAGMA table_info({table})")
+            if r[1] not in LATER_COLUMNS
+        ]  # fmt: skip
+        return raw.execute(f"SELECT {', '.join(columns)} FROM {table}").fetchall()  # noqa: S608
 
 
 # --- T-DATI-01 -----------------------------------------------------------------------------------
@@ -252,6 +263,7 @@ def test_t_dati_01_a_frozen_v1_database_gets_exactly_the_latest_tables(tmp_path:
         "session_choice",
         "plan_state",
         "plan_past_day",
+        "lean_mass",
     }
 
 

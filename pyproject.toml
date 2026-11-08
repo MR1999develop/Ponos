@@ -128,6 +128,7 @@ type = "forbidden"
 source_modules = [
     "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
     "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury", "ponos_coach.nutrition",
+    "ponos_coach.maps",
     "ponos_coach.profiles", "ponos_coach.garmin", "ponos_coach.storage",
     "ponos_coach.platform",
 ]
@@ -139,6 +140,7 @@ type = "forbidden"
 source_modules = [
     "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
     "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury", "ponos_coach.nutrition",
+    "ponos_coach.maps",
     "ponos_coach.profiles",
 ]
 forbidden_modules = ["ponos_coach.garmin", "ponos_coach.storage", "ponos_coach.platform"]
@@ -167,6 +169,7 @@ source_modules = ["ponos_coach.fsio"]
 forbidden_modules = [
     "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
     "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury", "ponos_coach.nutrition",
+    "ponos_coach.maps",
     "ponos_coach.profiles", "ponos_coach.garmin", "ponos_coach.storage",
     "ponos_coach.platform", "ponos_coach.ui", "ponos_coach.i18n", "ponos_coach.__main__",
 ]
@@ -178,6 +181,7 @@ source_modules = ["ponos_coach.zipread"]
 forbidden_modules = [
     "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
     "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury", "ponos_coach.nutrition",
+    "ponos_coach.maps",
     "ponos_coach.profiles", "ponos_coach.garmin", "ponos_coach.storage",
     "ponos_coach.platform", "ponos_coach.ui", "ponos_coach.i18n", "ponos_coach.fsio",
     "ponos_coach.__main__",
@@ -189,6 +193,7 @@ type = "forbidden"
 source_modules = [
     "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
     "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury", "ponos_coach.nutrition",
+    "ponos_coach.maps",
     "ponos_coach.profiles", "ponos_coach.storage", "ponos_coach.platform",
     "ponos_coach.ui", "ponos_coach.fsio", "ponos_coach.zipread",
 ]
@@ -210,6 +215,7 @@ type = "forbidden"
 source_modules = [
     "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
     "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury", "ponos_coach.nutrition",
+    "ponos_coach.maps",
     "ponos_coach.profiles", "ponos_coach.ui",
 ]
 forbidden_modules = ["ponos_coach.fsio"]
@@ -225,6 +231,7 @@ type = "forbidden"
 source_modules = [
     "ponos_coach.activities", "ponos_coach.load", "ponos_coach.assessment",
     "ponos_coach.goals", "ponos_coach.planning", "ponos_coach.injury", "ponos_coach.nutrition",
+    "ponos_coach.maps",
     "ponos_coach.profiles", "ponos_coach.garmin", "ponos_coach.storage",
     "ponos_coach.platform", "ponos_coach.ui",
 ]

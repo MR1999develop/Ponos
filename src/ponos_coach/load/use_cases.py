@@ -163,9 +163,10 @@ class ProfileOverview:
         return weekly_zone_seconds(self.day_loads(), through)
 
 
-def _read_bytes(
+def read_original_bytes(
     archive: ActivityArchive, record: ActivityRecord, max_file_bytes: int
 ) -> bytes | ExclusionReason:
+    """Bytes of the original from the archive (hash-verified, with the byte cap), or the reason."""
     try:
         return archive.read(record.archived, max_file_bytes)
     except ArchiveFileMissingError:
@@ -186,7 +187,7 @@ def read_original_activity(
     A failure does not raise: it gives the reason (missing file, altered, too large, unreadable,
     not decodable, or with an identity different from the record's).
     """
-    data = _read_bytes(archive, record, max_file_bytes)
+    data = read_original_bytes(archive, record, max_file_bytes)
     if isinstance(data, ExclusionReason):
         return data
     try:
