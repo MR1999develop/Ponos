@@ -24,6 +24,7 @@ from ponos_coach.nutrition.ports import (
     MealTimesStore,
 )
 from ponos_coach.planning.ports import PlanStore
+from ponos_coach.planning.workout_calendar import WorkoutBackupStore
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
     FolderKind,
@@ -190,6 +191,10 @@ class _CountingProfile:
     @property
     def plans(self) -> PlanStore:
         return self._inner.plans
+
+    @property
+    def workout_backups(self) -> WorkoutBackupStore:
+        return self._inner.workout_backups
 
     def close(self) -> None:
         self._owner.closed += 1

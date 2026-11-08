@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import date
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -61,6 +62,9 @@ class DayDetailPanel(QWidget):
         self._add_form = QPushButton(self.tr("Add form goal here..."), self)
         self._add_form.setObjectName("dayAddFormGoal")
         self._add_form.clicked.connect(self._on_add_form)
+        self._send_session = QPushButton(self.tr("Send this session to Garmin"), self)
+        self._send_session.setObjectName("daySendSession")
+        self._send_session.setEnabled(False)
         self._goal_rows = QVBoxLayout()
         self._goal_rows.setSpacing(SPACE_2)
         self._row_widgets: list[QWidget] = []
@@ -68,6 +72,7 @@ class DayDetailPanel(QWidget):
         column.setSpacing(SPACE_2)
         column.addWidget(self._add_race)
         column.addWidget(self._add_form)
+        column.addWidget(self._send_session)
         column.addLayout(self._goal_rows)
         column.addStretch(1)
         outer = QHBoxLayout(self)
@@ -93,6 +98,22 @@ class DayDetailPanel(QWidget):
     def add_form_goal_button(self) -> QPushButton:
         """The "Add form goal here..." button."""
         return self._add_form
+
+    @property
+    def send_session_button(self) -> QPushButton:
+        """The "Send this session to Garmin" button."""
+        return self._send_session
+
+    def attach_send_action(self, action: QAction) -> None:
+        """Make the "Send this session to Garmin" button follow a command: it does what the
+        action does and is enabled, and explains why not, as the action is."""
+        self._send_session.clicked.connect(action.trigger)
+        action.changed.connect(lambda: self._follow(action))
+        self._follow(action)
+
+    def _follow(self, action: QAction) -> None:
+        self._send_session.setEnabled(action.isEnabled())
+        self._send_session.setToolTip(action.toolTip())
 
     def goal_buttons(self) -> list[tuple[QPushButton, QPushButton]]:
         """For each goal of the day, its "Change..." and "Remove" buttons."""

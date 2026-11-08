@@ -85,6 +85,7 @@ from ponos_coach.nutrition.ports import (
 )
 from ponos_coach.planning.domain import Plan, PlanRefusal
 from ponos_coach.planning.ports import FrozenDay, PlanStore, StoredPlan, UnreadablePlan
+from ponos_coach.planning.workout_calendar import WorkoutBackupStore
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
     FixedProfileData,
@@ -104,6 +105,7 @@ from ponos_coach.profiles.ports import (
     WeightStore,
 )
 from ponos_coach.profiles.timezones import require_known_timezone
+from tests.fakes.workout_calendar import InMemoryWorkoutBackupStore
 
 FORMAT_VERSION = 6
 
@@ -132,6 +134,7 @@ class _Database:
     plan_state: tuple[Plan | PlanRefusal, date] | None = None
     past_days: dict[date, FrozenDay] = field(default_factory=dict)
     unreadable_past_days: set[date] = field(default_factory=set)  # frozen, lost: set by a test
+    workout_backups: InMemoryWorkoutBackupStore = field(default_factory=InMemoryWorkoutBackupStore)
     cursors: dict[ListingKind, ListingCursor] = field(default_factory=dict)
     journal: dict[GarminActivityId, JournalEntry] = field(default_factory=dict)
     last_completed: datetime | None = None
@@ -676,6 +679,10 @@ class _OpenProfile:
         self._availability = _Availability(database)
         self._session_choices = _SessionChoices(database)
         self._plans = _Plans(database)
+
+    @property
+    def workout_backups(self) -> WorkoutBackupStore:
+        return self._db.workout_backups
 
     @property
     def info(self) -> ProfileInfo:

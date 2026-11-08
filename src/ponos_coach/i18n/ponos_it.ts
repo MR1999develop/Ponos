@@ -444,6 +444,10 @@
         <translation>Aggiungi obiettivo di forma qui...</translation>
     </message>
     <message>
+        <source>Send this session to Garmin</source>
+        <translation>Invia questa seduta a Garmin</translation>
+    </message>
+    <message>
         <source>Select a day to see what is planned, what was done and its goals.</source>
         <translation>Seleziona un giorno per vedere cosa è previsto, cosa è stato fatto e i suoi obiettivi.</translation>
     </message>
@@ -1238,6 +1242,470 @@
     <message>
         <source>Green beans</source>
         <translation>Fagiolini</translation>
+    </message>
+</context>
+<context>
+    <name>GarminCalendar</name>
+    <message>
+        <source>{day}: {name}</source>
+        <translation>{day}: {name}</translation>
+    </message>
+    <message>
+        <source>Create or open a profile first.</source>
+        <translation>Crea o apri prima un profilo.</translation>
+    </message>
+    <message>
+        <source>The system keychain cannot be used, so no Garmin account can be connected.</source>
+        <translation>Il portachiavi del sistema non è utilizzabile, quindi non si può collegare nessun account Garmin.</translation>
+    </message>
+    <message>
+        <source>Checking the Garmin account; try again in a moment.</source>
+        <translation>Verifica dell'account Garmin in corso: riprova tra un momento.</translation>
+    </message>
+    <message>
+        <source>Another Garmin task is running; wait for it or stop it.</source>
+        <translation>Un altro compito Garmin è in corso: attendi che finisca o fermalo.</translation>
+    </message>
+    <message>
+        <source>Connect a Garmin account first.</source>
+        <translation>Collega prima un account Garmin.</translation>
+    </message>
+    <message>
+        <source>Garmin asks you to connect again.</source>
+        <translation>Garmin chiede di collegarsi di nuovo.</translation>
+    </message>
+    <message>
+        <source>This Garmin connection cannot manage workouts.</source>
+        <translation>Questo collegamento a Garmin non può gestire gli allenamenti.</translation>
+    </message>
+    <message>
+        <source>There is no plan yet: add a goal first.</source>
+        <translation>Non c'è ancora un piano: aggiungi prima un obiettivo.</translation>
+    </message>
+    <message>
+        <source>The plan has no sessions from today on.</source>
+        <translation>Il piano non ha sedute da oggi in poi.</translation>
+    </message>
+    <message>
+        <source>Select a day in the calendar first.</source>
+        <translation>Seleziona prima un giorno nel calendario.</translation>
+    </message>
+    <message>
+        <source>The selected day has no planned session.</source>
+        <translation>Il giorno selezionato non ha una seduta in programma.</translation>
+    </message>
+    <message>
+        <source>The selected week has no planned sessions.</source>
+        <translation>La settimana selezionata non ha sedute in programma.</translation>
+    </message>
+    <message>
+        <source>Only sessions of today or later can be sent.</source>
+        <translation>Si possono inviare solo le sedute di oggi o dei giorni successivi.</translation>
+    </message>
+    <message numerus="yes">
+        <source>Sending workout {step} of %n</source>
+        <translation>
+            <numerusform>Invio dell'allenamento {step} di %n</numerusform>
+            <numerusform>Invio dell'allenamento {step} di %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Deleting workout {step} of %n</source>
+        <translation>
+            <numerusform>Eliminazione dell'allenamento {step} di %n</numerusform>
+            <numerusform>Eliminazione dell'allenamento {step} di %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Creating workout {step} of %n again</source>
+        <translation>
+            <numerusform>Ricreazione dell'allenamento {step} di %n</numerusform>
+            <numerusform>Ricreazione dell'allenamento {step} di %n</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Reading the Garmin calendar...</source>
+        <translation>Lettura del calendario Garmin...</translation>
+    </message>
+    <message>
+        <source>Starting the Garmin task...</source>
+        <translation>Avvio del compito Garmin...</translation>
+    </message>
+    <message>
+        <source>You stopped the task; what was done is kept.</source>
+        <translation>Hai fermato il compito: ciò che era già stato fatto resta.</translation>
+    </message>
+    <message>
+        <source>Garmin asks you to connect again. Connect the account and repeat the command.</source>
+        <translation>Garmin chiede di collegarsi di nuovo. Collega l'account e ripeti il comando.</translation>
+    </message>
+    <message>
+        <source>Garmin is limiting the requests. Wait a few minutes and repeat the command.</source>
+        <translation>Garmin sta limitando le richieste. Attendi qualche minuto e ripeti il comando.</translation>
+    </message>
+    <message>
+        <source>Garmin did not answer. Check the connection and repeat the command.</source>
+        <translation>Garmin non ha risposto. Controlla la connessione e ripeti il comando.</translation>
+    </message>
+    <message>
+        <source>This Garmin connection cannot manage workouts. Nothing was changed.</source>
+        <translation>Questo collegamento a Garmin non può gestire gli allenamenti. Non è stato cambiato nulla.</translation>
+    </message>
+    <message>
+        <source>A copy could not be saved on this computer, so nothing more was deleted.</source>
+        <translation>Non è stato possibile salvare una copia su questo computer, quindi non è stato eliminato altro.</translation>
+    </message>
+    <message>
+        <source>Garmin refused it</source>
+        <translation>Garmin l'ha rifiutato</translation>
+    </message>
+    <message>
+        <source>it has more steps than a watch can take</source>
+        <translation>ha più passaggi di quanti ne gestisca un orologio</translation>
+    </message>
+    <message>
+        <source>its day has passed</source>
+        <translation>il suo giorno è passato</translation>
+    </message>
+    <message>
+        <source>it could not be copied first, so it was kept</source>
+        <translation>non è stato possibile copiarlo prima, quindi è stato mantenuto</translation>
+    </message>
+    <message>
+        <source>its day has passed, so it was not created again</source>
+        <translation>il suo giorno è passato, quindi non è stato ricreato</translation>
+    </message>
+    <message>
+        <source>{day}: {name} - {reason}</source>
+        <translation>{day}: {name} - {reason}</translation>
+    </message>
+    <message>
+        <source>{day}: {reason}</source>
+        <translation>{day}: {reason}</translation>
+    </message>
+    <message numerus="yes">
+        <source>and %n more</source>
+        <translation>
+            <numerusform>e altro %n</numerusform>
+            <numerusform>e altri %n</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>No Garmin account is connected.</source>
+        <translation>Nessun account Garmin è collegato.</translation>
+    </message>
+    <message>
+        <source>Connect an account from the Garmin menu.</source>
+        <translation>Collega un account dal menu Garmin.</translation>
+    </message>
+    <message>
+        <source>Connect the account again and repeat the command.</source>
+        <translation>Collega di nuovo l'account e ripeti il comando.</translation>
+    </message>
+    <message>
+        <source>The system keychain cannot be used.</source>
+        <translation>Il portachiavi del sistema non è utilizzabile.</translation>
+    </message>
+    <message>
+        <source>Check that the keychain is unlocked and try again.</source>
+        <translation>Controlla che il portachiavi sia sbloccato e riprova.</translation>
+    </message>
+    <message>
+        <source>Garmin is limiting the requests.</source>
+        <translation>Garmin sta limitando le richieste.</translation>
+    </message>
+    <message>
+        <source>Wait a few minutes and try again.</source>
+        <translation>Attendi qualche minuto e riprova.</translation>
+    </message>
+    <message>
+        <source>Garmin did not answer.</source>
+        <translation>Garmin non ha risposto.</translation>
+    </message>
+    <message>
+        <source>Check the connection and try again.</source>
+        <translation>Controlla la connessione e riprova.</translation>
+    </message>
+    <message>
+        <source>The profile could not be opened for this task.</source>
+        <translation>Non è stato possibile aprire il profilo per questo compito.</translation>
+    </message>
+    <message>
+        <source>Check that its folder is available and try again.</source>
+        <translation>Controlla che la sua cartella sia disponibile e riprova.</translation>
+    </message>
+    <message>
+        <source>Nothing was changed. Importing and syncing still work.</source>
+        <translation>Non è stato cambiato nulla. Importazione e sincronizzazione funzionano ancora.</translation>
+    </message>
+    <message>
+        <source>The Garmin task failed unexpectedly.</source>
+        <translation>Il compito Garmin è fallito in modo imprevisto.</translation>
+    </message>
+    <message>
+        <source>Try again; if it keeps failing, see the log.</source>
+        <translation>Riprova; se continua a fallire, guarda il registro.</translation>
+    </message>
+    <message>
+        <source>Sending stopped</source>
+        <translation>Invio fermato</translation>
+    </message>
+    <message>
+        <source>The plan was not fully sent</source>
+        <translation>Il piano non è stato inviato per intero</translation>
+    </message>
+    <message>
+        <source>Plan sent to Garmin</source>
+        <translation>Piano inviato a Garmin</translation>
+    </message>
+    <message>
+        <source>Deletion stopped</source>
+        <translation>Eliminazione fermata</translation>
+    </message>
+    <message>
+        <source>Some workouts were not deleted</source>
+        <translation>Alcuni allenamenti non sono stati eliminati</translation>
+    </message>
+    <message>
+        <source>Workouts deleted</source>
+        <translation>Allenamenti eliminati</translation>
+    </message>
+    <message>
+        <source>Recreation stopped</source>
+        <translation>Ricreazione fermata</translation>
+    </message>
+    <message>
+        <source>Some workouts were not created again</source>
+        <translation>Alcuni allenamenti non sono stati ricreati</translation>
+    </message>
+    <message>
+        <source>Workouts created again</source>
+        <translation>Allenamenti ricreati</translation>
+    </message>
+    <message numerus="yes">
+        <source>Workouts sent to Garmin: %n</source>
+        <translation>
+            <numerusform>Allenamento inviato a Garmin: %n</numerusform>
+            <numerusform>Allenamenti inviati a Garmin: %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Already on the calendar: %n</source>
+        <translation>
+            <numerusform>Già nel calendario: %n</numerusform>
+            <numerusform>Già nel calendario: %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Sessions left for a later send: %n (at most {limit} are sent at a time)</source>
+        <translation>
+            <numerusform>Sedute rimandate a un invio successivo: %n (se ne inviano al massimo {limit} alla volta)</numerusform>
+            <numerusform>Sedute rimandate a un invio successivo: %n (se ne inviano al massimo {limit} alla volta)</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Workouts deleted from the Garmin calendar: %n. A copy of each is kept on this computer.</source>
+        <translation>
+            <numerusform>Allenamento eliminato dal calendario Garmin: %n. Ne resta una copia su questo computer.</numerusform>
+            <numerusform>Allenamenti eliminati dal calendario Garmin: %n. Di ognuno resta una copia su questo computer.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Workouts created again: %n</source>
+        <translation>
+            <numerusform>Allenamento ricreato: %n</numerusform>
+            <numerusform>Allenamenti ricreati: %n</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>The Garmin calendar was not fully read</source>
+        <translation>Il calendario Garmin non è stato letto per intero</translation>
+    </message>
+    <message>
+        <source>The Garmin task did not start</source>
+        <translation>Il compito Garmin non è partito</translation>
+    </message>
+    <message>
+        <source>There was nothing to send.</source>
+        <translation>Non c'era nulla da inviare.</translation>
+    </message>
+    <message>
+        <source>Nothing was deleted.</source>
+        <translation>Non è stato eliminato nulla.</translation>
+    </message>
+    <message>
+        <source>There was nothing to create again.</source>
+        <translation>Non c'era nulla da ricreare.</translation>
+    </message>
+    <message numerus="yes">
+        <source>Workouts on the Garmin calendar: %n</source>
+        <translation>
+            <numerusform>Allenamento nel calendario Garmin: %n</numerusform>
+            <numerusform>Allenamenti nel calendario Garmin: %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Workouts deleted from Garmin: %n</source>
+        <translation>
+            <numerusform>Allenamento eliminato da Garmin: %n</numerusform>
+            <numerusform>Allenamenti eliminati da Garmin: %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Workouts created again on Garmin: %n</source>
+        <translation>
+            <numerusform>Allenamento ricreato su Garmin: %n</numerusform>
+            <numerusform>Allenamenti ricreati su Garmin: %n</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>GarminCalendarDialog</name>
+    <message>
+        <source>Garmin calendar</source>
+        <translation>Calendario Garmin</translation>
+    </message>
+    <message>
+        <source>Workouts on the Garmin calendar</source>
+        <translation>Allenamenti nel calendario Garmin</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Aggiorna</translation>
+    </message>
+    <message>
+        <source>Delete selected</source>
+        <translation>Elimina selezionati</translation>
+    </message>
+    <message>
+        <source>Recreate deleted</source>
+        <translation>Ricrea eliminati</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Chiudi</translation>
+    </message>
+    <message>
+        <source>Reading the Garmin calendar...</source>
+        <translation>Lettura del calendario Garmin...</translation>
+    </message>
+    <message numerus="yes">
+        <source>Workouts from today on: %n</source>
+        <translation>
+            <numerusform>Allenamento da oggi in poi: %n</numerusform>
+            <numerusform>Allenamenti da oggi in poi: %n</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>No workouts are scheduled from today on.</source>
+        <translation>Nessun allenamento è in programma da oggi in poi.</translation>
+    </message>
+    <message numerus="yes">
+        <source>Recreate deleted (%n)</source>
+        <translation>
+            <numerusform>Ricrea eliminato (%n)</numerusform>
+            <numerusform>Ricrea eliminati (%n)</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Wait for the Garmin task to end.</source>
+        <translation>Attendi la fine del compito Garmin.</translation>
+    </message>
+    <message>
+        <source>Select the workouts to delete first.</source>
+        <translation>Seleziona prima gli allenamenti da eliminare.</translation>
+    </message>
+    <message numerus="yes">
+        <source>Select at most %n workouts at a time.</source>
+        <translation>
+            <numerusform>Seleziona al massimo %n allenamento alla volta.</numerusform>
+            <numerusform>Seleziona al massimo %n allenamenti alla volta.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>No deleted workouts are waiting.</source>
+        <translation>Nessun allenamento eliminato è in attesa.</translation>
+    </message>
+</context>
+<context>
+    <name>GarminCalendarUi</name>
+    <message>
+        <source>Send plan to Garmin...</source>
+        <translation>Invia il piano a Garmin...</translation>
+    </message>
+    <message>
+        <source>Send this session to Garmin</source>
+        <translation>Invia questa seduta a Garmin</translation>
+    </message>
+    <message>
+        <source>Garmin calendar...</source>
+        <translation>Calendario Garmin...</translation>
+    </message>
+    <message>
+        <source>Recreate deleted workouts</source>
+        <translation>Ricrea gli allenamenti eliminati</translation>
+    </message>
+    <message>
+        <source>Stop Garmin calendar task</source>
+        <translation>Ferma il compito del calendario Garmin</translation>
+    </message>
+    <message>
+        <source>Garmin calendar task progress</source>
+        <translation>Avanzamento del compito del calendario Garmin</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Ferma</translation>
+    </message>
+    <message>
+        <source>No Garmin calendar task runs.</source>
+        <translation>Nessun compito del calendario Garmin è in corso.</translation>
+    </message>
+    <message>
+        <source>The whole plan from today on</source>
+        <translation>Tutto il piano da oggi in poi</translation>
+    </message>
+    <message>
+        <source>The week of the selected day</source>
+        <translation>La settimana del giorno selezionato</translation>
+    </message>
+    <message>
+        <source>The session of the selected day</source>
+        <translation>La seduta del giorno selezionato</translation>
+    </message>
+    <message>
+        <source>Delete workouts</source>
+        <translation>Elimina allenamenti</translation>
+    </message>
+    <message numerus="yes">
+        <source>Delete the selected workouts from the Garmin calendar? (%n)</source>
+        <translation>
+            <numerusform>Eliminare l'allenamento selezionato dal calendario Garmin? (%n)</numerusform>
+            <numerusform>Eliminare gli allenamenti selezionati dal calendario Garmin? (%n)</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>A copy of each is kept on this computer, so you can create them again.</source>
+        <translation>Di ognuno resta una copia su questo computer, così puoi ricrearli.</translation>
+    </message>
+    <message numerus="yes">
+        <source>Delete workouts (%n)</source>
+        <translation>
+            <numerusform>Elimina %n allenamento</numerusform>
+            <numerusform>Elimina %n allenamenti</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Keep them</source>
+        <translation>Mantienili</translation>
+    </message>
+    <message>
+        <source>Garmin calendar</source>
+        <translation>Calendario Garmin</translation>
+    </message>
+    <message>
+        <source>Connect account...</source>
+        <translation>Collega account...</translation>
     </message>
 </context>
 <context>
@@ -2454,7 +2922,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>Guidance for a day ahead comes from the training plan, and the plan has nothing saved for this day.</source>
-        <translation>L'alimentazione di un giorno futuro viene dal piano di allenamento, e il piano non ha niente di salvato per questo giorno.</translation>
+        <translation>L&apos;alimentazione di un giorno futuro viene dal piano di allenamento, e il piano non ha niente di salvato per questo giorno.</translation>
     </message>
     <message>
         <source>Update the plan in the Goals section.</source>
@@ -3473,6 +3941,58 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Change at least one value first.</source>
         <translation>Prima cambia almeno un valore.</translation>
+    </message>
+</context>
+<context>
+    <name>ScheduledWorkoutsModel</name>
+    <message>
+        <source>Date</source>
+        <translation>Data</translation>
+    </message>
+    <message>
+        <source>Workout</source>
+        <translation>Allenamento</translation>
+    </message>
+    <message>
+        <source>Created by</source>
+        <translation>Creato da</translation>
+    </message>
+    <message>
+        <source>Ponos Coach</source>
+        <translation>Ponos Coach</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Altro</translation>
+    </message>
+</context>
+<context>
+    <name>SendToGarminDialog</name>
+    <message>
+        <source>Send plan to Garmin</source>
+        <translation>Invia il piano a Garmin</translation>
+    </message>
+    <message>
+        <source>The sessions are sent as structured workouts with heart-rate targets. Workouts already on the calendar are left as they are.</source>
+        <translation>Le sedute sono inviate come allenamenti strutturati con obiettivi di frequenza cardiaca. Gli allenamenti già presenti nel calendario restano come sono.</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>Invia</translation>
+    </message>
+    <message numerus="yes">
+        <source>Send workouts (%n)</source>
+        <translation>
+            <numerusform>Invia %n allenamento</numerusform>
+            <numerusform>Invia %n allenamenti</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>At most {limit} workouts are sent at a time. Sessions waiting for another send: %n.</source>
+        <translation>
+            <numerusform>Si inviano al massimo {limit} allenamenti alla volta. Sedute in attesa di un altro invio: %n.</numerusform>
+            <numerusform>Si inviano al massimo {limit} allenamenti alla volta. Sedute in attesa di un altro invio: %n.</numerusform>
+        </translation>
     </message>
 </context>
 <context>

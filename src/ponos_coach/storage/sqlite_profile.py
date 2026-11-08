@@ -19,6 +19,7 @@ from ponos_coach.nutrition.ports import (
     MealTimesStore,
 )
 from ponos_coach.planning.ports import PlanStore
+from ponos_coach.planning.workout_calendar import WorkoutBackupStore
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
     ProfileId,
@@ -67,6 +68,7 @@ from ponos_coach.storage.sqlite_stores import (
 )
 from ponos_coach.storage.sqlite_sync import SqliteSyncJournal
 from ponos_coach.storage.sqlite_track_boxes import SqliteTrackBoxIndex
+from ponos_coach.storage.sqlite_workouts import SqliteWorkoutBackupStore
 
 _META_ID = "profile_id"
 _META_NAME = "name"
@@ -121,6 +123,7 @@ class SqliteOpenProfile:
         self._availability = SqliteAvailabilityStore(database)
         self._session_choices = SqliteSessionChoicesStore(database)
         self._plans = SqlitePlanStore(database)
+        self._workout_backups = SqliteWorkoutBackupStore(database)
         self._closed = False
 
     @property
@@ -212,6 +215,11 @@ class SqliteOpenProfile:
     def plans(self) -> PlanStore:
         """Current plan and past days as they were planned."""
         return self._plans
+
+    @property
+    def workout_backups(self) -> WorkoutBackupStore:
+        """Local copy of the workouts deleted from the Garmin calendar."""
+        return self._workout_backups
 
     def close(self) -> None:
         """Closes the connection (checkpoint included); repeating it has no effect.

@@ -32,6 +32,16 @@ from ponos_coach.activities.sync import SyncMode, SyncProgress
 from ponos_coach.profiles.domain import ProfileId
 from ponos_coach.profiles.ports import ProfileStorage
 from ponos_coach.ui.diagnostics import exception_chain
+from ponos_coach.ui.garmin_calendar_model import (
+    CalendarNotStarted,
+    CalendarProblem,
+    CalendarProgress,
+    CalendarRequest,
+    CalendarResult,
+    is_calendar_result,
+)
+from ponos_coach.ui.garmin_calendar_model import needs_reconnect as calendar_needs_reconnect
+from ponos_coach.ui.garmin_calendar_worker import CalendarWorker
 from ponos_coach.ui.sync_model import (
     AccountStatus,
     CommandInputs,
@@ -80,6 +90,8 @@ class SyncController(QObject):
     login_finished = Signal(object)  # LoginResult
     disconnect_finished = Signal(bool)  # true if the tokens were deleted
     sync_finished = Signal(object)  # SyncResult
+    calendar_progress_changed = Signal(object)  # CalendarProgress
+    calendar_job_finished = Signal(object)  # CalendarResult
 
     # Emitted from the worker threads; the first argument is the operation number.
     _checked = Signal(int, object)
@@ -88,6 +100,8 @@ class SyncController(QObject):
     _progressed = Signal(int, object)
     _synced = Signal(int, object)
     _mfa_asked = Signal(int)
+    _job_progressed = Signal(int, object)
+    _job_done = Signal(int, object)
 
     def __init__(
         self,
@@ -99,6 +113,7 @@ class SyncController(QObject):
         super().__init__(parent)
         self._services = services
         self._worker = SyncWorker(services, storage, archive_for)
+        self._calendar_worker = CalendarWorker(self._worker, services, storage)
         self._profile_id: ProfileId | None = None
         self._folder: Path | None = None
         self._status = AccountStatus.UNKNOWN
@@ -120,6 +135,8 @@ class SyncController(QObject):
         self._progressed.connect(self._on_progressed)
         self._synced.connect(self._on_synced)
         self._mfa_asked.connect(self._on_mfa_asked)
+        self._job_progressed.connect(self._on_job_progressed)
+        self._job_done.connect(self._on_job_done)
 
     # --- Stato ------------------------------------------------------------------------------
 
@@ -286,6 +303,41 @@ class SyncController(QObject):
         if self._operation is Operation.SYNC:
             self._cancel.set()
 
+    def start_calendar_job(self, request: CalendarRequest) -> bool:
+        """Start a job on the Garmin workout calendar (send, list, delete, recreate), with the same
+        rules as a synchronisation: one at a time, only with a connected account. False (nothing
+        happens) if the command is not available. The progress and the outcome come as signals."""
+        profile_id, folder = self._profile_id, self._folder
+        if profile_id is None or folder is None or not self.commands.sync.enabled:
+            return False
+
+        def work(serial: int, cancel: threading.Event) -> None:
+            result: CalendarResult | None = None
+            try:
+                result = self._calendar_worker.run(
+                    request,
+                    profile_id,
+                    folder,
+                    cancel,
+                    lambda progress: _post(self._job_progressed, serial, progress),
+                )
+            finally:  # whatever happens, the operation is closed (the worker does not raise)
+                _post(self._job_done, serial, result)
+
+        self._progress = None
+        self._launch(Operation.CALENDAR, profile_id, work)
+        return True
+
+    def cancel_calendar_job(self) -> None:
+        """Ask to stop the calendar job in progress (within one request)."""
+        if self._operation is Operation.CALENDAR:
+            self._cancel.set()
+
+    @property
+    def is_calendar_busy(self) -> bool:
+        """True while a calendar job is in progress."""
+        return self._operation is Operation.CALENDAR
+
     def begin_shutdown(self) -> None:
         """First step of closing: stop what is running. It does not wait: whoever closes watches
         `has_stopped`. From here on no operation starts; can be repeated."""
@@ -443,6 +495,30 @@ class SyncController(QObject):
         self.state_changed.emit()
         self.sync_finished.emit(result)
         self._notify(result)
+        self._check_if_needed()
+
+    @Slot(int, object)
+    def _on_job_progressed(self, serial: int, progress: object) -> None:
+        if (
+            serial == self._serial
+            and self._operation is Operation.CALENDAR
+            and isinstance(progress, CalendarProgress)
+        ):
+            self.calendar_progress_changed.emit(progress)
+
+    @Slot(int, object)
+    def _on_job_done(self, serial: int, result: object) -> None:
+        current = self._is_current_profile()
+        if not self._finish(serial):
+            return
+        outcome = (
+            result if is_calendar_result(result) else CalendarNotStarted(CalendarProblem.UNEXPECTED)
+        )
+        if current and calendar_needs_reconnect(outcome):
+            self._set_status(AccountStatus.NEEDS_RECONNECT)
+        self.state_changed.emit()
+        if current:
+            self.calendar_job_finished.emit(outcome)
         self._check_if_needed()
 
     def _notify(self, result: SyncResult) -> None:

@@ -35,6 +35,7 @@ class Operation(Enum):
     LOGIN = "login"
     LOGOUT = "logout"
     SYNC = "sync"
+    CALENDAR = "calendar"  # a job on the Garmin workout calendar (send, list, delete, recreate)
 
 
 class LoginFailure(Enum):

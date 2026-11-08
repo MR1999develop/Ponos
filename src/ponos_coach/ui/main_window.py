@@ -57,6 +57,7 @@ from ponos_coach.ui.chart_view import ChartEngine
 from ponos_coach.ui.data_thread import SHUTDOWN_WAIT_MS
 from ponos_coach.ui.day_page import DayPage
 from ponos_coach.ui.errors import ErrorMessage, exclusion_reason_text, unexpected_error_message
+from ponos_coach.ui.garmin_calendar_ui import GarminCalendarUi
 from ponos_coach.ui.garmin_ui import GarminUi
 from ponos_coach.ui.goals_page import GoalsPage
 from ponos_coach.ui.import_report import ImportReport
@@ -72,6 +73,7 @@ from ponos_coach.ui.overview_state import (
     Ready,
     summary_of,
 )
+from ponos_coach.ui.plan_presentation import plan_of
 from ponos_coach.ui.plan_ui import PlanUi
 from ponos_coach.ui.profile_dialogs import ProfileDialogs
 from ponos_coach.ui.profile_editor import ProfileEditor
@@ -307,7 +309,7 @@ class MainWindow(QMainWindow):
         ):
             calendar_menu.addAction(action)
         self._build_plan_menu()
-        self._garmin.build_menu(self.menuBar())
+        self._garmin_calendar.add_to_menu(self._garmin.build_menu(self.menuBar()))
         self._build_language_menu()
         help_menu = self.menuBar().addMenu(self.tr("Help"))
         help_menu.addAction(self._log_action)
@@ -440,6 +442,19 @@ class MainWindow(QMainWindow):
             edit_profile=self._edit_profile_from_day,
         )
         self._plan.retest_proposal_changed.connect(self._on_plan_retest_changed)
+        self._garmin_calendar = GarminCalendarUi(
+            self,
+            self._controller.sync,
+            plan=lambda: plan_of(self._plan.state),
+            today=self._today,
+            selected_day=self._calendar.selected_day,
+            remember_box=self._remember,
+            connect_account=self._garmin.connect_account,
+        )
+        self._calendar.selection_changed.connect(self._garmin_calendar.refresh)
+        self._calendar.panel.attach_send_action(self._garmin_calendar.send_session_action)
+        self._controller.plan_rebuilt.connect(self._garmin_calendar.refresh)
+        self._controller.profile_changed.connect(self._garmin_calendar.refresh)
 
     def _today(self) -> date:
         return self._defaults.today(self._zone)
@@ -505,6 +520,11 @@ class MainWindow(QMainWindow):
     def garmin(self) -> GarminUi:
         """The menu, the status bar and the Garmin account dialogs."""
         return self._garmin
+
+    @property
+    def garmin_calendar(self) -> GarminCalendarUi:
+        """The Garmin calendar commands: send the plan, list and delete workouts."""
+        return self._garmin_calendar
 
     @property
     def overview_page(self) -> OverviewPage:

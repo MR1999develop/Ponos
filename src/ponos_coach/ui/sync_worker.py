@@ -240,24 +240,32 @@ class SyncWorker:
         try:
             session = self._resume(profile_id)
             return self._run(session, folder, mode, automatic, cancelled, report)
-        except _SkippedError as skipped:
+        except SessionUnavailableError as skipped:
             return SyncNotStarted(skipped.problem, mode, automatic)
         except Exception as error:  # thread boundary: the error goes to the UI as "unexpected"
             _log_unexpected("synchronisation", error)
             return SyncNotStarted(SyncProblem.UNEXPECTED, mode, automatic)
 
+    def open_session(self, profile_id: ProfileId) -> GarminSession:
+        """Resume the profile's Garmin session from its saved tokens (renewed tokens are saved).
+
+        Raises:
+            SessionUnavailableError: no session could be had; `problem` says why.
+        """
+        return self._resume(profile_id)
+
     def _resume(self, profile_id: ProfileId) -> GarminSession:
         store = self._services.tokens
         if store is None:
-            raise _SkippedError(SyncProblem.KEYCHAIN_UNAVAILABLE)
+            raise SessionUnavailableError(SyncProblem.KEYCHAIN_UNAVAILABLE)
         try:
             tokens = store.load(profile_id)
         except TokenStoreCorruptError as error:
-            raise _SkippedError(SyncProblem.AUTH_REQUIRED) from error
+            raise SessionUnavailableError(SyncProblem.AUTH_REQUIRED) from error
         except TokenStoreUnavailableError as error:
-            raise _SkippedError(SyncProblem.KEYCHAIN_UNAVAILABLE) from error
+            raise SessionUnavailableError(SyncProblem.KEYCHAIN_UNAVAILABLE) from error
         if tokens is None:
-            raise _SkippedError(SyncProblem.NOT_LINKED)
+            raise SessionUnavailableError(SyncProblem.NOT_LINKED)
         session = self._resume_session(tokens)
         self._save_renewed(store, profile_id, tokens, session)
         return session
@@ -266,14 +274,14 @@ class SyncWorker:
         try:
             return self._services.account.resume(tokens)
         except AuthenticationRequiredError as error:
-            raise _SkippedError(SyncProblem.AUTH_REQUIRED) from error
+            raise SessionUnavailableError(SyncProblem.AUTH_REQUIRED) from error
         except RateLimitedError as error:
-            raise _SkippedError(SyncProblem.RATE_LIMITED) from error
+            raise SessionUnavailableError(SyncProblem.RATE_LIMITED) from error
         except TransientSourceError as error:
-            raise _SkippedError(SyncProblem.SERVICE_UNAVAILABLE) from error
+            raise SessionUnavailableError(SyncProblem.SERVICE_UNAVAILABLE) from error
         except ActivitySourceError as error:
             _log_unexpected("resume", error)
-            raise _SkippedError(SyncProblem.UNEXPECTED) from error
+            raise SessionUnavailableError(SyncProblem.UNEXPECTED) from error
 
     @staticmethod
     def _save_renewed(
@@ -301,7 +309,7 @@ class SyncWorker:
             # Second connection to a profile already opened and verified by the data thread.
             opened = self._storage.open(folder, check_integrity=False)
         except ProfileStorageError as error:
-            raise _SkippedError(SyncProblem.PROFILE_UNAVAILABLE) from error
+            raise SessionUnavailableError(SyncProblem.PROFILE_UNAVAILABLE) from error
         services = self._services
         try:
             ports = SyncPorts(
@@ -324,7 +332,7 @@ class SyncWorker:
         return SyncFinished(outcome, mode, automatic)
 
 
-class _SkippedError(Exception):
+class SessionUnavailableError(Exception):
     """The round cannot start (or continue): `problem` says why."""
 
     def __init__(self, problem: SyncProblem) -> None:

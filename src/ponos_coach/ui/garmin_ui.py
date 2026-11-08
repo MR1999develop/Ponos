@@ -15,6 +15,7 @@ from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
+    QMenu,
     QMenuBar,
     QMessageBox,
     QProgressBar,
@@ -118,8 +119,8 @@ class GarminUi(QObject):
             (self._auto_action, lambda: self._controller.commands.auto_sync),
         )
 
-    def build_menu(self, menu_bar: QMenuBar) -> None:
-        """Add the "Garmin" menu to the menu bar."""
+    def build_menu(self, menu_bar: QMenuBar) -> QMenu:
+        """Add the "Garmin" menu to the menu bar and return it."""
         menu = menu_bar.addMenu(self.tr("Garmin"))
         menu.addAction(self._connect_action)
         menu.addAction(self._disconnect_action)
@@ -132,6 +133,7 @@ class GarminUi(QObject):
         self._verify_action.setStatusTip(
             self.tr("List the whole Garmin history to find activities uploaded late.")
         )
+        return menu
 
     def _build_status_widgets(self) -> None:
         window = self._window
