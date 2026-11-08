@@ -40,7 +40,7 @@ Register of the results of the acceptance testing described in section 7 of
 | Phase 8, `tests/collaudo/test_fase8_*` (backup, restore, hostile ZIPs, interruptions, package) | 2026-11-08 | Windows 10 Pro 22H2, 12 CPUs | branch `fase-5-piano`, from source and from the built archive | passed | Defects D-F8-01…04 found and fixed. Covers T-DATI-05, T-DATI-02, T-SEC-02, T-SEC-07 (no token in the backup), T-SEC-12 (package). |
 | T-PERF backup and restore | 2026-11-08 | Windows 10 Pro 22H2, 12 CPUs | branch `fase-5-piano`, from source | passed | Profile with 1,000 activity files: backup 6.25 s, restore 1.18 s. |
 | Package size | 2026-11-08 | Windows 10 Pro 22H2, 12 CPUs | branch `fase-5-piano`, `nox -s dist` | passed | Windows package: 245 MB (zip). |
-| Phases 5 to 8, full run | | Windows 10 Pro 22H2, 12 CPUs | branch `fase-5-piano`, from source | to be filled in | Result of `uv run --locked nox` and `uv run --locked nox -s collaudo` with the number of tests: to be added by the main session. |
+| Phases 5 to 8, full run | 2026-11-08 | Windows 10 Pro 22H2, 12 CPUs | branch `fase-5-piano`, from source | passed after fixes | `uv run --locked nox`: 8,097 tests passed, 2 Italian-label tests and one mypy finding on Linux fixed afterwards; `uv run --locked nox -s collaudo`: 179 passed, 2 property-test counterexamples (wrong invariants, not code defects) fixed with regression tests. The fixed tests and `nox -s types` and `nox -s i18n` were rerun green; the whole suite was not rerun after these test-only changes. No real Garmin or Tracestrack calls. |
 
 ## Executable acceptance testing
 
