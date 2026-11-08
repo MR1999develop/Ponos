@@ -149,3 +149,12 @@ class WorkoutBackupStore(Protocol):
             WorkoutBackupStoreError: unknown id, or write failed.
         """
         ...
+
+    def discard(self, backup_id: int) -> None:
+        """Forgets a copy that is not restored: its workout was not deleted after all. An unknown
+        or already restored id is left alone.
+
+        Raises:
+            WorkoutBackupStoreError: write failed.
+        """
+        ...

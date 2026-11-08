@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 
+from ponos_coach.planning.calendar_use_cases import FailureReason, StopReason
 from ponos_coach.planning.domain import Plan
 from ponos_coach.planning.domain.workouts import ScheduledWorkout
 from ponos_coach.ui.garmin_calendar_dialogs import (
@@ -53,8 +54,10 @@ from ponos_coach.ui.garmin_calendar_model import (
     is_unsupported,
     needs_attention,
     needs_reconnect,
+    plan_is_halted,
     scope_of,
     sessions_in,
+    unplanned_app_workouts,
 )
 from ponos_coach.ui.garmin_calendar_text import (
     all_workouts_text,
@@ -95,6 +98,7 @@ class GarminCalendarUi(QObject):
         self._remember_box = remember_box
         self._connect_account = connect_account
         self._supported = True
+        self._offer_unplanned = False  # after a recreation that left sessions out
         self._dialog: GarminCalendarDialog | None = None
         self._send_dialog: SendToGarminDialog | None = None
         self._build_actions()
@@ -359,15 +363,37 @@ class GarminCalendarUi(QObject):
         if not isinstance(items, tuple) or not items:
             return
         workouts = tuple(item for item in items if isinstance(item, ScheduledWorkout))
+        self._ask_deletion(
+            workouts,
+            self.tr(
+                "Delete the selected workouts from the Garmin calendar? (%n)", "", len(workouts)
+            ),
+        )
+
+    def _offer_unplanned_deletion(self, workouts: tuple[ScheduledWorkout, ...]) -> None:
+        """After a recreation that left sessions out: the plan changed or is stopped, so the
+        app's workouts of days it no longer plans are offered for deletion (same confirmation)."""
+        if not workouts:
+            return
+        if plan_is_halted(self._plan()):
+            reason = self.tr("The plan is stopped, so it has no sessions to do.")
+        else:
+            reason = self.tr("The plan has changed since these workouts were sent.")
+        question = self.tr(
+            "Delete the workouts of days the plan no longer has from the Garmin calendar? (%n)",
+            "",
+            len(workouts),
+        )
+        self._ask_deletion(workouts, reason + "\n" + question)
+
+    def _ask_deletion(self, workouts: tuple[ScheduledWorkout, ...], question: str) -> None:
         count = len(workouts)
         box = QMessageBox(self._dialog or self._window)
         box.setObjectName("deleteWorkoutsConfirmation")
         box.setIcon(QMessageBox.Icon.Warning)
         box.setWindowTitle(self.tr("Delete workouts"))
         box.setTextFormat(Qt.TextFormat.PlainText)
-        box.setText(
-            self.tr("Delete the selected workouts from the Garmin calendar? (%n)", "", count)
-        )
+        box.setText(question)
         box.setInformativeText(
             listed_workouts_text(workouts)
             + "\n\n"
@@ -394,7 +420,7 @@ class GarminCalendarUi(QObject):
         """Create again the deleted workouts that wait (their local copies)."""
         if not self._commands().recreate.enabled:
             return
-        self._start(RecreateRequest(self._today()))
+        self._start(RecreateRequest(self._today(), self._plan()))
 
     def _start(self, request: CalendarRequest) -> None:
         """Start a job. If it cannot start now the list dialog, if open, says why instead of
@@ -417,12 +443,30 @@ class GarminCalendarUi(QObject):
         self._window.statusBar().showMessage(headline_text(result), _STATUS_MESSAGE_MS)
         if isinstance(result, Listed):
             self._show_list(result)
+            self._offer_unplanned_if_asked(result)
             return
         if self._dialog is not None and isinstance(result, CalendarNotStarted):
             self._dialog.show_workouts((), 0, headline_text(result))
         self._show_summary(result)
-        if self._dialog is not None and isinstance(result, Deleted | Restored):
+        self._read_calendar_again_if_needed(result)
+
+    def _read_calendar_again_if_needed(self, result: CalendarResult) -> None:
+        if isinstance(result, Restored) and any(
+            failure.reason is FailureReason.NOT_IN_PLAN for failure in result.outcome.failed
+        ):
+            self._offer_unplanned = True  # read the calendar to see what is left of the old plan
+        changed = isinstance(result, Deleted | Restored)
+        if (self._dialog is not None and changed) or self._offer_unplanned:
             self._read_calendar()  # what was deleted or created again is no longer as listed
+
+    def _offer_unplanned_if_asked(self, result: Listed) -> None:
+        if not self._offer_unplanned:
+            return
+        self._offer_unplanned = False
+        if result.outcome.stop is StopReason.COMPLETED:
+            self._offer_unplanned_deletion(
+                unplanned_app_workouts(self._plan(), result.outcome.workouts, self._today())
+            )
 
     def _show_list(self, result: Listed) -> None:
         if self._dialog is not None:

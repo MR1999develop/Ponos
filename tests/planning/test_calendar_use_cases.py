@@ -9,6 +9,7 @@ cancellation); T-SEC-10: a deletion touches only the chosen workouts, after savi
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
@@ -23,6 +24,7 @@ from ponos_coach.activities.ports import (
 from ponos_coach.goals.domain import Priority
 from ponos_coach.planning import calendar_use_cases
 from ponos_coach.planning.calendar_use_cases import (
+    MAX_WORKOUTS_PER_SEND,
     CalendarPorts,
     DeleteScheduledWorkouts,
     FailureReason,
@@ -468,13 +470,66 @@ def test_a_deletion_of_too_many_workouts_at_once_is_refused() -> None:
         rig.delete([item] * (calendar_use_cases.MAX_DELETIONS_PER_CALL + 1), TODAY)
 
 
+# --- Whole-plan sends move on, refused deletions leave no copy ------------------------------------
+def test_a_whole_plan_send_skips_what_is_already_there_before_the_cap() -> None:
+    rig, plan = Rig(), a_plan(400)
+    days = session_days(plan)
+    assert len(days) > MAX_WORKOUTS_PER_SEND
+
+    first = rig.send(plan, WholePlan(), TODAY)
+    second = rig.send(plan, WholePlan(), TODAY)
+
+    assert len(first.sent) == MAX_WORKOUTS_PER_SEND
+    assert first.deferred == len(days) - MAX_WORKOUTS_PER_SEND
+    assert len(second.already_there) == MAX_WORKOUTS_PER_SEND
+    assert len(second.sent) == min(MAX_WORKOUTS_PER_SEND, first.deferred)
+    assert second.deferred == max(0, first.deferred - MAX_WORKOUTS_PER_SEND)
+
+
+def test_a_refused_deletion_drops_its_copy_so_nothing_is_created_again() -> None:
+    rig, plan = Rig(), a_plan()
+    sent = rig.send(plan, SessionOfDay(session_days(plan)[0]), TODAY).sent
+    rig.calendar.fail("remove", DefinitiveSourceError("refused"))
+
+    outcome = rig.delete(sent, TODAY)
+
+    assert [f.reason for f in outcome.failed] == [FailureReason.REJECTED]
+    assert rig.backups.pending() == []
+
+
 # --- Creating again ------------------------------------------------------------------------------
+def test_the_app_workouts_are_created_again_only_if_the_current_plan_has_the_session() -> None:
+    rig, plan = Rig(), a_plan()
+    sent = rig.send(plan, WholePlan(), TODAY).sent
+    rig.delete(sent[:2], TODAY)
+    kept_day = sent[0].day
+    other = replace(plan, days=tuple(d for d in plan.days if d.day != kept_day))
+
+    outcome = rig.recreate(TODAY, other)
+
+    assert [(w.day, w.name) for w in outcome.restored] == [(sent[1].day, sent[1].name)]
+    assert [(f.day, f.reason) for f in outcome.failed] == [(kept_day, FailureReason.NOT_IN_PLAN)]
+    assert len(rig.backups.pending()) == 1
+
+
+def test_nothing_of_the_app_comes_back_without_a_plan_but_the_athletes_own_does() -> None:
+    rig, plan = Rig(), a_plan()
+    sent = rig.send(plan, SessionOfDay(session_days(plan)[0]), TODAY).sent
+    foreign = rig.calendar.add_foreign("Tempo run", TODAY + timedelta(days=1))
+    rig.delete([*sent, foreign], TODAY)
+
+    outcome = rig.recreate(TODAY, None)
+
+    assert [w.name for w in outcome.restored] == ["Tempo run"]
+    assert [f.reason for f in outcome.failed] == [FailureReason.NOT_IN_PLAN]
+
+
 def test_a_deleted_workout_is_created_again_on_its_day_and_the_copy_is_done() -> None:
     rig, plan = Rig(), a_plan()
     sent = rig.send(plan, SessionOfDay(session_days(plan)[0]), TODAY).sent
     rig.delete(sent, TODAY)
 
-    outcome = rig.recreate(TODAY)
+    outcome = rig.recreate(TODAY, plan)
 
     assert outcome.stop is StopReason.COMPLETED
     assert [(w.name, w.day) for w in outcome.restored] == [(sent[0].name, sent[0].day)]
@@ -486,9 +541,9 @@ def test_creating_again_twice_does_not_duplicate() -> None:
     rig = Rig()
     item = rig.calendar.add_foreign("Tempo run", TODAY + timedelta(days=2))
     rig.delete([item], TODAY)
-    rig.recreate(TODAY)
+    rig.recreate(TODAY, None)
 
-    second = rig.recreate(TODAY)
+    second = rig.recreate(TODAY, None)
 
     assert second.restored == () and second.already_there == ()
     assert len(rig.calendar.scheduled()) == 1
@@ -500,7 +555,7 @@ def test_a_copy_whose_workout_is_already_on_its_day_is_marked_done_without_creat
     rig.delete([item], TODAY)
     rig.calendar.add_foreign("Tempo run", item.day)  # the athlete made it again by hand
 
-    outcome = rig.recreate(TODAY)
+    outcome = rig.recreate(TODAY, None)
 
     assert outcome.restored == () and len(outcome.already_there) == 1
     assert rig.backups.pending() == []
@@ -512,7 +567,7 @@ def test_a_copy_of_a_day_that_has_passed_stays_pending_and_is_reported() -> None
     item = rig.calendar.add_foreign("Tempo run", TODAY + timedelta(days=2))
     rig.delete([item], TODAY)
 
-    outcome = rig.recreate(TODAY + timedelta(days=5))
+    outcome = rig.recreate(TODAY + timedelta(days=5), None)
 
     assert [f.reason for f in outcome.failed] == [FailureReason.EXPIRED]
     assert len(rig.backups.pending()) == 1 and rig.calendar.scheduled() == []
@@ -524,7 +579,7 @@ def test_only_the_copies_chosen_are_created_again() -> None:
     rig.delete(items, TODAY)
     wanted = rig.backups.pending()[1].backup_id
 
-    outcome = rig.recreate(TODAY, only={wanted})
+    outcome = rig.recreate(TODAY, None, only={wanted})
 
     assert [w.name for w in outcome.restored] == ["Run 2"]
     assert len(rig.backups.pending()) == 2
@@ -538,4 +593,4 @@ def test_creating_again_with_the_store_unreadable_says_so() -> None:
     rig = Rig()
     rig.ports = CalendarPorts(rig.calendar, Broken(), rig.clock, rig.wait, MidpointRandom(), POLICY)
 
-    assert rig.recreate(TODAY).stop is StopReason.BACKUP_FAILED
+    assert rig.recreate(TODAY, None).stop is StopReason.BACKUP_FAILED

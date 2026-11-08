@@ -41,12 +41,17 @@ class _GoneError(DefinitiveSourceError):
     """Garmin says the entry or workout is not there (404)."""
 
 
-def _call[T](request: Callable[[], T]) -> T:
-    """Runs one request of the client with its errors in the types of the Garmin source."""
+def _call(client: GarminWorkoutClient, method: str, *args: object) -> object:
+    """Runs the `method` of the client with its errors in the types of the Garmin source.
+
+    Raises:
+        CalendarUnsupportedError: the client does not have the method (the library dropped it).
+    """
+    operation = getattr(client, method, None)
+    if not callable(operation):
+        raise CalendarUnsupportedError("operation not available in this library")
     try:
-        return request()
-    except AttributeError as error:  # the library no longer has the method
-        raise CalendarUnsupportedError("operation not available in this library") from error
+        return operation(*args)
     except Exception as error:
         if is_not_found(error):
             raise _GoneError("not found") from error
@@ -71,7 +76,7 @@ class GarminWorkoutCalendar:
         """See `WorkoutCalendar.create_and_schedule`."""
         payload = workout_payload(spec)
         client = self._client
-        workout_id = _read(_call(lambda: client.upload_workout(payload)), parse_workout_id)
+        workout_id = _read(_call(client, "upload_workout", payload), parse_workout_id)
         schedule_id = self._schedule_or_discard(workout_id, day)
         return ScheduledWorkout(schedule_id, workout_id, spec.name, day)
 
@@ -80,7 +85,7 @@ class GarminWorkoutCalendar:
         if last < first or last - first >= timedelta(days=MAX_LIST_DAYS):
             raise ValueError("invalid range")
         client = self._client
-        response = _call(lambda: client.scheduled_between(first.isoformat(), last.isoformat()))
+        response = _call(client, "scheduled_between", first.isoformat(), last.isoformat())
         found, skipped = _read(response, parse_entries)
         if skipped:
             _LOGGER.warning("calendar entries left out", extra={"skipped": skipped})
@@ -89,13 +94,13 @@ class GarminWorkoutCalendar:
     def export_definition(self, workout_id: int) -> str:
         """See `WorkoutCalendar.export_definition`."""
         client = self._client
-        return _read(_call(lambda: client.get_workout(workout_id)), definition_text)
+        return _read(_call(client, "get_workout", workout_id), definition_text)
 
     def create_from_definition(self, payload: str, day: date) -> ScheduledWorkout:
         """See `WorkoutCalendar.create_from_definition`."""
         body = _read(payload, definition_payload)
         client = self._client
-        workout_id = _read(_call(lambda: client.upload_workout(body)), parse_workout_id)
+        workout_id = _read(_call(client, "upload_workout", body), parse_workout_id)
         schedule_id = self._schedule_or_discard(workout_id, day)
         return ScheduledWorkout(schedule_id, workout_id, str(body["workoutName"]), day)
 
@@ -107,10 +112,10 @@ class GarminWorkoutCalendar:
         """
         client = self._client
         if self._entry_is_still(item):
-            _call(lambda: client.unschedule_workout(item.schedule_id))
+            _call(client, "unschedule_workout", item.schedule_id)
         if delete_workout:
             try:
-                _call(lambda: client.delete_workout(item.workout_id))
+                _call(client, "delete_workout", item.workout_id)
             except _GoneError:
                 return  # already gone: the aim is reached
 
@@ -118,7 +123,7 @@ class GarminWorkoutCalendar:
         """True if the entry is there and is `item`; False if it is already gone."""
         client = self._client
         try:
-            current = _call(lambda: client.get_schedule(item.schedule_id))
+            current = _call(client, "get_schedule", item.schedule_id)
         except _GoneError:
             return False
         if not entry_matches(current, item):
@@ -129,11 +134,11 @@ class GarminWorkoutCalendar:
         """Schedules a new workout; if that fails the workout is deleted (one attempt)."""
         client = self._client
         try:
-            response = _call(lambda: client.schedule_workout(workout_id, day.isoformat()))
+            response = _call(client, "schedule_workout", workout_id, day.isoformat())
             return _read(response, parse_schedule_id)
         except ActivitySourceError:
             try:
-                _call(lambda: client.delete_workout(workout_id))
+                _call(client, "delete_workout", workout_id)
             except ActivitySourceError:
                 _LOGGER.warning("a new workout could not be discarded")
             raise

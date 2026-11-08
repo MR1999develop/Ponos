@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from collections.abc import Mapping
 from datetime import date
 from typing import Final
@@ -144,7 +145,9 @@ def parse_schedule_id(response: object) -> int:
 def _clean_name(value: object) -> str | None:
     if not isinstance(value, str) or not 0 < len(value) <= MAX_NAME_CHARS:
         return None
-    return None if _NAME_ILLEGAL.search(value) else value
+    if _NAME_ILLEGAL.search(value) or any(unicodedata.category(ch) == "Cf" for ch in value):
+        return None  # control, format (bidirectional, zero-width) and separator characters
+    return value
 
 
 def _day_of(value: object) -> date | None:

@@ -55,10 +55,15 @@ protects what is the athlete's, and what is kept locally of a deletion.
   stop the run too. A workout Garmin refuses fails alone.
 - **Order of a deletion**: read the definition, save the copy, check the calendar entry is still
   the one chosen, unschedule, delete from the library. Nothing is deleted without its copy, and a
-  day before today is never touched.
+  day before today is never touched. If Garmin then refuses, the copy is dropped again, so that
+  "create again" never makes a duplicate of a workout that was not deleted.
+- **Sending and creating again follow the plan**: the cap of 60 counts only the sessions not on
+  the calendar yet, so repeated sends of a long plan advance. A copy of the app's own workout is
+  created again only if the current plan still has that session on that day (a halted or changed
+  plan sends nothing back); the interface then offers to delete the app's workouts of days no
+  longer planned, with the usual confirmation.
 - **Schema**: one table, `workout_backup` (id, name, day, definition text and its SHA-256, saved
-  and restored times). It was written as a provisional "v9" in `storage/schema_workout_backup.py`
-  and is renumbered when merged with the other v9 (injuries). Restored copies are forgotten after
+  and restored times). It is migration v9 (`storage/schema_workout_backup.py`, final). Restored copies are forgotten after
   30 days; at most 1000 copies wait.
 - **Incomplete adapter**: `WorkoutCalendar` is separate from `ActivitySource`;
   `GarminConnectSession.calendar` is `None` if the client cannot do workouts, and every operation

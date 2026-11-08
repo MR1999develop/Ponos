@@ -4,10 +4,12 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
 
+from ponos_coach.injury.domain import HaltReason
 from ponos_coach.planning.calendar_use_cases import (
     Failure,
     FailureReason,
@@ -16,6 +18,12 @@ from ponos_coach.planning.calendar_use_cases import (
     StopReason,
     WeekOfPlan,
     WholePlan,
+)
+from ponos_coach.planning.domain import PlanHalted
+from ponos_coach.planning.domain.workouts import (
+    WORKOUT_PREFIX,
+    ScheduledWorkout,
+    planned_workouts,
 )
 from ponos_coach.ui.garmin_calendar_model import (
     MAX_SELECTED_FOR_DELETION,
@@ -29,9 +37,11 @@ from ponos_coach.ui.garmin_calendar_model import (
     failure_counts,
     needs_attention,
     needs_reconnect,
+    plan_is_halted,
     scope_of,
     sessions_in,
     too_many_selected,
+    unplanned_app_workouts,
     week_start,
 )
 from ponos_coach.ui.garmin_calendar_text import headline_text, reason_text, summary_of
@@ -196,3 +206,24 @@ def test_every_problem_that_stops_a_job_has_a_summary_with_a_remedy() -> None:
         summary = summary_of(CalendarNotStarted(problem))
         assert summary is not None
         assert len(summary.lines) == 2  # what happened and what to do
+
+
+def test_only_the_apps_workouts_of_days_the_plan_no_longer_has_are_offered_for_deletion() -> None:
+    plan = plan_for()
+    (day, name), *_ = sorted(planned_workouts(plan.days))
+    still = ScheduledWorkout(1, 11, name, day)
+    moved = ScheduledWorkout(2, 12, name, day + timedelta(days=400))
+    renamed = ScheduledWorkout(3, 13, f"{WORKOUT_PREFIX}Other", day)
+    athletes = ScheduledWorkout(4, 14, "Tempo run", day)
+    past = ScheduledWorkout(5, 15, f"{WORKOUT_PREFIX}Past", TODAY - timedelta(days=1))
+    listed = [still, moved, renamed, athletes, past]
+
+    assert unplanned_app_workouts(plan, listed, TODAY) == (moved, renamed)
+    assert unplanned_app_workouts(None, listed, TODAY) == (still, moved, renamed)
+
+
+def test_a_halted_plan_is_told_from_a_changed_one() -> None:
+    plan = plan_for()
+    halted = replace(plan, warnings=(*plan.warnings, PlanHalted(next(iter(HaltReason)), ())))
+
+    assert plan_is_halted(halted) and not plan_is_halted(plan) and not plan_is_halted(None)

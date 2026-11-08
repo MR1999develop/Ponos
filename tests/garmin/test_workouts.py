@@ -81,11 +81,15 @@ def test_a_429_carries_the_wait_garmin_suggests() -> None:
 
 
 def test_a_method_the_library_no_longer_has_is_unsupported_not_a_crash() -> None:
-    calendar, service = rig()
-    service.fail("scheduled_between", AttributeError("no such method"))
+    class WithoutListing(FakeWorkoutService):
+        scheduled_between = None  # type: ignore[assignment]
+
+    service = WithoutListing()
+    calendar = GarminWorkoutCalendar(service)  # type: ignore[arg-type]
 
     with pytest.raises(CalendarUnsupportedError):
         calendar.list_scheduled(DAY, DAY)
+    assert service.calls == []
 
 
 def test_a_response_that_does_not_fit_is_a_definitive_error_without_its_text() -> None:

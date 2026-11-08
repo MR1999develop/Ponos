@@ -118,7 +118,7 @@ def test_a_send_with_mixed_outcomes_says_what_was_sent_what_was_there_and_what_f
     assert isinstance(result, Sent)
     assert [w.day for w in result.outcome.already_there] == [first]
     assert [f.day for f in result.outcome.failed] == [second]
-    assert len(result.outcome.sent) == MAX_WORKOUTS_PER_SEND - 2
+    assert len(result.outcome.sent) == MAX_WORKOUTS_PER_SEND - 1  # one failed, one was there
     box = summary_box(qtbot, window)
     assert box.text() == "The plan was not fully sent"
     text = box.informativeText()
@@ -284,12 +284,18 @@ def test_the_list_shows_the_future_workouts_with_who_created_them(
 def test_deleting_asks_with_the_list_and_the_verb_then_keeps_a_copy_and_can_create_them_again(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
-    calendar = _calendar_with_three()
+    calendar = InMemoryWorkoutCalendar()
     window = window_with_plan(qtbot, tmp_path, settings, calendar)
+    planned = _names_by_day(window)  # the app's workout is one the plan still has
+    planned_day = min(planned)
+    app_workout = planned[planned_day]
+    calendar.add_foreign("Tempo di prova", TODAY)
+    calendar.add_foreign(app_workout, planned_day)
+    calendar.add_foreign("Fondo di prova", planned_day + timedelta(days=1))
     _open_list(qtbot, window, 3)
     dialog = window.garmin_calendar.calendar_dialog
     assert dialog is not None
-    _select_rows(window, [0, 2])
+    _select_rows(window, [0, 1])
     assert dialog.delete_button.isEnabled()
 
     dialog.delete_button.click()
@@ -297,7 +303,7 @@ def test_deleting_asks_with_the_list_and_the_verb_then_keeps_a_copy_and_can_crea
     box = open_box(qtbot, window, "deleteWorkoutsConfirmation")
     assert box.text() == "Delete the selected workouts from the Garmin calendar? (2)"
     assert "Tempo di prova" in box.informativeText()
-    assert APP_WORKOUT in box.informativeText()
+    assert app_workout in box.informativeText()
     assert "Fondo di prova" not in box.informativeText()
     assert sorted(b.text() for b in box.buttons() if b.text() != "Show Details...") == [
         "Delete workouts (2)",
@@ -309,7 +315,7 @@ def test_deleting_asks_with_the_list_and_the_verb_then_keeps_a_copy_and_can_crea
     deleted = wait_job(qtbot, window, lambda: click_button(box, "Delete workouts (2)"))
 
     assert isinstance(deleted, Deleted)
-    assert [w.name for w in deleted.outcome.deleted] == ["Tempo di prova", APP_WORKOUT]
+    assert [w.name for w in deleted.outcome.deleted] == ["Tempo di prova", app_workout]
     assert [w.name for w in calendar.scheduled()] == ["Fondo di prova"]
     assert (
         "Workouts deleted from the Garmin calendar: 2"
@@ -327,7 +333,7 @@ def test_deleting_asks_with_the_list_and_the_verb_then_keeps_a_copy_and_can_crea
     assert isinstance(restored, Restored)
     assert len(restored.outcome.restored) == 2
     assert sorted(w.name for w in calendar.scheduled()) == sorted(
-        ["Tempo di prova", "Fondo di prova", APP_WORKOUT]
+        ["Tempo di prova", "Fondo di prova", app_workout]
     )
     qtbot.waitUntil(
         lambda: dialog.recreate_button.text() == "Recreate deleted (0)", timeout=WAIT_MS
@@ -486,4 +492,55 @@ def test_another_garmin_task_is_not_started_while_a_calendar_task_runs(
     with qtbot.waitSignal(window.controller.sync.calendar_job_finished, timeout=WAIT_MS):
         garmin.stop_button.click()
         gate.set()
+    close_window(qtbot, window)
+
+
+def test_creating_again_after_the_plan_changed_says_so_and_offers_to_delete_the_old_sessions(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    calendar = InMemoryWorkoutCalendar()
+    window = window_with_plan(qtbot, tmp_path, settings, calendar)
+    stale = f"{WORKOUT_PREFIX}Old session"
+    gone = f"{WORKOUT_PREFIX}Older session"
+    calendar.add_foreign(stale, TODAY + timedelta(days=2))
+    calendar.add_foreign(gone, TODAY + timedelta(days=3))
+    _open_list(qtbot, window, 2)
+    dialog = window.garmin_calendar.calendar_dialog
+    assert dialog is not None
+    _select_rows(window, [1])
+    dialog.delete_button.click()
+    box = open_box(qtbot, window, "deleteWorkoutsConfirmation")
+    wait_job(qtbot, window, lambda: click_button(box, "Delete workouts (1)"))
+    summary_box(qtbot, window).close()  # the summary of the deletion
+    qtbot.waitUntil(
+        lambda: dialog.recreate_button.text() == "Recreate deleted (1)", timeout=WAIT_MS
+    )
+    qtbot.waitUntil(dialog.recreate_button.isEnabled, timeout=WAIT_MS)
+
+    restored = wait_job(qtbot, window, dialog.recreate_button.click)
+
+    assert isinstance(restored, Restored) and restored.outcome.restored == ()
+    assert "the plan no longer has this session" in summary_box(qtbot, window).informativeText()
+    offer = open_box(qtbot, window, "deleteWorkoutsConfirmation")
+    assert "The plan has changed" in offer.text()
+    assert stale in offer.informativeText() and gone not in offer.informativeText()
+    assert sorted(b.text() for b in offer.buttons() if b.text() != "Show Details...") == [
+        "Delete workouts (1)",
+        "Keep them",
+    ]
+    click_button(offer, "Keep them")
+    assert [w.name for w in calendar.scheduled()] == [stale]  # nothing is deleted unasked
+    close_window(qtbot, window)
+
+
+def test_the_send_dialog_says_the_workout_format_is_not_verified_with_a_real_account(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_plan(qtbot, tmp_path, settings, InMemoryWorkoutCalendar())
+
+    _open_send_dialog(qtbot, window)
+
+    dialog = window.garmin_calendar.send_dialog
+    assert dialog is not None
+    assert "has not been checked yet with a real Garmin account" in dialog.format_note_text
     close_window(qtbot, window)

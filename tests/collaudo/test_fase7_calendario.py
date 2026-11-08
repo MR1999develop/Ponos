@@ -245,10 +245,6 @@ def test_a_429_waits_within_the_cap_and_then_stops_without_hammering(
     assert "upload_workout" not in rig.service.calls
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F7-02: a whole-plan send always takes the same earliest 60, so the rest never goes",
-)
 def test_a_whole_plan_of_more_than_60_sessions_is_completed_by_sending_again(rig: Rig) -> None:
     """D-F7-02 (medium): `deferred` promises "left for another send", but the next send chooses
     the same first 60 (already there) and defers the same rest again: sessions 61 and later can
@@ -387,10 +383,6 @@ def test_a_response_that_is_not_a_calendar_is_a_definitive_error_not_a_crash(
     assert outcome.stop is StopReason.UNAVAILABLE
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F7-03: names with bidirectional controls (U+202E...) reach the deletion dialog",
-)
 @pytest.mark.parametrize("name", ["tempo ‮gpj.exe", "⁦hidden⁩", "a\u200bb", "x‪y"])
 def test_a_name_with_invisible_or_bidirectional_controls_is_left_out(
     name: str, tmp_path: Path
@@ -505,10 +497,6 @@ def test_a_changed_entry_is_not_removed_and_says_so(rig: Rig) -> None:
     assert chosen.schedule_id in rig.service.schedule_ids()  # still there
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="D-F7-01: a refused deletion leaves its copy among the pending ones to create again",
-)
 def test_a_refused_deletion_leaves_no_copy_to_create_again(rig: Rig) -> None:
     """D-F7-01 (medium): the copy is saved before the removal is tried; when the removal is
     refused (entry changed, Garmin rejects) the copy stays "pending". Creating "the deleted
@@ -536,8 +524,8 @@ def test_what_was_deleted_comes_back_with_the_same_steps_and_only_once(rig: Rig)
     rig.delete(chosen, TODAY)
     assert not [w for w in rig.on_calendar() if w in chosen]
 
-    outcome = rig.recreate(TODAY)
-    twice = rig.recreate(TODAY)
+    outcome = rig.recreate(TODAY, plan)
+    twice = rig.recreate(TODAY, plan)
 
     assert outcome.stop is StopReason.COMPLETED and outcome.failed == ()
     assert len(outcome.restored) == len(chosen)
@@ -564,7 +552,7 @@ def test_a_copy_whose_day_has_passed_stays_pending_and_is_reported_expired(rig: 
     chosen = rig.on_calendar()
     rig.delete(chosen, TODAY)
 
-    outcome = rig.recreate(chosen[0].day + timedelta(days=1))
+    outcome = rig.recreate(chosen[0].day + timedelta(days=1), a_plan())
 
     assert [f.reason for f in outcome.failed] == [FailureReason.EXPIRED]
     assert len(rig.recreate.pending()) == 1 and rig.on_calendar() == []
@@ -589,7 +577,7 @@ def test_a_hostile_copy_is_refused_without_a_request_and_stays_pending(
     rig.backups.add(NewBackup("hostile", TODAY + timedelta(days=2), payload, rig.clock.now()))
     calls_before = len(rig.service.calls)
 
-    outcome = rig.recreate(TODAY)
+    outcome = rig.recreate(TODAY, None)
 
     assert [f.reason for f in outcome.failed] == [FailureReason.REJECTED]
     assert "upload_workout" not in rig.service.calls[calls_before:]
@@ -604,7 +592,7 @@ def test_a_copy_altered_in_the_database_is_not_created_again(rig: Rig) -> None:
         "UPDATE workout_backup SET payload = ?", ('{"workoutName": "tampered"}',)
     )
 
-    outcome = rig.recreate(TODAY)
+    outcome = rig.recreate(TODAY, None)
 
     assert outcome.restored == () and outcome.failed == ()
     assert "upload_workout" not in rig.service.calls
@@ -614,7 +602,7 @@ def test_the_definition_of_a_deleted_workout_is_not_forwarded_with_ids_or_dates(
     rig.send(a_plan(), SessionOfDay(session_days(a_plan())[0]), TODAY)
     chosen = rig.on_calendar()
     rig.delete(chosen, TODAY)
-    rig.recreate(TODAY)
+    rig.recreate(TODAY, None)
 
     resent = rig.service.uploaded[-1]
 

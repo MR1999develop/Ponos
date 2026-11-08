@@ -29,8 +29,8 @@ from ponos_coach.planning.calendar_use_cases import (
     WeekOfPlan,
     WholePlan,
 )
-from ponos_coach.planning.domain import Plan
-from ponos_coach.planning.domain.workouts import ScheduledWorkout
+from ponos_coach.planning.domain import Plan, PlanHalted
+from ponos_coach.planning.domain.workouts import ScheduledWorkout, planned_workouts
 from ponos_coach.planning.workout_calendar import StoredBackup
 from ponos_coach.ui.sync_model import DisabledReason, SyncProblem
 
@@ -69,9 +69,11 @@ class DeleteRequest:
 
 @dataclass(frozen=True, slots=True)
 class RecreateRequest:
-    """Create again the deleted workouts waiting (those with the ids in `only`, if given)."""
+    """Create again the deleted workouts waiting (those with the ids in `only`, if given) that the
+    current `plan` (`None`: there is none) still has."""
 
     today: date
+    plan: Plan | None
     only: frozenset[int] | None = None
 
 
@@ -219,6 +221,26 @@ def needs_attention(result: CalendarResult) -> bool:
         return True
     stop = result.outcome.stop
     return bool(failures_of(result)) or stop not in (StopReason.COMPLETED, StopReason.CANCELLED)
+
+
+def plan_is_halted(plan: Plan | None) -> bool:
+    """True if the plan sends no session at all because it is stopped."""
+    return plan is not None and any(isinstance(w, PlanHalted) for w in plan.warnings)
+
+
+def unplanned_app_workouts(
+    plan: Plan | None, workouts: Sequence[ScheduledWorkout], today: date
+) -> tuple[ScheduledWorkout, ...]:
+    """The app's own workouts on the calendar, from `today` on, that the current plan no longer
+    has on that day (the plan changed or is stopped), at most one deletion's worth. The athlete's
+    own workouts are never in it."""
+    planned = planned_workouts(() if plan is None else plan.days)
+    stale = (
+        w
+        for w in workouts
+        if w.is_app_created and w.day >= today and (w.day, w.name) not in planned
+    )
+    return tuple(stale)[:MAX_SELECTED_FOR_DELETION]
 
 
 # --- Scopes and the sessions they cover --------------------------------------------------------

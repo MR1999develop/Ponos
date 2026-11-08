@@ -107,3 +107,11 @@ class SqliteWorkoutBackupStore:
                 ).fetchone()
                 if known is None:
                     raise WorkoutBackupStoreError("unknown copy")
+
+    def discard(self, backup_id: int) -> None:
+        """Forgets a copy that is not restored: its workout was not deleted after all."""
+        with translating(WorkoutBackupStoreError):
+            self._db.connection.execute(
+                "DELETE FROM workout_backup WHERE backup_id = ? AND restored_at IS NULL",
+                (backup_id,),
+            )

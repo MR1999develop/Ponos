@@ -222,8 +222,8 @@ def _dispatch(
             return Listed(listed, _pending_copies(ports))
         case DeleteRequest(items, today):
             return Deleted(DeleteScheduledWorkouts(ports)(items, today, is_cancelled))
-        case RecreateRequest(today, only):
-            return Restored(RecreateDeletedWorkouts(ports)(today, only, is_cancelled))
+        case RecreateRequest(today, plan, only):
+            return Restored(RecreateDeletedWorkouts(ports)(today, plan, only, is_cancelled))
 
 
 def _pending_copies(ports: CalendarPorts) -> tuple[StoredBackup, ...]:

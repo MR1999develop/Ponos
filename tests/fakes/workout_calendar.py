@@ -137,3 +137,8 @@ class InMemoryWorkoutBackupStore:
                     )
                 return
         raise WorkoutBackupStoreError("unknown copy")
+
+    def discard(self, backup_id: int) -> None:
+        self._rows = [
+            r for r in self._rows if not (r.backup_id == backup_id and r.restored_at is None)
+        ]

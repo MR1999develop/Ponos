@@ -208,6 +208,10 @@ def failure_reason_text(reason: FailureReason) -> str:
             return QCoreApplication.translate(
                 "GarminCalendar", "its day has passed, so it was not created again"
             )
+        case FailureReason.NOT_IN_PLAN:
+            return QCoreApplication.translate(
+                "GarminCalendar", "the plan no longer has this session, so it was not created again"
+            )
 
 
 def _failure_lines(failures: Sequence[Failure]) -> list[str]:

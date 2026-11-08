@@ -11,14 +11,17 @@ Rules shared by all of them (decisions of ADR 013):
 - a request that Garmin refuses (definitive error) fails that workout only;
 - a send is idempotent: what is already on the calendar with the same name on the same day is not
   created again, and after a transient error the workout is looked up before it is created again;
-- nothing is deleted from Garmin before a local copy of it is saved, and nothing is deleted that
-  was not given to `DeleteScheduledWorkouts`.
+- nothing is deleted from Garmin before a local copy of it is saved (the copy is dropped again if
+  Garmin then refuses the deletion), and nothing is deleted that was not given to
+  `DeleteScheduledWorkouts`;
+- the workouts of the app are created again only if the current plan still has that session.
 
 Health-related data (the sessions) never goes in messages.
 """
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -41,7 +44,13 @@ from ponos_coach.activities.ports import (
 )
 from ponos_coach.activities.sync import InterruptibleWait
 from ponos_coach.planning.domain import Plan, PlanDay
-from ponos_coach.planning.domain.workouts import ScheduledWorkout, workout_from_session
+from ponos_coach.planning.domain.workouts import (
+    WORKOUT_PREFIX,
+    ScheduledWorkout,
+    WorkoutSpec,
+    planned_workouts,
+    workout_from_session,
+)
 from ponos_coach.planning.workout_calendar import (
     MAX_LIST_DAYS,
     CalendarUnsupportedError,
@@ -95,6 +104,7 @@ class FailureReason(Enum):
     NOT_FUTURE = "not_future"  # only workouts of today or later are touched
     NO_COPY = "no_copy"  # its definition could not be read, so it was not deleted
     EXPIRED = "expired"  # its day has passed: not created again
+    NOT_IN_PLAN = "not_in_plan"  # the plan no longer has this session: not created again
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,8 +140,9 @@ type SendScope = WholePlan | WeekOfPlan | SessionOfDay
 
 @dataclass(frozen=True, slots=True)
 class SendOutcome:
-    """What a send did. `deferred` is the number of sessions beyond `MAX_WORKOUTS_PER_SEND`,
-    left for another send (the earliest days go first)."""
+    """What a send did. `deferred` is the number of sessions not yet on the calendar beyond
+    `MAX_WORKOUTS_PER_SEND`, left for another send (the earliest days go first; those already
+    there do not count, so each send moves on)."""
 
     sent: tuple[ScheduledWorkout, ...]
     already_there: tuple[ScheduledWorkout, ...]
@@ -328,18 +339,15 @@ class SendPlanToGarmin:
         today: date,
         is_cancelled: Callable[[], bool] = _never_cancelled,
     ) -> SendOutcome:
-        """Creates and schedules a workout for each session of the scope from `today` on, at most
-        `MAX_WORKOUTS_PER_SEND` (the earliest). A workout with the same name on the same day is
-        left as it is. Never raises for Garmin's errors: `stop` and `failed` say what happened."""
+        """Creates and schedules a workout for each session of the scope from `today` on that is
+        not on the calendar yet, at most `MAX_WORKOUTS_PER_SEND` (the earliest). A workout with
+        the same name on the same day is left as it is and does not count towards the cap.
+        Never raises for Garmin's errors: `stop` and `failed` say what happened."""
         chosen = _sessions_in_scope(plan, scope, today)
-        batch, deferred = (
-            chosen[:MAX_WORKOUTS_PER_SEND],
-            max(0, len(chosen) - MAX_WORKOUTS_PER_SEND),
-        )
         run = _SendRun(self._ports, _Requester(self._ports, is_cancelled))
-        stop = run.send_all(batch)
+        stop = run.send_all(chosen)
         return SendOutcome(
-            tuple(run.sent), tuple(run.already_there), tuple(run.failed), deferred, stop
+            tuple(run.sent), tuple(run.already_there), tuple(run.failed), run.deferred, stop
         )
 
 
@@ -350,41 +358,60 @@ class _SendRun:
         self.sent: list[ScheduledWorkout] = []
         self.already_there: list[ScheduledWorkout] = []
         self.failed: list[Failure] = []
+        self.deferred = 0
 
     def send_all(self, days: Sequence[PlanDay]) -> StopReason:
-        if not days:
+        """Sends the days that are not on the calendar yet, up to the cap of one send."""
+        self.deferred = max(0, len(days) - MAX_WORKOUTS_PER_SEND)  # until the calendar is read
+        specs = self._specs_of(days)
+        if not specs:
             return StopReason.COMPLETED
         try:
-            existing = _list_range(self._requester, self._calendar, days[0].day, days[-1].day)
-            for day in days:
-                self._send(day, existing)
+            existing = _list_range(self._requester, self._calendar, specs[0][0], specs[-1][0])
+            missing = self._take_present(specs, existing)
+            self.deferred = max(0, len(missing) - MAX_WORKOUTS_PER_SEND)
+            for day, spec in missing[:MAX_WORKOUTS_PER_SEND]:
+                self._send(day, spec)
         except _StopError as stop:
             return stop.reason
         except DefinitiveSourceError:  # the first look at the calendar was refused
             return StopReason.UNAVAILABLE
         return StopReason.COMPLETED
 
-    def _send(self, plan_day: PlanDay, existing: Collection[ScheduledWorkout]) -> None:
-        session = plan_day.session
-        if session is None:
-            return
-        try:
-            spec = workout_from_session(session)
-        except ValueError:
-            self.failed.append(Failure(plan_day.day, "", FailureReason.TOO_COMPLEX))
-            return
-        already = next((w for w in existing if w.name == spec.name and w.day == plan_day.day), None)
-        if already is not None:
-            self.already_there.append(already)
-            return
+    def _specs_of(self, days: Sequence[PlanDay]) -> list[tuple[date, WorkoutSpec]]:
+        """The workout of each day's session; one too long for a watch is reported as failed."""
+        specs: list[tuple[date, WorkoutSpec]] = []
+        for plan_day in days:
+            if plan_day.session is None:
+                continue
+            try:
+                specs.append((plan_day.day, workout_from_session(plan_day.session)))
+            except ValueError:
+                self.failed.append(Failure(plan_day.day, "", FailureReason.TOO_COMPLEX))
+        return specs
+
+    def _take_present(
+        self, specs: Sequence[tuple[date, WorkoutSpec]], existing: Collection[ScheduledWorkout]
+    ) -> list[tuple[date, WorkoutSpec]]:
+        """Records what is already on the calendar; returns what still has to be created."""
+        missing: list[tuple[date, WorkoutSpec]] = []
+        for day, spec in specs:
+            already = next((w for w in existing if w.name == spec.name and w.day == day), None)
+            if already is None:
+                missing.append((day, spec))
+            else:
+                self.already_there.append(already)
+        return missing
+
+    def _send(self, day: date, spec: WorkoutSpec) -> None:
         calendar = self._calendar
         try:
             created = self._requester.call(
-                lambda: calendar.create_and_schedule(spec, plan_day.day),
-                _find_on(calendar, spec.name, plan_day.day),
+                lambda: calendar.create_and_schedule(spec, day),
+                _find_on(calendar, spec.name, day),
             )
         except DefinitiveSourceError:
-            self.failed.append(Failure(plan_day.day, spec.name, FailureReason.REJECTED))
+            self.failed.append(Failure(day, spec.name, FailureReason.REJECTED))
             return
         self.sent.append(created)
 
@@ -438,7 +465,7 @@ class DeleteScheduledWorkouts:
         except DefinitiveSourceError:
             return FailureReason.NO_COPY
         try:
-            self._ports.backups.add(
+            saved = self._ports.backups.add(
                 NewBackup(item.name, item.day, payload, self._ports.clock.now())
             )
         except (WorkoutBackupStoreError, ValueError) as error:
@@ -446,8 +473,16 @@ class DeleteScheduledWorkouts:
         try:
             requester.call(lambda: calendar.remove(item, delete_workout=item.is_app_created))
         except DefinitiveSourceError:
+            # Garmin refused (the entry changed, or it said no): the workout is not deleted, so
+            # its copy must not wait to be "created again" as a duplicate.
+            self._drop(saved)
             return FailureReason.REJECTED
         return None
+
+    def _drop(self, saved: StoredBackup) -> None:
+        # If this fails the copy stays; creating it again is guarded by the plan and the calendar.
+        with contextlib.suppress(WorkoutBackupStoreError):
+            self._ports.backups.discard(saved.backup_id)
 
 
 class RecreateDeletedWorkouts:
@@ -467,24 +502,33 @@ class RecreateDeletedWorkouts:
     def __call__(
         self,
         today: date,
+        plan: Plan | None,
         only: Collection[int] | None = None,
         is_cancelled: Callable[[], bool] = _never_cancelled,
     ) -> RestoreOutcome:
         """Creates again the pending copies (or those with the ids in `only`), at most
-        `MAX_RESTORES_PER_CALL`. A copy whose day has passed is left pending and reported as
-        expired; one whose workout is already on its day (same name) counts as done."""
+        `MAX_RESTORES_PER_CALL`. A copy of the app's own workout is created only if `plan` (the
+        current one, `None` if there is none) has that session on that day: otherwise it is left
+        pending and reported as not in the plan (a halted or changed plan sends nothing back). A
+        copy whose day has passed is left pending and reported as expired; one whose workout is
+        already on its day (same name) counts as done. The athlete's own workouts do not depend
+        on the plan."""
         try:
             chosen = [
                 b for b in self._ports.backups.pending() if only is None or b.backup_id in only
             ]
         except WorkoutBackupStoreError:
             return RestoreOutcome((), (), (), StopReason.BACKUP_FAILED)
+        planned = planned_workouts(() if plan is None else plan.days)
         requester = _Requester(self._ports, is_cancelled)
         restored: list[ScheduledWorkout] = []
         already: list[ScheduledWorkout] = []
         failed: list[Failure] = []
         stop = StopReason.COMPLETED
         for backup in chosen[:MAX_RESTORES_PER_CALL]:
+            if backup.name.startswith(WORKOUT_PREFIX) and (backup.day, backup.name) not in planned:
+                failed.append(Failure(backup.day, backup.name, FailureReason.NOT_IN_PLAN))
+                continue
             try:
                 self._restore_one(requester, backup, today, restored, already, failed)
             except _StopError as stopped:

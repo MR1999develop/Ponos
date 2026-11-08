@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""PROVISIONAL schema migration for the local copy of workouts deleted from Garmin (ADR 013).
+"""Schema migration (v9) for the local copy of workouts deleted from Garmin (ADR 013).
 
-Written as "v9" in a module of its own because another branch adds its own v9 (injuries); the
-person who merges renumbers it (it is the last tuple of `sqlite_schema.MIGRATIONS` on this branch).
+Kept in a module of its own; `sqlite_schema.MIGRATIONS` has it as version 9, which is final.
 No imports: `sqlite_schema` imports this module.
 
 `workout_backup`: one row per deleted workout, with the definition as JSON text (a Garmin library

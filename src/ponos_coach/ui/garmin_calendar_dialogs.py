@@ -89,6 +89,17 @@ class SendToGarminDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(SPACE_4)
         layout.addWidget(intro)
+        self._format_note = QLabel(
+            self.tr(
+                "Note: the workout format has not been checked yet with a real Garmin account, "
+                "so Garmin may refuse or change what is sent."
+            ),
+            self,
+        )
+        self._format_note.setObjectName("sendToGarminFormatNote")
+        self._format_note.setWordWrap(True)
+        self._format_note.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(self._format_note)
         first_enabled = True
         for option in self._options:
             radio = QRadioButton(option.label, self)
@@ -133,6 +144,11 @@ class SendToGarminDialog(QDialog):
             if radio.isChecked():
                 return choice
         return None
+
+    @property
+    def format_note_text(self) -> str:
+        """The note that the workout format is not yet verified with a real account."""
+        return self._format_note.text()
 
     @property
     def cap_note_text(self) -> str:

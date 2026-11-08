@@ -35,6 +35,7 @@ from ponos_coach.planning.workout_calendar import (
     WorkoutBackupStoreError,
     WorkoutCalendar,
 )
+from ponos_coach.storage import schema_workout_backup
 from ponos_coach.storage.sqlite_database import SqliteDatabase, create_database
 from ponos_coach.storage.sqlite_workouts import SqliteWorkoutBackupStore
 from tests.fakes.workout_calendar import InMemoryWorkoutBackupStore, InMemoryWorkoutCalendar
@@ -241,6 +242,20 @@ class WorkoutBackupStoreContract:
 
         assert store.pending() == []
 
+    def test_a_discarded_copy_is_gone_but_a_restored_one_is_left_alone(
+        self, store: WorkoutBackupStore
+    ) -> None:
+        dropped = store.add(a_backup("dropped"))
+        done = store.add(a_backup("done"))
+        store.mark_restored(done.backup_id, NOW + timedelta(minutes=5))
+
+        store.discard(dropped.backup_id)
+        store.discard(done.backup_id)
+        store.discard(12345)
+
+        assert store.pending() == []
+        store.mark_restored(done.backup_id, NOW + timedelta(minutes=9))  # still known
+
     def test_marking_an_unknown_copy_fails(self, store: WorkoutBackupStore) -> None:
         with pytest.raises(WorkoutBackupStoreError):
             store.mark_restored(12345, NOW)
@@ -312,3 +327,7 @@ class TestSqliteWorkoutBackupStore(WorkoutBackupStoreContract):
             connection.execute(insert, ("x" * (MAX_BACKUP_PAYLOAD_CHARS + 1), "0" * 64, None))
         with closing(connection):
             pass
+
+    def test_the_schema_ceiling_is_the_one_of_the_port(self) -> None:
+        # The migration is frozen text (it has no imports), so the two constants are tied here.
+        assert schema_workout_backup.MAX_PAYLOAD_CHARS == MAX_BACKUP_PAYLOAD_CHARS

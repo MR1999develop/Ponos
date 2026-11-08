@@ -14,13 +14,14 @@ its own workouts from the athlete's.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 from enum import Enum
 from typing import Final
 
 from ponos_coach.activities.domain import Sport
-from ponos_coach.planning.domain.plan import Block, BlockRole, PlannedSession
+from ponos_coach.planning.domain.plan import Block, BlockRole, PlanDay, PlannedSession
 
 WORKOUT_PREFIX: Final = "Ponos · "  # "Ponos · "
 MAX_WORKOUT_NAME_CHARS: Final = 80
@@ -160,3 +161,17 @@ def workout_from_session(session: PlannedSession) -> WorkoutSpec:
     label = session.session_type.value.replace("_", " ").capitalize()
     name = f"{WORKOUT_PREFIX}{label} {session.minutes} min"
     return WorkoutSpec(name, session.sport, _expand(session.blocks))
+
+
+def planned_workouts(days: Iterable[PlanDay]) -> frozenset[tuple[date, str]]:
+    """The (day, workout name) of every session the plan has on those days. A session too long
+    for a watch is left out: it has no workout."""
+    planned: set[tuple[date, str]] = set()
+    for item in days:
+        if item.session is None:
+            continue
+        try:
+            planned.add((item.day, workout_from_session(item.session).name))
+        except ValueError:
+            continue
+    return frozenset(planned)
