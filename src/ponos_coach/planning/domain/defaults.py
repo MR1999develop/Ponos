@@ -19,7 +19,9 @@ from ponos_coach.planning.domain.phases import Phase, RaceClass
 
 # Saved with every plan; changes when the way a plan is computed changes.
 # 3: heart-rate zones of the 5th edition (Z2 from 78%, Z3 from 87%, Z4 from 94% of the threshold).
-METHOD_VERSION: Final = 3
+# 4: open injuries and illnesses (`PlanInputs.injuries`): the plan stops, or drops the sessions
+# that load the injured zone, and the weekly ramp is the lower one while they last.
+METHOD_VERSION: Final = 4
 
 # --- Horizon -----------------------------------------------------------------------------------
 HORIZON_DAYS: Final = 364  # a plan covers 52 weeks from tomorrow at most

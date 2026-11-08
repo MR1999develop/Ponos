@@ -18,6 +18,7 @@ from ponos_coach.goals.domain import (
     SessionType,
     WeeklyAvailability,
 )
+from ponos_coach.injury.domain import PlanInjury
 from ponos_coach.load.domain import HeartRateLimits, Physiology, Sex, ThresholdHeartRate
 from ponos_coach.planning.domain import FitnessState, PlanInputs
 
@@ -70,6 +71,7 @@ def inputs(
     pace: int | None = 300,
     after_injury: bool = False,
     choices_for: Sport = Sport.RUNNING,
+    injuries: Iterable[PlanInjury] = (),
 ) -> PlanInputs:
     """Plan inputs for the test athlete with the given goals."""
     return PlanInputs(
@@ -81,6 +83,7 @@ def inputs(
         fitness=FitnessState(ctl, atl),
         threshold_pace_s_per_km=pace,
         after_injury=after_injury,
+        injuries=tuple(injuries),
     )
 
 

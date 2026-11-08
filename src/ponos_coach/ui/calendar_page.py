@@ -62,6 +62,7 @@ from ponos_coach.ui.calendar_texts import (
     month_title,
     weekday_names,
 )
+from ponos_coach.ui.injury_presentation import ProblemSpan
 from ponos_coach.ui.plan_texts import phase_text
 from ponos_coach.ui.tokens import SPACE_2, SPACE_3, SPACE_4, Theme, goal_tints_for, tokens_for
 
@@ -243,6 +244,7 @@ class CalendarPage(QWidget):
         self._activities: tuple[ProfileActivity, ...] = ()
         self._periods: tuple[GoalPeriod, ...] = ()
         self._layer = PlanLayer()
+        self._problems: tuple[ProblemSpan, ...] = ()
         self._theme = Theme.LIGHT
         self._refreshing = False
         self._model = MonthModel(self)
@@ -440,6 +442,11 @@ class CalendarPage(QWidget):
         self._layer = layer
         self._refresh()
 
+    def set_problems(self, problems: Sequence[ProblemSpan]) -> None:
+        """Show the days with an injury or an illness (in words, in the cell and the panel)."""
+        self._problems = tuple(problems)
+        self._refresh()
+
     def apply_theme(self, theme: Theme) -> None:
         """Change the tints and the stripes to the theme's."""
         self._theme = theme
@@ -516,7 +523,12 @@ class CalendarPage(QWidget):
     def _refresh(self) -> None:
         selected = self.selected_day()
         month = build_month(
-            self._month_first, self._today, self._activities, self._periods, self._layer
+            self._month_first,
+            self._today,
+            self._activities,
+            self._periods,
+            self._layer,
+            self._problems,
         )
         self._refreshing = True  # the model reset drops the current cell: say it once, at the end
         try:

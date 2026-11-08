@@ -89,6 +89,7 @@ def window_action_texts(tmp_path: Path, qtbot: QtBot) -> set[str]:
         documents_dir=tmp_path / "documents",
         system_timezone_id="UTC",
         clock=lambda _zone: date(2026, 2, 1),
+        map_cache_dir=tmp_path / "map-cache",
     )
     qtbot.addWidget(window)
     return {action.text() for action in window.findChildren(QAction)}

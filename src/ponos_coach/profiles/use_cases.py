@@ -23,9 +23,10 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
-from ponos_coach.activities.ports import ActivityIndex, SyncJournal
+from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxIndex
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
+from ponos_coach.injury.ports import InjuryStore
 from ponos_coach.load.domain import Physiology, PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.nutrition.ports import (
@@ -125,6 +126,11 @@ class ProfileSession:
         return self._opened.activities
 
     @property
+    def track_boxes(self) -> TrackBoxIndex:
+        """Track boxes of the index (for the map and its resumable fill)."""
+        return self._opened.track_boxes
+
+    @property
     def sync_journal(self) -> SyncJournal:
         """Synchronization journal (same connection and transaction as the index)."""
         return self._opened.sync_journal
@@ -203,6 +209,11 @@ class ProfileSession:
     def workout_backups(self) -> WorkoutBackupStore:
         """The local copy of the workouts deleted from the Garmin calendar."""
         return self._opened.workout_backups
+
+    @property
+    def injuries(self) -> InjuryStore:
+        """The injuries and illnesses, with their check-ins."""
+        return self._opened.injuries
 
     def close(self) -> None:
         """Closes the database and releases the lock."""

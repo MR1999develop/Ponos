@@ -11,6 +11,7 @@ from enum import Enum
 
 from ponos_coach.activities.domain import Sport
 from ponos_coach.goals.domain import Priority, SessionType
+from ponos_coach.injury.domain import HaltReason
 from ponos_coach.planning.domain.inputs import PlanInputs
 from ponos_coach.planning.domain.phases import Phase
 from ponos_coach.planning.domain.serialization import canonical_json
@@ -227,6 +228,32 @@ class GoalBeyondHorizon:
     goal_id: str
 
 
+@dataclass(frozen=True, slots=True)
+class PlanHalted:
+    """No session at all: a warning sign or an illness stops the plan until it is seen to. The app
+    invites a visit to a doctor (it never says what the sign means); `injury_ids` are the
+    problems that stop it."""
+
+    reason: HaltReason
+    injury_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PlanAdapted:
+    """The plan leaves out what the open injuries and illnesses should not take; `injury_ids` are
+    the problems that limit it."""
+
+    injury_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class NoSessionPossible:
+    """Nothing the user chose can be scheduled without loading the injured zone (no tolerated
+    alternative is chosen or declared): rest days until the path allows more."""
+
+    injury_ids: tuple[str, ...]
+
+
 type PlanWarning = (
     MissingLongSession
     | MissingIntenseSessions
@@ -236,6 +263,9 @@ type PlanWarning = (
     | RecoveryInserted
     | LongDayUnavailable
     | GoalBeyondHorizon
+    | PlanHalted
+    | PlanAdapted
+    | NoSessionPossible
 )
 
 

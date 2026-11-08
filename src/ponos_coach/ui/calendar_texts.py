@@ -17,6 +17,7 @@ from ponos_coach.planning.domain import PlanDay
 from ponos_coach.ui.activity_text import sport_text
 from ponos_coach.ui.calendar_model import DAYS_PER_WEEK, CalendarDay, DayGoal, GoalKind
 from ponos_coach.ui.day_presentation import number_text
+from ponos_coach.ui.injury_texts import span_cell_text
 from ponos_coach.ui.plan_texts import (
     duration_clock_text,
     goal_kind_cell_text,
@@ -108,6 +109,7 @@ def cell_text(cell: CalendarDay) -> str:
         lines.append(", ".join(sport_short_text(sport) for sport in cell.sports))
         lines.append(load_text(cell.load))
     lines.extend(_plan_lines(cell))
+    lines.extend(span_cell_text(span) for span in cell.problems)
     if cell.goal is not None:
         lines.append(goal_kind_text(cell.goal))
     return "\n".join(lines)
@@ -128,6 +130,7 @@ def cell_description(cell: CalendarDay) -> str:
         parts.append(QCoreApplication.translate("Calendar", "Today"))
     parts.extend(goal_label(item.goal) for item in cell.goals)
     parts.extend(_planned_sentences(cell))
+    parts.extend(span_cell_text(span) for span in cell.problems)
     if cell.activity_count:
         sports = ", ".join(sport_text(sport) for sport in cell.sports)
         # {sports}: the names of the sports of the day; %n: the number of activities.
@@ -235,6 +238,8 @@ def day_detail_text(cell: CalendarDay) -> str:
         )
     if cell.adherence is not None:
         sections.append(_adherence_text(cell))
+    if cell.problems:
+        sections.append("\n".join(span_cell_text(span) for span in cell.problems))
     return "\n\n".join(sections)
 
 

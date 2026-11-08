@@ -1,6 +1,7 @@
 # 010. Map view: library, tile source, cache and page isolation
 
-- Status: Proposed (decision taken, to be accepted when the interface is built)
+- Status: Accepted (2026-11-08, interface built: Leaflet and markercluster vendored with
+  verified hashes, tile proxy behind `ponos://tiles/`, page without network)
 - Date: 2026-11-07
 
 ## Context

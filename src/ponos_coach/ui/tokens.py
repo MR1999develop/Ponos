@@ -126,6 +126,9 @@ class ThemeTokens:
     categories: tuple[str, ...]  # seven category colours, one per slot (never red or orange)
     zones: tuple[str, ...]  # Z1 to Z5, from least to most intense
     band_opacity: float  # transparency of the zone bands behind a curve
+    map_background: str  # neutral grey behind the map tiles (no tint: it is content backdrop)
+    map_panel: str  # background of the map's own controls and attribution
+    no_zone: str  # a stretch without HR on the map and in the profile (also dashed)
 
 
 _LIGHT = ThemeTokens(
@@ -151,6 +154,9 @@ _LIGHT = ThemeTokens(
     ),
     zones=_zone_ramp(_ZONE_LIGHTNESS_LIGHT),
     band_opacity=0.14,  # faint enough to leave the zone names at 4.5:1
+    map_background="#E6E8EB",
+    map_panel="#FFFFFF",
+    no_zone="#6E7781",
 )
 
 _DARK = ThemeTokens(
@@ -176,6 +182,9 @@ _DARK = ThemeTokens(
     ),
     zones=_zone_ramp(_ZONE_LIGHTNESS_DARK),
     band_opacity=0.16,  # zone names at 4.5:1 and discarded-sample crosses at 3:1
+    map_background="#2B2D31",
+    map_panel="#1E1F22",
+    no_zone="#8B949E",
 )
 
 

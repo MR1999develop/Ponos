@@ -19,6 +19,17 @@ from ponos_coach.goals.domain import (
     SessionType,
     WeeklyAvailability,
 )
+from ponos_coach.injury.domain import (
+    BodyRestriction,
+    BodyZone,
+    IllnessKind,
+    IllnessRestriction,
+    InjuryId,
+    PainFreeActivity,
+    PlanInjury,
+    Scope,
+    Step,
+)
 from ponos_coach.load.domain import HeartRateLimits, Physiology, Sex, ThresholdHeartRate
 from ponos_coach.planning.domain import (
     FitnessState,
@@ -43,6 +54,27 @@ _availability = st.builds(
 _types = st.sets(st.sampled_from(list(SessionType)), min_size=1)
 _priorities = st.sampled_from(list(Priority))
 _distances = st.sampled_from([1_500, 5_000, 10_000, 21_097, 42_195, 80_000])
+
+
+@st.composite
+def _injuries(draw: st.DrawFn) -> tuple[PlanInjury, ...]:
+    """None most of the time; otherwise one or two open problems with distinct ids."""
+    found: list[PlanInjury] = []
+    for index in range(draw(st.sampled_from([0, 0, 0, 1, 2]))):
+        ident = InjuryId(f"i{index}")
+        if draw(st.booleans()):
+            found.append(IllnessRestriction(ident, draw(st.sampled_from(list(IllnessKind)))))
+        else:
+            found.append(
+                BodyRestriction(
+                    ident,
+                    draw(st.sampled_from(list(BodyZone))),
+                    draw(st.sampled_from(list(Step))),
+                    frozenset(draw(st.sets(st.sampled_from(list(PainFreeActivity))))),
+                    draw(st.sampled_from([None, None, None, Scope.ZONE, Scope.WHOLE_PLAN])),
+                )
+            )
+    return tuple(found)
 
 
 @st.composite
@@ -81,6 +113,7 @@ def _inputs(draw: st.DrawFn) -> PlanInputs:
         FitnessState(ctl, atl),
         threshold_pace_s_per_km=pace,
         after_injury=draw(st.booleans()),
+        injuries=draw(_injuries()),
     )
 
 

@@ -26,7 +26,10 @@ from ponos_coach.planning.domain import (
     LongDayUnavailable,
     MissingIntenseSessions,
     MissingLongSession,
+    NoSessionPossible,
     Phase,
+    PlanAdapted,
+    PlanHalted,
     PlannedSession,
     PlanRefusal,
     RecoveryInserted,
@@ -46,6 +49,7 @@ from ponos_coach.ui.goal_draft import (
     TEN_KM_M,
     target_time_text,
 )
+from ponos_coach.ui.injury_texts import plan_warning_texts
 from ponos_coach.ui.plan_presentation import Notice
 
 _SECONDS_PER_MINUTE = 60
@@ -455,7 +459,16 @@ def _beyond_horizon(warning: GoalBeyondHorizon, label_of: _Label) -> tuple[str, 
     )
 
 
+def _from_injuries(
+    warning: PlanHalted | PlanAdapted | NoSessionPossible, _label_of: _Label
+) -> tuple[str, str]:
+    return plan_warning_texts(warning)
+
+
 _WARNING_BUILDERS: dict[type, Callable[..., tuple[str, str]]] = {
+    PlanHalted: _from_injuries,
+    PlanAdapted: _from_injuries,
+    NoSessionPossible: _from_injuries,
     MissingLongSession: _missing_long,
     MissingIntenseSessions: _missing_intense,
     LongDayUnavailable: _long_day_unavailable,

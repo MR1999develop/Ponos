@@ -61,14 +61,14 @@ def test_the_text_is_canonical_json() -> None:
     text = _json(build_plan(inputs(RACES, GOALS, avail=BIG_WEEK), TODAY))
     data = json.loads(text)
     assert json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=True) == text
-    assert data["method_version"] == 3
+    assert data["method_version"] == 4
     assert data["generated_on"] == TODAY.isoformat()
 
 
 def test_the_plan_records_what_generated_it() -> None:
     plan = build_plan(inputs(RACES, GOALS, avail=BIG_WEEK, after_injury=True), TODAY)
     assert isinstance(plan, Plan)
-    assert plan.method_version == 3
+    assert plan.method_version == 4
     assert dict(plan.parameters)["max_ramp_per_week"] == 3.0
     assert [r.goal_id.value for r in plan.inputs.races] == ["c", "b", "a"]  # normalised order
     assert plan.inputs.availability == BIG_WEEK

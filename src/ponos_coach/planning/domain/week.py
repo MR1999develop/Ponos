@@ -22,7 +22,7 @@ from ponos_coach.planning.domain.sessions import (
 )
 
 _FAR = 7  # distance used when there is no hard day to be near
-_FILLERS = (SessionType.EASY, SessionType.ALTERNATIVE, SessionType.RECOVERY)
+FILLERS = (SessionType.EASY, SessionType.ALTERNATIVE, SessionType.RECOVERY)
 _LONG_RACES = (RaceClass.HALF, RaceClass.LONG)
 
 
@@ -51,7 +51,8 @@ class WeekSetup:
     marks the fourth week of a mesocycle. `hard_seed` holds the race days and the last hard
     day of the week before: no hard session on them or next to them. `race_days` are all the
     races of the plan: no intense session in the 72 hours before one. `rotation` (consecutive
-    weeks differ by one) makes the intense types alternate.
+    weeks differ by one) makes the intense types alternate. `fillers` is the order of the types
+    that fill the days with nothing special.
     """
 
     days: tuple[DayInfo, ...]
@@ -62,6 +63,7 @@ class WeekSetup:
     hard_seed: frozenset[date]
     race_days: frozenset[date] = frozenset()
     rotation: int = 0
+    fillers: tuple[SessionType, ...] = FILLERS
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,8 +276,8 @@ def _is_race_pace(session_type: SessionType, info: DayInfo) -> bool:
     )
 
 
-def _filler(chosen: frozenset[SessionType]) -> SessionType | None:
-    return next((t for t in _FILLERS if t in chosen), None)
+def _filler(setup: WeekSetup) -> SessionType | None:
+    return next((t for t in setup.fillers if t in setup.chosen), None)
 
 
 def _place_long(
@@ -312,7 +314,7 @@ def choose_loaded_slots(
         _place_hard(free, hard, taken, session_type, _allowed_for(session_type, setup))
     if SessionType.STRENGTH in setup.chosen:
         _place_strength(free, hard, taken)
-    filler = _filler(setup.chosen)
+    filler = _filler(setup)
     slots: list[Slot] = []
     for d in free:
         chosen_type = taken.get(d.day, filler)
@@ -365,7 +367,7 @@ def choose_taper_slots(
     """One easy session on each available day of an unload before a race (so the number of
     sessions is kept); the eve of the race is short. With `with_quality`, one of them is the
     shortened quality session of the week, at race pace for the A race."""
-    filler = _filler(setup.chosen)
+    filler = _filler(setup)
     if filler is None:
         return []
     quality = _taper_quality_slot(setup, hard, sizer) if with_quality else None

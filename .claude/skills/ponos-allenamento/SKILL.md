@@ -40,6 +40,9 @@ come "punto aperto" nei file `references/`.
 | MUN15 | Muñoz, Seiler e altri, intensità nel picco (Asian J Sports Med 2015, PMC4594142) | ritmo gara contro alta intensità nel picco |
 | AUS26 | Ausland, Kelemen, Seiler, FC massima sul campo (Front Sports Act Living 2026, PMC13136085) | FC massima: formule per età da evitare, protocollo di campo |
 | SIL | Silbernagel e altri, modello di monitoraggio del dolore (2007) | ripresa guidata dal dolore |
+| CSM1 | *Clinical Sports Medicine* 5ª ed., vol. 1 (Brukner e Khan) | criteri di salita e discesa, 5 giorni senza dolore, bici e ginocchio o schiena, rampa dopo il rientro |
+| CSM2 | *Clinical Sports Medicine* 5ª ed., vol. 2 | segnali cardiaci che fermano tutto il piano, malattia |
+| FER25 | Fernández e altri, attivazione e dolore muscolo-scheletrico (2025) | gradino di attivazione, frequenza prima di durata e intensità |
 | ISSN | International Society of Sports Nutrition, posizioni sulla nutrizione sportiva | carboidrati, proteine, momenti |
 | ACSM | ACSM e Academy of Nutrition and Dietetics, *Nutrition and Athletic Performance* | carboidrati, liquidi, ritmo di perdita di peso |
 | IOC | Consenso del CIO sulla nutrizione dello sportivo | carboidrati durante e dopo |
@@ -76,8 +79,9 @@ Dettagli: `references/test-soglia.md`.
 
 ## 4. Infortuni
 
-Questionario, segnali d'allarme, percorso a gradini, check-in giornaliero,
-attività alternative. Fonte: SIL.
+Questionario, segnali d'allarme (di zona e di tutto il piano), percorso a gradini
+con check-in giornaliero, malattia, attività alternative, rampa ridotta dopo il
+rientro. Fonti: SIL, CSM1, CSM2, FER25. Decisione: ADR 012.
 Dettagli: `references/infortuni.md`.
 
 ## 5. Alimentazione

@@ -325,6 +325,43 @@ group and the build backend. Validation: **2026-11-05**.
   evaluated.
 - Registered: 2026-11-07.
 
+### Leaflet (JavaScript library, vendored, runtime of the map page)
+
+- Version: **1.9.4**, from the npm registry (package `leaflet`). Not a Python
+  dependency: the files are in `src/ponos_coach/ui/web/vendor/`
+  (`leaflet.js`, `leaflet.css`), served by the `ponos://` scheme; no CDN.
+- Hash: SHA-512 of the registry tarball, verified by
+  `tools/vendor_map_libraries.py` against the registry's own `dist.integrity`:
+  `sha512-nxS1ynzJOmOlHp+iL3FyWqK89GtNL8U8rvlMOsQdTTssxZwCXh8N2NB3GDQOL+YR3XnWyZAxwQixURb+FA74PA==`.
+  The SHA-256 of every packaged file is in `vendor/VENDOR.json` and a test
+  (`tests/ui/test_vendor_libraries.py`) fails if a file or a version changes.
+- Licence: **BSD-2-Clause** (read from the tarball `package.json`), text in
+  `vendor/LICENSE-leaflet.txt`. Attribution: "Leaflet, (c) Volodymyr
+  Agafonkin and CloudMade"; the licence file ships with the package.
+- Purpose: the map view (ADR 010). Leaflet 2 is still alpha: 1.9.x stays.
+- Alternatives: MapLibre GL JS (measured, rejected: needs WebGL), see ADR 010.
+- Validated: 2026-11-08.
+
+### Leaflet.markercluster (JavaScript library, vendored, runtime of the map page)
+
+- Version: **1.5.3**, npm package `leaflet.markercluster`, files
+  `leaflet.markercluster.js`, `MarkerCluster.css`, `MarkerCluster.Default.css`
+  in `src/ponos_coach/ui/web/vendor/`.
+- Hash: SHA-512 of the tarball (`dist.integrity`):
+  `sha512-vPTw/Bndq7eQHjLBVlWpnGeLa3t+3zGiuM7fJwCkiMFq+nmRuG3RI3f7f4N4TDX7T4NpbAXpR2+NTRSEGfCSeA==`,
+  verified like Leaflet's.
+- Licence: **MIT**, text in `vendor/LICENSE-leaflet.markercluster.txt`.
+- Purpose: numbered groups of start points that split and merge with the zoom.
+- Maintenance: no release since 2022; stable, pinned by hash, nobody to fix
+  bugs for us (accepted in ADR 010).
+- Validated: 2026-11-08.
+
+### qwebchannel.js (from Qt, not vendored by us)
+
+- Read at run time from PySide6's own resources (`:/qtwebchannel/`) and served
+  to the map page; it comes with Qt (LGPL-3.0 / GPL), covered by the `pyside6`
+  entry. It is the only script of the map page not under `web/`.
+
 ### uv_build (build backend)
 
 - Version: **not pinned in `uv.lock`**. The backend is in `[build-system]`

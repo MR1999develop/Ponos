@@ -81,6 +81,7 @@ with tempfile.TemporaryDirectory() as folder:
         log_dir=base / "logs",
         data_dir=base / "data",
         notifier=Quiet(),
+        map_cache_dir=base / "map-cache",
     )
     window.start()
     app.processEvents()

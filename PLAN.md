@@ -736,7 +736,8 @@ model e gli esiti del collaudo possono citarlo.
   byte una volta serializzato; l'ordine di inserimento degli obiettivi non
   conta.
 - **T-PIANO-02** Vincoli sempre rispettati, con property test su ingressi
-  casuali: rampa del CTL entro il massimo, ore entro la disponibilità, solo
+  casuali (anche con infortuni e malattie aperti: rampa +3, solo tipologie
+  scelte, nessuna seduta con un segnale d'allarme): rampa del CTL entro il massimo, ore entro la disponibilità, solo
   giorni disponibili, solo tipologie scelte, al massimo 3 sedute intense a
   settimana, mai due dure di seguito, scarico prima di ogni obiettivo A e B.
 - **T-PIANO-03** Scenari: un obiettivo A; due A a 3 settimane; A + B + C;

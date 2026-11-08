@@ -92,6 +92,21 @@ Columns of v8 (track box for the map):
   box crosses the antimeridian. Filled when an activity is added and, for the activities already
   indexed, by a resumable pass that reads only the index (never the archived files). Derived and
   rebuildable: `NULL` for an activity without positions, and until the pass reaches the row.
+
+Columns of v10 (injuries and illnesses, all `STRICT`; health data, in clear like the rest of the
+profile):
+
+- `injury`: one row per injury or illness (`kind` on a closed set), the id chosen by the caller.
+  An injury has the questionnaire (zone, side, onset, pain 0 to 10 at rest, walking, running or
+  NULL, the morning after, the doctor's notes as free text), the day of the medical review and the
+  closing day; an illness has its kind. The CHECKs keep the two shapes apart and within the domain
+  limits. The path step is not saved: it follows from the check-ins.
+- `injury_pain_free`: the activities that do not hurt, one row each (closed set).
+- `injury_checkin`: the daily answers, one per injury and day (pain during the activity or NULL,
+  pain in the morning).
+- `injury_sign`: the warning signs, one row each; `checkin_day` NULL for those of the questionnaire,
+  otherwise the check-in that reported it (foreign key, so a check-in takes its signs with it).
+  Deleting an injury deletes all of these (`ON DELETE CASCADE`).
 """
 
 from __future__ import annotations
@@ -169,6 +184,32 @@ V6_PRIORITIES: Final = frozenset(_PRIORITIES.replace("'", "").split(","))
 V6_SESSION_TYPES: Final = frozenset(_SESSION_TYPES.replace("'", "").split(","))
 V6_PLAN_KINDS: Final = frozenset(_PLAN_KINDS.replace("'", "").split(","))
 V6_REFUSAL_REASONS: Final = frozenset(_REFUSAL_REASONS.replace("'", "").split(","))
+
+# Closed sets and limits of the injury data (v10), frozen here on purpose.
+_INJURY_KINDS = "'injury','illness'"
+_BODY_ZONES = (
+    "'foot','ankle','achilles','calf','shin','knee','thigh','hip','lower_back','upper_body'"
+)
+_SIDES = "'left','right','both'"
+_ONSETS = "'sudden','gradual'"
+_PAIN_FREE_ACTIVITIES = "'walking','cycling','swimming','water_running'"
+_WARNING_SIGNS = (
+    "'night_pain','strong_rest_pain','swelling_or_deformity','numbness_or_weakness',"
+    "'cannot_bear_weight','bone_pain_walking_or_night','calf_swollen_and_warm',"
+    "'cycling_stop_pain','bladder_bowel_or_spreading_weakness','fever','general_malaise',"
+    "'chest_pain','palpitations','fainting','disproportionate_breathlessness'"
+)
+_ILLNESS_KINDS = "'neck_up','systemic'"
+V10_MAX_NOTES_CHARS = 2000
+
+V10_INJURY_KINDS: Final = frozenset(_INJURY_KINDS.replace("'", "").split(","))
+V10_BODY_ZONES: Final = frozenset(_BODY_ZONES.replace("'", "").split(","))
+V10_SIDES: Final = frozenset(_SIDES.replace("'", "").split(","))
+V10_ONSETS: Final = frozenset(_ONSETS.replace("'", "").split(","))
+V10_PAIN_FREE_ACTIVITIES: Final = frozenset(_PAIN_FREE_ACTIVITIES.replace("'", "").split(","))
+V10_WARNING_SIGNS: Final = frozenset(_WARNING_SIGNS.replace("'", "").split(","))
+V10_ILLNESS_KINDS: Final = frozenset(_ILLNESS_KINDS.replace("'", "").split(","))
+V10_TABLES: Final = frozenset({"injury", "injury_pain_free", "injury_checkin", "injury_sign"})
 
 _ACTIVITY_LEVELS = "'sedentary','light','active','very_active'"
 _GOAL_KINDS = "'weight_loss','maintenance','performance'"
@@ -566,6 +607,87 @@ ALTER TABLE activities ADD COLUMN track_east REAL
         track_south IS NULL AND track_west IS NULL AND track_north IS NULL))
 """
 
+
+def _pain(column: str, *, nullable: bool) -> str:
+    """A pain column: 0 to 10, and NULL only where the domain has no value."""
+    null = f"{column} IS NULL OR " if nullable else ""
+    return f"{column} INTEGER CHECK ({null}{column} BETWEEN 0 AND 10)"
+
+
+_V10_INJURY = f"""
+CREATE TABLE injury (
+    injury_id     TEXT    NOT NULL PRIMARY KEY
+                          CHECK (length(injury_id) BETWEEN 1 AND 64
+                                 AND injury_id NOT GLOB '*[^A-Za-z0-9_-]*'),
+    kind          TEXT    NOT NULL CHECK (kind IN ({_INJURY_KINDS})),
+    started_on    TEXT    NOT NULL CHECK (date(started_on) IS started_on
+                                          AND started_on >= '{V3_MIN_MEASUREMENT_DATE}'),
+    ended_on      TEXT    CHECK (ended_on IS NULL OR (date(ended_on) IS ended_on
+                                                      AND ended_on >= started_on)),
+    zone          TEXT    CHECK (zone IS NULL OR zone IN ({_BODY_ZONES})),
+    side          TEXT    CHECK (side IS NULL OR side IN ({_SIDES})),
+    onset         TEXT    CHECK (onset IS NULL OR onset IN ({_ONSETS})),
+    onset_day     TEXT    CHECK (onset_day IS NULL
+                                 OR (date(onset_day) IS onset_day
+                                     AND onset_day >= '{V3_MIN_MEASUREMENT_DATE}')),
+    {_pain("pain_rest", nullable=True)},
+    {_pain("pain_walking", nullable=True)},
+    {_pain("pain_running", nullable=True)},
+    {_pain("pain_morning", nullable=True)},
+    doctor_notes  TEXT    CHECK (doctor_notes IS NULL
+                                 OR length(doctor_notes) <= {V10_MAX_NOTES_CHARS}),
+    reviewed_on   TEXT    CHECK (reviewed_on IS NULL OR (date(reviewed_on) IS reviewed_on
+                                                         AND reviewed_on >= started_on)),
+    illness_kind  TEXT    CHECK (illness_kind IS NULL OR illness_kind IN ({_ILLNESS_KINDS})),
+    CHECK (kind <> 'injury' OR (zone IS NOT NULL AND side IS NOT NULL AND onset IS NOT NULL
+                                AND onset_day IS NOT NULL AND onset_day <= started_on
+                                AND pain_rest IS NOT NULL AND pain_walking IS NOT NULL
+                                AND pain_morning IS NOT NULL AND doctor_notes IS NOT NULL
+                                AND illness_kind IS NULL)),
+    CHECK (kind <> 'illness' OR (illness_kind IS NOT NULL AND zone IS NULL AND side IS NULL
+                                 AND onset IS NULL AND onset_day IS NULL AND pain_rest IS NULL
+                                 AND pain_walking IS NULL AND pain_running IS NULL
+                                 AND pain_morning IS NULL AND doctor_notes IS NULL
+                                 AND reviewed_on IS NULL))
+) STRICT
+"""
+
+_V10_INJURY_BY_START = "CREATE INDEX injury_by_start ON injury (started_on, injury_id)"
+
+_V10_INJURY_PAIN_FREE = f"""
+CREATE TABLE injury_pain_free (
+    injury_id TEXT NOT NULL REFERENCES injury (injury_id) ON DELETE CASCADE,
+    activity  TEXT NOT NULL CHECK (activity IN ({_PAIN_FREE_ACTIVITIES})),
+    PRIMARY KEY (injury_id, activity)
+) STRICT
+"""
+
+_V10_INJURY_CHECKIN = f"""
+CREATE TABLE injury_checkin (
+    injury_id   TEXT    NOT NULL REFERENCES injury (injury_id) ON DELETE CASCADE,
+    day         TEXT    NOT NULL CHECK (date(day) IS day AND day >= '{V3_MIN_MEASUREMENT_DATE}'),
+    {_pain("pain_during", nullable=True)},
+    {_pain("pain_morning", nullable=False)} NOT NULL,
+    PRIMARY KEY (injury_id, day)
+) STRICT
+"""
+
+# A sign of a check-in refers to it and goes with it; one of the questionnaire has no day.
+_V10_INJURY_SIGN = f"""
+CREATE TABLE injury_sign (
+    injury_id   TEXT NOT NULL REFERENCES injury (injury_id) ON DELETE CASCADE,
+    checkin_day TEXT,
+    sign        TEXT NOT NULL CHECK (sign IN ({_WARNING_SIGNS})),
+    FOREIGN KEY (injury_id, checkin_day) REFERENCES injury_checkin (injury_id, day)
+        ON DELETE CASCADE
+) STRICT
+"""
+
+_V10_INJURY_SIGN_UNIQUE = (
+    "CREATE UNIQUE INDEX injury_sign_once "
+    "ON injury_sign (injury_id, COALESCE(checkin_day, ''), sign)"
+)
+
 # Migration i (index i-1): brings the schema from version i-1 to i.
 MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     (_V1_META, _V1_ACTIVITIES, _V1_ACTIVITIES_START_INDEX, _V1_PHYSIOLOGY, _V1_LOAD_CACHE),
@@ -601,8 +723,16 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     ),
     (_V7_THRESHOLD_PROTOCOL, _V7_LEAN_MASS),
     (_V8_TRACK_SOUTH, _V8_TRACK_WEST, _V8_TRACK_NORTH, _V8_TRACK_EAST),
-    # PROVISIONAL v9 (ADR 013): renumbered when merged with the injuries migration.
+    # v9: the Garmin calendar's workout backup (ADR 013).
     WORKOUT_BACKUP_MIGRATION,
+    (
+        _V10_INJURY,
+        _V10_INJURY_BY_START,
+        _V10_INJURY_PAIN_FREE,
+        _V10_INJURY_CHECKIN,
+        _V10_INJURY_SIGN,
+        _V10_INJURY_SIGN_UNIQUE,
+    ),
 )
 
 SCHEMA_VERSION: Final = len(MIGRATIONS)

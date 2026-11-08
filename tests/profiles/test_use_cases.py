@@ -15,6 +15,7 @@ import pytest
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxIndex
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
+from ponos_coach.injury.ports import InjuryStore
 from ponos_coach.load.domain import PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.nutrition.ports import (
@@ -195,6 +196,10 @@ class _CountingProfile:
     @property
     def workout_backups(self) -> WorkoutBackupStore:
         return self._inner.workout_backups
+
+    @property
+    def injuries(self) -> InjuryStore:
+        return self._inner.injuries
 
     def close(self) -> None:
         self._owner.closed += 1

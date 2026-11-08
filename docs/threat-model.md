@@ -570,6 +570,31 @@ in the tests):
 | — | Preview that modifies the profile | `peek` opens the database read-only, without migrating or taking the lock | T-UI-03 |
 | — | File replacements with different techniques | One single module, `ponos_coach.fsio` | T-DATI-02 |
 
+### The map page (phase 5b, T-SEC-14 and T-SEC-15)
+
+- **Page**: `ponos://app/map.html`, same engine and interceptor as the charts;
+  CSP `default-src 'none'`, `connect-src 'none'`, `img-src` only `data:`, `blob:`
+  and `ponos://tiles`. Scripts: Leaflet and markercluster from `web/vendor/`
+  (hash-checked by test), `qwebchannel.js` from Qt, `map.js` (no `fetch`, no
+  `eval`, no `innerHTML`: tested).
+- **Tiles**: `ponos://tiles/z/x/y` only (interceptor: integers inside the
+  pyramid, no query, fragment or port); the scheme handler asks `TileProxy` in
+  a worker pool (at most 256 waiting) and never the network from the page.
+- **Channel**: one `QWebChannel` object, five slots taking numbers
+  (`pageReady`, `viewChanged`, `activityClicked`, `pointHovered`,
+  `pointLeft`). The page names an activity only by its position in the list
+  Python sent; every value is validated (`map_messages`) and rejected ones
+  are counted, with no effect. JSON cannot carry NaN or infinity: the channel
+  turns them into 0, a valid and harmless value. Qt also publishes
+  `QObject.deleteLater` on the object: a compromised page could delete the
+  bridge and so silence its own map (accepted, no other effect).
+- **Positions**: never in logs; the map's last view is not saved (a position in
+  `QSettings` would be a file outside the planned folders). The tile cache keeps
+  tile addresses (the areas looked at) in the app's cache folder, not in the
+  profile.
+- **Key**: only the key store and the HTTP adapter see it; the settings dialog
+  hides what is typed, clears the field after saving and never shows a saved key.
+
 ### Cases closed by the phase 4b acceptance testing (D-F4B)
 
 Defects found by the phase 4b acceptance testing (D-F4B-01…09) and the

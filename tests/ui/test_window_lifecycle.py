@@ -132,7 +132,7 @@ def test_closing_a_window_without_a_profile_is_immediate(
 # --- D-F1-08, D-F1-09: the window remembers ---------------------------------------------------
 
 
-@pytest.mark.parametrize("saved", ["testo", "99", "-1", "4", 42, ""], ids=repr)
+@pytest.mark.parametrize("saved", ["testo", "99", "-1", "6", 42, ""], ids=repr)
 def test_a_saved_section_that_is_not_available_opens_the_overview(
     qtbot: QtBot, tmp_path: Path, settings: QSettings, saved: object
 ) -> None:
@@ -144,6 +144,18 @@ def test_a_saved_section_that_is_not_available_opens_the_overview(
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
     assert sidebar.currentRow() == 0
+
+
+def test_the_map_section_is_remembered_like_the_others(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    settings.setValue("window/section", 4)
+
+    window = compose(tmp_path, settings)
+    qtbot.addWidget(window)
+
+    assert window.sidebar.currentRow() == 4
+    assert window.current_page is window.map_page
 
 
 def test_the_section_is_written_when_it_changes_not_only_at_close(

@@ -172,6 +172,7 @@ class PlanUi(QObject):
         show_error: Callable[[ErrorMessage], None],
         show_goals_page: Callable[[], None],
         edit_profile: Callable[[], None],
+        show_injuries_page: Callable[[], None] = lambda: None,
         make_goal_id: Callable[[], str] = new_goal_id,
     ) -> None:
         super().__init__(window)
@@ -185,6 +186,7 @@ class PlanUi(QObject):
         self._show_error = show_error
         self._show_goals_page = show_goals_page
         self._edit_profile = edit_profile
+        self._show_injuries_page = show_injuries_page
         self._make_goal_id = make_goal_id
         self._loader = PlanLoader(controller, self)
         self._stack = QUndoStack(self)
@@ -471,6 +473,8 @@ class PlanUi(QObject):
             self.show_training_settings()
         elif action is NoticeAction.EDIT_PROFILE:
             self._edit_profile()
+        elif action is NoticeAction.OPEN_INJURIES:
+            self._show_injuries_page()
 
     # --- What comes back from the data thread ---------------------------------------------------
 

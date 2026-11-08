@@ -58,6 +58,10 @@
         <source>Import files...</source>
         <translation>Importa file...</translation>
     </message>
+    <message>
+        <source>{shown} of {total} activities</source>
+        <translation>{shown} di {total} attività</translation>
+    </message>
 </context>
 <context>
     <name>ActivityDetailDialog</name>
@@ -189,6 +193,29 @@
     <message>
         <source>Format</source>
         <translation>Formato</translation>
+    </message>
+</context>
+<context>
+    <name>AreaListModel</name>
+    <message>
+        <source>Date and time</source>
+        <translation>Data e ora</translation>
+    </message>
+    <message>
+        <source>Sport</source>
+        <translation>Sport</translation>
+    </message>
+    <message>
+        <source>Distance (km)</source>
+        <translation>Distanza (km)</translation>
+    </message>
+    <message>
+        <source>Ascent (m)</source>
+        <translation>Dislivello (m)</translation>
+    </message>
+    <message>
+        <source>Moving time (h:mm:ss)</source>
+        <translation>Tempo in movimento (h:mm:ss)</translation>
     </message>
 </context>
 <context>
@@ -628,6 +655,33 @@
     <message>
         <source>Compare data on hover</source>
         <translation>Confronta dati al passaggio del mouse</translation>
+    </message>
+</context>
+<context>
+    <name>CheckInDialog</name>
+    <message>
+        <source>Daily check-in</source>
+        <translation>Controllo quotidiano</translation>
+    </message>
+    <message>
+        <source>Check-in of {date} for: {problem}</source>
+        <translation>Controllo del {date} per: {problem}</translation>
+    </message>
+    <message>
+        <source>Pain during the activity today</source>
+        <translation>Dolore durante l&apos;attività di oggi</translation>
+    </message>
+    <message>
+        <source>No activity today</source>
+        <translation>Nessuna attività oggi</translation>
+    </message>
+    <message>
+        <source>Pain this morning</source>
+        <translation>Dolore di questa mattina</translation>
+    </message>
+    <message>
+        <source>Save check-in</source>
+        <translation>Salva il controllo</translation>
     </message>
 </context>
 <context>
@@ -1272,6 +1326,119 @@
     <message>
         <source>file no longer valid</source>
         <translation>file non più valido</translation>
+    </message>
+</context>
+<context>
+    <name>FilterBar</name>
+    <message>
+        <source>Clear filters</source>
+        <translation>Azzera i filtri</translation>
+    </message>
+    <message>
+        <source>Show every activity again</source>
+        <translation>Mostra di nuovo tutte le attività</translation>
+    </message>
+    <message>
+        <source>Filter problems</source>
+        <translation>Problemi dei filtri</translation>
+    </message>
+    <message>
+        <source>e.g. {example}</source>
+        <translation>es. {example}</translation>
+    </message>
+    <message>
+        <source>from</source>
+        <translation>da</translation>
+    </message>
+    <message>
+        <source>to</source>
+        <translation>a</translation>
+    </message>
+    <message>
+        <source>Sport</source>
+        <translation>Sport</translation>
+    </message>
+    <message>
+        <source>Sports</source>
+        <translation>Sport</translation>
+    </message>
+    <message>
+        <source>All sports</source>
+        <translation>Tutti gli sport</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n sports</source>
+        <translation>
+            <numerusform>%n sport</numerusform>
+            <numerusform>%n sport</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>Filters</name>
+    <message>
+        <source>From date</source>
+        <translation>Dalla data</translation>
+    </message>
+    <message>
+        <source>To date</source>
+        <translation>Alla data</translation>
+    </message>
+    <message>
+        <source>Minimum duration (minutes)</source>
+        <translation>Durata minima (minuti)</translation>
+    </message>
+    <message>
+        <source>Maximum duration (minutes)</source>
+        <translation>Durata massima (minuti)</translation>
+    </message>
+    <message>
+        <source>Minimum distance (km)</source>
+        <translation>Distanza minima (km)</translation>
+    </message>
+    <message>
+        <source>Maximum distance (km)</source>
+        <translation>Distanza massima (km)</translation>
+    </message>
+    <message>
+        <source>Minimum ascent (m)</source>
+        <translation>Dislivello minimo (m)</translation>
+    </message>
+    <message>
+        <source>Maximum ascent (m)</source>
+        <translation>Dislivello massimo (m)</translation>
+    </message>
+    <message>
+        <source>{field}: not a date. Write it like 2026-03-05 or like {example}.</source>
+        <translation>{field}: non è una data. Scrivila come 2026-03-05 oppure come {example}.</translation>
+    </message>
+    <message>
+        <source>{field}: must not be negative. Leave it empty for no limit.</source>
+        <translation>{field}: non può essere negativo. Lascia vuoto per nessun limite.</translation>
+    </message>
+    <message>
+        <source>{field}: too large. Leave it empty for no limit.</source>
+        <translation>{field}: troppo grande. Lascia vuoto per nessun limite.</translation>
+    </message>
+    <message>
+        <source>{field}: not a number. Write a number such as 10.5 (a duration also as 1:30).</source>
+        <translation>{field}: non è un numero. Scrivi un numero come 10,5 (una durata anche come 1:30).</translation>
+    </message>
+    <message>
+        <source>Date</source>
+        <translation>Data</translation>
+    </message>
+    <message>
+        <source>Duration (min)</source>
+        <translation>Durata (min)</translation>
+    </message>
+    <message>
+        <source>Distance (km)</source>
+        <translation>Distanza (km)</translation>
+    </message>
+    <message>
+        <source>Ascent (m)</source>
+        <translation>Dislivello (m)</translation>
     </message>
 </context>
 <context>
@@ -2232,6 +2399,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Modifica profilo...</translation>
     </message>
     <message>
+        <source>Show the injuries</source>
+        <translation>Mostra gli infortuni</translation>
+    </message>
+    <message>
         <source>Goals</source>
         <translation>Obiettivi</translation>
     </message>
@@ -2284,6 +2455,17 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>The threshold cannot be higher than the maximum.</source>
         <translation>La soglia non può essere superiore alla massima.</translation>
+    </message>
+</context>
+<context>
+    <name>IllnessDialog</name>
+    <message>
+        <source>Report illness</source>
+        <translation>Segnala una malattia</translation>
+    </message>
+    <message>
+        <source>I have felt ill since</source>
+        <translation>Non sto bene dal</translation>
     </message>
 </context>
 <context>
@@ -2417,6 +2599,579 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>The import was stopped: run it again to continue.</source>
         <translation>L&apos;importazione è stata interrotta: avviala di nuovo per continuare.</translation>
+    </message>
+</context>
+<context>
+    <name>InjuriesPage</name>
+    <message>
+        <source>Injuries and illnesses</source>
+        <translation>Infortuni e malattie</translation>
+    </message>
+    <message>
+        <source>No injuries or illnesses. If something hurts or you do not feel well, choose Report an injury or Report illness, and the plan adapts.</source>
+        <translation>Nessun infortunio né malattia. Se qualcosa fa male o non ti senti bene, scegli Segnala un infortunio o Segnala una malattia e il piano si adatta.</translation>
+    </message>
+    <message>
+        <source>State of the selected problem</source>
+        <translation>Stato del problema selezionato</translation>
+    </message>
+</context>
+<context>
+    <name>InjuryDialogs</name>
+    <message>
+        <source>Pain from 0 (none) to 10 (the worst you can imagine).</source>
+        <translation>Dolore da 0 (nessuno) a 10 (il peggiore che puoi immaginare).</translation>
+    </message>
+</context>
+<context>
+    <name>InjuryTable</name>
+    <message>
+        <source>Problem</source>
+        <translation>Problema</translation>
+    </message>
+    <message>
+        <source>Started</source>
+        <translation>Dal</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>Stato</translation>
+    </message>
+    <message>
+        <source>Check-in</source>
+        <translation>Controllo</translation>
+    </message>
+</context>
+<context>
+    <name>InjuryTexts</name>
+    <message>
+        <source>Foot or heel</source>
+        <translation>Piede o tallone</translation>
+    </message>
+    <message>
+        <source>Ankle</source>
+        <translation>Caviglia</translation>
+    </message>
+    <message>
+        <source>Achilles tendon</source>
+        <translation>Tendine d&apos;Achille</translation>
+    </message>
+    <message>
+        <source>Calf</source>
+        <translation>Polpaccio</translation>
+    </message>
+    <message>
+        <source>Shin</source>
+        <translation>Tibia</translation>
+    </message>
+    <message>
+        <source>Knee</source>
+        <translation>Ginocchio</translation>
+    </message>
+    <message>
+        <source>Thigh</source>
+        <translation>Coscia</translation>
+    </message>
+    <message>
+        <source>Hip or groin</source>
+        <translation>Anca o inguine</translation>
+    </message>
+    <message>
+        <source>Lower back</source>
+        <translation>Zona lombare</translation>
+    </message>
+    <message>
+        <source>Upper body (shoulder, arm, neck)</source>
+        <translation>Parte alta del corpo (spalla, braccio, collo)</translation>
+    </message>
+    <message>
+        <source>left</source>
+        <translation>sinistra</translation>
+    </message>
+    <message>
+        <source>right</source>
+        <translation>destra</translation>
+    </message>
+    <message>
+        <source>both sides</source>
+        <translation>entrambi i lati</translation>
+    </message>
+    <message>
+        <source>Left</source>
+        <translation>Sinistra</translation>
+    </message>
+    <message>
+        <source>Right</source>
+        <translation>Destra</translation>
+    </message>
+    <message>
+        <source>Both sides</source>
+        <translation>Entrambi i lati</translation>
+    </message>
+    <message>
+        <source>Suddenly</source>
+        <translation>All&apos;improvviso</translation>
+    </message>
+    <message>
+        <source>Little by little</source>
+        <translation>Poco a poco</translation>
+    </message>
+    <message>
+        <source>Walking</source>
+        <translation>Camminata</translation>
+    </message>
+    <message>
+        <source>Cycling</source>
+        <translation>Bici</translation>
+    </message>
+    <message>
+        <source>Swimming</source>
+        <translation>Nuoto</translation>
+    </message>
+    <message>
+        <source>Water running</source>
+        <translation>Corsa in acqua</translation>
+    </message>
+    <message>
+        <source>Symptoms only above the neck, no fever</source>
+        <translation>Sintomi solo sopra il collo, senza febbre</translation>
+    </message>
+    <message>
+        <source>Fever, general malaise or aching muscles</source>
+        <translation>Febbre, malessere generale o dolori muscolari</translation>
+    </message>
+    <message>
+        <source>The plan keeps only a short easy session, with no hard work.</source>
+        <translation>Il piano tiene solo una seduta breve e facile, senza sforzi intensi.</translation>
+    </message>
+    <message>
+        <source>The plan has no sessions until you say you feel well. A doctor&apos;s visit is advised.</source>
+        <translation>Il piano non ha sedute finché non dici che stai bene. Si consiglia una visita medica.</translation>
+    </message>
+    <message>
+        <source>Gentle activation</source>
+        <translation>Attivazione leggera</translation>
+    </message>
+    <message>
+        <source>Run and walk</source>
+        <translation>Corsa e cammino</translation>
+    </message>
+    <message>
+        <source>Easy continuous running</source>
+        <translation>Corsa continua facile</translation>
+    </message>
+    <message>
+        <source>Longer running</source>
+        <translation>Corsa più lunga</translation>
+    </message>
+    <message>
+        <source>Full training</source>
+        <translation>Allenamento completo</translation>
+    </message>
+    <message>
+        <source>Light movement, short and often, without pain. No running.</source>
+        <translation>Movimento leggero, breve e frequente, senza dolore. Niente corsa.</translation>
+    </message>
+    <message>
+        <source>Walking. No running yet.</source>
+        <translation>Camminata. Ancora niente corsa.</translation>
+    </message>
+    <message>
+        <source>Short easy runs alternated with walking, every other day.</source>
+        <translation>Brevi corse facili alternate al cammino, a giorni alterni.</translation>
+    </message>
+    <message>
+        <source>Continuous easy running, every other day. No hard sessions.</source>
+        <translation>Corsa continua facile, a giorni alterni. Niente sedute intense.</translation>
+    </message>
+    <message>
+        <source>Easy running with longer sessions. No hard sessions yet.</source>
+        <translation>Corsa facile con sedute più lunghe. Ancora niente sedute intense.</translation>
+    </message>
+    <message>
+        <source>All the training, with intensity, as long as it does not hurt.</source>
+        <translation>Tutto l&apos;allenamento, anche intenso, purché non faccia male.</translation>
+    </message>
+    <message>
+        <source>Pain at night that wakes me up</source>
+        <translation>Dolore notturno che mi sveglia</translation>
+    </message>
+    <message>
+        <source>Strong pain even at rest</source>
+        <translation>Dolore forte anche a riposo</translation>
+    </message>
+    <message>
+        <source>Swelling, or the area has changed shape</source>
+        <translation>Gonfiore, o la zona ha cambiato forma</translation>
+    </message>
+    <message>
+        <source>Tingling, numbness or loss of strength</source>
+        <translation>Formicolio, intorpidimento o perdita di forza</translation>
+    </message>
+    <message>
+        <source>I cannot put my weight on it</source>
+        <translation>Non riesco a caricare il peso</translation>
+    </message>
+    <message>
+        <source>Pain on one spot of the bone, also when walking or at night</source>
+        <translation>Dolore in un punto preciso dell&apos;osso, anche camminando o di notte</translation>
+    </message>
+    <message>
+        <source>Calf painful, swollen and warm, after a rest or a journey</source>
+        <translation>Polpaccio dolente, gonfio e caldo, dopo un riposo o un viaggio</translation>
+    </message>
+    <message>
+        <source>Pain on the bike that forces me to stop and eases at once</source>
+        <translation>Dolore in bici che mi costringe a fermarmi e passa subito</translation>
+    </message>
+    <message>
+        <source>Bladder or bowel problems, or weakness that spreads, with back pain</source>
+        <translation>Problemi di vescica o intestino, o debolezza che si estende, con mal di schiena</translation>
+    </message>
+    <message>
+        <source>Fever</source>
+        <translation>Febbre</translation>
+    </message>
+    <message>
+        <source>General malaise, or weight or appetite lost without a reason</source>
+        <translation>Malessere generale, o peso o appetito persi senza motivo</translation>
+    </message>
+    <message>
+        <source>Chest pain</source>
+        <translation>Dolore al petto</translation>
+    </message>
+    <message>
+        <source>Sudden palpitations, or with dizziness</source>
+        <translation>Palpitazioni improvvise, o con capogiro</translation>
+    </message>
+    <message>
+        <source>Fainting, during or after effort</source>
+        <translation>Svenimento, durante o dopo lo sforzo</translation>
+    </message>
+    <message>
+        <source>New breathlessness or tiredness out of proportion to the effort</source>
+        <translation>Fiato corto o stanchezza nuovi e sproporzionati rispetto allo sforzo</translation>
+    </message>
+    <message>
+        <source>This is a sign that deserves a doctor&apos;s visit before any training. Ponos Coach cannot tell what it means.</source>
+        <translation>È un segnale che merita una visita medica prima di qualsiasi allenamento. Ponos Coach non può dire che cosa significhi.</translation>
+    </message>
+    <message>
+        <source>Illness: {kind}</source>
+        <translation>Malattia: {kind}</translation>
+    </message>
+    <message>
+        <source>Injury</source>
+        <translation>Infortunio</translation>
+    </message>
+    <message>
+        <source>{zone}, {side}</source>
+        <translation>{zone}, {side}</translation>
+    </message>
+    <message>
+        <source>Closed</source>
+        <translation>Chiuso</translation>
+    </message>
+    <message>
+        <source>See a doctor</source>
+        <translation>Vai da un medico</translation>
+    </message>
+    <message>
+        <source>Plan stopped</source>
+        <translation>Piano fermo</translation>
+    </message>
+    <message>
+        <source>Ongoing</source>
+        <translation>In corso</translation>
+    </message>
+    <message>
+        <source>Due today</source>
+        <translation>Da fare oggi</translation>
+    </message>
+    <message>
+        <source>Done today</source>
+        <translation>Fatto oggi</translation>
+    </message>
+    <message>
+        <source>Closed on {date}.</source>
+        <translation>Chiuso il {date}.</translation>
+    </message>
+    <message>
+        <source>Stopped by a warning sign: the plan has no sessions until a doctor has seen it.</source>
+        <translation>Fermo per un segnale d&apos;allarme: il piano non ha sedute finché non lo vede un medico.</translation>
+    </message>
+    <message>
+        <source>Ongoing: the plan has no sessions until you say you feel well.</source>
+        <translation>In corso: il piano non ha sedute finché non dici che stai bene.</translation>
+    </message>
+    <message>
+        <source>Ongoing: the plan keeps only a short easy session.</source>
+        <translation>In corso: il piano tiene solo una seduta breve e facile.</translation>
+    </message>
+    <message>
+        <source>Current step: {step}.</source>
+        <translation>Gradino attuale: {step}.</translation>
+    </message>
+    <message>
+        <source>All the steps are done. When you and your doctor agree, you can close it.</source>
+        <translation>Tutti i gradini sono fatti. Quando tu e il medico siete d&apos;accordo, puoi chiuderlo.</translation>
+    </message>
+    <message>
+        <source>Good days in a row: {done} of {needed} for the next step.</source>
+        <translation>Giorni buoni di fila: {done} su {needed} per il gradino successivo.</translation>
+    </message>
+    <message>
+        <source>Days with no pain at all: {done} of {needed} before running again.</source>
+        <translation>Giorni senza alcun dolore: {done} su {needed} prima di tornare a correre.</translation>
+    </message>
+    <message>
+        <source>The last check-in was good enough to go up one step.</source>
+        <translation>L&apos;ultimo controllo era abbastanza buono per salire di un gradino.</translation>
+    </message>
+    <message>
+        <source>The last check-in was worse than before: one step back.</source>
+        <translation>L&apos;ultimo controllo era peggiore di prima: un gradino indietro.</translation>
+    </message>
+    <message>
+        <source>The last check-in asked a little too much: the good days start again.</source>
+        <translation>L&apos;ultimo controllo ha chiesto un po&apos; troppo: i giorni buoni ricominciano.</translation>
+    </message>
+    <message>
+        <source>You have stayed on this step for a long time: see a doctor.</source>
+        <translation>Sei fermo da molto su questo gradino: vai da un medico.</translation>
+    </message>
+    <message>
+        <source>The recovery is taking longer than expected: see a doctor.</source>
+        <translation>Il recupero sta durando più del previsto: vai da un medico.</translation>
+    </message>
+    <message>
+        <source>Allowed now: no training.</source>
+        <translation>Permesso ora: nessun allenamento.</translation>
+    </message>
+    <message>
+        <source>Allowed now: a short easy session, no hard work, no strength.</source>
+        <translation>Permesso ora: una seduta breve e facile, niente sforzi intensi né forza.</translation>
+    </message>
+    <message>
+        <source>Allowed now: {allowance}</source>
+        <translation>Permesso ora: {allowance}</translation>
+    </message>
+    <message>
+        <source>Today&apos;s check-in is missing.</source>
+        <translation>Manca il controllo di oggi.</translation>
+    </message>
+    <message>
+        <source>Today&apos;s check-in is done.</source>
+        <translation>Il controllo di oggi è fatto.</translation>
+    </message>
+    <message>
+        <source>You are ill with fever, malaise or aching muscles: the plan has no sessions.</source>
+        <translation>Hai febbre, malessere o dolori muscolari: il piano non ha sedute.</translation>
+    </message>
+    <message>
+        <source>A doctor&apos;s visit is advised. When you feel well again, choose Close.</source>
+        <translation>Si consiglia una visita medica. Quando stai di nuovo bene, scegli Chiudi.</translation>
+    </message>
+    <message>
+        <source>You reported a warning sign that concerns the whole body: the plan has no sessions.</source>
+        <translation>Hai segnalato un segnale d&apos;allarme che riguarda tutto il corpo: il piano non ha sedute.</translation>
+    </message>
+    <message>
+        <source>See a doctor before any training. When you have been seen, choose Medical review done.</source>
+        <translation>Vai da un medico prima di qualsiasi allenamento. Dopo la visita, scegli Visita medica fatta.</translation>
+    </message>
+    <message>
+        <source>You reported a warning sign: the plan has no sessions until it is seen to.</source>
+        <translation>Hai segnalato un segnale d&apos;allarme: il piano non ha sedute finché non è stato visto.</translation>
+    </message>
+    <message>
+        <source>The plan leaves out what could load the affected area, and keeps the running gentle.</source>
+        <translation>Il piano lascia fuori ciò che potrebbe caricare la zona colpita e tiene la corsa leggera.</translation>
+    </message>
+    <message>
+        <source>Nothing to do: it goes back to normal as the path moves on.</source>
+        <translation>Non devi fare nulla: torna normale man mano che il percorso avanza.</translation>
+    </message>
+    <message>
+        <source>Nothing you chose can be planned without loading the affected area: rest days until the path allows more.</source>
+        <translation>Niente di ciò che hai scelto si può pianificare senza caricare la zona colpita: giorni di riposo finché il percorso non permette di più.</translation>
+    </message>
+    <message>
+        <source>Say what does not hurt when you report an injury, and choose an alternative session in Training settings.</source>
+        <translation>Indica che cosa non fa male quando segnali un infortunio e scegli una seduta alternativa nelle Impostazioni di allenamento.</translation>
+    </message>
+    <message>
+        <source>Last step</source>
+        <translation>Ultimo gradino</translation>
+    </message>
+    <message>
+        <source>Plan</source>
+        <translation>Piano</translation>
+    </message>
+    <message>
+        <source>{problem}: {invitation}</source>
+        <translation>{problem}: {invitation}</translation>
+    </message>
+    <message>
+        <source>{problem}: the plan has no sessions until you feel well.</source>
+        <translation>{problem}: il piano non ha sedute finché non stai bene.</translation>
+    </message>
+    <message>
+        <source>{problem}: {reason}</source>
+        <translation>{problem}: {reason}</translation>
+    </message>
+    <message>
+        <source>Do not go on with more of the same until a doctor has seen it.</source>
+        <translation>Non continuare allo stesso modo finché un medico non lo ha visto.</translation>
+    </message>
+    <message>
+        <source>{problem}: all the steps are done and the last ones were good.</source>
+        <translation>{problem}: tutti i gradini sono fatti e gli ultimi giorni sono andati bene.</translation>
+    </message>
+    <message>
+        <source>When you and your doctor agree it is over, choose Close.</source>
+        <translation>Quando tu e il medico siete d&apos;accordo che è finita, scegli Chiudi.</translation>
+    </message>
+    <message>
+        <source>Please see a doctor</source>
+        <translation>Vai da un medico</translation>
+    </message>
+    <message>
+        <source>You reported a warning sign. {invitation} The plan has no sessions until it is seen to, and you can keep using everything else.</source>
+        <translation>Hai segnalato un segnale d&apos;allarme. {invitation} Il piano non ha sedute finché non è stato visto, e puoi continuare a usare tutto il resto.</translation>
+    </message>
+    <message numerus="yes">
+        <source>Check-in due today (%n)</source>
+        <translation><numerusform>Controllo da fare oggi (%n)</numerusform><numerusform>Controllo da fare oggi (%n)</numerusform></translation>
+    </message>
+    <message>
+        <source>Injuries: {facts}</source>
+        <translation>Infortuni: {facts}</translation>
+    </message>
+    <message>
+        <source>Illness</source>
+        <translation>Malattia</translation>
+    </message>
+    <message>
+        <source>Injury: {zone}</source>
+        <translation>Infortunio: {zone}</translation>
+    </message>
+</context>
+<context>
+    <name>InjuryUi</name>
+    <message>
+        <source>Report an injury...</source>
+        <translation>Segnala un infortunio...</translation>
+    </message>
+    <message>
+        <source>Report illness...</source>
+        <translation>Segnala una malattia...</translation>
+    </message>
+    <message>
+        <source>Daily check-in...</source>
+        <translation>Controllo quotidiano...</translation>
+    </message>
+    <message>
+        <source>Medical review done</source>
+        <translation>Visita medica fatta</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Chiudi</translation>
+    </message>
+    <message>
+        <source>Undo</source>
+        <translation>Annulla</translation>
+    </message>
+    <message>
+        <source>Redo</source>
+        <translation>Ripeti</translation>
+    </message>
+    <message>
+        <source>The answers cannot be saved</source>
+        <translation>Le risposte non si possono salvare</translation>
+    </message>
+    <message>
+        <source>Something in the answers does not fit what can be recorded.</source>
+        <translation>Qualcosa nelle risposte non rientra in ciò che si può registrare.</translation>
+    </message>
+    <message>
+        <source>Open the form again and check the answers.</source>
+        <translation>Riapri il modulo e controlla le risposte.</translation>
+    </message>
+    <message>
+        <source>Show the injuries</source>
+        <translation>Mostra gli infortuni</translation>
+    </message>
+    <message>
+        <source>Not now</source>
+        <translation>Non ora</translation>
+    </message>
+    <message>
+        <source>Create or open a profile first.</source>
+        <translation>Crea o apri prima un profilo.</translation>
+    </message>
+    <message>
+        <source>Wait a moment: the injuries are being read.</source>
+        <translation>Attendi un momento: gli infortuni si stanno leggendo.</translation>
+    </message>
+    <message>
+        <source>An illness is already open: close it first.</source>
+        <translation>C&apos;è già una malattia aperta: chiudila prima.</translation>
+    </message>
+    <message>
+        <source>Select an open injury in the Injuries section first.</source>
+        <translation>Seleziona prima un infortunio aperto nella sezione Infortuni.</translation>
+    </message>
+    <message>
+        <source>No warning sign is waiting for a doctor&apos;s visit.</source>
+        <translation>Nessun segnale d&apos;allarme aspetta una visita medica.</translation>
+    </message>
+    <message>
+        <source>Select an open injury or illness in the Injuries section first.</source>
+        <translation>Seleziona prima un infortunio o una malattia aperti nella sezione Infortuni.</translation>
+    </message>
+    <message>
+        <source>There is nothing to take back.</source>
+        <translation>Non c&apos;è nulla da annullare.</translation>
+    </message>
+    <message>
+        <source>There is nothing to do again.</source>
+        <translation>Non c&apos;è nulla da ripetere.</translation>
+    </message>
+</context>
+<context>
+    <name>InjuryUndo</name>
+    <message>
+        <source>Report injury</source>
+        <translation>Segnala infortunio</translation>
+    </message>
+    <message>
+        <source>Report illness</source>
+        <translation>Segnala malattia</translation>
+    </message>
+    <message>
+        <source>Save check-in</source>
+        <translation>Salva controllo</translation>
+    </message>
+    <message>
+        <source>Medical review done</source>
+        <translation>Visita medica fatta</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Chiudi</translation>
+    </message>
+</context>
+<context>
+    <name>InjuryWizard</name>
+    <message>
+        <source>Report an injury</source>
+        <translation>Segnala un infortunio</translation>
+    </message>
+    <message>
+        <source>Report injury</source>
+        <translation>Segnala infortunio</translation>
     </message>
 </context>
 <context>
@@ -2634,6 +3389,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Infortuni</translation>
     </message>
     <message>
+        <source>Map</source>
+        <translation>Mappa</translation>
+    </message>
+    <message>
         <source>Tests</source>
         <translation>Test</translation>
     </message>
@@ -2830,6 +3589,374 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Save chart</source>
         <translation>Salva grafico</translation>
+    </message>
+</context>
+<context>
+    <name>Map</name>
+    <message numerus="yes">
+        <source>Activities in this area: %n</source>
+        <translation>
+            <numerusform>Attività in quest&apos;area: %n</numerusform>
+            <numerusform>Attività in quest&apos;area: %n</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>{distance} km  |  {ascent} m ascent  |  {hours} h moving</source>
+        <translation>{distance} km  |  {ascent} m di dislivello  |  {hours} h in movimento</translation>
+    </message>
+    <message numerus="yes">
+        <source>Activities without a position (not on the map): %n</source>
+        <translation>
+            <numerusform>Attività senza posizione (non sono sulla mappa): %n</numerusform>
+            <numerusform>Attività senza posizione (non sono sulla mappa): %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Older tracks not drawn: %n. Zoom in to see more tracks.</source>
+        <translation>
+            <numerusform>Tracce più vecchie non disegnate: %n. Ingrandisci per vederne altre.</numerusform>
+            <numerusform>Tracce più vecchie non disegnate: %n. Ingrandisci per vederne altre.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Zoom in to see the tracks. Circles with a number group the starts of activities.</source>
+        <translation>Ingrandisci per vedere le tracce. I cerchi numerati raggruppano le partenze delle attività.</translation>
+    </message>
+    <message>
+        <source>No activity in this area. Move or zoom the map, or change the filters.</source>
+        <translation>Nessuna attività in quest&apos;area. Sposta o ingrandisci la mappa, oppure cambia i filtri.</translation>
+    </message>
+    <message>
+        <source>No activity matches the filters.</source>
+        <translation>Nessuna attività corrisponde ai filtri.</translation>
+    </message>
+    <message>
+        <source>The map background needs a Tracestrack key</source>
+        <translation>Lo sfondo della mappa richiede una chiave Tracestrack</translation>
+    </message>
+    <message>
+        <source>Without a key the map shows a plain background.</source>
+        <translation>Senza chiave la mappa ha uno sfondo semplice.</translation>
+    </message>
+    <message>
+        <source>Add your key in Settings &gt; Map. Tracks, filters and the list work without it.</source>
+        <translation>Aggiungi la chiave in Impostazioni &gt; Mappa. Tracce, filtri ed elenco funzionano anche senza.</translation>
+    </message>
+    <message>
+        <source>Tracestrack refused the key</source>
+        <translation>Tracestrack ha rifiutato la chiave</translation>
+    </message>
+    <message>
+        <source>The map shows a plain background.</source>
+        <translation>La mappa ha uno sfondo semplice.</translation>
+    </message>
+    <message>
+        <source>Check the key in Settings &gt; Map, or enter a new one.</source>
+        <translation>Controlla la chiave in Impostazioni &gt; Mappa, oppure inseriscine una nuova.</translation>
+    </message>
+    <message>
+        <source>The Tracestrack credit is used up</source>
+        <translation>Il credito di Tracestrack è esaurito</translation>
+    </message>
+    <message>
+        <source>The map shows a plain background; tiles already seen still appear.</source>
+        <translation>La mappa ha uno sfondo semplice; le tessere già viste restano visibili.</translation>
+    </message>
+    <message>
+        <source>Check your Tracestrack account, or wait for the credit to renew.</source>
+        <translation>Controlla il tuo account Tracestrack, oppure attendi il rinnovo del credito.</translation>
+    </message>
+    <message>
+        <source>The map background cannot be loaded</source>
+        <translation>Lo sfondo della mappa non si può caricare</translation>
+    </message>
+    <message>
+        <source>There is no network, or Tracestrack does not answer.</source>
+        <translation>Manca la rete, oppure Tracestrack non risponde.</translation>
+    </message>
+    <message>
+        <source>Check the connection. The map tries again by itself when you move it.</source>
+        <translation>Controlla la connessione. La mappa riprova da sola quando la sposti.</translation>
+    </message>
+    <message>
+        <source>The map background cannot be shown</source>
+        <translation>Lo sfondo della mappa non si può mostrare</translation>
+    </message>
+    <message>
+        <source>Tracestrack sent something the map cannot use.</source>
+        <translation>Tracestrack ha inviato qualcosa che la mappa non può usare.</translation>
+    </message>
+    <message>
+        <source>Try again later. Tracks, filters and the list are not affected.</source>
+        <translation>Riprova più tardi. Tracce, filtri ed elenco non sono toccati.</translation>
+    </message>
+    <message>
+        <source>{title}. {what} {remedy}</source>
+        <translation>{title}. {what} {remedy}</translation>
+    </message>
+    <message>
+        <source>By sport</source>
+        <translation>Per sport</translation>
+    </message>
+    <message>
+        <source>By heart-rate zone</source>
+        <translation>Per zona di frequenza cardiaca</translation>
+    </message>
+    <message>
+        <source>Colour the track</source>
+        <translation>Colora la traccia</translation>
+    </message>
+    <message>
+        <source>below {high} bpm</source>
+        <translation>sotto {high} bpm</translation>
+    </message>
+    <message>
+        <source>from {low} bpm</source>
+        <translation>da {low} bpm</translation>
+    </message>
+    <message>
+        <source>{low} to {high} bpm</source>
+        <translation>da {low} a {high} bpm</translation>
+    </message>
+    <message>
+        <source>No usable heart rate (grey, dashed)</source>
+        <translation>Nessuna frequenza cardiaca utilizzabile (grigio, tratteggiato)</translation>
+    </message>
+    <message>
+        <source>This activity has no heart-rate data, so the track is coloured by sport.</source>
+        <translation>Questa attività non ha dati di frequenza cardiaca, quindi la traccia è colorata per sport.</translation>
+    </message>
+    <message>
+        <source>No heart-rate limits are set for the day of this activity, so the track is coloured by sport.</source>
+        <translation>Per il giorno di questa attività non ci sono limiti di frequenza cardiaca, quindi la traccia è colorata per sport.</translation>
+    </message>
+    <message>
+        <source>This activity has no altitude data, so there is no elevation profile.</source>
+        <translation>Questa attività non ha dati di quota, quindi non c&apos;è il profilo altimetrico.</translation>
+    </message>
+    <message>
+        <source>This activity has no positions (indoor or strength), so it is not on the map.</source>
+        <translation>Questa attività non ha posizioni (indoor o forza), quindi non è sulla mappa.</translation>
+    </message>
+    <message>
+        <source>The profile of this activity is not available: {why}.</source>
+        <translation>Il profilo di questa attività non è disponibile: {why}.</translation>
+    </message>
+    <message>
+        <source>Select an activity on the map or in the list to see its elevation profile.</source>
+        <translation>Seleziona un&apos;attività sulla mappa o nell&apos;elenco per vedere il suo profilo altimetrico.</translation>
+    </message>
+    <message>
+        <source>Distance (km)</source>
+        <translation>Distanza (km)</translation>
+    </message>
+    <message>
+        <source>Altitude (m)</source>
+        <translation>Quota (m)</translation>
+    </message>
+    <message>
+        <source>Altitude</source>
+        <translation>Quota</translation>
+    </message>
+</context>
+<context>
+    <name>MapPage</name>
+    <message>
+        <source>Map of activities</source>
+        <translation>Mappa delle attività</translation>
+    </message>
+    <message>
+        <source>Elevation profile of the selected activity</source>
+        <translation>Profilo altimetrico dell&apos;attività selezionata</translation>
+    </message>
+    <message>
+        <source>Legend: sports</source>
+        <translation>Legenda: sport</translation>
+    </message>
+    <message>
+        <source>Legend: heart-rate zones</source>
+        <translation>Legenda: zone di frequenza cardiaca</translation>
+    </message>
+    <message>
+        <source>Map background notice</source>
+        <translation>Avviso sullo sfondo della mappa</translation>
+    </message>
+    <message>
+        <source>Open map settings...</source>
+        <translation>Apri le impostazioni della mappa...</translation>
+    </message>
+    <message>
+        <source>Activities in the visible area</source>
+        <translation>Attività nell&apos;area visibile</translation>
+    </message>
+    <message>
+        <source>Zoom in</source>
+        <translation>Ingrandisci</translation>
+    </message>
+    <message>
+        <source>Zoom out</source>
+        <translation>Riduci</translation>
+    </message>
+</context>
+<context>
+    <name>MapSettings</name>
+    <message>
+        <source>Key saved. Tracestrack accepted it.</source>
+        <translation>Chiave salvata. Tracestrack l&apos;ha accettata.</translation>
+    </message>
+    <message>
+        <source>Tracestrack refused this key, so it was not saved. Copy it again from your Tracestrack account and paste it here.</source>
+        <translation>Tracestrack ha rifiutato questa chiave, quindi non è stata salvata. Copiala di nuovo dal tuo account Tracestrack e incollala qui.</translation>
+    </message>
+    <message>
+        <source>This is not a Tracestrack key. A key has 8 to 128 letters, digits, hyphens or underscores. Copy it again from your Tracestrack account.</source>
+        <translation>Questa non è una chiave Tracestrack. Una chiave ha da 8 a 128 lettere, cifre, trattini o trattini bassi. Copiala di nuovo dal tuo account Tracestrack.</translation>
+    </message>
+    <message>
+        <source>Key saved, but Tracestrack could not be asked (no network, or the credit is used up). The map will use it when it can.</source>
+        <translation>Chiave salvata, ma non è stato possibile interpellare Tracestrack (manca la rete oppure il credito è esaurito). La mappa la userà appena possibile.</translation>
+    </message>
+    <message>
+        <source>The system key store is not available, so the key cannot be saved. On Linux, install and unlock a Secret Service provider (for example GNOME Keyring), then try again.</source>
+        <translation>L&apos;archivio delle chiavi del sistema non è disponibile, quindi la chiave non si può salvare. Su Linux installa e sblocca un provider Secret Service (per esempio GNOME Keyring), poi riprova.</translation>
+    </message>
+    <message>
+        <source>Key removed. The map shows a plain background.</source>
+        <translation>Chiave rimossa. La mappa ha uno sfondo semplice.</translation>
+    </message>
+</context>
+<context>
+    <name>MapSettingsDialog</name>
+    <message>
+        <source>Map settings</source>
+        <translation>Impostazioni della mappa</translation>
+    </message>
+    <message>
+        <source>Tracestrack key</source>
+        <translation>Chiave Tracestrack</translation>
+    </message>
+    <message>
+        <source>The map background comes from Tracestrack (Topo style, data from OpenStreetMap). It needs your own key, which stays in the system key store, outside your profile folder. Without a key the map has a plain background; tracks, filters and the list work anyway.</source>
+        <translation>Lo sfondo della mappa viene da Tracestrack (stile Topo, dati di OpenStreetMap). Serve una tua chiave, che resta nell&apos;archivio delle chiavi del sistema, fuori dalla cartella del profilo. Senza chiave la mappa ha uno sfondo semplice; tracce, filtri ed elenco funzionano comunque.</translation>
+    </message>
+    <message>
+        <source>Paste your key here</source>
+        <translation>Incolla qui la chiave</translation>
+    </message>
+    <message>
+        <source>Save key</source>
+        <translation>Salva la chiave</translation>
+    </message>
+    <message>
+        <source>Remove key</source>
+        <translation>Rimuovi la chiave</translation>
+    </message>
+    <message>
+        <source>Map cache</source>
+        <translation>Cache della mappa</translation>
+    </message>
+    <message>
+        <source>Cache size (GB)</source>
+        <translation>Dimensione della cache (GB)</translation>
+    </message>
+    <message>
+        <source>Clear map cache...</source>
+        <translation>Svuota la cache della mappa...</translation>
+    </message>
+    <message>
+        <source>A key is saved.</source>
+        <translation>Una chiave è salvata.</translation>
+    </message>
+    <message>
+        <source>No key is saved.</source>
+        <translation>Nessuna chiave salvata.</translation>
+    </message>
+    <message>
+        <source>There is no key to remove.</source>
+        <translation>Non c&apos;è nessuna chiave da rimuovere.</translation>
+    </message>
+    <message>
+        <source>{used} used of {total}. Only tiles you looked at are saved.</source>
+        <translation>{used} usati su {total}. Si salvano solo le tessere che hai guardato.</translation>
+    </message>
+    <message>
+        <source>Checking the key with Tracestrack...</source>
+        <translation>Verifica della chiave con Tracestrack...</translation>
+    </message>
+    <message>
+        <source>Enter a size in GB between {low} and {high}, for example 4.</source>
+        <translation>Inserisci una dimensione in GB tra {low} e {high}, per esempio 4.</translation>
+    </message>
+    <message>
+        <source>Clear map cache</source>
+        <translation>Svuota la cache della mappa</translation>
+    </message>
+    <message>
+        <source>Clear the map cache? This frees {size}.</source>
+        <translation>Svuotare la cache della mappa? Si liberano {size}.</translation>
+    </message>
+    <message>
+        <source>The map downloads the tiles again when you look at those areas, which uses your Tracestrack credit.</source>
+        <translation>La mappa scarica di nuovo le tessere quando guardi quelle aree, e questo usa il tuo credito Tracestrack.</translation>
+    </message>
+    <message>
+        <source>Clear cache</source>
+        <translation>Svuota la cache</translation>
+    </message>
+    <message>
+        <source>Keep cache</source>
+        <translation>Mantieni la cache</translation>
+    </message>
+    <message>
+        <source>The cache could not be emptied. Close the app and delete it by hand.</source>
+        <translation>Non è stato possibile svuotare la cache. Chiudi l&apos;app ed eliminala a mano.</translation>
+    </message>
+</context>
+<context>
+    <name>MapUi</name>
+    <message>
+        <source>Show map</source>
+        <translation>Mostra la mappa</translation>
+    </message>
+    <message>
+        <source>Show all activities</source>
+        <translation>Mostra tutte le attività</translation>
+    </message>
+    <message>
+        <source>Zoom in</source>
+        <translation>Ingrandisci</translation>
+    </message>
+    <message>
+        <source>Zoom out</source>
+        <translation>Riduci</translation>
+    </message>
+    <message>
+        <source>Filter activities</source>
+        <translation>Filtra le attività</translation>
+    </message>
+    <message>
+        <source>Clear filters</source>
+        <translation>Azzera i filtri</translation>
+    </message>
+    <message>
+        <source>Map settings...</source>
+        <translation>Impostazioni della mappa...</translation>
+    </message>
+    <message>
+        <source>Clear map cache...</source>
+        <translation>Svuota la cache della mappa...</translation>
+    </message>
+    <message>
+        <source>Map</source>
+        <translation>Mappa</translation>
+    </message>
+    <message>
+        <source>Open the Map section first.</source>
+        <translation>Apri prima la sezione Mappa.</translation>
+    </message>
+    <message>
+        <source>No filter is set.</source>
+        <translation>Nessun filtro impostato.</translation>
     </message>
 </context>
 <context>
@@ -4197,6 +5324,13 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
 </context>
 <context>
+    <name>SignsGroup</name>
+    <message>
+        <source>Do you have any of these?</source>
+        <translation>Hai qualcuno di questi segnali?</translation>
+    </message>
+</context>
+<context>
     <name>SportWeightsDialog</name>
     <message>
         <source>Sport weights</source>
@@ -4911,6 +6045,94 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Share of the time in zones (%)</source>
         <translation>Quota del tempo in zona (%)</translation>
+    </message>
+</context>
+<context>
+    <name>_NotesPage</name>
+    <message>
+        <source>Notes from your doctor</source>
+        <translation>Note del medico</translation>
+    </message>
+    <message>
+        <source>Optional. This text stays on this computer and the app never reads it.</source>
+        <translation>Facoltative. Questo testo resta su questo computer e l&apos;app non lo legge mai.</translation>
+    </message>
+    <message>
+        <source>Characters: {count} of {max}</source>
+        <translation>Caratteri: {count} su {max}</translation>
+    </message>
+    <message>
+        <source>The notes are too long, or have characters that cannot be saved.</source>
+        <translation>Le note sono troppo lunghe o contengono caratteri che non si possono salvare.</translation>
+    </message>
+</context>
+<context>
+    <name>_PainPage</name>
+    <message>
+        <source>Pain and what does not hurt</source>
+        <translation>Dolore e ciò che non fa male</translation>
+    </message>
+    <message>
+        <source>Pain at rest</source>
+        <translation>Dolore a riposo</translation>
+    </message>
+    <message>
+        <source>Pain when walking</source>
+        <translation>Dolore camminando</translation>
+    </message>
+    <message>
+        <source>Pain when running</source>
+        <translation>Dolore correndo</translation>
+    </message>
+    <message>
+        <source>I cannot run, or I have not tried</source>
+        <translation>Non riesco a correre, o non ho provato</translation>
+    </message>
+    <message>
+        <source>Pain the morning after</source>
+        <translation>Dolore la mattina dopo</translation>
+    </message>
+    <message>
+        <source>Which of these do you do without any pain?</source>
+        <translation>Quali di queste attività fai senza alcun dolore?</translation>
+    </message>
+</context>
+<context>
+    <name>_SignsPage</name>
+    <message>
+        <source>Warning signs</source>
+        <translation>Segnali d&apos;allarme</translation>
+    </message>
+    <message>
+        <source>Tick any that apply. They do not stop you from reporting the injury.</source>
+        <translation>Spunta quelli che valgono per te. Non ti impediscono di segnalare l&apos;infortunio.</translation>
+    </message>
+</context>
+<context>
+    <name>_WherePage</name>
+    <message>
+        <source>Where and since when</source>
+        <translation>Dove e da quando</translation>
+    </message>
+    <message>
+        <source>Say where it hurts, in your own words. This is not a diagnosis.</source>
+        <translation>Di&apos; dove fa male, con parole tue. Non è una diagnosi.</translation>
+    </message>
+    <message>
+        <source>Where does it hurt?</source>
+        <translation>Dove fa male?</translation>
+    </message>
+    <message>
+        <source>Which side?</source>
+        <translation>Quale lato?</translation>
+    </message>
+    <message>
+        <source>Since which day?</source>
+        <translation>Da che giorno?</translation>
+    </message>
+    <message>
+        <source>How did it begin?</source>
+        <translation>Come è iniziato?</translation>
     </message>
 </context>
 </TS>

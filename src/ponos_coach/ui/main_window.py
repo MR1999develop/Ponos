@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QStackedWidget,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -64,6 +65,10 @@ from ponos_coach.ui.garmin_ui import GarminUi
 from ponos_coach.ui.goals_page import GoalsPage
 from ponos_coach.ui.import_report import ImportReport
 from ponos_coach.ui.import_report_dialog import ImportReportDialog
+from ponos_coach.ui.injury_page import InjuriesPage
+from ponos_coach.ui.injury_ui import InjuryUi
+from ponos_coach.ui.map_page import MapPage
+from ponos_coach.ui.map_ui import MapServices, MapUi
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
 from ponos_coach.ui.new_profile_form import NewProfileForm
 from ponos_coach.ui.nutrition_ui import NutritionUi
@@ -112,11 +117,15 @@ _SECTION_OVERVIEW = 0
 _SECTION_ACTIVITIES = 1
 _SECTION_CALENDAR = 2
 _SECTION_GOALS = 3
+_SECTION_MAP = 4
+_SECTION_INJURIES = 5
 _AVAILABLE_SECTIONS = (
     _SECTION_OVERVIEW,
     _SECTION_ACTIVITIES,
     _SECTION_CALENDAR,
     _SECTION_GOALS,
+    _SECTION_MAP,
+    _SECTION_INJURIES,
 )
 _SHUTDOWN_POLL_MS = 20
 
@@ -153,7 +162,7 @@ def system_theme() -> Theme:
 class MainWindow(QMainWindow):
     """Main window. It decides nothing: it shows the controller's state."""
 
-    def __init__(  # noqa: PLR0913 - controller, use cases and settings of the Composition Root
+    def __init__(  # noqa: PLR0913 - collaborators given by the Composition Root
         self,
         controller: WorkspaceController,
         settings: QSettings,
@@ -161,12 +170,14 @@ class MainWindow(QMainWindow):
         parent: QWidget | None = None,
         *,
         backup: BackupUseCases,
+        map_services: MapServices,
         log_folder: Path | None = None,
         language: Language = Language.ENGLISH,
     ) -> None:
         super().__init__(parent)
         self._backup_use_cases = backup
         self._controller = controller
+        self._map_services = map_services
         self._language = language
         self._settings = settings
         self._defaults = defaults
@@ -314,7 +325,9 @@ class MainWindow(QMainWindow):
             self._back_action,
         ):
             calendar_menu.addAction(action)
+        self._map_ui.build_menu(self.menuBar())
         self._build_plan_menu()
+        self._build_injuries_menu()
         self._garmin_calendar.add_to_menu(self._garmin.build_menu(self.menuBar()))
         self._build_language_menu()
         help_menu = self.menuBar().addMenu(self.tr("Help"))
@@ -330,6 +343,16 @@ class MainWindow(QMainWindow):
             menu.addAction(actions[name])
         menu.addSeparator()
         menu.addAction(actions["training"])
+        menu.addSeparator()
+        menu.addAction(actions["undo"])
+        menu.addAction(actions["redo"])
+
+    def _build_injuries_menu(self) -> None:
+        """Menu "Injuries": report, check in, medical review, close, and undo and redo of them."""
+        menu = self.menuBar().addMenu(self.tr("Injuries"))
+        actions = self._injuries.actions
+        for name in ("report_injury", "report_illness", "check_in", "review", "close"):
+            menu.addAction(actions[name])
         menu.addSeparator()
         menu.addAction(actions["undo"])
         menu.addAction(actions["redo"])
@@ -362,7 +385,8 @@ class MainWindow(QMainWindow):
             (self.tr("Activities"), True),
             (self.tr("Calendar"), True),
             (self.tr("Goals"), True),
-            (self.tr("Injuries"), False),
+            (self.tr("Map"), True),
+            (self.tr("Injuries"), True),
             (self.tr("Tests"), False),
             (self.tr("Profile settings"), False),
         )
@@ -374,15 +398,28 @@ class MainWindow(QMainWindow):
         self._sidebar.setCurrentRow(_SECTION_OVERVIEW)
         self._sidebar.currentRowChanged.connect(self._on_section_changed)
 
-        self._engine = ChartEngine(self._choose_export_path, self)
+        self._engine = ChartEngine(self._choose_export_path, self, tiles=self._map_services.tiles)
         self._overview = OverviewPage(self._engine, self._controller.compute, self)
         self._overview.action_requested.connect(self._on_overview_action)
         self._overview.cancel_requested.connect(self._controller.cancel_current)
         self._activities = ActivitiesPage(self)
         self._activities.import_requested.connect(self.choose_import_files)
         self._activities.selection_changed.connect(self._update_actions)
+        self._map_ui = MapUi(
+            self,
+            self._controller,
+            self._settings,
+            self._map_services,
+            self._activities,
+            engine=self._engine,
+            theme=system_theme,
+            zone=lambda: self._zone,
+            show_error=self._show_error,
+            show_map=lambda: self._sidebar.setCurrentRow(_SECTION_MAP),
+        )
         self._calendar = CalendarPage(self._today(), self)
         self._goals = GoalsPage(self)
+        self._injuries_page = InjuriesPage(self)
         self._day_page = DayPage(self)
         self._pages = QStackedWidget(self)
         self._section_pages: dict[int, QWidget] = {
@@ -390,6 +427,8 @@ class MainWindow(QMainWindow):
             _SECTION_ACTIVITIES: self._activities,
             _SECTION_CALENDAR: self._calendar,
             _SECTION_GOALS: self._goals,
+            _SECTION_MAP: self._map_ui.page,
+            _SECTION_INJURIES: self._injuries_page,
         }
         for page in (*self._section_pages.values(), self._day_page):
             self._pages.addWidget(page)
@@ -402,7 +441,13 @@ class MainWindow(QMainWindow):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(0)
         row.addWidget(self._sidebar)
-        row.addWidget(self._pages, stretch=1)
+        column = QVBoxLayout()
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+        self._map_ui.filter_bar.hide()  # shown over the table and the map only
+        column.addWidget(self._map_ui.filter_bar)
+        column.addWidget(self._pages, stretch=1)
+        row.addLayout(column, stretch=1)
         self.setCentralWidget(central)
 
     def _build_dialogs(self) -> None:
@@ -446,7 +491,19 @@ class MainWindow(QMainWindow):
             show_error=self._show_error,
             show_goals_page=self._show_goals,
             edit_profile=self._edit_profile_from_day,
+            show_injuries_page=self._show_injuries,
         )
+        self._injuries = InjuryUi(
+            self,
+            self._controller,
+            self._calendar,
+            self._injuries_page,
+            today=self._today,
+            theme=system_theme,
+            show_error=self._show_error,
+            show_page=self._show_injuries,
+        )
+        self._injuries.status_text_changed.connect(self._on_injury_status_changed)
         self._plan.retest_proposal_changed.connect(self._on_plan_retest_changed)
         self._garmin_calendar = GarminCalendarUi(
             self,
@@ -493,6 +550,10 @@ class MainWindow(QMainWindow):
         self._plan_retest_label.setObjectName("planRetestLabel")
         self._plan_retest_label.setVisible(False)
         bar.addPermanentWidget(self._plan_retest_label)
+        self._injury_label = self._status_label()
+        self._injury_label.setObjectName("injuryStatusLabel")
+        self._injury_label.setVisible(False)
+        bar.addPermanentWidget(self._injury_label)
         self._warning_label = self._status_label()
         bar.addPermanentWidget(self._warning_label)
         self._import_label = self._status_label()
@@ -552,6 +613,16 @@ class MainWindow(QMainWindow):
         return self._overview
 
     @property
+    def map_ui(self) -> MapUi:
+        """The filters and the map."""
+        return self._map_ui
+
+    @property
+    def map_page(self) -> MapPage:
+        """The Map page."""
+        return self._map_ui.page
+
+    @property
     def activities_page(self) -> ActivitiesPage:
         """The Activities page."""
         return self._activities
@@ -570,6 +641,21 @@ class MainWindow(QMainWindow):
     def plan(self) -> PlanUi:
         """The plan flow (goals, training settings, plan state)."""
         return self._plan
+
+    @property
+    def injuries(self) -> InjuryUi:
+        """The injuries flow (questionnaire, check-in, notices, calendar marks)."""
+        return self._injuries
+
+    @property
+    def injuries_page(self) -> InjuriesPage:
+        """The Injuries page."""
+        return self._injuries_page
+
+    @property
+    def injury_status_text(self) -> str:
+        """What the status bar says about the injuries (empty while hidden)."""
+        return self._injury_label.text()
 
     @property
     def plan_retest_text(self) -> str:
@@ -805,6 +891,13 @@ class MainWindow(QMainWindow):
     def _show_goals(self) -> None:
         self._sidebar.setCurrentRow(_SECTION_GOALS)
 
+    def _show_injuries(self) -> None:
+        self._sidebar.setCurrentRow(_SECTION_INJURIES)
+
+    def _on_injury_status_changed(self, text: str) -> None:
+        self._injury_label.setText(text)
+        self._injury_label.setVisible(bool(text))
+
     def _edit_profile_from_day(self) -> None:
         """Open "Edit profile" from the day page's missing-data message."""
         if self._controller.can_edit_profile:
@@ -916,6 +1009,7 @@ class MainWindow(QMainWindow):
         self._nutrition.profile_changed()
         self._threshold.profile_changed()
         self._plan.profile_changed()
+        self._injuries.profile_changed()
         self.setWindowTitle(self.tr("{profile} - Ponos Coach").format(profile=view.name.value))
         self._warning_label.setText(self._warning_text(view.warnings))
         self._warning_label.setVisible(bool(view.warnings))
@@ -1139,6 +1233,9 @@ class MainWindow(QMainWindow):
         if page is not None:
             self._pages.setCurrentWidget(page)
             self._settings.setValue(_KEY_SECTION, row)
+            self._map_ui.section_changed(
+                on_map=row == _SECTION_MAP, on_activities=row == _SECTION_ACTIVITIES
+            )
 
     def _restore_section(self) -> None:
         """Reopen the section of last time; an invalid saved value means the first one."""
@@ -1171,7 +1268,9 @@ class MainWindow(QMainWindow):
     def _on_color_scheme_changed(self) -> None:
         self._overview.apply_state(self._controller.overview_state, system_theme(), self._zone)
         self._calendar.apply_theme(system_theme())
+        self._map_ui.apply_theme()
         self._plan.theme_changed()
+        self._injuries.theme_changed()
 
     def _unavailable_reason(self, allowed: bool) -> str:
         """The reason, for the tooltip, why a command on the profile cannot be given now."""
@@ -1322,6 +1421,7 @@ class MainWindow(QMainWindow):
         have an action in progress yet.
         """
         self._overview.start_engines()
+        self._map_ui.start_engines()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt
         """Two-step close, without blocking the UI thread.
@@ -1344,6 +1444,8 @@ class MainWindow(QMainWindow):
             self._nutrition.close_dialogs()
             self._threshold.close_dialogs()
             self._plan.close_dialogs()
+            self._injuries.close_dialogs()
+            self._map_ui.close_dialogs()
             self.release_web_engine()
             if not self._controller.has_stopped:
                 event.ignore()
@@ -1387,4 +1489,5 @@ class MainWindow(QMainWindow):
 
     def _finish_closing(self) -> None:
         self.statusBar().clearMessage()
+        self._map_ui.release()
         self._closed = True

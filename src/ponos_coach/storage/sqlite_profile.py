@@ -11,6 +11,7 @@ from pathlib import Path
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxIndex
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
+from ponos_coach.injury.ports import InjuryStore
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.nutrition.ports import (
     ActivityLevelStore,
@@ -49,6 +50,7 @@ from ponos_coach.storage.sqlite_goals import (
     SqliteGoalStore,
     SqliteSessionChoicesStore,
 )
+from ponos_coach.storage.sqlite_injury import SqliteInjuryStore
 from ponos_coach.storage.sqlite_nutrition import (
     SqliteActivityLevelStore,
     SqliteGoalPeriodStore,
@@ -124,6 +126,7 @@ class SqliteOpenProfile:
         self._session_choices = SqliteSessionChoicesStore(database)
         self._plans = SqlitePlanStore(database)
         self._workout_backups = SqliteWorkoutBackupStore(database)
+        self._injuries = SqliteInjuryStore(database)
         self._closed = False
 
     @property
@@ -220,6 +223,11 @@ class SqliteOpenProfile:
     def workout_backups(self) -> WorkoutBackupStore:
         """Local copy of the workouts deleted from the Garmin calendar."""
         return self._workout_backups
+
+    @property
+    def injuries(self) -> InjuryStore:
+        """Injuries and illnesses with their check-ins."""
+        return self._injuries
 
     def close(self) -> None:
         """Closes the connection (checkpoint included); repeating it has no effect.

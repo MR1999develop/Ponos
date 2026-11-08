@@ -36,6 +36,7 @@ from ponos_coach.ui.translations import Language
 from ponos_coach.ui.workspace import ImportSources
 from tests.fakes.garmin import FakeActivitySource, FakeGarminAccount
 from tests.fakes.notifier import RecordingNotifier
+from tests.fakes.tiles import FakeTileSource, InMemoryTileKeyStore
 from tests.fakes.tokens import InMemoryTokenStore
 from tests.fixtures.generators.import_files import fit_run, gpx_run
 from tests.fixtures.generators.zip_writer import garmin_download
@@ -79,6 +80,20 @@ def make_fakes(
         InMemoryTokenStore(),
         RecordingNotifier(),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class TileFakes:
+    """The fake key store and tile source with which `compose` builds the map."""
+
+    keys: InMemoryTileKeyStore
+    source: FakeTileSource
+
+
+def make_tiles() -> TileFakes:
+    """New fake tiles: no key saved, so the provider answers "no key"."""
+    keys = InMemoryTileKeyStore()
+    return TileFakes(keys, FakeTileSource(keys))
 
 
 _FAKES: weakref.WeakKeyDictionary[MainWindow, GarminFakes] = weakref.WeakKeyDictionary()
@@ -131,10 +146,12 @@ def compose(
     default_token_store: bool = False,
     mfa_wait_s: float = MFA_WAIT_S,
     language: Language = Language.ENGLISH,
+    tiles: TileFakes | None = None,
 ) -> MainWindow:
     """Window from the Composition Root, with configuration and profiles in `tmp_path`.
 
-    `gate` (if given) makes the overview decoding wait until it is set.
+    `gate` (if given) makes the overview decoding wait until it is set. The map uses fake tiles
+    (no network, no real key store, no cache on disk): `tiles` lets a test keep them.
     """
 
     def gated_decode(data: bytes, file_format: FileFormat) -> Activity:
@@ -144,6 +161,7 @@ def compose(
 
     picker = FakeFolderPicker(tmp_path / "profiles")
     garmin = fakes or make_fakes()
+    map_tiles = tiles or make_tiles()
     window = compose_main_window(
         parse_command_line([]),
         settings=settings,
@@ -162,6 +180,9 @@ def compose(
         data_dir=tmp_path / "data",
         mfa_wait_s=mfa_wait_s,
         language=language,
+        map_cache_dir=tmp_path / "map-cache",
+        tile_key_store=map_tiles.keys,
+        tile_source=map_tiles.source,
     )
     _PICKERS[window] = picker
     _FAKES[window] = garmin

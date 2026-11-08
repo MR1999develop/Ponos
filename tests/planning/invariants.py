@@ -153,7 +153,7 @@ def _check_taper_frequency(plan: Plan) -> list[str]:
     chosen = inputs.choices.for_sport(inputs.plan_sport())
     shortest = next((m for t, m in FILLER_MINUTES if t in chosen), None)
     if (
-        inputs.after_injury
+        inputs.ramp_reduced
         or inputs.fitness.ctl < 10
         or shortest is None
         or available.max_week_minutes < sum(available.minutes_on(w) for w in range(7))
@@ -183,7 +183,7 @@ def _check_hard_days(plan: Plan) -> list[str]:
 
 def _check_ramp(plan: Plan) -> list[str]:
     """CTL gained in a week by the training days alone (a race is not a training choice)."""
-    cap = MAX_RAMP_AFTER_INJURY if plan.inputs.after_injury else MAX_RAMP
+    cap = MAX_RAMP_AFTER_INJURY if plan.inputs.ramp_reduced else MAX_RAMP
     problems: list[str] = []
     ctl = plan.inputs.fitness.ctl
     for start, days in _weeks(plan).items():

@@ -664,7 +664,7 @@ def test_dropping_files_on_the_window_imports_them(
 # --- Sidebar, menus, time zone, command line ----------------------------------------------
 
 
-def test_sidebar_has_overview_activities_calendar_and_goals_enabled_and_the_rest_with_a_reason(
+def test_sidebar_has_the_available_sections_enabled_and_the_rest_with_a_reason(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = compose(tmp_path, settings)
@@ -673,10 +673,17 @@ def test_sidebar_has_overview_activities_calendar_and_goals_enabled_and_the_rest
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
     items = [sidebar.item(row) for row in range(sidebar.count())]
-    assert [item.text() for item in items][:4] == ["Overview", "Activities", "Calendar", "Goals"]
-    for item in items[:4]:
+    assert [item.text() for item in items][:6] == [
+        "Overview",
+        "Activities",
+        "Calendar",
+        "Goals",
+        "Map",
+        "Injuries",
+    ]
+    for item in items[:6]:
         assert item.flags() & item.flags().ItemIsEnabled
-    for item in items[4:]:
+    for item in items[6:]:
         assert not item.flags() & item.flags().ItemIsEnabled
         assert item.toolTip() == "Available in a later version"
 
@@ -741,6 +748,19 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Change goal...": QKeySequence("Ctrl+Shift+E").toString(),
         "Remove goal": QKeySequence("Ctrl+Delete").toString(),
         "Training settings...": QKeySequence("Ctrl+Shift+T").toString(),
+        "Report an injury...": QKeySequence("Ctrl+J").toString(),
+        "Report illness...": QKeySequence("Ctrl+Shift+J").toString(),
+        "Daily check-in...": QKeySequence("Ctrl+K").toString(),
+        "Medical review done": QKeySequence("Ctrl+Shift+V").toString(),
+        "Close": QKeySequence("Ctrl+Shift+Q").toString(),
+        "Show map": QKeySequence("Ctrl+M").toString(),
+        "Show all activities": QKeySequence("Ctrl+0").toString(),
+        "Zoom in": QKeySequence(QKeySequence.StandardKey.ZoomIn).toString(),
+        "Zoom out": QKeySequence(QKeySequence.StandardKey.ZoomOut).toString(),
+        "Filter activities": QKeySequence("Ctrl+F").toString(),
+        "Clear filters": QKeySequence("Ctrl+Shift+K").toString(),
+        "Map settings...": QKeySequence("Ctrl+Shift+M").toString(),
+        "Clear map cache...": QKeySequence("Ctrl+Shift+Backspace").toString(),
     }
 
 
@@ -750,7 +770,11 @@ def test_window_has_no_status_labels_filled_before_a_profile_is_open(
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
 
-    assert all(label.isHidden() for label in window.findChildren(QLabel) if "(" in label.text())
+    assert all(
+        not label.isVisibleTo(window)
+        for label in window.findChildren(QLabel)
+        if "(" in label.text()
+    )
 
 
 @pytest.mark.parametrize(

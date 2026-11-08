@@ -68,6 +68,7 @@ def _action_label(action: NoticeAction) -> str:
             "GoalsPage", "Training settings..."
         ),
         NoticeAction.EDIT_PROFILE: QCoreApplication.translate("GoalsPage", "Edit profile..."),
+        NoticeAction.OPEN_INJURIES: QCoreApplication.translate("GoalsPage", "Show the injuries"),
     }
     return texts.get(action, "")
 
