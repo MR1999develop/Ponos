@@ -3,11 +3,28 @@
 """Pure domain of the activities feature (no I/O, Qt, network or logging)."""
 
 from ponos_coach.activities.domain.activity import Activity
+from ponos_coach.activities.domain.area_query import (
+    AreaResult,
+    AreaTotals,
+    StartIndex,
+    activities_in_area,
+    track_touches_area,
+)
 from ponos_coach.activities.domain.distance_series import DistanceSeries
 from ponos_coach.activities.domain.duplicates import (
     DUPLICATE_DURATION_TOLERANCE_PERCENT,
     DUPLICATE_START_TOLERANCE,
     is_possible_duplicate,
+)
+from ponos_coach.activities.domain.filters import (
+    ActivityFilter,
+    FilterInputError,
+    FilterInputReason,
+    NumericRange,
+    filter_activities,
+    parse_amount,
+    parse_distance_km,
+    parse_duration,
 )
 from ponos_coach.activities.domain.garmin_id import MAX_GARMIN_ACTIVITY_ID, GarminActivityId
 from ponos_coach.activities.domain.geo import (
@@ -19,6 +36,7 @@ from ponos_coach.activities.domain.geo import (
     simplify_indices,
     simplify_track,
 )
+from ponos_coach.activities.domain.geo_box import GeoBox
 from ponos_coach.activities.domain.heart_rate_series import HeartRateSeries
 from ponos_coach.activities.domain.identity import (
     ActivityIdentity,
@@ -52,8 +70,11 @@ from ponos_coach.activities.domain.journal import (
 from ponos_coach.activities.domain.limits import (
     MAX_ACTIVITY_FILE_BYTES,
     MAX_ACTIVITY_INSTANT,
+    MAX_RAW_TRACK_POINTS,
     MAX_TRACK_POINTS,
+    MAX_TRACK_ZOOM,
     MIN_ACTIVITY_INSTANT,
+    TRACK_GAP_S,
     TRACK_TOLERANCE_M,
 )
 from ponos_coach.activities.domain.record import ActivityOrigin, ActivityRecord, ArchivedFile
@@ -84,6 +105,15 @@ from ponos_coach.activities.domain.timing import (
     is_plausible_span,
     truncate_to_millisecond,
 )
+from ponos_coach.activities.domain.track import (
+    ActivityTrack,
+    TrackSegment,
+    build_track,
+    decode_segments,
+    encode_segments,
+    simplify_for_zoom,
+    zoom_tolerance_m,
+)
 
 __all__ = [
     "ALLOWED_TRANSITIONS",
@@ -100,25 +130,35 @@ __all__ = [
     "MAX_GARMIN_ACTIVITY_ID",
     "MAX_PAGE_SIZE",
     "MAX_POLYLINE_CHARS",
+    "MAX_RAW_TRACK_POINTS",
     "MAX_TOKEN_CHARS",
     "MAX_TRACK_POINTS",
+    "MAX_TRACK_ZOOM",
     "MIN_ACTIVITY_INSTANT",
     "RETRYABLE_REASONS",
+    "TRACK_GAP_S",
     "TRACK_TOLERANCE_M",
     "WORKABLE_STATUSES",
     "Activity",
+    "ActivityFilter",
     "ActivityIdentity",
     "ActivityOrigin",
     "ActivityPage",
     "ActivityRecord",
     "ActivitySummary",
+    "ActivityTrack",
     "ArchivedFile",
+    "AreaResult",
+    "AreaTotals",
     "DistanceSeries",
     "FailureReason",
     "FileFormat",
     "FileId",
+    "FilterInputError",
+    "FilterInputReason",
     "FitIdentity",
     "GarminActivityId",
+    "GeoBox",
     "GeoPoint",
     "GpxIdentity",
     "HeartRateSeries",
@@ -126,17 +166,25 @@ __all__ = [
     "JournalEntry",
     "ListingCursor",
     "ListingKind",
+    "NumericRange",
     "RandomSource",
     "RemoteActivity",
     "SessionTokens",
     "Sport",
+    "StartIndex",
     "SyncPolicy",
     "SyncStatus",
+    "TrackSegment",
+    "activities_in_area",
     "advance_cursor",
+    "build_track",
     "can_transition",
     "decode_polyline",
+    "decode_segments",
     "encode_polyline",
+    "encode_segments",
     "estimate_remaining_s",
+    "filter_activities",
     "find_matching_import",
     "format_of",
     "identity_from_key",
@@ -149,12 +197,18 @@ __all__ = [
     "mark_failed",
     "mark_matched",
     "original_matches_listing",
+    "parse_amount",
+    "parse_distance_km",
+    "parse_duration",
     "pause_between_requests_s",
     "pending_entry",
     "rearm_exhausted",
     "retry_wait_s",
+    "simplify_for_zoom",
     "simplify_indices",
     "simplify_track",
     "sport_from_garmin_key",
+    "track_touches_area",
     "truncate_to_millisecond",
+    "zoom_tolerance_m",
 ]

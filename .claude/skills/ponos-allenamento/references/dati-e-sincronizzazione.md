@@ -278,6 +278,53 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
 - Le posizioni sono dati personali sensibili: solo nell'indice locale, mai nei
   log. Costanti in `activities/domain/limits.py`.
 
+### Traccia completa e quota (`ActivityTrack`, fase 5b)
+
+- La traccia completa **non** sta nell'indice né nella cache dei carichi: si
+  rilegge dal file archiviato con `decode_stored_track(data, formato)`
+  (`None` se il file non ha posizioni). Non tocca `Activity`, la serie di FC,
+  il carico né la sua impronta: sono due letture indipendenti dello stesso
+  file, con gli stessi limiti di byte, record e punti.
+- `ActivityTrack` = tuple di `TrackSegment` (almeno uno, al più 1.000.000
+  punti in tutto). Un tratto ha colonne `seconds`, `lat_deg`, `lon_deg` e
+  `altitude_m` (facoltativa, `NaN` dove manca); secondi **dal primo record
+  (FIT) o dal primo punto (GPX), come la serie di FC**, strettamente
+  crescenti; coordinate finite e dentro i limiti.
+- Buchi: un record FIT senza posizione valida, un `trkseg` diverso in un GPX
+  o una pausa di posizione oltre 30 s (`TRACK_GAP_S`, anche uguale a 30 s non
+  spezza) chiudono il tratto. Un punto con secondi non maggiori di tutti i
+  precedenti si scarta (vale il primo), come per la FC.
+- Quota FIT: `enhanced_altitude`, altrimenti `altitude` del record; GPX:
+  `ele`.
+- Semplificazione per zoom: `simplify_for_zoom(traccia, zoom)` usa la
+  tolleranza di un pixel (`zoom_tolerance_m`: `2πR·cos(lat)/(256·2^zoom)`,
+  zoom 0-22, latitudine limitata a 85°), tiene primo e ultimo punto di ogni
+  tratto, omette i tratti di un solo punto e resta entro `MAX_TRACK_POINTS`
+  (raddoppia la tolleranza fino a 24 volte, poi tiene i tratti più lunghi).
+  Codifica compatta: `encode_segments`/`decode_segments`, un polyline per
+  tratto separati da uno spazio (fuori dall'alfabeto ASCII 63-126).
+- Riquadro: `GeoBox(south, west, north, east)`; `west > east` attraversa
+  l'antimeridiano; 180 e -180 sono lo stesso meridiano; `GeoBox.of_points`
+  sceglie il lato corto; `GeoBox.from_view` accetta l'area di una mappa che
+  esce dal globo (360° o più = tutto il globo).
+
+### Filtri e ricerca per area (`activities/domain/filters.py`, `area_query.py`)
+
+- `ActivityFilter` (data da-a in giorni inclusi nel fuso passato, durata =
+  tempo in movimento, distanza, dislivello positivo, insieme di sport; vuoto =
+  tutto). `NumericRange.of(a, b)` scambia gli estremi invertiti. Un valore
+  ignoto (indoor senza distanza) non passa un filtro che lo limita.
+- Parser tolleranti (`parse_duration`, `parse_distance_km`, `parse_amount`):
+  virgola o punto, "90" = minuti, "1:30" = ore e minuti, "1:30:15"; vuoto =
+  nessun limite; negativi, non numerici e oltre 10^9 → `FilterInputError` con
+  un `FilterInputReason` (l'input non si ripete nel messaggio). Nessun
+  separatore delle migliaia (il punto è sempre decimale).
+- `StartIndex(attività)` tiene le partenze in colonne; `.in_area(GeoBox)`
+  dà `AreaResult` (attività nell'area in ordine d'ingresso, `AreaTotals`
+  con numero, km, dislivello, ore, e le attività senza posizione contate a
+  parte, indipendenti dall'area). `track_touches_area` decide su una
+  polyline per le attività vicine al bordo.
+
 ## 4. Identità dell'attività
 
 - Unione di due casi (`ActivityIdentity`): `FitIdentity(FileId)` con il

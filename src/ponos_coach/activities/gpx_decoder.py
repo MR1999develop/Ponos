@@ -39,12 +39,14 @@ from ponos_coach.activities.domain import (
     MAX_ACTIVITY_FILE_BYTES,
     Activity,
     ActivitySummary,
+    ActivityTrack,
     DistanceSeries,
     FileFormat,
     GeoPoint,
     GpxIdentity,
     HeartRateSeries,
     Sport,
+    build_track,
     encode_polyline,
     is_plausible_instant,
     simplify_indices,
@@ -633,3 +635,31 @@ def decode_gpx(data: bytes, limits: GpxLimits | None = None) -> Activity:
     if len(data) > limits.max_bytes:
         raise GpxDecodeError(FitDecodeReason.TOO_LARGE)
     return _build(data, _read_points(data, limits), limits)
+
+
+def decode_gpx_track(data: bytes, limits: GpxLimits | None = None) -> ActivityTrack | None:
+    """Full track (positions and altitude) of a GPX file, `None` if it has no points.
+
+    For a file already accepted by `decode_gpx`: each `trkseg` is a segment and a pause longer
+    than `TRACK_GAP_S` splits it again. Seconds start from the first point, like the HR series.
+
+    Raises:
+        GpxDecodeError: empty or too large file, invalid or hostile XML, incomplete or
+            backwards times, limits exceeded.
+    """
+    limits = limits or GpxLimits()
+    if not data:
+        raise GpxDecodeError(FitDecodeReason.EMPTY)
+    if len(data) > limits.max_bytes:
+        raise GpxDecodeError(FitDecodeReason.TOO_LARGE)
+    columns = _read_points(data, limits).columns
+    if not columns.lat:
+        return None
+    when_us = _microseconds(columns)
+    return build_track(
+        (when_us - when_us[0]) / 1e6,
+        np.frombuffer(columns.lat, dtype=np.float64),
+        np.frombuffer(columns.lon, dtype=np.float64),
+        np.frombuffer(columns.ele, dtype=np.float64),
+        np.frombuffer(columns.segment, dtype=np.intc).astype(np.intp),
+    )

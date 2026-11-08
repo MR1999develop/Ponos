@@ -28,6 +28,7 @@ from ponos_coach.activities.domain import (
     MAX_ACTIVITY_KCAL,
     Activity,
     ActivitySummary,
+    ActivityTrack,
     DistanceSeries,
     FileFormat,
     FileId,
@@ -35,6 +36,7 @@ from ponos_coach.activities.domain import (
     GeoPoint,
     HeartRateSeries,
     Sport,
+    build_track,
     encode_polyline,
     is_plausible_instant,
     is_plausible_span,
@@ -143,6 +145,8 @@ class _Parsed:
     speed_values: list[float] = field(default_factory=list)  # m/s
     pos_lat: list[int] = field(default_factory=list)  # semicircles, valid pairs only
     pos_lon: list[int] = field(default_factory=list)
+    pos_record: list[int] = field(default_factory=list)  # index of the record of each position
+    pos_altitude: list[float] = field(default_factory=list)  # metres, NaN if unknown
     messages: int = 0
     records: int = 0
 
@@ -227,6 +231,11 @@ def _take_record(frame: fitdecode.FitDataMessage, parsed: _Parsed, limits: FitLi
     if position is not None:
         parsed.pos_lat.append(position[0])
         parsed.pos_lon.append(position[1])
+        parsed.pos_record.append(len(parsed.record_times) - 1)
+        altitude = _as_float(_value(frame, "enhanced_altitude"))
+        if altitude is None:
+            altitude = _as_float(_value(frame, "altitude"))
+        parsed.pos_altitude.append(math.nan if altitude is None else altitude)
     heart_rate = _as_int(_value(frame, "heart_rate"))
     if heart_rate is not None:
         parsed.hr_times.append(when)
@@ -510,3 +519,43 @@ def decode_activity(data: bytes, limits: FitLimits | None = None) -> Activity:
     if len(data) > limits.max_bytes:
         raise FitDecodeError(FitDecodeReason.TOO_LARGE)
     return _build(_parse(data, limits), limits)
+
+
+def _track(parsed: _Parsed) -> ActivityTrack | None:
+    """Full track from the records with a position; a record without GPS splits the segment.
+
+    Seconds start from the first record, like the HR series.
+    """
+    if not parsed.pos_record:
+        return None
+    origin = parsed.record_times[0]
+    record = np.array(parsed.pos_record, dtype=np.intp)
+    seconds = np.array(
+        [(parsed.record_times[i] - origin).total_seconds() for i in parsed.pos_record]
+    )
+    run_id = np.concatenate(([0], np.cumsum(np.diff(record) > 1))).astype(np.intp)
+    return build_track(
+        seconds,
+        np.array(parsed.pos_lat, dtype=np.float64) * _DEGREES_PER_SEMICIRCLE,
+        np.array(parsed.pos_lon, dtype=np.float64) * _DEGREES_PER_SEMICIRCLE,
+        np.array(parsed.pos_altitude, dtype=np.float64),
+        run_id,
+    )
+
+
+def decode_track(data: bytes, limits: FitLimits | None = None) -> ActivityTrack | None:
+    """Full track (positions and altitude) of a FIT file, `None` if it has no positions.
+
+    Meant for a file already accepted by `decode_activity` and archived: same size, record and
+    CRC checks, but none of the identity or duration checks. Load and the HR series do not
+    depend on this function.
+
+    Raises:
+        FitDecodeError: empty, too large, corrupt file or too many records.
+    """
+    limits = limits or FitLimits()
+    if not data:
+        raise FitDecodeError(FitDecodeReason.EMPTY)
+    if len(data) > limits.max_bytes:
+        raise FitDecodeError(FitDecodeReason.TOO_LARGE)
+    return _track(_parse(data, limits))

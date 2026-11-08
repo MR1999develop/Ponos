@@ -32,7 +32,7 @@ completata e verificata.
 | Import da cartella | Oltre alla sincronizzazione, su richiesta: si sceglie una cartella e si aggiungono i file FIT e GPX che contiene |
 | Formati dei file | FIT e GPX, anche dentro archivi ZIP (come quelli scaricati dal sito Garmin), sia nell'import sia nella sincronizzazione con Garmin |
 | Dati di salute sul disco | In chiaro nella cartella del profilo, protetti dai permessi del sistema (solo l'utente); il README consiglia la cifratura del disco; nessuna password dell'app |
-| Ricerca e mappa (fase 5b) | Filtri delle attività per data, durata, distanza e dislivello; mappa in stile Komoot con le tracce delle attività svolte (linee per sport; a zoom basso partenze raggruppate in cerchi numerati), sfondo Tracestrack Topo (dati OpenStreetMap) con chiave personale nel portachiavi del sistema ed etichette nella lingua dell'app, sfondo neutro con avviso senza chiave, rete o credito, cache delle tile su disco con dimensione scelta nelle impostazioni (default 4 GB); accanto alla mappa profilo altimetrico collegato alla traccia, traccia colorabile per zone FC, elenco e totali delle attività nell'area. Subito dopo la fase 5 (decisioni del 2026-11-07; prima era la fase 9, dopo il rilascio) |
+| Ricerca e mappa (fase 5b) | Filtri delle attività per data, durata, distanza e dislivello; mappa in stile Komoot con le tracce delle attività svolte (linee per sport; a zoom basso partenze raggruppate in cerchi numerati), sfondo Tracestrack Topo (dati OpenStreetMap) con chiave personale nel portachiavi del sistema ed etichette nella lingua dell'app, sfondo neutro con avviso senza chiave, rete o credito, tile servite da un proxy in Python (la pagina non ha rete), cache su disco LRU con tetto esatto scelto nelle impostazioni (default 4 GB); accanto alla mappa profilo altimetrico collegato alla traccia, traccia colorabile per zone FC, elenco e totali delle attività nell'area. Subito dopo la fase 5 (decisioni del 2026-11-07; prima era la fase 9, dopo il rilascio) |
 | Sincronizzazione | All'avvio e con il pulsante Sincronizza; la prima scarica tutto lo storico, le successive solo le attività mancanti; riprende da dove era rimasta dopo una chiusura; notifica a fine sincronizzazione; niente area di notifica |
 | Calendario Garmin | In una fase successiva: invio degli allenamenti a scelta dell'utente ed eliminazione degli allenamenti futuri programmati |
 | Lingue | Inglese come lingua predefinita, italiano scelto dal menu Lingua e ricordato (decisione del 2026-11-06; prima seguiva la lingua del sistema) |
@@ -368,19 +368,22 @@ src/ponos_coach/
   dimensione reale ricontrollata, nomi delle voci mai usati come percorsi,
   ZIP annidati e voci cifrate rifiutati, CRC verificato (default del
   progetto).
-- Pagina della mappa (fase 5b): unica eccezione al blocco della rete, solo
-  HTTPS verso `tile.tracestrack.com` (tile Tracestrack Topo), con un
-  User-Agent generico dell'app e l'attribuzione richiesta dalle condizioni
-  (dati © OpenStreetMap contributors e le altre fonti, mappe © Tracestrack).
-  La chiave personale sta nel portachiavi del sistema (DPAPI su Windows,
-  Secret Service su Linux), mai nella cartella del profilo, nella pagina o
-  nei log: la aggiunge l'intercettore delle richieste di Qt. Cache delle
-  tile su disco nella cartella dati locale dell'app (privata), con tetto
-  scelto nelle impostazioni (default 4 GB), scadenza dalle intestazioni
-  HTTP e comando per svuotarla; solo le tile guardate, mai scaricamenti in
-  massa. `QWebChannel` con pochi messaggi dalla pagina (area visibile,
-  attività cliccata, punto del profilo), validati. Tracestrack vede le aree
-  consultate: rischio dichiarato nel threat model e accettato dall'utente.
+- Pagina della mappa (fase 5b): **nessuna rete**, come la pagina dei
+  grafici (intercettore che blocca tutto, CSP senza host esterni). Le tile le
+  chiede a un proxy di tile in Python: la pagina carica
+  `ponos://tiles/{z}/{x}/{y}`, il guscio valida z/x/y (interi nei limiti),
+  scarica da `https://tile.tracestrack.com` (Tracestrack Topo) con timeout,
+  User-Agent generico dell'app e l'attribuzione richiesta (dati ©
+  OpenStreetMap contributors e le altre fonti, mappe © Tracestrack). La
+  chiave personale sta nel portachiavi del sistema (DPAPI su Windows, Secret
+  Service su Linux) e solo il proxy la usa: mai nella cartella del profilo,
+  nella pagina, nei log o nella cache. Cache su disco propria, con tetto
+  esatto e rimozione delle tile meno usate di recente (LRU), default 4 GB,
+  nella cartella cache del sistema (non nel profilo); comando per svuotarla;
+  solo le tile guardate, mai scaricamenti in massa. `QWebChannel` con pochi
+  messaggi dalla pagina (area visibile, attività cliccata, punto del
+  profilo), validati. Tracestrack vede le aree consultate: rischio dichiarato
+  nel threat model e accettato dall'utente.
 
 ## 5. Fasi
 
@@ -576,9 +579,12 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
 - [ ] ADR della mappa, dopo un prototipo misurato con 50.000 attività e le
       loro tracce: libreria (MapLibre GL JS, che disegna molte linee sulla
       GPU e raggruppa le partenze, oppure Leaflet con canvas e
-      raggruppamento dei marcatori), sfondo raster Tracestrack Topo nella
+      raggruppamento dei marcatori; scelta: Leaflet con
+      leaflet.markercluster, nessuna GPU richiesta), sfondo raster Tracestrack Topo nella
       lingua dell'app (`topo_it`/`topo_en`, nomi locali dove manca), libreria
-      inclusa nel pacchetto e servita dallo schema `ponos://`. Aggiornati
+      inclusa nel pacchetto e servita dallo schema `ponos://`, tile servite
+      dal proxy in Python (`ponos://tiles/...`), pagina senza rete (bozza in
+      `docs/adr/010-mappa.md`). Aggiornati
       threat model, specifica e registro delle dipendenze (licenze della
       libreria e condizioni Tracestrack).
 - [ ] Dati: traccia semplificata (Douglas-Peucker con tolleranza per zoom) e
@@ -606,8 +612,9 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
 - [ ] Dettaglio dell'attività selezionata: profilo altimetrico (quota sulla
       distanza) collegato alla traccia nei due sensi; traccia colorabile per
       zone FC con la legenda delle zone del giorno dell'attività.
-- [ ] Pagina della mappa isolata come quella dei grafici, con la sola
-      eccezione della sezione 4.9.
+- [ ] Pagina della mappa isolata come quella dei grafici e senza alcuna rete
+      (sezione 4.9); proxy delle tile in Python con timeout, chiave dal
+      portachiavi e cache su disco LRU con tetto esatto.
 - [ ] Test T-FILT e T-MAP (sezione 7.11), T-SEC-14 e T-SEC-15; collaudo.
 
 ### Fase 6 — Infortuni e recupero
@@ -876,8 +883,10 @@ model e gli esiti del collaudo possono citarlo.
 - **T-SEC-14** Canale della mappa (fase 5b): messaggi malformati (coordinate
   non numeriche o fuori intervallo, payload enormi, id inesistenti)
   rifiutati senza effetti; la pagina non può chiamare altro.
-- **T-SEC-15** Rete della mappa (fase 5b): richieste verso host diversi da
-  `tile.tracestrack.com`, o in HTTP, bloccate; nessuna posizione GPS nei log
+- **T-SEC-15** Rete della mappa (fase 5b): la pagina non fa nessuna richiesta
+  di rete (tutto tranne `ponos://` bloccato); il proxy chiama solo
+  `https://tile.tracestrack.com` (altri host, HTTP e z/x/y fuori limite
+  rifiutati, timeout rispettati); nessuna posizione GPS nei log
   né in file fuori dalle cartelle previste; la chiave Tracestrack mai nella
   pagina, nei log, nella cartella del profilo o nella cache.
 
