@@ -24,7 +24,10 @@ from ponos_coach.planning.domain import (
     LongDayUnavailable,
     MissingIntenseSessions,
     MissingLongSession,
+    NoSessionPossible,
     Plan,
+    PlanAdapted,
+    PlanHalted,
     PlanRefusal,
     PlanWarning,
     RefusalReason,
@@ -102,6 +105,7 @@ class NoticeAction(Enum):
     OPEN_GOALS = "open_goals"
     TRAINING_SETTINGS = "training_settings"
     EDIT_PROFILE = "edit_profile"
+    OPEN_INJURIES = "open_injuries"
 
 
 type NoticeSubject = PlanRefusal | PlanWarning | NotBuiltReason
@@ -126,7 +130,10 @@ _REFUSAL_ACTIONS = {
 
 
 def _warning_action(warning: PlanWarning) -> NoticeAction:
-    """Choices and the long day are put right in the training settings; the goals in the goals."""
+    """Choices and the long day are put right in the training settings; the goals in the goals; what
+    comes from an injury or an illness is looked at in the Injuries section."""
+    if isinstance(warning, PlanHalted | PlanAdapted | NoSessionPossible):
+        return NoticeAction.OPEN_INJURIES
     if isinstance(warning, MissingLongSession | MissingIntenseSessions | LongDayUnavailable):
         return NoticeAction.TRAINING_SETTINGS
     if isinstance(

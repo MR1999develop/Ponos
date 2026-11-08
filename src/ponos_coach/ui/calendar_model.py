@@ -30,6 +30,7 @@ from ponos_coach.nutrition.domain import (
 from ponos_coach.nutrition.domain.settings import MIN_VALID_DATE
 from ponos_coach.planning.domain import DayAdherence, Plan, PlanDay, TargetAssessment
 from ponos_coach.planning.ports import FrozenDay
+from ponos_coach.ui.injury_presentation import ProblemSpan
 
 DAYS_PER_WEEK = 7
 MONTHS_AHEAD = 12  # the plan reaches 52 weeks: the calendar opens a year ahead of today
@@ -102,7 +103,8 @@ class CalendarDay:
 
     `sports` are the distinct sports of the day's activities in order of start; `goal` is the kind
     of the period covering the day (`None` when no period covers it). `plan` is the day as
-    planned, `adherence` how it went (past days) and `goals` the goals of the day. A day outside
+    planned, `adherence` how it went (past days), `goals` the goals of the day and `problems` the
+    injuries and illnesses present on it (an open one reaches today). A day outside
     the shown month has no data and cannot be selected; a day after today can be selected and has
     a day page only if the plan covers it.
     """
@@ -118,6 +120,7 @@ class CalendarDay:
     plan: PlanDay | None = None
     adherence: DayAdherence | None = None
     goals: tuple[DayGoal, ...] = ()
+    problems: tuple[ProblemSpan, ...] = ()
 
     @property
     def can_open(self) -> bool:
@@ -200,6 +203,7 @@ def build_month(
     activities: Sequence[ProfileActivity],
     periods: Sequence[GoalPeriod],
     layer: PlanLayer | None = None,
+    problems: Sequence[ProblemSpan] = (),
 ) -> MonthView:
     """The month that starts on `first_day` (which must be a first of the month)."""
     if first_day.day != 1:
@@ -226,6 +230,7 @@ def build_month(
                 layer.planned.get(day) if in_month else None,
                 layer.adherence.get(day) if in_month else None,
                 layer.goals.get(day, ()) if in_month else (),
+                tuple(span for span in problems if span.covers(day, today)) if in_month else (),
             )
         )
     weeks = tuple(tuple(cells[i : i + DAYS_PER_WEEK]) for i in range(0, len(cells), DAYS_PER_WEEK))

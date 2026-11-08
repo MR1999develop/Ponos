@@ -135,6 +135,7 @@ def test_the_garmin_menu_sits_after_the_plan_menu_with_every_command(
         "Calendar",
         "Map",
         "Plan",
+        "Injuries",
         "Garmin",
         "Language",
         "Help",

@@ -138,6 +138,7 @@ def test_the_language_menu_offers_english_and_italian_with_english_checked_by_de
         "Calendar",
         "Map",
         "Plan",
+        "Injuries",
         "Garmin",
         "Language",
         "Help",
