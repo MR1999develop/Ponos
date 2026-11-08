@@ -149,6 +149,6 @@ def test_an_illness_title_and_the_status_bar_have_their_placeholders_filled(
 
     assert problem_title(illness) == "Malattia: febbre, malessere generale o dolori muscolari"
     assert status_bar_text(StatusFacts(see_doctor=True, checkins_due=2)) == (
-        "Infortuni: Vai da un medico, Controllo da fare oggi (2)"
+        "Infortuni: Vai da un medico, Controlli da fare oggi: 2"
     )
     assert status_bar_text(StatusFacts()) == ""

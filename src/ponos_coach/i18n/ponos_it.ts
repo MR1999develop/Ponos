@@ -3062,7 +3062,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message numerus="yes">
         <source>Check-in due today (%n)</source>
         <translation>
-            <numerusform>Controllo da fare oggi: %n</numerusform>
+            <numerusform>Controlli da fare oggi: %n</numerusform>
             <numerusform>Controlli da fare oggi: %n</numerusform>
         </translation>
     </message>
@@ -5001,7 +5001,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message numerus="yes">
         <source>Two A races are close together (days between them: %n): between them the plan only unloads, recovers and maintains.</source>
         <translation>
-            <numerusform>Due gare A sono vicine (giorno tra le due: %n): tra l&apos;una e l&apos;altra il piano si limita a scaricare, recuperare e mantenere.</numerusform>
+            <numerusform>Due gare A sono vicine (giorni tra le due: %n): tra l&apos;una e l&apos;altra il piano si limita a scaricare, recuperare e mantenere.</numerusform>
             <numerusform>Due gare A sono vicine (giorni tra le due: %n): tra l&apos;una e l&apos;altra il piano si limita a scaricare, recuperare e mantenere.</numerusform>
         </translation>
     </message>

@@ -325,16 +325,17 @@ class TestDestinationOutsideTheProfile:
         try:
             link.symlink_to(target, target_is_directory=True)
         except (OSError, NotImplementedError):
-            if sys.platform != "win32":
+            if sys.platform == "win32":
+                made = subprocess.run(  # noqa: S603 - fixed program and paths made by the test
+                    ["cmd", "/c", "mklink", "/J", str(link), str(target)],  # noqa: S607
+                    capture_output=True,
+                    check=False,
+                    timeout=60,
+                )
+                if made.returncode != 0:
+                    pytest.skip("no link or junction available")
+            else:
                 pytest.skip("symbolic links are not available")
-            made = subprocess.run(  # noqa: S603 - fixed program and paths made by the test
-                ["cmd", "/c", "mklink", "/J", str(link), str(target)],  # noqa: S607
-                capture_output=True,
-                check=False,
-                timeout=60,
-            )
-            if made.returncode != 0:
-                pytest.skip("no link or junction available")
 
     def test_a_destination_reached_through_a_link_into_the_profile_is_refused(
         self, tmp_path: Path
