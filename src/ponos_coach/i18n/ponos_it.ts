@@ -148,14 +148,14 @@
     <message numerus="yes">
         <source>Heart-rate samples outside your limits: %n. They were not used and are marked in the chart.</source>
         <translation>
-            <numerusform>Campioni di frequenza cardiaca fuori dai limiti impostati: %n. Non sono stati usati e sono segnati nel grafico.</numerusform>
+            <numerusform>Campione di frequenza cardiaca fuori dai limiti impostati: %n. Non è stato usato ed è segnato nel grafico.</numerusform>
             <numerusform>Campioni di frequenza cardiaca fuori dai limiti impostati: %n. Non sono stati usati e sono segnati nel grafico.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>Heart-rate samples skipped when the file was read because their time was repeated or earlier: %n.</source>
         <translation>
-            <numerusform>Campioni di frequenza cardiaca saltati nella lettura del file perché con un tempo ripetuto o precedente: %n.</numerusform>
+            <numerusform>Campione di frequenza cardiaca saltato nella lettura del file perché con un tempo ripetuto o precedente: %n.</numerusform>
             <numerusform>Campioni di frequenza cardiaca saltati nella lettura del file perché con un tempo ripetuto o precedente: %n.</numerusform>
         </translation>
     </message>
@@ -379,8 +379,8 @@
         <translation>La copia «{file}» è stata salvata.</translation>
     </message>
     <message>
-        <source>It holds your health data and no Garmin password or token: keep it somewhere private.</source>
-        <translation>Contiene i tuoi dati di salute e nessuna password o token di Garmin: conservala in un posto privato.</translation>
+        <source>The file is not encrypted and holds your health data and GPS positions (no Garmin password or token): keep it somewhere private, not in a folder synchronized with the cloud.</source>
+        <translation>Il file non è cifrato e contiene i tuoi dati di salute e le posizioni GPS (non la password né il token di Garmin): conservalo in un luogo riservato, non in una cartella sincronizzata con il cloud.</translation>
     </message>
     <message>
         <source>Profile restored</source>
@@ -848,7 +848,7 @@
     <message numerus="yes">
         <source>Activity files that could not be read: %n. The guidance may be less exact.</source>
         <translation>
-            <numerusform>File di attività non leggibili: %n. L&apos;indicazione potrebbe essere meno precisa.</numerusform>
+            <numerusform>File di attività non leggibile: %n. L&apos;indicazione potrebbe essere meno precisa.</numerusform>
             <numerusform>File di attività non leggibili: %n. L&apos;indicazione potrebbe essere meno precisa.</numerusform>
         </translation>
     </message>
@@ -1744,6 +1744,10 @@
         <translation>il suo giorno è passato, quindi non è stato ricreato</translation>
     </message>
     <message>
+        <source>the plan no longer has this session, so it was not created again</source>
+        <translation>il piano non ha più questa seduta, quindi non è stato creato di nuovo</translation>
+    </message>
+    <message>
         <source>{day}: {name} - {reason}</source>
         <translation>{day}: {name} - {reason}</translation>
     </message>
@@ -1867,7 +1871,7 @@
     <message numerus="yes">
         <source>Sessions left for a later send: %n (at most {limit} are sent at a time)</source>
         <translation>
-            <numerusform>Sedute rimandate a un invio successivo: %n (se ne inviano al massimo {limit} alla volta)</numerusform>
+            <numerusform>Seduta rimandata a un invio successivo: %n (se ne inviano al massimo {limit} alla volta)</numerusform>
             <numerusform>Sedute rimandate a un invio successivo: %n (se ne inviano al massimo {limit} alla volta)</numerusform>
         </translation>
     </message>
@@ -1971,8 +1975,8 @@
     <message numerus="yes">
         <source>Recreate deleted (%n)</source>
         <translation>
-            <numerusform>Ricrea eliminato (%n)</numerusform>
-            <numerusform>Ricrea eliminati (%n)</numerusform>
+            <numerusform>Ricrea %n eliminato</numerusform>
+            <numerusform>Ricrea %n eliminati</numerusform>
         </translation>
     </message>
     <message>
@@ -2042,14 +2046,29 @@
         <translation>La seduta del giorno selezionato</translation>
     </message>
     <message>
+        <source>The plan is stopped, so it has no sessions to do.</source>
+        <translation>Il piano è fermo, quindi non ha sedute da svolgere.</translation>
+    </message>
+    <message>
+        <source>The plan has changed since these workouts were sent.</source>
+        <translation>Il piano è cambiato dopo l&apos;invio di questi allenamenti.</translation>
+    </message>
+    <message numerus="yes">
+        <source>Delete the workouts of days the plan no longer has from the Garmin calendar? (%n)</source>
+        <translation>
+            <numerusform>Eliminare dal calendario Garmin %n allenamento di un giorno che il piano non ha più?</numerusform>
+            <numerusform>Eliminare dal calendario Garmin %n allenamenti di giorni che il piano non ha più?</numerusform>
+        </translation>
+    </message>
+    <message>
         <source>Delete workouts</source>
         <translation>Elimina allenamenti</translation>
     </message>
     <message numerus="yes">
         <source>Delete the selected workouts from the Garmin calendar? (%n)</source>
         <translation>
-            <numerusform>Eliminare l&apos;allenamento selezionato dal calendario Garmin? (%n)</numerusform>
-            <numerusform>Eliminare gli allenamenti selezionati dal calendario Garmin? (%n)</numerusform>
+            <numerusform>Eliminare dal calendario Garmin %n allenamento selezionato?</numerusform>
+            <numerusform>Eliminare dal calendario Garmin %n allenamenti selezionati?</numerusform>
         </translation>
     </message>
     <message>
@@ -2578,14 +2597,14 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message numerus="yes">
         <source>Archived files repaired from the imported original: %n</source>
         <translation>
-            <numerusform>File archiviati riparati dall&apos;originale importato: %n</numerusform>
+            <numerusform>File archiviato riparato dall&apos;originale importato: %n</numerusform>
             <numerusform>File archiviati riparati dall&apos;originale importato: %n</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>Files ignored (not an activity): %n</source>
         <translation>
-            <numerusform>File ignorati (non sono attività): %n</numerusform>
+            <numerusform>File ignorato (non è un&apos;attività): %n</numerusform>
             <numerusform>File ignorati (non sono attività): %n</numerusform>
         </translation>
     </message>
@@ -2593,7 +2612,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>Files with an error: %n</source>
         <translation>
             <numerusform>File con un errore: %n</numerusform>
-            <numerusform>File con un errore: %n</numerusform>
+            <numerusform>File con errori: %n</numerusform>
         </translation>
     </message>
     <message>
@@ -3042,7 +3061,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message numerus="yes">
         <source>Check-in due today (%n)</source>
-        <translation><numerusform>Controllo da fare oggi (%n)</numerusform><numerusform>Controllo da fare oggi (%n)</numerusform></translation>
+        <translation>
+            <numerusform>Controllo da fare oggi: %n</numerusform>
+            <numerusform>Controlli da fare oggi: %n</numerusform>
+        </translation>
     </message>
     <message>
         <source>Injuries: {facts}</source>
@@ -3076,8 +3098,8 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Visita medica fatta</translation>
     </message>
     <message>
-        <source>Close</source>
-        <translation>Chiudi</translation>
+        <source>Close injury or illness...</source>
+        <translation>Chiudi un infortunio o una malattia...</translation>
     </message>
     <message>
         <source>Undo</source>
@@ -3465,7 +3487,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message numerus="yes">
         <source>Days in the chart: %n</source>
         <translation>
-            <numerusform>Giorni nel grafico: %n</numerusform>
+            <numerusform>Giorno nel grafico: %n</numerusform>
             <numerusform>Giorni nel grafico: %n</numerusform>
         </translation>
     </message>
@@ -3614,7 +3636,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message numerus="yes">
         <source>Older tracks not drawn: %n. Zoom in to see more tracks.</source>
         <translation>
-            <numerusform>Tracce più vecchie non disegnate: %n. Ingrandisci per vederne altre.</numerusform>
+            <numerusform>Traccia più vecchia non disegnata: %n. Ingrandisci per vederne un&apos;altra.</numerusform>
             <numerusform>Tracce più vecchie non disegnate: %n. Ingrandisci per vederne altre.</numerusform>
         </translation>
     </message>
@@ -4979,7 +5001,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message numerus="yes">
         <source>Two A races are close together (days between them: %n): between them the plan only unloads, recovers and maintains.</source>
         <translation>
-            <numerusform>Due gare A sono vicine (giorni tra le due: %n): tra l&apos;una e l&apos;altra il piano si limita a scaricare, recuperare e mantenere.</numerusform>
+            <numerusform>Due gare A sono vicine (giorno tra le due: %n): tra l&apos;una e l&apos;altra il piano si limita a scaricare, recuperare e mantenere.</numerusform>
             <numerusform>Due gare A sono vicine (giorni tra le due: %n): tra l&apos;una e l&apos;altra il piano si limita a scaricare, recuperare e mantenere.</numerusform>
         </translation>
     </message>
@@ -5006,7 +5028,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message numerus="yes">
         <source>Your recent load is high. Recovery days at the start of the plan: %n.</source>
         <translation>
-            <numerusform>Il carico recente è alto. Giorni di recupero all&apos;inizio del piano: %n.</numerusform>
+            <numerusform>Il carico recente è alto. Giorno di recupero all&apos;inizio del piano: %n.</numerusform>
             <numerusform>Il carico recente è alto. Giorni di recupero all&apos;inizio del piano: %n.</numerusform>
         </translation>
     </message>
@@ -5305,6 +5327,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Le sedute sono inviate come allenamenti strutturati con obiettivi di frequenza cardiaca. Gli allenamenti già presenti nel calendario restano come sono.</translation>
     </message>
     <message>
+        <source>Note: the workout format has not been checked yet with a real Garmin account, so Garmin may refuse or change what is sent.</source>
+        <translation>Nota: il formato degli allenamenti non è ancora stato verificato con un account Garmin reale, quindi Garmin potrebbe rifiutare o modificare ciò che viene inviato.</translation>
+    </message>
+    <message>
         <source>Send</source>
         <translation>Invia</translation>
     </message>
@@ -5318,7 +5344,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message numerus="yes">
         <source>At most {limit} workouts are sent at a time. Sessions waiting for another send: %n.</source>
         <translation>
-            <numerusform>Si inviano al massimo {limit} allenamenti alla volta. Sedute in attesa di un altro invio: %n.</numerusform>
+            <numerusform>Si inviano al massimo {limit} allenamenti alla volta. Seduta in attesa di un altro invio: %n.</numerusform>
             <numerusform>Si inviano al massimo {limit} allenamenti alla volta. Sedute in attesa di un altro invio: %n.</numerusform>
         </translation>
     </message>
@@ -5472,21 +5498,21 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message numerus="yes">
         <source>New activities synchronised: %n</source>
         <translation>
-            <numerusform>Nuove attività sincronizzate: %n</numerusform>
+            <numerusform>Nuova attività sincronizzata: %n</numerusform>
             <numerusform>Nuove attività sincronizzate: %n</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>New activities synchronised: %n, matched with imported files: {matched}</source>
         <translation>
-            <numerusform>Nuove attività sincronizzate: %n, abbinate ai file importati: {matched}</numerusform>
+            <numerusform>Nuova attività sincronizzata: %n, abbinata ai file importati: {matched}</numerusform>
             <numerusform>Nuove attività sincronizzate: %n, abbinate ai file importati: {matched}</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>New activities downloaded: %n</source>
         <translation>
-            <numerusform>Nuove attività scaricate: %n</numerusform>
+            <numerusform>Nuova attività scaricata: %n</numerusform>
             <numerusform>Nuove attività scaricate: %n</numerusform>
         </translation>
     </message>
