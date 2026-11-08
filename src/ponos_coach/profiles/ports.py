@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Protocol
 
@@ -25,6 +26,7 @@ from ponos_coach.nutrition.ports import (
     MealTimesStore,
 )
 from ponos_coach.planning.ports import PlanStore
+from ponos_coach.planning.workout_calendar import WorkoutBackupStore
 from ponos_coach.profiles.domain import (
     FixedProfileData,
     FolderInspection,
@@ -35,6 +37,7 @@ from ponos_coach.profiles.domain import (
     RegistryEntry,
     WeightEntry,
 )
+from ponos_coach.profiles.domain.backup import BackupSummary
 
 # --- Profile list --------------------------------------------------------------------
 
@@ -325,7 +328,7 @@ class OpenProfile(Protocol):
     The transactions of `activities.transaction()` also cover `track_boxes`, `sync_journal`,
     `physiology`, `weights`, `fixed_data`, `sport_weights`, `load_cache`, `activity_levels`,
     `lean_masses`, `meal_times`, `goal_periods`, `threshold_tests`, `goals`, `availability`,
-    `session_choices` and `plans`.
+    `session_choices`, `plans` and `workout_backups`.
     It must be closed with `close()`; after closing the stores are no longer used.
     """
 
@@ -419,6 +422,11 @@ class OpenProfile(Protocol):
         """The current plan and the days of the past as they were planned."""
         ...
 
+    @property
+    def workout_backups(self) -> WorkoutBackupStore:
+        """The local copy of the workouts deleted from the Garmin calendar."""
+        ...
+
     def close(self) -> None:
         """Closes the connection (checkpoint included); calling it again has no effect."""
         ...
@@ -472,5 +480,78 @@ class ProfileStorage(Protocol):
             ProfileCorruptError: database unreadable, not intact or not a profile's.
             ProfileStorageError: other failure; if the migration fails the database stays
                 as it was and the backup copy is in place.
+        """
+        ...
+
+
+# --- Backup and restore --------------------------------------------------------------------
+
+
+class BackupProblem(Enum):
+    """Why a backup file cannot be restored. The value is stable."""
+
+    NOT_A_BACKUP = "not_a_backup"  # not a ZIP, no manifest, wrong format or inconsistent entries
+    LIMIT = "limit"  # too many entries, too many bytes, compression ratio, size per entry
+    CHECKSUM = "checksum"  # a file differs from the size or SHA-256 in the manifest
+    UNSAFE_ENTRY = "unsafe_entry"  # an entry outside the closed list of names, or encrypted
+    DATABASE_INVALID = "database_invalid"  # the restored database is not an intact profile
+
+
+class BackupError(Exception):
+    """Root of the backup and restore errors. Never paths or contents in messages."""
+
+
+class BackupFileExistsError(BackupError):
+    """The backup file to write already exists: a backup never overwrites anything."""
+
+
+class BackupWriteError(BackupError):
+    """Writing the backup or the restored files failed (I/O, source database not readable)."""
+
+
+class BackupInvalidError(BackupError):
+    """The backup file cannot be restored; `problem` says why. Nothing was restored."""
+
+    def __init__(self, problem: BackupProblem) -> None:
+        super().__init__(problem.value)
+        self.problem = problem
+
+
+class BackupTooNewError(BackupError):
+    """The backup is of a newer format, or holds a database newer than this app knows."""
+
+
+class ProfileBackupStorage(Protocol):
+    """Writes and reads backup files of a profile (format in `profiles.domain.backup`)."""
+
+    def write(
+        self, folder: Path, destination: Path, created_utc: datetime, app_version: str
+    ) -> BackupSummary:
+        """Writes a backup of the profile in `folder` to the new file `destination`.
+
+        Works on an open profile: the database is copied with the SQLite backup API (a
+        consistent snapshot), checked for integrity, and the activity files are added with the
+        SHA-256 of their bytes. The file appears under its name only when complete
+        (temporary file, flush, rename).
+
+        Raises:
+            BackupFileExistsError: `destination` exists; it is not touched.
+            BackupWriteError: the database or a file cannot be read, a limit is exceeded or
+                writing failed; no file is left behind.
+        """
+        ...
+
+    def restore(self, source: Path, folder: Path) -> BackupSummary:
+        """Restores the backup `source` into `folder`, which must hold nothing but the lock file.
+
+        Every size, entry count and ratio is checked before extracting, every file against its
+        SHA-256, the database against its integrity and its profile id. The database is written
+        last. If anything fails everything this call wrote is removed.
+
+        Raises:
+            FolderNotEmptyError: `folder` holds something besides the lock file.
+            BackupInvalidError: the file is not a restorable backup.
+            BackupTooNewError: format or database newer than this app knows.
+            BackupWriteError: reading `source` or writing `folder` failed.
         """
         ...

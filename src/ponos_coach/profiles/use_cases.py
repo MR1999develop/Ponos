@@ -35,6 +35,7 @@ from ponos_coach.nutrition.ports import (
     MealTimesStore,
 )
 from ponos_coach.planning.ports import PlanStore
+from ponos_coach.planning.workout_calendar import WorkoutBackupStore
 from ponos_coach.profiles.domain import (
     FixedProfileData,
     FolderKind,
@@ -197,6 +198,11 @@ class ProfileSession:
     def plans(self) -> PlanStore:
         """The current plan and the days of the past as they were planned."""
         return self._opened.plans
+
+    @property
+    def workout_backups(self) -> WorkoutBackupStore:
+        """The local copy of the workouts deleted from the Garmin calendar."""
+        return self._opened.workout_backups
 
     def close(self) -> None:
         """Closes the database and releases the lock."""

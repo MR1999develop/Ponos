@@ -6,9 +6,10 @@ load from heart rate and shows fitness and fatigue (ATL, CTL, TSB). It builds
 an adaptive training plan towards one or more goals in the calendar and guides
 recovery from injuries.
 
-**Status:** in development, phase 3 (load and charts, on top of profiles,
-archive, import and Garmin synchronisation). There are no released versions
-yet: run it from source.
+**Status:** in development; the phases and what each one delivers are in
+`PLAN.md`. A packaged build for Windows and Ubuntu is attached to each
+tagged release (see "Install from a package"); until the first release you
+can run the app from source.
 
 ## Notice: not a medical device
 
@@ -23,33 +24,94 @@ unofficial login (the `garminconnect` library). It may stop working when
 Garmin changes the login or the APIs. It may be against Garmin's terms of
 use: use it at your own risk. Manual import of FIT files is always available.
 
-## Planned features
+## Features
 
 - Several profiles, each with a folder chosen by the user for all its data.
-- Synchronisation of activities from Garmin Connect, resumable (phase 2), and
-  import of FIT and GPX files, also inside ZIP archives, from files or from a
-  folder.
+- Synchronisation of activities from Garmin Connect, resumable, and import of
+  FIT and GPX files, also inside ZIP archives, from files or from a folder.
 - To try the app without your own data: `uv run python -m
   tests.fixtures.generators.demo_history <folder>` creates a synthetic
   history of FIT files, to load into a profile with "Import from folder...".
-- Load from heart rate and charts of ATL, CTL and TSB (phase 3), weekly load
-  by sport, time in zones and the detail of each activity.
-- 30-minute threshold test (phase 4): from a run you choose, threshold heart
-  rate and pace, heart-rate and pace zones, history of the tests and a retest
-  every 6–8 weeks; applying a test can be undone.
-- Goals (A/B/C races, target time, fitness level) and an adaptive plan.
-- Recovery path from injuries.
-- Sending workouts to the Garmin calendar (later phase).
+- Load from heart rate and charts of ATL, CTL and TSB, weekly load by sport,
+  time in zones and the detail of each activity.
+- 30-minute threshold test: from a run you choose, threshold heart rate and
+  pace, heart-rate and pace zones, history of the tests and a retest every
+  6-8 weeks; applying a test can be undone.
+- Nutrition of the day: energy needs, deficit within safe limits, macros and
+  meals, from a curated food table.
+- Goals (A/B/C races, target time, fitness level) and an adaptive,
+  deterministic training plan.
+- Search and map of the activities: filters, tracks coloured by sport,
+  clustered starts, elevation profile linked to the track.
+- Recovery path from injuries, with warning signs that stop the plan of the
+  affected area and point to a doctor.
+- Sending the planned workouts to the Garmin calendar, and removing them
+  selectively (a local copy is kept so they can be created again).
+- Backup and restore of a profile in a versioned file (format in
+  `docs/backup-format.md`); Garmin tokens are never part of it.
 - Interface in English and Italian.
 
 The planned behaviour is described in `docs/specifica.md`, the decisions in
 `docs/adr/` and the work plan in `PLAN.md`.
 
-## Requirements
+## Install from a package
 
-- Windows or Ubuntu.
-- Python 3.13.
-- [uv](https://docs.astral.sh/uv/).
+Each release has, for Windows (x64) and Ubuntu (x64), an archive
+(`PonosCoach-<version>-windows-x64.zip`, `PonosCoach-<version>-linux-x64.tar.gz`)
+and a `SHA256SUMS` file. The app is a folder: nothing is installed, and
+nothing is written outside it except your profiles' folders, the list of
+profiles, the settings, the Garmin tokens and the log. The archive is about 250 MB (the web engine that draws
+the charts and the map is in it).
+
+1. **Verify the download.** Download the archive and `SHA256SUMS` from the
+   same release page, then compare the hash.
+   - Windows (PowerShell, in the download folder):
+     `(Get-FileHash .\PonosCoach-<version>-windows-x64.zip -Algorithm SHA256).Hash.ToLower()`
+     must equal the first column of the line of that file in `SHA256SUMS`.
+   - Ubuntu: `sha256sum --check --ignore-missing SHA256SUMS`.
+   If the hash differs, do not run the file.
+2. **Unpack** the archive anywhere you can write (not `Program Files`).
+3. **Start it:** `PonosCoach\ponos-coach.exe` on Windows, `PonosCoach/ponos-coach`
+   on Ubuntu.
+
+**SmartScreen on Windows.** The executables are not signed: this is a
+personal project without a code-signing certificate, and it will stay so.
+Windows SmartScreen may therefore show "Windows protected your PC". After
+you have verified the hash as above, choose "More info", then "Run anyway".
+The hash check is what tells you the file is the one that was released.
+
+**Ubuntu libraries.** The app needs the usual Qt and Chromium system
+libraries. On a minimal system install them with:
+
+```
+sudo apt-get install libegl1 libgl1 libopengl0 libglib2.0-0 libdbus-1-3 \
+  libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libnss3 libxcomposite1 \
+  libxdamage1 libxrandr2 libxtst6 libxcursor1 libasound2t64 libxcb-cursor0 \
+  libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
+  libxcb-shape0 libxcb-xinerama0
+```
+
+To check that an unpacked package is complete, run
+`ponos-coach --self-check report.txt` (the file must not exist yet): it checks the
+food table, translations, web resources, time-zone data and the web engine,
+writes one line per check to the report and exits with 0 if all passed.
+
+To remove the app, delete its folder. Your profiles are in the folders you
+chose and are not touched.
+
+## Run from source
+
+Requirements: Windows or Ubuntu, Python 3.13 and
+[uv](https://docs.astral.sh/uv/).
+
+```
+uv sync
+uv run --locked nox -s i18n
+uv run ponos-coach
+```
+
+The command `nox -s i18n` generates the Italian translations (`.qm`); without
+it the app stays in English even if you choose Italian.
 
 ## First profile
 
@@ -182,6 +244,9 @@ All the data of a profile is in the folder chosen at creation:
   (`ponos-v{from}-v{to}.sqlite3`);
 - `ponos.lock`: prevents opening the same profile twice.
 
+A profile can be saved to a single versioned backup file and restored into a
+new folder, never over an existing profile (`docs/backup-format.md`).
+
 Do not move or edit these files by hand while the app is open. The list of
 profiles is in the app's configuration folder (`profiles.json`). The Garmin
 tokens are never in the profile folder (see "Connecting the Garmin account").
@@ -203,17 +268,6 @@ To open it: Help, Open the log folder (Ctrl+Shift+L). The log has events and
 error types, without paths, file names or health data. If something goes
 wrong, attach it to a report after reading it.
 
-## Running from source
-
-```
-uv sync
-uv run --locked nox -s i18n
-uv run ponos-coach
-```
-
-The command `nox -s i18n` generates the Italian translations (`.qm`); without
-it the app stays in English even if you choose Italian.
-
 ## Checks
 
 ```
@@ -222,6 +276,13 @@ uv run --locked nox
 
 It runs formatting and lint, `mypy --strict`, the check of dependencies
 between modules, tests, translation tests and `pip-audit`.
+
+`uv run --locked nox -s dist` builds the PyInstaller package (`release/`),
+smoke-tests the executable, checks that no local path or user name is in it
+and writes the archive and `SHA256SUMS` to `dist/release/`; it takes a few
+minutes. The release workflow (`.github/workflows/release.yml`) runs it on
+Windows and Ubuntu when a `v*` tag is pushed and attaches the result to a
+draft release.
 
 ## Security
 

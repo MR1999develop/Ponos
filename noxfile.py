@@ -2,6 +2,7 @@
 # Copyright (C) 2026 MR
 """Mandatory checks: `uv run nox` locally and in CI (same command)."""
 
+import shutil
 from pathlib import Path
 
 import nox
@@ -12,6 +13,9 @@ _SOURCE_DIR = Path("src/ponos_coach")
 _CATALOG = _SOURCE_DIR / "i18n" / "ponos_it.ts"  # versioned: the translator fills it in
 _COMPILED_CATALOG = _CATALOG.with_suffix(".qm")  # generated and ignored by git
 _FRESH_CATALOG = Path(".nox") / "i18n" / "fresh.ts"  # only the current texts of the sources
+_DIST_DIR = Path("dist")  # ignored by git
+_APP_FOLDER = _DIST_DIR / "app" / "PonosCoach"
+_RELEASE_FOLDER = _DIST_DIR / "release"  # archive and SHA256SUMS: what is attached to a release
 
 
 # The sessions use the project environment, synchronised from the lock with
@@ -121,6 +125,20 @@ def _lupdate(session: nox.Session, target: Path, *options: str) -> None:
     )
 
 
+def _compile_catalog(session: nox.Session) -> None:
+    """Compiles `ponos_it.ts` into the `.qm` that the app and the package load."""
+    session.run(
+        "uv",
+        "run",
+        "--locked",
+        "pyside6-lrelease",
+        str(_CATALOG),
+        "-qm",
+        str(_COMPILED_CATALOG),
+        external=True,
+    )
+
+
 @nox.session(python=False)
 def i18n(session: nox.Session) -> None:
     """Complete translations consistent with the sources, then compiles the `.qm` files."""
@@ -138,19 +156,37 @@ def i18n(session: nox.Session) -> None:
         str(_CATALOG),
         external=True,
     )
-    session.run(
-        "uv",
-        "run",
-        "--locked",
-        "pyside6-lrelease",
-        str(_CATALOG),
-        "-qm",
-        str(_COMPILED_CATALOG),
-        external=True,
-    )
+    _compile_catalog(session)
 
 
 @nox.session(python=False, default=False)
 def i18n_update(session: nox.Session) -> None:
     """Updates `ponos_it.ts` from the sources: adds the new texts, removes the obsolete ones."""
     _lupdate(session, _CATALOG, "-no-obsolete")
+
+
+@nox.session(python=False, default=False)
+def dist(session: nox.Session) -> None:
+    """Release package: PyInstaller build, smoke test of the executable, scan for local paths and
+    the user name, archive and `SHA256SUMS` (sizes are printed). Not part of the default checks:
+    the release workflow runs it on Windows and Ubuntu."""
+    _compile_catalog(session)  # the spec needs it; completeness is the `i18n` session's job
+    shutil.rmtree(_DIST_DIR, ignore_errors=True)
+    session.run(
+        "uv",
+        "run",
+        "--locked",
+        "pyinstaller",
+        "--noconfirm",
+        "--clean",
+        "--distpath",
+        str(_DIST_DIR / "app"),
+        "--workpath",
+        "build/pyinstaller",
+        "release/ponos_coach.spec",
+        external=True,
+    )
+    checks = ("uv", "run", "--locked", "python", "-m", "release.dist_checks")
+    session.run(*checks, "smoke", str(_APP_FOLDER), external=True)
+    session.run(*checks, "traces", str(_APP_FOLDER), ".", external=True)
+    session.run(*checks, "package", str(_APP_FOLDER), str(_RELEASE_FOLDER), external=True)

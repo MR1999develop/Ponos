@@ -66,6 +66,7 @@ from ponos_coach.profiles.use_cases import (
     ProfilePorts,
     RemoveProfileFromList,
 )
+from ponos_coach.selfcheck import run_self_check
 from ponos_coach.storage.file_archive import FileArchive
 from ponos_coach.storage.import_scan import FilesImportSource, FolderImportSource
 from ponos_coach.storage.sqlite_profile import SqliteProfileStorage
@@ -121,6 +122,7 @@ class CommandLine:
     """Command-line options."""
 
     language: Language | None = None
+    self_check_report: Path | None = None
 
 
 def parse_command_line(argv: Sequence[str]) -> CommandLine:
@@ -135,8 +137,16 @@ def parse_command_line(argv: Sequence[str]) -> CommandLine:
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {ponos_coach.__version__}"
     )
+    parser.add_argument(
+        "--self-check",
+        metavar="REPORT",
+        type=Path,
+        default=None,
+        help="check that the installation has what it needs, write the result to the new file "
+        "REPORT and exit (0: all good); used to smoke-test the packaged app",
+    )
     args = parser.parse_args(list(argv))
-    return CommandLine(None if args.lang is None else Language(args.lang))
+    return CommandLine(None if args.lang is None else Language(args.lang), args.self_check)
 
 
 def resolve_user_timezone(zone_id: str) -> tuple[ZoneInfo, bool]:
@@ -376,12 +386,27 @@ def compose_main_window(  # noqa: PLR0913 - every argument is an injectable vola
     return window
 
 
+def _run_self_check(report: Path) -> int:
+    """`--self-check`: the checks of `selfcheck`, with no log file and no profile involved."""
+    prepare_qt()
+    app = QApplication([APP_NAME])
+    try:
+        return run_self_check(report, _read_food_table)
+    except OSError as exc:
+        print(f"ponos-coach: {report.name}: {type(exc).__name__}", file=sys.stderr)  # noqa: T201
+        return 1
+    finally:
+        app.shutdown()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Start the application and return the process exit code."""
     try:
         command_line = parse_command_line(sys.argv[1:] if argv is None else argv)
     except SystemExit as exit_request:
         return exit_request.code if isinstance(exit_request.code, int) else 1
+    if command_line.self_check_report is not None:
+        return _run_self_check(command_line.self_check_report)
     log_dir = _default_log_dir()
     configure_logging(log_dir, version=ponos_coach.__version__)
     prepare_qt()
