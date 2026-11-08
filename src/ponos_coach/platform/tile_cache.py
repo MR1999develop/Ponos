@@ -30,6 +30,8 @@ _LOG = logging.getLogger(__name__)
 
 CACHE_FILE_NAME: Final = "tiles.sqlite3"
 _SCHEMA_VERSION: Final = 1
+# PRAGMA takes no parameters: a literal that must match _SCHEMA_VERSION (test_tile_cache).
+_SET_SCHEMA_VERSION: Final = "PRAGMA user_version = 1"
 _PAGE_BYTES: Final = 4096
 _ROW_OVERHEAD_BYTES: Final = 160  # key, index entry and row header, generous
 _EVICTION_BATCH: Final = 64
@@ -248,7 +250,7 @@ class DiskTileCache:
             connection.execute("BEGIN IMMEDIATE")
             for statement in _CREATE:
                 connection.execute(statement)
-            connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
+            connection.execute(_SET_SCHEMA_VERSION)
             connection.execute("COMMIT")
         except BaseException:
             connection.close()
