@@ -82,20 +82,34 @@ def base_layout(tokens: ThemeTokens) -> dict[str, object]:
     }
 
 
-def render_script(figure: go.Figure, chrome: ChartChrome, filename: str) -> str:
-    """JavaScript call that draws the figure: the argument is a single JSON (`json.dumps`)."""
-    payload = {
+def render_script(
+    figure: go.Figure, chrome: ChartChrome, filename: str, *, hover: bool = False
+) -> str:
+    """JavaScript call that draws the figure: the argument is a single JSON (`json.dumps`).
+
+    With `hover` the page reports the point under the pointer (see `ChartView.hovered`).
+    """
+    payload: dict[str, object] = {
         "figure": json.loads(pio.to_json(figure)),
         "labels": {"png": chrome.export_png, "svg": chrome.export_svg},
         # Plotly language dictionary: the page registers it, no text is composed in JS.
         "locale": {"name": PLOTLY_LOCALE_NAME, "dictionary": dict(chrome.modebar)},
         "filename": filename,
     }
+    if hover:
+        payload["hover"] = True
     return f"ponosRender({json.dumps(payload, ensure_ascii=True, allow_nan=False)});"
 
 
 def prepare_figure(
-    figure: go.Figure, chrome: ChartChrome, filename: str, tokens: ThemeTokens
+    figure: go.Figure,
+    chrome: ChartChrome,
+    filename: str,
+    tokens: ThemeTokens,
+    *,
+    hover: bool = False,
 ) -> PreparedChart:
     """Figure, JSON and background together: pure, heavy work, suited to a non-UI thread."""
-    return PreparedChart(figure, render_script(figure, chrome, filename), tokens.background)
+    return PreparedChart(
+        figure, render_script(figure, chrome, filename, hover=hover), tokens.background
+    )

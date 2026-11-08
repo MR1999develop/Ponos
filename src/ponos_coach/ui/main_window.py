@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QStackedWidget,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -61,6 +62,8 @@ from ponos_coach.ui.garmin_ui import GarminUi
 from ponos_coach.ui.goals_page import GoalsPage
 from ponos_coach.ui.import_report import ImportReport
 from ponos_coach.ui.import_report_dialog import ImportReportDialog
+from ponos_coach.ui.map_page import MapPage
+from ponos_coach.ui.map_ui import MapServices, MapUi
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
 from ponos_coach.ui.new_profile_form import NewProfileForm
 from ponos_coach.ui.nutrition_ui import NutritionUi
@@ -108,11 +111,13 @@ _SECTION_OVERVIEW = 0
 _SECTION_ACTIVITIES = 1
 _SECTION_CALENDAR = 2
 _SECTION_GOALS = 3
+_SECTION_MAP = 4
 _AVAILABLE_SECTIONS = (
     _SECTION_OVERVIEW,
     _SECTION_ACTIVITIES,
     _SECTION_CALENDAR,
     _SECTION_GOALS,
+    _SECTION_MAP,
 )
 _SHUTDOWN_POLL_MS = 20
 
@@ -149,18 +154,20 @@ def system_theme() -> Theme:
 class MainWindow(QMainWindow):
     """Main window. It decides nothing: it shows the controller's state."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - collaborators given by the Composition Root
         self,
         controller: WorkspaceController,
         settings: QSettings,
         defaults: NewProfileDefaults,
         parent: QWidget | None = None,
         *,
+        map_services: MapServices,
         log_folder: Path | None = None,
         language: Language = Language.ENGLISH,
     ) -> None:
         super().__init__(parent)
         self._controller = controller
+        self._map_services = map_services
         self._language = language
         self._settings = settings
         self._defaults = defaults
@@ -305,6 +312,7 @@ class MainWindow(QMainWindow):
             self._back_action,
         ):
             calendar_menu.addAction(action)
+        self._map_ui.build_menu(self.menuBar())
         self._build_plan_menu()
         self._garmin.build_menu(self.menuBar())
         self._build_language_menu()
@@ -353,6 +361,7 @@ class MainWindow(QMainWindow):
             (self.tr("Activities"), True),
             (self.tr("Calendar"), True),
             (self.tr("Goals"), True),
+            (self.tr("Map"), True),
             (self.tr("Injuries"), False),
             (self.tr("Tests"), False),
             (self.tr("Profile settings"), False),
@@ -365,13 +374,25 @@ class MainWindow(QMainWindow):
         self._sidebar.setCurrentRow(_SECTION_OVERVIEW)
         self._sidebar.currentRowChanged.connect(self._on_section_changed)
 
-        self._engine = ChartEngine(self._choose_export_path, self)
+        self._engine = ChartEngine(self._choose_export_path, self, tiles=self._map_services.tiles)
         self._overview = OverviewPage(self._engine, self._controller.compute, self)
         self._overview.action_requested.connect(self._on_overview_action)
         self._overview.cancel_requested.connect(self._controller.cancel_current)
         self._activities = ActivitiesPage(self)
         self._activities.import_requested.connect(self.choose_import_files)
         self._activities.selection_changed.connect(self._update_actions)
+        self._map_ui = MapUi(
+            self,
+            self._controller,
+            self._settings,
+            self._map_services,
+            self._activities,
+            engine=self._engine,
+            theme=system_theme,
+            zone=lambda: self._zone,
+            show_error=self._show_error,
+            show_map=lambda: self._sidebar.setCurrentRow(_SECTION_MAP),
+        )
         self._calendar = CalendarPage(self._today(), self)
         self._goals = GoalsPage(self)
         self._day_page = DayPage(self)
@@ -381,6 +402,7 @@ class MainWindow(QMainWindow):
             _SECTION_ACTIVITIES: self._activities,
             _SECTION_CALENDAR: self._calendar,
             _SECTION_GOALS: self._goals,
+            _SECTION_MAP: self._map_ui.page,
         }
         for page in (*self._section_pages.values(), self._day_page):
             self._pages.addWidget(page)
@@ -393,7 +415,13 @@ class MainWindow(QMainWindow):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(0)
         row.addWidget(self._sidebar)
-        row.addWidget(self._pages, stretch=1)
+        column = QVBoxLayout()
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+        self._map_ui.filter_bar.hide()  # shown over the table and the map only
+        column.addWidget(self._map_ui.filter_bar)
+        column.addWidget(self._pages, stretch=1)
+        row.addLayout(column, stretch=1)
         self.setCentralWidget(central)
 
     def _build_dialogs(self) -> None:
@@ -509,6 +537,16 @@ class MainWindow(QMainWindow):
     def overview_page(self) -> OverviewPage:
         """The Overview page."""
         return self._overview
+
+    @property
+    def map_ui(self) -> MapUi:
+        """The filters and the map."""
+        return self._map_ui
+
+    @property
+    def map_page(self) -> MapPage:
+        """The Map page."""
+        return self._map_ui.page
 
     @property
     def activities_page(self) -> ActivitiesPage:
@@ -1098,6 +1136,9 @@ class MainWindow(QMainWindow):
         if page is not None:
             self._pages.setCurrentWidget(page)
             self._settings.setValue(_KEY_SECTION, row)
+            self._map_ui.section_changed(
+                on_map=row == _SECTION_MAP, on_activities=row == _SECTION_ACTIVITIES
+            )
 
     def _restore_section(self) -> None:
         """Reopen the section of last time; an invalid saved value means the first one."""
@@ -1130,6 +1171,7 @@ class MainWindow(QMainWindow):
     def _on_color_scheme_changed(self) -> None:
         self._overview.apply_state(self._controller.overview_state, system_theme(), self._zone)
         self._calendar.apply_theme(system_theme())
+        self._map_ui.apply_theme()
         self._plan.theme_changed()
 
     def _unavailable_reason(self, allowed: bool) -> str:
@@ -1280,6 +1322,7 @@ class MainWindow(QMainWindow):
         have an action in progress yet.
         """
         self._overview.start_engines()
+        self._map_ui.start_engines()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt
         """Two-step close, without blocking the UI thread.
@@ -1302,6 +1345,7 @@ class MainWindow(QMainWindow):
             self._nutrition.close_dialogs()
             self._threshold.close_dialogs()
             self._plan.close_dialogs()
+            self._map_ui.close_dialogs()
             self.release_web_engine()
             if not self._controller.has_stopped:
                 event.ignore()
@@ -1345,4 +1389,5 @@ class MainWindow(QMainWindow):
 
     def _finish_closing(self) -> None:
         self.statusBar().clearMessage()
+        self._map_ui.release()
         self._closed = True

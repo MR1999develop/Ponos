@@ -3,8 +3,10 @@
 """View of a chart: an isolated `QWebEngineView` showing the local Plotly page.
 
 Isolation: profile without on-disk storage, page and scripts served only by the app's
-scheme, an interceptor that blocks every other request, no `QWebChannel`, no context
-menu, no extra windows. Data enters as JSON (`render_script`).
+scheme, an interceptor that blocks every other request, no `QWebChannel` (the map page, a
+subclass, is the one that has it), no context menu, no extra windows. Data enters as JSON
+(`render_script`). The same engine also answers the map's tile requests (`ponos://tiles/...`)
+through the tile service, never from the network.
 
 The web engine profile (`ChartEngine`) is unique to the app and serves all charts: each
 `ChartView` has its own page and registers with the engine. On close `ChartEngine.dispose`
@@ -37,12 +39,22 @@ from shiboken6 import delete as delete_now
 from shiboken6 import isValid
 
 from ponos_coach.ui.chart_payload import PreparedChart
-from ponos_coach.ui.web_policy import APP_PAGE_URL, APP_SCHEME, is_request_allowed
+from ponos_coach.ui.tile_service import TileService
+from ponos_coach.ui.web_policy import (
+    APP_PAGE_URL,
+    APP_SCHEME,
+    TILES_HOST,
+    is_navigation_allowed,
+    is_request_allowed,
+)
 from ponos_coach.ui.web_resources import resource_for_path
 
 _LOG = logging.getLogger(__name__)
 
 type ExportPathChooser = Callable[[str], Path | None]
+
+_HOVER_PARTS = 3  # "hover", the index, a counter that makes every title new
+_MAX_INDEX_DIGITS = 6
 
 
 class AppOnlyInterceptor(QWebEngineUrlRequestInterceptor):
@@ -57,13 +69,24 @@ class AppOnlyInterceptor(QWebEngineUrlRequestInterceptor):
 
 
 class AppSchemeHandler(QWebEngineUrlSchemeHandler):
-    """Serve the resources of the closed list in `web_resources`; everything else is 404."""
+    """Serve the resources of the closed list in `web_resources` and, from the tile service, the
+    map tiles; everything else is 404."""
+
+    def __init__(self, tiles: TileService | None, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._tiles = tiles
 
     def requestStarted(self, job: QWebEngineUrlRequestJob) -> None:  # noqa: N802 - Qt
         """Answer a request of the app's scheme."""
-        resource = None
-        if job.requestMethod() == b"GET":
-            resource = resource_for_path(job.requestUrl().path())
+        if job.requestMethod() != b"GET":
+            job.fail(QWebEngineUrlRequestJob.Error.RequestDenied)
+        elif job.requestUrl().host() == TILES_HOST:
+            self._serve_tile(job)
+        else:
+            self._serve_resource(job)
+
+    def _serve_resource(self, job: QWebEngineUrlRequestJob) -> None:
+        resource = resource_for_path(job.requestUrl().path())
         if resource is None:
             job.fail(QWebEngineUrlRequestJob.Error.UrlNotFound)
             return
@@ -71,6 +94,25 @@ class AppSchemeHandler(QWebEngineUrlSchemeHandler):
         buffer.setData(resource.content)
         buffer.open(QIODevice.OpenModeFlag.ReadOnly)
         job.reply(resource.mime_type.encode("ascii"), buffer)
+
+    def _serve_tile(self, job: QWebEngineUrlRequestJob) -> None:
+        """Ask the tile service; the job waits (the page may close it meanwhile)."""
+        alive = [True]
+        job.destroyed.connect(lambda *_: alive.__setitem__(0, False))
+
+        def reply(png: bytes | None) -> None:
+            if not alive[0] or not isValid(job):
+                return
+            if png is None:
+                job.fail(QWebEngineUrlRequestJob.Error.UrlNotFound)
+                return
+            buffer = QBuffer(job)
+            buffer.setData(png)
+            buffer.open(QIODevice.OpenModeFlag.ReadOnly)
+            job.reply(b"image/png", buffer)
+
+        if self._tiles is None or not self._tiles.request(job.requestUrl().path(), reply):
+            job.fail(QWebEngineUrlRequestJob.Error.UrlNotFound)
 
 
 class _AppPage(QWebEnginePage):
@@ -81,7 +123,7 @@ class _AppPage(QWebEnginePage):
     ) -> bool:
         """Only `ponos://app/...`."""
         del nav_type, is_main_frame
-        return is_request_allowed(QUrl(url))
+        return is_navigation_allowed(QUrl(url))
 
 
 def _harden(settings: QWebEngineSettings) -> None:
@@ -123,10 +165,15 @@ class ChartEngine(QObject):
     """
 
     def __init__(
-        self, choose_export_path: ExportPathChooser, parent: QObject | None = None
+        self,
+        choose_export_path: ExportPathChooser,
+        parent: QObject | None = None,
+        *,
+        tiles: TileService | None = None,
     ) -> None:
         super().__init__(parent)
         self._choose_export_path = choose_export_path
+        self._tiles = tiles
         self._profile: QWebEngineProfile | None = None
         self._interceptor: AppOnlyInterceptor | None = None
         self._scheme_handler: AppSchemeHandler | None = None
@@ -155,7 +202,7 @@ class ChartEngine(QObject):
         if self._profile is None:
             profile = QWebEngineProfile(self)  # no name: no data on disk
             self._interceptor = AppOnlyInterceptor(self)
-            self._scheme_handler = AppSchemeHandler(self)
+            self._scheme_handler = AppSchemeHandler(self._tiles, self)
             profile.setUrlRequestInterceptor(self._interceptor)
             profile.installUrlSchemeHandler(APP_SCHEME.encode("ascii"), self._scheme_handler)
             profile.downloadRequested.connect(self._on_download_requested)
@@ -176,6 +223,8 @@ class ChartEngine(QObject):
             if isValid(view):
                 view.dispose()
         self._views.clear()
+        if self._tiles is not None:
+            self._tiles.shutdown()
         profile, self._profile = self._profile, None
         if profile is not None and isValid(profile):
             delete_now(profile)
@@ -199,6 +248,10 @@ class ChartView(QWidget):
 
     drawn = Signal()
     load_failed = Signal()
+    hovered = Signal(int)  # index of the point under the pointer (the chart asked for it)
+    hover_left = Signal()
+
+    _page_url = APP_PAGE_URL  # a subclass shows another page of the same scheme
 
     def __init__(
         self, engine: ChartEngine, accessible_name: str, parent: QWidget | None = None
@@ -209,6 +262,7 @@ class ChartView(QWidget):
         self._current_figure: go.Figure | None = None
         self._page_loaded = False
         self._pending_script: str | None = None
+        self._queued: list[str] = []
         self._disposed = False
         self._page: _AppPage | None = None
         self._view: QWebEngineView | None = None
@@ -231,6 +285,7 @@ class ChartView(QWidget):
         page = _AppPage(profile, self)
         page.loadFinished.connect(self._on_load_finished)
         page.titleChanged.connect(self._on_title_changed)
+        self._prepare_page(page)
         view = QWebEngineView(self)
         view.setPage(page)
         view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
@@ -238,7 +293,22 @@ class ChartView(QWidget):
         self._layout.addWidget(view)
         self._page = page
         self._view = view
-        view.setUrl(QUrl(APP_PAGE_URL))
+        view.setUrl(QUrl(self._page_url))
+
+    def _prepare_page(self, page: QWebEnginePage) -> None:
+        """Hook: a subclass attaches what its page needs (before the document is loaded)."""
+        del page
+
+    def run_script(self, script: str) -> None:
+        """Run a script in the page once it is loaded (kept if it is not yet; dropped if the
+        view is closed). Only strings made by the application."""
+        self.start_engine()
+        if self._page is None:
+            return
+        if self._page_loaded:
+            self._page.runJavaScript(script)
+        else:
+            self._queued.append(script)
 
     @property
     def current_figure(self) -> go.Figure | None:
@@ -293,10 +363,33 @@ class ChartView(QWidget):
             self.load_failed.emit()
             return
         self._page_loaded = True
-        if self._pending_script is not None and self._page is not None:
-            script, self._pending_script = self._pending_script, None
+        self._flush_scripts()
+
+    def _flush_scripts(self) -> None:
+        if self._page is None:
+            return
+        scripts, self._queued = self._queued, []
+        if self._pending_script is not None:
+            scripts.insert(0, self._pending_script)
+            self._pending_script = None
+        for script in scripts:
             self._page.runJavaScript(script)
 
     def _on_title_changed(self, title: str) -> None:
+        """The page talks through its title (no channel): `drawn-N`, `hover-I-N`, `leave-N`.
+
+        The index is parsed as digits only; the caller checks it against its data.
+        """
         if title.startswith("drawn-"):
             self.drawn.emit()
+            return
+        parts = title.split("-")
+        if parts[0] == "leave":
+            self.hover_left.emit()
+        elif (
+            parts[0] == "hover"
+            and len(parts) == _HOVER_PARTS
+            and parts[1].isdecimal()
+            and len(parts[1]) <= _MAX_INDEX_DIGITS
+        ):
+            self.hovered.emit(int(parts[1]))

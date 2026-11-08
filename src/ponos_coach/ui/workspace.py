@@ -183,7 +183,8 @@ class ProfileAccess:
     """The open profile, for jobs that run on the data thread (`run_on_profile`).
 
     Never leave the session to the UI thread: it is needed only inside the job. `today` is
-    today's date in the profile's time zone.
+    today's date in the profile's time zone; `context` lets a long job notice that the user (or
+    the closing app) asked to stop.
     """
 
     session: ProfileSession
@@ -191,6 +192,7 @@ class ProfileAccess:
     zone: ZoneInfo
     decode: Decoder
     today: Callable[[], date]
+    context: JobContext
 
 
 # --- State that lives only on the data thread ------------------------------------------------
@@ -518,7 +520,7 @@ class WorkspaceController(QObject):
         services = self._services
         data = self._data
 
-        def job(_context: JobContext) -> object:
+        def job(context: JobContext) -> object:
             current = data.require()
             access = ProfileAccess(
                 current.session,
@@ -526,6 +528,7 @@ class WorkspaceController(QObject):
                 current.zone,
                 services.decode,
                 lambda: services.today(current.zone),
+                context,
             )
             return work(access)
 

@@ -23,7 +23,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
-from ponos_coach.activities.ports import ActivityIndex, SyncJournal
+from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxIndex
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.load.domain import Physiology, PhysiologyEntry
@@ -117,6 +117,11 @@ class ProfileSession:
     def activities(self) -> ActivityIndex:
         """Activity index (valid while the profile is open)."""
         return self._opened.activities
+
+    @property
+    def track_boxes(self) -> TrackBoxIndex:
+        """Track boxes of the index (for the map and its resumable fill)."""
+        return self._opened.track_boxes
 
     @property
     def sync_journal(self) -> SyncJournal:

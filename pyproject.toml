@@ -79,6 +79,8 @@ max-args = 6
 # Lo spike è uno script da terminale: stampa a schermo per scelta; random
 # serve solo al jitter dei ritentativi, senza uso crittografico.
 "experiments/**" = ["T201", "S311"]
+# Script di manutenzione da terminale: stampa a schermo per scelta.
+"tools/**" = ["T201"]
 
 [tool.mypy]
 python_version = "3.13"

@@ -6,3 +6,5 @@
 *.png binary
 *.ico binary
 *.qm binary
+# Vendored libraries: bytes exactly as published (their SHA-256 is checked by a test)
+src/ponos_coach/ui/web/vendor/* -text

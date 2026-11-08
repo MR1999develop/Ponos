@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Network policy of the charts page: only the app's scheme, nothing else.
+"""Network policy of the web pages (charts and map): only the app's scheme, nothing else.
 
-The decision is a pure function (`is_request_allowed`); `register_app_scheme` must be called
-before creating the `QApplication`.
+The scheme has two hosts: `app` (the pages and their scripts) and `tiles` (map tiles, answered by
+the tile proxy in Python, never by the network). The decisions are pure functions
+(`is_request_allowed`, `is_navigation_allowed`); `register_app_scheme` must be called before
+creating the `QApplication`.
 """
 
 from __future__ import annotations
@@ -11,16 +13,42 @@ from __future__ import annotations
 from PySide6.QtCore import QUrl
 from PySide6.QtWebEngineCore import QWebEngineUrlScheme
 
+from ponos_coach.maps.domain import TileAddressError, parse_tile_path
+
 APP_SCHEME = "ponos"
 APP_HOST = "app"
+TILES_HOST = "tiles"
 APP_PAGE_URL = f"{APP_SCHEME}://{APP_HOST}/chart.html"
+APP_MAP_URL = f"{APP_SCHEME}://{APP_HOST}/map.html"
+TILE_URL_TEMPLATE = f"{APP_SCHEME}://{TILES_HOST}/{{z}}/{{x}}/{{y}}"  # Leaflet fills the braces
 
 _registered = False
 
 
+def is_tile_request(url: QUrl) -> bool:
+    """True for `ponos://tiles/z/x/y` with integers inside the tile pyramid (and nothing else:
+    no query, no fragment, no credentials, no port)."""
+    if url.scheme() != APP_SCHEME or url.host() != TILES_HOST:
+        return False
+    if url.hasQuery() or url.hasFragment() or url.port() != -1 or url.userInfo():
+        return False
+    try:
+        parse_tile_path(url.path())
+    except TileAddressError:
+        return False
+    return True
+
+
 def is_request_allowed(url: QUrl) -> bool:
-    """True only for `ponos://app/...`: http, https, file, data, blob and every other are
-    forbidden."""
+    """True for `ponos://app/...` and for tile addresses `ponos://tiles/z/x/y`: http, https, file,
+    data, blob and every other are forbidden."""
+    if url.scheme() != APP_SCHEME:
+        return False
+    return url.host() == APP_HOST or is_tile_request(url)
+
+
+def is_navigation_allowed(url: QUrl) -> bool:
+    """True only for `ponos://app/...`: a page never navigates to tiles or anywhere else."""
     return url.scheme() == APP_SCHEME and url.host() == APP_HOST
 
 
