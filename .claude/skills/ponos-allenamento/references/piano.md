@@ -22,8 +22,8 @@ invia. Nessun I/O nel motore.
   recupero, forza, alternativa). Tutti validi per costruzione.
 - `planning/domain`: `PlanInputs` (obiettivi, disponibilità, tipologie,
   `Physiology`, `FitnessState` = CTL e ATL a fine di oggi, pesi degli sport,
-  ritmo di soglia `int | None`, `after_injury`, `retest` = esito di
-  `assessment.retest_status`). Funzione unica:
+  ritmo di soglia `int | None`, `after_injury`, `injuries` = istantanee dei
+  casi aperti di `injury`, `retest` = esito di `assessment.retest_status`). Funzione unica:
   `build_plan(inputs, today) -> Plan | PlanRefusal`.
 - Il piano parte da **domani**; l'orizzonte arriva all'ultimo obiettivo, al
   massimo 364 giorni (52 settimane). Un obiettivo oltre l'orizzonte resta
@@ -112,7 +112,8 @@ picco):
 - La meta si cerca su base e costruzione (`RampSpan`); picco e mantenimento
   tengono il livello. Ogni settimana: `rampa = (CTL meta − CTL attuale) /
   (settimane rimaste × 0,6)`, tra 0 e il massimo (+5 CTL a settimana, +3
-  dopo un infortunio: parametro `after_injury`). Il carico giornaliero che dà
+  con un infortunio o una malattia aperti o chiusi da non più di 28 giorni:
+  `PlanInputs.ramp_reduced`). Il carico giornaliero che dà
   quella rampa è `CTL + rampa / (1 − (41/42)^n)` (n giorni della settimana),
   al minimo 10.
 - Il CTL del PMC proiettato non sale mai più del massimo in nessuna settimana
@@ -265,8 +266,11 @@ valgono.
 - Forza e alternativa non sono mai "dure"; il recupero è sempre in Z1.
 - Le ore massime non contano la gara. Le sedute dei giorni di scarico finale
   sono solo facili (o alternativa o recupero se manca la facile).
-- Nessun deficit calorico, nessun infortunio attivo: arrivano con le fasi 5
-  (alimentazione) e 6 (infortuni).
+- Gli infortuni attivi (fase 6) restringono le tipologie scelte (`planning/domain/
+  health.py`): corsa per grado, bici e forza per zona, niente intensità prima
+  dell'ultimo gradino, nessuna seduta con un segnale d'allarme o una malattia
+  sistemica; avvisi `PlanHalted`, `PlanAdapted`, `NoSessionPossible`. Dettagli in
+  `references/infortuni.md`.
 
 ## 12. Test
 
@@ -285,11 +289,11 @@ settimanali inferiori ai minuti dei giorni disponibili, dopo infortunio, con CTL
 sotto 10 o senza tipologia facile: lì le ore o la rampa decidono quali sedute
 togliere).
 
-Versione del metodo: **3** (zone FC della 5ª edizione e FC rappresentative delle zone
+Versione del metodo: **4** (infortuni e malattie aperti; la 3 aveva le zone FC della 5ª edizione e FC rappresentative delle zone
 per il carico stimato; la 2 aveva scarico a gradini, distribuzione 80/20 per sedute,
 giorni duri, ritmo gara, scarico del 3:1 al 70%). I piani salvati con la
-versione 1 non si rileggono (il formato ha campi in più): il guscio li
-ricalcola; quello della 2 resta leggibile (stesso formato) finché il piano non si
+versione 1 non si rileggono (il formato ha campi in più), né quelli della 3 (il campo
+`injuries` in più): il guscio li ricalcola; quello della 2 resta leggibile (stesso formato) finché il piano non si
 rigenera (a ogni sincronizzazione e ogni giorno). Con le zone più larghe un minuto facile pesa meno nel
 carico stimato: per lo stesso CTL il piano chiede più minuti (o non arriva al livello se
 le ore sono poche; `test_a_plan_from_ctl_100…` tiene il CTL sopra 65).

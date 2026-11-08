@@ -26,6 +26,7 @@ from tests.contracts.contract_assessment import (
     PhysiologyRemovalContract,
     ThresholdTestStoreContract,
 )
+from tests.contracts.contract_injury import InjuryStoreContract
 from tests.contracts.contract_nutrition import (
     ActivityCaloriesContract,
     ActivityLevelStoreContract,
@@ -285,4 +286,8 @@ class TestFakeSessionChoicesStore(_FakeStorageFixture, SessionChoicesStoreContra
 
 
 class TestFakePlanStore(_FakeStorageFixture, PlanStoreContract):
+    pass
+
+
+class TestFakeInjuryStore(_FakeStorageFixture, InjuryStoreContract):
     pass

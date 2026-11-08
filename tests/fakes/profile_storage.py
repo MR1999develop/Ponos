@@ -64,6 +64,8 @@ from ponos_coach.goals.ports import (
     RaceDayTakenError,
     SessionChoicesStore,
 )
+from ponos_coach.injury.domain import Injury, InjuryId, Problem, problem_id
+from ponos_coach.injury.ports import InjuryAlreadyExistsError, InjuryNotFoundError, InjuryStore
 from ponos_coach.load.domain import ActivityLoad, LoadFingerprint, PhysiologyEntry, SportWeight
 from ponos_coach.load.ports import (
     LoadCache,
@@ -131,6 +133,7 @@ class _Database:
     session_choices: SessionChoices = field(default_factory=lambda: SessionChoices.of({}))
     plan_state: tuple[Plan | PlanRefusal, date] | None = None
     past_days: dict[date, FrozenDay] = field(default_factory=dict)
+    injuries: dict[str, Problem] = field(default_factory=dict)  # by id
     unreadable_past_days: set[date] = field(default_factory=set)  # frozen, lost: set by a test
     cursors: dict[ListingKind, ListingCursor] = field(default_factory=dict)
     journal: dict[GarminActivityId, JournalEntry] = field(default_factory=dict)
@@ -159,6 +162,7 @@ class _Database:
                 self.session_choices,
                 self.plan_state,
                 self.past_days,
+                self.injuries,
                 self.cursors,
                 self.journal,
                 self.last_completed,
@@ -186,6 +190,7 @@ class _Database:
             self.session_choices,
             self.plan_state,
             self.past_days,
+            self.injuries,
             self.cursors,
             self.journal,
             self.last_completed,
@@ -611,6 +616,39 @@ class _Plans:
         return sorted(d for d in self._db.unreadable_past_days if first <= d <= last)
 
 
+class _Injuries:
+    """The injuries and illnesses, by id; a record is an immutable value, so it is kept as is."""
+
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def add(self, problem: Problem) -> None:
+        key = problem_id(problem).value
+        if key in self._db.injuries:
+            raise InjuryAlreadyExistsError("id taken")
+        self._db.injuries[key] = problem
+
+    def replace(self, problem: Problem) -> None:
+        key = problem_id(problem).value
+        if key not in self._db.injuries:
+            raise InjuryNotFoundError("missing")
+        self._db.injuries[key] = problem
+
+    def remove(self, injury_id: InjuryId) -> None:
+        if injury_id.value not in self._db.injuries:
+            raise InjuryNotFoundError("missing")
+        del self._db.injuries[injury_id.value]
+
+    def get(self, injury_id: InjuryId) -> Problem | None:
+        return self._db.injuries.get(injury_id.value)
+
+    def list_problems(self) -> Sequence[Problem]:
+        def start(problem: Problem) -> date:
+            return problem.opened_on if isinstance(problem, Injury) else problem.started_on
+
+        return sorted(self._db.injuries.values(), key=lambda p: (start(p), problem_id(p).value))
+
+
 class _TrackBoxes:
     """Track boxes keyed by identity key; the row id is the 1-based insertion order."""
 
@@ -676,6 +714,7 @@ class _OpenProfile:
         self._availability = _Availability(database)
         self._session_choices = _SessionChoices(database)
         self._plans = _Plans(database)
+        self._injuries = _Injuries(database)
 
     @property
     def info(self) -> ProfileInfo:
@@ -748,6 +787,10 @@ class _OpenProfile:
     @property
     def plans(self) -> PlanStore:
         return self._plans
+
+    @property
+    def injuries(self) -> InjuryStore:
+        return self._injuries
 
     def close(self) -> None:
         """No effect: the data stay in the fake disk."""

@@ -18,9 +18,20 @@ from ponos_coach.activities.domain import Sport
 from ponos_coach.assessment.domain import Overdue, ThresholdTest
 from ponos_coach.goals.domain import GoalId, Priority, RaceGoal, SessionChoices, SessionType
 from ponos_coach.goals.use_cases import AddGoal, RemoveGoal, SetAvailability, SetSessionChoices
+from ponos_coach.injury.domain import (
+    BodyZone,
+    Illness,
+    IllnessKind,
+    Injury,
+    InjuryId,
+)
+from ponos_coach.injury.domain import (
+    defaults as injury_defaults,
+)
+from ponos_coach.injury.use_cases import CloseProblem, OpenInjury, ReportIllness
 from ponos_coach.load.domain import SportWeight
 from ponos_coach.load.use_cases import ComputeProfileOverview, ProfileOverview, SetSportWeights
-from ponos_coach.planning.domain import Plan, PlanRefusal, RefusalReason, defaults
+from ponos_coach.planning.domain import Plan, PlanHalted, PlanRefusal, RefusalReason, defaults
 from ponos_coach.planning.domain.serialization import canonical_json
 from ponos_coach.planning.ports import FrozenDay, PlanStore, StoredPlan, UnreadablePlan
 from ponos_coach.planning.use_cases import CurrentPlan, PastPlan
@@ -34,6 +45,7 @@ from ponos_coach.profiles.rebuild_plan import (
     RebuildPlan,
 )
 from tests.builders import fit_identity, physiology_entry
+from tests.injury.builders import questionnaire as injury_questionnaire
 from tests.load.test_profile_overview import ROME, World, decode_fit
 from tests.planning.builders import BIG_WEEK
 
@@ -98,6 +110,7 @@ class PlanWorld(World):
             self.profile.sport_weights,
             self.profile.threshold_tests,
             self.spy,
+            self.profile.injuries,
         )
         self.rebuild = RebuildPlan(sources, self.overview_now)
         self.current = CurrentPlan(self.spy)
@@ -379,6 +392,7 @@ def test_an_unreadable_saved_plan_is_replaced_by_the_next_rebuild() -> None:
             world.profile.sport_weights,
             world.profile.threshold_tests,
             Unreadable(world.profile.plans),
+            world.profile.injuries,
         ),
         world.overview_now,
     )
@@ -388,6 +402,60 @@ def test_an_unreadable_saved_plan_is_replaced_by_the_next_rebuild() -> None:
     assert result.saved
     assert world.stored_plan().to_json() == result.plan.to_json()
     assert CurrentPlan(Unreadable(world.profile.plans))() is None
+
+
+# --- Injuries and illnesses (T-INF-03) ------------------------------------------------------------
+def ramp_window() -> int:
+    return injury_defaults.RAMP_AFTER_RETURN_DAYS
+
+
+def _open_injury(world: PlanWorld, ident: str, zone: BodyZone = BodyZone.SHIN) -> None:
+    OpenInjury(world.profile.injuries)(Injury(InjuryId(ident), TODAY, injury_questionnaire(zone)))
+
+
+def test_an_open_injury_changes_the_plan_and_closing_it_keeps_the_ramp_lower_for_a_while() -> None:
+    world = PlanWorld()
+    free = world.built().plan
+    assert not free.inputs.injuries
+    assert dict(free.parameters)["max_ramp_per_week"] == defaults.MAX_RAMP_PER_WEEK
+
+    _open_injury(world, "i1")
+    hurt = world.built()
+    assert hurt.saved  # the plan changed, so it is saved again
+    assert [i.injury_id.value for i in hurt.plan.inputs.injuries] == ["i1"]
+    assert (
+        dict(hurt.plan.parameters)["max_ramp_per_week"] == defaults.MAX_RAMP_PER_WEEK_AFTER_INJURY
+    )
+    kinds = {d.session.session_type for d in hurt.plan.days if d.session}
+    assert kinds == {SessionType.ALTERNATIVE}  # the shin does not run, the bike and the pool do
+
+    CloseProblem(world.profile.activities, world.profile.injuries)(InjuryId("i1"), TODAY)
+    back = world.built().plan
+    assert not back.inputs.injuries
+    assert back.inputs.after_injury
+    assert dict(back.parameters)["max_ramp_per_week"] == defaults.MAX_RAMP_PER_WEEK_AFTER_INJURY
+
+    world.today = TODAY + timedelta(days=ramp_window() + 1)
+    later = world.built().plan
+    assert not later.inputs.after_injury
+    assert dict(later.parameters)["max_ramp_per_week"] == defaults.MAX_RAMP_PER_WEEK
+
+
+def test_an_illness_stops_the_plan_and_the_end_of_it_brings_the_training_back() -> None:
+    world = PlanWorld()
+    ReportIllness(world.profile.activities, world.profile.injuries)(
+        Illness(InjuryId("flu"), IllnessKind.SYSTEMIC, TODAY)
+    )
+
+    stopped = world.built().plan
+
+    assert not any(d.session for d in stopped.days)
+    assert any(isinstance(w, PlanHalted) for w in stopped.warnings)
+    CloseProblem(world.profile.activities, world.profile.injuries)(
+        InjuryId("flu"), TODAY + timedelta(days=4)
+    )
+    world.today = TODAY + timedelta(days=5)
+    assert any(d.session for d in world.built().plan.days)
 
 
 # --- A frozen day that cannot be read is told, and the current plan never stands in for it --------

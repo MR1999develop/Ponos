@@ -18,7 +18,9 @@ from datetime import date, timedelta
 from ponos_coach.activities.domain import Sport
 from ponos_coach.assessment.domain import NoTest, Overdue
 from ponos_coach.goals.domain import HARD_TYPES, INTENSE_TYPES, Priority, RaceGoal, SessionType
+from ponos_coach.injury.domain import PlanRestriction
 from ponos_coach.planning.domain import defaults
+from ponos_coach.planning.domain.health import LIMITED_FILLERS, allowed_types, restriction_of
 from ponos_coach.planning.domain.inputs import PlanInputs, PlanRefusal, RefusalReason
 from ponos_coach.planning.domain.macrocycle import Anchor, Macrocycle, build_macrocycle
 from ponos_coach.planning.domain.phases import (
@@ -35,8 +37,11 @@ from ponos_coach.planning.domain.plan import (
     LongDayUnavailable,
     MissingIntenseSessions,
     MissingLongSession,
+    NoSessionPossible,
     Plan,
+    PlanAdapted,
     PlanDay,
+    PlanHalted,
     PlannedRace,
     PlanWarning,
     PlanWeek,
@@ -71,7 +76,7 @@ from ponos_coach.planning.domain.target import (
     taper_days_for,
     target_ctl_for_distance,
 )
-from ponos_coach.planning.domain.week import DayInfo, Placed, Sizer, WeekSetup, plan_week
+from ponos_coach.planning.domain.week import FILLERS, DayInfo, Placed, Sizer, WeekSetup, plan_week
 
 _DAYS_PER_WEEK = 7
 _RUNNING = (Sport.RUNNING, Sport.TRAIL)
@@ -120,6 +125,8 @@ class _Context:
     races: dict[date, PlannedRace]
     max_ramp: float
     targets: tuple[_RaceTarget, ...]
+    restriction: PlanRestriction
+    chosen: frozenset[SessionType]
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,7 +154,7 @@ def build_plan(inputs: PlanInputs, today: date) -> Plan | PlanRefusal:
     unload_first = defaults.RECOVERY_DAYS_ADAPTATION if recover else 0
     macro = _macrocycle(norm, start, end, unload_first)
     max_ramp = (
-        defaults.MAX_RAMP_PER_WEEK_AFTER_INJURY if norm.after_injury else defaults.MAX_RAMP_PER_WEEK
+        defaults.MAX_RAMP_PER_WEEK_AFTER_INJURY if norm.ramp_reduced else defaults.MAX_RAMP_PER_WEEK
     )
     context = _context(norm, macro, today, max_ramp)
     run = _Run(Fitness(norm.fitness.ctl, norm.fitness.atl), norm.fitness.ctl)
@@ -283,8 +290,21 @@ def _context(inputs: PlanInputs, macro: Macrocycle, today: date, max_ramp: float
         for r in inputs.races
         if r.priority is Priority.A
     )
+    restriction = restriction_of(inputs.injuries)
+    chosen = allowed_types(inputs.choices.for_sport(sport), sport, restriction)
     return _Context(
-        inputs, macro, sport, Sizer(rates_of), rates_of, rates, ranges, races, max_ramp, targets
+        inputs,
+        macro,
+        sport,
+        Sizer(rates_of),
+        rates_of,
+        rates,
+        ranges,
+        races,
+        max_ramp,
+        targets,
+        restriction,
+        chosen,
     )
 
 
@@ -367,18 +387,31 @@ def _setup(
     race_days = frozenset(context.races)
     infos = tuple(_day_info(context, day) for day in week)
     seed = race_days | ({run.last_hard} if run.last_hard is not None else set())
-    chosen = context.inputs.choices.for_sport(context.sport)
     monday = week[0] - timedelta(days=week[0].weekday())
     return WeekSetup(
         infos,
         week_phase,
         unload,
         availability.long_day,
-        chosen,
+        context.chosen,
         frozenset(seed),
         race_days,
         monday.toordinal() // _DAYS_PER_WEEK,
+        _fillers(context),
     )
+
+
+def _fillers(context: _Context) -> tuple[SessionType, ...]:
+    """The order of the filler types: the usual one, or the one of a plan with an injury."""
+    return LIMITED_FILLERS if context.restriction.limited_by else FILLERS
+
+
+def _day_minutes(context: _Context, day: date) -> int:
+    """Minutes the user has on a day; with an injury on the first running steps, none on every
+    other day (sessions on alternate days, by the parity of the date)."""
+    if context.restriction.alternate_days and day.toordinal() % 2 == 1:
+        return 0
+    return context.inputs.availability.minutes_on(day.weekday())
 
 
 def _day_info(context: _Context, day: date) -> DayInfo:
@@ -387,7 +420,7 @@ def _day_info(context: _Context, day: date) -> DayInfo:
     return DayInfo(
         day,
         phase,
-        context.inputs.availability.minutes_on(day.weekday()),
+        _day_minutes(context, day),
         day + timedelta(days=1) in context.races,
         _taper_fraction(phase, target, day),
         None if target is None else target.race_class,
@@ -589,11 +622,25 @@ def _choice_warnings(inputs: PlanInputs) -> list[PlanWarning]:
     return warnings
 
 
+def _health_warnings(context: _Context) -> list[PlanWarning]:
+    """What the open injuries and illnesses did to the plan: stopped it, nothing left to schedule,
+    or only trimmed it."""
+    restriction = context.restriction
+    if restriction.halt is not None:
+        return [PlanHalted(restriction.halt, restriction.halted_ids)]
+    if not restriction.limited_by:
+        return []
+    if not context.chosen:
+        return [NoSessionPossible(restriction.limited_by)]
+    return [PlanAdapted(restriction.limited_by)]
+
+
 def _plan_warnings(
     context: _Context, today: date, targets: Sequence[TargetAssessment], recover: bool
 ) -> tuple[PlanWarning, ...]:
     inputs = context.inputs
     warnings = _choice_warnings(inputs)
+    warnings.extend(_health_warnings(context))
     chosen = inputs.choices.for_sport(context.sport)
     if (
         SessionType.LONG in chosen

@@ -17,6 +17,7 @@ from ponos_coach.activities.domain import SessionTokens
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxIndex
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
+from ponos_coach.injury.ports import InjuryStore
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.nutrition.ports import (
     ActivityLevelStore,
@@ -325,7 +326,7 @@ class OpenProfile(Protocol):
     The transactions of `activities.transaction()` also cover `track_boxes`, `sync_journal`,
     `physiology`, `weights`, `fixed_data`, `sport_weights`, `load_cache`, `activity_levels`,
     `lean_masses`, `meal_times`, `goal_periods`, `threshold_tests`, `goals`, `availability`,
-    `session_choices` and `plans`.
+    `session_choices`, `plans` and `injuries`.
     It must be closed with `close()`; after closing the stores are no longer used.
     """
 
@@ -417,6 +418,11 @@ class OpenProfile(Protocol):
     @property
     def plans(self) -> PlanStore:
         """The current plan and the days of the past as they were planned."""
+        ...
+
+    @property
+    def injuries(self) -> InjuryStore:
+        """The injuries and illnesses, with their check-ins."""
         ...
 
     def close(self) -> None:

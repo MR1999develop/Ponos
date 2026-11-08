@@ -26,6 +26,7 @@ from typing import Self
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxIndex
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
+from ponos_coach.injury.ports import InjuryStore
 from ponos_coach.load.domain import Physiology, PhysiologyEntry
 from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
 from ponos_coach.nutrition.ports import (
@@ -202,6 +203,11 @@ class ProfileSession:
     def plans(self) -> PlanStore:
         """The current plan and the days of the past as they were planned."""
         return self._opened.plans
+
+    @property
+    def injuries(self) -> InjuryStore:
+        """The injuries and illnesses, with their check-ins."""
+        return self._opened.injuries
 
     def close(self) -> None:
         """Closes the database and releases the lock."""

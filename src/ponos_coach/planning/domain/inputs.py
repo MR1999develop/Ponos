@@ -18,6 +18,7 @@ from ponos_coach.goals.domain import (
     SessionChoices,
     WeeklyAvailability,
 )
+from ponos_coach.injury.domain import PlanInjury
 from ponos_coach.load.domain import Physiology, SportWeight
 
 MAX_PACE_S_PER_KM = 3600
@@ -46,8 +47,10 @@ class PlanInputs:
     """Everything a plan is computed from, besides today's date.
 
     `threshold_pace_s_per_km` is the pace of the last threshold test, `None` without one.
-    `weights` are the effective sport weights. `after_injury` lowers the maximum ramp.
-    `retest` says where today stands against the threshold-test window.
+    `weights` are the effective sport weights. `injuries` are the open injuries and illnesses
+    (what the plan needs of them, no free text); `after_injury` says one was closed recently.
+    Either lowers the maximum ramp (`ramp_reduced`). `retest` says where today stands against the
+    threshold-test window.
     """
 
     races: tuple[RaceGoal, ...]
@@ -60,11 +63,21 @@ class PlanInputs:
     threshold_pace_s_per_km: int | None = None
     after_injury: bool = False
     retest: RetestStatus = field(default_factory=NoTest)
+    injuries: tuple[PlanInjury, ...] = ()
 
     def __post_init__(self) -> None:
         pace = self.threshold_pace_s_per_km
         if pace is not None and not MIN_PACE_S_PER_KM <= pace <= MAX_PACE_S_PER_KM:
             raise ValueError("threshold pace outside the plausible range")
+        ids = [injury.injury_id.value for injury in self.injuries]
+        if len(set(ids)) != len(ids):
+            raise ValueError("an injury is given twice")
+
+    @property
+    def ramp_reduced(self) -> bool:
+        """True if the weekly ramp is the lower one: an open injury or illness, or one closed
+        recently."""
+        return self.after_injury or bool(self.injuries)
 
     def normalised(self) -> PlanInputs:
         """The same inputs with the goals in a stable order (date, priority, id): the order they
@@ -82,6 +95,7 @@ class PlanInputs:
             self.threshold_pace_s_per_km,
             self.after_injury,
             self.retest,
+            tuple(sorted(self.injuries, key=lambda i: i.injury_id.value)),
         )
 
     def plan_sport(self) -> Sport:
