@@ -215,6 +215,7 @@ def test_new_database_has_the_latest_schema_and_the_expected_tables(tmp_path: Pa
         "goal",
         "weekly_availability",
         "session_choice",
+        "workout_backup",
         "plan_state",
         "plan_past_day",
         "lean_mass",

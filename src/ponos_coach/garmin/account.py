@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Final
 
 from ponos_coach.activities.domain import SessionTokens
@@ -33,6 +34,8 @@ from ponos_coach.activities.ports import (
 from ponos_coach.garmin.client import GarminClient, GarminClientFactory
 from ponos_coach.garmin.errors import translate_login_error, translate_resume_error
 from ponos_coach.garmin.source import GarminActivitySource
+from ponos_coach.garmin.workout_client import GarminWorkoutClient
+from ponos_coach.garmin.workouts import GarminWorkoutCalendar
 
 DEFAULT_MAX_MFA_PROMPTS: Final = 3
 _MAX_EMAIL_CHARS: Final = 320
@@ -71,6 +74,14 @@ class _MfaPrompter:
             self.exhausted = True  # an empty or huge code is not sent to Garmin
             raise _MfaAbortError
         return code
+
+
+@dataclass(frozen=True, slots=True)
+class GarminConnectSession(GarminSession):
+    """A `GarminSession` that also has the workout calendar of the same client; `calendar` is
+    None if the client cannot do workouts."""
+
+    calendar: GarminWorkoutCalendar | None = None
 
 
 def _is_json_object(text: str) -> bool:
@@ -132,4 +143,7 @@ class GarminConnectAccount:
             tokens = SessionTokens(client.dump_tokens())
         except Exception as exc:
             raise DefinitiveSourceError("session tokens not usable") from exc
-        return GarminSession(GarminActivitySource(client), tokens)
+        calendar = (
+            GarminWorkoutCalendar(client) if isinstance(client, GarminWorkoutClient) else None
+        )
+        return GarminConnectSession(GarminActivitySource(client), tokens, calendar)

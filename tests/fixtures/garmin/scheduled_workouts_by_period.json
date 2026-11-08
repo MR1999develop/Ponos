@@ -1,0 +1,44 @@
+[
+  {
+    "workoutScheduleId": 2000000001,
+    "calendarDate": "2026-06-10",
+    "createdDate": "2026-05-01",
+    "workout": {
+      "workoutId": 1000000001,
+      "workoutName": "Ponos · Easy 30 min",
+      "sportType": {
+        "sportTypeId": 1,
+        "sportTypeKey": "running"
+      },
+      "estimatedDurationInSecs": 1800
+    }
+  },
+  {
+    "workoutScheduleId": 2000000002,
+    "calendarDate": "2026-06-11",
+    "createdDate": "2026-05-01",
+    "workout": {
+      "workoutId": 1000000002,
+      "workoutName": "Allenamento di prova",
+      "sportType": {
+        "sportTypeId": 1,
+        "sportTypeKey": "running"
+      },
+      "estimatedDurationInSecs": 1800
+    }
+  },
+  {
+    "workoutScheduleId": 2000000003,
+    "calendarDate": "2026-06-12",
+    "createdDate": "2026-05-01",
+    "workout": {
+      "workoutId": 1000000003,
+      "workoutName": "Ponos · Threshold 55 min",
+      "sportType": {
+        "sportTypeId": 1,
+        "sportTypeKey": "running"
+      },
+      "estimatedDurationInSecs": 1800
+    }
+  }
+]

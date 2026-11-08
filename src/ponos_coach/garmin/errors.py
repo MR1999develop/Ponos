@@ -146,6 +146,14 @@ def translate_source_error(exc: Exception) -> ActivitySourceError:
     return DefinitiveSourceError("request rejected or response not interpretable")
 
 
+def is_not_found(exc: BaseException) -> bool:
+    """True if the failure is Garmin saying the thing is not there (404)."""
+    chain = _chain(exc)
+    return any(isinstance(item, GarminConnectNotFoundError) for item in chain) or (
+        _first_status(chain) == 404
+    )
+
+
 def translate_login_error(exc: Exception) -> ActivitySourceError:
     """The error of login with credentials, in the type of the `GarminAccount.login` port.
 
