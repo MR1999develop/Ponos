@@ -680,3 +680,46 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
 - I fake in memoria stanno in `tests/fakes/`; i contratti in
   `tests/contracts/` (classi `*Contract` con la fixture `harness`): ogni
   adattatore reale li eredita con la propria impalcatura.
+
+## 10. Calendario Garmin (fase 7)
+
+Decisioni in `docs/adr/013-calendario-garmin.md`; che cosa offre `garminconnect` 0.3.20 e le forme
+JSON (non verificate dal vivo, le controlla `T-MAN-01`) in `experiments/garmin_workouts.md`.
+
+- **Dominio** (`planning/domain/workouts.py`): `workout_from_session(PlannedSession) ->
+  WorkoutSpec`; passi piatti (`WorkoutStep`: tipo, secondi, FC bassa e alta in bpm, ritmo lento e
+  veloce in s/km se noto). Le ripetizioni di una seduta a intervalli sono scritte una per una
+  (lavoro, recupero, lavoro, ..., lavoro); i blocchi a ritmo gara puntano al ritmo gara ±5 s/km. Il
+  nome è `"Ponos · " + tipo + minuti` (`WORKOUT_PREFIX`): da qui l'app riconosce i suoi
+  allenamenti (`ScheduledWorkout.is_app_created`). Massimo 40 passi.
+- **Porta** (`planning/workout_calendar.py`): `WorkoutCalendar` con `create_and_schedule`,
+  `list_scheduled(first, last)`, `export_definition(workout_id)`, `create_from_definition`,
+  `remove(item, delete_workout=)`; errori della sorgente Garmin più `CalendarUnsupportedError`
+  (adattatore incompleto). `WorkoutBackupStore` (`add`, `pending`, `mark_restored`): copia locale
+  di ciò che si elimina, tabella `workout_backup` (v9 provvisoria in
+  `storage/schema_workout_backup.py`), al massimo 1000 copie in attesa, le ripristinate si
+  dimenticano dopo 30 giorni.
+- **Casi d'uso** (`planning/calendar_use_cases.py`, tutti con `CalendarPorts`):
+  `SendPlanToGarmin(plan, scope, today, is_cancelled)` con `WholePlan | WeekOfPlan |
+  SessionOfDay`; `ListScheduledWorkouts(first, last)`; `DeleteScheduledWorkouts(items, today)`;
+  `RecreateDeletedWorkouts(today, only=)` e `.pending()`. Non sollevano per gli errori di Garmin:
+  l'esito ha `stop` (`StopReason`) e i fallimenti per voce (`Failure`, `FailureReason`).
+- **Regole comuni**: pausa con jitter prima di ogni richiesta e backoff come la sincronizzazione
+  (`SyncPolicy`); 429 e transitori ritentati fino ai tentativi della politica, poi la corsa si
+  ferma; sessione scaduta, annullamento, operazione non supportata e copia non salvabile fermano
+  la corsa; un rifiuto di Garmin fa fallire solo quella voce. Tetti: 60 allenamenti per invio (i
+  primi per data, il resto in `deferred`), 100 per eliminazione, 60 per ricreazione.
+- **Idempotenza**: prima si legge il calendario; stesso nome e stesso giorno = già presente, non si
+  ricrea; dopo un errore transitorio si cerca l'allenamento prima di crearlo di nuovo.
+- **Eliminazione** (T-SEC-10): solo le voci date (la lista confermata dall'utente), solo da oggi in
+  poi; per ognuna: legge la definizione, salva la copia, `remove` (rilegge la voce e rifiuta se non
+  è più quella scelta), toglie dal calendario; dalla libreria Garmin solo se ha il prefisso
+  dell'app. Senza copia non si elimina.
+- **Adattatore** (`garmin/`): `workout_client.py` (le sette chiamate alla libreria),
+  `workout_json.py` (costruzione e lettura dei JSON, voci illeggibili scartate mai riparate),
+  `workouts.py` (`GarminWorkoutCalendar`), `connect.py` (`ConnectClient` fa anche da
+  `GarminWorkoutClient`), `GarminConnectSession.calendar` (None se il client non sa fare
+  allenamenti).
+- **Test**: fake in `tests/fakes/workout_calendar.py` e `tests/garmin/workout_fakes.py`; contratti
+  in `tests/contracts/test_workout_contracts.py`; fixture JSON sintetiche in
+  `tests/fixtures/garmin/`.

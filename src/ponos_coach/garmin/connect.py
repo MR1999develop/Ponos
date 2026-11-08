@@ -45,7 +45,7 @@ def quiet_library_loggers() -> None:
 
 
 class ConnectClient:
-    """`GarminClient` on top of an authenticated `garminconnect.Garmin` instance."""
+    """`GarminClient` and `GarminWorkoutClient` on an authenticated `garminconnect.Garmin`."""
 
     def __init__(self, garmin: Garmin) -> None:
         self._garmin = garmin
@@ -69,6 +69,36 @@ class ConnectClient:
         """See `GarminClient.dump_tokens`."""
         tokens: str = self._garmin.client.dumps()
         return tokens
+
+    # --- Workouts (`GarminWorkoutClient`) ---------------------------------------------------
+
+    def upload_workout(self, payload: dict[str, object]) -> object:
+        """See `GarminWorkoutClient.upload_workout`."""
+        return self._garmin.upload_workout(payload)
+
+    def schedule_workout(self, workout_id: int, day_iso: str) -> object:
+        """See `GarminWorkoutClient.schedule_workout`."""
+        return self._garmin.schedule_workout(workout_id, day_iso)
+
+    def scheduled_between(self, start_iso: str, end_iso: str) -> object:
+        """See `GarminWorkoutClient.scheduled_between`."""
+        return self._garmin.get_scheduled_workouts_by_period(start_iso, end_iso)
+
+    def get_schedule(self, schedule_id: int) -> object:
+        """See `GarminWorkoutClient.get_schedule`."""
+        return self._garmin.get_scheduled_workout_by_id(schedule_id)
+
+    def get_workout(self, workout_id: int) -> object:
+        """See `GarminWorkoutClient.get_workout`."""
+        return self._garmin.get_workout_by_id(workout_id)
+
+    def unschedule_workout(self, schedule_id: int) -> None:
+        """See `GarminWorkoutClient.unschedule_workout`."""
+        self._garmin.unschedule_workout(schedule_id)
+
+    def delete_workout(self, workout_id: int) -> None:
+        """See `GarminWorkoutClient.delete_workout`."""
+        self._garmin.delete_workout(workout_id)
 
 
 class ConnectClientFactory:

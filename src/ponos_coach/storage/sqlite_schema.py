@@ -98,6 +98,8 @@ from __future__ import annotations
 
 from typing import Final
 
+from ponos_coach.storage.schema_workout_backup import WORKOUT_BACKUP_MIGRATION
+
 # Closed sets of v1 (stable values of the saved data); frozen here on purpose.
 _SPORTS = "'running','trail','cycling','strength','hiking','walking','other'"
 _FORMATS = "'fit','gpx'"
@@ -599,6 +601,8 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     ),
     (_V7_THRESHOLD_PROTOCOL, _V7_LEAN_MASS),
     (_V8_TRACK_SOUTH, _V8_TRACK_WEST, _V8_TRACK_NORTH, _V8_TRACK_EAST),
+    # PROVISIONAL v9 (ADR 013): renumbered when merged with the injuries migration.
+    WORKOUT_BACKUP_MIGRATION,
 )
 
 SCHEMA_VERSION: Final = len(MIGRATIONS)
