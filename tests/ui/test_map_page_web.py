@@ -348,10 +348,10 @@ def test_the_page_can_reach_one_object_with_five_slots_and_nothing_else(
         "b.viewChanged(0, 0, 1, 1, -3)",
         "b.viewChanged(0, 1e308, 1, 1e308, 5)",
         "b.viewChanged(0, 10, 1, 5, 5)",
-        "b.activityClicked(-1)",
-        "b.activityClicked(1e12)",
-        "b.pointHovered(5)",
-        "b.pointHovered(-1)",
+        "b.activityClicked(-1, GEN)",
+        "b.activityClicked(1e12, GEN)",
+        "b.pointHovered(5, 0)",
+        "b.pointHovered(-1, 0)",
     ],
 )
 def test_malformed_messages_from_the_page_are_rejected_without_effect(
@@ -376,6 +376,7 @@ def test_malformed_messages_from_the_page_are_rejected_without_effect(
     view.bridge.activity_clicked.connect(seen.append)
     view.bridge.point_hovered.connect(seen.append)
 
+    script = script.replace("GEN", str(view.bridge.activity_generation))
     execute(qtbot, view, f"(function (b) {{ {script}; }})(window.__bridge);")
     qtbot.waitUntil(lambda: view.bridge.rejected > rejected_before, timeout=WAIT_MS)
 
@@ -440,9 +441,8 @@ def test_when_the_provider_fails_the_tracks_stay_and_the_notice_says_what_to_do(
     assert what in page.notice_text
     assert remedy in page.notice_text  # not only what is wrong: what to do about it
     qtbot.waitUntil(lambda: page_state(qtbot, view)["tracks"] == 8, timeout=WAIT_MS)  # tracks stay
-    assert (
-        len(tiles.source.calls) <= 3
-    )  # the proxy stops asking; the page's tiles did not hammer it
+    if problem is not TileProblem.INVALID_RESPONSE:  # that one is per tile, the others global
+        assert len(tiles.source.calls) <= 3  # the proxy stops asking: no hammering
 
 
 def test_without_a_key_the_notice_appears_at_once_and_the_list_still_works(

@@ -129,6 +129,7 @@
         fillColor: sportStyle(sport).color, fillOpacity: 1,
       });
       marker.ponosIdx = idx;
+      marker.ponosGen = payload.gen;
       marker.on("click", onItemClick);
       markers.push(marker);
     }
@@ -138,7 +139,7 @@
   }
 
   function onItemClick(event) {
-    if (bridge !== null) { bridge.activityClicked(event.target.ponosIdx); }
+    if (bridge !== null) { bridge.activityClicked(event.target.ponosIdx, event.target.ponosGen); }
   }
 
   // --- Tracks -------------------------------------------------------------------------
@@ -159,6 +160,7 @@
           color: style.color, weight: 3, opacity: 0.85, dashArray: style.dash || null,
         });
         line.ponosIdx = track.idx;
+        line.ponosGen = payload.gen;
         line.on("click", onItemClick);
         trackLayer.addLayer(line);
         return line;
@@ -240,12 +242,22 @@
     flush();
   }
 
+  // The points arrive once (`setProfile`); which activity they belong to and the colour mode
+  // arrive with `setProfileView`, which may come again when the list or the mode changes.
   function setProfile(payload) {
     clearProfile();
     profile = {
-      idx: payload.idx, lat: payload.lat, lon: payload.lon, segment: payload.segment,
-      zone: payload.zone, mode: payload.zone !== null && payload.mode === "zones" ? "zones" : "sport",
+      gen: payload.gen, idx: null, lat: payload.lat, lon: payload.lon, segment: payload.segment,
+      zone: payload.zone, mode: "sport",
     };
+  }
+
+  function setProfileView(payload) {
+    if (profile === null) { return; }
+    profile.idx = payload.idx;
+    profile.mode = profile.zone !== null && payload.mode === "zones" ? "zones" : "sport";
+    profileLayer.clearLayers();
+    cursor = null;
     if (profile.mode === "zones") { drawZones(); }
     drawSelection(false);
   }
@@ -288,7 +300,7 @@
       if (i < 0) { leaveProfile(); return; }
       hovering = true;
       setCursor({ index: i });
-      bridge.pointHovered(i);
+      bridge.pointHovered(i, profile.gen);
     });
   }
 
@@ -363,7 +375,7 @@
 
   window.ponosMap = {
     init: init, setStarts: setStarts, setTracks: setTracks, setSelected: setSelected,
-    setProfile: setProfile, setCursor: setCursor, setTheme: setTheme, fitAll: fitAll,
+    setProfile: setProfile, setProfileView: setProfileView, setCursor: setCursor, setTheme: setTheme, fitAll: fitAll,
     setView: setView, zoomBy: zoomBy, visibleGroups: visibleGroups, state: state, pixelOf: pixelOf,
     clearProfile: function () { clearProfile(); drawSelection(false); },
     refreshTiles: function () { if (tileLayer !== null) { tileLayer.redraw(); } },

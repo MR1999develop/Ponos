@@ -326,11 +326,6 @@ def test_t_map_10_a_single_missing_tile_does_not_black_out_the_others(
     assert neighbour.png == PNG
 
 
-test_t_map_10_a_single_missing_tile_does_not_black_out_the_others = pytest.mark.xfail(
-    strict=True, reason="D-F5B-02: global 15 s cool-down after a per-tile 404"
-)(test_t_map_10_a_single_missing_tile_does_not_black_out_the_others)
-
-
 def test_t_map_11_only_the_asked_tiles_are_fetched_and_a_fresh_tile_is_not_asked_twice(
     server: Server, stack: Stack
 ) -> None:
@@ -443,11 +438,6 @@ def test_t_sec_15_tile_paths_accept_only_ascii_digits() -> None:
         parse_cache_limit_gib("٤")
 
 
-test_t_sec_15_tile_paths_accept_only_ascii_digits = pytest.mark.xfail(
-    strict=True, reason="D-F5B-01: Unicode digits accepted by the tile path and cache size parsers"
-)(test_t_sec_15_tile_paths_accept_only_ascii_digits)
-
-
 # --- T-MAP-11: the exact cap of the cache ---------------------------------------------------------
 
 
@@ -512,10 +502,8 @@ def test_t_map_11_the_files_on_disk_stay_near_the_cap(tmp_path: Path) -> None:
     assert disk_use(tmp_path / "c") <= limit + 128 * 1024
 
 
-@pytest.mark.xfail(strict=True, reason="D-F5B-03: the WAL file adds about 4 MiB beyond the cap")
 def test_t_map_11_disk_use_while_open_stays_within_the_cap_plus_a_few_kib(tmp_path: Path) -> None:
-    """D-F5B-03 (low): the WAL is never truncated, so with the cache open the folder reaches
-    about the cap plus 4 MiB (measured: 2.03 x a 4 MiB cap), not "a few KiB" as documented."""
+    """D-F5B-03: the WAL is truncated after every write, so the folder stays near the cap."""
     limit = 4 * 1024 * 1024
     cache = DiskTileCache(tmp_path / "c", limit)
     worst = 0

@@ -152,16 +152,17 @@ def test_tracks_are_keyed_by_position_and_leave_out_activities_not_in_the_list()
         record(5).identity, Sport.RUNNING, ((GeoPoint(0.0, 0.0), GeoPoint(1.0, 1.0)),)
     )
 
-    message = tracks_message([inside, outside], index_by_identity(result))
+    message = tracks_message([inside, outside], index_by_identity(result), 7)
 
     assert message == {
+        "gen": 7,
         "tracks": [
             {
                 "idx": 1,
                 "sport": sport_index(Sport.RUNNING),
                 "segments": [[-30.0, -20.0, -29.9, -20.0]],
             }
-        ]
+        ],
     }
     assert identity_key(result.activities[0].identity) in index_by_identity(result)
 

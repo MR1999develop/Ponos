@@ -6,7 +6,8 @@ The cache lives in the app's cache folder (never in a profile folder, so a profi
 not carry the areas that were looked at), in a private folder like the others. Tiles are rows of
 one table; every write is a transaction, so a tile is stored whole or not at all. The cap is on
 the *accounted* size of the tiles: their bytes plus a per-row overhead, rounded up to the SQLite
-page, so the database file stays within the cap (plus a few KiB of schema and the WAL). A tile
+page, so the database file stays within the cap (plus a few KiB of schema). The WAL is truncated
+by a checkpoint after every write transaction, so the cap holds also while the cache is open. A tile
 is evicted by order of use (a counter, not the clock), oldest first, until the cap holds again.
 The cache is derived data: a file that cannot be read is deleted and rebuilt empty.
 """
@@ -222,6 +223,9 @@ class DiskTileCache:
             if self._connection.in_transaction:
                 self._connection.execute("ROLLBACK")
             raise
+        # The WAL is emptied after every write, so the file never grows beyond the cap
+        # while the cache is open (plus a few KiB of schema).
+        self._connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall()
 
     @contextlib.contextmanager
     def _failures(self) -> Iterator[None]:

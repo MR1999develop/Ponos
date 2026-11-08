@@ -17,7 +17,7 @@ from typing import Final, NoReturn
 MIN_TILE_ZOOM: Final = 0
 MAX_TILE_ZOOM: Final = 19  # highest zoom the topographic style is asked for
 _MAX_PATH_CHARS: Final = 32  # "19/524287/524287.png" is 20: checked before the pattern
-_PATH: Final = re.compile(r"/?(\d{1,2})/(\d{1,6})/(\d{1,6})(?:\.png)?")
+_PATH: Final = re.compile(r"/?([0-9]{1,2})/([0-9]{1,6})/([0-9]{1,6})(?:\.png)?")
 
 _LANGUAGE_CODE: Final = re.compile(r"([a-z]{2})(?:[-_][a-z0-9]{1,8})?")  # "it", "it_IT", "en-gb"
 _LANGUAGES: Final = frozenset({"it", "en"})  # labels the topographic style offers
@@ -31,7 +31,7 @@ MIN_CACHE_BYTES: Final = 64 * MIB
 MAX_CACHE_BYTES: Final = 64 * GIB
 DEFAULT_CACHE_BYTES: Final = 4 * GIB
 _MAX_LIMIT_TEXT_CHARS: Final = 16
-_LIMIT_TEXT: Final = re.compile(r"(\d{1,6})(?:[.,](\d{1,3}))?")
+_LIMIT_TEXT: Final = re.compile(r"([0-9]{1,6})(?:[.,]([0-9]{1,3}))?")
 
 
 class TileAddressError(ValueError):

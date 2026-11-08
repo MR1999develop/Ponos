@@ -69,8 +69,8 @@ def test_t_sec_14_an_activity_outside_the_list_python_sent_is_dropped(position: 
     bridge.activity_clicked.connect(clicked.append)
     bridge.point_hovered.connect(hovered.append)
 
-    bridge.activityClicked(position)
-    bridge.pointHovered(position)
+    bridge.activityClicked(position, 0)
+    bridge.pointHovered(position, 0)
 
     assert clicked == [] or position < 8
     assert bridge.rejected >= 1
@@ -83,8 +83,8 @@ def test_t_sec_14_with_nothing_sent_every_click_and_hover_is_dropped() -> None:
     bridge.point_hovered.connect(seen.append)
 
     for value in (0, 1, -1):
-        bridge.activityClicked(value)
-        bridge.pointHovered(value)
+        bridge.activityClicked(value, 0)
+        bridge.pointHovered(value, 0)
 
     assert seen == []
     assert bridge.rejected == 6
@@ -96,7 +96,7 @@ def test_t_sec_14_the_boundaries_of_the_list_are_exact() -> None:
     bridge.activity_clicked.connect(clicked.append)
 
     for position in (-1, 0, 7, 8):
-        bridge.activityClicked(position)
+        bridge.activityClicked(position, 0)
 
     assert clicked == [0, 7]
 
@@ -113,8 +113,8 @@ def test_t_sec_14_random_garbage_never_raises_and_every_message_is_accounted_for
         pool = HOSTILE_NUMBERS + [rng.uniform(-400, 400) for _ in range(5)]
         south, west, north, east = (rng.choice(pool) for _ in range(4))
         bridge.viewChanged(south, west, north, east, rng.randrange(-5, 30))
-        bridge.activityClicked(rng.randrange(-20, 30))
-        bridge.pointHovered(rng.randrange(-20, 200))
+        bridge.activityClicked(rng.randrange(-20, 30), 0)
+        bridge.pointHovered(rng.randrange(-20, 200), 0)
         sent += 3
 
     assert len(accepted) + bridge.rejected == sent
@@ -166,3 +166,20 @@ def test_t_sec_14_every_allowed_call_is_one_statement_with_a_json_argument(name:
 def test_t_sec_14_non_finite_numbers_never_reach_the_page(bad: float) -> None:
     with pytest.raises(ValueError, match="Out of range float values"):
         page_call("setView", {"lat": bad})
+
+
+def test_a_message_about_an_older_list_is_dropped_and_counted_as_stale() -> None:
+    bridge = bridge_with_counts(activities=8, points=100)
+    bridge.activity_generation = 5
+    bridge.profile_generation = 9
+    seen: list[int] = []
+    bridge.activity_clicked.connect(seen.append)
+    bridge.point_hovered.connect(seen.append)
+
+    bridge.activityClicked(3, 4)  # the list was replaced after the page drew this one
+    bridge.pointHovered(3, 8)
+    bridge.activityClicked(3, 5)
+    bridge.pointHovered(4, 9)
+
+    assert seen == [3, 4]
+    assert bridge.stale == 2

@@ -128,7 +128,6 @@ def test_t_map_10_without_a_key_the_answer_is_the_problem_and_no_tile() -> None:
         TileProblem.KEY_REJECTED,
         TileProblem.NETWORK_UNAVAILABLE,
         TileProblem.CREDIT_EXHAUSTED,
-        TileProblem.INVALID_RESPONSE,
     ],
 )
 def test_t_map_10_each_problem_is_reported_and_asked_again_only_after_its_cool_down(
@@ -146,6 +145,24 @@ def test_t_map_10_each_problem_is_reported_and_asked_again_only_after_its_cool_d
     assert len(rig.source.calls) == 2  # the one that failed and the one after the cool-down
     assert after.problem is None
     assert after.png is not None
+
+
+def test_t_map_10_a_bad_answer_about_one_tile_blocks_only_that_tile() -> None:
+    """D-F5B-02: the cool-down of INVALID_RESPONSE (a 404, not a PNG) is for the tile itself."""
+    rig = Rig(script=[TileUnavailable(TileProblem.INVALID_RESPONSE), TileImage(make_png(), 3600)])
+
+    first = rig.proxy.tile(HERE, "en")
+    again = rig.proxy.tile(HERE, "en")
+    neighbour = rig.proxy.tile(TileAddress(12, 2201, 1500), "en")
+    rig.clocks.advance(COOLDOWN_S[TileProblem.INVALID_RESPONSE] + 1)
+    later = rig.proxy.tile(HERE, "en")
+
+    assert first == TileAnswer(None, TileProblem.INVALID_RESPONSE)
+    assert again == TileAnswer(None, TileProblem.INVALID_RESPONSE)  # not asked again
+    assert neighbour.problem is None
+    assert neighbour.png is not None
+    assert later.problem is None  # asked again after its cool-down
+    assert len(rig.source.calls) == 3
 
 
 def test_t_map_10_a_page_that_wants_many_tiles_does_not_hammer_a_refusing_provider() -> None:

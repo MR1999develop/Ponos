@@ -16,17 +16,13 @@ from collections.abc import Mapping
 from PySide6.QtCore import QObject, Signal
 
 from ponos_coach.activities.domain import ActivityFilter, ActivityIdentity, identity_key
-from ponos_coach.activities.map_queries import AreaView, SearchResult
-from ponos_coach.load.activity_profile import ActivityProfileData, NoTrack
-from ponos_coach.load.use_cases import ExcludedActivity
+from ponos_coach.activities.map_queries import SearchResult
 from ponos_coach.ui.activity_filters import SharedFilterState
 from ponos_coach.ui.data_thread import JobFailed, JobOutcome, JobSucceeded
 from ponos_coach.ui.map_messages import MapView, index_by_identity, parse_activity_index
-from ponos_coach.ui.map_query_host import MapQueryHost
+from ponos_coach.ui.map_query_host import AreaPage, MapQueryHost, ProfilePage, SearchPage
 from ponos_coach.ui.overview_state import Idle
 from ponos_coach.ui.workspace import ProfileAccess, WorkspaceController
-
-_PROFILE_TYPES = (ActivityProfileData, NoTrack, ExcludedActivity)
 
 
 class MapController(QObject):
@@ -57,7 +53,15 @@ class MapController(QObject):
         self._searching = False
         self._querying_area = False
         self._search_asked: ActivityFilter | None = None
-        self._area_asked: tuple[ActivityFilter, MapView] | None = None
+        self._area_asked: tuple[ActivityFilter, MapView, int] | None = None
+        # Numbers of the lists the page was given: every message the page sends back names the
+        # one it refers to, and a message about an older list is dropped.
+        self._counter = 0
+        self._list_generation = 0
+        self._profile_generation = 0
+        self._starts_script: str | None = None
+        self._tracks_script: str | None = None
+        self._profile_script: str | None = None
         filters.changed.connect(self.refresh_search)
         workspace.profile_changed.connect(self._on_profile_changed)
         workspace.overview_changed.connect(self._on_overview_changed)
@@ -78,6 +82,35 @@ class MapController(QObject):
     def selected(self) -> ActivityIdentity | None:
         """The selected activity."""
         return self._selected
+
+    @property
+    def list_generation(self) -> int:
+        """Number of the list (search result) the page's indexes refer to now."""
+        return self._list_generation
+
+    @property
+    def profile_generation(self) -> int:
+        """Number of the profile points the page holds."""
+        return self._profile_generation
+
+    @property
+    def starts_script(self) -> str | None:
+        """JavaScript that shows the starts of the last search (built on the data thread)."""
+        return self._starts_script
+
+    @property
+    def tracks_script(self) -> str | None:
+        """JavaScript that shows the tracks of the last area (built on the data thread)."""
+        return self._tracks_script
+
+    @property
+    def profile_script(self) -> str | None:
+        """JavaScript that sends the points of the selected profile, if it has any."""
+        return self._profile_script
+
+    def _take_generation(self) -> int:
+        self._counter += 1
+        return self._counter
 
     def index_map(self) -> Mapping[str, int]:
         """Position in the last search result of every activity, by identity key (read-only)."""
@@ -102,9 +135,10 @@ class MapController(QObject):
         criteria = self._filters.criteria
         host = self._host
         self._search_asked = criteria
+        generation = self._take_generation()
 
         def work(access: ProfileAccess) -> object:
-            return host.search(access, criteria)
+            return host.search_page(access, criteria, generation)
 
         self._searching = self._workspace.run_on_profile(work, self._on_search_done)
 
@@ -129,8 +163,8 @@ class MapController(QObject):
     # --- Reactions of the workspace --------------------------------------------------------
 
     def _on_profile_changed(self, _view: object) -> None:
-        self._search = None
-        self._index_of = {}
+        self._reset_list()
+        self._profile_script = None
         self._selected = None
         self.profile_opened.emit()
         self.selection_changed.emit(None, False)
@@ -141,6 +175,13 @@ class MapController(QObject):
 
         self._workspace.run_on_profile(work, self._after_backfill)
 
+    def _reset_list(self) -> None:
+        self._search = None
+        self._index_of = {}
+        self._starts_script = None
+        self._tracks_script = None
+        self._list_generation = self._take_generation()
+
     def _after_backfill(self, outcome: JobOutcome) -> None:
         if isinstance(outcome, JobFailed):  # derived data: the map still works with what exists
             self.failed.emit(self._workspace.describe_failure(outcome.error))
@@ -148,8 +189,7 @@ class MapController(QObject):
 
     def _on_overview_changed(self, state: object) -> None:
         if isinstance(state, Idle):
-            self._search = None
-            self._index_of = {}
+            self._reset_list()
             self.search_changed.emit(None)
         else:
             self.refresh_search()
@@ -158,15 +198,18 @@ class MapController(QObject):
 
     def _on_search_done(self, outcome: JobOutcome) -> None:
         self._searching = False
-        if isinstance(outcome, JobSucceeded) and isinstance(outcome.value, SearchResult):
+        if isinstance(outcome, JobSucceeded) and isinstance(outcome.value, SearchPage):
             self._adopt(outcome.value)
         elif isinstance(outcome, JobFailed):
             self.failed.emit(self._workspace.describe_failure(outcome.error))
         if self._search_asked != self._filters.criteria:
             self.refresh_search()  # the filter changed while the search ran
 
-    def _adopt(self, result: SearchResult) -> None:
+    def _adopt(self, page: SearchPage) -> None:
+        result = page.result
         self._search = result
+        self._list_generation = page.generation
+        self._starts_script = page.script
         self._index_of = index_by_identity(result)
         if self._selected is not None and identity_key(self._selected) not in self._index_of:
             self.select_identity(None)
@@ -179,36 +222,47 @@ class MapController(QObject):
             return
         criteria = self._filters.criteria
         host = self._host
-        self._area_asked = (criteria, view)
+        index_of = self._index_of  # replaced, never changed in place: safe on the data thread
+        generation = self._list_generation
+        self._area_asked = (criteria, view, generation)
 
         def work(access: ProfileAccess) -> object:
-            return host.area(access, criteria, view)
+            return host.area_page(access, criteria, view, index_of, generation)
 
         self._querying_area = self._workspace.run_on_profile(work, self._on_area_done)
 
     def _on_area_done(self, outcome: JobOutcome) -> None:
         self._querying_area = False
-        if isinstance(outcome, JobSucceeded) and isinstance(outcome.value, AreaView):
-            self.area_changed.emit(outcome.value)
+        if (
+            isinstance(outcome, JobSucceeded)
+            and isinstance(outcome.value, AreaPage)
+            and outcome.value.generation == self._list_generation
+        ):  # tracks numbered with an older list would name the wrong activities
+            self._tracks_script = outcome.value.script
+            self.area_changed.emit(outcome.value.view)
         elif isinstance(outcome, JobFailed):
             self.failed.emit(self._workspace.describe_failure(outcome.error))
-        if self._area_asked != (self._filters.criteria, self._view):
+        if self._area_asked != (self._filters.criteria, self._view, self._list_generation):
             self._refresh_area()  # the map moved (or the filter changed) while the query ran
 
     def _request_profile(self, identity: ActivityIdentity | None) -> None:
         if identity is None:
+            self._profile_script = None
             self.profile_changed.emit(None)
             return
         host = self._host
+        generation = self._take_generation()
 
         def work(access: ProfileAccess) -> object:
-            return host.profile(access, identity)
+            return host.profile_page(access, identity, generation)
 
         def done(outcome: JobOutcome) -> None:
             if identity != self._selected:
                 return  # another activity was selected meanwhile
-            if isinstance(outcome, JobSucceeded) and isinstance(outcome.value, _PROFILE_TYPES):
-                self.profile_changed.emit(outcome.value)
+            if isinstance(outcome, JobSucceeded) and isinstance(outcome.value, ProfilePage):
+                self._profile_generation = outcome.value.generation
+                self._profile_script = outcome.value.script
+                self.profile_changed.emit(outcome.value.outcome)
             elif isinstance(outcome, JobFailed):
                 self.failed.emit(self._workspace.describe_failure(outcome.error))
 

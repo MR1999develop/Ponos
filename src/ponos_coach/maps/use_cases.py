@@ -4,9 +4,10 @@
 
 `TileProxy` is what the `ponos://tiles/{z}/{x}/{y}` handler calls. It asks the cache first, then
 the provider, one attempt at a time, and after a failure it stops asking for a while (a cool-down
-per problem) so that a page that wants dozens of tiles cannot hammer a provider that refused the
-key or ran out of credit. It never prefetches: only the tiles the page asks for. No log: a tile
-address says which area is being looked at.
+per problem: global for a refused key, no credit and no network; for one tile only after a
+bad answer about it) so that a page that wants dozens of tiles cannot hammer a provider that
+refused the key or ran out of credit. It never prefetches: only the tiles the page asks for.
+No log: a tile address says which area is being looked at.
 """
 
 from __future__ import annotations
@@ -47,6 +48,9 @@ COOLDOWN_S: Final[dict[TileProblem, float]] = {
     TileProblem.NETWORK_UNAVAILABLE: 15.0,
     TileProblem.INVALID_RESPONSE: 15.0,
 }
+# Problems about one tile (a 404, a body that is not a PNG): the cool-down is for that tile only.
+_PER_TILE: Final = frozenset({TileProblem.INVALID_RESPONSE})
+_MAX_TILE_BLOCKS: Final = 512  # bound of the per-tile table: the oldest is dropped
 _CHECK_ADDRESS: Final = TileAddress(0, 0, 0)  # the whole world: the cheapest tile to ask for
 
 
@@ -87,6 +91,7 @@ class TileProxy:
         self._monotonic = monotonic
         self._lock = threading.Lock()
         self._blocked: tuple[TileProblem, float] | None = None  # problem, monotonic end
+        self._tile_blocks: dict[tuple[str, TileAddress], float] = {}  # tile -> monotonic end
 
     def serve(self, path: str, language: str) -> TileAnswer:
         """Tile for a path as the page writes it (`/z/x/y`, `z/x/y.png`).
@@ -104,18 +109,21 @@ class TileProxy:
         if cached is not None and cached.is_fresh(now):
             return TileAnswer(cached.png, None)
         problem = self._current_problem()
-        if problem is None:
+        if problem is None and self._tile_is_blocked(style, address):
+            problem = TileProblem.INVALID_RESPONSE
+        elif problem is None:
             result = self._source.fetch(address.z, address.x, address.y, style)
             if isinstance(result, TileImage):
                 self._store(style, address, result, now)
                 return TileAnswer(result.png, None)
-            problem = self._block(result)
+            problem = self._block(result, style, address)
         return TileAnswer(None if cached is None else cached.png, problem)
 
     def key_changed(self) -> None:
         """The key was replaced or removed: the cool-down no longer applies."""
         with self._lock:
             self._blocked = None
+            self._tile_blocks.clear()
 
     def clear_cache(self) -> None:
         """Empties the tile cache ("Clear map cache").
@@ -147,11 +155,28 @@ class TileProxy:
             self._blocked = None
             return None
 
-    def _block(self, failure: TileUnavailable) -> TileProblem:
+    def _tile_is_blocked(self, style: str, address: TileAddress) -> bool:
+        with self._lock:
+            until = self._tile_blocks.get((style, address))
+            if until is None:
+                return False
+            if self._monotonic() < until:
+                return True
+            del self._tile_blocks[(style, address)]
+            return False
+
+    def _block(self, failure: TileUnavailable, style: str, address: TileAddress) -> TileProblem:
         seconds = COOLDOWN_S[failure.problem]
-        if seconds > 0:
-            with self._lock:
-                self._blocked = (failure.problem, self._monotonic() + seconds)
+        if seconds <= 0:
+            return failure.problem
+        end = self._monotonic() + seconds
+        with self._lock:
+            if failure.problem in _PER_TILE:
+                if len(self._tile_blocks) >= _MAX_TILE_BLOCKS:
+                    del self._tile_blocks[next(iter(self._tile_blocks))]
+                self._tile_blocks[(style, address)] = end
+            else:
+                self._blocked = (failure.problem, end)
         return failure.problem
 
 

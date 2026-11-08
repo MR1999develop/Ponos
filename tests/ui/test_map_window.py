@@ -8,6 +8,8 @@ the controller (the view the page would report).
 
 from __future__ import annotations
 
+import threading
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -16,6 +18,7 @@ from pytestqt.qtbot import QtBot
 
 from ponos_coach.activities.domain import Sport
 from ponos_coach.load.activity_profile import ActivityProfileData
+from ponos_coach.ui import map_query_host
 from ponos_coach.ui.activity_filters import FilterTexts
 from ponos_coach.ui.main_window import MainWindow
 from tests.ui.map_support import (
@@ -151,6 +154,74 @@ def test_the_page_receives_the_selected_activity_by_position_in_the_search(
 
     assert controller.selected == search.activities[3].identity
     assert controller.index_of(search.activities[3].identity) == 3
+
+
+def test_the_json_for_the_page_is_built_on_the_data_thread_not_on_the_gui_thread(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    threads: dict[str, set[int]] = {"starts": set(), "tracks": set(), "profile": set()}
+
+    def recording(kind: str, original: Callable[..., object]) -> Callable[..., object]:
+        def wrapper(*args: object, **kwargs: object) -> object:
+            threads[kind].add(threading.get_ident())
+            return original(*args, **kwargs)
+
+        return wrapper
+
+    for kind, name in (
+        ("starts", "starts_message"),
+        ("tracks", "tracks_message"),
+        ("profile", "profile_message"),
+    ):
+        monkeypatch.setattr(map_query_host, name, recording(kind, getattr(map_query_host, name)))
+    window = map_window(qtbot, tmp_path, settings)
+    show_view(qtbot, window, NEAR)
+    controller = window.map_ui.controller
+
+    controller.select_index(0)
+    qtbot.waitUntil(lambda: controller.profile_script is not None, timeout=WAIT_MS)
+
+    gui = threading.get_ident()
+    for kind, seen in threads.items():
+        assert seen, kind  # it was built...
+        assert gui not in seen, kind  # ...and not here
+    assert controller.starts_script is not None
+    assert controller.tracks_script is not None
+
+
+def test_a_click_that_names_an_older_list_is_dropped(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = map_window(qtbot, tmp_path, settings)
+    show_view(qtbot, window, NEAR)
+    controller = window.map_ui.controller
+    bridge = window.map_page.map_view.bridge
+    current = controller.list_generation
+    assert bridge.activity_generation == current  # the page was given the number of the list
+    assert controller.starts_script is not None
+    assert f'"gen":{current}' in controller.starts_script
+    clicked: list[int] = []
+    bridge.activity_clicked.connect(clicked.append)
+
+    bridge.activityClicked(2, current - 1)  # the page answers about the list before this one
+    bridge.activityClicked(2, current)
+
+    assert clicked == [2]
+    assert bridge.stale == 1
+
+
+def test_a_new_search_gets_a_new_generation(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = map_window(qtbot, tmp_path, settings)
+    controller = window.map_ui.controller
+    before = controller.list_generation
+
+    controller.refresh_search()
+    qtbot.waitUntil(lambda: controller.list_generation != before, timeout=WAIT_MS)
+
+    assert controller.list_generation > before
+    assert window.map_page.map_view.bridge.activity_generation == controller.list_generation
 
 
 def test_a_selection_outside_the_list_changes_nothing(

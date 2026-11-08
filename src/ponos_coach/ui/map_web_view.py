@@ -30,7 +30,9 @@ class MapBridge(QObject):
     pointer is over (or left) a point of the selected track.
 
     `activity_count` and `profile_points` are how many activities and profile points Python sent;
-    a message outside them is dropped (`rejected` counts them, for the diagnostics and the tests).
+    `activity_generation` and `profile_generation` number those lists. A message outside them is
+    dropped (`rejected` counts them), and so is one that carries the number of an older list
+    (`stale` counts them): the page may answer about a list that Python has already replaced.
     """
 
     ready = Signal()
@@ -43,7 +45,10 @@ class MapBridge(QObject):
         super().__init__(parent)
         self.activity_count = 0
         self.profile_points = 0
+        self.activity_generation = 0
+        self.profile_generation = 0
         self.rejected = 0
+        self.stale = 0
 
     @Slot()
     def pageReady(self) -> None:  # noqa: N802 - called from JavaScript
@@ -61,18 +66,28 @@ class MapBridge(QObject):
             return
         self.view_changed.emit(view)
 
-    @Slot(int)
-    def activityClicked(self, position: int) -> None:  # noqa: N802 - called from JavaScript
-        """An activity (a start or a track) was clicked."""
+    @Slot(int, int)
+    def activityClicked(  # noqa: N802 - called from JavaScript
+        self, position: int, generation: int
+    ) -> None:
+        """An activity (a start or a track) was clicked; `generation` is the list it came from."""
+        if generation != self.activity_generation:
+            self.stale += 1
+            return
         index = parse_activity_index(position, self.activity_count)
         if index is None:
             self.rejected += 1
             return
         self.activity_clicked.emit(index)
 
-    @Slot(int)
-    def pointHovered(self, index: int) -> None:  # noqa: N802 - called from JavaScript
-        """The pointer is over a point of the selected activity's track."""
+    @Slot(int, int)
+    def pointHovered(  # noqa: N802 - called from JavaScript
+        self, index: int, generation: int
+    ) -> None:
+        """The pointer is over a point of the selected activity's track (of that profile)."""
+        if generation != self.profile_generation:
+            self.stale += 1
+            return
         point = parse_activity_index(index, self.profile_points)
         if point is None:
             self.rejected += 1

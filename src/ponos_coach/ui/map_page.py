@@ -56,9 +56,7 @@ from ponos_coach.ui.map_legend import LegendBar, LegendEntry
 from ponos_coach.ui.map_list_model import AreaListModel, sorted_list_model, start_text
 from ponos_coach.ui.map_messages import (
     MapView,
-    profile_message,
-    starts_message,
-    tracks_message,
+    profile_view_message,
 )
 from ponos_coach.ui.map_style import page_colors, page_sports, sport_color, sport_look
 from ponos_coach.ui.map_web_view import MapWebView
@@ -101,6 +99,7 @@ class MapPage(QWidget):
         self._started = False
         self._syncing = False
         self._fit_pending = False
+        self._profile_sent: int | None = None  # generation of the points the page holds
         self._search: SearchResult | None = None
         self._area: AreaView | None = None
         self._profile: _Profile = None
@@ -376,13 +375,14 @@ class MapPage(QWidget):
         self._search = result if isinstance(result, SearchResult) else None
         count = 0 if self._search is None else len(self._search.activities)
         self._map.bridge.activity_count = count
+        self._map.bridge.activity_generation = self._controller.list_generation
         self._update_legends()
         self._update_texts()
         if self._started:
             self._push_starts()
             self._on_selection(self._selected, False)  # positions in the list changed
             if isinstance(self._profile, ActivityProfileData):
-                self._send_profile(self._profile)
+                self._send_profile_view(self._profile)
             if self._fit_pending and self._search is not None and count:
                 self._fit_pending = False
                 self._call("fitAll", {})
@@ -414,6 +414,7 @@ class MapPage(QWidget):
         self._map.bridge.profile_points = (
             len(self._profile) if isinstance(self._profile, ActivityProfileData) else 0
         )
+        self._map.bridge.profile_generation = self._controller.profile_generation
         self._show_profile()
 
     # --- List --------------------------------------------------------------------------------
@@ -487,10 +488,20 @@ class MapPage(QWidget):
             self._chart.show_prepared(prepared)
 
     def _send_profile(self, profile: ActivityProfileData) -> None:
-        """Give the map the points of the selected activity (and how to colour them)."""
+        """Give the map the points of the selected activity (and how to colour them).
+
+        The points come as the script the data thread built; they are sent once per profile.
+        """
+        script = self._controller.profile_script
+        generation = self._controller.profile_generation
+        if self._started and script is not None and generation != self._profile_sent:
+            self._map.run_script(script)
+            self._profile_sent = generation
+        self._send_profile_view(profile)
+
+    def _send_profile_view(self, profile: ActivityProfileData) -> None:
         position = self._controller.index_of(profile.identity)
-        if position is not None:
-            self._call("setProfile", profile_message(profile, position, self.effective_mode))
+        self._call("setProfileView", profile_view_message(position, self.effective_mode))
 
     def _elevation_labels(self, profile: ActivityProfileData) -> ElevationLabels:
         x_axis, y_axis = texts.elevation_axis_titles()
@@ -645,6 +656,7 @@ class MapPage(QWidget):
         }
 
     def _push_all(self) -> None:
+        self._profile_sent = None  # a new page has none of the points
         self._map.set_background(tokens_for(self._theme()).map_background)
         self._call("init", self._page_config())
         self._push_starts()
@@ -653,16 +665,20 @@ class MapPage(QWidget):
         self._show_profile()
 
     def _push_starts(self) -> None:
-        search = self._search
-        self._call("setStarts", starts_message(search) if search is not None else {"data": []})
+        """The starts: the script the data thread built (nothing is encoded here)."""
+        script = self._controller.starts_script
+        if self._search is None or script is None:
+            generation = self._controller.list_generation
+            self._call("setStarts", {"gen": generation, "data": []})
+        elif self._started:
+            self._map.run_script(script)
 
     def _push_tracks(self) -> None:
-        search = self._search
-        area = self._area
-        if search is None or area is None:
-            self._call("setTracks", {"tracks": []})
-            return
-        self._call("setTracks", tracks_message(area.tracks, self._controller.index_map()))
+        script = self._controller.tracks_script
+        if self._search is None or self._area is None or script is None:
+            self._call("setTracks", {"gen": self._controller.list_generation, "tracks": []})
+        elif self._started:
+            self._map.run_script(script)
 
 
 def _zoom_of(view: MapView | None) -> int:

@@ -10,6 +10,7 @@ bindings when the profile changes. Positions are personal data: nothing here log
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from ponos_coach.activities.domain import ActivityFilter, ActivityIdentity
@@ -26,10 +27,43 @@ from ponos_coach.activities.map_queries import (
 from ponos_coach.load.activity_profile import ActivityProfileData, GetActivityProfile, NoTrack
 from ponos_coach.load.use_cases import ExcludedActivity
 from ponos_coach.profiles.use_cases import ProfileSession
-from ponos_coach.ui.map_messages import MapView
+from ponos_coach.ui.map_messages import (
+    MapView,
+    page_call,
+    profile_message,
+    starts_message,
+    tracks_message,
+)
 from ponos_coach.ui.workspace import ProfileAccess
 
 type ProfileOutcome = ActivityProfileData | NoTrack | ExcludedActivity
+
+
+@dataclass(frozen=True, slots=True)
+class SearchPage:
+    """A search result and the script that shows its starts, built on the data thread."""
+
+    result: SearchResult
+    generation: int
+    script: str
+
+
+@dataclass(frozen=True, slots=True)
+class AreaPage:
+    """An area view and the script that shows its tracks, built on the data thread."""
+
+    view: AreaView
+    generation: int
+    script: str
+
+
+@dataclass(frozen=True, slots=True)
+class ProfilePage:
+    """The outcome for an activity and, if it has a profile, the script that sends its points."""
+
+    outcome: ProfileOutcome
+    generation: int
+    script: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +83,39 @@ class MapQueryHost:
     def search(self, access: ProfileAccess, criteria: ActivityFilter) -> SearchResult:
         """The activities that pass the filter (an empty filter gives all of them)."""
         return self._for(access).search(criteria)
+
+    def search_page(
+        self, access: ProfileAccess, criteria: ActivityFilter, generation: int
+    ) -> SearchPage:
+        """`search` plus the JSON for the page: the UI thread only hands the string over."""
+        result = self.search(access, criteria)
+        script = page_call("setStarts", starts_message(result, generation))
+        return SearchPage(result, generation, script)
+
+    def area_page(
+        self,
+        access: ProfileAccess,
+        criteria: ActivityFilter,
+        view: MapView,
+        index_of: Mapping[str, int],
+        generation: int,
+    ) -> AreaPage:
+        """`area` plus the JSON of its tracks, numbered with the list they refer to."""
+        area = self.area(access, criteria, view)
+        script = page_call("setTracks", tracks_message(area.tracks, index_of, generation))
+        return AreaPage(area, generation, script)
+
+    def profile_page(
+        self, access: ProfileAccess, identity: ActivityIdentity, generation: int
+    ) -> ProfilePage:
+        """`profile` plus the JSON of its points (only for an activity that has a profile)."""
+        outcome = self.profile(access, identity)
+        script = (
+            page_call("setProfile", profile_message(outcome, generation))
+            if isinstance(outcome, ActivityProfileData)
+            else None
+        )
+        return ProfilePage(outcome, generation, script)
 
     def area(self, access: ProfileAccess, criteria: ActivityFilter, view: MapView) -> AreaView:
         """Starts in the area, their totals and, from zoom 11, the tracks."""

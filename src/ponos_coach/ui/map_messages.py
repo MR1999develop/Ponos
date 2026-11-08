@@ -33,6 +33,7 @@ PAGE_FUNCTIONS: Final = frozenset(
         "setTracks",
         "setSelected",
         "setProfile",
+        "setProfileView",
         "setCursor",
         "setTheme",
         "fitAll",
@@ -95,8 +96,11 @@ def _rounded(value: float) -> float:
     return round(value, _COORDINATE_DECIMALS)
 
 
-def starts_message(search: SearchResult) -> dict[str, object]:
-    """Start points of the filtered activities: `lat, lon, index, sport` repeated, flat."""
+def starts_message(search: SearchResult, generation: int = 0) -> dict[str, object]:
+    """Start points of the filtered activities: `lat, lon, index, sport` repeated, flat.
+
+    `generation` numbers the list the indexes refer to; the page sends it back with every click.
+    """
     data: list[float | int] = []
     for position, lat, lon in zip(
         search.start_indices.tolist(),
@@ -110,7 +114,7 @@ def starts_message(search: SearchResult) -> dict[str, object]:
             position,
             sport_index(search.activities[position].sport),
         )
-    return {"data": data}
+    return {"gen": generation, "data": data}
 
 
 def _flat(points: Sequence[GeoPoint]) -> list[float]:
@@ -125,7 +129,9 @@ def index_by_identity(search: SearchResult) -> dict[str, int]:
     return {identity_key(r.identity): i for i, r in enumerate(search.activities)}
 
 
-def tracks_message(tracks: Sequence[MapTrack], index_of: Mapping[str, int]) -> dict[str, object]:
+def tracks_message(
+    tracks: Sequence[MapTrack], index_of: Mapping[str, int], generation: int = 0
+) -> dict[str, object]:
     """Simplified tracks in view; a track whose activity is not in the list is left out."""
     items: list[dict[str, object]] = []
     for track in tracks:
@@ -138,19 +144,28 @@ def tracks_message(tracks: Sequence[MapTrack], index_of: Mapping[str, int]) -> d
                     "segments": [_flat(segment) for segment in track.segments],
                 }
             )
-    return {"tracks": items}
+    return {"gen": generation, "tracks": items}
 
 
-def profile_message(profile: ActivityProfileData, position: int, mode: str) -> dict[str, object]:
-    """Points of the selected activity's profile for the page (zones only if there are any)."""
+def profile_message(profile: ActivityProfileData, generation: int) -> dict[str, object]:
+    """Points of the selected activity's profile for the page (the heavy part).
+
+    The position in the list and the colour mode change without the points changing: they go in
+    `profile_view_message`. `generation` numbers these points; the page sends it back with the
+    index of a hovered point.
+    """
     return {
-        "idx": position,
+        "gen": generation,
         "lat": [_rounded(v) for v in profile.lat_deg.tolist()],
         "lon": [_rounded(v) for v in profile.lon_deg.tolist()],
         "segment": profile.segment.tolist(),
         "zone": None if profile.zone is None else profile.zone.tolist(),
-        "mode": mode,
     }
+
+
+def profile_view_message(position: int | None, mode: str) -> dict[str, object]:
+    """Which activity of the list the profile belongs to and how to colour it."""
+    return {"idx": position, "mode": mode}
 
 
 def page_call(function: str, payload: object) -> str:
