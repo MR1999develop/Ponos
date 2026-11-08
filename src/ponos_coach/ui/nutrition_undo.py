@@ -69,8 +69,12 @@ class SettingsOps(Protocol):
         """Set the lean mass from a day (the first set; a refusal comes back as a signal)."""
         ...
 
-    def reset_lean_mass(self, lean_mass: LeanMass, valid_from: date, cell: LeanMassCell) -> bool:
-        """Set a lean mass again (redo, or undoing a removal); `cell` receives what to undo."""
+    def redo_lean_mass(self, cell: LeanMassCell) -> bool:
+        """Put back the set that `cell` holds, exactly (redo after an undo)."""
+        ...
+
+    def restore_lean_mass(self, entry: LeanMassEntry) -> bool:
+        """Put back a removed measurement exactly, whatever the weight is now."""
         ...
 
     def undo_lean_mass(self, cell: LeanMassCell) -> bool:
@@ -217,7 +221,7 @@ class SetLeanMassCommand(QUndoCommand):
         if self._already_set:
             self._already_set = False
             return
-        self._ops.reset_lean_mass(self._lean_mass, self._valid_from, self._cell)
+        self._ops.redo_lean_mass(self._cell)
 
     def undo(self) -> None:
         """Put back the measurement of that day, or remove it if there was none."""
@@ -237,5 +241,5 @@ class RemoveLeanMassCommand(QUndoCommand):
         self._ops.remove_lean_mass(self._entry.valid_from)
 
     def undo(self) -> None:
-        """Set the measurement back."""
-        self._ops.reset_lean_mass(self._entry.lean_mass, self._entry.valid_from, LeanMassCell())
+        """Put the measurement back exactly as it was."""
+        self._ops.restore_lean_mass(self._entry)

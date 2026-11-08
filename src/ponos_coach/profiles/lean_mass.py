@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Use cases of the measured lean mass: set (with an exact undo), remove, list.
+"""Use cases of the measured lean mass: set (with an exact undo), restore, remove, list.
 
 The lean mass is an optional dated measurement. When one is valid on a day it replaces the Boer
 estimate in the limit on energy availability (see `PlanDayNutrition`). Each change is one
@@ -115,6 +115,31 @@ class UndoLeanMass:
                 self._store.put(applied.replaced)
 
 
+class RestoreLeanMass:
+    """Puts back an exact entry (undoing a removal, redoing a set), whatever the weight is now."""
+
+    def __init__(self, activities: ActivityIndex, store: LeanMassStore) -> None:
+        self._activities = activities
+        self._store = store
+
+    def __call__(
+        self, entry: LeanMassEntry, expected: LeanMassEntry | None = None
+    ) -> AppliedLeanMass:
+        """Saves `entry` as it was, in one transaction, if its day still holds `expected` (None:
+        the day is free). Unlike `SetLeanMass` it does not check the entry against the weight: it
+        was valid when it was first set, and a weight changed since must not lose it.
+
+        Raises:
+            LeanMassChangedError: the day holds something else; nothing changes.
+            NutritionStoreError: a store failed; nothing changes.
+        """
+        with self._activities.transaction():
+            if _entry_of(self._store.list_entries(), entry.valid_from) != expected:
+                raise LeanMassChangedError("the lean mass was changed after it was removed")
+            self._store.put(entry)
+        return AppliedLeanMass(entry, expected)
+
+
 class RemoveLeanMass:
     """Removes the measurement of a day (the days it covered fall back to the one before it, or to
     the Boer estimate if there is none)."""
@@ -125,7 +150,7 @@ class RemoveLeanMass:
 
     def __call__(self, valid_from: date) -> LeanMassEntry:
         """Deletes the entry that starts on `valid_from` and returns it (to put it back with
-        `SetLeanMass`).
+        `RestoreLeanMass`).
 
         Raises:
             LeanMassNotFoundError: there is none; nothing changes.

@@ -214,7 +214,7 @@ def test_a_plan_at_exactly_the_size_cap_with_a_good_checksum_is_read_not_trusted
         tampered.close()
 
 
-def test_a_frozen_day_with_a_wrong_checksum_is_left_out_and_the_adherence_goes_on(
+def test_a_frozen_day_with_a_damaged_text_is_told_in_the_adherence_not_dropped(
     world: World,
 ) -> None:
     world.today = TODAY + timedelta(days=4)
@@ -236,7 +236,10 @@ def test_a_frozen_day_with_a_wrong_checksum_is_left_out_and_the_adherence_goes_o
         days = [f.day.day for f in tampered.past(TODAY, tampered.today)]
         assert days == [TODAY + timedelta(days=n) for n in (1, 3, 4)]
         adherence = tampered.adherence(TODAY, tampered.today)
-        assert [a.day for a in adherence] == days
+        # the lost day is still there, marked, and the current plan does not stand in for it
+        assert [a.day for a in adherence] == [TODAY + timedelta(days=n) for n in (1, 2, 3, 4)]
+        assert [a.plan_unreadable for a in adherence] == [False, True, False, False]
+        assert adherence[1].planned_load == 0.0
     finally:
         tampered.close()
 

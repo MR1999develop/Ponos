@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import date
 from enum import Enum
 
@@ -45,7 +45,6 @@ from ponos_coach.planning.domain import (
     PlanInputs,
     PlanRefusal,
     build_plan,
-    compare_with_actual,
 )
 from ponos_coach.planning.ports import FrozenDay, PlanStore, StoredPlan
 from ponos_coach.profiles.use_cases import ProfileSession
@@ -224,7 +223,9 @@ class PlanAdherence:
     def __call__(self, first: date, last: date) -> tuple[DayAdherence, ...]:
         """For each planned day from `first` to `last` (not beyond today) the load planned and the
         load done, by ascending day. A day nobody planned is not there, even if something was
-        done. Past days use what was planned at the time; days not yet frozen use the current plan.
+        done. Past days use what was planned at the time; only the days after the last frozen one
+        use the current plan. A frozen day that cannot be read back is there with
+        `plan_unreadable` (its plan is lost; the current plan never stands in for it).
 
         Raises:
             OverviewCancelledError: the overview was cancelled.
@@ -234,14 +235,18 @@ class PlanAdherence:
         if last < first:
             return ()
         planned = {f.day.day: f.day for f in self._plans.past_days(first, last)}
+        unreadable = set(self._plans.unreadable_past_days(first, last))
+        last_frozen = max([*planned, *unreadable], default=None)
         stored = self._plans.current()
         current = stored.state if isinstance(stored, StoredPlan) else None
         if isinstance(current, Plan):
             for day in current.days:
-                if first <= day.day <= last:
+                if first <= day.day <= last and (last_frozen is None or day.day > last_frozen):
                     planned.setdefault(day.day, day)
         actual = _daily_loads(self._overview())
-        days = tuple(planned[d] for d in sorted(planned))
-        if isinstance(current, Plan):
-            return compare_with_actual(replace(current, days=days), actual, last)
-        return tuple(DayAdherence(d.day, d.load, actual.get(d.day, 0.0)) for d in days)
+        return tuple(
+            DayAdherence(d, 0.0, actual.get(d, 0.0), plan_unreadable=True)
+            if d in unreadable
+            else DayAdherence(d, planned[d].load, actual.get(d, 0.0))
+            for d in sorted([*planned, *unreadable])
+        )

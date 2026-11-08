@@ -130,21 +130,34 @@ class SqlitePlanStore:
             raise PlanStoreError("writing the past days failed") from exc
 
     def past_days(self, first: date, last: date) -> Sequence[FrozenDay]:
-        """The frozen days from `first` to `last` included, by ascending day."""
+        """The frozen days from `first` to `last` included, by ascending day; the ones that
+        cannot be read are in `unreadable_past_days`."""
+        return [found for found in self._read_past(first, last) if isinstance(found, FrozenDay)]
+
+    def unreadable_past_days(self, first: date, last: date) -> Sequence[date]:
+        """The frozen days from `first` to `last` included that cannot be read back."""
+        return [found for found in self._read_past(first, last) if isinstance(found, date)]
+
+    def _read_past(self, first: date, last: date) -> list[FrozenDay | date]:
+        """Each frozen day in the range, by ascending day: decoded, or just its date if the saved
+        text does not hold together (the history cannot be rebuilt, so it is told, not skipped)."""
         try:
             rows = self._db.connection.execute(
-                "SELECT planned_on, day_json, day_sha256 FROM plan_past_day "
+                "SELECT day, planned_on, day_json, day_sha256 FROM plan_past_day "
                 "WHERE day BETWEEN ? AND ? ORDER BY day",
                 (first.isoformat(), last.isoformat()),
             ).fetchall()
         except sqlite3.Error as exc:
             raise PlanStoreError("reading the past days failed") from exc
-        days = []
-        for planned_on, text, sha256 in rows:
+        found: list[FrozenDay | date] = []
+        for day, planned_on, text, sha256 in rows:
             try:
-                days.append(
+                found.append(
                     FrozenDay(date.fromisoformat(planned_on), decode_plan_day(text, sha256))
                 )
             except (PlanDecodingError, ValueError, TypeError):
-                continue  # an unreadable day is left out; the history is not rebuildable
-        return days
+                try:
+                    found.append(date.fromisoformat(day))
+                except (ValueError, TypeError):
+                    raise PlanStoreError("a frozen day has no valid date") from None
+        return found

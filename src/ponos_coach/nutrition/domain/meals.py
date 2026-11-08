@@ -171,9 +171,10 @@ def _during_moment(session: TrainingSession) -> _Moment | None:
 
 
 def _refuel_hours(minutes_to_next: float) -> int:
-    """How many hourly intakes fit before the next session: at most 4, the last at least 30
-    minutes before it, and always the first."""
-    room = minutes_to_next - defaults.REFUEL_LAST_BEFORE_NEXT_MIN
+    """How many hourly intakes fit before the next session: at most 4, the first waits 30 minutes
+    after the end, the last is at least 30 minutes before the next session, and the first is
+    always there."""
+    room = minutes_to_next - defaults.POST_LEAD_MIN - defaults.REFUEL_LAST_BEFORE_NEXT_MIN
     fitting = math.floor(room / defaults.REFUEL_STEP_MIN) + 1
     return max(1, min(defaults.REFUEL_HOURS, fitting))
 
@@ -197,6 +198,10 @@ def _post_moments(
                 refuel_hour=hour + 1,
             )
             for hour in range(_refuel_hours(minutes_to_next))
+            # the hours that would fall after midnight are left out: the next day does not
+            # inherit them and they must not pile up on the last minute of this one
+            if hour == 0
+            or round(first + hour * defaults.REFUEL_STEP_MIN) <= defaults.LAST_MINUTE_OF_DAY
         ]
     carbs = (
         round(defaults.POST_CARBS_G_PER_KG * weight_kg)
@@ -420,7 +425,7 @@ def schedule_meals(
             refuel_hour=m.refuel_hour,
         )
         for m in moments
-        if m.refuel_hour is None or m.carbs_g or m.protein_g  # a cut hourly intake is dropped
+        if m.carbs_g or m.protein_g  # an intake cut down to nothing is not shown
     ]
     result = sorted(_fuse(items), key=lambda i: (i.minute, i.slots[0].rank))
     return tuple(result), scaled

@@ -324,7 +324,12 @@ le ore sono poche; `test_a_plan_from_ctl_100…` tiene il CTL sopra 65).
   riscrive. Quindi per un giorno passato vale ciò che era pianificato in quel
   giorno, qualunque cosa direbbe il piano di oggi. Schema scelto perché è il più
   semplice che lo garantisca: una riga per giorno, immutabile per trigger, senza
-  versioni intere del piano da conservare.
+  versioni intere del piano da conservare. La storia congelata non si cancella (nessun
+  comando, il trigger rifiuta UPDATE e DELETE): l'unica via è eliminare il profilo
+  (`docs/specifica.md`, sezione 9). Un giorno congelato illeggibile non si scarta:
+  `PlanStore.unreadable_past_days(first, last)` lo elenca e `PlanAdherence` lo
+  restituisce con `DayAdherence.plan_unreadable=True` (carico pianificato 0, nessun
+  mancato); il piano corrente subentra solo per i giorni dopo l'ultimo congelato.
 - **Aggancio al ricalcolo:** `ui/workspace.py` (`WorkspaceController`), dopo
   ogni panoramica calcolata con successo (apertura del profilo, import,
   sincronizzazione, cambio di misure o pesi) mette in coda un secondo lavoro sul

@@ -219,7 +219,6 @@ def _present_report(
     *,
     in_progress: bool,
     verified: bool,
-    lean_mass_measured: bool | None,
 ) -> DayView:
     return DayView(
         day_title(report.day),
@@ -232,7 +231,7 @@ def _present_report(
         _unreadable_note(report.unreadable_activities),
         in_progress_text() if in_progress else "",
         "" if verified else foods_unverified_text(),
-        "" if lean_mass_measured is None else lean_mass_note_text(measured=lean_mass_measured),
+        lean_mass_note_text(measured=report.lean_mass_measured),
         fixed_notice_text(),
         estimate_from_plan_text() if report.from_plan else "",
     )
@@ -244,14 +243,12 @@ def present_day(
     *,
     today: date | None = None,
     foods_verified: bool = True,
-    lean_mass_measured: bool | None = None,
 ) -> DayContent:
     """The page content of a day from the use case's result.
 
     `today` (the profile's today) marks the current day as in progress; `foods_verified` is False
-    while the food table's values have not been checked against their source;
-    `lean_mass_measured` says whether the energy availability limit used a measured lean mass
-    (True) or the estimate (False); None leaves the note out.
+    while the food table's values have not been checked against their source. The note on
+    the lean mass comes from the report (`lean_mass_measured`).
     """
     if isinstance(result, NutritionUnavailable):
         return UnavailableView(day_title(day), unavailable_text(result.reason), fixed_notice_text())
@@ -259,5 +256,4 @@ def present_day(
         result,
         in_progress=day == today,
         verified=foods_verified,
-        lean_mass_measured=lean_mass_measured,
     )

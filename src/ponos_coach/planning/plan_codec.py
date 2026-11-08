@@ -3,8 +3,9 @@
 """Reads a saved plan back: the canonical JSON of `Plan.to_json()` becomes a `Plan` again.
 
 The text comes from the database, so it is input like any other: size first, then checksum, then
-syntax, then the shape the types declare (every dataclass with exactly its fields, every enum with
-a known value, every date in the form `isoformat()` writes). The domain types check their own
+syntax, then the size of the tree (depth and number of values), then the shape the types declare
+(every dataclass with exactly its fields, every enum with a known value, every date in the form
+`isoformat()` writes). The domain types check their own
 invariants as they are built. Whatever fails is a `PlanDecodingError`; nothing is repaired and the
 text is never repeated in the error.
 
@@ -29,8 +30,13 @@ from typing import Final
 
 from ponos_coach.planning.domain import Plan, PlanDay
 
-MAX_PLAN_JSON_CHARS: Final = 16 * 1024 * 1024  # a full-year plan is well under 2 MiB
+MAX_PLAN_JSON_CHARS: Final = 4 * 1024 * 1024  # a full-year plan is about 250 KiB
 MAX_PLAN_DAY_JSON_CHARS: Final = 64 * 1024
+# A full-year plan has about 16 000 values at depth 7: the caps leave a wide margin and stop
+# a small text that expands into a huge tree (millions of values, or deep nesting).
+MAX_PLAN_VALUES: Final = 250_000
+MAX_PLAN_DAY_VALUES: Final = 2_000
+MAX_PLAN_DEPTH: Final = 32
 _TYPE_KEY: Final = "_type"
 
 
@@ -53,7 +59,7 @@ def decode_plan(text: str, sha256: str) -> Plan:
     Raises:
         PlanDecodingError: text too big, checksum different, invalid JSON or content.
     """
-    return _decode_text(text, sha256, MAX_PLAN_JSON_CHARS, Plan)
+    return _decode_text(text, sha256, MAX_PLAN_JSON_CHARS, MAX_PLAN_VALUES, Plan)
 
 
 def decode_plan_day(text: str, sha256: str) -> PlanDay:
@@ -62,22 +68,42 @@ def decode_plan_day(text: str, sha256: str) -> PlanDay:
     Raises:
         PlanDecodingError: text too big, checksum different, invalid JSON or content.
     """
-    return _decode_text(text, sha256, MAX_PLAN_DAY_JSON_CHARS, PlanDay)
+    return _decode_text(text, sha256, MAX_PLAN_DAY_JSON_CHARS, MAX_PLAN_DAY_VALUES, PlanDay)
 
 
-def _decode_text[T](text: str, sha256: str, max_chars: int, expected: type[T]) -> T:
+def _decode_text[T](
+    text: str, sha256: str, max_chars: int, max_values: int, expected: type[T]
+) -> T:
     if len(text) > max_chars:
         raise PlanDecodingError("the saved plan is too big")
     if digest(text) != sha256:
         raise PlanDecodingError("the checksum of the saved plan does not match")
     try:
-        decoded = _decode(json.loads(text, parse_constant=_reject_constant), expected)
+        tree = json.loads(text, parse_constant=_reject_constant)
+        _check_tree_size(tree, max_values)
+        decoded = _decode(tree, expected)
     except (ValueError, TypeError, OverflowError, RecursionError, _MismatchError):
         # The text is not kept in the chain of causes: it comes from outside.
         raise PlanDecodingError("the saved plan is not valid") from None
     if not isinstance(decoded, expected):
         raise PlanDecodingError("the saved plan is not valid")
     return decoded
+
+
+def _check_tree_size(tree: object, max_values: int) -> None:
+    """Rejects a tree with more than `max_values` values or deeper than `MAX_PLAN_DEPTH`, before
+    anything is built from it. Iterative: a deep tree must not use the stack."""
+    seen = 0
+    pending: list[tuple[object, int]] = [(tree, 1)]
+    while pending:
+        value, depth = pending.pop()
+        seen += 1
+        if seen > max_values or depth > MAX_PLAN_DEPTH:
+            raise _MismatchError
+        if isinstance(value, dict):
+            pending.extend((item, depth + 1) for item in value.values())
+        elif isinstance(value, list):
+            pending.extend((item, depth + 1) for item in value)
 
 
 def _reject_constant(_name: str) -> object:
