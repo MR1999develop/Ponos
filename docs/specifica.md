@@ -7,7 +7,8 @@ they are in the project skill, in
 The work phases are in `PLAN.md`.
 
 Interface labels are quoted in their English form; the Italian version is
-given in brackets where it matters.
+given in brackets where it matters. The Italian labels of the plan, injuries,
+map and Garmin calendar menus are in the translation file.
 
 Ponos Coach is not a medical device and makes no diagnosis.
 
@@ -343,10 +344,12 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 - Stacked bars in hours per week, with Z1 at the bottom and Z5 at the top, over
   the same 26 weeks.
 - The five zones are defined on the threshold of the sport (on the bike, the
-  bike threshold): Z1 below 85%, Z2 85-89%, Z3 90-94%, Z4 95-99%, Z5 from
-  100%. They are project default percentages, reviewed in phase 4 with the
-  threshold test ([ADR 007](adr/007-dati-del-profilo-e-zone.md)). A sample on
-  the boundary belongs to the higher zone.
+  bike threshold), as in the 5th edition of the reference text: Z1 below 78%,
+  Z2 from 78% to 86%, Z3 from 87% to 93%, Z4 from 94% to 99%, Z5 from 100%
+  (since phase 5; before, the percentages were 85, 90, 95 and 100). A sample
+  on the boundary belongs to the higher zone. The change moves only the seconds
+  in each zone and the planned load of a session, not the load of an activity
+  already done ([ADR 007](adr/007-dati-del-profilo-e-zone.md)).
 - The colour scale has increasing lightness: the order can be read even
   without the colours, and the legend gives the name and the boundaries of
   each zone.
@@ -397,15 +400,25 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 - Numbers right-aligned, units in the header, no lines. The cell is empty where
   the data is missing (for example the distance of an indoor session).
 - Without activities, the page invites you to import files.
-- Filters (date, duration, distance, ascent, sport) arrive with phase 9.
+- Filters (date, duration, distance, ascent, sport) are above the table and
+  are shared with the Map (section 15).
 - A double click or Enter on a row opens the activity detail (section 6).
 
 ## 7. Threshold test
 
-- The app proposes a 30-minute running threshold test at the start and
-  proposes it again every 6–8 weeks (from phase 5 also in a recovery week of
-  the plan). Decision:
-  [ADR 009](adr/009-test-di-soglia.md).
+- The app proposes a running threshold test at the start and proposes it again
+  every 6–8 weeks, in a recovery week of the plan when there is one (section
+  9). Decision: [ADR 009](adr/009-test-di-soglia.md).
+- Two protocols, chosen in the result dialog and remembered (30 minutes is the
+  default):
+  - **30 minutes**, as described below: the threshold is read from the last 20
+    minutes of the 30.
+  - **20 minutes** (5th edition): the segment is 20 minutes; the threshold HR
+    is 95% of the mean HR, rounded; the threshold pace is the mean pace plus
+    5% of the time per kilometre. Shorter than 20:00 is rejected. Every test is
+    saved with its protocol.
+  Where the text below says "30 minutes" and "the last 20 minutes", with the
+  20-minute protocol the window is the 20 minutes.
 
 ### Instructions
 
@@ -493,8 +506,10 @@ activity is reported as excluded, with the reason, not as a rejected test.
 - A retest is recommended from 42 to 56 days after the last applied test
   (both days included). Before day 42 the app only says when the window
   opens; from day 57 it says the retest is overdue. With no test, it proposes
-  the first. Only the most recent test counts. The recovery week arrives with
-  the plan (phase 5): for now only the dates are used.
+  the first. Only the most recent test counts. The plan places the retest in
+  the first recovery week of the 3:1 cycle that touches the window (not in the
+  taper before a race); if none can be placed, only the dates are given. Without
+  a test the plan asks for one before it starts.
 - "Threshold tests..." shows the history (most recent first: date, activity,
   threshold HR, pace, method) and the retest message below it; with no test,
   an empty state with the first step. The retest message is also in the status
@@ -510,12 +525,42 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
 - Adding, editing and deleting a goal can be undone and redone.
 - The app states whether the target time is realistic, ambitious or not
   reachable by the date.
+- The Goals section lists the goals. Plan menu: "Add race..." (Ctrl+R), "Add
+  form goal..." (Ctrl+Shift+F), "Change goal..." (Ctrl+Shift+E) and "Remove
+  goal" (Ctrl+Delete), both on the goal selected in the section, "Training
+  settings..." (Ctrl+Shift+T), then Undo and Redo of the goals and the settings.
+  A disabled entry gives the reason in the tooltip. Two races on the same day
+  are refused.
+- A race has a date, a priority A, B or C, a distance and an optional target
+  time; a form goal has a date and a CTL.
 
 ## 9. Adaptive plan
 
-- The user indicates available days, maximum hours per week, the day of the
-  long session and the session types allowed per sport. The plan never exceeds
-  the availability and schedules only those types.
+- "Training settings..." holds the time available on each weekday, the day of
+  the long session, the most training in a week and the session types the plan
+  may use. The dialog opens with suggestions, nothing is saved until "Save
+  settings". The plan never exceeds the availability and schedules only those
+  types.
+- The plan starts tomorrow and reaches the last goal, at most 52 weeks ahead; a
+  goal further away stays in the list with a warning. It has one session a day
+  and one sport (that of the first A race).
+- The plan is refused, with the reason, when there are no goals, a goal is today
+  or in the past, two races are on the same day, there is no availability or no
+  session type for the sport. Otherwise it always exists and what is not right
+  goes in warnings (for example a half marathon without a long session, two A
+  races three weeks apart, a CTL that cannot be reached at the maximum ramp).
+- The CTL grows at most 5 points a week (3 with an injury or illness open, or
+  closed within 28 days). Every goal A has a taper before it and every goal B
+  a short one; three weeks of load are followed by one of recovery.
+- Where the plan is seen:
+  - the Calendar shows the planned session and its load on the days ahead, and,
+    for the days already past, what was planned that day next to what was done;
+  - the PMC chart has the plan's projection of CTL, ATL and TSB (dotted) and the
+    races as markers; with a projection it opens on the last three months and
+    the plan;
+  - the plan is rebuilt after each synchronisation, import or change of the
+    data; if it fails, the rest of the app keeps working.
+- An empty profile starts from CTL zero and still gets a plan.
 - If a goal requires an excluded type, the plan reports it and explains the
   effect, but does not add it.
 - The plan is deterministic: same data and parameters, same plan.
@@ -536,6 +581,12 @@ Rules and thresholds: [plan](../.claude/skills/ponos-allenamento/references/pian
 
 ## 10. Injuries
 
+- The Injuries section lists injuries and illnesses with the state of the one
+  selected. Injuries menu: "Report an injury..." (Ctrl+J), "Report illness..."
+  (Ctrl+Shift+J, one illness at a time), "Daily check-in..." (Ctrl+K),
+  "Medical review done" (Ctrl+Shift+V, only when a warning sign waits for a
+  visit), "Close injury or illness...", then Undo and Redo. A disabled entry
+  gives the reason in the tooltip.
 - The user describes the injury with a questionnaire: area and side, onset,
   pain, activities that do not hurt, the doctor's indications (free text, only
   local).
@@ -545,25 +596,57 @@ Rules and thresholds: [plan](../.claude/skills/ponos-allenamento/references/pian
   every day. It goes up a step only with low pain and a normal next morning;
   it goes down if things get worse.
 - Alternative activities without pain keep fitness. After the return the load
-  growth is more cautious.
+  growth is more cautious: the weekly ramp is 3 while a problem is open and for
+  28 days after its closing day, also when that day is dated ahead.
+- With a warning sign or a systemic illness the plan has no session at all,
+  with the reason and the invitation to see a doctor. After a medical review the
+  path starts again from the first step.
+- The app never decides the return: when the path is done it says the injury
+  could be closed, and closing is the user's.
+- Adding, changing and closing can be undone and redone. The doctor's notes and
+  the pain scores are not in the saved plan or in the logs.
 
 Rules: [injuries](../.claude/skills/ponos-allenamento/references/infortuni.md).
 
 ## 11. Garmin calendar (phase 7)
 
-- The user chooses what to send: the whole plan, a week or a session.
-- They can see the future workouts scheduled on Garmin and delete some. The
-  confirmation shows the list, uses a button with the verb and the app first
-  saves a local copy so that they can be recreated.
-- Workouts created by the app have a prefix in the name.
+- The user chooses what to send: the whole plan from today on, the week of the
+  selected day or the session of the selected day. Garmin menu: "Send plan to
+  Garmin..." (Ctrl+Shift+S), "Send this session to Garmin" (Ctrl+Shift+Y),
+  "Garmin calendar..." (Ctrl+Shift+C), "Recreate deleted workouts"
+  (Ctrl+Shift+D), "Stop Garmin calendar task" (Ctrl+Shift+X). The work runs in
+  the background with a progress bar and Stop.
+- A workout is made of flat steps with the heart-rate range in bpm and, for a
+  run with a threshold pace, the pace range. An interval session shows every
+  repetition on the watch.
+- A send can be repeated: a workout with the same name on the same day is not
+  created again, also after a lost answer. At most 60 workouts per send (the
+  sessions not yet on the calendar, earliest first); the summary says how many
+  were left, and sending again continues.
+- "Garmin calendar..." lists the future workouts scheduled on Garmin, those of
+  the app and the athlete's own, and lets the user delete some. The
+  confirmation ("Delete workouts (n)", the other button "Keep them") shows the
+  list. The app first saves a local copy of each, then removes it; at most 100
+  at a time; a day before today is never touched. A workout of the athlete is
+  only taken off the calendar and stays in the library; one of the app is also
+  deleted from the library. If Garmin refuses, nothing is deleted and no copy
+  waits.
+- "Recreate deleted workouts" makes them again from the copies, only if the
+  current plan still has that session on that day; the new workout has new
+  ids. When the plan has changed since a send, the app offers to delete the
+  workouts of days no longer planned, with the same confirmation.
+- Workouts created by the app have the prefix "Ponos ·" in the name.
+- The shape of the Garmin responses has not been checked on the live service
+  yet (`T-MAN-01`).
 
 ## 12. Backup
 
-- A profile can be saved to a versioned backup file and restored to a new
-  folder, with the same content (activities, parameters, goals, plan,
-  injuries). Planned for phase 8.
-- The backup contains health data: it must be kept as such. It does not contain
-  the Garmin tokens.
+- A profile can be saved to a versioned backup file (`.ponosbackup`) and
+  restored to a new folder, with the same content (activities, parameters,
+  goals, plan, injuries). Format: [backup format](backup-format.md).
+- The backup contains health data and GPS positions and **is not encrypted**:
+  it must be kept as such, in a private place and not in a synchronised
+  folder. It does not contain the Garmin tokens, nor the map key.
 
 ### Interface (phase 8)
 
@@ -625,8 +708,8 @@ no diet or allergy restriction for now.
 - "Previous month" (Ctrl+Left), "Next month" (Ctrl+Right), "Today" (Ctrl+T),
   "Open day" (Ctrl+Return) in the Calendar menu. A click or Enter on a day
   opens its page.
-- Only past days and today can be opened. Future days arrive with the plan
-  (phase 5); the page says so.
+- Past days, today and the days of the plan can be opened. A day with no plan
+  (no plan, a refused plan, past the last goal or the horizon) says why.
 
 ### Day page
 
@@ -676,6 +759,25 @@ no diet or allergy restriction for now.
 - A value applies from its day: the weight, the level and the goal of the day
   decide that day only.
 
+### Days ahead (phase 5)
+
+- The page of a future day is built from the saved plan with the same model:
+  the planned session is at the typical time of that kind of session, with the
+  energy of its estimated effort, and a race is a session of its day with the
+  time the plan expects. It is a guide, not a forecast, and says so.
+- No deficit in the week of an A or B race, nor in the taper before it: the day
+  is a maintenance day, and when a weight-loss period overlaps, the page says
+  so. A C race pauses nothing.
+- A change of the plan changes the days ahead only. The same data give the same
+  page.
+
+### Lean mass
+
+- In "Nutrition settings..." the user may enter a measured lean mass with its
+  day. It replaces the estimate (Boer 1984) in the energy availability limit
+  from that day on, if it is plausible (between 40% and 95% of the weight of
+  the day); otherwise the estimate is used. It can be undone.
+
 ### Limits of the advice
 
 - Under 18 years the app gives no numbers and invites to speak with a doctor
@@ -699,7 +801,50 @@ no diet or allergy restriction for now.
   drinks, gels and bars are not in the table yet.
 - The names of the foods are in English until translated.
 
+## 15. Map and filters (phase 5b)
+
+Decision: [ADR 010](adr/010-mappa.md).
+
+### Filters
+
+- Above the Activities table and the Map: date (from–to), duration, distance,
+  positive ascent and sport. Minimum and maximum are optional (empty means no
+  limit); a minimum above the maximum are swapped; negative values are refused
+  with a message. Input is tolerant: comma or point, duration as "1:30" or "90".
+- One state of the filters, shared by the table and the map, remembered for the
+  next start. Map menu: "Filter activities" (Ctrl+F), "Clear filters"
+  (Ctrl+Shift+K).
+
+### Map
+
+- Map menu: "Show map" (Ctrl+M), "Show all activities" (Ctrl+0), Zoom in and out,
+  "Map settings..." (Ctrl+Shift+M), "Clear map cache..."
+  (Ctrl+Shift+Backspace). The commands that need the map are disabled elsewhere,
+  with the reason in the tooltip.
+- At low zoom the starts of the filtered activities are grouped in circles with
+  the number, which split and merge at each level; a click on a group zooms to
+  its area. At higher zoom the tracks of the activities in view are drawn as
+  lines coloured by sport, with a legend (never colour alone). A click on a
+  track selects the activity.
+- On the right a list of the activities visible in the framed area, after the
+  filters, with the count and the totals (km, ascent, hours), updated at each
+  move or zoom; the selection is the same on the map and in the list.
+  Activities without a position (indoor, strength) are counted apart.
+- The detail of the selected activity has the elevation profile linked to the
+  track in both directions, and the track can be coloured by heart-rate zone
+  with the legend of the zones of that day. Without elevation the profile says
+  why it is missing.
+- Settings: the Tracestrack key (hidden while typed, checked when saved,
+  cleared from the field after saving and never shown again) and the size of the
+  tile cache (4 GB by default); "Clear map cache" empties it.
+- The page has no network: the tiles come through the app. The map's last view
+  is not saved. The tile provider sees which areas are looked at. Without a key, without network, with a refused key or with the credit
+  over, the map keeps working on a neutral background with a line that says why
+  and what to do; list and filters keep working.
+- The provider's attribution is on the map.
+
 ## Open points
 
-- Format and content of the backup file (phase 8).
 - Food values not verified against FoodData Central (section 14).
+- The Garmin workout and calendar responses and the Tracestrack terms are not
+  verified live (section 11, section 15).

@@ -1,8 +1,11 @@
 # Threat model
 
-Phase 4 version (2026-11-07): adds the threshold test (the distance series
+Phase 8 version (2026-11-08): adds the plan and the frozen days (phase 5), the
+map and its tile proxy (phase 5b), injuries (phase 6), the Garmin calendar
+(phase 7), the profile backup and the release workflow (phase 8). It builds on
+that of phase 4 (2026-11-07: the threshold test, the distance series
 read from FIT and GPX files, the history of the tests in schema v5, threshold
-HR and pace, pace zones). It builds on that of phase 4b (2026-11-07: the
+HR and pace, pace zones), on that of phase 4b (2026-11-07: the
 nutrition of the day: activity calories, activity level, meal times, goal
 periods, the table of foods and the guidance itself), on that of phase 3 (2026-11-06: height, weight and
 date of birth as personal health data, dated measurements, sport weights, HR
@@ -77,6 +80,12 @@ Boundaries:
 | B11 | Table of foods (`foods.json`, shipped with the app) → parser | values per 100 g, ids, names, portions. It is part of the package, but it is treated as input: a mistake or a change of source must not reach the guidance |
 | B12 | FIT `session.total_calories` (inside B1 and B2) → model | calories declared by the device: untrusted until checked against the duration |
 | B13 | FIT `record.distance` and `record.speed`, GPX track points (inside B1 and B2) → distance series → threshold test | cumulative distance and its time axis: untrusted until they form a valid series (finite, increasing time, non-decreasing metres) |
+| B14 | Map page (`ponos://app/map.html`, a web engine process) ↔ app | five numeric calls from the page (view, click, hover), the list, the totals and the simplified tracks that Python sends to it. Not drawn in the diagram: it sits next to B4 |
+| B15 | Tile proxy → Tracestrack (`https://tile.tracestrack.com`) | the tile address (z/x/y), which reveals the area looked at, the key in the query, the PNG that comes back: untrusted |
+| B16 | App ↔ tile key store (Windows: DPAPI file in `secrets/`; Ubuntu: Secret Service) | the Tracestrack key, app-wide, never per profile |
+| B17 | App ↔ Garmin calendar (workouts and schedule, unofficial API) | structured workouts sent, the list of scheduled workouts that comes back (untrusted), the local copy of what is deleted |
+| B18 | App ↔ backup file (`.ponosbackup`, chosen by the user) | a whole profile in a ZIP: database, original files, manifest. On read it is untrusted input; on write it holds health and GPS data in the clear |
+| B19 | Saved plan and frozen days (inside B3) → plan decoder | JSON text and its SHA-256 in the profile database: input, because the file can be edited by hand |
 
 ### Assets
 
@@ -87,7 +96,12 @@ Boundaries:
 | Health data: HR, injuries, pain, doctor's notes | confidentiality |
 | Height, weight and date of birth (with the weight history) | personal health data: they are only in the profile database; never in logs, messages or error chains; in plain text like the other profile data (accepted risk, section 5) |
 | Threshold HR and threshold pace, with the history of the tests | health data: only in the profile database; never in logs, messages or error chains. They move the zones and the load of every later activity, so their integrity matters too |
-| GPS positions of the activities | they reveal home and habits |
+| GPS positions of the activities | they reveal home and habits; also the box and the simplified track of each activity (schema v8) and the areas looked at on the map |
+| Injuries, pain scores, warning signs, doctor's notes and illnesses (phase 6) | health data: only in the profile database; never in logs, messages, error chains or the saved plan (the plan carries a snapshot without free text) |
+| Tracestrack key | a personal key with a quota: its leak costs the user's credit and lets others use their account |
+| Local copies of deleted Garmin workouts (`workout_backup`) | they are the only place that holds a definition after Garmin deletes it: integrity matters; they carry names and training structure |
+| Backup files (`.ponosbackup`) | one file holds the whole profile in the clear (health data, GPS, injuries); it leaves the profile folder and its permissions |
+| Frozen days of the plan (`plan_past_day`) | the history of what was planned: it must not be rewritten |
 | Integrity of the profile data (original files, database, parameters) | calculations and plan rely on them; a wrong plan can cause harm |
 | Availability of the app and the data | do not lose years of history |
 | List of profiles | contains paths and names; if lost, the profiles cannot be found |
@@ -107,6 +121,12 @@ Boundaries:
 - An operating system lock on a local disk works; on a network or synchronised
   disk it is not guaranteed (warning to the user).
 - The attacker knows the code (it is public).
+- Tracestrack is not malicious, but its answers are input (PNG checked) and it
+  sees which areas the user looks at (accepted risk, section 5).
+- The Garmin workout and calendar responses have the shape inferred from the
+  library, not verified against the live service (`T-MAN-01`).
+- A backup file is kept by the user in a place of their choosing; the app
+  cannot protect it once it is out of the profile folder.
 
 ## 2. What can go wrong (STRIDE per boundary)
 
@@ -223,8 +243,54 @@ service, E elevation of privilege.
 | Plan | Guidance taken as medical advice or a diagnosis | T | fixed notice always on screen (`tests/ui/test_day_window.py`); no diagnosis in the model |
 | Plan | Absurd date or person (age over 130, far-future day, extreme weight and height) that crashes the day | D | T-NUT-01, D-F4B-05 |
 | Plan | Time of the recovery wrong across a change of daylight saving time or after long stops | T | T-NUT-04, D-F4B-04, D-F4B-07 |
-| Calendar | Deletion of unwanted workouts on Garmin (phase 7) | T | T-SEC-10, T-UI-03 |
 | Plan | Dangerous plan from wrong data or wrong rules | T | T-PIANO-02, T-PIANO-03, T-PIANO-04, T-INF-01, T-INF-02, T-INF-03 |
+| B19 | Saved plan edited by hand, with a good checksum and impossible numbers (negative minutes or load, NaN) that break the nutrition or the calendar | T, D | T-SEC-02, D-F5-01 (`tests/collaudo/test_fase5_piano_manomesso.py`) |
+| B19 | Saved plan damaged, truncated, huge or nested: exception, or a plan that cannot be read for ever | T, D | T-SEC-02 (unreadable, never an exception; the next rebuild writes a good plan) |
+| B19 | Frozen day edited or deleted (the past rewritten); a damaged frozen day dropped so that the adherence looks better | T, R | T-PIANO-04 (the database refuses `UPDATE` and `DELETE`; a damaged day is shown as unreadable, not dropped) |
+| Plan | Two calls that build the plan together, or a rebuild killed halfway, leave a frozen day without its plan or the reverse | T | T-DATI-02 (`tests/collaudo/test_fase5_annulla_interruzioni.py`) |
+| Plan | Goals, availability or session types changed and undone: the undo does not restore the exact state | T | T-DATI-02 (command killed at every statement; undo exact) |
+| Plan | Nutrition of a future day that harms: deficit in the week of a race, a made-up session time | T | T-NUT-07, T-NUT-08 (ADR 011) |
+| Plan | Refuelling that falls at the minute the next session starts | T | T-NUT-04, D-F5-03 |
+| B14 | The map page calls something other than its five slots, or sends NaN, out-of-range views, an activity that Python did not list | E, T | T-SEC-14 (`tests/collaudo/test_fase5b_canale.py`) |
+| B14 | The page deletes its own bridge (`deleteLater`) | D | accepted risk (section 4, map page): no other effect |
+| B14 | The map page makes a network request or loads a remote image or script | I | T-SEC-15 (CSP, interceptor that lets only `ponos://` pass) |
+| B14 | Messages about an older list applied to the new one | T | T-SEC-14 (dropped and counted as stale) |
+| B15 | A tile address with Unicode digits, a query or a port passes the check and reaches the provider | T, I | T-SEC-15, D-F5B-01 |
+| B15 | Hostile tile answer: not a PNG, huge, huge in pixels, slow drip, lying length, redirect to another host | T, D | T-SEC-15, T-MAP-10 (cap of 1 MiB, 1,024 px, total deadline of 20 s, redirects never followed) |
+| B15 | Refused key, 429, no network, 5xx: endless retries, hammering the provider | D | T-MAP-10 (one attempt per call, cool-down per problem; the map stays usable on a neutral background) |
+| B15 | One missing tile (404) silences all the tiles around it | D | T-MAP-10, D-F5B-02 |
+| B15 | The provider sees which areas are looked at | I | accepted risk (section 5), declared by the user |
+| B15 | Plain HTTP or another host used for tiles | T, I | T-SEC-15 (HTTPS and the one host only; plain HTTP only on loopback, for tests) |
+| B16 | The Tracestrack key in the page, a log, an exception, a profile folder, a backup or the tile cache | I | T-SEC-15, T-SEC-07 (placeholder key searched everywhere) |
+| B16 | Silent fallback to a plain file when no secure store exists | I | T-SEC-15 (`TileKeyStoreUnavailableError`, no fallback) |
+| B16 | A token file read as the key or the reverse | S, I | `tests/platform/` (own entropy and name) |
+| Map | Tile cache over its cap, WAL that grows beyond it, stale tiles forever, a full disk | D | T-MAP-11, D-F5B-03 |
+| Map | The areas looked at stay in the cache folder, readable by every process of the user | I | accepted risk (section 5); outside the profile and its backups; "Clear map cache" |
+| Map | GPS positions in logs or in `QSettings` | I | T-SEC-08, T-SEC-15 |
+| Injury | The plan keeps loading a zone with a warning sign, or an illness stays ignored | T | T-INF-01, T-INF-03 |
+| Injury | Doctor's notes and pain scores copied into the saved plan, a log or an error | I | T-SEC-08 (`tests/collaudo/test_fase6_log_salute.py`); the plan carries a snapshot without free text (ADR 012) |
+| Injury | The ramp returns to +5 too early (closing dated ahead, review not done) | T | T-INF-03, D-F6-01 |
+| Injury | The app decides the return by itself | T | T-INF-02 (`ready_to_close` is information; closing is the user's) |
+| B3 | Migration v9 → v10 (injuries) or v6 → v7 → v8 interrupted midway or done by two instances | T, D | T-DATI-01 (`tests/collaudo/test_fase6_migrazione_v10.py`, `tests/collaudo/test_fase5b_migrazione_v8.py`) |
+| B17 | A hostile or damaged calendar response: wrong types, names with control or invisible characters, entries without a date | T, E | T-SEC-03, T-SEC-10, D-F7-03 |
+| B17 | Deleting a workout that is not the one chosen, an entry changed since, a day in the past, or more than the cap | T | T-SEC-10 (copy first; stale entry refused; past days never; cap of 100) |
+| B17 | A deletion refused by Garmin leaves a copy that "create again" turns into a duplicate | T | T-SEC-10, D-F7-01 |
+| B17 | A send repeated or cut by a lost answer creates duplicate workouts | T | T-SYNC-03 (same name on the same day is not created again; the calendar is read before creating) |
+| B17 | A long plan can only be sent a week at a time | D | D-F7-02 (the cap of 60 counts only sessions not yet on the calendar) |
+| B17 | 429, 5xx, expired session, cancellation during a send or a deletion | D | T-SYNC-03, T-SYNC-04 (same policy as the synchronisation, bounded attempts) |
+| B17 | A copy altered in the database is created again; a hostile copy reaches Garmin | T | T-SEC-10 (SHA-256 of the definition checked; refused without a request) |
+| B17 | The shape of the workout and calendar responses differs on the live service | T | accepted risk (section 5); `T-MAN-01` is the check |
+| B3 | Workout copies that grow without limit | D | ADR 013 (restored copies forgotten after 30 days, at most 1,000 wait) |
+| B18 | Backup that overwrites a file, lands inside the profile folder or follows a junction in the archive | T, E | T-DATI-05 (exclusive rename; path compared after resolving links; junction not followed) |
+| B18 | Backup that holds the Garmin tokens, the lock file, the pre-migration copies or an unknown file | I | T-SEC-07, T-DATI-05 (closed list of entries) |
+| B18 | Hostile backup: bomb, too many entries, false sizes, names with `../`, absolute or Unicode-digit names, encrypted entries, a manifest that lies, a database that is not a profile | T, D, E | T-SEC-02, D-F8-04 (`tests/collaudo/test_fase8_zip_ostili.py`) |
+| B18 | A restore over an existing profile, into a folder with files, or that leaves a folder that looks like a profile after a crash | T | T-DATI-05, T-DATI-02, D-F8-01, D-F8-03 |
+| B18 | A backup or restore killed halfway leaves a partial copy of the user's data in the chosen folder | I, D | T-DATI-02, D-F8-02 |
+| B18 | The backup file read by other users of the PC or copied by a cloud client | I | accepted risk (section 5): not encrypted; private permissions where the file system has them |
+| B18 | A backup of a newer version restored by an old app | T | T-DATI-01 (`BackupTooNewError`) |
+| B7 | Release workflow with excessive permissions, an unpinned action, a token with a long life | E | T-SEC-11 (read-only token; only the attestation job has `id-token` and `attestations`; actions pinned to a SHA; the release is a draft: publishing is manual) |
+| B7 | Packaged executable with local paths, user name or development files; `foods.json` missing from the package | I, D | T-SEC-12 (`tests/collaudo/test_fase8_pacchetto.py`) |
+| B7 | Package replaced after publication | T | T-SEC-12 (`SHA256SUMS` checked in the workflow, provenance attested, SBOM attested); the executable is not signed (exception 2, section 5) |
 | UI | Interface blocked by a long operation | D | T-UI-02, T-SYNC-06 |
 
 ## 3. What we do
@@ -286,7 +352,8 @@ service, E elevation of privilege.
   profile of another instance that won the race on the same folder
   (T-DATI-06).
 - Charts page: only local content, network blocked by an interceptor, data as
-  encoded JSON, no `QWebChannel`.
+  encoded JSON, no `QWebChannel` (the map page has one, with five numeric
+  slots: section "The map page").
 - Garmin login in the app (exception written in `CLAUDE.md`, ADR 002). The
   password and the MFA code go only to `garminconnect`, are not saved and do
   not appear in `repr`, messages or logs; empty or huge email and password are
@@ -439,6 +506,105 @@ service, E elevation of privilege.
     the person; a failure shows a generic message without the text of the
     exception (T-SEC-08).
 
+- Plan and frozen days (phase 5, ADR 011):
+  - The saved plan and each frozen day are input (B19): text, size cap and
+    SHA-256 checked, then the content is decoded into types that are valid by
+    construction (`PlannedSession`, `PlannedRace`, `PlanDay` refuse minutes
+    under 1, negative or non-finite loads, an empty goal id). Anything else is
+    "unreadable", never an exception; the next rebuild writes a good plan.
+  - A frozen day is never rewritten: the database refuses `UPDATE` and
+    `DELETE` (trigger), there is no command to clear the history, and a damaged
+    day is shown in the adherence as unreadable, not dropped and not replaced by
+    the current plan. The only way to remove it is to delete the profile.
+  - The plan is rebuilt on the data thread after each overview, in one
+    transaction with the freezing; the undo of goals, availability and session
+    types restores the exact state. The nutrition of the days ahead is built
+    from the saved plan with the same model, with no deficit in the week of an
+    A or B race and in the taper before it.
+- Map (phase 5b, ADR 010; the rules of the page are in the section "The map
+  page"):
+  - Page without network: only `ponos://` passes the interceptor. Tiles come
+    through `TileProxy` (Python): the address is parsed with ASCII digits only
+    and checked against the pyramid, the request goes to one host over HTTPS
+    with full verification, one attempt per call, a socket timeout and a total
+    deadline, redirects never followed, no system proxy, an answer that must be
+    a PNG within 1 MiB and 1,024 px. A problem sets a cool-down (15 s for a
+    network problem or a bad answer, 300 s for a refused key or exhausted
+    credit); a bad answer (a 404) cools down that tile only.
+  - Key: the Tracestrack key is in the key store (DPAPI file with its own
+    entropy on Windows; Secret Service on Ubuntu), app-wide, never in a profile
+    folder, a backup, a log, the page or the cache. It travels in the query of
+    the request, as the provider requires, and the URL is never logged. No
+    secure store means no key, never a plain file.
+  - Tile cache: own, on disk, in the user's cache folder, with an exact cap
+    (default 4 GB), LRU eviction, the WAL truncated after every write, "Clear
+    map cache". Only tiles that were looked at are stored.
+  - Without a key, without network or with the credit over, the map shows a
+    neutral background and a line that says why and what to do; the tracks, the
+    list and the filters keep working.
+  - Positions: the box and the simplified track of each activity are in the
+    profile database (schema v8, `CHECK` constraints on the box), rebuildable
+    from the original; never in a log.
+- Injuries (phase 6, ADR 012):
+  - Only the answers are saved (questionnaire, check-ins, review day, closing
+    day); the step of the path is replayed from them. The plan carries a
+    snapshot without free text, so the doctor's notes and the pain scores never
+    go into the saved plan.
+  - A warning sign or a systemic illness leaves no session for the plan, with
+    the reason and the invitation to see a doctor; the app gives no diagnosis
+    and never decides the return (`ready_to_close` is information).
+  - The ramp is +3 while a problem is open and for 28 days after the closing
+    day, also when that day is dated ahead.
+  - Schema v10 goes through the safety copy
+    (`backup/ponos-v9-v10.sqlite3`) and is tested interrupted at every
+    statement. Health data stay in the profile database in clear (the user's
+    decision of 2026-11-05); nothing about them goes to a log, a message or an
+    error chain (T-SEC-08).
+- Garmin calendar (phase 7, ADR 013):
+  - Responses of the calendar become domain types at the boundary; an entry
+    with wrong types, no date or a name with control, invisible or
+    direction-changing characters is left out, never repaired. A response that
+    is not a calendar is a definitive error.
+  - Every workout the app creates carries the prefix `Ponos · `. The library
+    workout of an entry is deleted only if it has the prefix; the athlete's own
+    workout is only taken off the calendar.
+  - Deleting: read the definition, save the copy (with its SHA-256), check the
+    entry is still the chosen one, unschedule, delete from the library. Nothing
+    is deleted without its copy; a day before today is never touched; at most
+    100 per deletion; if Garmin refuses, the copy is dropped so that "create
+    again" never makes a duplicate. A copy whose hash does not match, or whose
+    day has passed, is not created again.
+  - Sending: the calendar is read first and a workout with the same name on the
+    same day is not created again, also after a lost answer; at most 60 per
+    send, counting only the sessions not yet on the calendar, so repeated sends
+    advance; a 429 or a transient error is retried with the policy of the
+    synchronisation and then stops.
+  - The responses have the shape inferred from the library
+    (`experiments/garmin_workouts.md`): no live test yet.
+- Backup (phase 8, `docs/backup-format.md`):
+  - One ZIP with a closed list of entries (database snapshot made with the
+    SQLite backup API, original files, manifest with sizes and SHA-256). Never
+    in it: tokens, lock, pre-migration copies, anything else.
+  - Written in a private temporary folder next to the destination and renamed
+    at the end with an exclusive rename: it never overwrites a file and never
+    lands inside the profile folder; a dead process leaves only its temporary
+    folder, which the next backup into the same folder removes (only a real
+    folder with the generated name, whose process is gone or older than a day).
+  - Restore: untrusted input. Central directory, number of entries, declared
+    sizes, ratio and duplicates checked before extracting; names from a closed
+    list with ASCII digits only; each file streamed, checked against its
+    SHA-256, flushed and renamed; the database last, opened like a profile. It
+    works in a temporary folder and gives it the name of the destination as its
+    last step, so a failure or a death leaves the destination as it was; an
+    empty folder the user created stays, and a folder with anything in it is
+    refused.
+  - The file is not encrypted (accepted risk, section 5).
+- Release (phase 8): `release.yml` builds the Windows and Ubuntu packages,
+  checks `SHA256SUMS`, attests the provenance of the archives and of a
+  CycloneDX SBOM made from the lockfile, and attaches them to a draft release;
+  publishing is manual. Only the attestation job has `id-token` and
+  `attestations`. The executable is not signed (exception 2).
+
 ## 4. Did we do it right?
 
 - Every threat in the table has at least one test, by id. The acceptance
@@ -501,6 +667,20 @@ service, E elevation of privilege.
 | Threshold test: apply and undo, history, retest | T-PIANO-06 |
 | Migration v4 → v5 and the rules of `threshold_test` | T-DATI-01 |
 | Threshold HR and pace in logs and messages | T-SEC-08 |
+| Saved plan and frozen days edited by hand; undo and interruptions of goals and plan | T-SEC-02, T-PIANO-04, T-DATI-02 |
+| Nutrition of the days ahead, pause around the races | T-NUT-07, T-NUT-08 |
+| Map channel (hostile messages, allowed calls) | T-SEC-14 |
+| Map page without network; tile proxy, hostile answers, key | T-SEC-15, T-MAP-10 |
+| Tile cache: cap, LRU, expiry, clear | T-MAP-11 |
+| Map and list: speed with 50,000 activities, tracks, antimeridian | T-MAP-03, T-MAP-05, T-MAP-07 |
+| Migration v7 → v8 (boxes of the tracks) | T-DATI-01 (`tests/collaudo/test_fase5b_migrazione_v8.py`) |
+| Injuries: warning signs, path by steps, plan, ramp | T-INF-01, T-INF-02, T-INF-03 |
+| Injuries in logs and messages | T-SEC-08 (`tests/collaudo/test_fase6_log_salute.py`) |
+| Migration v9 → v10 (injuries) | T-DATI-01 (`tests/collaudo/test_fase6_migrazione_v10.py`) |
+| Garmin calendar: send, delete, copies, create again, hostile responses | T-SEC-10, T-SEC-03, T-SYNC-03, T-SYNC-04 (`tests/collaudo/test_fase7_calendario.py`) |
+| Backup and restore: round trip, closed list, hostile ZIP, interruptions | T-DATI-05, T-DATI-02, T-SEC-02 (`tests/collaudo/test_fase8_*.py`) |
+| Token absent from the backup | T-SEC-07 |
+| Package, `SHA256SUMS`, no local path, files read at run time | T-SEC-12 (`tests/collaudo/test_fase8_pacchetto.py`) |
 
 ### Cases closed by the phase 1 acceptance testing (D-F1)
 
@@ -569,6 +749,60 @@ in the tests):
 | — | Migration without a safety net | Copy of the database in `backup/ponos-v{from}-v{to}.sqlite3` before every migration; without a copy it does not migrate | T-DATI-01 |
 | — | Preview that modifies the profile | `peek` opens the database read-only, without migrating or taking the lock | T-UI-03 |
 | — | File replacements with different techniques | One single module, `ponos_coach.fsio` | T-DATI-02 |
+
+### Cases closed by the phase 5 acceptance testing (D-F5)
+
+Defects found by the phase 5 acceptance testing and the behaviour that closes
+them. Closed on 2026-11-08.
+
+| Id | Defect | Behaviour | Test (plan) | Test (file) |
+|---|---|---|---|---|
+| D-F5-01 | A saved plan edited by hand with its checksum recomputed (minutes 0 or negative, a negative load, an expected time of 0) was read back and broke the nutrition of that day | The values of a session, a race and a day are valid by construction: a plan with impossible numbers cannot be built, so the decoder reads it as unreadable and the next rebuild writes a good one | T-SEC-02 | `tests/collaudo/test_fase5_piano_manomesso.py`, `tests/planning/test_plan_codec.py` |
+| D-F5-02 | Today, inside the week of an A or B race or the day before a taper, still had the weight-loss deficit while tomorrow had none | Today has no deficit in the week (Monday to Sunday) of an A or B race of the saved plan, or when the first day of the plan is in a taper or mini-taper | T-NUT-08 | `tests/collaudo/test_fase5_alimentazione_futura.py` |
+| D-F5-03 | With a gap of 90 minutes between two sessions the second refuelling fell at the minute the next session starts (the 30 minutes that the first intake waits were not subtracted) | The refuelling hours count the wait after the end of the session and the 30 minutes before the next one; the first intake is always there | T-NUT-04, T-NUT-07 | `tests/collaudo/test_fase5_rifornimento_orario.py` |
+| D-F5-04 | Late-evening refuelling intakes after midnight were all clamped to 23:59 and piled on the same minute | Intakes that would fall after the end of the day are left out; the first one stays, at 23:59 at the latest | T-NUT-04 | `tests/collaudo/test_fase5_rifornimento_orario.py` |
+
+Closed on 2026-11-08: their tests, born as expected-fail (strict `xfail`), pass
+without the mark.
+
+### Cases closed by the phase 5b acceptance testing (D-F5B)
+
+Closed on 2026-11-08.
+
+| Id | Defect | Behaviour | Test (plan) | Test (file) |
+|---|---|---|---|---|
+| D-F5B-01 | The pattern for a tile address and for the size of the cache used `\d`, which matches Unicode digits: Arabic-Indic digits were read as 12/0/0 and as a size | Only ASCII digits are accepted, in the address and in the size | T-SEC-15 | `tests/collaudo/test_fase5b_tile.py` |
+| D-F5B-02 | The cool-down was global: one 404 (a tile the provider does not have) silenced the tiles around it for 15 seconds | A bad answer for one tile cools down that tile only (a table of at most 512 tiles); the network problems and the key stay global | T-MAP-10 | `tests/collaudo/test_fase5b_tile.py`, `tests/maps/test_use_cases.py` |
+| D-F5B-03 | The write-ahead log of the tile cache grew past the cap of the folder | The WAL is truncated after every write: the folder stays within the cap plus a small margin | T-MAP-11 | `tests/collaudo/test_fase5b_tile.py` |
+
+### Cases closed by the phase 6 acceptance testing (D-F6)
+
+Closed on 2026-11-08.
+
+| Id | Defect | Behaviour | Test (plan) | Test (file) |
+|---|---|---|---|---|
+| D-F6-01 | An injury closed on a day dated ahead was neither open nor "recently returned": for those days the plan went back to a ramp of +5 | A closing dated ahead keeps the ramp at +3 until 28 days after the closing day | T-INF-03 | `tests/collaudo/test_fase6_piano.py`, `tests/injury/test_restriction.py` |
+
+### Cases closed by the phase 7 acceptance testing (D-F7)
+
+Closed on 2026-11-08.
+
+| Id | Defect | Behaviour | Test (plan) | Test (file) |
+|---|---|---|---|---|
+| D-F7-01 | The copy of a workout was saved before the removal was tried; when Garmin refused (entry changed), the copy stayed pending and "create again" made a workout that was never deleted | If the removal does not happen the copy is dropped again; nothing is pending | T-SEC-10 | `tests/collaudo/test_fase7_calendario.py` |
+| D-F7-02 | `deferred` promised "left for another send", but the next send chose the same first 60 sessions (already on the calendar) and deferred the same rest: a long plan went one week at a time | The cap of 60 counts only the sessions not yet on the calendar, so repeated sends advance until the plan is complete | T-SYNC-03 | `tests/collaudo/test_fase7_calendario.py` |
+| D-F7-03 | The filter on the names of the calendar entries dropped control characters but not the format characters that reorder or hide text, in the dialog where the user chooses what to delete | An entry whose name carries invisible or direction-changing characters is left out of the list | T-SEC-03, T-SEC-10 | `tests/collaudo/test_fase7_calendario.py` |
+
+### Cases closed by the phase 8 acceptance testing (D-F8)
+
+Closed on 2026-11-08.
+
+| Id | Defect | Behaviour | Test (plan) | Test (file) |
+|---|---|---|---|---|
+| D-F8-01 | After a power-off during a restore the target held some archive files and no database; the restore refuses a non-empty folder, so the user could not retry | The restore works in a temporary folder next to the destination and gives it the destination's name as its last step: the destination stays as it was | T-DATI-05, T-DATI-02 | `tests/collaudo/test_fase8_interruzioni.py` |
+| D-F8-02 | A backup process that died left its `.ponos-backup-*` temporary ZIP (a partial copy of the user's data) in the chosen folder for ever | The next backup into the same folder removes it, only if it is a real folder with the generated name whose process is gone or that is more than a day old | T-DATI-02, T-SEC-09 | `tests/collaudo/test_fase8_interruzioni.py` |
+| D-F8-03 | `docs/backup-format.md` said a failed restore removes the folder only "if it created it", but any empty folder was removed, also one the user had made | Only a folder the restore created is removed; an empty folder of the user stays | T-DATI-05 | `tests/collaudo/test_fase8_backup.py` |
+| D-F8-04 | The pattern of the entry names used `\d` (any Unicode digit): a backup could carry a year folder in Arabic-Indic digits and the restore created it; the writer (`str.isdecimal`) was as lenient | The year is 4 ASCII digits, in the reader and in the writer | T-SEC-02 | `tests/collaudo/test_fase8_zip_ostili.py` |
 
 ### The map page (phase 5b, T-SEC-14 and T-SEC-15)
 
@@ -640,7 +874,7 @@ only windows with valid HR on at least 90% of the last 20 minutes.
 | Risk | Reason |
 |---|---|
 | Unofficial Garmin API: it can break, can violate the terms of use, can lead to the blocking of the account | There is no official access for private users (ADR 002). Mitigations: isolated adapter, few requests, FIT import always available. |
-| Unsigned executables | Personal project without a signing certificate. Mitigation: `SHA256SUMS`, README with hash verification and SmartScreen notice. |
+| Unsigned executables (exception 2 of `CLAUDE.md`, permanent) | Personal project without a signing certificate. Mitigation: `SHA256SUMS`, provenance of the archives and an SBOM attested by the release workflow, README with hash verification and SmartScreen notice. |
 | Tokens readable by every process of the user | DPAPI in user scope and the Secret Service protect from other users, not from other processes of the same user. Credential Manager, rejected because it cannot hold the tokens (2560 bytes), would have had the same limit. A password the user must type at every start would go against daily use. The machine is assumed not compromised. Mitigation: logout deletes the tokens. |
 | Non-interruptible library timeouts | The timeout belongs to the library (15 s per request, 30 s per login step) and cannot be configured without touching internal parts. Cancellation applies from the next request: a request already sent ends or times out on its own. Mitigation: the journal makes resuming safe at every point. |
 | Response or download read entirely into memory by the library before the cap | The cap of 50 MB applies after the read. Mitigation: the 15 s timeout and the ZIP limits downstream (T-SEC-02). |
@@ -660,11 +894,19 @@ only windows with valid HR on at least 90% of the last 20 minutes.
 | A threshold that is wrong but plausible (a field test, a hard day, a fast downhill window) | It cannot be told from a real effort within the limits of the refusals. Mitigations: the user chooses the activity, the refusals with reasons, the exact undo, the retest every 6–8 weeks; the zones are a training indication, not medical advice (ADR 009). |
 | Distance from a GPS or a treadmill sensor with a systematic error | The pace is only as good as the distance; the app cannot measure more. The HR threshold does not depend on it. |
 | Food names and nutrition advice only in English until translated; no allergy or diet restriction | User decision of 2026-11-07. The examples are an illustration, not a menu. |
+| The tile provider (Tracestrack) sees the areas the user looks at, and the key travels in the query of each request | Accepted by the user on 2026-11-07 (ADR 010). A map with tiles needs a tile host; the alternative, an offline vector region, is deferred. Mitigations: the page has no network, one host over HTTPS only, the URL is never logged, only tiles that were looked at are asked (no prefetch), no map at all without a key (neutral background). |
+| The areas looked at stay in the tile cache (a database in the user's cache folder) | Same readers as the profile (every process of the user). It is outside the profile folder and its backups, derived, and "Clear map cache" empties it. |
+| A compromised map page can delete its own bridge (`deleteLater`) | The only effect is that its own map goes quiet. No other call is open. |
+| Shape of the Garmin workout and calendar responses not verified on the live service | The adapter is written from the library's code; only `garmin/workout_json.py` changes if Garmin differs. Mitigations: hostile or odd entries are left out, deletion needs a copy and a still-matching entry, `T-MAN-01` is the check by the user. |
+| The backup file is not encrypted and holds health data and GPS positions | Declared in the format, in the interface and in the README. Encrypting needs a password and a recovery key, as for the profile (accepted on 2026-11-05: same decision). Mitigations: private permissions where the file system has them, never in the profile folder, no tokens in it, the advice to use disk encryption and not to keep it in a synchronised folder. |
+| A backup made by the user is then outside the protection of the profile folder | The app cannot follow a file the user moves. The warning is in the interface. |
+| Injuries and illnesses in plain text in the profile database | Same decision and mitigations as the other health data (accepted on 2026-11-05); the saved plan holds no free text. |
+| A frozen day of the plan cannot be removed except by deleting the profile | Decision of phase 5: the history of what was planned must not be rewritten. |
 
 ## Open points
 
-- The backup contains health data: format and protection to be decided in
-  phase 8.
+- The final review of this document (T-SEC-13) is part of the release
+  checklist and is not done yet.
 - No test covers the cap of 1,000,000 listed entries
   (`MAX_LISTED_ACTIVITIES`).
 - The real shape of the Garmin responses (sport keys, listing fields) is
@@ -677,3 +919,7 @@ only windows with valid HR on at least 90% of the last 20 minutes.
   or to leave empty.
 - The D-F1 and D-F2 defects are not yet recorded in `docs/collaudo.md`: the
   main session does it.
+- The rows of D-F5-02 and D-F5-04 are missing from the table of phase 5.
+- The Garmin workout and calendar responses and the Tracestrack terms
+  (quota, caching, attribution) are checked only on fixtures and on a local
+  server: `T-MAN-01` and the reading of the provider's terms before the release.

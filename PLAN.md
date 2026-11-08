@@ -556,17 +556,17 @@ posto e documentati nella skill del progetto; non sono consigli medici.
 
 ### Fase 5 — Obiettivi e piano adattivo
 
-- [ ] Obiettivi nel calendario (A/B/C, tempo obiettivo, CTL a una data), con
+- [x] Obiettivi nel calendario (A/B/C, tempo obiettivo, CTL a una data), con
       annulla.
-- [ ] Disponibilità settimanale.
-- [ ] Scelta delle tipologie di seduta per sport; avviso quando un obiettivo
+- [x] Disponibilità settimanale.
+- [x] Scelta delle tipologie di seduta per sport; avviso quando un obiettivo
       ne richiede una esclusa.
-- [ ] Motore del piano (sezione 4.6) con test a scenari (un obiettivo, due A
+- [x] Motore del piano (sezione 4.6) con test a scenari (un obiettivo, due A
       vicini, A + B, obiettivo irraggiungibile, sedute saltate, carico
       eccessivo).
-- [ ] Vista calendario: pianificato contro fatto; proiezione del PMC nel
+- [x] Vista calendario: pianificato contro fatto; proiezione del PMC nel
       grafico.
-- [ ] Ricalcolo del piano dopo ogni sincronizzazione.
+- [x] Ricalcolo del piano dopo ogni sincronizzazione.
 - [x] Alimentazione dei giorni futuri dal piano (ADR 011, T-NUT-07 e 08), con lo stesso modello della
       fase 4b; nessun deficit nella settimana di una gara A o B e nello
       scarico che la precede (ACSM 2016: dimagrire lontano dalle gare), con
@@ -576,7 +576,7 @@ posto e documentati nella skill del progetto; non sono consigli medici.
 
 Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
 
-- [ ] ADR della mappa, dopo un prototipo misurato con 50.000 attività e le
+- [x] ADR della mappa, dopo un prototipo misurato con 50.000 attività e le
       loro tracce: libreria (MapLibre GL JS, che disegna molte linee sulla
       GPU e raggruppa le partenze, oppure Leaflet con canvas e
       raggruppamento dei marcatori; scelta: Leaflet con
@@ -587,52 +587,52 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       `docs/adr/010-mappa.md`). Aggiornati
       threat model, specifica e registro delle dipendenze (licenze della
       libreria e condizioni Tracestrack).
-- [ ] Dati: traccia semplificata (Douglas-Peucker con tolleranza per zoom) e
+- [x] Dati: traccia semplificata (Douglas-Peucker con tolleranza per zoom) e
       riquadro di ogni attività nell'indice, rigenerabili dal FIT o dal GPX;
       serie della quota per il profilo; nessuna posizione nei log.
-- [ ] Impostazioni › Mappa: chiave Tracestrack (nel portachiavi, con verifica
+- [x] Impostazioni › Mappa: chiave Tracestrack (nel portachiavi, con verifica
       e messaggio chiaro se rifiutata), dimensione della cache (default
       4 GB), "Svuota cache"; senza chiave, senza rete o con il credito
       esaurito la mappa resta usabile su sfondo neutro con un avviso che dice
       perché e cosa fare.
-- [ ] Filtri dell'elenco attività: data (da–a), durata, distanza, dislivello
+- [x] Filtri dell'elenco attività: data (da–a), durata, distanza, dislivello
       positivo, sport. Minimo e massimo facoltativi (vuoto = nessun limite),
       input tolleranti (virgola o punto, "1:30" o "90" per la durata),
       minimo e massimo invertiti scambiati. Un solo stato dei filtri,
       condiviso da tabella e mappa; l'app ricorda gli ultimi filtri.
-- [ ] Vista Mappa: tracce delle attività filtrate come linee colorate per
+- [x] Vista Mappa: tracce delle attività filtrate come linee colorate per
       sport (legenda, mai il solo colore); a zoom basso partenze raggruppate
       in cerchi con il numero, che si dividono o si uniscono a ogni livello;
       clic su un gruppo → zoom sull'area; clic su una traccia → selezione,
       traccia evidenziata e riga dell'elenco selezionata.
-- [ ] Elenco a destra delle attività visibili nell'area inquadrata (dopo i
+- [x] Elenco a destra delle attività visibili nell'area inquadrata (dopo i
       filtri), con conteggio e totali (km, dislivello, ore), aggiornato a
       ogni spostamento o zoom; selezione sincronizzata con la mappa; attività
       senza posizione (indoor, forza) contate a parte.
-- [ ] Dettaglio dell'attività selezionata: profilo altimetrico (quota sulla
+- [x] Dettaglio dell'attività selezionata: profilo altimetrico (quota sulla
       distanza) collegato alla traccia nei due sensi; traccia colorabile per
       zone FC con la legenda delle zone del giorno dell'attività.
-- [ ] Pagina della mappa isolata come quella dei grafici e senza alcuna rete
+- [x] Pagina della mappa isolata come quella dei grafici e senza alcuna rete
       (sezione 4.9); proxy delle tile in Python con timeout, chiave dal
       portachiavi e cache su disco LRU con tetto esatto.
-- [ ] Test T-FILT e T-MAP (sezione 7.11), T-SEC-14 e T-SEC-15; collaudo.
+- [x] Test T-FILT e T-MAP (sezione 7.11), T-SEC-14 e T-SEC-15; collaudo.
 
 ### Fase 6 — Infortuni e recupero
 
-- [ ] Questionario, segnali d'allarme, percorso a gradini, check-in
+- [x] Questionario, segnali d'allarme, percorso a gradini, check-in
       giornaliero (sezione 4.7), con test per ogni regola di salita, discesa e
       stop.
-- [ ] Integrazione con il piano: zona colpita sospesa, alternative, rampa
+- [x] Integrazione con il piano: zona colpita sospesa, alternative, rampa
       ridotta dopo il rientro.
 
 ### Fase 7 — Calendario Garmin
 
-- [ ] Porta `WorkoutCalendar`: invio degli allenamenti strutturati (zone FC,
+- [x] Porta `WorkoutCalendar`: invio degli allenamenti strutturati (zone FC,
       durate), a scelta dell'utente (piano intero, settimana, singola seduta).
-- [ ] Elenco degli allenamenti futuri programmati su Garmin ed eliminazione
+- [x] Elenco degli allenamenti futuri programmati su Garmin ed eliminazione
       selettiva con conferma che mostra l'elenco e un bottone con il verbo;
       copia locale di ciò che si elimina, per poterlo ricreare.
-- [ ] Gli allenamenti creati dall'app sono riconoscibili (prefisso nel nome).
+- [x] Gli allenamenti creati dall'app sono riconoscibili (prefisso nel nome).
 
 ### Fase 8 — Rilascio
 
@@ -641,14 +641,14 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
 - [ ] Valori della tabella degli alimenti verificati contro USDA FoodData
       Central con `experiments/verify_foods.py --apply` (`source.verified_on`
       valorizzato); il 2026-11-07 `api.nal.usda.gov` non si risolveva.
-- [ ] `nutrition/foods.json` incluso nel pacchetto PyInstaller.
-- [ ] Backup e ripristino di un profilo in un file versionato, con test di
+- [x] `nutrition/foods.json` incluso nel pacchetto PyInstaller.
+- [x] Backup e ripristino di un profilo in un file versionato, con test di
       ripristino.
-- [ ] PyInstaller con `.spec` versionato per Windows e Ubuntu, smoke test
+- [x] PyInstaller con `.spec` versionato per Windows e Ubuntu, smoke test
       sull'eseguibile, `SHA256SUMS`, misura della dimensione del pacchetto.
 - [ ] Controllo di conformità: licenze, intestazioni, autore dei commit,
       nessun dato personale né percorso locale nel pacchetto.
-- [ ] README con installazione, verifica dell'hash, avviso di SmartScreen,
+- [x] README con installazione, verifica dell'hash, avviso di SmartScreen,
       messaggio di responsabilità medica.
 
 ## 6. Squadra di agenti e modelli
