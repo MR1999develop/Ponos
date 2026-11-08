@@ -710,6 +710,8 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Import from folder...": QKeySequence("Ctrl+Shift+I").toString(),
         "Stop": QKeySequence("Esc").toString(),
         "Quit": QKeySequence("Ctrl+Q").toString(),
+        "Back up profile...": QKeySequence("Ctrl+Shift+B").toString(),
+        "Restore profile from backup...": QKeySequence("Ctrl+Shift+O").toString(),
         "Open the log folder": QKeySequence("Ctrl+Shift+L").toString(),
         "Edit profile...": QKeySequence("Ctrl+E").toString(),
         "Sport weights...": QKeySequence("Ctrl+Shift+W").toString(),

@@ -192,6 +192,207 @@
     </message>
 </context>
 <context>
+    <name>Backup</name>
+    <message>
+        <source>Size: {size}.</source>
+        <translation>Dimensione: {size}.</translation>
+    </message>
+    <message numerus="yes">
+        <source>Activity files: %n.</source>
+        <translation>
+            <numerusform>File di attività: %n.</numerusform>
+            <numerusform>File di attività: %n.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>The backup was not written</source>
+        <translation>La copia non è stata scritta</translation>
+    </message>
+    <message>
+        <source>A file with this name already exists, and a backup never replaces a file.</source>
+        <translation>Esiste già un file con questo nome, e una copia non sostituisce mai un file.</translation>
+    </message>
+    <message>
+        <source>Choose another name or another folder.</source>
+        <translation>Scegli un altro nome o un&apos;altra cartella.</translation>
+    </message>
+    <message>
+        <source>The backup cannot be saved inside the folder of the profile it copies.</source>
+        <translation>La copia non può essere salvata dentro la cartella del profilo che copia.</translation>
+    </message>
+    <message>
+        <source>Choose a folder outside the profile folder.</source>
+        <translation>Scegli una cartella fuori da quella del profilo.</translation>
+    </message>
+    <message>
+        <source>The profile could not be read or the file could not be written.</source>
+        <translation>Non è stato possibile leggere il profilo o scrivere il file.</translation>
+    </message>
+    <message>
+        <source>Check that the folder is writable and has enough free space, then try again.</source>
+        <translation>Controlla che la cartella sia scrivibile e abbia spazio libero, poi riprova.</translation>
+    </message>
+    <message>
+        <source>The profile was not restored</source>
+        <translation>Il profilo non è stato ripristinato</translation>
+    </message>
+    <message>
+        <source>This backup was made by a newer version of Ponos Coach.</source>
+        <translation>Questa copia è stata fatta da una versione più recente di Ponos Coach.</translation>
+    </message>
+    <message>
+        <source>Update Ponos Coach and try again.</source>
+        <translation>Aggiorna Ponos Coach e riprova.</translation>
+    </message>
+    <message>
+        <source>Choose another backup.</source>
+        <translation>Scegli un&apos;altra copia.</translation>
+    </message>
+    <message>
+        <source>The chosen folder is not empty.</source>
+        <translation>La cartella scelta non è vuota.</translation>
+    </message>
+    <message>
+        <source>Choose a new folder or an empty one. Nothing was changed.</source>
+        <translation>Scegli una cartella nuova o vuota. Non è stato cambiato nulla.</translation>
+    </message>
+    <message>
+        <source>The chosen folder is in use by another instance of Ponos Coach.</source>
+        <translation>La cartella scelta è in uso da un&apos;altra istanza di Ponos Coach.</translation>
+    </message>
+    <message>
+        <source>Choose another folder.</source>
+        <translation>Scegli un&apos;altra cartella.</translation>
+    </message>
+    <message>
+        <source>The backup could not be read or the folder could not be written.</source>
+        <translation>Non è stato possibile leggere la copia o scrivere la cartella.</translation>
+    </message>
+    <message>
+        <source>Check that the file is readable and the folder is writable, with free space.</source>
+        <translation>Controlla che il file sia leggibile e la cartella scrivibile, con spazio libero.</translation>
+    </message>
+    <message>
+        <source>Something unexpected happened.</source>
+        <translation>È successo qualcosa di imprevisto.</translation>
+    </message>
+    <message>
+        <source>Try again; if it happens again, look at the log (Help menu).</source>
+        <translation>Riprova; se succede ancora, guarda il registro (menu Aiuto).</translation>
+    </message>
+    <message>
+        <source>This file is not a Ponos Coach backup.</source>
+        <translation>Questo file non è una copia di Ponos Coach.</translation>
+    </message>
+    <message>
+        <source>This backup is larger than the limits Ponos Coach accepts.</source>
+        <translation>Questa copia supera i limiti accettati da Ponos Coach.</translation>
+    </message>
+    <message>
+        <source>This backup is damaged: a file does not match its checksum.</source>
+        <translation>Questa copia è danneggiata: un file non corrisponde alla sua somma di controllo.</translation>
+    </message>
+    <message>
+        <source>This backup holds files that a backup should never hold.</source>
+        <translation>Questa copia contiene file che una copia non dovrebbe mai contenere.</translation>
+    </message>
+    <message>
+        <source>This backup is damaged: its database is not intact.</source>
+        <translation>Questa copia è danneggiata: il suo database non è integro.</translation>
+    </message>
+</context>
+<context>
+    <name>BackupUi</name>
+    <message>
+        <source>Back up profile...</source>
+        <translation>Crea copia del profilo...</translation>
+    </message>
+    <message>
+        <source>Restore profile from backup...</source>
+        <translation>Ripristina profilo da copia...</translation>
+    </message>
+    <message>
+        <source>A backup or a restore is running; wait for it to finish.</source>
+        <translation>È in corso una copia o un ripristino: attendi che finisca.</translation>
+    </message>
+    <message>
+        <source>Create or open a profile first.</source>
+        <translation>Crea o apri prima un profilo.</translation>
+    </message>
+    <message>
+        <source>Ponos Coach backup (*{suffix})</source>
+        <translation>Copia di Ponos Coach (*{suffix})</translation>
+    </message>
+    <message>
+        <source>Back up profile</source>
+        <translation>Crea copia del profilo</translation>
+    </message>
+    <message>
+        <source>Choose the backup to restore</source>
+        <translation>Scegli la copia da ripristinare</translation>
+    </message>
+    <message>
+        <source>Choose a new or empty folder for the profile</source>
+        <translation>Scegli una cartella nuova o vuota per il profilo</translation>
+    </message>
+    <message>
+        <source>Backing up the profile...</source>
+        <translation>Copia del profilo in corso...</translation>
+    </message>
+    <message>
+        <source>Restoring the profile...</source>
+        <translation>Ripristino del profilo in corso...</translation>
+    </message>
+    <message>
+        <source>Backup saved</source>
+        <translation>Copia salvata</translation>
+    </message>
+    <message>
+        <source>The backup &quot;{file}&quot; was saved.</source>
+        <translation>La copia «{file}» è stata salvata.</translation>
+    </message>
+    <message>
+        <source>It holds your health data and no Garmin password or token: keep it somewhere private.</source>
+        <translation>Contiene i tuoi dati di salute e nessuna password o token di Garmin: conservala in un posto privato.</translation>
+    </message>
+    <message>
+        <source>Profile restored</source>
+        <translation>Profilo ripristinato</translation>
+    </message>
+    <message>
+        <source>The profile was restored into {folder}.</source>
+        <translation>Il profilo è stato ripristinato in {folder}.</translation>
+    </message>
+    <message>
+        <source>Open the restored profile now?</source>
+        <translation>Aprire ora il profilo ripristinato?</translation>
+    </message>
+    <message>
+        <source>Open profile</source>
+        <translation>Apri profilo</translation>
+    </message>
+    <message>
+        <source>Not now</source>
+        <translation>Non ora</translation>
+    </message>
+    <message>
+        <source>The list already has a profile with the same id: &quot;{name}&quot; in {folder}. Replace its entry with the restored profile and open it? The old folder is not deleted.</source>
+        <translation>L&apos;elenco ha già un profilo con lo stesso id: «{name}» in {folder}. Sostituire la sua voce con il profilo ripristinato e aprirlo? La vecchia cartella non viene eliminata.</translation>
+    </message>
+    <message>
+        <source>Replace entry</source>
+        <translation>Sostituisci voce</translation>
+    </message>
+    <message>
+        <source>Keep the list as it is</source>
+        <translation>Lascia l&apos;elenco com&apos;è</translation>
+    </message>
+    <message>
+        <source>Wait for the current operation to finish, or stop it first.</source>
+        <translation>Attendi la fine dell&apos;operazione in corso, oppure interrompila.</translation>
+    </message>
+</context>
+<context>
     <name>BirthDateEdit</name>
     <message>
         <source>Date of birth</source>
@@ -1260,7 +1461,7 @@
     </message>
     <message>
         <source>Checking the Garmin account; try again in a moment.</source>
-        <translation>Verifica dell'account Garmin in corso: riprova tra un momento.</translation>
+        <translation>Verifica dell&apos;account Garmin in corso: riprova tra un momento.</translation>
     </message>
     <message>
         <source>Another Garmin task is running; wait for it or stop it.</source>
@@ -1280,7 +1481,7 @@
     </message>
     <message>
         <source>There is no plan yet: add a goal first.</source>
-        <translation>Non c'è ancora un piano: aggiungi prima un obiettivo.</translation>
+        <translation>Non c&apos;è ancora un piano: aggiungi prima un obiettivo.</translation>
     </message>
     <message>
         <source>The plan has no sessions from today on.</source>
@@ -1305,22 +1506,22 @@
     <message numerus="yes">
         <source>Sending workout {step} of %n</source>
         <translation>
-            <numerusform>Invio dell'allenamento {step} di %n</numerusform>
-            <numerusform>Invio dell'allenamento {step} di %n</numerusform>
+            <numerusform>Invio dell&apos;allenamento {step} di %n</numerusform>
+            <numerusform>Invio dell&apos;allenamento {step} di %n</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>Deleting workout {step} of %n</source>
         <translation>
-            <numerusform>Eliminazione dell'allenamento {step} di %n</numerusform>
-            <numerusform>Eliminazione dell'allenamento {step} di %n</numerusform>
+            <numerusform>Eliminazione dell&apos;allenamento {step} di %n</numerusform>
+            <numerusform>Eliminazione dell&apos;allenamento {step} di %n</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>Creating workout {step} of %n again</source>
         <translation>
-            <numerusform>Ricreazione dell'allenamento {step} di %n</numerusform>
-            <numerusform>Ricreazione dell'allenamento {step} di %n</numerusform>
+            <numerusform>Ricreazione dell&apos;allenamento {step} di %n</numerusform>
+            <numerusform>Ricreazione dell&apos;allenamento {step} di %n</numerusform>
         </translation>
     </message>
     <message>
@@ -1337,7 +1538,7 @@
     </message>
     <message>
         <source>Garmin asks you to connect again. Connect the account and repeat the command.</source>
-        <translation>Garmin chiede di collegarsi di nuovo. Collega l'account e ripeti il comando.</translation>
+        <translation>Garmin chiede di collegarsi di nuovo. Collega l&apos;account e ripeti il comando.</translation>
     </message>
     <message>
         <source>Garmin is limiting the requests. Wait a few minutes and repeat the command.</source>
@@ -1357,7 +1558,7 @@
     </message>
     <message>
         <source>Garmin refused it</source>
-        <translation>Garmin l'ha rifiutato</translation>
+        <translation>Garmin l&apos;ha rifiutato</translation>
     </message>
     <message>
         <source>it has more steps than a watch can take</source>
@@ -1400,7 +1601,7 @@
     </message>
     <message>
         <source>Connect the account again and repeat the command.</source>
-        <translation>Collega di nuovo l'account e ripeti il comando.</translation>
+        <translation>Collega di nuovo l&apos;account e ripeti il comando.</translation>
     </message>
     <message>
         <source>The system keychain cannot be used.</source>
@@ -1527,7 +1728,7 @@
     </message>
     <message>
         <source>There was nothing to send.</source>
-        <translation>Non c'era nulla da inviare.</translation>
+        <translation>Non c&apos;era nulla da inviare.</translation>
     </message>
     <message>
         <source>Nothing was deleted.</source>
@@ -1535,7 +1736,7 @@
     </message>
     <message>
         <source>There was nothing to create again.</source>
-        <translation>Non c'era nulla da ricreare.</translation>
+        <translation>Non c&apos;era nulla da ricreare.</translation>
     </message>
     <message numerus="yes">
         <source>Workouts on the Garmin calendar: %n</source>
@@ -1680,7 +1881,7 @@
     <message numerus="yes">
         <source>Delete the selected workouts from the Garmin calendar? (%n)</source>
         <translation>
-            <numerusform>Eliminare l'allenamento selezionato dal calendario Garmin? (%n)</numerusform>
+            <numerusform>Eliminare l&apos;allenamento selezionato dal calendario Garmin? (%n)</numerusform>
             <numerusform>Eliminare gli allenamenti selezionati dal calendario Garmin? (%n)</numerusform>
         </translation>
     </message>

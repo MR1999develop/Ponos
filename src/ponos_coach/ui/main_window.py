@@ -52,6 +52,8 @@ from ponos_coach.profiles.domain import ProfileId, RegistryEntry
 from ponos_coach.profiles.use_cases import FolderWarning, NewProfileRequest
 from ponos_coach.ui.activity_detail_loader import ActivityDetailLoader
 from ponos_coach.ui.activity_table import ActivitiesPage
+from ponos_coach.ui.backup_runner import BackupRunner, BackupUseCases
+from ponos_coach.ui.backup_ui import BackupUi
 from ponos_coach.ui.calendar_page import CalendarPage
 from ponos_coach.ui.chart_view import ChartEngine
 from ponos_coach.ui.data_thread import SHUTDOWN_WAIT_MS
@@ -151,17 +153,19 @@ def system_theme() -> Theme:
 class MainWindow(QMainWindow):
     """Main window. It decides nothing: it shows the controller's state."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - controller, use cases and settings of the Composition Root
         self,
         controller: WorkspaceController,
         settings: QSettings,
         defaults: NewProfileDefaults,
         parent: QWidget | None = None,
         *,
+        backup: BackupUseCases,
         log_folder: Path | None = None,
         language: Language = Language.ENGLISH,
     ) -> None:
         super().__init__(parent)
+        self._backup_use_cases = backup
         self._controller = controller
         self._language = language
         self._settings = settings
@@ -280,6 +284,8 @@ class MainWindow(QMainWindow):
         self._switch_menu = file_menu.addMenu(self.tr("Switch profile"))
         self._remove_menu = file_menu.addMenu(self.tr("Remove profile from list"))
         self._delete_menu = file_menu.addMenu(self.tr("Delete profile folder"))
+        file_menu.addSeparator()
+        self._backup.add_to_menu(file_menu)
         file_menu.addSeparator()
         file_menu.addAction(self._import_files_action)
         file_menu.addAction(self._import_folder_action)
@@ -451,6 +457,16 @@ class MainWindow(QMainWindow):
             remember_box=self._remember,
             connect_account=self._garmin.connect_account,
         )
+        self._backup = BackupUi(
+            self,
+            self._controller,
+            BackupRunner(self._backup_use_cases, self),
+            self._settings,
+            today=self._today,
+            remember_box=self._remember,
+            show_error=self._show_error,
+            open_profile_folder=self.open_profile_folder,
+        )
         self._calendar.selection_changed.connect(self._garmin_calendar.refresh)
         self._calendar.panel.attach_send_action(self._garmin_calendar.send_session_action)
         self._controller.plan_rebuilt.connect(self._garmin_calendar.refresh)
@@ -515,6 +531,10 @@ class MainWindow(QMainWindow):
         controller.busy_changed.connect(self._update_actions)
 
     # --- Accessors for tests and the Composition Root -------------------------------------
+
+    @property
+    def backup(self) -> BackupUi:
+        return self._backup
 
     @property
     def garmin(self) -> GarminUi:
@@ -1172,6 +1192,7 @@ class MainWindow(QMainWindow):
             menu.setEnabled(can_change and not menu.isEmpty())
             menu.menuAction().setToolTip("" if can_change else busy_reason)
         self._update_profile_data_actions()
+        self._backup.refresh()
         self._stop_action.setEnabled(controller.can_stop)
         self._stop_action.setToolTip(
             "" if controller.can_stop else self.tr("There is nothing to stop.")

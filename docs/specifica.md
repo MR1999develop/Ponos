@@ -565,6 +565,31 @@ Rules: [injuries](../.claude/skills/ponos-allenamento/references/infortuni.md).
 - The backup contains health data: it must be kept as such. It does not contain
   the Garmin tokens.
 
+### Interface (phase 8)
+
+- File menu: "Back up profile..." (Ctrl+Shift+B) and "Restore profile from
+  backup..." (Ctrl+Shift+O). The first needs an open profile (the tooltip
+  says so); both are off while a backup or a restore is running.
+- Backup: a save dialog proposes `<profile name> <date>.ponosbackup`; the
+  folder is remembered apart from the one of "Open profile from folder". The
+  suffix is added if missing. A file that exists is never replaced.
+- Restore: first the backup file, then a new or empty folder (each dialog
+  remembers its own folder). A folder with anything in it is refused and
+  nothing is changed.
+- The work runs on its own thread; the window stays usable and the profile
+  can stay open. After one second a progress indicator appears in the status
+  bar (no end in sight: the use cases report no steps and cannot be
+  cancelled). Logs hold only the types of the errors.
+- When it ends, a box shows the size and the number of activity files. After a
+  restore it offers to open the profile ("Open profile" / "Not now"); if the
+  profile list already has a profile with the same id, it says so and asks
+  whether to replace that entry ("Replace entry" / "Keep the list as it is");
+  the old folder is never deleted.
+- One message per reason, in plain words: file exists, destination inside the
+  profile folder, writing failed, not a backup, too large, damaged (checksum
+  or database), unsafe content, backup of a newer version, folder not empty,
+  folder in use.
+
 ## 13. General behaviour
 
 - Interface in Italian and English. The default language is English, not that

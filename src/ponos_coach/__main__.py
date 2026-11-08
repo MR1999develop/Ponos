@@ -54,6 +54,7 @@ from ponos_coach.platform.profile_registry import (
     RegistryFormatTooNewError,
 )
 from ponos_coach.platform.token_store import create_token_store
+from ponos_coach.profiles.backup import BackupProfile, RestoreProfile
 from ponos_coach.profiles.domain import ProfileId
 from ponos_coach.profiles.ports import TokenStore, TokenStoreUnavailableError
 from ponos_coach.profiles.use_cases import (
@@ -69,7 +70,9 @@ from ponos_coach.profiles.use_cases import (
 from ponos_coach.selfcheck import run_self_check
 from ponos_coach.storage.file_archive import FileArchive
 from ponos_coach.storage.import_scan import FilesImportSource, FolderImportSource
+from ponos_coach.storage.profile_backup import FileProfileBackup
 from ponos_coach.storage.sqlite_profile import SqliteProfileStorage
+from ponos_coach.ui.backup_runner import BackupUseCases
 from ponos_coach.ui.bootstrap import prepare_qt
 from ponos_coach.ui.data_thread import DataThread
 from ponos_coach.ui.diagnostics import ErrorNotifier, configure_logging, install_exception_hooks
@@ -381,7 +384,14 @@ def compose_main_window(  # noqa: PLR0913 - every argument is an injectable vola
     defaults = NewProfileDefaults(
         documents_dir, folder_picker or native_folder_picker, zone.key, fell_back, today_in
     )
-    window = MainWindow(controller, settings, defaults, log_folder=log_dir, language=language)
+    backup_storage = FileProfileBackup()
+    backup = BackupUseCases(
+        backup=BackupProfile(backup_storage, utc_now, ponos_coach.__version__),
+        restore=RestoreProfile(backup_storage, ports.folders),
+    )
+    window = MainWindow(
+        controller, settings, defaults, backup=backup, log_folder=log_dir, language=language
+    )
     controller.setParent(window)
     return window
 
