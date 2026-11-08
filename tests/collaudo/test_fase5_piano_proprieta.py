@@ -155,8 +155,10 @@ def violations(plan: Plan, today: date) -> list[str]:  # noqa: PLR0912, PLR0915 
     for d in days:
         if d.race is None or d.race.priority is not Priority.A:
             continue
-        if any(0 < abs((o - d.day).days) <= 31 for o in race_days):
-            continue  # tapers and recoveries of close races share days: no rule per race
+        if any(0 < abs((r.day - d.day).days) <= 31 for r in inputs.races):
+            # tapers and recoveries of close races share days: no rule per race; the races
+            # beyond the horizon count too (their taper starts inside the plan)
+            continue
         length = 0
         while (
             e := by_day.get(d.day - timedelta(days=length + 1))
@@ -324,6 +326,37 @@ def _with_day(plan: Plan, index: int, **changes: object) -> Plan:
     days = list(plan.days)
     days[index] = replace(days[index], **changes)  # type: ignore[arg-type]
     return replace(plan, days=tuple(days))
+
+
+def _a_race(name: str, day: date, distance_m: int) -> RaceGoal:
+    return RaceGoal(GoalId(name), day, Priority.A, Sport.RUNNING, distance_m, None)
+
+
+@pytest.mark.parametrize(
+    "races",
+    [
+        # a race whose own taper is cut short because it falls in the taper of a later race
+        # that lies beyond the horizon (the plan ends on 2027-03-01)
+        [
+            _a_race("r3", date(2027, 2, 24), 1500),
+            _a_race("r4", date(2027, 3, 2), 10_001),
+        ],
+        # consecutive A races: the day between them is not a taper of either
+        [_a_race("r0", date(2026, 3, 3), 1500), _a_race("r1", date(2026, 3, 4), 1500)],
+    ],
+    ids=["race_in_the_taper_of_one_beyond_the_horizon", "consecutive_a_races"],
+)
+def test_d_f5_close_a_races_keep_the_rules_of_the_taper(races: list[RaceGoal]) -> None:
+    inputs = PlanInputs(
+        tuple(races),
+        (),
+        WeeklyAvailability((0, 0, 0, 0, 0, 0, 20), 0, 60),
+        SessionChoices.of({Sport.RUNNING: frozenset({SessionType.EASY})}),
+        PHYSIOLOGY,
+        FitnessState(0.0, 0.0),
+    )
+
+    check_scenario(inputs, date(2026, 3, 2))
 
 
 def test_the_oracle_catches_a_session_longer_than_the_day_allows() -> None:

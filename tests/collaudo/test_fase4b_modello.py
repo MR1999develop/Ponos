@@ -137,7 +137,11 @@ def check_day(day: DayInput, result: DayNutrition) -> None:
             assert 0 < item.hourly.fluid_ml <= MAX_HOURLY_FLUID_ML
             assert item.hourly.sodium_mg > 0
     during = [s for s in day.sessions if s.duration_min > 75]
-    assert sum(MealSlot.DURING_TRAINING in i.slots for i in result.meals) == len(during)
+    shown = sum(MealSlot.DURING_TRAINING in i.slots for i in result.meals)
+    if Advisory.INTAKES_SCALED in result.advisories:
+        assert shown <= len(during)  # an intake cut down to nothing is not shown (and says so)
+    else:
+        assert shown == len(during)
     # one recovery per session: a single dose or, with another session within 8 hours, up to 4
     # hourly intakes, each marked with its hour
     recoveries = sum(MealSlot.POST_TRAINING in i.slots for i in result.meals)
@@ -703,6 +707,24 @@ def test_d_f4b_01_an_extreme_but_allowed_person_does_not_crash_the_day() -> None
     day = day_of(person, WeightLossGoal(100))
 
     check_day(day, plan_day(day))  # ValueError: macronutrient grams cannot be negative
+
+
+def test_d_f4b_04_two_overlapping_sessions_of_a_tiny_day_cut_one_intake_and_say_so() -> None:
+    """Two sessions starting together (151 and 76 min) for 20 kg: the day cannot carry both
+    during-intakes; the one cut to nothing is not shown, and INTAKES_SCALED says so."""
+    day = DayInput(
+        Person(Sex.MALE, 0, 100, 20.0, None),
+        MaintenanceGoal(),
+        MealTimes(time(0, 0), time(2, 0), time(4, 0)),
+        (TrainingSession(0, 151.0, 0.0, 0.0), TrainingSession(0, 76.0, 0.0, 0.0)),
+        None,
+    )
+
+    result = plan_day(day)
+
+    check_day(day, result)
+    assert sum(MealSlot.DURING_TRAINING in i.slots for i in result.meals) == 1
+    assert Advisory.INTAKES_SCALED in result.advisories
 
 
 @pytest.mark.parametrize(
