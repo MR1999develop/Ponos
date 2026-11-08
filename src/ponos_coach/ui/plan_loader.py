@@ -21,11 +21,15 @@ from ponos_coach.goals.domain import GoalId, SessionChoices, WeeklyAvailability
 from ponos_coach.goals.ports import Goal
 from ponos_coach.goals.use_cases import (
     AddGoal,
+    AvailabilityChanged,
     ChangeGoal,
+    GoalChanged,
+    GoalRemoved,
     ListGoals,
     ReadAvailability,
     ReadSessionChoices,
     RemoveGoal,
+    SessionChoicesChanged,
     SetAvailability,
     SetSessionChoices,
 )
@@ -35,6 +39,7 @@ from ponos_coach.planning.ports import FrozenDay
 from ponos_coach.planning.use_cases import PastPlan
 from ponos_coach.profiles.rebuild_plan import PlanAdherence
 from ponos_coach.ui.data_thread import JobFailed, JobOutcome, JobSucceeded
+from ponos_coach.ui.plan_undo import OutcomeCell
 from ponos_coach.ui.workspace import ProfileAccess, WorkspaceController
 
 
@@ -125,33 +130,97 @@ class PlanLoader(QObject):
         """Add a goal."""
         return self._change(lambda access: AddGoal(access.session.goals)(goal))
 
-    def change_goal(self, goal: Goal) -> bool:
-        """Replace the goal with the same id."""
-        return self._change(
-            lambda access: ChangeGoal(access.session.activities, access.session.goals)(goal)
-        )
+    def change_goal(self, goal: Goal, cell: OutcomeCell[GoalChanged]) -> bool:
+        """Replace the goal with the same id; `cell` receives the version it replaced."""
 
-    def remove_goal(self, goal_id: GoalId) -> bool:
-        """Remove a goal."""
-        return self._change(
-            lambda access: RemoveGoal(access.session.activities, access.session.goals)(goal_id)
-        )
+        def change(access: ProfileAccess) -> None:
+            cell.value = None
+            cell.value = ChangeGoal(access.session.activities, access.session.goals)(goal)
 
-    def set_availability(self, availability: WeeklyAvailability | None) -> bool:
-        """Set the weekly availability (None forgets it)."""
-        return self._change(
-            lambda access: SetAvailability(access.session.activities, access.session.availability)(
+        return self._change(change)
+
+    def restore_goal(self, cell: OutcomeCell[GoalChanged]) -> bool:
+        """Put back the version that `cell` holds; nothing to do if the change was refused."""
+
+        def change(access: ProfileAccess) -> None:
+            changed = cell.value
+            if changed is not None:
+                ChangeGoal(access.session.activities, access.session.goals)(changed.before)
+                cell.value = None
+
+        return self._change(change)
+
+    def remove_goal(self, goal_id: GoalId, cell: OutcomeCell[GoalRemoved]) -> bool:
+        """Remove a goal; `cell` receives the goal as it was."""
+
+        def change(access: ProfileAccess) -> None:
+            cell.value = None
+            cell.value = RemoveGoal(access.session.activities, access.session.goals)(goal_id)
+
+        return self._change(change)
+
+    def restore_removed_goal(self, cell: OutcomeCell[GoalRemoved]) -> bool:
+        """Add back the goal that `cell` holds; nothing to do if the removal was refused."""
+
+        def change(access: ProfileAccess) -> None:
+            removed = cell.value
+            if removed is not None:
+                AddGoal(access.session.goals)(removed.goal)
+                cell.value = None
+
+        return self._change(change)
+
+    def set_availability(
+        self, availability: WeeklyAvailability | None, cell: OutcomeCell[AvailabilityChanged]
+    ) -> bool:
+        """Set the weekly availability (None forgets it); `cell` receives the previous one."""
+
+        def change(access: ProfileAccess) -> None:
+            cell.value = None
+            cell.value = SetAvailability(access.session.activities, access.session.availability)(
                 availability
             )
-        )
 
-    def set_choices(self, choices: SessionChoices) -> bool:
-        """Set the session types the plan may use."""
-        return self._change(
-            lambda access: SetSessionChoices(
+        return self._change(change)
+
+    def restore_availability(self, cell: OutcomeCell[AvailabilityChanged]) -> bool:
+        """Set the availability that was there before; nothing if the change was refused."""
+
+        def change(access: ProfileAccess) -> None:
+            changed = cell.value
+            if changed is not None:
+                SetAvailability(access.session.activities, access.session.availability)(
+                    changed.before
+                )
+                cell.value = None
+
+        return self._change(change)
+
+    def set_choices(
+        self, choices: SessionChoices, cell: OutcomeCell[SessionChoicesChanged]
+    ) -> bool:
+        """Set the session types the plan may use; `cell` receives the previous ones."""
+
+        def change(access: ProfileAccess) -> None:
+            cell.value = None
+            cell.value = SetSessionChoices(
                 access.session.activities, access.session.session_choices
             )(choices)
-        )
+
+        return self._change(change)
+
+    def restore_choices(self, cell: OutcomeCell[SessionChoicesChanged]) -> bool:
+        """Set the session types that were there before; nothing if the change was refused."""
+
+        def change(access: ProfileAccess) -> None:
+            changed = cell.value
+            if changed is not None:
+                SetSessionChoices(access.session.activities, access.session.session_choices)(
+                    changed.before
+                )
+                cell.value = None
+
+        return self._change(change)
 
     def _change(self, change: Callable[[ProfileAccess], object]) -> bool:
         """Save a change and re-read the three choices, all in one job."""

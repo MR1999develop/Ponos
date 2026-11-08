@@ -2461,8 +2461,8 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Aggiorna il piano nella sezione Obiettivi.</translation>
     </message>
     <message>
-        <source>Your body mass index is below 18.5. Please talk to a doctor or a dietitian before changing how you eat.</source>
-        <translation>Il tuo indice di massa corporea è inferiore a 18,5. Parla con un medico o con un dietista prima di cambiare come mangi.</translation>
+        <source>Your weight is low for your height. Please talk to a doctor or a dietitian before changing how you eat.</source>
+        <translation>Il tuo peso è basso per la tua altezza. Parla con un medico o con un dietista prima di cambiare come mangi.</translation>
     </message>
     <message>
         <source>This app does not suggest a calorie deficit for this day.</source>

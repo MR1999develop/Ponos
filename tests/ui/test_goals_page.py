@@ -263,7 +263,8 @@ def test_the_two_levels_have_their_own_border_colour_in_both_themes(qtbot: QtBot
         show(page, (no_plan, warning), theme=theme)
         frames = [f for f in page.findChildren(QFrame, "planNotice") if not f.isHidden()]
         sheets = [frame.styleSheet() for frame in frames]
-        assert tokens_for(theme).error in sheets[0]
+        assert tokens_for(theme).text_muted in sheets[0]
+        assert tokens_for(theme).error not in sheets[0]  # no plan is not an error
         assert warning_color_for(theme) in sheets[1]
     assert warning_color_for(Theme.LIGHT) != warning_color_for(Theme.DARK)
 
@@ -282,7 +283,7 @@ def test_the_commands_are_the_window_actions_shown_as_text_buttons(qtbot: QtBot)
 def test_the_colours_of_the_two_levels_reach_three_to_one_on_the_background(theme: Theme) -> None:
     background = tokens_for(theme).background
 
-    for colour in (tokens_for(theme).error, warning_color_for(theme)):
+    for colour in (tokens_for(theme).text_muted, warning_color_for(theme)):
         assert _contrast(colour, background) >= 3.0
 
 

@@ -223,7 +223,8 @@ class GoalsPage(QWidget):
         self, notice: Notice, label_of: Callable[[str], str], theme: Theme
     ) -> QWidget:
         no_plan = notice.severity is Severity.NO_PLAN
-        color = tokens_for(theme).error if no_plan else warning_color_for(theme)
+        # No plan yet is a normal state, not an error: neutral border; red stays for errors.
+        color = tokens_for(theme).text_muted if no_plan else warning_color_for(theme)
         headline, remedy = notice_texts(notice, label_of)
         frame = QFrame(self)
         frame.setObjectName("planNotice")
