@@ -3,10 +3,11 @@
 """The map and the filters in the window: owns the shared filter, the controller, the page, the
 Settings > Map page and the commands of the Map menu.
 
-The window only gives it callbacks and places its widgets (the filter bar above the pages, the map
-page in the stack). The table of the activities and the map list the same activities: both follow
-the one `SharedFilterState`, and a selection made in the table, in the list or on the map is the
-selection of all three.
+The window only gives it callbacks and places its widgets (the filter bar above the Activities
+section, the map page beside the table). The table of the activities and the map show the same
+activities: both follow the one `SharedFilterState`, and a selection made in the table or on the
+map is the selection of both. The table can also be narrowed to the activities that start in the
+area the map shows ("Only the visible map area"); the map keeps the count and totals of that area.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QMenuBar, QWidget
 
 from ponos_coach.activities.domain import ActivityIdentity, identity_key
-from ponos_coach.activities.map_queries import SearchResult
+from ponos_coach.activities.map_queries import AreaView, SearchResult
 from ponos_coach.maps.ports import TileProblem
 from ponos_coach.ui.activity_filters import SharedFilterState
 from ponos_coach.ui.activity_table import ActivitiesPage
@@ -36,6 +37,8 @@ from ponos_coach.ui.settings_page import SettingsPage
 from ponos_coach.ui.tile_service import TileService
 from ponos_coach.ui.tokens import Theme
 from ponos_coach.ui.workspace import WorkspaceController
+
+_KEY_AREA_ONLY = "activities/visibleAreaOnly"
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,8 +79,11 @@ class MapUi(QObject):
         self._show_map = show_map
         self._settings_page = settings_page
         self._show_settings = show_settings
+        self._settings = settings
         self._notice_checked = False
-        self._on_map = False
+        self._on_activities = False
+        self._filter_keys: frozenset[str] | None = None  # who passed the filter (None: all)
+        self._area_keys: frozenset[str] | None = None  # who starts in the visible area
         self._filters = SharedFilterState(settings, self)
         self._bar = FilterBar(self._filters, theme, window)
         self._controller = MapController(controller, services.host, self._filters, self)
@@ -93,7 +99,10 @@ class MapUi(QObject):
         self._build_actions()
         self._connect()
         self._fill_settings_page()
-        self.update_actions(on_map=False)
+        self.update_actions(on_activities=False)
+        self._activities.area_only_check.setChecked(
+            bool(settings.value(_KEY_AREA_ONLY, False, type=bool))
+        )
 
     # --- Parts ----------------------------------------------------------------------------
 
@@ -114,7 +123,7 @@ class MapUi(QObject):
 
     @property
     def page(self) -> MapPage:
-        """The Map page."""
+        """The map, beside the table of the activities."""
         return self._page
 
     @property
@@ -140,7 +149,7 @@ class MapUi(QObject):
 
     def _build_actions(self) -> None:
         self._actions = {
-            "show": self._action(self.tr("Show map"), "Ctrl+M", self._show_map),
+            "show": self._action(self.tr("Show activities and map"), "Ctrl+M", self._show_map),
             "fit": self._action(self.tr("Show all activities"), "Ctrl+0", self._page.request_fit),
             "zoom_in": self._action(
                 self.tr("Zoom in"), QKeySequence.StandardKey.ZoomIn, lambda: self._page.zoom_by(1)
@@ -153,9 +162,6 @@ class MapUi(QObject):
             "filter": self._action(self.tr("Filter activities"), "Ctrl+F", self.focus_filters),
             "clear_filters": self._action(
                 self.tr("Clear filters"), "Ctrl+Shift+K", self._bar.clear_filters
-            ),
-            "settings": self._action(
-                self.tr("Map settings..."), "Ctrl+Shift+M", self.show_settings
             ),
             "clear_cache": self._action(
                 self.tr("Clear map cache..."), "Ctrl+Shift+Backspace", self.ask_clear_cache
@@ -171,16 +177,15 @@ class MapUi(QObject):
         menu.addAction(self._actions["filter"])
         menu.addAction(self._actions["clear_filters"])
         menu.addSeparator()
-        menu.addAction(self._actions["settings"])
         menu.addAction(self._actions["clear_cache"])
 
-    def update_actions(self, *, on_map: bool) -> None:
+    def update_actions(self, *, on_activities: bool) -> None:
         """Enable the commands that apply to the section shown, with the reason when they do not."""
-        needs_map = self.tr("Open the Map section first.")
+        needs_map = self.tr("Open the Activities section first.")
         for name in ("fit", "zoom_in", "zoom_out"):
             action = self._actions[name]
-            action.setEnabled(on_map)
-            action.setToolTip("" if on_map else needs_map)
+            action.setEnabled(on_activities)
+            action.setToolTip("" if on_activities else needs_map)
         active = not self._filters.criteria.is_empty
         clear = self._actions["clear_filters"]
         clear.setEnabled(active)
@@ -191,19 +196,43 @@ class MapUi(QObject):
     def _connect(self) -> None:
         self._controller.search_changed.connect(self._on_search)
         self._controller.selection_changed.connect(self._on_selection)
+        self._controller.area_changed.connect(self._on_area)
+        self._activities.area_only_toggled.connect(self._on_area_only_toggled)
         self._controller.failed.connect(self._show_error)
         self._activities.selection_changed.connect(self._on_table_selection)
         self._page.settings_requested.connect(self.show_settings)
         self._settings_page.shown.connect(self._fill_settings_page)
-        self._filters.changed.connect(lambda *_: self.update_actions(on_map=self._on_map))
+        self._filters.changed.connect(
+            lambda *_: self.update_actions(on_activities=self._on_activities)
+        )
 
     def _on_search(self, result: object) -> None:
         """The table shows the activities that passed the filter, like the map."""
         if isinstance(result, SearchResult) and not self._filters.criteria.is_empty:
-            keys = frozenset(identity_key(r.identity) for r in result.activities)
-            self._activities.set_visible_identities(keys)
+            self._filter_keys = frozenset(identity_key(r.identity) for r in result.activities)
         else:
-            self._activities.set_visible_identities(None)
+            self._filter_keys = None
+        self._show_table_rows()
+
+    def _on_area(self, view: object) -> None:
+        """The map reported a new area: with "Only the visible map area" the table follows it."""
+        if isinstance(view, AreaView):
+            self._area_keys = frozenset(identity_key(r.identity) for r in view.in_area.activities)
+        else:
+            self._area_keys = None
+        if self._activities.area_only_check.isChecked():
+            self._show_table_rows()
+
+    def _on_area_only_toggled(self, on: bool) -> None:
+        self._settings.setValue(_KEY_AREA_ONLY, on)
+        self._show_table_rows()
+
+    def _show_table_rows(self) -> None:
+        """The rows of the table: those that start in the area when asked (the area answer already
+        follows the filter), otherwise those that passed the filter."""
+        area_only = self._activities.area_only_check.isChecked()
+        keys = self._area_keys if area_only and self._area_keys is not None else self._filter_keys
+        self._activities.set_visible_identities(keys)
 
     def _on_table_selection(self) -> None:
         if self._activities.is_syncing:
@@ -218,12 +247,12 @@ class MapUi(QObject):
 
     # --- Window events -----------------------------------------------------------------------
 
-    def section_changed(self, *, on_map: bool, on_activities: bool) -> None:
+    def section_changed(self, *, on_activities: bool) -> None:
         """The filter bar shows over the table and the map only; the map's commands follow."""
-        self._on_map = on_map
-        self._bar.setVisible(on_map or on_activities)
-        self.update_actions(on_map=on_map)
-        if on_map and not self._notice_checked:
+        self._on_activities = on_activities
+        self._bar.setVisible(on_activities)
+        self.update_actions(on_activities=on_activities)
+        if on_activities and not self._notice_checked:
             self._notice_checked = True
             self._check_key_notice()
 

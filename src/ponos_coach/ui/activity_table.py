@@ -30,6 +30,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QHeaderView,
     QLabel,
     QStackedWidget,
@@ -257,6 +258,7 @@ class ActivitiesPage(QWidget):
     import_requested = Signal()
     detail_requested = Signal(object)  # ActivityIdentity, on double click or Enter
     selection_changed = Signal()
+    area_only_toggled = Signal(bool)  # "Only the visible map area" was checked or unchecked
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -284,6 +286,12 @@ class ActivitiesPage(QWidget):
         self._count = QLabel(self)
         self._count.setObjectName("activitiesCount")
         self._count.setTextFormat(Qt.TextFormat.PlainText)
+        self._area_only = QCheckBox(self.tr("Only the visible map area"), self)
+        self._area_only.setObjectName("activitiesAreaOnly")
+        self._area_only.setToolTip(
+            self.tr("List only the activities that start in the area the map shows.")
+        )
+        self._area_only.toggled.connect(self.area_only_toggled)
         self._empty = StatePage(self)
         self._empty.set_content(
             self.tr("No activities yet"),
@@ -297,9 +305,16 @@ class ActivitiesPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._count)
+        layout.addWidget(self._area_only)
         layout.addWidget(self._stack)
         self._stack.setCurrentWidget(self._empty)
         self._count.hide()
+        self._area_only.hide()
+
+    @property
+    def area_only_check(self) -> QCheckBox:
+        """The check box "Only the visible map area" (shown while there are activities)."""
+        return self._area_only
 
     @property
     def table(self) -> QTableView:
@@ -355,6 +370,7 @@ class ActivitiesPage(QWidget):
         if total == 0:
             self._count.setText("")
             self._count.hide()
+            self._area_only.hide()
             return
         # {shown}: rows shown after the filters; {total}: all the activities of the profile.
         self._count.setText(
@@ -363,6 +379,7 @@ class ActivitiesPage(QWidget):
             )
         )
         self._count.show()
+        self._area_only.show()
 
     @property
     def empty_page(self) -> StatePage:

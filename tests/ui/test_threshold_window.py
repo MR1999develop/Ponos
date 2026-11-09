@@ -24,6 +24,7 @@ from ponos_coach.profiles.measurements import MeasurementUpdate, UpdateMeasureme
 from ponos_coach.ui.data_thread import JobOutcome, JobSucceeded
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.overview_state import Ready
+from ponos_coach.ui.settings_page import SettingsCategory
 from ponos_coach.ui.threshold_dialogs import ThresholdInstructionsDialog
 from ponos_coach.ui.threshold_preferences import ProtocolPreference
 from ponos_coach.ui.workspace import ProfileAccess, WorkspaceController
@@ -92,23 +93,47 @@ def wait_recalculated(qtbot: QtBot, window: MainWindow, load: float) -> None:
 # --- Menu, shortcuts and tooltips -------------------------------------------------------------
 
 
-def test_the_threshold_menu_has_its_commands_and_the_undo_of_the_tests(
+def menu_commands(window: MainWindow, title: str) -> list[tuple[str, str]]:
+    menu = next(a.menu() for a in window.menuBar().actions() if a.text() == title)
+    assert isinstance(menu, QMenu)
+    return [(a.text(), a.shortcut().toString()) for a in menu.actions()]
+
+
+def test_there_is_no_threshold_menu_and_its_commands_are_in_profile_help_and_settings(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with(qtbot, tmp_path, settings, THRESHOLD_RUN)
 
-    menu = next(a.menu() for a in window.menuBar().actions() if a.text() == "Threshold test")
-    assert isinstance(menu, QMenu)
-    commands = [(a.text(), a.shortcut().toString()) for a in menu.actions()]
-    assert commands == [
-        ("Test instructions...", "Ctrl+Shift+H"),
-        ("Use as threshold test...", "Ctrl+Shift+U"),
-        ("Threshold tests...", "Ctrl+Shift+R"),
-        ("", ""),  # separator
-        ("Undo", ""),
-        ("Redo", ""),
-    ]
-    assert not [a for a in window.menuBar().actions() if a.text() == "Edit"]
+    titles = [a.text() for a in window.menuBar().actions()]
+    assert "Threshold test" not in titles
+    assert "Edit" not in titles
+    profile = menu_commands(window, "Profile")
+    assert ("Use as threshold test...", "Ctrl+Shift+U") in profile
+    assert ("Threshold tests...", "Ctrl+Shift+R") in profile
+    assert ("Test instructions...", "Ctrl+Shift+H") in menu_commands(window, "Help")
+    panel = window.threshold.history_panel
+    assert window.settings_window.page(SettingsCategory.TRAINING_PLAN).isAncestorOf(panel)
+    assert panel.undo_button.text() == "Undo"
+    assert not panel.undo_button.isEnabled()
+    assert panel.undo_button.toolTip() == "There is no threshold test to take back."
+
+
+def test_threshold_tests_opens_the_training_plan_page_and_the_buttons_follow_the_undo(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with(qtbot, tmp_path, settings, THRESHOLD_RUN)
+    apply_test(qtbot, window)
+    qtbot.waitUntil(window.threshold_history_action.isEnabled, timeout=WAIT_MS)
+
+    window.threshold_history_action.trigger()
+
+    assert window.settings_window.current_category is SettingsCategory.TRAINING_PLAN
+    panel = window.threshold.history_panel
+    qtbot.waitUntil(panel.undo_button.isEnabled, timeout=WAIT_MS)
+    assert panel.undo_button.text() == "Undo Apply threshold test"
+    panel.undo_button.click()
+    qtbot.waitUntil(lambda: panel.model.rowCount() == 0, timeout=WAIT_MS)
+    assert panel.redo_button.isEnabled()
 
 
 def test_use_as_test_says_why_it_is_disabled_without_a_selection_and_for_a_bike_ride(
@@ -482,10 +507,9 @@ def test_the_history_is_empty_at_first_and_says_how_to_add_a_test(
 
     dialog = open_history(qtbot, window)
 
+    qtbot.waitUntil(lambda: dialog.retest_label_text == "No test yet", timeout=WAIT_MS)
     assert dialog.empty_page.title_text == "No threshold tests yet"
     assert "Use as threshold test" in dialog.empty_page.body_text
-    assert dialog.retest_label_text == "No test yet"
-    dialog.close()
 
 
 def test_the_history_lists_the_test_with_the_activity_pace_and_method_and_the_retest_state(
@@ -510,8 +534,10 @@ def test_the_history_lists_the_test_with_the_activity_pace_and_method_and_the_re
     assert cells[0] == "3/14/26"
     assert plain(cells[1]) == "Running, 3/14/26 8:00 AM"  # 07:00 UTC is 08:00 in Rome
     assert cells[2:] == ["168", "4:38", "30-minute test, method 2"]
+    qtbot.waitUntil(
+        lambda: dialog.retest_label_text.startswith("The last test is"), timeout=WAIT_MS
+    )
     assert dialog.retest_label_text == "The last test is 108 days old: a new test is recommended"
-    dialog.close()
 
 
 def test_the_open_history_follows_an_undo(
@@ -526,8 +552,7 @@ def test_the_open_history_follows_an_undo(
     window.threshold.undo_stack.undo()
 
     qtbot.waitUntil(lambda: dialog.model.rowCount() == 0, timeout=WAIT_MS)
-    assert dialog.retest_label_text == "No test yet"
-    dialog.close()
+    qtbot.waitUntil(lambda: dialog.retest_label_text == "No test yet", timeout=WAIT_MS)
 
 
 def test_the_retest_status_in_the_status_bar_is_hidden_without_text_and_comes_back(

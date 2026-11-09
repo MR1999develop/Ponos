@@ -325,14 +325,12 @@ def test_the_day_page_has_named_controls_in_reading_order(
     assert window.calendar_page.table.accessibleName() == "Calendar"
 
 
-def test_an_empty_profile_has_a_calendar_but_cannot_open_nutrition_settings(
+def test_an_empty_profile_has_a_calendar_and_no_day_window(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
 
-    assert not window.nutrition_action.isEnabled()
-    assert window.nutrition_action.toolTip() == "Create or open a profile first."
     window.nutrition.open_day(EMPTY_DAY)  # no profile: nothing happens
     assert window.nutrition.day_windows == ()
 

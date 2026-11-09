@@ -3,7 +3,8 @@
 """The threshold test in the window: instructions, review and apply, history, undo and retest.
 
 Owns the dialogs, the undo stack of the applied tests and the jobs of `ThresholdLoader`; the window
-only gives it callbacks and puts its actions in the menus. Evaluating opens the review at once in a
+only gives it callbacks. The history, with the undo and redo of the tests, is a panel that the
+window puts in Settings > Training plan. Evaluating opens the review at once in a
 "working" state and fills it in when the data thread answers; closing it drops the answer that is
 on its way.
 An apply goes through the dialog and only then is pushed on the stack, so the stack holds exactly
@@ -25,7 +26,7 @@ from ponos_coach.assessment.domain import ThresholdProtocol, ThresholdRejection
 from ponos_coach.load.use_cases import ExcludedActivity
 from ponos_coach.ui.errors import ErrorMessage, unavailable_detail_message
 from ponos_coach.ui.threshold_dialogs import (
-    ThresholdHistoryDialog,
+    ThresholdHistoryPanel,
     ThresholdInstructionsDialog,
     ThresholdResultDialog,
 )
@@ -48,12 +49,14 @@ class ThresholdUi(QObject):
 
     retest_text_changed = Signal(str)  # the status bar sentence; empty without a profile
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - every argument is a distinct callback of the window
         self,
         window: QWidget,
         controller: WorkspaceController,
         *,
         settings: QSettings,
+        instructions: QAction,
+        show_history_page: Callable[[], None],
         zone: Callable[[], ZoneInfo],
         show_error: Callable[[ErrorMessage], None],
         notify: Callable[[str], None],
@@ -64,6 +67,7 @@ class ThresholdUi(QObject):
         self._zone = zone
         self._show_error = show_error
         self._notify = notify
+        self._show_history_page = show_history_page
         self._protocol = ProtocolPreference(settings)
         self._protocol_shown = self._protocol.load()
         self._identity: ActivityIdentity | None = None
@@ -75,9 +79,10 @@ class ThresholdUi(QObject):
         self._stack.canRedoChanged.connect(self._update_undo_tips)
         self._update_undo_tips()
         self._result_dialog: ThresholdResultDialog | None = None
-        self._history_dialog: ThresholdHistoryDialog | None = None
+        self._history_panel = ThresholdHistoryPanel(
+            self._undo_action, self._redo_action, instructions
+        )
         self._review: ThresholdReview | None = None
-        self._waiting_for_history = False
         self._loader.evaluated.connect(self._on_evaluated)
         self._loader.applied.connect(self._on_applied)
         self._loader.apply_failed.connect(self._on_apply_failed)
@@ -100,12 +105,12 @@ class ThresholdUi(QObject):
 
     @property
     def undo_action(self) -> QAction:
-        """ "Undo <command>", for the Threshold test menu (no global shortcut)."""
+        """ "Undo <command>", for Settings > Training plan (no global shortcut)."""
         return self._undo_action
 
     @property
     def redo_action(self) -> QAction:
-        """ "Redo <command>", for the Threshold test menu (no global shortcut)."""
+        """ "Redo <command>", for Settings > Training plan (no global shortcut)."""
         return self._redo_action
 
     @property
@@ -114,9 +119,9 @@ class ThresholdUi(QObject):
         return self._result_dialog
 
     @property
-    def history_dialog(self) -> ThresholdHistoryDialog | None:
-        """The open history, if any."""
-        return self._history_dialog
+    def history_panel(self) -> ThresholdHistoryPanel:
+        """The history of the tests, the content of Settings > Training plan."""
+        return self._history_panel
 
     # --- Instructions ---------------------------------------------------------------
 
@@ -250,35 +255,16 @@ class ThresholdUi(QObject):
     # --- History and retest ---------------------------------------------------------
 
     def show_history(self) -> None:
-        """Read the history and open it (no effect if it is already open)."""
-        if self._history_dialog is not None:
-            self._history_dialog.raise_()
-            self._history_dialog.activateWindow()
-            return
-        if self._waiting_for_history or self._controller.profile is None:
-            return
-        self._waiting_for_history = self._loader.load_history()
+        """Open Settings > Training plan, where the history is."""
+        self._show_history_page()
 
     def _on_history_loaded(self, history: object) -> None:
         if not isinstance(history, ThresholdHistory):
             return
         self.retest_text_changed.emit(retest_status_bar_text(history.retest))
-        if self._history_dialog is not None:
-            self._history_dialog.show_history(history, self._zone())
-        elif self._waiting_for_history:
-            self._waiting_for_history = False
-            dialog = ThresholdHistoryDialog(self._window)
-            dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-            dialog.finished.connect(self._on_history_closed)
-            dialog.show_history(history, self._zone())
-            self._history_dialog = dialog
-            dialog.open()
-
-    def _on_history_closed(self) -> None:
-        self._history_dialog = None
+        self._history_panel.show_history(history, self._zone())
 
     def _on_failed(self, message: object) -> None:
-        self._waiting_for_history = False
         if not isinstance(message, ErrorMessage):
             return
         if self._result_dialog is not None and self._result_dialog.is_loading:
@@ -292,6 +278,7 @@ class ThresholdUi(QObject):
         """Another profile opened: the stack and the dialogs belong to the old one."""
         self._stack.clear()
         self.close_dialogs()
+        self._history_panel.clear()
         self.retest_text_changed.emit("")
         self._loader.load_history()
 
@@ -301,6 +288,5 @@ class ThresholdUi(QObject):
 
     def close_dialogs(self) -> None:
         """Close the open dialogs (another profile opens, or the window is closing)."""
-        for dialog in (self._result_dialog, self._history_dialog):
-            if dialog is not None:
-                dialog.close()
+        if self._result_dialog is not None:
+            self._result_dialog.close()

@@ -47,6 +47,14 @@
         <translation>Attività</translation>
     </message>
     <message>
+        <source>Only the visible map area</source>
+        <translation>Solo l&apos;area visibile della mappa</translation>
+    </message>
+    <message>
+        <source>List only the activities that start in the area the map shows.</source>
+        <translation>Elenca solo le attività che iniziano nell&apos;area mostrata dalla mappa.</translation>
+    </message>
+    <message>
         <source>No activities yet</source>
         <translation>Nessuna attività ancora</translation>
     </message>
@@ -217,29 +225,6 @@
     <message>
         <source>Format</source>
         <translation>Formato</translation>
-    </message>
-</context>
-<context>
-    <name>AreaListModel</name>
-    <message>
-        <source>Date and time</source>
-        <translation>Data e ora</translation>
-    </message>
-    <message>
-        <source>Sport</source>
-        <translation>Sport</translation>
-    </message>
-    <message>
-        <source>Distance (km)</source>
-        <translation>Distanza (km)</translation>
-    </message>
-    <message>
-        <source>Ascent (m)</source>
-        <translation>Dislivello (m)</translation>
-    </message>
-    <message>
-        <source>Moving time (h:mm:ss)</source>
-        <translation>Tempo in movimento (h:mm:ss)</translation>
     </message>
 </context>
 <context>
@@ -1205,8 +1190,16 @@
         <translation>È già stata rimossa.</translation>
     </message>
     <message>
-        <source>Open Nutrition settings to see what is saved.</source>
-        <translation>Apri le impostazioni alimentari per vedere cosa è salvato.</translation>
+        <source>Open Settings &gt; Nutrition to see what is saved.</source>
+        <translation>Apri Impostazioni &gt; Alimentazione per vedere cosa è salvato.</translation>
+    </message>
+    <message>
+        <source>Choose another activity, or open Settings &gt; Training plan to see the tests.</source>
+        <translation>Scegli un&apos;altra attività, oppure apri Impostazioni &gt; Piano di allenamento per vedere i test.</translation>
+    </message>
+    <message>
+        <source>Open Settings &gt; Training plan to see what is saved.</source>
+        <translation>Apri Impostazioni &gt; Piano di allenamento per vedere cosa è salvato.</translation>
     </message>
     <message>
         <source>The threshold test cannot be taken back</source>
@@ -1229,20 +1222,12 @@
         <translation>Il test di questa attività è stato applicato in precedenza.</translation>
     </message>
     <message>
-        <source>Choose another activity, or open Threshold test &gt; Threshold tests.</source>
-        <translation>Scegli un&apos;altra attività, oppure apri Test di soglia &gt; Storico dei test.</translation>
-    </message>
-    <message>
         <source>The threshold test is no longer saved</source>
         <translation>Il test di soglia non è più salvato</translation>
     </message>
     <message>
         <source>The test was already taken back.</source>
         <translation>Il test è già stato annullato.</translation>
-    </message>
-    <message>
-        <source>Open Threshold test &gt; Threshold tests to see what is saved.</source>
-        <translation>Apri Test di soglia &gt; Storico dei test per vedere cosa è salvato.</translation>
     </message>
     <message>
         <source>The test day is in the future</source>
@@ -1630,13 +1615,6 @@
     <message>
         <source>Green beans</source>
         <translation>Fagiolini</translation>
-    </message>
-</context>
-<context>
-    <name>GarminAccountSection</name>
-    <message>
-        <source>Garmin account</source>
-        <translation>Account Garmin</translation>
     </message>
 </context>
 <context>
@@ -3309,20 +3287,12 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Impostazioni...</translation>
     </message>
     <message>
-        <source>Garmin account settings...</source>
-        <translation>Impostazioni dell&apos;account Garmin...</translation>
-    </message>
-    <message>
         <source>Edit profile...</source>
         <translation>Modifica profilo...</translation>
     </message>
     <message>
         <source>Sport weights...</source>
         <translation>Pesi degli sport...</translation>
-    </message>
-    <message>
-        <source>Nutrition settings...</source>
-        <translation>Impostazioni alimentari...</translation>
     </message>
     <message>
         <source>Previous month</source>
@@ -3389,16 +3359,8 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Profilo</translation>
     </message>
     <message>
-        <source>Threshold test</source>
-        <translation>Test di soglia</translation>
-    </message>
-    <message>
         <source>Help</source>
         <translation>Aiuto</translation>
-    </message>
-    <message>
-        <source>Plan</source>
-        <translation>Piano</translation>
     </message>
     <message>
         <source>Sport weights</source>
@@ -3439,6 +3401,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Injuries</source>
         <translation>Infortuni</translation>
+    </message>
+    <message>
+        <source>Garmin account</source>
+        <translation>Account Garmin</translation>
     </message>
     <message>
         <source>Map</source>
@@ -3885,10 +3851,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Energia (kcal)</translation>
     </message>
     <message>
-        <source>Activities in the visible area</source>
-        <translation>Attività nell&apos;area visibile</translation>
-    </message>
-    <message>
         <source>Zoom in</source>
         <translation>Ingrandisci</translation>
     </message>
@@ -4010,8 +3972,8 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
 <context>
     <name>MapUi</name>
     <message>
-        <source>Show map</source>
-        <translation>Mostra la mappa</translation>
+        <source>Show activities and map</source>
+        <translation>Mostra attività e mappa</translation>
     </message>
     <message>
         <source>Show all activities</source>
@@ -4034,8 +3996,8 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Azzera i filtri</translation>
     </message>
     <message>
-        <source>Map settings...</source>
-        <translation>Impostazioni della mappa...</translation>
+        <source>Open the Activities section first.</source>
+        <translation>Apri prima la sezione Attività.</translation>
     </message>
     <message>
         <source>Clear map cache...</source>
@@ -4044,10 +4006,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Map</source>
         <translation>Mappa</translation>
-    </message>
-    <message>
-        <source>Open the Map section first.</source>
-        <translation>Apri prima la sezione Mappa.</translation>
     </message>
     <message>
         <source>No filter is set.</source>
@@ -4984,6 +4942,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>{role}: {details}</source>
         <translation>{role}: {details}</translation>
     </message>
+    <message>
+        <source>Threshold test</source>
+        <translation>Test di soglia</translation>
+    </message>
     <message numerus="yes">
         <source>{type}, %n min</source>
         <translation>
@@ -5144,6 +5106,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Plan: no easy week fits the next threshold test</source>
         <translation>Piano: nessuna settimana facile è adatta al prossimo test di soglia</translation>
+    </message>
+    <message>
+        <source>Threshold test planned on {date}</source>
+        <translation>Test di soglia previsto il {date}</translation>
     </message>
 </context>
 <context>
@@ -5773,25 +5739,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
 </context>
 <context>
-    <name>ThresholdHistoryDialog</name>
-    <message>
-        <source>Threshold tests</source>
-        <translation>Storico dei test di soglia</translation>
-    </message>
-    <message>
-        <source>No threshold tests yet</source>
-        <translation>Nessun test di soglia finora</translation>
-    </message>
-    <message>
-        <source>To add one, do the test, then choose the activity and use Threshold test &gt; Use as threshold test.</source>
-        <translation>Per aggiungerne uno, fai il test, poi scegli l&apos;attività e usa Test di soglia &gt; Usa come test di soglia.</translation>
-    </message>
-    <message>
-        <source>When to repeat the test</source>
-        <translation>Quando ripetere il test</translation>
-    </message>
-</context>
-<context>
     <name>ThresholdHistoryModel</name>
     <message>
         <source>Date</source>
@@ -5812,6 +5759,25 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Method</source>
         <translation>Metodo</translation>
+    </message>
+</context>
+<context>
+    <name>ThresholdHistoryPanel</name>
+    <message>
+        <source>Threshold tests</source>
+        <translation>Storico dei test di soglia</translation>
+    </message>
+    <message>
+        <source>No threshold tests yet</source>
+        <translation>Nessun test di soglia finora</translation>
+    </message>
+    <message>
+        <source>To add one, do the test, then choose the activity and use Profile &gt; Use as threshold test.</source>
+        <translation>Per aggiungerne uno, fai il test, poi scegli l&apos;attività e usa Profilo &gt; Usa come test di soglia.</translation>
+    </message>
+    <message>
+        <source>When to repeat the test</source>
+        <translation>Quando ripetere il test</translation>
     </message>
 </context>
 <context>

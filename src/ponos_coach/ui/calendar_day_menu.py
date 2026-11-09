@@ -6,7 +6,8 @@ Opened by the right button on a day, or by the Menu key or Shift+F10 on the sele
 the window's own actions (the same ones as the menus, with the same shortcuts, enabled state and
 reason in the tooltip), so a command is never different here from what it is in the menu bar. The
 commands on a goal or on an injury appear only on a day that has one; adding is always offered, and
-a command that cannot be given says why in its tooltip.
+a command that cannot be given says why in its tooltip. The commands of the whole plan (they used to
+be in a menu "Plan") close the menu, in a group of their own, after those of the day.
 """
 
 from __future__ import annotations
@@ -33,12 +34,14 @@ class CalendarDayMenu(QObject):
         *,
         open_day: QAction,
         plan_actions: Mapping[str, QAction],
+        goals_window: QAction,
         injury_actions: Mapping[str, QAction],
     ) -> None:
         super().__init__(calendar)
         self._calendar = calendar
         self._open_day = open_day
         self._plan = plan_actions
+        self._goals_window = goals_window
         self._injuries = injury_actions
         self._menu: QMenu | None = None
         calendar.day_menu_requested.connect(self._on_requested)
@@ -49,7 +52,8 @@ class CalendarDayMenu(QObject):
         return self._menu
 
     def build(self, cell: CalendarDay) -> QMenu:
-        """The menu of a day: open it, goals, injuries."""
+        """The menu of a day: open it, the goals and injuries of the day, then the commands of the
+        whole plan (goals and status, training settings, undo and redo)."""
         menu = QMenu(self._calendar)
         menu.setObjectName("calendarDayMenu")
         menu.setToolTipsVisible(True)
@@ -67,7 +71,17 @@ class CalendarDayMenu(QObject):
         if cell.problems:
             for name in _INJURY_COMMANDS:
                 menu.addAction(self._injuries[name])
+        self._add_plan_commands(menu)
         return menu
+
+    def _add_plan_commands(self, menu: QMenu) -> None:
+        """The commands of the whole plan, in a group of their own."""
+        menu.addSeparator()
+        menu.addAction(self._goals_window)
+        menu.addAction(self._plan["training"])
+        menu.addSeparator()
+        menu.addAction(self._plan["undo"])
+        menu.addAction(self._plan["redo"])
 
     def _on_requested(self, cell: object, position: object) -> None:
         if not isinstance(cell, CalendarDay) or not isinstance(position, QPoint):

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-MAP-02, T-MAP-04, T-MAP-06, T-FILT-04: the Map section in the real window.
+"""T-MAP-02, T-MAP-04, T-MAP-06, T-FILT-04: the map beside the table, in the real window.
 
 Eight made-up runs, all starting at one invented point in the open sea. The map is driven through
 the controller (the view the page would report).
@@ -28,7 +28,6 @@ from tests.ui.map_support import (
     FAR,
     NEAR,
     SECTION_ACTIVITIES,
-    SECTION_MAP,
     map_window,
     show_view,
 )
@@ -41,7 +40,9 @@ def settings(tmp_path: Path) -> QSettings:
 
 
 def listed(window: MainWindow) -> int:
-    return window.map_page.list_model.rowCount()
+    """How many activities the map says start in the visible area (0 while it says nothing)."""
+    count = window.map_page.summary_texts[0]
+    return int(count.rsplit(": ", 1)[1]) if ": " in count else 0
 
 
 def shown_in_table(window: MainWindow) -> int:
@@ -58,14 +59,22 @@ def wait_search(qtbot: QtBot, window: MainWindow, count: int) -> None:
     )
 
 
-def test_the_map_section_is_in_the_sidebar_and_lists_the_activities_of_the_area(
+def test_the_map_is_beside_the_table_in_the_activities_section_and_counts_its_area(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = map_window(qtbot, tmp_path, settings)
 
     show_view(qtbot, window, NEAR)
 
-    assert window.sidebar.item(SECTION_MAP).text() == "Map"
+    assert [window.sidebar.item(r).text() for r in range(window.sidebar.count())] == [
+        "Overview",
+        "Activities",
+        "Calendar",
+        "Tests",
+    ]
+    assert window.activities_view.widget(0) is window.activities_page
+    assert window.activities_view.widget(1) is window.map_page
+    assert window.sidebar.currentRow() == SECTION_ACTIVITIES
     assert listed(window) == ACTIVITIES_WITH_POSITION
     count, totals, extra = window.map_page.summary_texts
     assert count == f"Activities in this area: {ACTIVITIES_WITH_POSITION}"
@@ -121,25 +130,45 @@ def test_selecting_in_the_table_selects_on_the_map_and_the_other_way_round(
     window = map_window(qtbot, tmp_path, settings)
     show_view(qtbot, window, NEAR)
     controller = window.map_ui.controller
-    page = window.map_page
 
-    window.sidebar.setCurrentRow(SECTION_ACTIVITIES)
     window.activities_page.table.selectRow(2)
     chosen = window.activities_page.selected_activity()
     assert chosen is not None
     assert controller.selected == chosen.identity
-    row = page.table.selectionModel().selectedRows()
-    assert row
-    assert page.list_model.identity_at(page.list_proxy.mapToSource(row[0]).row()) == chosen.identity
 
-    # Clicking another row of the map's list selects it in the table too.
-    page.table.selectRow(0)
+    # A click on the map (a position of the search result) selects the row of the table too.
+    controller.select_index(0)
     other = controller.selected
     assert other is not None
     assert other != chosen.identity
     now_selected = window.activities_page.selected_activity()
     assert now_selected is not None
     assert now_selected.identity == other
+
+
+def test_the_table_can_be_narrowed_to_the_visible_area_and_the_choice_is_remembered(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = map_window(qtbot, tmp_path, settings)
+    show_view(qtbot, window, NEAR)
+    activities = window.activities_page.model.rowCount()
+    check = window.activities_page.area_only_check
+    assert check.isVisibleTo(window.activities_page)
+    assert not check.isChecked()
+    assert shown_in_table(window) == activities
+
+    check.setChecked(True)
+    show_view(qtbot, window, ELSEWHERE)  # nothing starts there
+
+    qtbot.waitUntil(lambda: shown_in_table(window) == 0, timeout=WAIT_MS)
+    assert window.activities_page.model.rowCount() == activities
+    show_view(qtbot, window, NEAR)
+    qtbot.waitUntil(lambda: shown_in_table(window) == activities, timeout=WAIT_MS)
+    check.setChecked(False)
+    show_view(qtbot, window, ELSEWHERE)
+    assert shown_in_table(window) == activities  # unchecked: the table ignores the area
+    check.setChecked(True)
+    assert bool(settings.value("activities/visibleAreaOnly", False, type=bool))
 
 
 def test_the_page_receives_the_selected_activity_by_position_in_the_search(

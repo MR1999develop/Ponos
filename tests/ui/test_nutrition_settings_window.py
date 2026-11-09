@@ -77,14 +77,13 @@ def add_period(
         sub.save_button.click()
 
 
-def test_the_settings_open_from_the_profile_menu_with_the_defaults_and_nothing_to_undo(
+def test_the_settings_open_in_their_page_with_the_defaults_and_nothing_to_undo(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with_days(qtbot, tmp_path, settings)
 
     dialog = open_settings(qtbot, window)
 
-    assert window.nutrition_action.shortcut().toString() == "Ctrl+Shift+N"
     assert window.settings_window.page(SettingsCategory.NUTRITION).form is dialog
     assert dialog.levels_model.rowCount() == 0
     assert dialog.periods_model.rowCount() == 0

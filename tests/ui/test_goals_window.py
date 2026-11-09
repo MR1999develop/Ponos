@@ -101,7 +101,6 @@ def test_the_goals_window_opens_from_the_menu_and_the_commands_have_their_reason
         "Overview",
         "Activities",
         "Calendar",
-        "Map",
         "Tests",
     ]
     assert window.goals_page.empty_text.startswith("No goals yet.")
@@ -115,22 +114,24 @@ def test_the_goals_window_opens_from_the_menu_and_the_commands_have_their_reason
     assert actions["undo"].toolTip() == "There is no change to the goals to take back."
 
 
-def test_the_plan_menu_lists_every_command_with_its_shortcut(
+def test_the_plan_commands_are_in_the_calendar_menu_and_there_is_no_plan_menu(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = ready_window(qtbot, tmp_path, settings)
 
-    menu = next(a.menu() for a in window.menuBar().actions() if a.text() == "Plan")
+    assert not [a for a in window.menuBar().actions() if a.text() == "Plan"]
+    menu = next(a.menu() for a in window.menuBar().actions() if a.text() == "Calendar")
 
     assert isinstance(menu, QMenu)
-    assert [(a.text(), a.shortcut().toString()) for a in menu.actions() if not a.isSeparator()] == [
+    commands = [(a.text(), a.shortcut().toString()) for a in menu.actions() if not a.isSeparator()]
+    assert commands[4:] == [
         ("Add race...", "Ctrl+R"),
         ("Add form goal...", "Ctrl+Shift+F"),
         ("Change goal...", "Ctrl+Shift+E"),
         ("Remove goal", "Ctrl+Del"),
         ("Goals and plan status...", "Ctrl+Shift+P"),
         ("Training settings...", "Ctrl+Shift+T"),
-        ("Undo", ""),  # like the threshold test: no global shortcut
+        ("Undo", ""),  # no global shortcut
         ("Redo", ""),
     ]
 
@@ -767,9 +768,10 @@ def test_the_plan_proposes_the_next_threshold_test_beside_the_status_of_the_test
 
     add_race(qtbot, window, RACE_DAY)
     wait_plan(qtbot, window, race_ids(window))
-    wait_for(qtbot, lambda: window.plan_retest_text.startswith("Plan: "))
+    wait_for(qtbot, lambda: window.plan_retest_text != "")
 
-    assert window.plan_retest_text == "Plan: do the threshold test before the plan starts"
+    # with no test yet the plan puts the test in its first weeks (ADR 015)
+    assert window.plan_retest_text.startswith("Threshold test planned on ")
     wait_for(qtbot, lambda: window.retest_status_text.startswith("Threshold test: "))
     label = window.findChild(QLabel, "planRetestLabel")
     assert label is not None
@@ -781,7 +783,7 @@ def test_taking_the_goal_back_takes_the_proposal_off_the_status_bar(
 ) -> None:
     window = plan_window(qtbot, tmp_path, settings)
     add_race(qtbot, window, RACE_DAY)
-    wait_for(qtbot, lambda: window.plan_retest_text.startswith("Plan: "))
+    wait_for(qtbot, lambda: window.plan_retest_text != "")
 
     undo(window)
 

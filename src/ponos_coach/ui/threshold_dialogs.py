@@ -11,12 +11,14 @@ from __future__ import annotations
 from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QLocale, QSortFilterProxyModel, Qt, Signal
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -28,6 +30,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from ponos_coach.assessment.domain import ThresholdProtocol
 from ponos_coach.assessment.domain.defaults import (
@@ -54,7 +57,6 @@ _SECONDS_PER_MINUTE = 60
 _DAYS_PER_WEEK = 7
 _TABLE_MIN_HEIGHT = 140
 _ZONE_TABLE_HEIGHT = 176
-_HISTORY_MIN_WIDTH = 720
 
 
 def _label(text: str, parent: QWidget, name: str = "") -> QLabel:
@@ -397,13 +399,20 @@ class ThresholdResultDialog(QDialog):
         self.apply_requested.emit()
 
 
-class ThresholdHistoryDialog(QDialog):
-    """The tests applied so far, and when to repeat the test."""
+class ThresholdHistoryPanel(QGroupBox):
+    """The tests applied so far, when to repeat the test, and the commands on them: take the last
+    one back, apply it again, read how to do the test. Lives in Settings > Training plan."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        undo: QAction,
+        redo: QAction,
+        instructions: QAction,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
-        self.setWindowTitle(self.tr("Threshold tests"))
-        self.setMinimumWidth(_HISTORY_MIN_WIDTH)
+        self.setTitle(self.tr("Threshold tests"))
+        self.setObjectName("thresholdHistoryPanel")
         self._model = ThresholdHistoryModel(self)
         self._proxy = sorted_history_model(self._model, self)
         self._table = _table(self, "thresholdHistory", self.tr("Threshold tests"))
@@ -415,7 +424,7 @@ class ThresholdHistoryDialog(QDialog):
         self._empty.set_content(
             self.tr("No threshold tests yet"),
             self.tr(
-                "To add one, do the test, then choose the activity and use Threshold test > "
+                "To add one, do the test, then choose the activity and use Profile > "
                 "Use as threshold test."
             ),
             "",
@@ -425,13 +434,19 @@ class ThresholdHistoryDialog(QDialog):
         self._stack.addWidget(self._table)
         self._retest = _label("", self, "thresholdRetest")
         self._retest.setAccessibleName(self.tr("When to repeat the test"))
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
-        buttons.rejected.connect(self.reject)
+        self._undo_button = _ActionButton(undo, "thresholdUndo", self)
+        self._redo_button = _ActionButton(redo, "thresholdRedo", self)
+        self._instructions_button = _ActionButton(instructions, "thresholdInstructions", self)
+        buttons = QHBoxLayout()
+        for button in (self._undo_button, self._redo_button):
+            buttons.addWidget(button)
+        buttons.addStretch(1)
+        buttons.addWidget(self._instructions_button)
         outer = QVBoxLayout(self)
         outer.setSpacing(SPACE_4)
         outer.addWidget(self._stack, stretch=1)
         outer.addWidget(self._retest)
-        outer.addWidget(buttons)
+        outer.addLayout(buttons)
         self._stack.setCurrentWidget(self._empty)
 
     @property
@@ -459,8 +474,43 @@ class ThresholdHistoryDialog(QDialog):
         """The retest sentence."""
         return self._retest.text()
 
+    @property
+    def undo_button(self) -> QPushButton:
+        """The button that takes the last applied test back."""
+        return self._undo_button
+
+    @property
+    def redo_button(self) -> QPushButton:
+        """The button that applies a test again."""
+        return self._redo_button
+
     def show_history(self, history: ThresholdHistory, zone: ZoneInfo) -> None:
         """Show the tests (or the empty state) and the retest status."""
         self._model.set_entries(history.entries, zone)
         self._stack.setCurrentWidget(self._table if history.entries else self._empty)
         self._retest.setText(retest_text(history.retest))
+
+    def clear(self) -> None:
+        """No profile: nothing to show."""
+        self._model.set_entries((), ZoneInfo("UTC"))
+        self._stack.setCurrentWidget(self._empty)
+        self._retest.setText("")
+
+
+class _ActionButton(QPushButton):
+    """A button that is a face of a `QAction`: same text, same availability, same tooltip."""
+
+    def __init__(self, action: QAction, name: str, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setObjectName(name)
+        self._action = action
+        self.clicked.connect(action.trigger)
+        action.changed.connect(self._follow)
+        self._follow()
+
+    def _follow(self) -> None:
+        if not isValid(self._action):  # the action goes first when the window is torn down
+            return
+        self.setText(self._action.text().replace("&", ""))
+        self.setEnabled(self._action.isEnabled())
+        self.setToolTip(self._action.toolTip())

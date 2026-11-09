@@ -20,7 +20,7 @@ from ponos_coach.activities.domain import Sport
 from ponos_coach.load.use_cases import ProfileActivity
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.overview_state import Ready
-from ponos_coach.ui.threshold_dialogs import ThresholdHistoryDialog, ThresholdResultDialog
+from ponos_coach.ui.threshold_dialogs import ThresholdHistoryPanel, ThresholdResultDialog
 from tests.ui.workspace_support import WAIT_MS, compose, create_profile, wait_ready
 
 PROFILE = "Atleta di prova"
@@ -114,11 +114,8 @@ def apply_test(qtbot: QtBot, window: MainWindow) -> None:
     qtbot.waitUntil(lambda: window.threshold.result_dialog is None, timeout=WAIT_MS)
 
 
-def open_history(qtbot: QtBot, window: MainWindow) -> ThresholdHistoryDialog:
-    """Open "Threshold tests..." and wait for the dialog."""
+def open_history(qtbot: QtBot, window: MainWindow) -> ThresholdHistoryPanel:
+    """Open "Threshold tests..." (Settings > Training plan) and return the history panel."""
     qtbot.waitUntil(window.threshold_history_action.isEnabled, timeout=WAIT_MS)
     window.threshold_history_action.trigger()
-    qtbot.waitUntil(lambda: window.threshold.history_dialog is not None, timeout=WAIT_MS)
-    dialog = window.threshold.history_dialog
-    assert dialog is not None
-    return dialog
+    return window.threshold.history_panel

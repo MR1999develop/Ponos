@@ -38,6 +38,7 @@ from ponos_coach.planning.domain import (
     RetestInUnloadWeek,
     RetestNotPlaceable,
     RetestProposal,
+    RetestScheduled,
     TargetClass,
     TargetTimeUnreachable,
 )
@@ -255,11 +256,18 @@ def block_text(block: Block) -> str:
     )
 
 
+def session_name(session: PlannedSession) -> str:
+    """The name of a session: its type, or "Threshold test" when it is the test itself."""
+    if session.threshold_test is not None:
+        return QCoreApplication.translate("Plan", "Threshold test")
+    return session_type_text(session.session_type)
+
+
 def session_title(session: PlannedSession) -> str:
-    """A session in one line: "Threshold, 60 min"."""
+    """A session in one line: "Threshold, 60 min" ("Threshold test, 55 min" for the test)."""
     # {type}: the session type; %n: the minutes.
     return QCoreApplication.translate("Plan", "{type}, %n min", "", session.minutes).format(
-        type=session_type_text(session.session_type)
+        type=session_name(session)
     )
 
 
@@ -528,4 +536,9 @@ def retest_proposal_text(proposal: RetestProposal) -> str:
         case RetestNotPlaceable():
             return QCoreApplication.translate(
                 "Plan", "Plan: no easy week fits the next threshold test"
+            )
+        case RetestScheduled(day=day):
+            # {date}: the day of the threshold test in the plan.
+            return QCoreApplication.translate("Plan", "Threshold test planned on {date}").format(
+                date=short_date_text(day)
             )

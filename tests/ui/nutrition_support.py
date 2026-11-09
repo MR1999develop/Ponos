@@ -22,6 +22,7 @@ from ponos_coach.ui.calendar_model import CalendarDay
 from ponos_coach.ui.day_page import DayPage, DayState
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.nutrition_settings_dialog import NutritionSettingsDialog
+from ponos_coach.ui.settings_page import SettingsCategory
 from tests.fixtures.generators import fit_writer as fw
 from tests.fixtures.generators.tracks import SEA_LAT_DEG, SEA_LON_DEG
 from tests.ui.workspace_support import (
@@ -145,9 +146,8 @@ def open_day(qtbot: QtBot, window: MainWindow, day: date, *, wait: bool = True) 
 
 
 def open_settings(qtbot: QtBot, window: MainWindow) -> NutritionSettingsDialog:
-    """Open "Nutrition settings..." and wait for the dialog."""
-    qtbot.waitUntil(window.nutrition_action.isEnabled, timeout=WAIT_MS)
-    window.nutrition_action.trigger()
+    """Open Settings > Nutrition and wait for its content."""
+    window.show_settings_page(SettingsCategory.NUTRITION)
     qtbot.waitUntil(lambda: window.nutrition.settings_dialog is not None, timeout=WAIT_MS)
     dialog = window.nutrition.settings_dialog
     assert dialog is not None

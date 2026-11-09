@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""The "Garmin account" section of Settings > Profile: whether an account is connected, the buttons
+"""The content of Settings > Garmin account: whether an account is connected, the buttons
 to connect and disconnect it and the preference to synchronise when a profile opens.
 
 Humble view: the commands themselves (their availability, the reason when they are off, what they
@@ -35,7 +35,7 @@ class GarminAccountSection(QGroupBox):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setTitle(self.tr("Garmin account"))
+        self.setFlat(True)  # the page heading already says "Garmin account"
         self.setObjectName("garminAccountSection")
         self._connect = connect
         self._disconnect = disconnect

@@ -50,6 +50,7 @@ from ponos_coach.activities.domain import ActivityIdentity
 from ponos_coach.load.use_cases import ProfileOverview
 from ponos_coach.profiles.domain import ProfileId, RegistryEntry
 from ponos_coach.profiles.use_cases import FolderWarning, NewProfileRequest
+from ponos_coach.ui.activities_view import ActivitiesMapView
 from ponos_coach.ui.activity_detail_loader import ActivityDetailLoader
 from ponos_coach.ui.activity_table import ActivitiesPage
 from ponos_coach.ui.backup_runner import BackupRunner, BackupUseCases
@@ -121,13 +122,9 @@ _STATUS_MESSAGE_MS = 8000
 _SECTION_OVERVIEW = 0
 _SECTION_ACTIVITIES = 1
 _SECTION_CALENDAR = 2
-_SECTION_MAP = 3
-_AVAILABLE_SECTIONS = (
-    _SECTION_OVERVIEW,
-    _SECTION_ACTIVITIES,
-    _SECTION_CALENDAR,
-    _SECTION_MAP,
-)
+_AVAILABLE_SECTIONS = (_SECTION_OVERVIEW, _SECTION_ACTIVITIES, _SECTION_CALENDAR)
+_FIRST_SECTION = _SECTION_ACTIVITIES  # the activities beside the map, the first time and when the
+# section saved last no longer exists
 _SHUTDOWN_POLL_MS = 20
 
 
@@ -226,10 +223,15 @@ class MainWindow(QMainWindow):
         return action
 
     def _build_actions(self) -> None:
+        self._threshold_instructions_action = self._action(
+            self.tr("Test instructions..."), "Ctrl+Shift+H", self._show_threshold_instructions
+        )
         self._threshold = ThresholdUi(
             self,
             self._controller,
             settings=self._settings,
+            instructions=self._threshold_instructions_action,
+            show_history_page=partial(self.show_settings_page, SettingsCategory.TRAINING_PLAN),
             zone=lambda: self._zone,
             show_error=self._show_error,
             notify=lambda text: self.statusBar().showMessage(text, _STATUS_MESSAGE_MS),
@@ -254,17 +256,11 @@ class MainWindow(QMainWindow):
             preferences if not preferences.isEmpty() else QKeySequence("Ctrl+,")
         )
         self._settings_action.setMenuRole(QAction.MenuRole.PreferencesRole)
-        self._garmin_account_action = self._action(
-            self.tr("Garmin account settings..."), None, self.edit_garmin_account
-        )
         self._edit_profile_action = self._action(
             self.tr("Edit profile..."), "Ctrl+E", self.edit_profile
         )
         self._sport_weights_action = self._action(
             self.tr("Sport weights..."), "Ctrl+Shift+W", self.edit_sport_weights
-        )
-        self._nutrition_action = self._action(
-            self.tr("Nutrition settings..."), "Ctrl+Shift+N", self.edit_nutrition_settings
         )
         self._previous_month_action = self._action(
             self.tr("Previous month"), "Ctrl+Left", self._calendar_step_back
@@ -284,9 +280,6 @@ class MainWindow(QMainWindow):
         )
         self._detail_action = self._action(
             self.tr("Activity detail..."), "Ctrl+D", self.show_selected_activity_detail
-        )
-        self._threshold_instructions_action = self._action(
-            self.tr("Test instructions..."), "Ctrl+Shift+H", self._threshold.show_instructions
         )
         self._use_as_test_action = self._action(
             self.tr("Use as threshold test..."),
@@ -324,38 +317,33 @@ class MainWindow(QMainWindow):
         profile_menu = self.menuBar().addMenu(self.tr("Profile"))
         profile_menu.addAction(self._edit_profile_action)
         profile_menu.addAction(self._sport_weights_action)
-        profile_menu.addAction(self._nutrition_action)
         profile_menu.addSeparator()
         profile_menu.addAction(self._detail_action)
-        threshold_menu = self.menuBar().addMenu(self.tr("Threshold test"))
-        threshold_menu.addAction(self._threshold_instructions_action)
-        threshold_menu.addAction(self._use_as_test_action)
-        threshold_menu.addAction(self._threshold_history_action)
-        threshold_menu.addSeparator()
-        threshold_menu.addAction(self._threshold.undo_action)
-        threshold_menu.addAction(self._threshold.redo_action)
-        calendar_menu = self.menuBar().addMenu(self.tr("Calendar"))
+        profile_menu.addAction(self._use_as_test_action)
+        profile_menu.addAction(self._threshold_history_action)
+        self._build_calendar_menu()
+        self._map_ui.build_menu(self.menuBar())
+        self._build_injuries_menu()
+        self._garmin_calendar.add_to_menu(self._garmin.build_menu(self.menuBar()))
+        help_menu = self.menuBar().addMenu(self.tr("Help"))
+        help_menu.addAction(self._threshold_instructions_action)
+        help_menu.addSeparator()
+        help_menu.addAction(self._log_action)
+        help_menu.addSeparator()
+        help_menu.addAction(self._about_action)
+
+    def _build_calendar_menu(self) -> None:
+        """Menu "Calendar": moving about it and, since the plan is on the calendar, the plan's
+        commands (the same ones as in the menu of a day, which holds them by right click)."""
+        menu = self.menuBar().addMenu(self.tr("Calendar"))
         for action in (
             self._previous_month_action,
             self._next_month_action,
             self._today_action,
             self._open_day_action,
         ):
-            calendar_menu.addAction(action)
-        self._map_ui.build_menu(self.menuBar())
-        self._build_plan_menu()
-        self._build_injuries_menu()
-        self._garmin_calendar.add_to_menu(
-            self._garmin.build_menu(self.menuBar(), self._garmin_account_action)
-        )
-        help_menu = self.menuBar().addMenu(self.tr("Help"))
-        help_menu.addAction(self._log_action)
-        help_menu.addSeparator()
-        help_menu.addAction(self._about_action)
-
-    def _build_plan_menu(self) -> None:
-        """Menu "Plan": the goals, the training settings, and undo and redo of both."""
-        menu = self.menuBar().addMenu(self.tr("Plan"))
+            menu.addAction(action)
+        menu.addSeparator()
         actions = self._plan.actions
         for name in ("add_race", "add_form_goal", "change_goal", "remove_goal"):
             menu.addAction(actions[name])
@@ -385,17 +373,27 @@ class MainWindow(QMainWindow):
             SettingsCategory.PROFILE,
             self.tr("Profile"),
             self,
+        )
+        self._garmin_settings = SettingsPage(
+            SettingsCategory.GARMIN,
+            self.tr("Garmin account"),
+            self,
             footer=self._garmin.account_section,
         )
         self._weights_settings = SettingsPage(
             SettingsCategory.SPORT_WEIGHTS, self.tr("Sport weights"), self
         )
         self._protocol_section = ThresholdProtocolSection(ProtocolPreference(self._settings))
+        threshold_part = QWidget(self)
+        threshold_column = QVBoxLayout(threshold_part)
+        threshold_column.setContentsMargins(0, 0, 0, 0)
+        threshold_column.addWidget(self._protocol_section)
+        threshold_column.addWidget(self._threshold.history_panel)
         self._training_settings = SettingsPage(
             SettingsCategory.TRAINING_PLAN,
             self.tr("Training plan"),
             self,
-            footer=self._protocol_section,
+            footer=threshold_part,
         )
         self._training_settings.shown.connect(self._protocol_section.refresh)
         self._nutrition_settings = SettingsPage(
@@ -419,7 +417,6 @@ class MainWindow(QMainWindow):
             (self.tr("Overview"), True),
             (self.tr("Activities"), True),
             (self.tr("Calendar"), True),
-            (self.tr("Map"), True),
             (self.tr("Tests"), False),
         )
         for label, available in sections:
@@ -427,7 +424,6 @@ class MainWindow(QMainWindow):
             if not available:
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
                 item.setToolTip(later)
-        self._sidebar.setCurrentRow(_SECTION_OVERVIEW)
         self._sidebar.currentRowChanged.connect(self._on_section_changed)
 
         self._engine = ChartEngine(self._choose_export_path, self, tiles=self._map_services.tiles)
@@ -447,7 +443,7 @@ class MainWindow(QMainWindow):
             theme=system_theme,
             zone=lambda: self._zone,
             show_error=self._show_error,
-            show_map=lambda: self._sidebar.setCurrentRow(_SECTION_MAP),
+            show_map=lambda: self._sidebar.setCurrentRow(_SECTION_ACTIVITIES),
             settings_page=self._map_settings,
             show_settings=partial(self.show_settings_page, SettingsCategory.MAP),
         )
@@ -461,11 +457,13 @@ class MainWindow(QMainWindow):
             self.tr("Injury history"), self._injuries_page, self, name="injuryHistoryWindow"
         )
         self._pages = QStackedWidget(self)
+        self._activities_view = ActivitiesMapView(
+            self._activities, self._map_ui.page, self._settings, self
+        )
         self._section_pages: dict[int, QWidget] = {
             _SECTION_OVERVIEW: self._overview,
-            _SECTION_ACTIVITIES: self._activities,
+            _SECTION_ACTIVITIES: self._activities_view,
             _SECTION_CALENDAR: self._calendar,
-            _SECTION_MAP: self._map_ui.page,
         }
         for page in self._section_pages.values():
             self._pages.addWidget(page)
@@ -550,6 +548,7 @@ class MainWindow(QMainWindow):
             self._calendar,
             open_day=self._open_day_action,
             plan_actions=self._plan.actions,
+            goals_window=self._goals_window_action,
             injury_actions=self._injuries.actions,
         )
         self._injuries.status_text_changed.connect(self._on_injury_status_changed)
@@ -576,6 +575,7 @@ class MainWindow(QMainWindow):
         self._settings_window = SettingsWindow(
             (
                 self._profile_settings,
+                self._garmin_settings,
                 self._weights_settings,
                 self._training_settings,
                 self._nutrition_settings,
@@ -679,6 +679,11 @@ class MainWindow(QMainWindow):
         return self._map_ui
 
     @property
+    def activities_view(self) -> ActivitiesMapView:
+        """The Activities section: the table and the map side by side."""
+        return self._activities_view
+
+    @property
     def map_page(self) -> MapPage:
         """The Map page."""
         return self._map_ui.page
@@ -752,11 +757,6 @@ class MainWindow(QMainWindow):
     def nutrition(self) -> NutritionUi:
         """The nutrition flow (day windows and the Settings > Nutrition page)."""
         return self._nutrition
-
-    @property
-    def nutrition_action(self) -> QAction:
-        """Action "Nutrition settings..."."""
-        return self._nutrition_action
 
     @property
     def current_page(self) -> QWidget:
@@ -939,10 +939,6 @@ class MainWindow(QMainWindow):
         """Open the Settings window (or bring it forward) on the page of `category`."""
         self._settings_window.show_page(category)
 
-    def edit_garmin_account(self) -> None:
-        """Open Settings on the page that has the Garmin account."""
-        self.show_settings_page(SettingsCategory.PROFILE)
-
     # --- Profile data ------------------------------------------------------------------
 
     def edit_profile(self) -> None:
@@ -953,9 +949,8 @@ class MainWindow(QMainWindow):
         """Open Settings > Sport weights."""
         self._dialogs.edit_sport_weights()
 
-    def edit_nutrition_settings(self) -> None:
-        """Open Settings > Nutrition."""
-        self._nutrition.show_settings()
+    def _show_threshold_instructions(self) -> None:
+        self._threshold.show_instructions()
 
     def use_selected_as_threshold_test(self) -> None:
         """Evaluate the activity selected in the list as the threshold test (no effect if the
@@ -1336,17 +1331,16 @@ class MainWindow(QMainWindow):
         if page is not None:
             self._pages.setCurrentWidget(page)
             self._settings.setValue(_KEY_SECTION, row)
-            self._map_ui.section_changed(
-                on_map=row == _SECTION_MAP, on_activities=row == _SECTION_ACTIVITIES
-            )
+            self._map_ui.section_changed(on_activities=row == _SECTION_ACTIVITIES)
 
     def _restore_section(self) -> None:
-        """Reopen the section of last time; an invalid saved value means the first one."""
+        """Reopen the section of last time; an invalid saved value, or one that no longer exists
+        (the old "Map" section), means the activities beside the map."""
         try:
             row = int(str(self._settings.value(_KEY_SECTION)))
         except ValueError:
-            row = _SECTION_OVERVIEW
-        self._sidebar.setCurrentRow(row if row in _AVAILABLE_SECTIONS else _SECTION_OVERVIEW)
+            row = _FIRST_SECTION
+        self._sidebar.setCurrentRow(row if row in _AVAILABLE_SECTIONS else _FIRST_SECTION)
 
     def _on_overview_action(self, action: object) -> None:
         if action is PrimaryAction.NEW_PROFILE:
@@ -1409,7 +1403,6 @@ class MainWindow(QMainWindow):
             (self._import_folder_action, controller.can_import),
             (self._edit_profile_action, controller.can_edit_profile),
             (self._sport_weights_action, controller.can_edit_profile),
-            (self._nutrition_action, controller.profile is not None),
         ):
             action.setEnabled(allowed)
             action.setToolTip(self._unavailable_reason(allowed))

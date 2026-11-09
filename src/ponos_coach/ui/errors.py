@@ -418,7 +418,7 @@ def _lean_mass_not_found(_error: BaseException) -> ErrorMessage:
     return ErrorMessage(
         QCoreApplication.translate("Errors", "The measurement is no longer saved"),
         QCoreApplication.translate("Errors", "It was already removed."),
-        QCoreApplication.translate("Errors", "Open Nutrition settings to see what is saved."),
+        QCoreApplication.translate("Errors", "Open Settings > Nutrition to see what is saved."),
     )
 
 
@@ -439,7 +439,7 @@ def _threshold_already_stored(_error: BaseException) -> ErrorMessage:
         QCoreApplication.translate("Errors", "This activity is already a threshold test"),
         QCoreApplication.translate("Errors", "The test of this activity was applied before."),
         QCoreApplication.translate(
-            "Errors", "Choose another activity, or open Threshold test > Threshold tests."
+            "Errors", "Choose another activity, or open Settings > Training plan to see the tests."
         ),
     )
 
@@ -448,9 +448,7 @@ def _threshold_not_found(_error: BaseException) -> ErrorMessage:
     return ErrorMessage(
         QCoreApplication.translate("Errors", "The threshold test is no longer saved"),
         QCoreApplication.translate("Errors", "The test was already taken back."),
-        QCoreApplication.translate(
-            "Errors", "Open Threshold test > Threshold tests to see what is saved."
-        ),
+        QCoreApplication.translate("Errors", "Open Settings > Training plan to see what is saved."),
     )
 
 

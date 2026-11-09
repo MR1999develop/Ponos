@@ -367,7 +367,7 @@ _DISABLED_REASONS: dict[DisabledReason, Callable[[], str]] = {
 
 
 def account_status_text(status: AccountStatus) -> str:
-    """What is known about the profile's Garmin account, for the Settings > Profile page."""
+    """What is known about the profile's Garmin account, for the Settings > Garmin account page."""
     translate = QCoreApplication.translate
     if status is AccountStatus.LINKED:
         return translate("Sync", "A Garmin account is connected to this profile.")

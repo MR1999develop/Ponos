@@ -466,7 +466,7 @@ def test_when_the_provider_fails_the_tracks_stay_and_the_notice_says_what_to_do(
         assert len(tiles.source.calls) <= 3  # the proxy stops asking: no hammering
 
 
-def test_without_a_key_the_notice_appears_at_once_and_the_list_still_works(
+def test_without_a_key_the_notice_appears_at_once_and_the_table_still_works(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window, _view = window_with_page(qtbot, tmp_path, settings)  # the fake key store is empty
@@ -474,7 +474,7 @@ def test_without_a_key_the_notice_appears_at_once_and_the_list_still_works(
 
     assert window.map_page.notice_visible
     assert "needs a Tracestrack key" in window.map_page.notice_text
-    assert window.map_page.list_model.rowCount() == 8
+    assert window.activities_page.proxy.rowCount() == 8  # the table lists them all the same
 
 
 def test_a_tile_that_arrives_clears_the_notice(

@@ -91,13 +91,24 @@ def test_the_right_button_selects_the_day_and_opens_its_menu_with_the_commands_a
     assert window.calendar_page.selected_day() == PAST_DAY
     menu = window.day_menu.menu
     assert menu is not None
-    assert texts_of(menu) == [
+    texts = texts_of(menu)
+    assert texts[:7] == [
         "Open day",
         "Add race...",
         "Add form goal...",
         "Add injury...",
         "Add illness...",
+        "Goals and plan status...",
+        "Training settings...",
     ]
+    assert [t.split()[0] for t in texts[7:]] == ["Undo", "Redo"]  # the text names the change
+    plan_group = menu.actions()[-6:]  # a separator, the plan's commands, a separator, undo, redo
+    assert plan_group[0].isSeparator()
+    assert plan_group[1] is window.goals_window_action
+    assert plan_group[2] is window.plan.actions["training"]
+    assert plan_group[3].isSeparator()
+    assert plan_group[4] is window.plan.actions["undo"]
+    assert plan_group[5] is window.plan.actions["redo"]
     add_race = action_named(menu, "Add race...")
     assert not add_race.isEnabled()
     assert add_race.toolTip() == "A goal needs a day after today."
@@ -143,7 +154,7 @@ def test_a_day_with_a_goal_or_an_injury_offers_the_commands_on_it(
     assert "Change goal..." in texts_of(with_goal)
     assert "Remove goal" in texts_of(with_goal)
     assert "Daily check-in..." not in texts_of(with_goal)
-    assert texts_of(with_injury)[-3:] == [
+    assert texts_of(with_injury)[-7:-4] == [
         "Daily check-in...",
         "Medical review done",
         "Close injury or illness...",

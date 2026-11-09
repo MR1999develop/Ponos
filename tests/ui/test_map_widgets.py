@@ -5,11 +5,9 @@
 from __future__ import annotations
 
 from datetime import date
-from zoneinfo import ZoneInfo
 
 import numpy as np
 import pytest
-from PySide6.QtCore import Qt
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.activities.domain import ActivityIdentity, Sport
@@ -19,7 +17,6 @@ from ponos_coach.ui import map_texts
 from ponos_coach.ui.chart_texts import chart_chrome
 from ponos_coach.ui.elevation_figure import ElevationLabels, build_elevation_figure
 from ponos_coach.ui.map_legend import LegendBar, LegendEntry, dash_pattern
-from ponos_coach.ui.map_list_model import AreaListModel, ListColumn, sorted_list_model
 from ponos_coach.ui.map_style import (
     SPORT_ORDER,
     page_colors,
@@ -28,7 +25,7 @@ from ponos_coach.ui.map_style import (
     sport_look,
 )
 from ponos_coach.ui.tokens import Theme, tokens_for
-from tests.builders import fit_identity, make_record
+from tests.builders import fit_identity
 
 IDENTITY: ActivityIdentity = fit_identity(1)
 
@@ -118,34 +115,6 @@ def test_the_zone_legend_gives_the_heart_rate_range_when_the_thresholds_are_know
 def test_the_attribution_credits_both_providers() -> None:
     assert "OpenStreetMap contributors" in map_texts.ATTRIBUTION
     assert "Tracestrack" in map_texts.ATTRIBUTION
-
-
-# --- The list model -------------------------------------------------------------------------
-
-
-def test_the_list_has_numbers_on_the_right_units_in_the_headers_and_sorts_most_recent_first(
-    qtbot: QtBot,
-) -> None:
-    older = make_record(fit_identity(1), start=make_record().start.replace(day=2))
-    newer = make_record(fit_identity(2), start=make_record().start.replace(day=9))
-    model = AreaListModel()
-    proxy = sorted_list_model(model)
-    model.set_records([older, newer], ZoneInfo("UTC"))
-
-    assert proxy.index(0, 0).data(Qt.ItemDataRole.UserRole) > proxy.index(1, 0).data(
-        Qt.ItemDataRole.UserRole
-    )
-    assert model.identity_at(proxy.mapToSource(proxy.index(0, 0)).row()) == newer.identity
-    assert model.row_of(older.identity) == 0
-    assert model.row_of(fit_identity(99)) is None
-    for column in (ListColumn.DISTANCE, ListColumn.ASCENT, ListColumn.MOVING_TIME):
-        alignment = model.headerData(
-            column, Qt.Orientation.Horizontal, Qt.ItemDataRole.TextAlignmentRole
-        )
-        assert isinstance(alignment, int)
-        assert alignment & int(Qt.AlignmentFlag.AlignRight)
-    assert "km" in str(model.headerData(ListColumn.DISTANCE, Qt.Orientation.Horizontal))
-    assert "m" in str(model.headerData(ListColumn.ASCENT, Qt.Orientation.Horizontal))
 
 
 # --- Elevation profile ----------------------------------------------------------------------

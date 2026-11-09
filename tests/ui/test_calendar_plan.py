@@ -6,6 +6,7 @@ the athlete is made up."""
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
@@ -15,7 +16,8 @@ from PySide6.QtCore import QLocale, Qt
 from PySide6.QtTest import QTest
 from pytestqt.qtbot import QtBot
 
-from ponos_coach.goals.domain import GoalId
+from ponos_coach.assessment.domain import ThresholdProtocol
+from ponos_coach.goals.domain import GoalId, SessionType
 from ponos_coach.goals.ports import Goal
 from ponos_coach.planning.domain import DayAdherence, Phase, Plan, PlanDay
 from ponos_coach.planning.ports import FrozenDay
@@ -123,6 +125,28 @@ def test_a_future_cell_names_the_session_the_phase_and_the_race_with_its_priorit
     assert lines[2] == phase_text(target.phase)
     assert "Race A" in race_lines
     assert phase_text(Phase.RACE) in race_lines
+
+
+def test_the_day_of_the_threshold_test_is_named_so_in_the_cell_and_in_the_detail(
+    plan: Plan,
+) -> None:
+    target = session_day(plan)
+    assert target.session is not None
+    test = dataclasses.replace(
+        target.session,
+        session_type=SessionType.THRESHOLD,
+        race_pace=False,
+        threshold_test=ThresholdProtocol.THIRTY_MINUTES,
+    )
+    days = tuple(
+        dataclasses.replace(d, session=test) if d.day == target.day else d for d in plan.days
+    )
+    with_test = dataclasses.replace(plan, days=days)
+
+    cell = cell_for(with_test, target.day, PLAN_TODAY)
+
+    assert f"Threshold test, {test.minutes} min" in cell_text(cell)
+    assert f"Threshold test, {test.minutes} min" in day_detail_text(cell)
 
 
 def test_the_phase_is_in_the_text_of_every_planned_cell_not_only_in_a_colour(plan: Plan) -> None:

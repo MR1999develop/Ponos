@@ -133,7 +133,7 @@ def test_closing_a_window_without_a_profile_is_immediate(
 
 
 @pytest.mark.parametrize("saved", ["testo", "99", "-1", "6", 42, ""], ids=repr)
-def test_a_saved_section_that_is_not_available_opens_the_overview(
+def test_a_saved_section_that_is_not_available_opens_the_activities_beside_the_map(
     qtbot: QtBot, tmp_path: Path, settings: QSettings, saved: object
 ) -> None:
     settings.setValue("window/section", saved)
@@ -143,19 +143,66 @@ def test_a_saved_section_that_is_not_available_opens_the_overview(
 
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
-    assert sidebar.currentRow() == 0
+    assert sidebar.currentRow() == 1
+    assert window.current_page is window.activities_view
 
 
-def test_the_map_section_is_remembered_like_the_others(
+def test_the_first_time_the_window_shows_the_activities_beside_the_map(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
-    settings.setValue("window/section", 3)
+    window = compose(tmp_path, settings)
+    qtbot.addWidget(window)
+
+    assert window.sidebar.currentRow() == 1
+    assert window.current_page is window.activities_view
+    assert window.activities_view.widget(0) is window.activities_page
+    assert window.activities_view.widget(1) is window.map_page
+
+
+def test_the_overview_and_the_calendar_are_remembered_like_the_activities(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    settings.setValue("window/section", 0)
+    first = compose(tmp_path, settings)
+    qtbot.addWidget(first)
+    settings.setValue("window/section", 2)
+    second = compose(tmp_path / "second", settings)
+    qtbot.addWidget(second)
+
+    assert first.sidebar.currentRow() == 0
+    assert second.sidebar.currentRow() == 2
+
+
+def test_the_old_map_section_that_was_saved_opens_the_activities(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    settings.setValue("window/section", 3)  # "Map" in the versions that had it
 
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
 
-    assert window.sidebar.currentRow() == 3
-    assert window.current_page is window.map_page
+    assert window.sidebar.currentRow() == 1
+    assert window.current_page is window.activities_view
+
+
+def test_the_divider_between_the_table_and_the_map_is_remembered(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = compose(tmp_path, settings)
+    qtbot.addWidget(window)
+    window.show()
+    view = window.activities_view
+    view.setSizes([300, 700])
+
+    view.splitterMoved.emit(300, 1)  # setSizes does not say that the user dragged it
+    saved = settings.value("activities/splitter")
+    assert saved is not None
+    again = compose(tmp_path / "again", settings)
+    qtbot.addWidget(again)
+    again.show()
+
+    first, second = again.activities_view.sizes()
+    assert first < second  # 300 : 700 and not the equal halves of a new window
 
 
 def test_the_section_is_written_when_it_changes_not_only_at_close(

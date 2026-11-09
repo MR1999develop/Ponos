@@ -122,7 +122,7 @@ def test_opening_again_brings_the_same_window_forward_and_never_makes_a_second(
 ) -> None:
     window = empty_window(qtbot, tmp_path, settings)
     settings_command(window).trigger()
-    window.settings_window.category_list.setCurrentRow(4)
+    window.settings_window.category_list.setCurrentRow(5)
 
     settings_command(window).trigger()
 
@@ -138,6 +138,7 @@ def test_the_categories_are_listed_in_order(
 
     assert window.settings_window.categories == (
         SettingsCategory.PROFILE,
+        SettingsCategory.GARMIN,
         SettingsCategory.SPORT_WEIGHTS,
         SettingsCategory.TRAINING_PLAN,
         SettingsCategory.NUTRITION,
@@ -146,6 +147,7 @@ def test_the_categories_are_listed_in_order(
     )
     assert category_names(window) == [
         "Profile",
+        "Garmin account",
         "Sport weights",
         "Training plan",
         "Nutrition",
@@ -209,7 +211,7 @@ def test_the_pages_of_the_profile_say_why_they_are_empty_and_the_others_work(
     assert shown.page(SettingsCategory.LANGUAGE).form is not None
 
 
-def test_the_garmin_section_of_the_profile_page_is_off_without_a_profile(
+def test_the_garmin_account_page_is_off_without_a_profile(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = empty_window(qtbot, tmp_path, settings)
@@ -224,12 +226,14 @@ def test_the_garmin_section_of_the_profile_page_is_off_without_a_profile(
 # --- The Garmin account --------------------------------------
 
 
-def test_the_garmin_account_is_connected_and_the_preference_is_set_from_the_profile_page(
+def test_the_garmin_account_is_connected_and_the_preference_is_set_from_its_own_page(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with_profile(qtbot, tmp_path, settings, make_fakes())
-    window.show_settings_page(SettingsCategory.PROFILE)
+    window.show_settings_page(SettingsCategory.GARMIN)
     section = window.garmin.account_section
+    assert window.settings_window.page(SettingsCategory.GARMIN).isAncestorOf(section)
+    assert window.settings_window.category_label(SettingsCategory.GARMIN) == "Garmin account"
 
     assert section.status_text == "No Garmin account is connected to this profile."
     assert section.connect_button.isEnabled()
@@ -245,18 +249,17 @@ def test_the_garmin_account_is_connected_and_the_preference_is_set_from_the_prof
     assert not window.garmin.auto_sync_action.isChecked()  # one preference, two views
 
 
-def test_the_garmin_menu_keeps_the_commands_and_opens_the_settings_for_the_account(
+def test_the_garmin_menu_has_no_account_settings_and_the_profile_page_no_garmin_section(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with_profile(qtbot, tmp_path, settings, make_fakes())
     menu = next(a.menu() for a in window.menuBar().actions() if a.text() == "Garmin")
     assert isinstance(menu, QMenu)
-    account = next(a for a in menu.actions() if a.text() == "Garmin account settings...")
 
-    account.trigger()
-
-    assert window.settings_window.isVisible()
-    assert current(window) is SettingsCategory.PROFILE
+    assert "Garmin account settings..." not in [a.text() for a in menu.actions()]
+    assert window.garmin.sync_action in menu.actions()
+    profile_page = window.settings_window.page(SettingsCategory.PROFILE)
+    assert not profile_page.isAncestorOf(window.garmin.account_section)
     wait_account(qtbot, window, AccountStatus.NOT_LINKED)
 
 
@@ -472,9 +475,6 @@ def test_the_profile_commands_open_their_pages(
     assert current(window) is SettingsCategory.SPORT_WEIGHTS
     open_edit_dialog(qtbot, window)
     assert current(window) is SettingsCategory.PROFILE
-    window.nutrition_action.trigger()
-    assert current(window) is SettingsCategory.NUTRITION
-    qtbot.waitUntil(lambda: window.nutrition.settings_dialog is not None, timeout=WAIT_MS)
     assert shown.isVisible()
 
 
@@ -487,8 +487,6 @@ def test_the_plan_and_map_commands_open_their_pages(
     window.plan.actions["training"].trigger()
     assert current(window) is SettingsCategory.TRAINING_PLAN
     qtbot.waitUntil(lambda: window.plan.training_dialog is not None, timeout=WAIT_MS)
-    window.map_ui.actions["settings"].trigger()
-    assert current(window) is SettingsCategory.MAP
     window.map_page.settings_requested.emit()  # the "Open map settings..." button of the notice
     assert current(window) is SettingsCategory.MAP
     window.map_ui.actions["clear_cache"].trigger()

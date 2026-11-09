@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Page "Map": the map with the tracks, the list of the area, the legend and the activity detail.
+"""The map half of the Activities section: the map with the tracks, the count and totals of the
+visible area, the legend and the data of the selected activity.
 
 A humble view: the controller decides what is asked and the answers arrive as signals; this page
-keeps the last answers, shows them and forwards the user's gestures (a click on the map or in the
-list, the choice of how to colour the track, the pointer over the elevation profile or over the
-track). Nothing is sent to the web page before `start_engines` (the window shows first); then the
+keeps the last answers, shows them and forwards the user's gestures (a click on the map, the
+choice of how to colour the track, the pointer over the elevation profile or over the track).
+Nothing is sent to the web page before `start_engines` (the window shows first); then the
 page is given the whole state again, so it never matters when it was created.
 """
 
@@ -14,17 +15,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from zoneinfo import ZoneInfo
 
-from PySide6.QtCore import (
-    QItemSelectionModel,
-    QLocale,
-    QModelIndex,
-    QSettings,
-    QSortFilterProxyModel,
-    Qt,
-    Signal,
-)
+from PySide6.QtCore import QDate, QDateTime, QLocale, QSettings, Qt, QTime, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QComboBox,
     QFormLayout,
     QHBoxLayout,
@@ -32,7 +24,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSplitter,
     QStackedWidget,
-    QTableView,
     QVBoxLayout,
     QWidget,
 )
@@ -59,7 +50,6 @@ from ponos_coach.ui.elevation_figure import (
 )
 from ponos_coach.ui.map_controller import MapController
 from ponos_coach.ui.map_legend import LegendBar, LegendEntry
-from ponos_coach.ui.map_list_model import AreaListModel, sorted_list_model, start_text
 from ponos_coach.ui.map_messages import (
     MapView,
     profile_view_message,
@@ -74,7 +64,6 @@ KEY_COLOR_MODE = "map/colorMode"
 MODE_SPORT = "sport"
 MODE_ZONES = "zones"
 _INITIAL_VIEW = {"lat": 30.0, "lon": 10.0, "zoom": 2}  # the world, not a place of the user
-_LIST_MIN_WIDTH = 280
 _DETAIL_MIN_HEIGHT = 160
 _MS_TO_KMH = 3.6
 _STACK_CHART = 0
@@ -133,22 +122,12 @@ class MapPage(QWidget):
     # --- Construction ---------------------------------------------------------------------
 
     def _build(self) -> None:
-        outer = QHBoxLayout(self)
+        outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
-        split = QSplitter(Qt.Orientation.Horizontal, self)
-        split.addWidget(self._build_left())
-        split.addWidget(self._build_list())
-        split.setStretchFactor(0, 1)
-        split.setChildrenCollapsible(False)
-        outer.addWidget(split)
-
-    def _build_left(self) -> QWidget:
-        left = QWidget(self)
-        column = QVBoxLayout(left)
-        column.setContentsMargins(0, 0, 0, 0)
-        column.setSpacing(0)
-        column.addWidget(self._build_notice())
-        vertical = QSplitter(Qt.Orientation.Vertical, left)
+        outer.setSpacing(0)
+        outer.addWidget(self._build_notice())
+        outer.addWidget(self._build_area_summary())
+        vertical = QSplitter(Qt.Orientation.Vertical, self)
         top = QWidget(vertical)
         top_column = QVBoxLayout(top)
         top_column.setContentsMargins(0, 0, 0, 0)
@@ -163,8 +142,7 @@ class MapPage(QWidget):
         vertical.setStretchFactor(0, 3)
         vertical.setStretchFactor(1, 1)
         vertical.setChildrenCollapsible(False)
-        column.addWidget(vertical, stretch=1)
-        return left
+        outer.addWidget(vertical, stretch=1)
 
     def _build_notice(self) -> QWidget:
         self._notice = QWidget(self)
@@ -258,18 +236,19 @@ class MapPage(QWidget):
         if self._selected is not None:
             self.detail_requested.emit(self._selected)
 
-    def _build_list(self) -> QWidget:
-        right = QWidget(self)
-        right.setMinimumWidth(_LIST_MIN_WIDTH)
-        column = QVBoxLayout(right)
-        column.setContentsMargins(SPACE_2, SPACE_2, SPACE_2, SPACE_2)
+    def _build_area_summary(self) -> QWidget:
+        """The count and the totals of the activities that start in the visible area."""
+        summary = QWidget(self)
+        summary.setObjectName("areaSummary")
+        column = QVBoxLayout(summary)
+        column.setContentsMargins(SPACE_4, SPACE_2, SPACE_4, SPACE_2)
         column.setSpacing(SPACE_1)
-        self._count = QLabel(right)
+        self._count = QLabel(summary)
         font = self._count.font()
         font.setWeight(font.Weight.DemiBold)
         self._count.setFont(font)
-        self._totals = QLabel(right)
-        self._extra = QLabel(right)
+        self._totals = QLabel(summary)
+        self._extra = QLabel(summary)
         for label in (self._count, self._totals, self._extra):
             label.setTextFormat(Qt.TextFormat.PlainText)
             label.setWordWrap(True)
@@ -279,23 +258,7 @@ class MapPage(QWidget):
         column.addWidget(self._count)
         column.addWidget(self._totals)
         column.addWidget(self._extra)
-        self._model = AreaListModel(self)
-        self._proxy = sorted_list_model(self._model, self)
-        self._table = QTableView(right)
-        self._table.setObjectName("areaList")
-        self._table.setAccessibleName(self.tr("Activities in the visible area"))
-        self._table.setModel(self._proxy)
-        self._table.setSortingEnabled(True)
-        self._table.setShowGrid(False)
-        self._table.setAlternatingRowColors(True)
-        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self._table.verticalHeader().setVisible(False)
-        self._table.horizontalHeader().setStretchLastSection(True)
-        self._table.selectionModel().selectionChanged.connect(self._on_row_selected)
-        column.addWidget(self._table, stretch=1)
-        return right
+        return summary
 
     def _connect(self, controller: MapController, tiles: TileService | None) -> None:
         controller.profile_opened.connect(self.prepare_for_profile)
@@ -326,21 +289,6 @@ class MapPage(QWidget):
         return self._chart
 
     @property
-    def table(self) -> QTableView:
-        """The list of the activities in the area."""
-        return self._table
-
-    @property
-    def list_model(self) -> AreaListModel:
-        """The list's model (rows in domain order)."""
-        return self._model
-
-    @property
-    def list_proxy(self) -> QSortFilterProxyModel:
-        """The list's sorting proxy (what the table view shows)."""
-        return self._proxy
-
-    @property
     def sport_legend(self) -> LegendBar:
         """Legend of the sports (colour and dash)."""
         return self._sport_legend
@@ -367,7 +315,7 @@ class MapPage(QWidget):
 
     @property
     def summary_texts(self) -> tuple[str, str, str]:
-        """The count, the totals and the extra line above the list."""
+        """The count, the totals and the extra line above the map."""
         return self._count.text(), self._totals.text(), self._extra.text()
 
     @property
@@ -452,19 +400,11 @@ class MapPage(QWidget):
 
     def _on_area(self, view: object) -> None:
         self._area = view if isinstance(view, AreaView) else None
-        records = () if self._area is None else self._area.in_area.activities
-        self._syncing = True
-        try:
-            self._model.set_records(records, self._zone())
-        finally:
-            self._syncing = False
-        self._select_row(self._selected)
         self._update_texts()
         self._push_tracks()
 
     def _on_selection(self, identity: object, reveal: object) -> None:
         self._selected = identity if isinstance(identity, ActivityIdentity) else None
-        self._select_row(self._selected)
         position = None if self._selected is None else self._controller.index_of(self._selected)
         self._call("setSelected", {"idx": position, "reveal": reveal is True})
         self._update_detail_title()
@@ -479,37 +419,6 @@ class MapPage(QWidget):
         )
         self._map.bridge.profile_generation = self._controller.profile_generation
         self._show_profile()
-
-    # --- List --------------------------------------------------------------------------------
-
-    def _select_row(self, identity: ActivityIdentity | None) -> None:
-        row = None if identity is None else self._model.row_of(identity)
-        selection = self._table.selectionModel()
-        self._syncing = True
-        try:
-            if row is None:
-                selection.clearSelection()
-            else:
-                index = self._proxy.mapFromSource(self._model.index(row, 0))
-                selection.select(
-                    index,
-                    QItemSelectionModel.SelectionFlag.ClearAndSelect
-                    | QItemSelectionModel.SelectionFlag.Rows,
-                )
-                self._table.scrollTo(index)
-        finally:
-            self._syncing = False
-
-    def _on_row_selected(self) -> None:
-        if self._syncing:
-            return
-        rows = self._table.selectionModel().selectedRows()
-        if not rows:
-            return
-        source: QModelIndex = self._proxy.mapToSource(rows[0])
-        identity = self._model.identity_at(source.row())
-        if identity is not None:
-            self._controller.select_identity(identity, reveal=True)
 
     # --- Detail: elevation profile and track colour ------------------------------------------
 
@@ -613,7 +522,7 @@ class MapPage(QWidget):
             return
         parts = [
             sport_text(record.sport),
-            start_text(record, self._zone()),
+            _start_text(record, self._zone()),
             _with_unit(distance_km_text(record.summary.distance_m), "km"),
             _with_unit(ascent_m_text(record.summary.ascent_m), "m"),
         ]
@@ -764,6 +673,14 @@ class MapPage(QWidget):
             self._call("setTracks", {"gen": self._controller.list_generation, "tracks": []})
         elif self._started:
             self._map.run_script(script)
+
+
+def _start_text(record: ActivityRecord, zone: ZoneInfo) -> str:
+    local = record.start.astimezone(zone)
+    stamp = QDateTime(
+        QDate(local.year, local.month, local.day), QTime(local.hour, local.minute, local.second)
+    )
+    return QLocale().toString(stamp, QLocale.FormatType.ShortFormat)
 
 
 def _zoom_of(view: MapView | None) -> int:

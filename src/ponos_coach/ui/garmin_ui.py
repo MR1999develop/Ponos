@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
 """View of the Garmin account in the main window: menu, status bar, dialogs and the account section
-of Settings > Profile.
+of Settings > Garmin account.
 
 Humble view: the decisions (which commands are available, what the summary says, whether a
 window is needed) live in `sync_model` and `sync_text`; here there are only widgets and commands.
@@ -126,13 +126,11 @@ class GarminUi(QObject):
             (self._auto_action, lambda: self._controller.commands.auto_sync),
         )
 
-    def build_menu(self, menu_bar: QMenuBar, account_settings: QAction) -> QMenu:
+    def build_menu(self, menu_bar: QMenuBar) -> QMenu:
         """Add the "Garmin" menu to the menu bar and return it. Connecting and disconnecting the
         account and the preference to synchronise when a profile opens are settings: they live in
-        Settings > Profile, and the menu opens that page with `account_settings`."""
+        Settings > Garmin account, not in this menu of actions."""
         menu = menu_bar.addMenu(self.tr("Garmin"))
-        menu.addAction(account_settings)
-        menu.addSeparator()
         menu.addAction(self._sync_action)
         menu.addAction(self._verify_action)
         menu.addAction(self._stop_action)
@@ -162,7 +160,7 @@ class GarminUi(QObject):
 
     @property
     def account_section(self) -> GarminAccountSection:
-        """The "Garmin account" section of Settings > Profile."""
+        """The content of Settings > Garmin account."""
         return self._section
 
     # --- Test accessors -----

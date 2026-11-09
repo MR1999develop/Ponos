@@ -27,6 +27,7 @@ from ponos_coach.planning.domain import (
     RetestBeforePlan,
     RetestInUnloadWeek,
     RetestNotPlaceable,
+    RetestScheduled,
     TargetClass,
     TargetTimeUnreachable,
 )
@@ -284,6 +285,8 @@ def test_the_retest_the_plan_proposes_is_said_in_a_sentence_for_each_case() -> N
     assert retest_proposal_text(RetestNotPlaceable()) == (
         "Plan: no easy week fits the next threshold test"
     )
+    scheduled = retest_proposal_text(RetestScheduled(date(2026, 4, 8)))
+    assert scheduled == "Threshold test planned on 4/8/26"
 
 
 def test_a_plan_carries_the_retest_proposal() -> None:

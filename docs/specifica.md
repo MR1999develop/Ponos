@@ -96,7 +96,7 @@ folder, height, weight, date of birth, resting, maximum and threshold HR
 Height, weight and date of birth are mandatory and are health data: they stay
 in the profile database (section 5). The next steps arrive with their phases.
 In phase 2 the Garmin login is not a step of the dialog: it is done from
-File, Settings..., Profile page, Garmin account (section 3).
+File, Settings..., Garmin account page (section 3).
 
 ## 3. Synchronisation with Garmin
 
@@ -107,14 +107,12 @@ official (ADR 002): it can stop working, and file import is always available.
 ### Garmin menu and Garmin account settings
 
 The account is a setting of the profile: it is connected, disconnected and
-configured in File, Settings..., Profile page, "Garmin account" section (see
-"Settings window"). The Garmin menu keeps the commands that act and has
-"Garmin account settings..." ("Impostazioni dell'account Garmin..."), which
-opens that page.
+configured in File, Settings..., "Garmin account" page (see "Settings
+window"). The Garmin menu has only the commands that act (no "Garmin account
+settings..." entry: the page is a category of the Settings window).
 
 | Entry | Shortcut | When it is available |
 |---|---|---|
-| Garmin account settings... | none | always |
 | Synchronise | F5 | account connected, no other operation |
 | Full check | Ctrl+F5 | as Synchronise |
 | Stop synchronisation | Shift+F5 | only during a synchronisation |
@@ -122,10 +120,10 @@ opens that page.
 A greyed-out entry gives the reason in the tooltip (no profile, account not
 connected, login to redo, operation in progress, keychain not available).
 
-The Italian labels are: Impostazioni dell'account Garmin..., Sincronizza,
+The Italian labels are: Sincronizza,
 Verifica completa, Interrompi sincronizzazione.
 
-The "Garmin account" section of the Profile page shows what is known about the
+The "Garmin account" page shows what is known about the
 account (one sentence: connected, not connected, sign-in to redo, keychain not
 available, no profile), the buttons "Connect Garmin account..." and
 "Disconnect Garmin account" ("Collega account Garmin...", "Scollega account
@@ -468,9 +466,11 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 
 ### Instructions
 
-- Menu "Threshold test": "Test instructions..." (Ctrl+Shift+H), "Use as
-  threshold test..." (Ctrl+Shift+U), "Threshold tests..." (Ctrl+Shift+R), then
-  the undo and redo of the last applied test.
+- There is no "Threshold test" menu. Profile menu: "Use as threshold test..."
+  (Ctrl+Shift+U, also in the activity detail window) and "Threshold tests..."
+  (Ctrl+Shift+R, opens Settings, Training plan page, where the history is);
+  Help menu: "Test instructions..." (Ctrl+Shift+H). The undo and redo of the
+  last applied test are buttons of the history, in Settings, Training plan.
 - The instructions open in a dialog: a warm-up of 10–15 minutes, 30 minutes of
   running at the maximum steady effort the runner can hold, alone and on flat
   ground, then a cool-down, with the watch recording heart rate and, outdoors,
@@ -537,7 +537,7 @@ activity is reported as excluded, with the reason, not as a rejected test.
 - An activity that is already a test in the history cannot be applied again.
 - The loads depend on the threshold: they are recalculated by themselves, as
   for any change of the measurements.
-- Applying can be undone from the "Threshold test" menu during the session
+- Applying can be undone from the history (Settings, Training plan) during the session
   (the undo does not survive a restart). If the profile is busy, the undo is
   refused with a message and the undo history is cleared. Undoing removes the test from the history and puts
   the measurement of that day back exactly as it was (or removes it, if the
@@ -559,9 +559,10 @@ activity is reported as excluded, with the reason, not as a rejected test.
   easy week of the 3:1 cycle that touches the window (not in the taper before a
   race), where a retest could go; if none can be placed, only the dates are
   given.
-- "Threshold tests..." shows the history (most recent first: date, activity,
-  threshold HR, pace, method) and the retest message below it; with no test,
-  an empty state with the first step. The retest message is also in the status
+- The history, on the Settings, Training plan page ("Threshold tests..." opens
+  it), lists the tests (most recent first: date, activity, threshold HR, pace,
+  method) and has the retest message below it, with the buttons Undo, Redo and
+  "Test instructions..."; with no test, an empty state with the first step. The retest message is also in the status
   bar, as text.
 
 Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-soglia.md).
@@ -574,10 +575,16 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
 - Adding, editing and deleting a goal can be undone and redone.
 - The app states whether the target time is realistic, ambitious or not
   reachable by the date.
-- The Goals section lists the goals. Plan menu: "Add race..." (Ctrl+R), "Add
-  form goal..." (Ctrl+Shift+F), "Change goal..." (Ctrl+Shift+E) and "Remove
-  goal" (Ctrl+Delete), both on the goal selected in the section, "Training
-  settings..." (Ctrl+Shift+T), then Undo and Redo of the goals and the settings.
+- The plan is on the calendar, so its commands are in the menu of a day (right
+  button on the day, or the Menu key) and in the Calendar menu; there is no
+  "Plan" menu. In the menu of a day the commands of the day come first ("Add
+  race..." (Ctrl+R), "Add form goal..." (Ctrl+Shift+F) on that day, "Change goal..."
+  (Ctrl+Shift+E) and "Remove goal" (Ctrl+Delete) on a day with a goal, then the
+  injuries), then, in a group of their own, the commands of the whole plan:
+  "Goals and plan status..." (Ctrl+Shift+P), "Training settings..."
+  (Ctrl+Shift+T), Undo and Redo of the goals and the settings. The Calendar
+  menu has the same commands, with the same shortcuts, after the ones that move
+  about the calendar.
   A disabled entry gives the reason in the tooltip. Two races on the same day
   are refused.
 - A race has a date, a priority A, B or C, a distance and an optional target
@@ -585,7 +592,7 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
 
 ## 9. Adaptive plan
 
-- Settings, Training plan page (Plan menu, "Training settings...", opens it)
+- Settings, Training plan page (Calendar menu, "Training settings...", opens it)
   holds the time available on each weekday, the day of the long session, the
   most training in a week and the session types the plan may use. The page
   starts with suggestions, nothing is saved until "Save settings". Below, the
@@ -755,9 +762,10 @@ Rules: [injuries](../.claude/skills/ponos-allenamento/references/infortuni.md).
 - **Settings window** (File menu, "Settings..." ("Impostazioni..."), Ctrl+, or the
   standard Preferences key of the system). One window, not modal, one instance
   (opening it again brings it forward on the page it showed). On the left the
-  categories, on the right the page: Profile (name, measurements and history,
-  and the "Garmin account" section), Sport weights, Training plan (and the
-  threshold test protocol), Nutrition, Map, Language. Each page keeps the way
+  categories, on the right the page: Profile (name, measurements and history),
+  Garmin account (status, connect and disconnect, synchronise when a profile
+  opens), Sport weights, Training plan (and the threshold test protocol and
+  the history of the tests), Nutrition, Map, Language. Each page keeps the way
   of saving that its content always had (Save button on the page, or changes
   that apply at once, with their own undo). The pages that read the profile read
   it when they open; without a profile open they say "Create or open a profile
@@ -765,14 +773,17 @@ Rules: [injuries](../.claude/skills/ponos-allenamento/references/infortuni.md).
   asterisk and a tooltip; closing the window (or quitting) with unsaved edits
   asks "Some settings have changes that are not saved." with the buttons Save,
   Discard and Keep editing (default). The commands that open a page from where
-  the user looks for them (Profile menu, Plan menu, Map menu, the map notice and
-  the day page) open the same window on that page; there is no other dialog for
+  the user looks for them (Profile menu, Calendar menu and the menu of a day, the
+  map notice and the day page) open the same window on that page; the Map
+  and Nutrition settings are reached only from Settings itself, the map notice
+  and the day page (no menu entry); there is no other dialog for
   the same setting.
 - Undo and redo for goals and calendar.
 - The app remembers window, panels, last profile and last folders. In phase 1:
   size and position of the window, the open section (saved as soon as it
-  changes; an invalid value opens the Overview; an unreadable geometry gives
-  the default window), the folders of imports, of the profile choice and of
+  changes; the first time, an invalid value or a section that no longer exists
+  opens the Activities beside the map; an unreadable geometry gives the default
+  window), the position of the divider between the table and the map, the folders of imports, of the profile choice and of
   chart export, the last profile.
 - Long operations do not block the window and can be cancelled.
 - An unexpected error shows a generic message; the detail goes in the log,
@@ -829,8 +840,8 @@ no diet or allergy restriction for now.
 
 ### Nutrition settings
 
-- Settings, Nutrition page (Profile menu, "Nutrition settings...", Ctrl+Shift+N,
-  opens it). Three parts:
+- Settings, Nutrition page (there is no menu entry: the day page and the notices
+  that need it open it). Three parts:
   - **Daily activity outside sport**: sedentary, light, active or very
     active, from a chosen day until the next one is set. Without a level the
     day is sedentary and a warning says so.
@@ -895,7 +906,7 @@ Decision: [ADR 010](adr/010-mappa.md).
 
 ### Filters
 
-- Above the Activities table and the Map: date (from–to), duration, distance,
+- Above the Activities table and the map: date (from–to), duration, distance,
   positive ascent and sport. Minimum and maximum are optional (empty means no
   limit); a minimum above the maximum are swapped; negative values are refused
   with a message. Input is tolerant: comma or point, duration as "1:30" or "90".
@@ -905,24 +916,34 @@ Decision: [ADR 010](adr/010-mappa.md).
 
 ### Map
 
-- Map menu: "Show map" (Ctrl+M), "Show all activities" (Ctrl+0), Zoom in and out,
-  "Map settings..." (Ctrl+Shift+M), "Clear map cache..."
-  (Ctrl+Shift+Backspace). The commands that need the map are disabled elsewhere,
-  with the reason in the tooltip.
+- The map is not a section of its own: the Activities section (the one shown
+  when the app starts) has the table of the activities on the left and the map
+  on the right, with a divider that can be dragged and is remembered. Selecting
+  an activity in the table selects it on the map and the other way round. The
+  sidebar has Overview, Activities and Calendar.
+- Map menu: "Show activities and map" (Ctrl+M), "Show all activities" (Ctrl+0),
+  Zoom in and out, "Filter activities", "Clear filters", "Clear map cache..."
+  (Ctrl+Shift+Backspace). There is no "Map settings..." entry: the Map page of
+  Settings opens from the button of the map notice and from Clear map cache.
+  The commands that need the map are disabled in the other sections, with the
+  reason in the tooltip.
 - At low zoom the starts of the filtered activities are grouped in circles with
   the number, which split and merge at each level; a click on a group zooms to
   its area. At higher zoom the tracks of the activities in view are drawn as
   lines coloured by sport, with a legend (never colour alone). A click on a
   track selects the activity.
-- On the right a list of the activities visible in the framed area, after the
-  filters, with the count and the totals (km, ascent, hours), updated at each
-  move or zoom; the selection is the same on the map and in the list.
-  Activities without a position (indoor, strength) are counted apart.
+- Above the map, the count and the totals (km, ascent, hours) of the activities
+  that start in the framed area, after the filters, updated at each move or
+  zoom. The separate list of that area is gone, because the table already
+  lists the activities: the check box "Only the visible map area", under the
+  table's count, narrows the table to the same activities (remembered between
+  sessions). Activities without a position (indoor, strength) are counted
+  apart.
 - The detail of the selected activity has the elevation profile linked to the
   track in both directions, and the track can be coloured by heart-rate zone
   with the legend of the zones of that day. Without elevation the profile says
   why it is missing.
-- Settings, Map page ("Map settings..." opens it): the Tracestrack key (hidden while typed, checked when saved,
+- Settings, Map page: the Tracestrack key (hidden while typed, checked when saved,
   cleared from the field after saving and never shown again) and the size of the
   tile cache (4 GB by default); "Clear map cache" empties it.
 - The page has no network: the tiles come through the app. The map's last view

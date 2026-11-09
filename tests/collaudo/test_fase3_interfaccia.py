@@ -450,6 +450,7 @@ ALL_KEYS = (
     "language/code", "window/geometry", "window/section", "import/lastFolder",
     "import/lastFilesFolder", "profiles/lastOpenFolder", "overview/lastExportFolder",
     "garmin/autoSyncOnOpen/00000000-0000-4000-8000-000000000001",
+    "activities/splitter", "activities/visibleAreaOnly",
 )  # fmt: skip
 
 

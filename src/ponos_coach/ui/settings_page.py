@@ -23,6 +23,7 @@ class SettingsCategory(Enum):
     """The categories of the Settings window, in the order they are listed."""
 
     PROFILE = "profile"
+    GARMIN = "garmin"
     SPORT_WEIGHTS = "sport-weights"
     TRAINING_PLAN = "training-plan"
     NUTRITION = "nutrition"

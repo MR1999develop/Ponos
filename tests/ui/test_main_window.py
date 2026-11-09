@@ -16,7 +16,7 @@ import pytest
 from PySide6.QtCore import QMimeData, QPoint, QPointF, QSettings, Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent, QKeySequence
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QLabel, QListWidget, QMessageBox
+from PySide6.QtWidgets import QLabel, QListWidget, QMenu, QMessageBox
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.__main__ import main, resolve_user_timezone
@@ -702,10 +702,10 @@ def test_sidebar_has_the_available_sections_enabled_and_the_rest_with_a_reason(
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
     items = [sidebar.item(row) for row in range(sidebar.count())]
-    assert [item.text() for item in items][:4] == ["Overview", "Activities", "Calendar", "Map"]
-    for item in items[:4]:
+    assert [item.text() for item in items] == ["Overview", "Activities", "Calendar", "Tests"]
+    for item in items[:3]:
         assert item.flags() & item.flags().ItemIsEnabled
-    for item in items[4:]:
+    for item in items[3:]:
         assert not item.flags() & item.flags().ItemIsEnabled
         assert item.toolTip() == "Available in a later version"
 
@@ -750,7 +750,6 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Edit profile...": QKeySequence("Ctrl+E").toString(),
         "Sport weights...": QKeySequence("Ctrl+Shift+W").toString(),
         "Activity detail...": QKeySequence("Ctrl+D").toString(),
-        "Nutrition settings...": QKeySequence("Ctrl+Shift+N").toString(),
         "Previous month": QKeySequence("Ctrl+Left").toString(),
         "Next month": QKeySequence("Ctrl+Right").toString(),
         "Today": QKeySequence("Ctrl+T").toString(),
@@ -777,15 +776,55 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Injury history...": QKeySequence("Ctrl+H").toString(),
         "Daily check-in...": QKeySequence("Ctrl+K").toString(),
         "Medical review done": QKeySequence("Ctrl+Shift+V").toString(),
-        "Show map": QKeySequence("Ctrl+M").toString(),
+        "Show activities and map": QKeySequence("Ctrl+M").toString(),
         "Show all activities": QKeySequence("Ctrl+0").toString(),
         "Zoom in": QKeySequence(QKeySequence.StandardKey.ZoomIn).toString(),
         "Zoom out": QKeySequence(QKeySequence.StandardKey.ZoomOut).toString(),
         "Filter activities": QKeySequence("Ctrl+F").toString(),
         "Clear filters": QKeySequence("Ctrl+Shift+K").toString(),
-        "Map settings...": QKeySequence("Ctrl+Shift+M").toString(),
         "Clear map cache...": QKeySequence("Ctrl+Shift+Backspace").toString(),
     }
+
+
+def titles_in_menu(window: MainWindow, title: str) -> list[str]:
+    menu = next(a.menu() for a in window.menuBar().actions() if a.text() == title)
+    assert isinstance(menu, QMenu)
+    return [a.text() for a in menu.actions() if not a.isSeparator()]
+
+
+def test_the_profile_menu_has_no_nutrition_settings_and_the_map_menu_no_map_settings(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = compose(tmp_path, settings)
+    qtbot.addWidget(window)
+
+    assert "Nutrition settings..." not in titles_in_menu(window, "Profile")
+    assert "Map settings..." not in titles_in_menu(window, "Map")
+    assert titles_in_menu(window, "Map") == [
+        "Show activities and map",
+        "Show all activities",
+        "Zoom in",
+        "Zoom out",
+        "Filter activities",
+        "Clear filters",
+        "Clear map cache...",
+    ]
+    assert not [a for a in window.menuBar().actions() if a.text() in ("Plan", "Threshold test")]
+
+
+def test_the_map_commands_say_to_open_the_activities_section_when_it_is_not_shown(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = compose(tmp_path, settings)
+    qtbot.addWidget(window)
+    fit = window.map_ui.actions["fit"]
+
+    window.sidebar.setCurrentRow(0)
+    assert not fit.isEnabled()
+    assert fit.toolTip() == "Open the Activities section first."
+    window.sidebar.setCurrentRow(1)
+    assert fit.isEnabled()
+    assert window.map_ui.filter_bar.isVisibleTo(window)
 
 
 def test_window_has_no_status_labels_filled_before_a_profile_is_open(
@@ -797,8 +836,8 @@ def test_window_has_no_status_labels_filled_before_a_profile_is_open(
     assert all(
         not label.isVisibleTo(window)
         for label in window.findChildren(QLabel)
-        if "(" in label.text()
-    )
+        if "(" in label.text() and not window.map_ui.filter_bar.isAncestorOf(label)
+    )  # (the filter fields name their unit, and the bar shows with the Activities section)
 
 
 @pytest.mark.parametrize(

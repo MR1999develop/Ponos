@@ -31,7 +31,6 @@ from tests.ui.workspace_support import (
 
 PROFILE = "Atleta di prova"
 SECTION_ACTIVITIES = 1
-SECTION_MAP = 3
 ACTIVITIES_WITH_POSITION = FILES_IN_FIXTURE_FOLDER  # all eight runs have positions
 
 # A view around the invented point at sea: zoomed in (tracks are drawn from zoom 11) and zoomed out.
@@ -45,7 +44,7 @@ ELSEWHERE = MapView(GeoBox(40.0, 0.0, 41.0, 1.0), 13)  # nothing there
 def map_window(
     qtbot: QtBot, tmp_path: Path, settings: QSettings, tiles: TileFakes | None = None
 ) -> MainWindow:
-    """A profile with eight runs, ready, with the Map section open and the engines started."""
+    """A profile with eight runs, ready, with the Activities section open, engines started."""
     window = compose(tmp_path, settings, tiles=tiles)
     qtbot.addWidget(window)
     window.start()
@@ -53,7 +52,7 @@ def map_window(
     with qtbot.waitSignal(window.controller.import_finished, timeout=WAIT_MS):
         window.import_folder(make_import_folder(tmp_path))
     wait_ready(qtbot, window, ACTIVITIES_WITH_POSITION)
-    window.sidebar.setCurrentRow(SECTION_MAP)
+    window.sidebar.setCurrentRow(SECTION_ACTIVITIES)
     window.map_ui.page.start_engines()
     qtbot.waitUntil(lambda: window.map_ui.controller.search is not None, timeout=WAIT_MS)
     return window
