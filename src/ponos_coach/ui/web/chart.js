@@ -102,6 +102,41 @@
     Plotly.relayout(host, { shapes: shapes });
   };
 
+  // Right button held and dragged: up stretches the chart vertically, down squeezes it (the
+  // user's request of 2026-11-09). Charts that start at zero keep their floor; the others scale
+  // around their middle. The y axes stay closed to Plotly's own drags.
+  var STRETCH_PER_PIXEL = 0.006;
+
+  function bindStretch(gd) {
+    if (gd.ponosStretch) { return; }
+    gd.ponosStretch = true;
+    gd.addEventListener("contextmenu", function (event) { event.preventDefault(); });
+    gd.addEventListener("mousedown", function (event) {
+      if (event.button !== 2) { return; }
+      event.preventDefault();
+      event.stopPropagation();
+      var range = gd._fullLayout.yaxis.range.slice();
+      var low = Number(range[0]);
+      var high = Number(range[1]);
+      var anchor = low >= 0 ? low : (low + high) / 2;
+      var startY = event.clientY;
+      function move(moved) {
+        var factor = Math.exp((moved.clientY - startY) * STRETCH_PER_PIXEL);
+        Plotly.relayout(gd, {
+          "yaxis.autorange": false,
+          "yaxis.range": [anchor + (low - anchor) * factor, anchor + (high - anchor) * factor],
+        });
+      }
+      function up(released) {
+        move(released);
+        window.removeEventListener("mousemove", move, true);
+        window.removeEventListener("mouseup", up, true);
+      }
+      window.addEventListener("mousemove", move, true);
+      window.addEventListener("mouseup", up, true);
+    }, true);
+  }
+
   function exportButton(name, title, format, filename) {
     return {
       name: name,
@@ -139,6 +174,7 @@
     Plotly.react(host, payload.figure.data, payload.figure.layout, config).then(function (gd) {
       if (payload.hover === true) { bindHover(gd); }
       if (payload.linkedX === true) { bindRange(gd); }
+      if (payload.zoom === true) { bindStretch(gd); }
       // Signal to Python without channels: the page title changes at every draw.
       drawCount += 1;
       document.title = "drawn-" + drawCount;

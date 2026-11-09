@@ -2,9 +2,10 @@
 # Copyright (C) 2026 MR
 """Plotly PMC figure: pure function from `PmcSeries` and activities to `go.Figure`.
 
-Two panels with the same date axis: on top CTL, ATL and daily load (from zero, drawn as one
-stepped area: a bar per day costs the browser a shape each, and with years of days zooming
-lagged), below the form (TSB), which can be negative. The legend follows the series order.
+One panel (the user's request of 2026-11-09): CTL, ATL, the form (TSB, which can be negative,
+so zero is marked) and the daily load (from zero, drawn as one stepped area: a bar per day costs
+the browser a shape each, and with years of days zooming lagged). The legend follows the series
+order.
 CTL and ATL are told apart even without colour: ATL is dashed and each line carries its name
 next to the last point.
 The page payload is a JSON produced by `json.dumps` (`render_script`).
@@ -20,7 +21,6 @@ from datetime import date, timedelta
 
 import numpy as np
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 from ponos_coach.goals.domain import Priority
 from ponos_coach.load.domain import PmcSeries, ctl_share_of_recent_peak
@@ -40,8 +40,8 @@ LOAD_UNIT = "hrTSS per day"  # unit of the daily load and its averages (CTL, ATL
 MAX_NAMES_PER_DAY = 5  # activity names shown in a bar's hint
 _LINE_WIDTH = 2
 _ATL_DASH = "dash"  # ATL is dashed: CTL and ATL differ even without colour
+_TSB_DASH = "dashdot"  # the form shares the panel: it differs from CTL even without colour
 _END_LABEL_SHIFT = 4  # pixels between the last point and the line's name
-_TOP_ROW_SHARE = 0.68
 _PROJECTION_DASH = "dot"  # the plan's part: dotted; the real part is solid (CTL, TSB) or dashed
 _PAST_DAYS_SHOWN = 90  # with a projection the chart opens on the last three months and the plan
 _MARKER_SIZE = 11
@@ -138,13 +138,7 @@ def build_pmc_figure(
     """PMC figure. Series, in this order: CTL, ATL, TSB (lines), daily load (bars); with a
     projection then the plan's CTL, ATL and TSB (dotted, named "plan") and the races."""
     days = pmc.days
-    figure = make_subplots(
-        rows=2,
-        cols=1,
-        shared_xaxes=True,
-        row_heights=[_TOP_ROW_SHARE, 1 - _TOP_ROW_SHARE],
-        vertical_spacing=0.06,
-    )
+    figure = go.Figure()
     unit = labels.load_unit
     hover = f"%{{x|%Y-%m-%d}}<br>%{{y:.1f}} {unit}<extra>%{{fullData.name}}</extra>"
 
@@ -163,9 +157,9 @@ def build_pmc_figure(
     # the share of the recent best: the absolute CTL depends on parameters and sports
     share_text = html.escape(labels.peak_share).replace("{share}", "%{customdata:.0f}")
     ctl_line.hovertemplate = hover.replace("<extra>", f" ({share_text})<extra>")
-    figure.add_trace(ctl_line, row=1, col=1)
-    figure.add_trace(line(labels.atl, pmc.atl, tokens.atl, _ATL_DASH), row=1, col=1)
-    figure.add_trace(line(labels.tsb, pmc.tsb, tokens.tsb), row=2, col=1)
+    figure.add_trace(ctl_line)
+    figure.add_trace(line(labels.atl, pmc.atl, tokens.atl, _ATL_DASH))
+    figure.add_trace(line(labels.tsb, pmc.tsb, tokens.tsb, _TSB_DASH))
     figure.add_trace(
         go.Scatter(
             x=days,
@@ -178,22 +172,14 @@ def build_pmc_figure(
             customdata=_day_hover_text(activities, days),
             hovertemplate=hover.replace("<extra>", "<br>%{customdata}<extra>"),
         ),
-        row=1,
-        col=1,
     )
     has_projection = projection is not None and len(projection.points) > 0
     if projection is not None and has_projection:
         _add_projection(figure, pmc, projection, labels, tokens, hover)
-    figure.update_xaxes(axis_style(tokens, ""))
-    figure.update_xaxes(axis_style(tokens, labels.x_axis), type="date", row=2, col=1)
+    figure.update_xaxes(axis_style(tokens, labels.x_axis), type="date")
     figure.update_yaxes(
-        axis_style(tokens, f"{labels.load_axis} ({unit})"),
-        rangemode="tozero",  # bars start at zero
-        row=1,
-        col=1,
-    )
-    figure.update_yaxes(
-        axis_style(tokens, f"{labels.form_axis} ({unit})"), zeroline=True, row=2, col=1
+        axis_style(tokens, f"{labels.load_axis} / {labels.form_axis} ({unit})"),
+        zeroline=True,  # the form goes below zero; the load starts from it
     )
     figure.update_layout(
         **base_layout(tokens),
@@ -221,7 +207,7 @@ def _add_projection(
     points = projection.points
     days = ([pmc.days[-1]] if len(pmc) else []) + [point.day for point in points]
 
-    def series(name: str, joined: list[float], color: str, row: int) -> None:
+    def series(name: str, joined: list[float], color: str) -> None:
         figure.add_trace(
             go.Scatter(
                 x=days,
@@ -231,14 +217,12 @@ def _add_projection(
                 line={"color": color, "width": _LINE_WIDTH, "dash": _PROJECTION_DASH},
                 hovertemplate=hover,
             ),
-            row=row,
-            col=1,
         )
 
     ends = [(float(pmc.ctl[-1]), float(pmc.atl[-1]), float(pmc.tsb[-1]))] if len(pmc) else []
-    series(labels.ctl_plan, [end[0] for end in ends] + [p.ctl for p in points], tokens.ctl, 1)
-    series(labels.atl_plan, [end[1] for end in ends] + [p.atl for p in points], tokens.atl, 1)
-    series(labels.tsb_plan, [end[2] for end in ends] + [p.tsb for p in points], tokens.tsb, 2)
+    series(labels.ctl_plan, [end[0] for end in ends] + [p.ctl for p in points], tokens.ctl)
+    series(labels.atl_plan, [end[1] for end in ends] + [p.atl for p in points], tokens.atl)
+    series(labels.tsb_plan, [end[2] for end in ends] + [p.tsb for p in points], tokens.tsb)
     _add_race_markers(figure, projection, labels, tokens)
 
 
@@ -274,8 +258,6 @@ def _add_race_markers(
             ],
             hovertemplate="%{x|%Y-%m-%d}<br>%{customdata}<extra></extra>",
         ),
-        row=1,
-        col=1,
     )
 
 

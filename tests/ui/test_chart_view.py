@@ -114,7 +114,7 @@ def test_modebar_buttons_carry_the_titles_from_the_configuration(qtbot: QtBot) -
     ticks = evaluate(
         qtbot,
         view,
-        "Array.from(document.querySelectorAll('.x2tick text')).map(e => e.textContent)",
+        "Array.from(document.querySelectorAll('.xtick text')).map(e => e.textContent)",
     )
 
     assert isinstance(titles, list)
@@ -211,7 +211,7 @@ def test_a_zoom_by_the_user_is_reported_and_a_range_set_by_the_app_is_not(qtbot:
         qtbot,
         view,
         "Plotly.relayout(document.getElementById('chart'),"
-        " {'xaxis2.range[0]': '2026-01-02', 'xaxis2.range[1]': '2026-01-05 12:00'});",
+        " {'xaxis.range[0]': '2026-01-02', 'xaxis.range[1]': '2026-01-05 12:00'});",
     )
     qtbot.waitUntil(lambda: bool(reports), timeout=WAIT_MS)
 
@@ -308,3 +308,34 @@ def test_a_page_title_over_the_limit_is_dropped_before_it_is_parsed(
     view.page.titleChanged.emit(title + "1" * 500 + separator)
     view.page.titleChanged.emit(title + "9" * 5000)
     assert len(heard) == 1
+
+
+def test_a_right_drag_stretches_or_squeezes_the_chart_vertically(qtbot: QtBot) -> None:
+    # The user's request of 2026-11-09: holding the right button, up stretches, down squeezes.
+    view = drawn_view(qtbot, navigation=XNavigation.LINKED)
+
+    def span() -> float:
+        bounds = evaluate(qtbot, view, "document.getElementById('chart')._fullLayout.yaxis.range")
+        assert isinstance(bounds, list)
+        return float(bounds[1]) - float(bounds[0])
+
+    def right_drag(dy: int) -> None:
+        execute(
+            qtbot,
+            view,
+            "var g = document.getElementById('chart'); var r = g.getBoundingClientRect();"
+            "var x = r.left + r.width / 2, y = r.top + r.height / 2;"
+            "g.dispatchEvent(new MouseEvent('mousedown', {button: 2, buttons: 2, clientX: x,"
+            " clientY: y, bubbles: true}));"
+            f"window.dispatchEvent(new MouseEvent('mousemove', {{buttons: 2, clientX: x,"
+            f" clientY: y + ({dy}), bubbles: true}}));"
+            f"window.dispatchEvent(new MouseEvent('mouseup', {{button: 2, clientX: x,"
+            f" clientY: y + ({dy}), bubbles: true}}));",
+        )
+
+    before = span()
+    right_drag(-120)  # up
+    qtbot.waitUntil(lambda: span() < before * 0.8, timeout=WAIT_MS)
+    stretched = span()
+    right_drag(240)  # down
+    qtbot.waitUntil(lambda: span() > stretched * 1.5, timeout=WAIT_MS)

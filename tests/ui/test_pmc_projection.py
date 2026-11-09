@@ -98,15 +98,14 @@ def test_the_plan_uses_the_series_colours_of_the_real_part() -> None:
     assert by_name["Form (TSB), plan"].line.color == tokens.tsb
 
 
-def test_the_form_projection_is_on_the_form_panel_and_the_load_ones_on_the_top_panel() -> None:
+def test_the_projections_and_the_races_share_the_one_panel() -> None:
     pmc, entries = small_history()
 
     figure = build_pmc_figure(pmc, entries, LABELS, tokens_for(Theme.LIGHT), projection())
 
     by_name = {t.name: t for t in figure.data}
-    assert by_name["Form (TSB), plan"].yaxis == "y2"
-    assert by_name["Fitness (CTL), plan"].yaxis == "y"
-    assert by_name["Races"].yaxis == "y"
+    for name in ("Form (TSB), plan", "Fitness (CTL), plan", "Races"):
+        assert by_name[name].yaxis in (None, "y")
 
 
 def test_a_race_is_a_marker_with_its_priority_letter_on_the_projected_ctl() -> None:

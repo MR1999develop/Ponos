@@ -210,7 +210,7 @@ def test_t_ui_04_bar_charts_start_at_zero_stack_and_never_go_negative(theme: The
     (daily,) = [t for t in pmc.data if t.name == "Daily load"]
     assert daily.fill == "tozeroy"  # an area from zero, one step a day
     assert (np.asarray(daily.y) >= 0).all()
-    assert pmc.layout.yaxis.rangemode == "tozero"  # the load panel
+    assert pmc.layout.yaxis.zeroline is True  # one panel with the form: zero is marked
 
 
 @pytest.mark.parametrize("theme", THEMES)

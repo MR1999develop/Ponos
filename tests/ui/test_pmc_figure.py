@@ -45,15 +45,18 @@ def test_line_values_are_the_pmc_series_and_bars_the_daily_loads() -> None:
     assert list(ctl.x) == list(pmc.days)
 
 
-def test_axes_have_names_with_units_and_bars_start_at_zero() -> None:
+def test_one_panel_holds_load_and_form_with_zero_marked() -> None:
+    # The user's request of 2026-11-09: the form in the same chart as the load.
     pmc, entries = small_history()
 
-    layout = build_pmc_figure(pmc, entries, LABELS, tokens_for(Theme.LIGHT)).layout
+    figure = build_pmc_figure(pmc, entries, LABELS, tokens_for(Theme.LIGHT))
+    layout = figure.layout
 
-    assert layout.xaxis2.title.text == "Date"
-    assert layout.yaxis.title.text == "Load (hrTSS per day)"
-    assert layout.yaxis2.title.text == "Form (hrTSS per day)"
-    assert layout.yaxis.rangemode == "tozero"
+    assert {trace.yaxis or "y" for trace in figure.data} == {"y"}
+    assert "xaxis2" not in layout  # no second panel
+    assert layout.xaxis.title.text == "Date"
+    assert layout.yaxis.title.text == "Load / Form (hrTSS per day)"
+    assert layout.yaxis.zeroline is True  # the form goes below zero
 
 
 def test_series_use_okabe_ito_colors_and_themes_change_the_surface() -> None:
@@ -195,8 +198,7 @@ def test_the_load_unit_comes_from_the_labels_for_axes_and_tooltips() -> None:
 
     figure = build_pmc_figure(pmc, entries, labels, tokens_for(Theme.LIGHT))
 
-    assert figure.layout.yaxis.title.text == "Load (hrTSS al giorno)"
-    assert figure.layout.yaxis2.title.text == "Form (hrTSS al giorno)"
+    assert figure.layout.yaxis.title.text == "Load / Form (hrTSS al giorno)"
     assert "hrTSS al giorno" in figure.data[0].hovertemplate
 
 

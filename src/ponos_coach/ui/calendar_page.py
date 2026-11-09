@@ -327,13 +327,16 @@ class CalendarPage(QWidget):
         self._table.selectionModel().currentChanged.connect(self._on_current_changed)
 
     def _build_legends(self) -> QWidget:
-        legends = QWidget(self)
-        column = QVBoxLayout(legends)
-        column.setContentsMargins(0, 0, 0, 0)
-        column.setSpacing(SPACE_2)
-        column.addWidget(self._build_goal_legend())
-        column.addWidget(self._build_phase_legend())
-        return legends
+        """Goals and phases on one row when the pane is wide enough, wrapping only when not (the
+        user's request of 2026-11-09: the legend under the calendar takes less room)."""
+        self._legends = QWidget(self)
+        self._legends.setObjectName("calendarLegends")
+        self._legend = FlowLayout(self._legends, spacing=SPACE_4)
+        self._build_goal_legend()
+        self._goal_legend_items = self._legend.count()  # the phases follow, month by month
+        self._phase_legend_row = self._legends  # where the phase names are found
+        self._phase_legend = self._legend
+        return self._legends
 
     def _legend_pair(self, swatch: QFrame, name: QLabel, parent: QWidget) -> QWidget:
         """A swatch with its name, kept together when the legend wraps."""
@@ -345,11 +348,13 @@ class CalendarPage(QWidget):
         row.addWidget(name)
         return pair
 
-    def _build_goal_legend(self) -> QWidget:
-        legend_row = QWidget(self)
-        self._legend = FlowLayout(legend_row, spacing=SPACE_4)
+    def _build_goal_legend(self) -> None:
+        legend_row = self._legends
         self._legend_swatches: dict[GoalKind, QFrame] = {}
-        self._legend.addWidget(QLabel(self.tr("Nutrition goal:"), legend_row))
+        title = QLabel(self.tr("Nutrition goal:"), legend_row)
+        # The note on days without colour is a tooltip: one row less under the month.
+        title.setToolTip(self.tr("No colour: no goal period, maintenance assumed."))
+        self._legend.addWidget(title)
         for kind in GoalKind:
             swatch = QFrame(legend_row)
             swatch.setFixedSize(_LEGEND_SWATCH, _LEGEND_SWATCH)
@@ -359,20 +364,13 @@ class CalendarPage(QWidget):
             self._legend.addWidget(
                 self._legend_pair(swatch, QLabel(goal_kind_text(kind), legend_row), legend_row)
             )
-        no_colour = QLabel(self.tr("No colour: no goal period, maintenance assumed."), legend_row)
-        no_colour.setWordWrap(True)  # a long sentence must not force the pane wide
-        self._legend.addWidget(no_colour)
-        return legend_row
-
-    def _build_phase_legend(self) -> QWidget:
-        """The training phases of the month shown, each with its stripe colour and its name."""
-        self._phase_legend_row = QWidget(self)
-        self._phase_legend_row.setObjectName("calendarPhaseLegend")
-        self._phase_legend = FlowLayout(self._phase_legend_row, spacing=SPACE_4)
-        self._phase_legend_row.hide()
-        return self._phase_legend_row
 
     # --- Public commands and state ------------------------------------------------------
+
+    @property
+    def legend_widget(self) -> QWidget:
+        """The legends under the month."""
+        return self._legends
 
     @property
     def table(self) -> QTableView:
@@ -579,13 +577,13 @@ class CalendarPage(QWidget):
 
     def _refresh_phase_legend(self, month: MonthView) -> None:
         present = {cell.plan.phase for cell in month.days if cell.plan is not None}
-        while self._phase_legend.count():
-            item = self._phase_legend.takeAt(0)
+        # The training phases of the month shown follow the goals in the same row.
+        while self._phase_legend.count() > self._goal_legend_items:
+            item = self._phase_legend.takeAt(self._goal_legend_items)
             widget = None if item is None else item.widget()
             if widget is not None:
                 widget.hide()
                 widget.deleteLater()
-        self._phase_legend_row.setVisible(bool(present))
         if not present:
             return
         self._phase_legend.addWidget(QLabel(self.tr("Training phase:"), self._phase_legend_row))
