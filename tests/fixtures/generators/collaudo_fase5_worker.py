@@ -104,9 +104,9 @@ def _run(opened: OpenProfile, folder: Path, scenario: str, today: date, argument
             SessionChoices.of({Sport.RUNNING: types})
         )
     elif scenario == "availability":
-        minutes = (30,) * 7 if argument == "small" else (120, 120, 120, 120, 120, 120, 180)
+        small = argument == "small"
         SetAvailability(activities, store.availability)(
-            WeeklyAvailability(minutes, 6, 210 if argument == "small" else 1200)
+            WeeklyAvailability(frozenset(range(7)), 3 if small else 7, 6, 210 if small else 1200)
         )
     elif scenario == "rebuild":
         sources = PlanSources(

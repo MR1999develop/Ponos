@@ -52,13 +52,21 @@ from ponos_coach.planning.domain import (
 from tests.planning.builders import TODAY
 from tests.planning.invariants import violations
 
-_day_minutes = st.sampled_from([0, 0, 20, 30, 45, 60, 90, 120, 180])
-_availability = st.builds(
-    WeeklyAvailability,
-    st.tuples(*[_day_minutes] * 7),
-    st.integers(0, 6),
-    st.sampled_from([0, 60, 180, 300, 420, 600, 900, 1500]),
-)
+
+@st.composite
+def _availability(draw: st.DrawFn) -> WeeklyAvailability:
+    """No day at all (then no time), or some days, some sessions among them and a long day."""
+    days = draw(st.sets(st.integers(0, 6), max_size=7))
+    if not days:
+        return WeeklyAvailability.empty()
+    return WeeklyAvailability(
+        frozenset(days),
+        draw(st.integers(1, len(days))),
+        draw(st.sampled_from(sorted(days))),
+        draw(st.sampled_from([0, 60, 180, 300, 420, 600, 900, 1500])),
+    )
+
+
 _types = st.sets(st.sampled_from(list(SessionType)), min_size=1)
 _priorities = st.sampled_from(list(Priority))
 _distances = st.sampled_from([1_500, 5_000, 10_000, 21_097, 42_195, 80_000])
@@ -128,7 +136,7 @@ def _inputs(draw: st.DrawFn) -> PlanInputs:
     return PlanInputs(
         tuple(races),
         tuple(fitness),
-        draw(_availability),
+        draw(_availability()),
         SessionChoices.of({Sport.RUNNING: draw(_types)}),
         Physiology(HeartRateLimits(50, 190), ThresholdHeartRate(170), Sex.MALE),
         FitnessState(ctl, atl),

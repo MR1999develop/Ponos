@@ -281,3 +281,24 @@ def test_a_field_the_plan_does_not_know_is_still_refused() -> None:
 
     with pytest.raises(PlanDecodingError):
         decode_plan_day(text, digest(text))
+
+
+def test_the_days_of_a_plan_made_with_method_5_are_still_read() -> None:
+    # The days that were lived are frozen as they were planned; method 6 changed which days get a
+    # session, not the shape of a planned day.
+    day = next(d for d in PLANS[0].days if d.session is not None)
+    text = canonical_json(day)
+
+    assert canonical_json(decode_plan_day(text, digest(text))) == text
+
+
+def test_a_plan_saved_with_minutes_per_day_is_refused_not_misread() -> None:
+    # The current plan is derived and rebuilt: the old availability (minutes) is not a valid one.
+    document = json.loads(canonical_json(PLANS[0]))
+    availability = document["inputs"]["availability"]
+    del availability["days"], availability["sessions_per_week"]
+    availability["day_minutes"] = [60, 60, 60, 60, 60, 60, 60]
+    text = json.dumps(document, sort_keys=True, separators=(",", ":"))
+
+    with pytest.raises(PlanDecodingError):
+        decode_plan(text, digest(text))

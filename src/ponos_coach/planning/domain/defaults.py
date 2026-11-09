@@ -23,7 +23,10 @@ from ponos_coach.planning.domain.phases import Phase, RaceClass
 # that load the injured zone, and the weekly ramp is the lower one while they last.
 # 5: the threshold test is a session of the plan (`threshold_test` on the planned session,
 # the protocol and the missed tests among the inputs): ADR 015.
-METHOD_VERSION: Final = 5
+# 6: the user chooses the days and how many sessions a week, not the minutes of each day: the
+# sessions go on `sessions_per_week` of the available days (`WeeklyAvailability.session_days`)
+# and a day is as long as the types allow; the long session is the longest of its week.
+METHOD_VERSION: Final = 6
 
 # --- Horizon -----------------------------------------------------------------------------------
 HORIZON_DAYS: Final = 364  # a plan covers 52 weeks from tomorrow at most
@@ -176,6 +179,14 @@ MAX_MINUTES: Final[dict[SessionType, int]] = {
     SessionType.STRENGTH: 60,
     SessionType.ALTERNATIVE: 120,
 }
+# The long session is the key session of the week and has to be the longest by minutes: an easy,
+# recovery, medium or alternative session is always shorter than it, and an easy or recovery one
+# lasts at most this share of it (a long run of 60 minutes next to an easy run of 90 would turn the
+# week upside down). When the hours or the load do not allow all, the others give way first.
+OTHER_SESSION_MAX_SHARE_OF_LONG_PERCENT: Final = 75
+
+# The most a day can hold: the longest session of any type (the user gives no minutes per day).
+DAY_MAX_MINUTES: Final = max(MAX_MINUTES.values())
 
 # --- Threshold test in the plan (ADR 015) -----------------------------------------------------
 # The test (FRI, FRI5: at the start of a period) is a hard session: warm-up, the test, cool-down.

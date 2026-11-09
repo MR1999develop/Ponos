@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Content of the Settings > Training plan page: the time available each day, the long day, the
-most time a week and the session types the plan may use for each sport.
+"""Content of the Settings > Training plan page: the days available, how many sessions a week, the
+long day, the most time a week and the session types the plan may use for each sport.
 
 The page edits a copy: nothing changes until "Save settings". What the plan cannot do with the
-settings (no time at all, a long session on a day without time) is written under the fields as
-soon as it appears; it does not stop saving, because the plan says the same in its own notices. A
-profile that saved nothing yet starts from suggested values, and the page says so.
+settings (no day or no time at all) is written under the fields as soon as it appears; it does not
+stop saving, because the plan says the same in its own notices. A profile that saved nothing yet
+starts from suggested values, and the page says so.
 """
 
 from __future__ import annotations
@@ -29,14 +29,13 @@ from PySide6.QtWidgets import (
 
 from ponos_coach.activities.domain import Sport
 from ponos_coach.goals.domain import SessionType
-from ponos_coach.goals.domain.availability import MAX_DAY_MINUTES, WEEKDAYS
+from ponos_coach.goals.domain.availability import WEEKDAYS
 from ponos_coach.ui.activity_text import sport_text
 from ponos_coach.ui.form_rows import add_field_row
 from ponos_coach.ui.plan_texts import session_type_text, weekday_name
 from ponos_coach.ui.settings_form import SettingsForm
 from ponos_coach.ui.tokens import SPACE_2, SPACE_4
 from ponos_coach.ui.training_draft import (
-    DAY_MINUTES_STEP,
     MAX_WEEK_HOURS,
     MINUTES_PER_HOUR,
     TrainingDraft,
@@ -45,22 +44,18 @@ from ponos_coach.ui.training_draft import (
     shown_sports,
 )
 
+_DAY_COLUMNS = 4  # weekday check boxes per row
 _HOURS_STEP = 0.25
 _HOURS_DECIMALS = 2
 
 
 def hint_text(hint: TrainingHint) -> str:
     """What the plan cannot do with the settings, and how to put it right."""
-    if hint is TrainingHint.NO_TIME:
-        return QCoreApplication.translate(
-            "TrainingDialog",
-            "No training time is set, so the plan cannot be made. "
-            "Give at least one day some minutes, and the week some hours.",
-        )
+    del hint  # one hint so far: no day or no weekly time
     return QCoreApplication.translate(
         "TrainingDialog",
-        "The long day has no time, so no long session will be planned. "
-        "Give that day some minutes, or choose another long day.",
+        "No training time is set, so the plan cannot be made. "
+        "Tick at least one day, and give the week some hours.",
     )
 
 
@@ -121,24 +116,29 @@ class TrainingSettingsDialog(SettingsForm):
         box = QGroupBox(self.tr("Time available"), self)
         form = QFormLayout()
         form.setVerticalSpacing(SPACE_2)
-        self._day_spins: list[QSpinBox] = []
+        days = QWidget(box)
+        grid = QGridLayout(days)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(SPACE_4)
+        grid.setVerticalSpacing(SPACE_2)
+        self._day_checks: list[QCheckBox] = []
         previous: QWidget | None = None
         for weekday in range(WEEKDAYS):
-            spin = QSpinBox(box)
-            spin.setObjectName(f"trainingDay{weekday}")
-            spin.setRange(0, MAX_DAY_MINUTES)
-            spin.setSingleStep(DAY_MINUTES_STEP)
-            spin.setSuffix(self.tr(" min"))
-            spin.valueChanged.connect(self._on_day_changed)
-            add_field_row(form, weekday_name(weekday), spin)
-            self._day_spins.append(spin)
+            check = QCheckBox(weekday_name(weekday), days)
+            check.setObjectName(f"trainingDay{weekday}")
+            check.setAccessibleName(weekday_name(weekday))
+            check.toggled.connect(self._on_days_changed)
+            grid.addWidget(check, weekday // _DAY_COLUMNS, weekday % _DAY_COLUMNS)
+            self._day_checks.append(check)
             if previous is not None:
-                QWidget.setTabOrder(previous, spin)
-            previous = spin
+                QWidget.setTabOrder(previous, check)
+            previous = check
+        self._sessions = QSpinBox(box)
+        self._sessions.setObjectName("trainingSessions")
+        self._sessions.setRange(1, WEEKDAYS)
+        self._sessions.valueChanged.connect(self._on_sessions_changed)
         self._long_day = QComboBox(box)
         self._long_day.setObjectName("trainingLongDay")
-        for weekday in range(WEEKDAYS):
-            self._long_day.addItem(weekday_name(weekday), weekday)
         self._long_day.currentIndexChanged.connect(self._on_long_day_changed)
         self._week_hours = QDoubleSpinBox(box)
         self._week_hours.setObjectName("trainingWeekHours")
@@ -147,10 +147,13 @@ class TrainingSettingsDialog(SettingsForm):
         self._week_hours.setSingleStep(_HOURS_STEP)
         self._week_hours.setSuffix(self.tr(" h"))
         self._week_hours.valueChanged.connect(self._on_week_changed)
+        add_field_row(form, self.tr("Days available"), days)
+        add_field_row(form, self.tr("Sessions per week"), self._sessions)
         add_field_row(form, self.tr("Long session day"), self._long_day)
         add_field_row(form, self.tr("Most training in a week"), self._week_hours)
         if previous is not None:
-            QWidget.setTabOrder(previous, self._long_day)
+            QWidget.setTabOrder(previous, self._sessions)
+        QWidget.setTabOrder(self._sessions, self._long_day)
         QWidget.setTabOrder(self._long_day, self._week_hours)
         outer = QVBoxLayout(box)
         outer.addLayout(form)
@@ -190,20 +193,41 @@ class TrainingSettingsDialog(SettingsForm):
     # --- Showing and reading ---------------------------------------------------------------
 
     def _show_draft(self, draft: TrainingDraft) -> None:
-        for spin, minutes in zip(self._day_spins, draft.day_minutes, strict=True):
-            spin.setValue(minutes)
-        self._long_day.setCurrentIndex(self._long_day.findData(draft.long_day))
+        for weekday, check in enumerate(self._day_checks):
+            check.setChecked(weekday in draft.days)
+        self._show_day_dependents(draft)
         self._week_hours.setValue(draft.max_week_minutes / MINUTES_PER_HOUR)
         for (sport, session_type), check in self._checks.items():
             check.setChecked(session_type in draft.choices.for_sport(sport))
 
-    def _on_day_changed(self) -> None:
+    def _show_day_dependents(self, draft: TrainingDraft) -> None:
+        """The sessions field and the long day list follow the ticked days: at most one session
+        per day, the long day among them."""
+        self._sessions.setRange(1, max(len(draft.days), 1))
+        self._sessions.setValue(draft.sessions)
+        self._sessions.setEnabled(bool(draft.days))
+        self._long_day.clear()
+        for weekday in sorted(draft.days):
+            self._long_day.addItem(weekday_name(weekday), weekday)
+        self._long_day.setCurrentIndex(self._long_day.findData(draft.long_day))
+        self._long_day.setEnabled(bool(draft.days))
+
+    def _on_days_changed(self) -> None:
         if self._loading:
             return
         draft = self._draft
-        for weekday, spin in enumerate(self._day_spins):
-            draft = draft.with_day_minutes(weekday, spin.value())
+        for weekday, check in enumerate(self._day_checks):
+            draft = draft.with_day(weekday, check.isChecked())
         self._draft = draft
+        self._loading = True  # the fields below follow the days: they do not change the draft
+        self._show_day_dependents(draft)
+        self._loading = False
+        self._update()
+
+    def _on_sessions_changed(self) -> None:
+        if self._loading:
+            return
+        self._draft = self._draft.with_sessions(self._sessions.value())
         self._update()
 
     def _on_long_day_changed(self) -> None:
@@ -264,9 +288,14 @@ class TrainingSettingsDialog(SettingsForm):
     # --- State for the tests -----------------------------------------------------------------
 
     @property
-    def day_spins(self) -> list[QSpinBox]:
-        """The minutes of each weekday, Monday first."""
-        return self._day_spins
+    def day_checks(self) -> list[QCheckBox]:
+        """The check box of each weekday, Monday first."""
+        return self._day_checks
+
+    @property
+    def sessions_spin(self) -> QSpinBox:
+        """The sessions per week."""
+        return self._sessions
 
     @property
     def long_day_combo(self) -> QComboBox:

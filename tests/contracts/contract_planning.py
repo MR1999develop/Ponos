@@ -218,7 +218,7 @@ class AvailabilityStoreContract:
 
     def test_it_is_kept_whole_and_replaced(self, harness: StorageHarness) -> None:
         first = availability()
-        second = WeeklyAvailability((0, 30, 0, 90, 0, 0, 720), 3, 6000)
+        second = WeeklyAvailability(frozenset({1, 3, 6}), 2, 3, 6000)
         with closing(create(harness)) as profile:
             profile.availability.set(first)
             assert profile.availability.get() == first

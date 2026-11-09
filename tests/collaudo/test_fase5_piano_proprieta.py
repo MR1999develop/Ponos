@@ -96,9 +96,8 @@ def violations(plan: Plan, today: date) -> list[str]:  # noqa: PLR0912, PLR0915 
     # --- day by day ---
     for d in days:
         if d.session is not None:
-            minutes = inputs.availability.minutes_on(d.day.weekday())
-            if d.session.minutes > minutes:
-                problems.append(f"{d.day}: {d.session.minutes} min with {minutes} available")
+            if d.day.weekday() not in inputs.availability.days:
+                problems.append(f"{d.day}: a session on a day the user cannot train")
             # the threshold test is a measurement, not one of the chosen types (ADR 015)
             if d.session.session_type not in allowed and d.session.threshold_test is None:
                 problems.append(f"{d.day}: {d.session.session_type.value} was not chosen")
@@ -122,6 +121,15 @@ def violations(plan: Plan, today: date) -> list[str]:  # noqa: PLR0912, PLR0915 
     for start, group in weeks.items():
         sessions = [d.session for d in group if d.session is not None]
         total = sum(s.minutes for s in sessions)
+        if len(sessions) > inputs.availability.sessions_per_week:
+            problems.append(f"week {start}: {len(sessions)} sessions over the chosen number")
+        longs = [s.minutes for s in sessions if s.session_type is SessionType.LONG]
+        if longs and any(
+            s.minutes >= max(longs)
+            for s in sessions
+            if s.session_type in (SessionType.EASY, SessionType.MEDIUM, SessionType.ALTERNATIVE)
+        ):
+            problems.append(f"week {start}: the long session is not the longest")
         if total > inputs.availability.max_week_minutes:
             problems.append(
                 f"week {start}: {total} min over {inputs.availability.max_week_minutes}"
@@ -218,13 +226,21 @@ def violations(plan: Plan, today: date) -> list[str]:  # noqa: PLR0912, PLR0915 
 
 
 # --- Random inputs --------------------------------------------------------------------------------
-_minutes = st.sampled_from([0, 0, 20, 30, 45, 60, 90, 120, 180, 240])
-_availability = st.builds(
-    WeeklyAvailability,
-    st.tuples(*[_minutes] * 7),
-    st.integers(0, 6),
-    st.sampled_from([0, 60, 180, 300, 420, 600, 900, 1500, 3000]),
-)
+
+
+@st.composite
+def _availability(draw: st.DrawFn) -> WeeklyAvailability:
+    days = draw(st.sets(st.integers(0, 6), max_size=7))
+    if not days:
+        return WeeklyAvailability.empty()
+    return WeeklyAvailability(
+        frozenset(days),
+        draw(st.integers(1, len(days))),
+        draw(st.sampled_from(sorted(days))),
+        draw(st.sampled_from([0, 60, 180, 300, 420, 600, 900, 1500, 3000])),
+    )
+
+
 _types = st.sets(st.sampled_from(list(SessionType)), min_size=1)
 _distances = st.sampled_from([1_500, 5_000, 10_000, 10_001, 21_097, 21_098, 42_195, 80_000])
 _starts = st.integers(0, 13).map(lambda n: date(2026, 3, 2) + timedelta(days=n))
@@ -266,7 +282,7 @@ def scenarios(draw: st.DrawFn) -> tuple[PlanInputs, date]:
     inputs = PlanInputs(
         races,
         form,
-        draw(_availability),
+        draw(_availability()),
         SessionChoices.of({Sport.RUNNING: draw(_types)}),
         PHYSIOLOGY,
         FitnessState(draw(st.floats(0, 140)), draw(st.floats(0, 200))),
@@ -327,7 +343,7 @@ def _good_plan() -> tuple[Plan, date]:
             ),
         ),
         (),
-        WeeklyAvailability((60, 60, 60, 60, 60, 60, 120), 6, 600),
+        WeeklyAvailability(frozenset(range(7)), 7, 6, 600),
         SessionChoices.of({Sport.RUNNING: set(SessionType)}),
         PHYSIOLOGY,
         FitnessState(40.0, 40.0),
@@ -366,7 +382,7 @@ def test_d_f5_close_a_races_keep_the_rules_of_the_taper(races: list[RaceGoal]) -
     inputs = PlanInputs(
         tuple(races),
         (),
-        WeeklyAvailability((0, 0, 0, 0, 0, 0, 20), 0, 60),
+        WeeklyAvailability(frozenset({6}), 1, 6, 60),
         SessionChoices.of({Sport.RUNNING: frozenset({SessionType.EASY})}),
         PHYSIOLOGY,
         FitnessState(0.0, 0.0),

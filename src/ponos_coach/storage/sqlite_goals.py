@@ -22,6 +22,7 @@ from ponos_coach.goals.domain import (
     SessionType,
     WeeklyAvailability,
 )
+from ponos_coach.goals.domain.availability import WEEKDAYS
 from ponos_coach.goals.ports import (
     Goal,
     GoalAlreadyExistsError,
@@ -41,8 +42,7 @@ _UPDATE = (
     "UPDATE goal SET kind = ?, goal_date = ?, priority = ?, sport = ?, distance_m = ?, "
     "target_time_s = ?, ctl = ? WHERE goal_id = ?"
 )
-_DAY_COLUMNS = tuple(f"day{i}_min" for i in range(7))
-_AVAILABILITY_COLUMNS = (*_DAY_COLUMNS, "long_day", "max_week_min")
+_AVAILABILITY_COLUMNS = ("days_mask", "sessions_per_week", "long_day", "max_week_min")
 _AVAILABILITY_SELECT = (
     "SELECT " + ", ".join(_AVAILABILITY_COLUMNS) + " FROM weekly_availability WHERE id = 1"  # noqa: S608
 )
@@ -186,8 +186,9 @@ class SqliteAvailabilityStore:
         if not all(isinstance(value, int) for value in row):
             raise GoalStoreError("saved availability invalid")
         try:
-            minutes = (*row[:7],)
-            return WeeklyAvailability(minutes, row[7], row[8])
+            mask, sessions, long_day, max_week_min = row
+            days = frozenset(day for day in range(WEEKDAYS) if (mask >> day) & 1)
+            return WeeklyAvailability(days, sessions, long_day, max_week_min)
         except ValueError:
             raise GoalStoreError("saved availability invalid") from None
 
@@ -198,7 +199,8 @@ class SqliteAvailabilityStore:
                 self._db.connection.execute("DELETE FROM weekly_availability WHERE id = 1")
                 return
             values = (
-                *availability.day_minutes,
+                sum(1 << day for day in availability.days),
+                availability.sessions_per_week,
                 availability.long_day,
                 availability.max_week_minutes,
             )

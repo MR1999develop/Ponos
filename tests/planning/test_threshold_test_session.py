@@ -161,21 +161,20 @@ def test_the_test_is_on_a_day_with_easy_days_around_it_and_not_next_to_the_long_
     assert all(abs((day.day - other).days) >= 2 for other in long_days)
 
 
-def test_the_test_waits_for_a_day_with_enough_time() -> None:
-    only_saturday = availability((0, 0, 0, 0, 0, 90, 0), long_day=6, max_week_minutes=600)
-    (day,) = threshold_tests_of(planned(avail=only_saturday))
-    assert day.day.weekday() == 5
-    too_short = availability((50, 50, 50, 50, 50, 50, 120), long_day=6, max_week_minutes=600)
-    assert (
-        threshold_tests_of(planned(avail=too_short, test_protocol=THIRTY)) == []
-    )  # 55 minutes do not fit
-    assert len(threshold_tests_of(planned(avail=too_short, test_protocol=TWENTY))) == 1  # 45 do
+def test_the_test_goes_on_a_session_day_that_is_not_the_long_day() -> None:
+    two_days = availability((2, 5), long_day=5, max_week_minutes=600)
+    (day,) = threshold_tests_of(planned(avail=two_days))
+    assert day.day.weekday() == 2
+    chosen = availability(range(7), sessions=3, long_day=6, max_week_minutes=600)
+    assert {d.day.weekday() for d in threshold_tests_of(planned(avail=chosen))} <= (
+        chosen.session_days - {chosen.long_day}
+    )
 
 
 def test_a_first_week_with_no_fitting_day_leaves_the_second_week() -> None:
     # the only day with time is the long day, which the long session takes first: no test that
     # week; the plan never has a long session and a test on the same day, nor next to each other
-    saturday_long = availability((0, 0, 0, 0, 0, 90, 0), long_day=5, max_week_minutes=600)
+    saturday_long = availability((5,), long_day=5, max_week_minutes=600)
     plan = planned(avail=saturday_long, types=[SessionType.LONG, SessionType.EASY])
     assert threshold_tests_of(plan) == []
 
@@ -277,7 +276,7 @@ def test_the_week_takes_the_test_as_its_intense_session_even_when_it_has_few_ses
 
 
 def test_the_test_counts_as_an_intense_session_in_a_week_of_few_sessions() -> None:
-    two_days = availability((0, 60, 0, 0, 60, 0, 0), long_day=6, max_week_minutes=600)
+    two_days = availability((1, 4), long_day=4, max_week_minutes=600)
     plan = planned(avail=two_days)
     (day,) = threshold_tests_of(plan)
     week = [d for d in plan.days if week_of(d.day) == week_of(day.day) and d.session]

@@ -52,15 +52,19 @@ def fitness_goal(goal_id: str, day: date, ctl: float) -> FitnessGoal:
 
 
 def availability(
-    minutes: tuple[int, int, int, int, int, int, int] = (60, 60, 60, 60, 60, 60, 120),
+    days: Iterable[int] = range(7),
+    sessions: int | None = None,
     long_day: int = 6,
     max_week_minutes: int = 600,
 ) -> WeeklyAvailability:
-    """Availability: an hour on weekdays, two on Sunday (the long day)."""
-    return WeeklyAvailability(minutes, long_day, max_week_minutes)
+    """Availability: by default every day, a session on each, Sunday the long day, ten hours."""
+    chosen = frozenset(days)
+    return WeeklyAvailability(
+        chosen, len(chosen) if sessions is None else sessions, long_day, max_week_minutes
+    )
 
 
-BIG_WEEK = availability((120, 120, 120, 120, 120, 120, 180), 6, 1200)  # lots of time
+BIG_WEEK = availability(max_week_minutes=1200)  # lots of time: a session every day
 
 
 def inputs(

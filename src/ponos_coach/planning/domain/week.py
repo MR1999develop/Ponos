@@ -492,6 +492,41 @@ def _placed(slots: Sequence[Slot], sized: Mapping[int, Shape]) -> dict[date, Pla
     }
 
 
+_BELOW_LONG = (
+    SessionType.EASY,
+    SessionType.MEDIUM,
+    SessionType.ALTERNATIVE,
+    SessionType.RECOVERY,
+)
+_SHARE_OF_LONG = (SessionType.EASY, SessionType.RECOVERY)
+
+
+def _under_the_long(placed: dict[date, Placed], sizer: Sizer) -> dict[date, Placed]:
+    """The week with every easy, medium, alternative and recovery session shortened to stay
+    shorter than the long one (and the easy and recovery ones within their share of it): the long
+    session is the longest of the week, and when the budget is short the others give way. A
+    session that cannot be shortened enough (below its own minimum) is left as it is."""
+    longest = max(
+        (p.shape.minutes for p in placed.values() if p.shape.session_type is SessionType.LONG),
+        default=0,
+    )
+    if longest == 0:
+        return placed
+    out = dict(placed)
+    for day, item in placed.items():
+        kind = item.shape.session_type
+        limit = (
+            longest - 1
+            if kind not in _SHARE_OF_LONG
+            else min(longest - 1, longest * defaults.OTHER_SESSION_MAX_SHARE_OF_LONG_PERCENT // 100)
+        )
+        if kind in _BELOW_LONG and item.shape.minutes > limit:
+            shapes = sizer.options(kind, item.phase, limit)[0]
+            if shapes:
+                out[day] = Placed(shapes[-1], item.phase, item.race_pace)
+    return out
+
+
 def plan_week(
     setup: WeekSetup,
     sizer: Sizer,
@@ -525,6 +560,7 @@ def plan_week(
             budget = max(budget, sizer.minimum_load(taper))
         placed.update(_placed(taper, sizer.size(taper, budget)))
         placed.update(recovery_sessions(setup))
+        placed = _under_the_long(placed, sizer)
         if week_ok(setup, placed):
             return placed
         if keep > 0:

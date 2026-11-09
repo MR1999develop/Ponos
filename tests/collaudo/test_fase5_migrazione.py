@@ -350,12 +350,17 @@ def test_the_database_allows_one_race_a_day_even_to_a_direct_write(tmp_path: Pat
 @pytest.mark.parametrize(
     "statement",
     [
-        "INSERT INTO weekly_availability VALUES (2, 0,0,0,0,0,0,0, 0, 0)",
-        "INSERT INTO weekly_availability VALUES (1, 721,0,0,0,0,0,0, 0, 0)",
-        "INSERT INTO weekly_availability VALUES (1, 0,0,0,0,0,0,-1, 0, 0)",
-        "INSERT INTO weekly_availability VALUES (1, 0,0,0,0,0,0,0, 7, 0)",
-        "INSERT INTO weekly_availability VALUES (1, 0,0,0,0,0,0,0, -1, 0)",
-        "INSERT INTO weekly_availability VALUES (1, 0,0,0,0,0,0,0, 0, 6001)",
+        "INSERT INTO weekly_availability VALUES (2, 1, 1, 0, 60)",
+        "INSERT INTO weekly_availability VALUES (1, 128, 1, 0, 60)",
+        "INSERT INTO weekly_availability VALUES (1, -1, 1, 0, 60)",
+        "INSERT INTO weekly_availability VALUES (1, 1, 1, 7, 60)",
+        "INSERT INTO weekly_availability VALUES (1, 1, 1, -1, 60)",
+        "INSERT INTO weekly_availability VALUES (1, 1, 1, 0, 6001)",
+        "INSERT INTO weekly_availability VALUES (1, 1, 0, 0, 60)",  # days but no session
+        "INSERT INTO weekly_availability VALUES (1, 3, 3, 0, 60)",  # 2 days, 3 sessions: 3 > 2
+        "INSERT INTO weekly_availability VALUES (1, 5, 1, 1, 60)",  # the long day is not a day
+        "INSERT INTO weekly_availability VALUES (1, 0, 0, 0, 60)",  # time but no day
+        "INSERT INTO weekly_availability VALUES (1, 0, 1, 0, 0)",  # a session but no day
         "INSERT INTO session_choice VALUES ('swimming', 'easy')",
         "INSERT INTO session_choice VALUES ('running', 'sprint')",
     ],
@@ -371,7 +376,10 @@ def test_the_database_accepts_the_availability_limits_and_refuses_a_choice_twice
     tmp_path: Path,
 ) -> None:
     with closing(migrated(tmp_path)) as raw:
-        raw.execute("INSERT INTO weekly_availability VALUES (1, 720,0,0,0,0,0,720, 6, 6000)")
+        raw.execute("INSERT INTO weekly_availability VALUES (1, 127, 7, 6, 6000)")
+        raw.execute(
+            "UPDATE weekly_availability SET days_mask = 0, sessions_per_week = 0, max_week_min = 0"
+        )  # the empty one
         raw.execute("INSERT INTO session_choice VALUES ('running', 'easy')")
 
         with pytest.raises(sqlite3.IntegrityError):

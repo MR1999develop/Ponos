@@ -255,8 +255,9 @@ class Types:
 
 @dataclass(frozen=True)
 class Availability:
-    minutes: tuple[int, int, int, int, int, int, int]
-    long_day: int
+    days: frozenset[int]
+    sessions: int  # clamped to the days when the value is built
+    long_pick: int  # which of the days is the long one
     max_week_min: int
 
 
@@ -277,7 +278,8 @@ _operation: st.SearchStrategy[Operation] = st.one_of(
     st.builds(Types, st.frozensets(st.sampled_from(list(SessionType)), max_size=8)),
     st.builds(
         Availability,
-        st.tuples(*[st.integers(0, 720)] * 7),
+        st.frozensets(st.integers(0, 6), min_size=1),
+        st.integers(1, 7),
         st.integers(0, 6),
         st.integers(0, 6000),
     ),
@@ -337,9 +339,15 @@ def apply(world: World, operation: Operation) -> Callable[[], object] | None:  #
                 return lambda: SetSessionChoices(session.activities, session.session_choices)(
                     switched.before
                 )
-            case Availability(minutes, long_day, max_week_min):
+            case Availability(days, sessions, long_pick, max_week_min):
+                ordered = sorted(days)
                 set_to = SetAvailability(session.activities, session.availability)(
-                    WeeklyAvailability(minutes, long_day, max_week_min)
+                    WeeklyAvailability(
+                        days,
+                        min(sessions, len(days)),
+                        ordered[long_pick % len(ordered)],
+                        max_week_min,
+                    )
                 )
                 return lambda: SetAvailability(session.activities, session.availability)(
                     set_to.before

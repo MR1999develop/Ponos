@@ -57,7 +57,7 @@ from ponos_coach.profiles.use_cases import ProfileSession
 # How far back the frozen days are searched for a planned threshold test that was missed: the
 # engine proposes it again only in the following weeks (ADR 015), so a few months are plenty.
 MISSED_TEST_LOOKBACK_DAYS = 84
-_NO_AVAILABILITY = WeeklyAvailability((0, 0, 0, 0, 0, 0, 0), 6, 0)
+_NO_AVAILABILITY = WeeklyAvailability.empty()
 
 
 @dataclass(frozen=True, slots=True)

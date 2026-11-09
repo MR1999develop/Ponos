@@ -161,8 +161,8 @@ def archive_files(folder: Path) -> set[str]:
 # --- Migration ---------------------------------------------------------------------------------
 
 
-def test_the_latest_schema_is_v11_and_v11_is_the_one_that_removes_non_fit_activities() -> None:
-    assert sqlite_schema.SCHEMA_VERSION == 11
+def test_v11_is_the_migration_that_removes_non_fit_activities() -> None:
+    assert sqlite_schema.SCHEMA_VERSION >= 11
     assert sqlite_schema.NON_FIT_REMOVED_IN == 11
 
 
@@ -200,7 +200,7 @@ def test_a_copy_of_the_v10_database_is_made_before_anything_changes(tmp_path: Pa
     open_profile(tmp_path).close()
 
     [copy] = sorted((tmp_path / "backup").glob("*"))
-    assert copy.name == "ponos-v10-v11.sqlite3"
+    assert copy.name == f"ponos-v10-v{sqlite_schema.SCHEMA_VERSION}.sqlite3"
     assert user_version(copy) == V10
     assert rows(copy, "activities") == before_kinds  # the copy still has the GPX ones
     assert len(rows(copy, "activities")) == 6

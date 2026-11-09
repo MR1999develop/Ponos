@@ -66,8 +66,9 @@ Columns of v6 (goals, availability, session types and the plan, all `STRICT`):
   distance and an optional target time, a form goal has a CTL, and the CHECKs keep the two shapes
   apart and within the domain limits. A partial unique index allows one race per day (the plan
   refuses two); form goals may share a day.
-- `weekly_availability`: a single row (`id = 1`), minutes per weekday (Monday = `day0_min`), the
-  weekday of the long session and the weekly maximum; absent means "not set".
+- `weekly_availability`: a single row (`id = 1`); absent means "not set". In v6 it held the minutes
+  per weekday (Monday = `day0_min`), the weekday of the long session and the weekly maximum; since
+  v12 the days available, the sessions per week, the long day and the weekly maximum (see v12).
 - `session_choice`: one row per sport and session type chosen (closed sets).
 - `plan_state`: a single row (`id = 1`) with the last result of the plan engine, either a plan
   (`kind = 'plan'`: method version, canonical JSON and its SHA-256; the JSON also holds the
@@ -116,6 +117,13 @@ the sync journal entries that pointed to a removed activity go back to `pending`
 is downloaded again: a FIT becomes an activity, anything else fails as an unsupported format). The
 caller first collects the archive paths of the GPX files (`NON_FIT_REMOVED_IN`) and removes the
 files after the transaction has committed.
+
+Migration v12 (days and sessions per week instead of minutes per day): `weekly_availability` has
+`days_mask` (bit i = weekday i available, Monday = bit 0), `sessions_per_week`, `long_day` and
+`max_week_min`. SQLite cannot drop columns with CHECKs in place, so the table is rebuilt in the
+same transaction: the days are those with minutes, the sessions are as many as the days, the long
+day is added to the days if it was not one, the weekly maximum is kept. A row with no day with
+minutes (it meant "nothing available") becomes the empty one: no day, no session, no time.
 """
 
 from __future__ import annotations
@@ -766,6 +774,44 @@ _V11_DROP_THRESHOLD_TESTS = "DROP TABLE threshold_test"
 _V11_RENAME_ACTIVITIES = "ALTER TABLE activities_v11 RENAME TO activities"
 _V11_RENAME_THRESHOLD_TESTS = "ALTER TABLE threshold_test_v11 RENAME TO threshold_test"
 
+_V12_DAY_BIT = "(CASE WHEN day{i}_min > 0 THEN {bit} ELSE 0 END)"
+_V12_MASK_OF_MINUTES = " + ".join(_V12_DAY_BIT.format(i=i, bit=1 << i) for i in range(7))
+_V12_BITS_OF_MASK = " + ".join(f"((days_mask >> {i}) & 1)" for i in range(7))
+_V12_WEEKLY_AVAILABILITY = f"""
+CREATE TABLE weekly_availability_v12 (
+    id                INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    days_mask         INTEGER NOT NULL CHECK (days_mask BETWEEN 0 AND 127),
+    sessions_per_week INTEGER NOT NULL CHECK (sessions_per_week BETWEEN 0 AND 7),
+    long_day          INTEGER NOT NULL CHECK (long_day BETWEEN 0 AND 6),
+    max_week_min      INTEGER NOT NULL CHECK (max_week_min BETWEEN {V6_WEEK_MINUTES[0]}
+                                                               AND {V6_WEEK_MINUTES[1]}),
+    CHECK (
+        (days_mask = 0 AND sessions_per_week = 0 AND max_week_min = 0)
+        OR (
+            days_mask > 0
+            AND sessions_per_week >= 1
+            AND sessions_per_week <= {_V12_BITS_OF_MASK}
+            AND ((days_mask >> long_day) & 1) = 1
+        )
+    )
+) STRICT
+"""
+# `old` has the minutes of v6: the mask of the days with minutes, then with the long day added.
+_V12_COPY_AVAILABILITY = f"""
+INSERT INTO weekly_availability_v12 (id, days_mask, sessions_per_week, long_day, max_week_min)
+SELECT id, days_mask, {_V12_BITS_OF_MASK}, long_day, max_week_min
+FROM (
+    SELECT id,
+           CASE WHEN mask = 0 THEN 0 ELSE mask | (1 << long_day) END AS days_mask,
+           long_day,
+           CASE WHEN mask = 0 THEN 0 ELSE max_week_min END AS max_week_min
+    FROM (SELECT id, long_day, max_week_min, {_V12_MASK_OF_MINUTES} AS mask
+          FROM weekly_availability)
+)
+"""  # noqa: S608 - module constants only
+_V12_DROP_AVAILABILITY = "DROP TABLE weekly_availability"
+_V12_RENAME_AVAILABILITY = "ALTER TABLE weekly_availability_v12 RENAME TO weekly_availability"
+
 # Migration i (index i-1): brings the schema from version i-1 to i.
 MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     (_V1_META, _V1_ACTIVITIES, _V1_ACTIVITIES_START_INDEX, _V1_PHYSIOLOGY, _V1_LOAD_CACHE),
@@ -823,6 +869,12 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
         _V11_RENAME_ACTIVITIES,
         _V11_RENAME_THRESHOLD_TESTS,
         _V1_ACTIVITIES_START_INDEX,
+    ),
+    (
+        _V12_WEEKLY_AVAILABILITY,
+        _V12_COPY_AVAILABILITY,
+        _V12_DROP_AVAILABILITY,
+        _V12_RENAME_AVAILABILITY,
     ),
 )
 

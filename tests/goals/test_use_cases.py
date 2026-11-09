@@ -208,7 +208,7 @@ def test_availability_set_gives_the_previous_one_and_setting_it_back_restores_it
     set_availability = SetAvailability(profile.activities, profile.availability)
     read = ReadAvailability(profile.availability)
     mine = availability()
-    other = WeeklyAvailability((30, 0, 30, 0, 30, 0, 180), 6, 400)
+    other = WeeklyAvailability(frozenset({0, 2, 4, 6}), 3, 6, 400)
 
     first = set_availability(mine)
     second = set_availability(other)

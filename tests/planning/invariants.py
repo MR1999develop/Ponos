@@ -22,6 +22,10 @@ NO_QUALITY_DAYS = 3
 # The taper is made of the first of these that is chosen, with its shortest duration in minutes.
 FILLER_MINUTES = ((SessionType.EASY, 20), (SessionType.ALTERNATIVE, 30), (SessionType.RECOVERY, 20))
 SHORT_RACE_M = 10_000
+MAX_SHARE_OF_LONG = 75  # percent of the long session that an easy or recovery one may take
+_BELOW_LONG = (SessionType.EASY, SessionType.MEDIUM, SessionType.ALTERNATIVE, SessionType.RECOVERY)
+_AT_MOST_THREE_QUARTERS = (SessionType.EASY, SessionType.RECOVERY)
+EASY_MAX_MINUTES = 90  # the longest easy session
 MAX_RAMP_AFTER_INJURY = 3.0
 CTL_DAYS = 42.0
 EPSILON = 1e-6
@@ -47,9 +51,8 @@ def _check_days(plan: Plan) -> list[str]:
     for day in plan.days:
         if day.session is None:
             continue
-        minutes = inputs.availability.minutes_on(day.day.weekday())
-        if day.session.minutes > minutes:
-            problems.append(f"{day.day}: {day.session.minutes} min on a day with {minutes}")
+        if day.day.weekday() not in inputs.availability.session_days:
+            problems.append(f"{day.day}: a session on a day that is not a session day")
         if day.session.session_type not in allowed and day.session.threshold_test is None:
             problems.append(f"{day.day}: {day.session.session_type} was not chosen")
         long_day = inputs.availability.long_day
@@ -65,6 +68,10 @@ def _check_weeks(plan: Plan) -> list[str]:
     cap = plan.inputs.availability.max_week_minutes
     for start, days in _weeks(plan).items():
         minutes = sum(d.session.minutes for d in days if d.session)
+        count = sum(1 for d in days if d.session)
+        chosen = plan.inputs.availability.sessions_per_week
+        if count > chosen:
+            problems.append(f"week {start}: {count} sessions over the {chosen} chosen")
         intense = sum(1 for d in days if d.session and d.session.session_type in INTENSE_TYPES)
         if minutes > cap:
             problems.append(f"week {start}: {minutes} min over the maximum {cap}")
@@ -76,6 +83,27 @@ def _check_weeks(plan: Plan) -> list[str]:
             and intense > 2
         ):
             problems.append(f"week {start}: {intense} intense sessions in base")
+    return problems
+
+
+def _check_long_is_the_longest(plan: Plan) -> list[str]:
+    """In a week with a long session it is the longest session by minutes: longer than every
+    easy, medium or alternative one, and the easy and recovery ones are at most 75% of it."""
+    problems: list[str] = []
+    for start, days in _weeks(plan).items():
+        sessions = [d.session for d in days if d.session]
+        longs = [s.minutes for s in sessions if s.session_type is SessionType.LONG]
+        if not longs:
+            continue
+        top = max(longs)
+        for s in sessions:
+            kind = s.session_type
+            if kind in _BELOW_LONG and s.minutes >= top:
+                problems.append(f"week {start}: a {kind.value} of {s.minutes} min, long {top}")
+            if kind in _AT_MOST_THREE_QUARTERS and s.minutes * 100 > MAX_SHARE_OF_LONG * top:
+                problems.append(
+                    f"week {start}: a {kind.value} of {s.minutes} min over 75% of {top}"
+                )
     return problems
 
 
@@ -149,7 +177,7 @@ def _check_quality_before_races(plan: Plan) -> list[str]:
 
 def _check_taper_frequency(plan: Plan) -> list[str]:
     """A full week of taper keeps the number of sessions: every day with time for one has it.
-    Not checked when the weekly hours are fewer than the minutes the user has on all his days
+    Not checked when the weekly hours are fewer than a long easy session on each session day
     (the hours decide which sessions to drop), after an injury, from almost no fitness, or when
     no easy type is chosen (the taper is made of easy sessions)."""
     inputs = plan.inputs
@@ -160,18 +188,14 @@ def _check_taper_frequency(plan: Plan) -> list[str]:
         inputs.ramp_reduced
         or inputs.fitness.ctl < 10
         or shortest is None
-        or available.max_week_minutes < sum(available.minutes_on(w) for w in range(7))
+        or available.max_week_minutes < available.sessions_per_week * EASY_MAX_MINUTES
     ):
         return []
     problems: list[str] = []
     for start, days in _weeks(plan).items():
         if len(days) < 7 or any(d.phase is not Phase.TAPER for d in days):
             continue
-        free = [
-            d
-            for d in days
-            if d.session is None and available.minutes_on(d.day.weekday()) >= shortest
-        ]
+        free = [d for d in days if d.session is None and d.day.weekday() in available.session_days]
         if free:
             problems.append(f"week {start}: {len(free)} taper days without a session")
     return problems
@@ -268,6 +292,7 @@ def violations(plan: Plan) -> list[str]:
     return [
         *_check_days(plan),
         *_check_weeks(plan),
+        *_check_long_is_the_longest(plan),
         *_check_hard_days(plan),
         *_check_week_quotas(plan),
         *_check_quality_before_races(plan),

@@ -16,7 +16,6 @@ from ponos_coach.goals.domain import (
     RaceGoal,
     SessionChoices,
     SessionType,
-    WeeklyAvailability,
 )
 
 DAY = date(2026, 6, 1)
@@ -66,34 +65,6 @@ def test_fitness_goal_accepts_the_limits(ctl: float) -> None:
 def test_goal_dates_before_1900_are_rejected() -> None:
     with pytest.raises(ValueError, match="1900"):
         FitnessGoal(GoalId("f"), date(1899, 12, 31), 10.0)
-
-
-@pytest.mark.parametrize(
-    ("minutes", "long_day", "cap"),
-    [
-        ((721, 0, 0, 0, 0, 0, 0), 0, 0),
-        ((-1, 0, 0, 0, 0, 0, 0), 0, 0),
-        ((60,) * 7, 7, 100),
-        ((60,) * 7, -1, 100),
-        ((60,) * 7, 0, 6001),
-    ],
-)
-def test_availability_rejects_values_out_of_range(
-    minutes: tuple[int, int, int, int, int, int, int], long_day: int, cap: int
-) -> None:
-    with pytest.raises(ValueError, match=r"minutes|long day"):
-        WeeklyAvailability(minutes, long_day, cap)
-
-
-def test_availability_accepts_the_limits() -> None:
-    assert WeeklyAvailability((720, 0, 0, 0, 0, 0, 0), 6, 6000).minutes_on(0) == 720
-    assert WeeklyAvailability((0,) * 7, 0, 0).long_day == 0
-
-
-def test_availability_is_empty_without_days_or_hours() -> None:
-    assert WeeklyAvailability((0,) * 7, 6, 600).is_empty
-    assert WeeklyAvailability((60,) * 7, 6, 0).is_empty
-    assert not WeeklyAvailability((0, 0, 0, 0, 0, 0, 30), 6, 60).is_empty
 
 
 def test_session_choices_have_one_canonical_form() -> None:

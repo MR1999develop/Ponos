@@ -226,7 +226,10 @@ class RecoveryInserted:
 
 @dataclass(frozen=True, slots=True)
 class LongDayUnavailable:
-    """The long session is chosen but the long day has no time: no long session is planned."""
+    """The long session is chosen but the long day has no time: no long session is planned.
+
+    Not produced since method version 6 (the long day is always an available day); kept so that
+    the plans saved before still read."""
 
 
 @dataclass(frozen=True, slots=True)

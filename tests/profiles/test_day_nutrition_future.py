@@ -133,7 +133,7 @@ def test_the_typical_time_is_the_mean_start_of_the_last_sixty_days_on_that_weekd
 
 
 def test_a_rest_day_ahead_has_no_activities_but_still_comes_from_the_plan() -> None:
-    no_tuesdays = availability((120, 0, 120, 120, 120, 120, 180), 6, 1200)
+    no_tuesdays = availability((0, 2, 3, 4, 5, 6), None, 6, 1200)
     result = build_plan(inputs([race("a", TODAY + timedelta(days=98))], avail=no_tuesdays), TODAY)
     assert isinstance(result, Plan)
     rest = next(d for d in result.days if d.day.weekday() == 1 and d.race is None)

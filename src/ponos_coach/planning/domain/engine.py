@@ -34,7 +34,6 @@ from ponos_coach.planning.domain.plan import (
     CloseARaces,
     CtlTargetNotReached,
     GoalBeyondHorizon,
-    LongDayUnavailable,
     MissingIntenseSessions,
     MissingLongSession,
     NoSessionPossible,
@@ -466,11 +465,14 @@ def _fillers(context: _Context) -> tuple[SessionType, ...]:
 
 
 def _day_minutes(context: _Context, day: date) -> int:
-    """Minutes the user has on a day; with an injury on the first running steps, none on every
-    other day (sessions on alternate days, by the parity of the date)."""
+    """Minutes a day can hold: the longest session of any type on a day with a session, none on
+    the others; with an injury on the first running steps, none on every other day (sessions on
+    alternate days, by the parity of the date)."""
     if context.restriction.alternate_days and day.toordinal() % 2 == 1:
         return 0
-    return context.inputs.availability.minutes_on(day.weekday())
+    return (
+        defaults.DAY_MAX_MINUTES if day.weekday() in context.inputs.availability.session_days else 0
+    )
 
 
 def _day_info(context: _Context, day: date) -> DayInfo:
@@ -704,12 +706,6 @@ def _plan_warnings(
     inputs = context.inputs
     warnings = _choice_warnings(inputs)
     warnings.extend(_health_warnings(context))
-    chosen = inputs.choices.for_sport(context.sport)
-    if (
-        SessionType.LONG in chosen
-        and inputs.availability.minutes_on(inputs.availability.long_day) == 0
-    ):
-        warnings.append(LongDayUnavailable())
     horizon = today + timedelta(days=defaults.HORIZON_DAYS)
     beyond = sorted((day, goal_id) for goal_id, day in _goal_days(inputs) if day > horizon)
     warnings.extend(GoalBeyondHorizon(goal_id) for _, goal_id in beyond)

@@ -350,7 +350,8 @@ def _refusal_texts(refusal: PlanRefusal, label_of: Callable[[str], str]) -> tupl
             return (
                 QCoreApplication.translate("Plan", "No training time is set."),
                 QCoreApplication.translate(
-                    "Plan", "Set the minutes you can train each day in Training settings."
+                    "Plan",
+                    "Choose the days you can train and the hours a week in Training settings.",
                 ),
             )
         case RefusalReason.NO_SESSION_TYPES:

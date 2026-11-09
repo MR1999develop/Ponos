@@ -10,12 +10,11 @@ from datetime import date, timedelta
 import pytest
 
 from ponos_coach.assessment.domain import NoTest, NotYet, Overdue
-from ponos_coach.goals.domain import Priority, SessionType
+from ponos_coach.goals.domain import Priority, SessionType, WeeklyAvailability
 from ponos_coach.planning.domain import (
     CloseARaces,
     CtlTargetNotReached,
     GoalBeyondHorizon,
-    LongDayUnavailable,
     MissingIntenseSessions,
     MissingLongSession,
     Phase,
@@ -213,7 +212,7 @@ def test_no_goals_is_refused() -> None:
 
 @pytest.mark.parametrize(
     "avail",
-    [availability((0,) * 7, 6, 600), availability((60,) * 7, 6, 0)],
+    [WeeklyAvailability.empty(), availability(max_week_minutes=0)],
     ids=["no day", "no hours"],
 )
 def test_no_availability_means_no_plan(avail: object) -> None:
@@ -264,13 +263,6 @@ def test_a_c_race_asks_for_nothing() -> None:
     types = {SessionType.EASY}
     plan = _plan([race("c", _weeks_ahead(12), Priority.C, 21_097)], types=types)
     assert plan.warnings == ()
-
-
-def test_the_long_day_without_time_warns_and_has_no_long_session() -> None:
-    avail = availability((90, 90, 90, 90, 90, 90, 0), long_day=6)
-    plan = _plan([race("a", _weeks_ahead(12), distance_m=21_097)], avail=avail)
-    assert LongDayUnavailable() in plan.warnings
-    assert SessionType.LONG not in _types(plan)
 
 
 def test_long_sessions_fall_on_the_long_day() -> None:
@@ -372,3 +364,49 @@ def test_a_window_without_unload_weeks_is_not_placeable() -> None:
     plan = build_plan(replace(base, retest=window), TODAY)
     assert isinstance(plan, Plan)
     assert plan.retest_proposal == RetestNotPlaceable()
+
+
+# --- Days and sessions a week --------------------------------------------------------------------
+def test_sessions_go_only_on_the_session_days_of_the_availability() -> None:
+    avail = availability(days=(0, 1, 2, 4, 5, 6), sessions=3, long_day=6, max_week_minutes=900)
+    plan = _plan([race("a", _weeks_ahead(12))], avail=avail)
+
+    weekdays = {d.day.weekday() for d in plan.days if d.session}
+
+    assert avail.session_days == {2, 4, 6}
+    assert weekdays <= avail.session_days
+    assert {d.session_count for d in plan.weeks if d.kind is WeekKind.BUILD} == {3}
+
+
+def test_a_day_the_user_cannot_train_never_gets_a_session() -> None:
+    avail = availability(days=(1, 3, 6), long_day=6, max_week_minutes=900)
+    plan = _plan([race("a", _weeks_ahead(12))], avail=avail)
+
+    assert {d.day.weekday() for d in plan.days if d.session} <= {1, 3, 6}
+
+
+def test_the_plan_does_not_depend_on_the_days_given_in_another_order() -> None:
+    first = availability(days=(6, 4, 2, 0), sessions=3, max_week_minutes=900)
+    second = availability(days=(0, 2, 4, 6), sessions=3, max_week_minutes=900)
+
+    assert _plan([race("a", _weeks_ahead(12))], avail=first) == _plan(
+        [race("a", _weeks_ahead(12))], avail=second
+    )
+
+
+def test_more_sessions_a_week_means_more_sessions_in_a_full_week() -> None:
+    few = availability(sessions=3, max_week_minutes=1500)
+    many = availability(sessions=6, max_week_minutes=1500)
+
+    def counts(plan: Plan) -> int:
+        return max(w.session_count for w in plan.weeks if w.kind is WeekKind.BUILD)
+
+    assert counts(_plan([race("a", _weeks_ahead(16))], avail=few)) == 3
+    assert counts(_plan([race("a", _weeks_ahead(16))], avail=many)) == 6
+
+
+def test_the_week_never_passes_the_hours_whatever_the_number_of_sessions() -> None:
+    avail = availability(sessions=7, max_week_minutes=240)
+    plan = _plan([race("a", _weeks_ahead(12))], avail=avail)
+
+    assert all(w.session_minutes <= 240 for w in plan.weeks)

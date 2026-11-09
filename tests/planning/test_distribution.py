@@ -171,18 +171,18 @@ def test_at_most_a_quarter_of_the_sessions_of_a_week_are_intense() -> None:
 
 
 @pytest.mark.parametrize(
-    "minutes",
-    [(60, 0, 60, 0, 60, 0, 0), (60, 0, 60, 0, 60, 0, 90), (60, 0, 0, 0, 0, 0, 90)],
+    ("days", "long_day"),
+    [((0, 2, 4), 4), ((0, 2, 4, 6), 6), ((0, 6), 6)],
     ids=["3 days", "4 days", "2 days"],
 )
 def test_a_week_of_three_or_four_sessions_has_one_intense_session(
-    minutes: tuple[int, int, int, int, int, int, int],
+    days: tuple[int, ...], long_day: int
 ) -> None:
-    avail = availability(minutes, long_day=6 if minutes[6] else 4, max_week_minutes=600)
+    avail = availability(days, long_day=long_day, max_week_minutes=600)
     plan = _plan([race("a", _weeks_ahead(16))], avail=avail)
     full = [w for w in plan.weeks if w.kind is WeekKind.BUILD]
     assert full
-    sessions = len([m for m in minutes if m])
+    sessions = len(days)
     for week in full:
         assert week.session_count == sessions
         intense = round(week.intense_session_share * week.session_count)
