@@ -1,6 +1,7 @@
 # 003. On-disk data format
 
-- Status: Accepted; archive path and GPX identity replaced by ADR 005
+- Status: Accepted; archive path and GPX identity replaced by ADR 005; GPX and ZIP
+  import removed by ADR 014
 - Date: 2026-11-05
 
 ## Context

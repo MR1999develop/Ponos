@@ -6,7 +6,7 @@ distance series, T-PIANO-06).
 Long tests: only in the `collaudo` session (hypothesis profile `collaudo`). The oracles go beyond
 "does not crash":
 
-- FIT and GPX with hostile timestamps, distances and speeds: the only error is `ActivityFileError`;
+- FIT with hostile timestamps, distances and speeds: the only error is `ActivityFileError`;
   a distance series, when there is one, is finite, strictly increasing in time, non-negative and
   non-decreasing in metres, on the same axis as the HR (seconds from the first record, a subset of
   the record times) and, when the file is monotone, equal to what the file said;
@@ -18,7 +18,7 @@ Long tests: only in the `collaudo` session (hypothesis profile `collaudo`). The 
 from __future__ import annotations
 
 import statistics
-from datetime import UTC, date, datetime, timedelta
+from datetime import date
 from fractions import Fraction
 from itertools import pairwise
 
@@ -37,7 +37,6 @@ from ponos_coach.assessment.domain import (
 from ponos_coach.load.domain import HeartRateLimits
 from tests.collaudo.fase4_support import DAY, LIMITS, START, Leg, run_fit
 from tests.fixtures.generators import fit_writer as fw
-from tests.fixtures.generators import gpx_writer as gw
 
 pytestmark = pytest.mark.collaudo
 
@@ -167,47 +166,6 @@ def test_t_sec_02_fuzz_fit_speed_integration_matches_a_naive_trapezoid(
     for (_, before), (gap, after) in pairwise(steps):
         naive.append(naive[-1] + (0.0 if gap > 10 else (before + after) / 2 * gap))
     assert activity.distance.meters.tolist() == pytest.approx(naive, abs=1e-6)
-
-
-# --- GPX -----------------------------------------------------------------------------------
-
-gpx_points = st.lists(
-    st.tuples(
-        st.integers(-3, 40),  # time step in seconds (backwards and repeated included)
-        st.floats(-90.0, 90.0, allow_nan=False),
-        st.floats(-180.0, 180.0, allow_nan=False),
-        st.one_of(st.none(), st.integers(30, 220)),
-        st.booleans(),  # a new segment starts here
-    ),
-    min_size=2,
-    max_size=50,
-)
-
-
-@given(gpx_points)
-def test_t_sec_02_fuzz_gpx_distance_series_invariants(
-    raw: list[tuple[int, float, float, int | None, bool]],
-) -> None:
-    moment = datetime(2026, 3, 14, 7, 0, tzinfo=UTC)
-    segments: list[list[gw.GpxPoint]] = []
-    times: list[datetime] = []
-    for step, lat, lon, bpm, new_segment in raw:
-        moment += timedelta(seconds=step)
-        times.append(moment)
-        point = gw.GpxPoint(round(lat, 7), round(lon, 7), moment, None, bpm)
-        if new_segment or not segments:
-            segments.append([])
-        segments[-1].append(point)
-    data = gw.build_gpx(gw.GpxSpec(segments, "running"))
-    try:
-        activity = decode_activity_file(data, "x.gpx")
-    except ActivityFileError:
-        return
-    axis = {(t - times[0]).total_seconds() for t in times}
-
-    check_axis(activity, axis)
-    outcome = evaluate_threshold_test(activity, HeartRateLimits(MIN_BPM, MAX_BPM), DAY)
-    assert isinstance(outcome, ThresholdRejection | ThresholdTestResult)
 
 
 # --- Differential: the threshold test against a naive exact computation ---------------------------

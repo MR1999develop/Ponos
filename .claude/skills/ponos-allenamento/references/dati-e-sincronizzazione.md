@@ -2,7 +2,7 @@
 
 **Quando leggerlo:** scrivendo o rivedendo `storage`, `profiles`, `garmin`,
 `activities` (import e sincronizzazione), `platform`, i test `T-DATI`, `T-SYNC`,
-`T-IMP`, `T-GPX`. Sezione 5 di `SKILL.md`. ADR: `docs/adr/003-formato-dati.md`
+`T-IMP` (i `T-GPX` sono tolti in fase 8). Sezione 5 di `SKILL.md`. ADR: `docs/adr/003-formato-dati.md`
 e `docs/adr/005-schema-sqlite-e-archivio.md` (schema, archivio e identità:
 qui non si ripetono) e `docs/adr/006-token-e-sincronizzazione.md` (perché i
 token, il thread, il giornale e la politica sono fatti così: qui ci sono le
@@ -16,7 +16,7 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
 ```
 <cartella del profilo>/
   ponos.sqlite3     database (WAL: anche -wal e -shm)
-  archivio/<anno>/<sha256>.fit|.gpx
+  archivio/<anno>/<sha256>.fit
   backup/           ponos-v{da}-v{a}.sqlite3: copia prima di ogni migrazione
   ponos.lock        lock del sistema operativo sul file aperto
 ```
@@ -232,7 +232,7 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
 
 ## 3. Archivio dei file originali
 
-- I file originali (FIT, GPX) sono la fonte di verità delle attività; la porta
+- I file originali (FIT) sono la fonte di verità delle attività; la porta
   è `ActivityArchive` (`activities/ports.py`), l'adattatore `FileArchive`.
 - Ogni file ha il suo SHA-256 e la sua dimensione registrati
   (`ArchivedFile`: percorso relativo, SHA-256, byte). Il percorso è generato
@@ -262,7 +262,7 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   silenzio: l'attività resta fuori dalla panoramica con il suo motivo, finché
   non si reimporta l'originale.
 - Limiti prima della lettura (default del progetto, costanti in
-  `activities/domain/limits.py`, `FitLimits` e `GpxLimits`): dimensione
+  `activities/domain/limits.py`, `FitLimits`): dimensione
   massima 50 MB, un milione di record o punti, durata massima 7 giorni.
   Finestra degli orari plausibili: [1990-01-01, 2100-01-01) UTC
   (`MIN_ACTIVITY_INSTANT` e `MAX_ACTIVITY_INSTANT` in `limits.py`,
@@ -286,7 +286,7 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
 ### Riepilogo ricavato dal file (`ActivitySummary`)
 
 - Distanza (`total_distance` della sessione, m), dislivello positivo
-  (`total_ascent`, m; per un GPX la soglia di 3 m), punto di partenza e
+  (`total_ascent`, m), punto di partenza e
   traccia semplificata; ogni voce può mancare (bici indoor: solo distanza).
   Somma sulle sessioni che le dichiarano; valori non validi (0xFFFFFFFF,
   0xFFFF) ignorati, mai riparati.
@@ -430,21 +430,19 @@ Tutti sul thread dei dati (la connessione è di un solo thread), nessun log (pos
 
 ## 4. Identità dell'attività
 
-- Unione di due casi (`ActivityIdentity`): `FitIdentity(FileId)` con il
-  `file_id` del FIT (produttore, prodotto, numero di serie, ora di creazione
-  UTC), uguale per lo stesso file scaricato da Garmin o copiato
-  dall'orologio; `GpxIdentity(sha256_hex)` con lo SHA-256 dei byte del GPX,
-  che non ha un `file_id`.
+- `ActivityIdentity` è `FitIdentity(FileId)` con il `file_id` del FIT (produttore,
+  prodotto, numero di serie, ora di creazione UTC), uguale per lo stesso file
+  scaricato da Garmin o copiato dall'orologio. Dalla fase 8 (ADR 014) non
+  esiste più `GpxIdentity`: `FileFormat` ha il solo valore `fit`.
 - Chiave testuale stabile per i dati salvati (`identity_key` /
-  `identity_from_key`): `fit:<produttore>:<prodotto>:<serie>:<ora ISO UTC>`
-  oppure `gpx:<sha256>`.
+  `identity_from_key`): `fit:<produttore>:<prodotto>:<serie>:<ora ISO UTC>`.
 - L'id Garmin (facoltativo) si aggiunge quando è noto; con origine `GARMIN`
   c'è sempre. Un'identità e un id Garmin sono unici nell'indice.
-- La stessa attività arrivata come FIT e come GPX non ha la stessa identità:
-  si riconosce come possibile duplicato con `is_possible_duplicate` (inizi a
-  non più di 60 s, tempi trascorsi che differiscono al più del 5% del
-  maggiore, confronto in millisecondi interi, simmetrico); si tiene la prima
-  arrivata. `ActivityIndex.find_possible_duplicates` applica quella funzione.
+- `is_possible_duplicate` (inizi a non più di 60 s, tempi trascorsi che
+  differiscono al più del 5% del maggiore, confronto in millisecondi interi,
+  simmetrico) serve solo ad abbinare una voce di Garmin a un'attività già
+  importata da file (`find_matching_import`); `ActivityIndex.find_possible_duplicates`
+  applica quella funzione.
 
 ## 5. Sincronizzazione riprendibile
 
@@ -573,16 +571,17 @@ Tutti sul thread dei dati (la connessione è di un solo thread), nessun log (pos
 - Stima del tempo restante: media mobile delle ultime 20 durate per voce
   (pause comprese) per le voci rimaste (`estimate_remaining_s`).
 
-## 6. Import di file, cartelle e ZIP
+## 6. Import di file FIT e di cartelle
 
 Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
 `FolderImportSource` in `storage/import_scan.py`; caso d'uso
 `import_activities` in `activities/use_cases.py`; tetti in
 `activities/import_limits.py`.
 
-1. **Esame** (`scan`): solo nomi, dimensioni e directory degli ZIP, mai i
-   contenuti. File `.fit`, `.gpx` e `.zip`, sottocartelle comprese per una
-   cartella. Solo file regolari dentro la cartella scelta; collegamenti,
+1. **Esame** (`scan`): solo nomi e dimensioni, mai i contenuti. Solo file
+   `.fit` (senza badare alle maiuscole), sottocartelle comprese per una
+   cartella; gli altri file (GPX, ZIP, TCX...) in una cartella si ignorano
+   senza segnalarli, scelti a mano sono `UNSUPPORTED_FORMAT`. Solo file regolari dentro la cartella scelta; collegamenti,
    giunzioni, reparse point, FIFO e dispositivi si saltano e si segnalano;
    nomi riservati di Windows e percorsi lunghi si saltano; il tipo si
    ricontrolla sull'handle aperto.
@@ -590,32 +589,28 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
 
    | Tetto | Valore |
    |---|---|
-   | File di attività (FIT e GPX, voci degli ZIP comprese) | 50.000 |
-   | Voci esaminate (file e cartelle di ogni tipo, voci degli ZIP comprese) | 500.000 |
+   | File di attività (`.fit`) | 50.000 |
+   | Voci esaminate (file e cartelle di ogni tipo) | 500.000 |
    | Livelli di sottocartelle | 32 |
-   | Dimensione di un file o di una voce | 50 MB |
-   | Voci di un solo ZIP | 50.000 |
-   | Dimensioni dichiarate di uno ZIP | 5 GB |
-   | Compressione di una voce | 100:1 |
-   | Directory centrale di uno ZIP | 32 MiB |
+   | Dimensione di un file | 50 MB |
    | Percorso mostrato | 2048 caratteri |
 
 3. Se si supera uno dei primi tre, l'esame si ferma, non si importa nulla e
    l'app chiede una sottocartella: niente import parziali. I file oltre 50 MB
    sono segnalati e saltati.
-4. **ZIP:** si leggono solo le voci `.fit` e `.gpx`. Prima di estrarre si
-   controllano directory centrale, numero di voci (dichiarato e contato),
-   somma e rapporto delle dimensioni; durante l'estrazione la dimensione reale
-   e il CRC. Nomi delle voci mai usati come percorsi; rifiutati `..`,
-   percorsi assoluti, unità, controlli, nomi riservati, nomi duplicati (anche
-   per maiuscole), voci cifrate e ZIP annidati. Nell'archivio va il file
-   estratto, non lo ZIP.
-5. **Lettura di un file:** `decode_activity_file` riconosce il formato dal
-   contenuto, controlla che coincida con l'estensione (altri XML, come il
-   TCX, sono `UNSUPPORTED_FORMAT`) e lo decodifica con il lettore FIT o GPX.
-   Un solo errore, `ActivityFileError`, con un motivo enumerato.
+4. **ZIP:** non si importano (fase 8). Lo ZIP si legge ancora per l'originale
+   che Garmin manda nella sincronizzazione (`zipread.read_activity_entry`:
+   l'unica voce `.fit`; un solo GPX o TCX è `NO_ACTIVITY`, cioè
+   `UNSUPPORTED_FORMAT`, e più voci `.fit` sono `MULTIPLE_ACTIVITIES`) e per il
+   backup del profilo, con le stesse difese (directory centrale, numero di
+   voci, somma e rapporto delle dimensioni, CRC, nomi mai usati come
+   percorsi, voci cifrate e ZIP annidati rifiutati).
+5. **Lettura di un file:** `decode_activity_file` controlla l'estensione
+   (`.fit`, altrimenti `UNSUPPORTED_FORMAT`) e decodifica con il lettore FIT,
+   che verifica firma, CRC e struttura. Un solo errore, `ActivityFileError`,
+   con un motivo enumerato.
 6. **Esiti per file** (`ImportStatus`): importata; già presente (stessa
-   identità); duplicato di un altro formato; ignorata (il file non è
+   identità); ignorata (il file non è
    un'attività); fallita, con il motivo (`ImportIssue`); riparata (`REPAIRED`):
    l'attività c'è già ma il suo file in archivio manca o è alterato, e la
    reimportazione dello stesso originale lo rimette a posto (il riepilogo la
@@ -645,7 +640,7 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
 
 ## 8. Test attesi
 
-`T-DATI-01…06`, `T-SYNC-01…06`, `T-IMP-01…04`, `T-GPX-01…02`, `T-SEC-02`,
+`T-DATI-01…06`, `T-SYNC-01…06`, `T-IMP-01…04`, `T-SEC-02`,
 `T-SEC-04`, `T-SEC-09` in `PLAN.md` sezione 7.
 
 ## 9. Porte della fase 1 e test di contratto
@@ -723,3 +718,26 @@ JSON (non verificate dal vivo, le controlla `T-MAN-01`) in `experiments/garmin_w
 - **Test**: fake in `tests/fakes/workout_calendar.py` e `tests/garmin/workout_fakes.py`; contratti
   in `tests/contracts/test_workout_contracts.py`; fixture JSON sintetiche in
   `tests/fixtures/garmin/`.
+
+## 7. Profili con attività GPX (migrazione v11, ADR 014)
+
+Un profilo v1-v10 con attività importate da GPX si migra all'apertura
+(`storage/sqlite_database.py`, `sqlite_schema.py`, `archive_cleanup.py`):
+
+1. copia coerente del database in `backup/ponos-v<da>-v11.sqlite3` (la fa il
+   meccanismo di ogni migrazione; senza copia non si migra);
+2. si leggono prima i percorsi d'archivio delle attività non FIT;
+3. una sola transazione (`MIGRATIONS[10]`): le voci del giornale che puntano a
+   un'attività GPX tornano `pending`; la cache dei carichi si svuota;
+   `activities` e `threshold_test` si ricostruiscono (copia delle sole righe
+   `fit`; i CHECK ammettono solo `fit`) e si rinominano; l'indice si ricrea;
+4. dopo la conferma, `remove_gpx_files` toglie i file GPX dall'archivio, solo
+   se il percorso ha la forma esatta `<anno>/<sha256>.gpx` e il file è
+   regolare (mai un collegamento); un file rimasto è un orfano innocuo;
+5. `OpenProfile.removed_unsupported_activities` dà il numero di attività
+   tolte (0 senza migrazione): la finestra mostra l'avviso una volta
+   (`ProfileView.removed_unsupported`). Il numero non si salva.
+
+Il formato del backup (`.ponosbackup`) accetta ancora voci `.gpx`, per poter
+ripristinare un backup fatto prima: il profilo ripristinato si migra aprendolo.
+Test: `tests/collaudo/test_fase8_solo_fit.py`.

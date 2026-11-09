@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Scaffolding for the phase 4 acceptance campaign: realistic threshold-test runs as FIT/GPX files
+"""Scaffolding for the phase 4 acceptance campaign: realistic threshold-test runs as FIT files
 that go through the real stack (decoder, archive, SQLite index, use cases).
 
 A run is a list of `Leg`s (constant HR and speed), one record per second from second 0 to the
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -31,8 +31,6 @@ from ponos_coach.profiles.threshold_tests import ApplyThresholdTest, RemoveThres
 from tests.builders import physiology_entry
 from tests.collaudo.support import RealProfile, create_profile
 from tests.fixtures.generators import fit_writer as fw
-from tests.fixtures.generators import gpx_writer as gw
-from tests.fixtures.generators.tracks import SEA_LAT_DEG, SEA_LON_DEG
 
 ROME = ZoneInfo("Europe/Rome")
 TODAY = date(2026, 7, 1)  # the same `TODAY` as the campaign (support.py)
@@ -133,34 +131,6 @@ def run_fit(
         total_elapsed_ms=round(total * 1000),
     )
     return fw.build_activity(spec)
-
-
-def gpx_run(
-    legs: Sequence[Leg],
-    start: datetime = START,
-    *,
-    with_hr: bool = True,
-    sport_type: str | None = "running",
-    lon_step_per_ms: float = 0.00001,
-) -> bytes:
-    """A GPX of a run on a straight line at the speed of each leg (one point a second)."""
-    points = []
-    position = 0.0
-    t = 0
-    for leg in legs:
-        for _ in range(leg.seconds):
-            points.append(_gpx_point(start, t, position, leg.bpm if with_hr else None))
-            position += leg.speed_ms * lon_step_per_ms
-            t += 1
-    points.append(_gpx_point(start, t, position, legs[-1].bpm if with_hr else None))
-    spec = gw.GpxSpec([points], sport_type=sport_type)
-    return gw.build_gpx(spec)
-
-
-def _gpx_point(start: datetime, t: int, lon_offset: float, hr: int | None) -> gw.GpxPoint:
-    return gw.GpxPoint(
-        SEA_LAT_DEG, SEA_LON_DEG + lon_offset, start + timedelta(seconds=t), None, hr
-    )
 
 
 @dataclass

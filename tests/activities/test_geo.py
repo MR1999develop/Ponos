@@ -14,7 +14,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from ponos_coach.activities import gpx_decoder
+from ponos_coach.activities import fit_decoder
 from ponos_coach.activities.domain import (
     MAX_POLYLINE_CHARS,
     MAX_TRACK_POINTS,
@@ -315,4 +315,4 @@ def test_arbitrary_text_never_crashes_the_decoder(text: str) -> None:
 
 def test_earth_radius_is_defined_once_in_geo() -> None:
     assert geo.EARTH_RADIUS_M == 6_371_008.8
-    assert "6_371_008" not in inspect.getsource(gpx_decoder)
+    assert "6_371_008" not in inspect.getsource(fit_decoder)

@@ -25,7 +25,7 @@ from typing import BinaryIO, Final
 
 from ponos_coach.zipread.names import file_suffix, is_safe_entry_name
 
-ACTIVITY_SUFFIXES: Final = (".fit", ".gpx")
+ACTIVITY_SUFFIXES: Final = (".fit",)
 ZIP_SUFFIX: Final = ".zip"
 
 _MIB = 1024 * 1024
@@ -69,8 +69,8 @@ class ZipReason(Enum):
     UNSAFE_NAME = "unsafe_name"  # `..`, absolute path, drive, control characters, reserved name
     TOO_LARGE = "too_large"  # entry beyond `max_entry_bytes`
     NESTED_ARCHIVE = "nested_archive"  # ZIP inside a ZIP
-    NO_ACTIVITY = "no_activity"  # no `.fit` or `.gpx` entry
-    MULTIPLE_ACTIVITIES = "multiple_activities"  # more than one `.fit` or `.gpx` entry
+    NO_ACTIVITY = "no_activity"  # no `.fit` entry (for example only a GPX or a TCX)
+    MULTIPLE_ACTIVITIES = "multiple_activities"  # more than one `.fit` entry
 
 
 class ZipReadError(Exception):
@@ -99,7 +99,7 @@ class ZipLimits:
 
 @dataclass(frozen=True, slots=True)
 class ZipActivity:
-    """The extracted activity entry: `suffix` is `.fit` or `.gpx`; the entry name does not leave."""
+    """The extracted activity entry: `suffix` is `.fit`; the entry name does not leave."""
 
     suffix: str
     content: bytes
@@ -260,7 +260,7 @@ def _single_activity(archive: zipfile.ZipFile) -> zipfile.ZipInfo:
 
 
 def read_activity_entry(content: bytes, limits: ZipLimits | None = None) -> ZipActivity:
-    """The only `.fit` or `.gpx` entry of a ZIP given as bytes, extracted in memory.
+    """The only `.fit` entry of a ZIP given as bytes, extracted in memory.
 
     The other entries (which are not ZIPs) are ignored without reading them. No name leaves here.
 

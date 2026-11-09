@@ -147,6 +147,7 @@ class ProfileView:
     folder: Path
     timezone_name: str
     warnings: tuple[FolderWarning, ...]
+    removed_unsupported: int = 0  # GPX activities removed on opening (notice shown once)
 
     @property
     def zone(self) -> ZoneInfo:
@@ -478,7 +479,7 @@ class WorkspaceController(QObject):
         self._submit(job, done)
 
     def import_files(self, paths: Sequence[Path]) -> bool:
-        """Import chosen files (FIT, GPX, ZIP) into the open profile."""
+        """Import chosen FIT files into the open profile."""
         chosen = tuple(paths)
         return self._begin_import(lambda: self._services.import_sources.files(chosen))
 
@@ -629,7 +630,12 @@ class WorkspaceController(QObject):
             try:
                 info = session.info
                 view = ProfileView(
-                    info.profile_id, info.name, session.folder, info.timezone_name, session.warnings
+                    info.profile_id,
+                    info.name,
+                    session.folder,
+                    info.timezone_name,
+                    session.warnings,
+                    session.removed_unsupported_activities,
                 )
                 archive = services.archive_for(session.folder)
                 _remove_orphan_temporaries(archive)

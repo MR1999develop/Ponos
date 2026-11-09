@@ -13,7 +13,7 @@ The file is a ZIP archive (deflate) with exactly these entries and no others:
 | Entry | Content |
 |---|---|
 | `ponos.sqlite3` | Snapshot of the profile database, made with the SQLite backup API (consistent even if the profile is open) and checked with `quick_check`. |
-| `archivio/<year>/<sha256>.fit` or `.gpx` | The original activity files, as in the profile's archive. |
+| `archivio/<year>/<sha256>.fit` or `.gpx` | The original activity files, as in the profile's archive. A `.gpx` entry only occurs in backups made before the FIT-only change (ADR 014): it is still accepted so that such a backup can be restored, and the restored profile is migrated (GPX activities removed) when it is opened. |
 | `manifest.json` | UTF-8 JSON, described below. |
 
 **The file is not encrypted.** It holds the same health data and GPS positions as

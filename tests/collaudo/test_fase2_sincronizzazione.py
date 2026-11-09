@@ -47,7 +47,7 @@ from tests.collaudo.fase2_support import (
 from tests.collaudo.support import TODAY, stored_files, temporaries
 from tests.collaudo.test_sync_kill import COUNT, kill_at
 from tests.fakes.garmin import FIRST_ACTIVITY_ID, make_remote_history
-from tests.fixtures.generators.import_files import RUN_SECONDS, fit_run, gpx_run, run_start
+from tests.fixtures.generators.import_files import RUN_SECONDS, fit_run, run_start
 from tests.fixtures.generators.zip_writer import garmin_download
 from tests.garmin.scripted import (
     ScriptedClient,
@@ -94,13 +94,11 @@ def assert_coherent(stack: Stack, expected_runs: int) -> None:
 def test_t_sync_05_sync_and_folder_import_at_the_same_time_on_the_same_profile(
     tmp_path: Path, round_number: int
 ) -> None:
-    garmin_runs, import_fit, import_gpx = range(0, 40), range(20, 60), range(10, 20)
+    garmin_runs, import_fit = range(0, 40), range(20, 60)
     folder = tmp_path / "da-importare"
     folder.mkdir()
     for number in import_fit:
         (folder / f"f{number:03d}.fit").write_bytes(fit_run(number))
-    for number in import_gpx:  # the same Garmin runs, but as GPX: twins in another format
-        (folder / f"g{number:03d}.gpx").write_bytes(gpx_run(number))
     stack = build_stack(
         tmp_path / f"r{round_number}", scripted_client(history=[remote_run(n) for n in garmin_runs])
     )
@@ -154,7 +152,6 @@ def test_t_sync_05_a_late_import_of_a_file_already_downloaded_is_not_a_second_re
         folder.mkdir()
         for number in range(5):
             (folder / f"f{number}.fit").write_bytes(fit_run(number))
-            (folder / f"g{number}.gpx").write_bytes(gpx_run(number))
 
         summary = stack.profile.import_folder(folder)
 

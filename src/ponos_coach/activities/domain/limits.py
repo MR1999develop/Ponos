@@ -4,7 +4,7 @@
 
 from datetime import UTC, datetime
 
-MAX_ACTIVITY_FILE_BYTES = 50 * 1024 * 1024  # FIT or GPX: beyond this, the file is not read
+MAX_ACTIVITY_FILE_BYTES = 50 * 1024 * 1024  # FIT: beyond this, the file is not read
 MAX_TRACK_POINTS = 2000  # points of the simplified track saved in the index
 TRACK_TOLERANCE_M = 10.0  # maximum deviation of the simplified track from the original
 MAX_RAW_TRACK_POINTS = 1_000_000  # full track read from the file: same cap as the readers

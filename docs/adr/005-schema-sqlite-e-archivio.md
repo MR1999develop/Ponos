@@ -1,6 +1,7 @@
 # 005. SQLite schema and archive of the original files
 
-- Status: Accepted
+- Status: Accepted; since ADR 014 the file format is FIT only (schema v11): the parts
+  about GPX no longer apply
 - Date: 2026-11-05
 
 ## Context

@@ -2,8 +2,8 @@
 # Copyright (C) 2026 MR
 """Fake Garmin: listing and originals (`ActivitySource`) and account with MFA (`GarminAccount`).
 
-No network and no real data: the activities are generated (one run per day, with synthetic FIT or
-GPX of the same start and duration as the listing). Failures are injected by
+No network and no real data: the activities are generated (one run per day, with synthetic FIT of
+the same start and duration as the listing). Failures are injected by
 call number or by activity; the slow response advances a fake clock, without
 `sleep`.
 """
@@ -35,10 +35,11 @@ from ponos_coach.activities.ports import (
     RateLimitedError,
     ServiceUnavailableError,
 )
-from tests.fixtures.generators.import_files import RUN_SECONDS, fit_run, gpx_run, run_start
+from tests.fixtures.generators.import_files import RUN_SECONDS, fit_run, run_start
 from tests.fixtures.generators.zip_writer import build_zip, garmin_download
 
 FIRST_ACTIVITY_ID = 1_000_000
+_GPX = b'<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="test"></gpx>'
 _TCX = (
     b'<?xml version="1.0" encoding="UTF-8"?>'
     b'<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">'
@@ -54,7 +55,7 @@ class OriginalKind(Enum):
     """What is in the ZIP downloaded for an activity."""
 
     FIT = "fit"  # as from the Garmin site: `<id>_ACTIVITY.fit`
-    GPX = "gpx"  # activity uploaded as GPX
+    GPX = "gpx"  # activity uploaded as GPX: an unsupported format
     TCX = "tcx"  # unsupported format
     CORRUPT_FIT = "corrupt_fit"  # valid ZIP, `.fit` with random bytes
     TRUNCATED_ZIP = "truncated_zip"  # truncated ZIP: does not open
@@ -75,7 +76,7 @@ def original_zip(number: int, kind: OriginalKind = OriginalKind.FIT) -> bytes:
     name = f"{activity_id}_ACTIVITY"
     builders: dict[OriginalKind, Callable[[], bytes]] = {
         OriginalKind.FIT: lambda: garmin_download(fit_run(number), activity_id),
-        OriginalKind.GPX: lambda: build_zip([(f"{name}.gpx", gpx_run(number))]),
+        OriginalKind.GPX: lambda: build_zip([(f"{name}.gpx", _GPX)]),
         OriginalKind.TCX: lambda: build_zip([(f"{name}.tcx", _TCX)]),
         OriginalKind.CORRUPT_FIT: lambda: build_zip([(f"{name}.fit", bytes(range(256)) * 4)]),
         OriginalKind.TRUNCATED_ZIP: lambda: garmin_download(fit_run(number), activity_id)[:-40],

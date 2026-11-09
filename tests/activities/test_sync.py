@@ -48,7 +48,7 @@ from tests.activities.import_fakes import (
     OrderLog,
 )
 from tests.fakes.garmin import FIRST_ACTIVITY_ID, Call, OriginalKind
-from tests.fixtures.generators.import_files import fit_run, gpx_run, run_start
+from tests.fixtures.generators.import_files import fit_run, run_start
 from tests.fixtures.generators.sync_harness import SyncRig, in_memory_rig, remote_id
 
 FIRST_PAUSE_S = 1.375  # minimum pause 1 s plus half the maximum jitter (0.75 s)
@@ -212,20 +212,6 @@ def test_t_sync_05_the_same_file_already_imported_is_linked_not_duplicated() -> 
     assert len(rig.memory.files) == 3  # no extra file
 
 
-def test_t_sync_05_the_same_activity_imported_in_another_format_is_matched_after_download() -> None:
-    rig = in_memory_rig(1, sport_key="cycling")
-    import_files(rig, {"corsa-0.gpx": gpx_run(0)})
-
-    outcome = rig.run()
-
-    assert (outcome.matched, outcome.downloaded) == (1, 0)
-    (record,) = rig.records()
-    assert record.file_format is FileFormat.GPX
-    assert record.garmin_activity_id == FIRST_ACTIVITY_ID
-    assert rig.status_of(0) is SyncStatus.MATCHED
-    assert len(rig.memory.files) == 1  # the downloaded FIT was not archived
-
-
 def test_t_sync_05_a_full_verification_finds_activities_uploaded_late_with_old_dates() -> None:
     rig = in_memory_rig(20, policy=SyncPolicy(page_size=10))
     rig.run()
@@ -251,23 +237,10 @@ def test_t_sync_05_a_full_verification_finds_activities_uploaded_late_with_old_d
 # --- Formats and damaged files ------------------------------------------------------------------
 
 
-def test_a_gpx_original_is_read_like_an_imported_one() -> None:
-    rig = in_memory_rig(4)
-    rig.fake.set_kind(remote_id(2), OriginalKind.GPX)
-
-    outcome = rig.run()
-
-    assert (outcome.completed, outcome.downloaded) == (True, 4)
-    gpx = [r for r in rig.records() if r.file_format is FileFormat.GPX]
-    assert len(gpx) == 1
-    assert gpx[0].garmin_activity_id == FIRST_ACTIVITY_ID + 2
-    assert gpx[0].origin is ActivityOrigin.GARMIN
-    assert gpx[0].archived.relative_path.suffix == ".gpx"
-
-
 @pytest.mark.parametrize(
     ("kind", "reason"),
     [
+        (OriginalKind.GPX, FailureReason.UNSUPPORTED_FORMAT),  # a GPX alone is not used anymore
         (OriginalKind.TCX, FailureReason.UNSUPPORTED_FORMAT),
         (OriginalKind.CORRUPT_FIT, FailureReason.CORRUPT_FILE),
         (OriginalKind.TRUNCATED_ZIP, FailureReason.ARCHIVE_INVALID),
@@ -321,7 +294,6 @@ def test_a_definitive_source_error_fails_the_entry_with_its_reason(
         (ActivityFileReason.TOO_MANY_RECORDS, FailureReason.FILE_TOO_LARGE),
         (ActivityFileReason.TOO_LARGE, FailureReason.FILE_TOO_LARGE),
         (ActivityFileReason.NOT_AN_ACTIVITY, FailureReason.NOT_AN_ACTIVITY),
-        (ActivityFileReason.EXTENSION_MISMATCH, FailureReason.CORRUPT_FILE),
         (ActivityFileReason.TOO_LONG, FailureReason.CORRUPT_FILE),
     ],
 )

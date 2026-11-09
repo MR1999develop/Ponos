@@ -35,7 +35,7 @@ anche questo file e i test `T-NUT`.
   riepilogo (`ActivitySummary.calories_kcal`) e nell'indice (colonna
   `activities.calories_kcal`, schema v4). Zero e il valore non valido del FIT
   significano "non calcolato"; sopra 50.000 kcal non è credibile. Con più sedute
-  nel file si somma solo se tutte lo dichiarano. Il GPX non ha calorie.
+  nel file si somma solo se tutte lo dichiarano.
 - Il totale dichiarato si usa solo se è credibile per la durata: **al massimo
   1.500 kcal per ora** di tempo in movimento (`MAX_ACTIVITY_KCAL_PER_HOUR`,
   default del progetto). Oltre, si scarta (mai si taglia al tetto) e si stima

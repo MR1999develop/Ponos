@@ -54,8 +54,7 @@ class ImportReport:
         )
         return cls(
             imported=summary.count(ImportStatus.IMPORTED),
-            already_present=summary.count(ImportStatus.ALREADY_PRESENT)
-            + summary.count(ImportStatus.DUPLICATE_OF_OTHER_FORMAT),
+            already_present=summary.count(ImportStatus.ALREADY_PRESENT),
             ignored=summary.count(ImportStatus.IGNORED),
             failed=summary.count(ImportStatus.FAILED),
             cancelled=summary.cancelled,

@@ -2,10 +2,10 @@
 # Copyright (C) 2026 MR
 """T-SEC-02, T-SEC-04, T-SEC-05, T-SEC-09 on the real stack (real files, archive and SQLite).
 
-The hostile corpus (FIT, GPX, ZIP) enters from the folder as the app would receive it. Oracles
-beyond
-the outcome: no record, no file in the archive, nothing written outside the profile folder,
-no network connection attempted, peak memory under a cap.
+Il corpus ostile (FIT; GPX e ZIP non si leggono più) entra dalla cartella come lo riceverebbe
+l'app. Oracoli oltre
+l'esito: nessun record, nessun file nell'archivio, nulla scritto fuori dalla cartella del profilo,
+nessuna connessione di rete tentata, memoria al picco sotto un tetto.
 """
 
 from __future__ import annotations
@@ -44,7 +44,6 @@ from tests.collaudo.support import (
     temporaries,
 )
 from tests.fixtures.generators import fit_writer as fw
-from tests.fixtures.generators import gpx_writer as gw
 from tests.fixtures.generators import import_files as imp
 from tests.fixtures.generators import zip_writer as zw
 from tests.platform.windows_dacl import dacl_sddl, normalize_sid, trustees
@@ -120,7 +119,7 @@ def hostile_fit_files() -> dict[str, bytes]:
         "fit/json.fit": b'{"activity": "no"}',
         "fit/casuale.fit": random_bytes,
         "fit/tcx.fit": b'<?xml version="1.0"?><TrainingCenterDatabase xmlns="urn:x"/>',
-        "fit/gpx_travestito.fit": imp.gpx_run(1),
+        "fit/gpx_travestito.fit": b'<?xml version="1.0"?><gpx version="1.1"><trk/></gpx>',
     }
     return files
 
@@ -211,115 +210,49 @@ def test_t_sec_02_collaudo_a_fit_with_more_records_than_the_cap_is_refused(
     assert peak[0] < 512 * MIB
 
 
-# --- T-SEC-02: GPX -------------------------------------------------------------------------------
+# --- T-SEC-02: GPX e ZIP non si leggono più ------------------------------------------------------
 
 
-def test_t_sec_02_hostile_gpx_corpus_is_refused_without_network_or_side_effects(
+def hostile_xml(url: str, sentinel_uri: str) -> dict[str, bytes]:
+    """XML ostile con nome `.gpx`: entità esplosive, entità e DTD esterne verso rete e disco."""
+    header = b'<?xml version="1.0"?>'
+    return {
+        "laughs.gpx": header
+        + b'<!DOCTYPE l [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;">'
+        + b'<!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;">]><gpx>&c;&c;&c;</gpx>',
+        "entita_http.gpx": header
+        + f'<!DOCTYPE g [<!ENTITY x SYSTEM "{url}">]><gpx>&x;</gpx>'.encode(),
+        "entita_file.gpx": header
+        + f'<!DOCTYPE g [<!ENTITY x SYSTEM "{sentinel_uri}">]><gpx>&x;</gpx>'.encode(),
+        "dtd_http.gpx": header + f'<!DOCTYPE gpx SYSTEM "{url}.dtd"><gpx/>'.encode(),
+        "annidato.gpx": header + b"<gpx>" + b"<a>" * 20_000 + b"</a>" * 20_000 + b"</gpx>",
+        "casuale.gpx": random.Random(7).randbytes(100_000),
+    }
+
+
+def test_t_sec_02_hostile_xml_named_gpx_is_never_opened_in_a_folder_or_a_chosen_list(
     tmp_path: Path, profile: RealProfile
 ) -> None:
     sentinel = tmp_path / "segreto.txt"
     sentinel.write_text("contenuto che non deve uscire", encoding="utf-8")
     with loopback_listener() as (port, contacted):
-        url = f"http://127.0.0.1:{port}/x"
-        files = {
-            "gpx/laughs.gpx": gw.billion_laughs(),
-            "gpx/quadratico.gpx": gw.quadratic_blowup(),
-            "gpx/entita_http.gpx": gw.external_entity(url),
-            "gpx/entita_file.gpx": gw.external_entity(sentinel.as_uri()),
-            "gpx/dtd_http.gpx": gw.external_dtd(url + ".dtd"),
-            "gpx/parametrica.gpx": gw.parameter_entity(url + ".ent"),
-            "gpx/doctype_vuoto.gpx": gw.gpx_with_empty_doctype(),
-            "gpx/annidato.gpx": gw.deeply_nested(20_000),
-            "gpx/testo_enorme.gpx": gw.huge_text(8 * MIB),
-            "gpx/attributo_enorme.gpx": gw.huge_attribute(1 * MIB),
-            "gpx/png.gpx": b"\x89PNG\r\n\x1a\n" + bytes(2000),
-            "gpx/fit_travestito.gpx": imp.fit_run(1),
-            "gpx/casuale.gpx": random.Random(7).randbytes(100_000),
-            "gpx/xml_non_gpx.gpx": b'<?xml version="1.0"?><svg xmlns="urn:x"/>',
-            "gpx/senza_chiusura.gpx": b'<?xml version="1.0"?><gpx><trk><trkseg>' * 50,
-        }
+        files = hostile_xml(f"http://127.0.0.1:{port}/x", sentinel.as_uri())
         source = tmp_path / "ostili"
         write(source, files)
         before = all_files(tmp_path)
 
         with peak_memory() as peak:
-            summary = profile.import_folder(source)
+            from_folder = profile.import_folder(source)
+            chosen = profile.import_files([source / name for name in files])
 
-    assert not contacted[0], "the GPX reader opened a connection"
-    assert set(outcomes(summary)) == set(files)
-    assert {status for status, _ in outcomes(summary).values()} <= FAILURES
+    assert not contacted[0], "l'import ha aperto una connessione"
+    assert outcomes(from_folder) == {}  # una cartella ignora i file di altri formati
+    assert set(outcomes(chosen)) == set(files)
+    assert set(outcomes(chosen).values()) == {(ImportStatus.FAILED, ImportIssue.UNSUPPORTED_FORMAT)}
     assert profile.records() == []
     assert stored_files(profile.folder) == []
     assert all_files(tmp_path) == before
     assert peak[0] < PEAK_MEMORY_LIMIT
-
-
-@pytest.mark.collaudo
-def test_t_sec_02_collaudo_gpx_with_millions_of_points_is_refused_by_the_cap(
-    tmp_path: Path, profile: RealProfile
-) -> None:
-    source = tmp_path / "milioni"
-    write(source, {"punti.gpx": gw.points_without_data(1_200_000)})
-
-    with peak_memory() as peak:
-        summary = profile.import_folder(source)
-
-    ((status, issue),) = outcomes(summary).values()
-    assert status in FAILURES
-    assert issue is not None
-    assert profile.records() == []
-    assert peak[0] < 1024 * MIB
-
-
-# --- T-SEC-02: ZIP -------------------------------------------------------------------------------
-
-UNSAFE_ENTRY_NAMES = [
-    "../evil.fit",
-    "..\\evil.fit",
-    "/abs/evil.fit",
-    "\\abs\\evil.fit",
-    "C:\\evil.fit",
-    "C:evil.fit",
-    "a/../../evil.fit",
-    "a\\..\\..\\evil.fit",
-    "con.fit",
-    "dir/aux.fit",
-    "NUL.gpx",
-    "ok/\x07campanello.fit",
-    "traversal/./../../x.fit",
-    "a:b.fit",
-    "a|b.fit",
-]
-
-
-def test_t_sec_02_zip_entries_with_hostile_names_write_nothing_outside_the_archive(
-    tmp_path: Path, profile: RealProfile
-) -> None:
-    fit = imp.fit_run(1)
-    # On Windows `zipfile` reads `\` as `/`: names equal after this are counted once.
-    distinct = {
-        name.replace("\\", "/") if sys.platform == "win32" else name: name
-        for name in UNSAFE_ENTRY_NAMES
-    }
-    entries = [(name, fit) for name in distinct.values()]
-    entries.append(("buona/corsa.fit", imp.fit_run(2)))
-    write(tmp_path / "src", {"nomi.zip": zw.build_zip(entries)})
-    before = all_files(tmp_path)
-
-    summary = profile.import_folder(tmp_path / "src")
-
-    unsafe = [r for r in summary.results if r.issue is ImportIssue.UNSAFE_NAME]
-    assert len(unsafe) == len(distinct)
-    assert [r.name for r in summary.results if r.status is ImportStatus.IMPORTED] == [
-        "nomi.zip!buona/corsa.fit"
-    ]
-    new_files = all_files(tmp_path) - before
-    assert {Path(name).parts[:2] for name in new_files} <= {
-        ("profilo", PROFILE_ARCHIVE_DIR),
-        ("profilo", "ponos.sqlite3-wal"),
-        ("profilo", "ponos.sqlite3-shm"),
-    }
-    assert len(profile.records()) == 1
 
 
 def hostile_zips() -> dict[str, bytes]:
@@ -329,42 +262,31 @@ def hostile_zips() -> dict[str, bytes]:
         "dichiara_falso.zip": zw.patch_entry(
             zw.build_zip([("a.fit", b"x" * 100)]), 0, file_size=4_000_000_000
         ),
-        "crc.zip": zw.patch_entry(zw.build_zip([("a.fit", fit)]), 0, crc=0x12345678),
+        "nomi.zip": zw.build_zip([("../evil.fit", fit), ("C:\\evil.fit", fit)]),
         "cifrato.zip": zw.patch_entry(zw.build_zip([("a.fit", fit)]), 0, flags=0x1),
         "annidato.zip": zw.build_zip([("dentro.zip", zw.garmin_download(fit))]),
-        "troncato.zip": zw.garmin_download(fit)[:-30],
+        "scaricato.zip": zw.garmin_download(fit),
         "rumore.zip": random.Random(3).randbytes(50_000),
-        "taglia_piu_piccola.zip": zw.patch_entry(zw.build_zip([("a.fit", fit)]), 0, file_size=10),
     }
 
 
-def test_t_sec_02_hostile_zip_corpus_is_refused_with_a_reason_and_no_side_effects(
+def test_t_sec_02_zip_files_are_never_opened_by_the_import(
     tmp_path: Path, profile: RealProfile
 ) -> None:
     source = tmp_path / "ostili"
-    write(source, hostile_zips())
+    write(source, {**hostile_zips(), "valido.fit": imp.fit_run(5)})
     before = all_files(tmp_path)
 
     with peak_memory() as peak:
-        summary = profile.import_folder(source)
+        from_folder = profile.import_folder(source)
+        chosen = profile.import_files([source / name for name in hostile_zips()])
 
-    assert {status for status, _ in outcomes(summary).values()} == {ImportStatus.FAILED}
-    assert all(issue is not None for _, issue in outcomes(summary).values())
-    assert profile.records() == []
-    assert stored_files(profile.folder) == []
-    assert all_files(tmp_path) == before
+    assert outcomes(from_folder) == {"valido.fit": (ImportStatus.IMPORTED, None)}
+    assert set(outcomes(chosen).values()) == {(ImportStatus.FAILED, ImportIssue.UNSUPPORTED_FORMAT)}
+    assert len(profile.records()) == 1
+    assert not list(tmp_path.rglob("evil*"))
+    assert len(all_files(tmp_path) - before) >= 1  # solo ciò che l'archivio e il database scrivono
     assert peak[0] < PEAK_MEMORY_LIMIT
-
-
-def test_t_sec_02_a_zip_inside_the_folder_does_not_hide_the_loose_files_next_to_it(
-    tmp_path: Path, profile: RealProfile
-) -> None:
-    source = tmp_path / "misto"
-    write(source, {**hostile_zips(), "valido.fit": imp.fit_run(5)})
-
-    summary = profile.import_folder(source)
-
-    assert [r.name for r in summary.results if r.status is ImportStatus.IMPORTED] == ["valido.fit"]
 
 
 # --- T-SEC-04 ------------------------------------------------------------------------------------
@@ -421,7 +343,7 @@ def test_t_sec_04_importing_the_profile_folder_itself_changes_nothing(
     tmp_path: Path, profile: RealProfile
 ) -> None:
     source = tmp_path / "sorgente"
-    write(source, {"a.fit": imp.fit_run(1), "b.gpx": imp.gpx_run(2)})
+    write(source, {"a.fit": imp.fit_run(1), "b.fit": imp.fit_run(2)})
     profile.import_folder(source)
     snapshot = {p: p.read_bytes() for p in sorted(stored_files(profile.folder))}
 
@@ -560,8 +482,8 @@ def populated_profile_paths(tmp_path: Path, profile: RealProfile) -> tuple[list[
         source,
         {
             "a.fit": imp.fit_run(1),
-            "b.gpx": imp.gpx_run(2),
-            "z.zip": zw.garmin_download(imp.fit_run(3)),
+            "b.fit": imp.fit_run(2),
+            "z.fit": imp.fit_run(3),
         },
     )
     profile.import_folder(source)  # the database is open: there are also -wal and -shm

@@ -126,6 +126,10 @@ class _CountingProfile:
         return self._inner.info
 
     @property
+    def removed_unsupported_activities(self) -> int:
+        return self._inner.removed_unsupported_activities
+
+    @property
     def activities(self) -> ActivityIndex:
         return self._inner.activities
 

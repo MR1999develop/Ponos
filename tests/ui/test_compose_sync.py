@@ -31,18 +31,17 @@ def test_every_zip_reason_maps_to_a_definitive_failure(reason: ZipReason) -> Non
     assert failure is not FailureReason.ATTEMPTS_EXHAUSTED
 
 
-def test_a_garmin_download_with_a_fit_or_a_gpx_gives_the_file_and_its_format() -> None:
+def test_a_garmin_download_with_a_fit_gives_the_file_and_its_format() -> None:
     fit = extract_original_activity(original_zip(1, OriginalKind.FIT))
-    gpx = extract_original_activity(original_zip(1, OriginalKind.GPX))
 
     assert fit.file_format is FileFormat.FIT
-    assert gpx.file_format is FileFormat.GPX
-    assert fit.content and gpx.content
+    assert fit.content
 
 
 @pytest.mark.parametrize(
     ("kind", "reason"),
     [
+        (OriginalKind.GPX, FailureReason.UNSUPPORTED_FORMAT),  # il solo GPX non si usa più
         (OriginalKind.TCX, FailureReason.UNSUPPORTED_FORMAT),
         (OriginalKind.EMPTY_ZIP, FailureReason.UNSUPPORTED_FORMAT),
         (OriginalKind.TRUNCATED_ZIP, FailureReason.ARCHIVE_INVALID),

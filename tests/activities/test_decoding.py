@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Single decoding entry point: recognition by content and extension."""
+"""Single decoding entry point: only FIT files, recognized by the extension."""
 
 from __future__ import annotations
 
@@ -14,19 +14,20 @@ from ponos_coach.activities.decoding import (
     ActivityFileError,
     ActivityFileLimits,
     ActivityFileReason,
-    DetectedContent,
     decode_activity_file,
     decode_stored_activity,
-    detect_content,
 )
 from ponos_coach.activities.domain import Activity, FileFormat
 from ponos_coach.activities.fit_decoder import FitLimits, decode_activity
-from ponos_coach.activities.gpx_decoder import GpxLimits
 from ponos_coach.activities.ports import ImportIssue
-from tests.fixtures.generators import gpx_writer as gw
 from tests.fixtures.generators import import_files as imp
 
 DATA = Path(__file__).resolve().parents[1] / "fixtures" / "data"
+GPX = (
+    b'<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="test">'
+    b'<trk><trkseg><trkpt lat="1.0" lon="1.0"><time>2026-03-02T07:00:00Z</time></trkpt>'
+    b"</trkseg></trk></gpx>"
+)
 TCX = (
     b'<?xml version="1.0"?><TrainingCenterDatabase '
     b'xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"/>'
@@ -56,32 +57,12 @@ def assert_same_activity(actual: Activity, expected: Activity) -> None:
     )
 
 
-def test_fit_and_gpx_are_recognised_from_the_content() -> None:
-    assert detect_content(imp.fit_run(1)) is DetectedContent.FIT
-    assert detect_content(imp.gpx_run(1)) is DetectedContent.GPX
-    assert detect_content(TCX) is DetectedContent.OTHER_XML
-    assert detect_content(b"") is DetectedContent.UNKNOWN
-    assert detect_content(b"plain text, not a file of activity") is DetectedContent.UNKNOWN
-
-
-def test_xml_with_a_bom_comments_and_declaration_is_recognised() -> None:
-    body = b"\xef\xbb\xbf" + b'<?xml version="1.0"?>\n<!-- commento -->\n' + imp.gpx_run(1)[39:]
-
-    assert detect_content(body) is DetectedContent.GPX
-
-
-def test_content_with_a_doctype_is_unknown() -> None:
-    assert detect_content(gw.gpx_with_empty_doctype()) is DetectedContent.UNKNOWN
-
-
-def test_fit_and_gpx_files_decode_to_their_format() -> None:
+def test_a_fit_file_decodes_to_the_fit_format() -> None:
     assert decode_activity_file(imp.fit_run(1), "run.fit").file_format is FileFormat.FIT
-    assert decode_activity_file(imp.gpx_run(1), "run.gpx").file_format is FileFormat.GPX
 
 
 def test_extension_is_case_insensitive_and_only_the_extension_counts() -> None:
     assert decode_activity_file(imp.fit_run(1), "RUN.FIT").file_format is FileFormat.FIT
-    assert decode_activity_file(imp.gpx_run(1), "a.zip!sub/Run.GPX").file_format is FileFormat.GPX
     assert decode_activity_file(imp.fit_run(1), "..\\..\\x.fit").file_format is FileFormat.FIT
 
 
@@ -99,20 +80,15 @@ def test_hostile_fit_fixtures_give_the_single_error(name: str) -> None:
     assert isinstance(reason_of(data, name), ActivityFileReason)
 
 
-def test_t_sec_02_fit_named_gpx_and_gpx_named_fit_are_a_mismatch() -> None:
-    assert reason_of(imp.fit_run(1), "run.gpx") is ActivityFileReason.EXTENSION_MISMATCH
-    assert reason_of(imp.gpx_run(1), "run.fit") is ActivityFileReason.EXTENSION_MISMATCH
+@pytest.mark.parametrize("name", ["run.gpx", "run.GPX", "run.tcx"])
+def test_a_gpx_or_other_xml_file_is_no_longer_supported(name: str) -> None:
+    assert reason_of(GPX, name) is ActivityFileReason.UNSUPPORTED_FORMAT
+    assert reason_of(TCX, name) is ActivityFileReason.UNSUPPORTED_FORMAT
 
 
-def test_t_sec_02_other_content_under_a_known_extension_is_corrupt() -> None:
-    for name in ("run.fit", "run.gpx"):
-        assert reason_of(b"MZ\x90\x00 not an activity", name) is ActivityFileReason.CORRUPT
-        assert reason_of(b"\x00" * 64, name) is ActivityFileReason.CORRUPT
-
-
-def test_tcx_is_refused_with_its_reason_under_any_name() -> None:
-    for name in ("run.tcx", "run.gpx", "run.fit"):
-        assert reason_of(TCX, name) is ActivityFileReason.UNSUPPORTED_FORMAT
+def test_t_sec_02_other_content_under_the_fit_extension_is_corrupt() -> None:
+    for data in (b"MZ\x90\x00 not an activity", b"\x00" * 64, GPX, TCX):
+        assert reason_of(data, "run.fit") is ActivityFileReason.CORRUPT
 
 
 @pytest.mark.parametrize("name", ["notes.txt", "run", "run.fit.bak", "run.zip", ".fit.", ""])
@@ -125,19 +101,13 @@ def test_empty_file() -> None:
     assert reason_of(b"", "run.txt") is ActivityFileReason.EMPTY
 
 
-def test_reasons_of_the_readers_are_passed_on() -> None:
-    no_times = gw.build_gpx(gw.GpxSpec([[gw.GpxPoint(1.0, 1.0), gw.GpxPoint(1.0, 1.1)]]))
-    assert reason_of(no_times, "a.gpx") is ActivityFileReason.NOT_AN_ACTIVITY
-
+def test_reasons_of_the_reader_are_passed_on() -> None:
     fit = imp.fit_run(1)
     assert reason_of(fit[:-1] + b"\x00", "a.fit") is ActivityFileReason.CORRUPT
     assert reason_of(fit, "a.fit", ActivityFileLimits(FitLimits(max_bytes=10))) is (
         ActivityFileReason.TOO_LARGE
     )
     assert reason_of(fit, "a.fit", ActivityFileLimits(FitLimits(max_records=5))) is (
-        ActivityFileReason.TOO_MANY_RECORDS
-    )
-    assert reason_of(imp.gpx_run(1), "a.gpx", ActivityFileLimits(gpx=GpxLimits(max_points=5))) is (
         ActivityFileReason.TOO_MANY_RECORDS
     )
     assert reason_of(fit, "a.fit", ActivityFileLimits(FitLimits(max_duration_s=60.0))) is (
@@ -149,46 +119,22 @@ def test_every_reason_of_the_decoder_is_an_import_issue() -> None:
     assert {reason.value for reason in ActivityFileReason} <= {i.value for i in ImportIssue}
 
 
-# --- Already archived file of known format -------------------------------------------------
+# --- Already archived file -----------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    ("data", "name", "file_format"),
-    [
-        (imp.fit_run(1), "a.fit", FileFormat.FIT),
-        (
-            gw.build_gpx(gw.GpxSpec([gw.line_points(imp.run_start(1), 30, step_s=10)])),
-            "a.gpx",
-            FileFormat.GPX,
-        ),
-    ],
-)
-def test_stored_file_decodes_like_the_named_one(
-    data: bytes, name: str, file_format: FileFormat
-) -> None:
+def test_stored_file_decodes_like_the_named_one() -> None:
+    data = imp.fit_run(1)
+
     assert_same_activity(
-        decode_stored_activity(data, file_format), decode_activity_file(data, name)
+        decode_stored_activity(data, FileFormat.FIT), decode_activity_file(data, "a.fit")
     )
 
 
-@pytest.mark.parametrize("file_format", [FileFormat.FIT, FileFormat.GPX])
-def test_stored_file_that_is_not_an_activity_raises_the_single_error(
-    file_format: FileFormat,
-) -> None:
+def test_stored_file_that_is_not_an_activity_raises_the_single_error() -> None:
     for data, reason in (
         (b"", ActivityFileReason.EMPTY),
-        (b"non e un file", ActivityFileReason.CORRUPT),
+        (b"not a file", ActivityFileReason.CORRUPT),
     ):
         with pytest.raises(ActivityFileError) as caught:
-            decode_stored_activity(data, file_format)
+            decode_stored_activity(data, FileFormat.FIT)
         assert caught.value.reason is reason
-
-
-def test_stored_gpx_with_too_many_points_raises_the_single_error() -> None:
-    data = gw.build_gpx(gw.GpxSpec([gw.line_points(imp.run_start(1), 5, step_s=10)]))
-    limits = ActivityFileLimits(gpx=GpxLimits(max_points=2))
-
-    with pytest.raises(ActivityFileError) as caught:
-        decode_stored_activity(data, FileFormat.GPX, limits)
-
-    assert caught.value.reason is ActivityFileReason.TOO_MANY_RECORDS

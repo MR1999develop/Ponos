@@ -4,7 +4,7 @@ Phase 8 version (2026-11-08): adds the plan and the frozen days (phase 5), the
 map and its tile proxy (phase 5b), injuries (phase 6), the Garmin calendar
 (phase 7), the profile backup and the release workflow (phase 8). It builds on
 that of phase 4 (2026-11-07: the threshold test, the distance series
-read from FIT and GPX files, the history of the tests in schema v5, threshold
+read from FIT files, the history of the tests in schema v5, threshold
 HR and pace, pace zones), on that of phase 4b (2026-11-07: the
 nutrition of the day: activity calories, activity level, meal times, goal
 periods, the table of foods and the guidance itself), on that of phase 3 (2026-11-06: height, weight and
@@ -20,7 +20,7 @@ every function that touches a trust boundary. The test identifiers
 
 Local desktop app (Windows and Ubuntu) for one user at a time per profile. It
 downloads activities from Garmin Connect with an unofficial login, reads FIT
-and GPX files (also inside ZIPs), computes the load, shows charts in a local
+files, computes the load, shows charts in a local
 web page and saves everything in a folder chosen by the user. It has no server
 and no listening port.
 
@@ -34,8 +34,8 @@ and no listening port.
                | HTTPS
  ==============|=========================== app process boundary
    +-----------v-----------+      +--------------------------------------+
-   | garmin (adapter)      |      | Import of files, folders and ZIPs    |
-   +-----------+-----------+      |  (B2) FIT, GPX, ZIP: untrusted       |
+   | garmin (adapter)      |      | Import of FIT files and folders      |
+   +-----------+-----------+      |  (B2) FIT: untrusted                 |
                |                  +------------------+-------------------+
                v                                     v
    +-------------------------------------------------------+
@@ -46,7 +46,7 @@ and no listening port.
  +----------+  +-----------+  +-----------+  +-----------------+
  | storage  |  | platform  |  | log       |  | ui              |
  | SQLite + |  | keychains,|  | structured|  | Qt + charts:    |
- | FIT/GPX  |  | notif.,   |  | (B6)      |  | QWebEngineView  |
+ | FIT      |  | notif.,   |  | (B6)      |  | QWebEngineView  |
  | archive  |  | profile   |  +-----------+  | (B4) web page   |
  +----+-----+  | list (B8) |                 +-----------------+
       |        +-----+-----+
@@ -68,7 +68,7 @@ Boundaries:
 | Id | Boundary | Data crossing it |
 |---|---|---|
 | B1 | Garmin Connect → app | JSON responses, downloaded FIT files (zip), error codes, `Retry-After` header, MFA code request |
-| B2 | FIT, GPX and ZIP files imported by hand, dragged or from a folder → app | files, names, paths, links, archive entries |
+| B2 | FIT files imported by hand, dragged or from a folder → app | files, names, paths, links |
 | B3 | App ↔ profile folder | database, archive, backup, lock, permissions |
 | B4 | App → charts web page | chart data as JSON, activity names |
 | B5 | App ↔ token store (Windows: file encrypted with DPAPI in `secrets/` in the app's local data folder; Ubuntu: Secret Service) | Garmin tokens, by profile id |
@@ -79,7 +79,7 @@ Boundaries:
 | B10 | App → system notifications | fixed title and number of new activities |
 | B11 | Table of foods (`foods.json`, shipped with the app) → parser | values per 100 g, ids, names, portions. It is part of the package, but it is treated as input: a mistake or a change of source must not reach the guidance |
 | B12 | FIT `session.total_calories` (inside B1 and B2) → model | calories declared by the device: untrusted until checked against the duration |
-| B13 | FIT `record.distance` and `record.speed`, GPX track points (inside B1 and B2) → distance series → threshold test | cumulative distance and its time axis: untrusted until they form a valid series (finite, increasing time, non-decreasing metres) |
+| B13 | FIT `record.distance` and `record.speed` (inside B1 and B2) → distance series → threshold test | cumulative distance and its time axis: untrusted until they form a valid series (finite, increasing time, non-decreasing metres) |
 | B14 | Map page (`ponos://app/map.html`, a web engine process) ↔ app | five numeric calls from the page (view, click, hover), the list, the totals and the simplified tracks that Python sends to it. Not drawn in the diagram: it sits next to B4 |
 | B15 | Tile proxy → Tracestrack (`https://tile.tracestrack.com`) | the tile address (z/x/y), which reveals the area looked at, the key in the query, the PNG that comes back: untrusted |
 | B16 | App ↔ tile key store (Windows: DPAPI file in `secrets/`; Ubuntu: Secret Service) | the Tracestrack key, app-wide, never per profile |
@@ -154,17 +154,13 @@ service, E elevation of privilege.
 | B9 | Empty or huge MFA code sent to Garmin; unlimited code attempts | D | T-SYNC-04 (`tests/garmin/test_account.py`) |
 | B9 | Empty or huge email or password sent to the library | D | T-SYNC-04 (`tests/garmin/test_account.py`) |
 | B2 | FIT with huge declared sizes, endless records, false extension | D | T-SEC-01, T-SEC-02 |
-| B2 | FIT or GPX with absurd start or end (outside 1990–2099 UTC) that pollute archive, table and calculations | T | T-SEC-02, T-GPX-01 |
-| B2 | GPX with DTD or entities (even external), exponential expansion (XXE, billion laughs) | I, D | T-SEC-02, T-GPX-01 |
-| B2 | GPX with deep nesting, millions of points or huge texts | D | T-SEC-02, T-GPX-01 |
-| B2 | GPX with `.gpx` extension and content of another type (FIT, TCX) or the reverse | T | T-SEC-02, T-GPX-01 |
-| B2 | ZIP: decompression bomb, ratio over 100:1, too many entries, false declared sizes | D | T-SEC-02, T-IMP-04 |
-| B2 | ZIP: names with `../`, absolute paths or reserved names written outside the archive | T, E | T-SEC-02, T-SEC-04, T-IMP-04 |
-| B2 | Nested ZIPs, encrypted entries, wrong CRC | D, T | T-SEC-02, T-IMP-04 |
+| B2 | FIT with absurd start or end (outside 1990–2099 UTC) that pollute archive, table and calculations | T | T-SEC-02 |
+| B2 | Hostile GPX, ZIP or XML files (XXE, billion laughs, decompression bombs, names with `../`) chosen by hand or in a folder: since phase 8 the import never opens them (a folder ignores them, a hand choice reports them as an unsupported format); there is no XML parser any more | I, D, T, E | T-SEC-02, T-IMP-04 |
 | B2 | Symlinks, junctions, reparse points, Windows reserved names, long paths in the scan of a folder | T, I, E | T-SEC-04 |
 | B2 | File replaced by a link between the check and the read | T, I | T-SEC-04 |
 | B2 | Huge folder (whole disk) | D | T-IMP-02, T-PERF-02 |
-| B2 | Duplicates or altered files that change the past; same activity in FIT and GPX | T | T-IMP-01, T-IMP-03, T-GPX-02, T-SYNC-05 |
+| B2 | Duplicates or altered files that change the past | T | T-IMP-01, T-IMP-03, T-SYNC-05 |
+| B3 | Migration v11 that removes the GPX activities: an altered archive path in the database that points outside the archive, a link in place of a file, an interrupted migration | T, I, D | T-DATI-01 (`tests/collaudo/test_fase8_solo_fit.py`) |
 | B2 | Unexpected error on a file that stops the import or leaves half of the files | D | T-IMP-01, T-UI-08 |
 | B3 | Interruption midway through a write: record without file, orphan temporary files | T, D | T-DATI-02 |
 | B3 | Archive file altered or missing after the import | T | T-DATI-03 |
@@ -224,7 +220,7 @@ service, E elevation of privilege.
 | B3 | Overlapping goal periods, also by an `UPDATE` of the dates; level, meal times or pace out of range | T | T-DATI-01, T-UI-01 |
 | B3 | Weight, age, HR, level, goals and meal times in logs, messages or error chains | I | T-SEC-08 (`tests/collaudo/test_fase4b_log_salute.py`) |
 | B3 | Activity indexed before v4 without calories that makes the day wrong | T | T-NUT-03, D-F4B-09 |
-| B13 | Distance that is NaN or infinite (FIT float field, speed, GPX coordinates) that breaks the window search or gives a nonsense pace | T, D | T-PIANO-06, D-F4 |
+| B13 | Distance that is NaN or infinite (FIT float field, speed) that breaks the window search or gives a nonsense pace | T, D | T-PIANO-06, D-F4 |
 | B13 | Distance that goes backwards (damaged file, odometer reset) read as a valid effort | T | T-PIANO-06, D-F4 |
 | B13 | Jumps of distance (GPS glitch, a record after a long gap) that make a window look like a world-record effort and set a wrong threshold pace | T | T-PIANO-06 (steps above 12 m/s ignored for the window; implausible window falls back to heart rate, no pace), D-F4-04 |
 | B13 | Gaps in the records (pauses, missing distance) hidden by a distance that keeps growing, so a test with long stops is accepted | T | T-PIANO-06 (pauses over 60 s in the segment, HR and distance records together), D-F4 |
@@ -295,17 +291,18 @@ service, E elevation of privilege.
 
 ## 3. What we do
 
-- External inputs (JSON, FIT, GPX, ZIP, file names) become domain types at the
+- External inputs (JSON, FIT, ZIPs downloaded from Garmin, file names) become domain types at the
   boundary, with limits checked before reading or allocating; order: origin,
   size, characters, syntax, semantics. We reject, we do not repair. One single
-  point decodes FIT and GPX, with the same error.
-- The format is recognised from the content and must match the extension. A
-  start or an end (start plus elapsed time) outside [1990-01-01, 2100-01-01)
-  UTC makes the file damaged.
-- GPX: XML read by events with `defusedxml`, without DTD, entities or external
-  resources; limits of 50 MB, depth 32, 1,000,000 points and 4096 characters
-  per text, checked before and during reading.
-- ZIP: central directory read with a cap, number of entries, sum of sizes and
+  point decodes FIT files, with a single error.
+- Reduced surface (phase 8): only `.fit` files are imported. There is no XML parser
+  (`defusedxml` was removed from the dependencies) and no reading of ZIP files chosen
+  by the user; GPX and ZIP files in a folder are ignored, and chosen by hand are
+  reported as an unsupported format, without opening them. The extension decides
+  whether a file is tried; the FIT reader checks the rest (signature, CRC, structure,
+  limits). A start or an end (start plus elapsed time) outside [1990-01-01,
+  2100-01-01) UTC makes the file damaged.
+- ZIP (only the download from Garmin and the profile backup): central directory read with a cap, number of entries, sum of sizes and
   compression ratio checked before extracting; extraction in memory in blocks
   with the real size checked again and the CRC verified; entry names never
   become paths; nested ZIPs and encrypted entries rejected; duplicate names
@@ -317,7 +314,7 @@ service, E elevation of privilege.
   single module; source folder never modified.
 - An unexpected error on a file is a failed result for that file; the import
   continues and the message does not contain the exception.
-- The names of the archive files (`archivio/<year>/<sha256>.<fit|gpx>`) are
+- The names of the archive files (`archivio/<year>/<sha256>.fit`) are
   generated by the program; no external data enters a path. Format in ADR 005.
 - SQL always parametrised; static check against composed SQL. `CHECK`
   constraints, foreign keys and `STRICT` in the database.
@@ -481,8 +478,7 @@ service, E elevation of privilege.
     later than all the previous ones are dropped, as for the HR. A series with
     a value that is not finite or with metres that go backwards is not used and
     not repaired: the activity stays valid, without pace. Speed is integrated
-    without inventing distance over gaps above 10 s; the GPX distance counts no
-    step between two segments. `DistanceSeries` checks its own invariants
+    without inventing distance over gaps above 10 s. `DistanceSeries` checks its own invariants
     (finite, strictly increasing time, non-negative non-decreasing metres).
   - Evaluation: pure and deterministic. The window search tries only the
     breakpoints of the series (no loop per second). A pace outside
@@ -621,9 +617,9 @@ service, E elevation of privilege.
 | Threat | Test |
 |---|---|
 | Hostile FIT and fuzzing | T-SEC-01, T-SEC-02 |
-| Hostile GPX (XXE, expansion, depth, points) | T-SEC-02, T-GPX-01 |
-| Hostile ZIP (bomb, entries, names, encrypted, nested) | T-SEC-02, T-IMP-04 |
-| Times outside 1990–2099 | T-SEC-02, T-GPX-01 |
+| Hostile GPX and ZIP chosen by the user: never opened by the import | T-SEC-02, T-IMP-04 |
+| Hostile ZIP downloaded from Garmin (bomb, entries, names, encrypted, nested) | T-SEC-02, T-SEC-03 (`tests/zipread`) |
+| Times outside 1990–2099 | T-SEC-02 |
 | Hostile JSON, ZIP and `Retry-After` from Garmin | T-SEC-03, T-SYNC-03 |
 | Paths, links, reparse points, reserved names, scan of folders | T-SEC-04 |
 | Deleting a profile folder | T-SEC-04, T-DATI-04, T-UI-03 |
@@ -644,8 +640,8 @@ service, E elevation of privilege.
 | Matching with imports, download of another activity | T-SYNC-05, D-F2-03 |
 | Token, login and MFA | T-SYNC-04, T-SEC-07 |
 | Notifications | T-SEC-08 (`tests/platform/test_notifier.py`) |
-| Import of files, folders and ZIPs | T-IMP-01, T-IMP-02, T-IMP-03, T-IMP-04 |
-| Duplicates between FIT and GPX | T-GPX-02 |
+| Import of FIT files and folders | T-IMP-01, T-IMP-02, T-IMP-03, T-IMP-04 |
+| Migration that removes the GPX activities | T-DATI-01 (`tests/collaudo/test_fase8_solo_fit.py`) |
 | Integrity and crash | T-DATI-01, T-DATI-02, T-DATI-03, T-DATI-05 |
 | Resources | T-PERF-02, T-PERF-03 |
 | Unexpected errors | T-UI-08, T-IMP-01 |
@@ -694,7 +690,7 @@ the name (`test_d_f1_NN_…`).
 | D-F1-01 | A database from another program with `user_version` 1 produced a raw SQLite error instead of "damaged profile" | The tables of the schema are checked: it is a damaged profile and the file is not touched | T-DATI-01 | `tests/collaudo/test_database_del_profilo.py` |
 | D-F1-02 | Orphan temporary files of an interrupted write stayed in the archive | At profile opening they are removed; in the log only the number | T-DATI-02 | `tests/collaudo/test_interfaccia.py`, `tests/ui/test_window_lifecycle.py` |
 | D-F1-03 | Missing or altered archive file of an already present activity: no way to put it right | Result "repaired": by importing the original again the file is replaced atomically | T-DATI-03, T-IMP-03 | `tests/collaudo/test_integrita_e_cartella.py`, `tests/activities/test_import_use_case.py` |
-| D-F1-04 | A GPX with a date in year 1 made the load series cover centuries | Start time outside [1990-01-01, 2100-01-01) UTC: file rejected as damaged | T-SEC-02, T-GPX-01 | `tests/collaudo/test_date_ostili.py`, `tests/activities/test_instants.py` |
+| D-F1-04 | A file with a date in year 1 (then a GPX) made the load series cover centuries | Start time outside [1990-01-01, 2100-01-01) UTC: file rejected as damaged | T-SEC-02 | `tests/collaudo/test_date_ostili.py`, `tests/activities/test_instants.py` |
 | D-F1-05 | The log received names of user folders and a name with a newline could fake a line | The formatter writes only exception types and neutralises control characters | T-SEC-08 | `tests/collaudo/test_interfaccia.py`, `tests/ui/test_diagnostics.py` |
 | D-F1-06 | Permissions of the archive and of the original files not guaranteed to be private | They inherit the private permissions of the profile folder | T-SEC-09 | `tests/collaudo/test_sicurezza_input.py` |
 | D-F1-07 | Whoever lost the race in creating a profile deleted the winner's database | The rollback undoes only what the creation did | T-DATI-06 | `tests/collaudo/test_due_istanze.py`, `tests/profiles/test_use_cases.py` |
@@ -743,7 +739,7 @@ in the tests):
 | R1 | Unexpected error stops the import | Failed result for that file; the import continues | T-IMP-01 |
 | R4 | Close that waits for a job in progress | The window stays open until the data thread finishes, without blocking the UI; over the cap it warns | T-UI-02, T-UI-08 |
 | R5 | No way to see the logs | Help menu, log folder; log on file with rotation | T-SEC-08 |
-| R11 | Start times without a plausibility window | See D-F1-04 | T-SEC-02, T-GPX-01 |
+| R11 | Start times without a plausibility window | See D-F1-04 | T-SEC-02 |
 | R14 | List of profiles unusable | Message with the location of the file; the window stays usable | T-DATI-01 |
 | — | Deletion too wide | Only the names the app puts in the folder; refused if there is anything else, a link or an open profile | T-SEC-04, T-DATI-04 |
 | — | Migration without a safety net | Copy of the database in `backup/ponos-v{from}-v{to}.sqlite3` before every migration; without a copy it does not migrate | T-DATI-01 |
@@ -879,14 +875,15 @@ only windows with valid HR on at least 90% of the last 20 minutes.
 | Non-interruptible library timeouts | The timeout belongs to the library (15 s per request, 30 s per login step) and cannot be configured without touching internal parts. Cancellation applies from the next request: a request already sent ends or times out on its own. Mitigation: the journal makes resuming safe at every point. |
 | Response or download read entirely into memory by the library before the cap | The cap of 50 MB applies after the read. Mitigation: the 15 s timeout and the ZIP limits downstream (T-SEC-02). |
 | DPAPI entropy is not secret | The code is public; the entropy ties the file to the app and the profile, it does not protect from the user themselves. |
-| Wrong matching between two almost equal activities (60 s, 5%, same sport) | The imported original file stays; the other activity is not downloaded. As for duplicates between FIT and GPX, better not to lose data. |
+| Wrong matching between two almost equal activities (60 s, 5%, same sport) | The imported original file stays; the other activity is not downloaded. Better not to lose data. |
 | Health data in plain text in the profile folder, protected only by the system permissions | Simplicity and opening with other tools; encrypting requires managing a password and a recovery key. Accepted by the user on 2026-11-05. From phase 3 it also holds height, weight (with the history) and date of birth. Mitigation: folder permissions for the user only (T-SEC-09); the README recommends disk encryption (BitLocker on Windows, LUKS on Ubuntu). |
 | Copies of the database in `backup/` and archive files with the same health data | Same risk and same mitigation as the profile folder: same private permissions. |
 | Profile folder on a network or in a synchronised folder | The app warns but does not forbid: the user may have a reliable NAS. On these places the SQLite lock and WAL are not guaranteed; a damaged database is reported at opening. |
 | Incomplete detection of network and cloud | UNC, remote drives, network mounts, OneDrive, Dropbox, Google Drive and iCloud Drive are recognised by name and variables; an unknown service is not recognised. When in doubt the type is unknown and there is no warning. |
 | List of profiles readable by every process of the user | It contains paths and names of profiles, not health data; it is in the user's configuration folder. |
 | An attack with the user's permissions can replace the archive and its database together | Integrity protects from errors and partial modifications, not from whoever already controls the account (assumptions). |
-| Unrecognised duplicate between FIT and GPX outside the threshold (60 s, 5%) | The activity enters twice: no data lost. Better than deleting a real activity. |
+| A GPX archive file left behind after the v11 migration (interruption between the commit of the database and the removal of the files) | It is an orphan file, harmless and not cited by the database; the opposite (a record without its file) cannot happen because the database commits first. |
+| Activities imported from GPX removed from the profile without the user confirming each one | Decision of the user (2026-11-09, ADR 014): copy of the database in `backup/ponos-v10-v11.sqlite3` before the migration and a notice with the number of activities removed when the profile opens. |
 | No secure deletion of data | Beyond the reach of an app on ordinary file systems. |
 | Food values not yet verified against FoodData Central | The first version of the table was written without access to the source. Mitigations: `source.verified_on` is empty and the release waits for `experiments/verify_foods.py`; the parser checks energy against macros; the notice says the guidance is general. |
 | Guidance built on population formulas (Mifflin-St Jeor, Keytel, Boer, factors without sport) and on self-assessed level | Individual error of hundreds of kcal is possible, and an app cannot measure more. Mitigations: conservative limits of the deficit, no numbers under 18 years, fixed notice, no diagnosis (ADR 008). |

@@ -16,7 +16,7 @@ import pytest
 from ponos_coach.assessment.domain import ThresholdProtocol, ThresholdTest
 from ponos_coach.assessment.ports import ThresholdTestAlreadyStoredError, ThresholdTestNotFoundError
 from ponos_coach.load.ports import PhysiologyEntryNotFoundError
-from tests.builders import fit_identity, gpx_identity, physiology_entry
+from tests.builders import fit_identity, physiology_entry
 from tests.contracts.contract_storage import NAME, PROFILE_ID, create
 from tests.contracts.harness import StorageHarness
 
@@ -68,13 +68,6 @@ class ThresholdTestStoreContract:
             profile.threshold_tests.add(entry)
 
             assert profile.threshold_tests.get(entry.identity) == entry
-
-    def test_a_gpx_activity_can_be_a_test_too(self, harness: StorageHarness) -> None:
-        entry = ThresholdTest(gpx_identity(), date(2026, 3, 2), START, 160, 310)
-        with closing(create(harness)) as profile:
-            profile.threshold_tests.add(entry)
-
-            assert profile.threshold_tests.list_tests() == [entry]
 
     def test_an_unknown_activity_has_no_test(self, harness: StorageHarness) -> None:
         with closing(create(harness)) as profile:

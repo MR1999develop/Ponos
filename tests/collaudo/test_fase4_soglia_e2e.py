@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-PIANO-06 end to end: realistic runs written as FIT and GPX files go through the real import,
+"""T-PIANO-06 end to end: realistic runs written as FIT files go through the real import,
 the on-disk archive, the SQLite index and `EvaluateThresholdTest`.
 
 Every expected value is computed by hand from the legs of the run (see `fase4_support`):
@@ -11,7 +11,6 @@ out-of-limits HR, wrong sport, a treadmill run without distance.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -19,7 +18,6 @@ from pathlib import Path
 import pytest
 
 from ponos_coach.activities.decoding import decode_stored_activity
-from ponos_coach.activities.domain.geo import EARTH_RADIUS_M
 from ponos_coach.assessment.domain import (
     SegmentSelection,
     ThresholdRejection,
@@ -33,7 +31,6 @@ from tests.collaudo.fase4_support import (
     START,
     Leg,
     ThresholdProfile,
-    gpx_run,
     make_threshold_profile,
     run_fit,
     run_samples,
@@ -41,7 +38,6 @@ from tests.collaudo.fase4_support import (
 )
 from tests.collaudo.support import stored_files
 from tests.fixtures.generators import fit_writer as fw
-from tests.fixtures.generators.tracks import SEA_LAT_DEG
 
 PACE_AT_3_5_MS = 286  # 1000 / 3.5 = 285.71 s/km
 
@@ -425,35 +421,6 @@ def test_t_piano_06_a_gps_glitch_that_makes_the_pace_absurd_gives_no_pace_but_a_
 
     assert result.threshold_bpm == 165
     assert result.pace_s_per_km is None
-
-
-# --- GPX -----------------------------------------------------------------------------------------
-
-LON_DEG_PER_M = math.degrees(1.0 / (EARTH_RADIUS_M * math.cos(math.radians(SEA_LAT_DEG))))
-
-
-def test_t_piano_06_a_gpx_with_hr_gives_the_pace_from_the_track_and_the_hr_from_the_extension(
-    tp: ThresholdProfile,
-) -> None:
-    data = gpx_run(standard_legs(), lon_step_per_ms=LON_DEG_PER_M)
-
-    result = accepted(tp.evaluate_bytes(data, "run.gpx"))
-
-    assert result.threshold_bpm == 165
-    assert result.pace_s_per_km == PACE_AT_3_5_MS
-    assert result.segment_start_s == pytest.approx(600.0, abs=1.0)
-
-
-def test_t_piano_06_a_gpx_without_hr_cannot_be_the_test(tp: ThresholdProfile) -> None:
-    data = gpx_run(standard_legs(), with_hr=False, lon_step_per_ms=LON_DEG_PER_M)
-
-    assert tp.evaluate_bytes(data, "run.gpx") is ThresholdRejection.TOO_FEW_HEART_RATE_SAMPLES
-
-
-def test_t_piano_06_a_gpx_of_another_sport_is_refused(tp: ThresholdProfile) -> None:
-    data = gpx_run(standard_legs(), sport_type="cycling", lon_step_per_ms=LON_DEG_PER_M)
-
-    assert tp.evaluate_bytes(data, "ride.gpx") is ThresholdRejection.WRONG_SPORT
 
 
 # --- A file that cannot be read -------------------------------------------------------------------

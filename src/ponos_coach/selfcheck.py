@@ -40,7 +40,6 @@ _LOADED_ON_DEMAND: Final = (
     "ponos_coach.platform.token_store",
     "ponos_coach.platform.notifier",
     "fitdecode",
-    "defusedxml.ElementTree",
     "keyring",
     "desktop_notifier",
 )

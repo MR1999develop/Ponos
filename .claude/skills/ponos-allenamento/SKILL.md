@@ -96,8 +96,8 @@ valori in `nutrition/domain/defaults.py`.
 ## 6. Dati e sincronizzazione
 
 Cartella del profilo e elenco dei profili, SQLite, archivio dei file
-originali (FIT e GPX), identità (`file_id` o SHA-256), giornale della
-sincronizzazione, abbinamento, backoff, import di file, cartelle e ZIP con i
+originali FIT, identità (`file_id`), giornale della
+sincronizzazione, abbinamento, backoff, import di file FIT e cartelle con i
 tetti, esiti dell'import, lock, dati personali, schema da v3 a v7. Dettagli:
 `references/dati-e-sincronizzazione.md`; schema e archivio:
 `docs/adr/005-schema-sqlite-e-archivio.md`; dati del profilo:
@@ -125,7 +125,7 @@ tetti, esiti dell'import, lock, dati personali, schema da v3 a v7. Dettagli:
   FRI5); l'impronta dei carichi le contiene, quindi i secondi per zona si ricalcolano da
   soli; `LOAD_MODEL_VERSION` si alza solo se cambia la formula del carico. Se cambiano le
   zone si alza anche `METHOD_VERSION` del piano.
-- Un file originale (FIT o GPX) si scrive su temporaneo, flush, rinomina; il
+- Un file originale (FIT) si scrive su temporaneo, flush, rinomina; il
   record SQLite dopo il file; il token non sta mai nella cartella del profilo.
 - La cancellazione di una cartella di profilo tocca solo i nomi noti e mai un
   profilo aperto.

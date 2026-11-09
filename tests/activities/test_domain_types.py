@@ -23,7 +23,6 @@ from ponos_coach.activities.domain import (
     FileId,
     FitIdentity,
     GeoPoint,
-    GpxIdentity,
     Sport,
     format_of,
     identity_from_key,
@@ -31,7 +30,7 @@ from ponos_coach.activities.domain import (
     is_possible_duplicate,
 )
 from ponos_coach.activities.domain.timing import truncate_to_millisecond
-from tests.builders import IMPORTED_AT, T0, archived_file, fit_identity, gpx_identity, make_record
+from tests.builders import IMPORTED_AT, T0, archived_file, fit_identity, make_record
 
 SHA = "ab" * 32
 
@@ -64,23 +63,15 @@ def test_file_id_needs_a_utc_time() -> None:
         FileId(1, 1, 1, datetime(2026, 1, 1, tzinfo=timezone(timedelta(hours=2))))
 
 
-@pytest.mark.parametrize("sha", ["", "A" * 64, "a" * 63, "a" * 65, "g" * 64, " " + "a" * 63])
-def test_gpx_identity_needs_a_lowercase_sha256(sha: str) -> None:
-    with pytest.raises(ValueError, match="SHA-256"):
-        GpxIdentity(sha)
-
-
 def test_format_follows_the_identity() -> None:
     assert format_of(fit_identity()) is FileFormat.FIT
-    assert format_of(gpx_identity()) is FileFormat.GPX
-    assert [f.value for f in FileFormat] == ["fit", "gpx"]
+    assert [f.value for f in FileFormat] == ["fit"]
 
 
 def test_keys_have_the_documented_shape() -> None:
     assert identity_key(FitIdentity(FileId(255, 1, 5000001, T0))) == (
         "fit:255:1:5000001:2026-03-02T07:00:00+00:00"
     )
-    assert identity_key(GpxIdentity(SHA)) == f"gpx:{SHA}"
 
 
 @given(file_ids)
@@ -90,9 +81,8 @@ def test_fit_key_round_trips(file_id: FileId) -> None:
     assert identity_from_key(identity_key(identity)) == identity
 
 
-def test_gpx_key_round_trips_and_keys_of_different_identities_differ() -> None:
-    assert identity_from_key(identity_key(gpx_identity(3))) == gpx_identity(3)
-    keys = {identity_key(i) for i in (fit_identity(1), fit_identity(2), gpx_identity(1))}
+def test_keys_of_different_identities_differ() -> None:
+    keys = {identity_key(i) for i in (fit_identity(1), fit_identity(2), fit_identity(3))}
     assert len(keys) == 3
 
 
@@ -102,7 +92,7 @@ def test_gpx_key_round_trips_and_keys_of_different_identities_differ() -> None:
         "",
         "fit:",
         "gpx:",
-        "gpx:XYZ",
+        "gpx:" + "a" * 64,  # GPX is no longer a format
         "zip:1",
         "fit:1:2:3",
         "fit:a:2:3:2026-03-02T07:00:00+00:00",
@@ -192,16 +182,6 @@ def test_record_defaults_are_consistent() -> None:
     assert record.timer_s == record.elapsed_s
 
 
-def test_record_format_must_match_the_identity() -> None:
-    record = make_record(gpx_identity())
-    assert record.file_format is FileFormat.GPX
-    with pytest.raises(ValueError, match="format"):
-        ActivityRecord(
-            fit_identity(), FileFormat.GPX, Sport.RUNNING, T0, 10.0, 10.0,
-            ActivitySummary(), archived_file(fit_identity()), ActivityOrigin.IMPORT, IMPORTED_AT,
-        )  # fmt: skip
-
-
 def test_record_times_must_be_utc_and_durations_sane() -> None:
     with pytest.raises(ValueError, match="UTC"):
         make_record(start=datetime(2026, 3, 2, 7, 0))
@@ -242,8 +222,6 @@ def test_activity_invariants() -> None:
     make_activity(timer_s=100.0)
     with pytest.raises(ValueError, match="moving"):
         make_activity(timer_s=100.001)
-    with pytest.raises(ValueError, match="format"):
-        make_activity(file_format=FileFormat.GPX)
     with pytest.raises(ValueError, match="UTC"):
         make_activity(start=datetime(2026, 3, 2))
     with pytest.raises(ValueError, match="discarded"):

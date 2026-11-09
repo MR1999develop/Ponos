@@ -18,7 +18,7 @@ Ponos Coach is not a medical device and makes no diagnosis.
 - At the first start, with no profiles, the "New profile" dialog ("Nuovo
   profilo") opens.
 - At creation the user chooses the profile folder. All their data is there:
-  database, archive of the original files (FIT and GPX), backup.
+  database, archive of the original FIT files, backup.
 - No folder is proposed: the field starts empty and "Create profile" ("Crea
   profilo") stays disabled until the user chooses a folder with "Browse..."
   ("Sfoglia...") or types it. The picker starts from the last folder used for
@@ -208,40 +208,41 @@ Sincronizza, Verifica completa, Interrompi sincronizzazione.
   activities from Garmin") with the number. If the system does not support
   notifications nothing happens. There is no notification area.
 
-## 4. Import of files, folders and ZIPs
+## 4. Import of FIT files
+
+Ponos Coach works only with FIT files (decision of 2026-11-09, ADR 014). GPX and
+other formats are not read, and ZIP files are not imported (a ZIP is still read
+for the original that Garmin sends during synchronisation, section 3, and for
+the profile backup).
 
 - Three ways, all on request and only with a profile open:
-  - "Import files..." (Ctrl+I): choose one or more `.fit`, `.gpx` or `.zip`
-    files;
+  - "Import files..." (Ctrl+I): choose one or more `.fit` files (the filter of
+    the dialog is `*.fit`);
   - "Import from folder..." (Ctrl+Shift+I): choose a folder;
   - dragging files or a folder onto the window.
-- Formats: FIT and GPX, also inside ZIP files (such as those downloaded from
-  the Garmin site). From the GPX the track, times, elevation and HR are read;
-  a GPX without times is not an activity. TCX files are not supported and are
-  rejected with the reason. The format is recognised from the content and must
-  match the extension.
-- An activity whose start or end is outside the period 1990–2099 (UTC) is
+- Only `.fit` files are imported (the extension is matched regardless of case).
+  In a folder every other file (GPX, ZIP, TCX, text...) is ignored without a
+  message. A file chosen by hand with another extension is reported as an
+  unsupported format.
+- The FIT file is checked at the boundary (signature, CRC, structure, limits) and
+  is rejected with the reason if it is damaged or is not an activity.
+- An activity whose start or end is outside the period 1990-2099 (UTC) is
   rejected as a damaged file.
 - With a folder, the app examines it before importing (names and sizes,
   subfolders included). It skips, reporting them, symbolic links, junctions
   and special files, names not allowed on Windows and paths that are too long.
-- From ZIPs only the `.fit` and `.gpx` entries are read. Damaged, too large or
-  too full archives, entries with unsafe names, password-protected files and
-  ZIPs inside ZIPs are rejected, with the reason.
-- Caps: 50,000 activity files (ZIP entries count), 500,000 entries examined,
-  32 levels of subfolders, 50 MB per file. If one of the first three is
-  exceeded, nothing is imported and the app asks to choose a subfolder. Files
-  over 50 MB are reported and skipped. ZIP limits: 50,000 entries, 5 GB in
-  total, compression at most 100:1.
+- Caps: 50,000 activity files, 500,000 entries examined, 32 levels of
+  subfolders, 50 MB per file. If one of the first three is exceeded, nothing is
+  imported and the app asks to choose a subfolder. Files over 50 MB are
+  reported and skipped.
 - The files are copied into the profile archive. The source folder or file is
   never modified.
-- Duplicates are skipped. Running the import again changes nothing. The same
-  activity arriving as FIT and as GPX counts once: the first is kept.
+- Duplicates are skipped. Running the import again changes nothing.
 - The import does not block the window. The status bar shows the progress and
   "Stop import" (Esc). An interrupted import is resumed by running it again.
 - Result per file:
   - imported;
-  - already present (even if it arrived in another format);
+  - already present;
   - repaired: the activity was already there, but its file in the archive was
     missing or altered; by importing the same original file again, the app puts
     it right. The summary counts it separately ("Archived files repaired from
@@ -254,6 +255,32 @@ Sincronizza, Verifica completa, Interrompi sincronizzazione.
 - At the end a summary: the counts by result and, for each file not imported,
   the name and the reason in plain words.
 - The app remembers the last folder used for files and for folders.
+
+### Profiles that contain activities imported from GPX
+
+A profile created before this change may contain activities imported from GPX
+files. It is migrated when it is opened (schema version 11):
+
+1. a consistent copy of the database is made in the `backup` folder of the profile
+   (`ponos-v10-v11.sqlite3`; without the copy nothing is migrated);
+2. in a single transaction the GPX activities are removed from the database, the
+   `file_format` constraint admits only `fit`, the load cache is emptied (it is
+   derived and is recomputed from the files), the threshold tests of the removed
+   activities are removed, and the synchronisation journal entries that pointed
+   to a removed activity go back to "pending" (the next synchronisation
+   downloads Garmin's original again: a FIT becomes an activity, a GPX-only
+   original fails as an unsupported format);
+3. after the commit, the GPX files are removed from the archive. A file left
+   behind by an interruption is a harmless orphan; a record is never left without
+   its file;
+4. the app tells the user, once, when the profile opens, how many activities were
+   removed ("Activities removed") and that the pre-migration copy of the database
+   is in the backup folder.
+
+A migration interrupted at any point leaves the database as it was (version 10)
+and the files untouched; opening the profile again runs it from the start. A
+backup made before this change may contain GPX activities: restoring it gives a
+profile that is migrated the same way when opened.
 
 ## 5. Physiological parameters
 
@@ -396,7 +423,7 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
   clicking a column header.
 - Columns: date and time (in the profile time zone), sport, moving time
   (h:mm:ss), distance (km), positive ascent (m), load (hrTSS), origin of the
-  load (heart rate or estimate) and file format (FIT or GPX).
+  load (heart rate or estimate) and file format (always FIT).
 - Numbers right-aligned, units in the header, no lines. The cell is empty where
   the data is missing (for example the distance of an indoor session).
 - Without activities, the page invites you to import files.

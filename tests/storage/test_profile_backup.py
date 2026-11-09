@@ -45,7 +45,7 @@ from tests.builders import T0, fit_identity, make_record, physiology_entry
 
 _NOW = datetime(2026, 11, 8, 12, 0, tzinfo=UTC)
 _FIT_BYTES = b"FIT-like bytes of a test run " * 40
-_GPX_BYTES = b"<gpx><trk>a test walk</trk></gpx>" * 20
+_OTHER_FIT_BYTES = b"FIT-like bytes of another test run " * 20
 _PROFILE_ID = ProfileId(uuid.UUID("0b3f4c1a-7d2e-4a8b-9c65-1e2f3a4b5c6d"))
 
 
@@ -64,12 +64,12 @@ def _make_profile(root: Path, name: str = "source") -> _Profile:
     )
     archive = FileArchive.in_profile_folder(folder)
     fit = archive.store(_FIT_BYTES, FileFormat.FIT, T0)
-    gpx = archive.store(_GPX_BYTES, FileFormat.GPX, datetime(2025, 3, 2, tzinfo=UTC))
+    other = archive.store(_OTHER_FIT_BYTES, FileFormat.FIT, datetime(2025, 3, 2, tzinfo=UTC))
     with opened.activities.transaction():
         opened.activities.add(make_record(fit_identity(1)))
         opened.physiology.put(physiology_entry(date(2026, 1, 1), 172))
     opened.close()
-    paths = tuple(f"archivio/{file.relative_path.as_posix()}" for file in (fit, gpx))
+    paths = tuple(f"archivio/{file.relative_path.as_posix()}" for file in (fit, other))
     return _Profile(folder, paths)
 
 

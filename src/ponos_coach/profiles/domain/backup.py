@@ -8,7 +8,8 @@ A backup is a ZIP archive (suffix `.ponosbackup`) with these entries and no othe
   `created_utc`, `app_version`, `profile_id`, `schema_version` and `files`, the list of the
   other entries, each with `path`, `size_bytes` and `sha256`;
 - `ponos.sqlite3`: a consistent snapshot of the profile database;
-- `archivio/<year>/<sha256>.fit` or `.gpx`: the original activity files.
+- `archivio/<year>/<sha256>.fit` or `.gpx`: the original activity files (`.gpx` only in backups
+  made before the FIT-only change, ADR 014: it stays accepted so that they can be restored).
 
 Never in a backup: Garmin tokens (they live in the system keyring), the lock file and the
 `backup/` folder of the pre-migration copies. The ZIP entry names are the only file names the

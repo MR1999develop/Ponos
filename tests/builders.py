@@ -18,7 +18,6 @@ from ponos_coach.activities.domain import (
     FileId,
     FitIdentity,
     GarminActivityId,
-    GpxIdentity,
     RemoteActivity,
     Sport,
     format_of,
@@ -39,11 +38,6 @@ IMPORTED_AT = datetime(2026, 4, 1, 12, 0, tzinfo=UTC)
 def fit_identity(number: int = 1) -> FitIdentity:
     """Distinct FIT identity for each `number` (serial number)."""
     return FitIdentity(FileId(255, 1, number, T0))
-
-
-def gpx_identity(number: int = 1) -> GpxIdentity:
-    """Distinct GPX identity for each `number` (SHA-256 of a text)."""
-    return GpxIdentity(hashlib.sha256(f"gpx-{number}".encode()).hexdigest())
 
 
 def archived_file(identity: ActivityIdentity) -> ArchivedFile:

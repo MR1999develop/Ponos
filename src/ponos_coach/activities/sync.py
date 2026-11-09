@@ -111,7 +111,6 @@ _REASON_BY_FILE_ERROR: Final[Mapping[ActivityFileReason, FailureReason]] = {
     ActivityFileReason.CORRUPT: FailureReason.CORRUPT_FILE,
     ActivityFileReason.NOT_AN_ACTIVITY: FailureReason.NOT_AN_ACTIVITY,
     ActivityFileReason.UNSUPPORTED_FORMAT: FailureReason.UNSUPPORTED_FORMAT,
-    ActivityFileReason.EXTENSION_MISMATCH: FailureReason.CORRUPT_FILE,
     ActivityFileReason.TOO_MANY_RECORDS: FailureReason.FILE_TOO_LARGE,
     ActivityFileReason.TOO_LONG: FailureReason.CORRUPT_FILE,
 }
@@ -332,7 +331,6 @@ class _Saved(Enum):
     """What the saving of a downloaded original produced."""
 
     NEW = "new"  # new activity: archive and record
-    MATCHED = "matched"  # twin in another format: id linked
     ALREADY_PRESENT = "already_present"  # same file already in the profile: id linked
 
 
@@ -589,9 +587,7 @@ class _Run:
             return
         except ArchiveError as error:  # not the entry's fault: it stops, the entry stays as it was
             raise _StopError(StopReason.STORAGE_ERROR) from error
-        if saved is _Saved.MATCHED:
-            self._matched += 1
-        elif saved is _Saved.ALREADY_PRESENT:
+        if saved is _Saved.ALREADY_PRESENT:
             self._already_present += 1
         else:
             self._downloaded += 1
@@ -599,28 +595,13 @@ class _Run:
     def _store_if_new(
         self, extracted: ExtractedOriginal, activity: Activity
     ) -> ArchivedFile | None:
-        """Archives the file only if the activity is new (neither the same file nor a twin in
-        another
-        format); otherwise None. Reads without a transaction: the decision is repeated,
+        """Archives the file only if the activity is new (the same file is not there yet);
+        otherwise None. Reads without a transaction: the decision is repeated,
         identical, inside the transaction that writes."""
         index = self._p.index
-        if index.get(activity.identity) is not None or self._find_twin(activity) is not None:
+        if index.get(activity.identity) is not None:
             return None
         return self._p.archive.store(extracted.content, activity.file_format, activity.start)
-
-    def _find_twin(self, activity: Activity) -> ActivityRecord | None:
-        """The same start and the same duration, without Garmin id, in another format."""
-        return next(
-            (
-                record
-                for record in self._p.index.find_possible_duplicates(
-                    activity.start, activity.elapsed_s
-                )
-                if record.garmin_activity_id is None
-                and record.file_format is not activity.file_format
-            ),
-            None,
-        )
 
     def _record_activity(
         self,
@@ -638,11 +619,6 @@ class _Run:
                 index.link_garmin_id(existing.identity, garmin_id)
             self._p.journal.update(mark_downloaded(entry, now))
             return _Saved.ALREADY_PRESENT
-        twin = self._find_twin(activity)
-        if twin is not None:  # the same activity imported in another format
-            index.link_garmin_id(twin.identity, garmin_id)
-            self._p.journal.update(mark_matched(entry, now))
-            return _Saved.MATCHED
         if archived is None:  # the state changed after the read: it is archived now
             archived = self._p.archive.store(
                 extracted.content, activity.file_format, activity.start

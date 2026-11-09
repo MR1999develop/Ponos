@@ -107,6 +107,15 @@ profile):
 - `injury_sign`: the warning signs, one row each; `checkin_day` NULL for those of the questionnaire,
   otherwise the check-in that reported it (foreign key, so a check-in takes its signs with it).
   Deleting an injury deletes all of these (`ON DELETE CASCADE`).
+
+Migration v11 (FIT files only, ADR 008): GPX activities leave the database and `file_format`
+admits only `fit`; the `threshold_test` keys admit only `fit:`. SQLite cannot change a CHECK in
+place, so `activities` and `threshold_test` are rebuilt (copy of the FIT rows only, rename, index).
+The load cache is emptied (derived, rebuildable) and so are the tests that used a removed activity;
+the sync journal entries that pointed to a removed activity go back to `pending` (Garmin's original
+is downloaded again: a FIT becomes an activity, anything else fails as an unsupported format). The
+caller first collects the archive paths of the GPX files (`NON_FIT_REMOVED_IN`) and removes the
+files after the transaction has committed.
 """
 
 from __future__ import annotations
@@ -117,13 +126,15 @@ from ponos_coach.storage.schema_workout_backup import WORKOUT_BACKUP_MIGRATION
 
 # Closed sets of v1 (stable values of the saved data); frozen here on purpose.
 _SPORTS = "'running','trail','cycling','strength','hiking','walking','other'"
-_FORMATS = "'fit','gpx'"
+_FORMATS = "'fit','gpx'"  # v1; from v11 only 'fit'
+_FORMATS_V11 = "'fit'"
 _ORIGINS = "'import','garmin'"
 _SEXES = "'male','female'"
 _LOAD_SOURCES = "'heart_rate','estimate'"
 
 V1_SPORTS: Final = frozenset(_SPORTS.replace("'", "").split(","))
 V1_FORMATS: Final = frozenset(_FORMATS.replace("'", "").split(","))
+V11_FORMATS: Final = frozenset(_FORMATS_V11.replace("'", "").split(","))
 V1_ORIGINS: Final = frozenset(_ORIGINS.replace("'", "").split(","))
 V1_SEXES: Final = frozenset(_SEXES.replace("'", "").split(","))
 V1_LOAD_SOURCES: Final = frozenset(_LOAD_SOURCES.replace("'", "").split(","))
@@ -688,6 +699,73 @@ _V10_INJURY_SIGN_UNIQUE = (
     "ON injury_sign (injury_id, COALESCE(checkin_day, ''), sign)"
 )
 
+
+# v11 (ADR 008): FIT files only. The tables are rebuilt with the shape they have after v10.
+_V11_ACTIVITY_COLUMNS = (
+    "id, identity_key, file_format, sport, start_ms, elapsed_s, timer_s, distance_m, ascent_m, "
+    "start_lat, start_lon, track_polyline, archive_path, archive_sha256, archive_size_bytes, "
+    "origin, imported_ms, garmin_activity_id, calories_kcal, "
+    "track_south, track_west, track_north, track_east"
+)
+_V11_ACTIVITY_EXTRA_COLUMNS = f"""    calories_kcal      REAL
+        CHECK (calories_kcal IS NULL OR
+               (calories_kcal > 0 AND calories_kcal <= {V4_MAX_ACTIVITY_KCAL})),
+    track_south        REAL    CHECK (track_south IS NULL OR track_south BETWEEN -90 AND 90),
+    track_west         REAL    CHECK (track_west IS NULL OR track_west BETWEEN -180 AND 180),
+    track_north        REAL    CHECK (track_north IS NULL OR track_north BETWEEN -90 AND 90),
+    track_east         REAL
+        CHECK (track_east IS NULL OR (
+            track_east BETWEEN -180 AND 180
+            AND track_south IS NOT NULL AND track_west IS NOT NULL AND track_north IS NOT NULL
+            AND track_south <= track_north))
+        CHECK (track_east IS NOT NULL OR (
+            track_south IS NULL AND track_west IS NULL AND track_north IS NULL)),
+"""
+
+# Journal entries that point to a GPX activity are to be worked on again (`pending` has no
+# attempts and no cause).
+_V11_REARM_JOURNAL = """
+UPDATE sync_journal SET status = 'pending', failed_attempts = 0, failure = NULL
+WHERE garmin_id IN (SELECT garmin_activity_id FROM activities
+                    WHERE file_format <> 'fit' AND garmin_activity_id IS NOT NULL)
+"""
+_V11_CLEAR_LOAD_CACHE = "DELETE FROM load_cache"  # before replacing the table it points to
+_V11_ACTIVITIES = (
+    _V1_ACTIVITIES.replace("CREATE TABLE activities (", "CREATE TABLE activities_v11 (")
+    .replace(f"IN ({_FORMATS})", f"IN ({_FORMATS_V11})")
+    .replace(
+        "    CHECK ((start_lat IS NULL)",
+        _V11_ACTIVITY_EXTRA_COLUMNS + "    CHECK ((start_lat IS NULL)",
+        1,
+    )
+)
+_V11_COPY_ACTIVITIES = (
+    f"INSERT INTO activities_v11 ({_V11_ACTIVITY_COLUMNS}) "  # noqa: S608 - module constants only
+    f"SELECT {_V11_ACTIVITY_COLUMNS} FROM activities WHERE file_format = 'fit'"
+)
+_V11_THRESHOLD_COLUMNS = (
+    "activity_key, test_date, segment_start_ms, threshold_bpm, pace_s_per_km, method_version, "
+    "protocol"
+)
+_V11_THRESHOLD_TEST = (
+    _V5_THRESHOLD_TEST.replace("CREATE TABLE threshold_test (", "CREATE TABLE threshold_test_v11 (")
+    .replace("IN ('fit:', 'gpx:')", "= 'fit:'")
+    .replace(
+        "CHECK (method_version >= 1)\n) STRICT",
+        "CHECK (method_version >= 1),\n"
+        "    protocol         TEXT    NOT NULL DEFAULT 'thirty_minutes'\n"
+        f"                             CHECK (protocol IN ({_THRESHOLD_PROTOCOLS}))\n) STRICT",
+    )
+)
+_V11_COPY_THRESHOLD_TESTS = (
+    f"INSERT INTO threshold_test_v11 ({_V11_THRESHOLD_COLUMNS}) "  # noqa: S608 - module constants
+    f"SELECT {_V11_THRESHOLD_COLUMNS} FROM threshold_test WHERE substr(activity_key, 1, 4) = 'fit:'"
+)
+_V11_DROP_ACTIVITIES = "DROP TABLE activities"
+_V11_DROP_THRESHOLD_TESTS = "DROP TABLE threshold_test"
+_V11_RENAME_ACTIVITIES = "ALTER TABLE activities_v11 RENAME TO activities"
+_V11_RENAME_THRESHOLD_TESTS = "ALTER TABLE threshold_test_v11 RENAME TO threshold_test"
+
 # Migration i (index i-1): brings the schema from version i-1 to i.
 MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     (_V1_META, _V1_ACTIVITIES, _V1_ACTIVITIES_START_INDEX, _V1_PHYSIOLOGY, _V1_LOAD_CACHE),
@@ -733,6 +811,20 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
         _V10_INJURY_SIGN,
         _V10_INJURY_SIGN_UNIQUE,
     ),
+    (
+        _V11_REARM_JOURNAL,
+        _V11_CLEAR_LOAD_CACHE,
+        _V11_ACTIVITIES,
+        _V11_COPY_ACTIVITIES,
+        _V11_THRESHOLD_TEST,
+        _V11_COPY_THRESHOLD_TESTS,
+        _V11_DROP_ACTIVITIES,
+        _V11_DROP_THRESHOLD_TESTS,
+        _V11_RENAME_ACTIVITIES,
+        _V11_RENAME_THRESHOLD_TESTS,
+        _V1_ACTIVITIES_START_INDEX,
+    ),
 )
 
 SCHEMA_VERSION: Final = len(MIGRATIONS)
+NON_FIT_REMOVED_IN: Final = 11  # the migration that removes the non-FIT activities

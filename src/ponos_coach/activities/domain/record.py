@@ -11,7 +11,7 @@ from enum import Enum
 from pathlib import PurePosixPath
 
 from ponos_coach.activities.domain.activity import Activity
-from ponos_coach.activities.domain.identity import ActivityIdentity, FileFormat, format_of
+from ponos_coach.activities.domain.identity import ActivityIdentity, FileFormat
 from ponos_coach.activities.domain.sport import Sport
 from ponos_coach.activities.domain.summary import ActivitySummary
 from ponos_coach.activities.domain.timing import check_durations, check_utc
@@ -76,8 +76,6 @@ class ActivityRecord:
     garmin_activity_id: int | None = None
 
     def __post_init__(self) -> None:
-        if format_of(self.identity) is not self.file_format:
-            raise ValueError("the format does not match the identity")
         check_utc(self.start)
         check_utc(self.imported_at)
         check_durations(self.elapsed_s, self.timer_s)

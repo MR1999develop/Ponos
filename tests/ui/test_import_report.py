@@ -22,7 +22,6 @@ def test_report_counts_each_outcome_and_lists_files_not_imported() -> None:
             FileImportResult("a.fit", ImportStatus.IMPORTED),
             FileImportResult("b.fit", ImportStatus.IMPORTED),
             FileImportResult("c.fit", ImportStatus.ALREADY_PRESENT, matches=identity),
-            FileImportResult("c.gpx", ImportStatus.DUPLICATE_OF_OTHER_FORMAT, matches=identity),
             FileImportResult("d.fit", ImportStatus.IGNORED, ImportIssue.NOT_AN_ACTIVITY),
             FileImportResult("e.fit", ImportStatus.FAILED, ImportIssue.CORRUPT),
         ),
@@ -31,9 +30,9 @@ def test_report_counts_each_outcome_and_lists_files_not_imported() -> None:
 
     report = ImportReport.from_summary(summary)
 
-    assert (report.imported, report.already_present, report.ignored, report.failed) == (2, 2, 1, 1)
+    assert (report.imported, report.already_present, report.ignored, report.failed) == (2, 1, 1, 1)
     assert report.cancelled
-    assert report.examined == 6
+    assert report.examined == 5
     assert report.not_imported == (
         NotImported("d.fit", ImportIssue.NOT_AN_ACTIVITY),
         NotImported("e.fit", ImportIssue.CORRUPT),

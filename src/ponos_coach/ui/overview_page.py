@@ -307,7 +307,7 @@ class OverviewPage(QWidget):
             case Ready():
                 self._state_page.set_content(
                     self.tr("No activities yet"),
-                    self.tr("To get started, import FIT, GPX or ZIP files."),
+                    self.tr("To get started, import FIT files."),
                     self.tr("Import files..."),
                 )
             case _:

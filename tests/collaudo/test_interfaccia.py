@@ -27,7 +27,7 @@ from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.overview_state import Ready
 from tests.collaudo.support import format_logs
 from tests.collaudo.test_import_pila_reale import mixed_tree
-from tests.fixtures.generators import gpx_writer as gw
+from tests.fixtures.generators import fit_writer as fw
 from tests.fixtures.generators import import_files as imp
 from tests.ui.workspace_support import (
     WAIT_MS,
@@ -111,16 +111,16 @@ def test_t_ui_01_a_hostile_tree_from_the_window_then_again_then_a_new_session(
 
     first = import_and_wait(qtbot, window, source)
 
-    assert (first.imported, first.already_present, first.ignored, first.failed) == (4, 2, 1, 7)
+    assert (first.imported, first.already_present, first.ignored, first.failed) == (4, 2, 0, 6)
     assert not first.cancelled
-    assert len(first.not_imported) == 8  # every refused or ignored file has its reason
+    assert len(first.not_imported) == 6  # ogni file rifiutato o ignorato ha il suo motivo
     wait_ready(qtbot, window, 4)
     assert activity_rows(window) == 4
 
     again = import_and_wait(qtbot, window, source)
 
     assert (again.imported, again.already_present) == (0, 6)
-    assert len(again.not_imported) == 8  # the refusals stay refusals, every time
+    assert len(again.not_imported) == 6  # i rifiuti restano rifiuti, ogni volta
     wait_ready(qtbot, window, 4)
 
     second_session = restart(qtbot, window, tmp_path, settings)
@@ -145,7 +145,7 @@ def test_t_ui_01_two_profiles_stay_separate_and_the_last_one_used_reopens(
     assert activity_rows(window) == 0  # the new profile inherits nothing
     second_source = tmp_path / "due"
     second_source.mkdir()
-    (second_source / "a.gpx").write_bytes(imp.gpx_run(50))
+    (second_source / "a.fit").write_bytes(imp.fit_run(50))
     import_and_wait(qtbot, window, second_source)
     wait_ready(qtbot, window, 1)
     first_id = next(
@@ -351,17 +351,15 @@ def test_d_f1_08_the_open_section_is_remembered_at_the_next_start(
 # --- T-SEC-08 ------------------------------------------------------------------------------------
 
 
-def secret_gpx() -> bytes:
-    points = gw.line_points(
-        imp.run_start(1),
-        61,
-        step_s=10,
-        lat_step_deg=0.0001,
-        first_lat=SECRET_LAT,
-        first_lon=SECRET_LON,
-        hr=[187] * 61,
-    )
-    return gw.build_gpx(gw.GpxSpec([points], name=SECRET_NAME))
+def secret_fit() -> bytes:
+    start = imp.run_start(1)
+    first = fw.datetime_to_fit(start)
+    samples = [
+        fw.Sample(first + i * 10, 187, lat_deg=SECRET_LAT + i * 0.0001, lon_deg=SECRET_LON)
+        for i in range(61)
+    ]
+    spec = fw.ActivitySpec(start, fw.Sport.RUNNING, fw.SubSport.GENERIC, samples)
+    return fw.build_activity(spec)
 
 
 def assert_log_is_clean(text: str, tmp_path: Path) -> None:
@@ -391,7 +389,7 @@ def test_t_sec_08_import_open_and_overview_log_no_data_of_the_user(
     create_profile(qtbot, window, "Atleta di prova")
     source = tmp_path / SECRET_NAME
     mixed_tree(source)
-    (source / f"{SECRET_NAME}.gpx").write_bytes(secret_gpx())
+    (source / f"{SECRET_NAME}.fit").write_bytes(secret_fit())
     (source / f"{SECRET_NAME}_rotto.fit").write_bytes(b"non un fit " + SECRET_NAME.encode())
     import_and_wait(qtbot, window, source)
     wait_ready(qtbot, window, 5)
