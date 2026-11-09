@@ -29,7 +29,7 @@ from ponos_coach.ui.calendar_texts import day_detail_text
 from ponos_coach.ui.plan_texts import goal_label
 from ponos_coach.ui.tokens import SPACE_1, SPACE_2, SPACE_3
 
-_PANEL_MIN_HEIGHT = 140
+_PANEL_MIN_HEIGHT = 72  # about four lines of text; the user can drag it taller
 
 
 class DayDetailPanel(QWidget):

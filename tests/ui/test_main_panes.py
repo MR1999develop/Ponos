@@ -4,10 +4,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QLocale, QSettings, Qt
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QListWidget, QMenu
 from pytestqt.qtbot import QtBot
@@ -15,6 +16,15 @@ from pytestqt.qtbot import QtBot
 from ponos_coach.ui.main_panes import Pane
 from tests.ui.map_support import map_window
 from tests.ui.workspace_support import compose, make_settings
+
+
+@pytest.fixture(autouse=True)
+def english_dates() -> Iterator[None]:
+    """Month names in English, whatever the language of the test computer."""
+    previous = QLocale()
+    QLocale.setDefault(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
+    yield
+    QLocale.setDefault(previous)
 
 
 @pytest.fixture

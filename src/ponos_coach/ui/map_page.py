@@ -15,13 +15,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from zoneinfo import ZoneInfo
 
-from PySide6.QtCore import QDate, QDateTime, QLocale, QSettings, Qt, QTime, Signal
+from PySide6.QtCore import QDate, QDateTime, QLocale, QSettings, Qt, QTime
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QSplitter,
     QStackedWidget,
     QVBoxLayout,
@@ -64,7 +63,8 @@ KEY_COLOR_MODE = "map/colorMode"
 MODE_SPORT = "sport"
 MODE_ZONES = "zones"
 _INITIAL_VIEW = {"lat": 30.0, "lon": 10.0, "zoom": 2}  # the world, not a place of the user
-_DETAIL_MIN_HEIGHT = 160
+_DETAIL_MIN_HEIGHT = 110
+_MAP_MIN_HEIGHT = 220  # px: below this a map of tracks cannot be read
 _MS_TO_KMH = 3.6
 _STACK_CHART = 0
 _STACK_MESSAGE = 1
@@ -85,7 +85,6 @@ def _calories_text(kcal: float | None) -> str:
 class MapPage(QWidget):
     """The map section."""
 
-    detail_requested = Signal(object)  # ActivityIdentity: open its detail window
 
     def __init__(  # noqa: PLR0913 - every argument is a distinct collaborator of the page
         self,
@@ -131,6 +130,9 @@ class MapPage(QWidget):
         top_column = QVBoxLayout(top)
         top_column.setContentsMargins(0, 0, 0, 0)
         top_column.setSpacing(0)
+        # The map keeps a usable height: in a quarter of the window the elevation profile below
+        # must never squeeze it away (user's report of 2026-11-09).
+        self._map.setMinimumHeight(_MAP_MIN_HEIGHT)
         top_column.addWidget(self._map, stretch=1)
         self._sport_legend = LegendBar(self.tr("Legend: sports"), top)
         self._zone_legend = LegendBar(self.tr("Legend: heart-rate zones"), top)
@@ -138,8 +140,8 @@ class MapPage(QWidget):
         top_column.addWidget(self._zone_legend)
         vertical.addWidget(top)
         vertical.addWidget(self._build_detail())
-        vertical.setStretchFactor(0, 3)
-        vertical.setStretchFactor(1, 1)
+        vertical.setStretchFactor(0, 1)
+        vertical.setStretchFactor(1, 0)
         vertical.setChildrenCollapsible(False)
         outer.addWidget(vertical, stretch=1)
 
@@ -211,10 +213,6 @@ class MapPage(QWidget):
             form.addRow(text, value)
         column.addLayout(form)
         column.addStretch(1)
-        self._open_detail = QPushButton(self.tr("Activity detail..."), self._summary)
-        self._open_detail.setObjectName("mapOpenDetail")
-        self._open_detail.clicked.connect(self._on_open_detail)
-        column.addWidget(self._open_detail)
         self._summary.hide()
         return self._summary
 
@@ -227,10 +225,6 @@ class MapPage(QWidget):
             ("speed", self.tr("Average speed (km/h)")),
             ("calories", self.tr("Energy (kcal)")),
         )
-
-    def _on_open_detail(self) -> None:
-        if self._selected is not None:
-            self.detail_requested.emit(self._selected)
 
     def _build_area_summary(self) -> QWidget:
         """The count and the totals of the activities that start in the visible area."""

@@ -18,12 +18,12 @@ from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QLocale, Qt, QTime, Signal
 from PySide6.QtWidgets import (
-    QFrame,
+    QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QProgressBar,
     QPushButton,
-    QScrollArea,
-    QSplitter,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -69,12 +69,6 @@ type ChartScheduler = Callable[
     [Callable[[], object], Callable[[object], None], Callable[[ErrorMessage], None]], bool
 ]
 """Run a job off the UI thread and deliver its outcome on the UI thread."""
-
-
-# Relative heights of the three charts: the PMC has two panels, the others one.
-_CHART_STRETCH = (4, 3, 3)
-# Least height of a chart: in a small pane the three charts scroll instead of being squashed.
-_CHART_MIN_HEIGHT = 150
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,19 +161,34 @@ class OverviewPage(QWidget):
         self._chart = ChartView(engine, self.tr("Fitness and fatigue chart"), self)
         self._load_chart = ChartView(engine, self.tr("Weekly load chart"), self)
         self._zones_chart = ChartView(engine, self.tr("Time in zones chart"), self)
-        self._charts = QSplitter(Qt.Orientation.Vertical, self)
-        self._charts.setChildrenCollapsible(False)
-        for index, view in enumerate((self._chart, self._load_chart, self._zones_chart)):
-            self._charts.addWidget(view)
-            self._charts.setStretchFactor(index, _CHART_STRETCH[index])
+        # One chart at a time, chosen in a short list on its left (user's request of 2026-11-09):
+        # a quarter of the window cannot hold three charts. The dates stay in step anyway.
+        self._chart_list = QListWidget(self)
+        self._chart_list.setObjectName("overviewCharts")
+        self._chart_list.setAccessibleName(self.tr("Overview charts"))
+        self._chart_stack = QStackedWidget(self)
+        names = (self.tr("Fitness and fatigue"), self.tr("Weekly load"), self.tr("Time in zones"))
+        for name, view in zip(
+            names, (self._chart, self._load_chart, self._zones_chart), strict=True
+        ):
+            QListWidgetItem(name, self._chart_list)
+            self._chart_stack.addWidget(view)
             view.x_range_changed.connect(partial(self._follow_dates, view))
-        self._charts.setMinimumHeight(_CHART_MIN_HEIGHT * len(_CHART_STRETCH))
-        self._charts_scroll = QScrollArea(self)
-        self._charts_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self._charts_scroll.setWidgetResizable(True)  # the charts follow the width
-        self._charts_scroll.setWidget(self._charts)
+        self._chart_list.setFixedWidth(
+            max(self._chart_list.sizeHintForColumn(0), 0)
+            + 2 * self._chart_list.frameWidth()
+            + SPACE_4
+        )
+        self._chart_list.currentRowChanged.connect(self._chart_stack.setCurrentIndex)
+        self._chart_list.setCurrentRow(0)
+        self._charts = QWidget(self)
+        row = QHBoxLayout(self._charts)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(SPACE_2)
+        row.addWidget(self._chart_list)
+        row.addWidget(self._chart_stack, stretch=1)
         self._stack = QStackedWidget(self)
-        for widget in (self._state_page, self._loading_page, self._charts_scroll):
+        for widget in (self._state_page, self._loading_page, self._charts):
             self._stack.addWidget(widget)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -199,6 +208,11 @@ class OverviewPage(QWidget):
     def zones_chart(self) -> ChartView:
         """The time in HR zones view."""
         return self._zones_chart
+
+    @property
+    def chart_list(self) -> QListWidget:
+        """The list on the left that chooses the chart shown."""
+        return self._chart_list
 
     @property
     def charts_widget(self) -> QWidget:
@@ -226,8 +240,7 @@ class OverviewPage(QWidget):
 
     def current_widget(self) -> QWidget | None:
         """Widget currently visible in the stack."""
-        current = self._stack.currentWidget()
-        return self._charts if current is self._charts_scroll else current
+        return self._stack.currentWidget()
 
     def apply_state(self, state: OverviewState, theme: Theme, zone: ZoneInfo) -> None:
         """Show the page decided by `page_of` for the state; `zone` is the profile's time zone.
@@ -285,7 +298,7 @@ class OverviewPage(QWidget):
                 self._chart.show_prepared(prepared.pmc)
                 self._load_chart.show_prepared(prepared.weekly_load)
                 self._zones_chart.show_prepared(prepared.weekly_zones)
-                self._stack.setCurrentWidget(self._charts_scroll)
+                self._stack.setCurrentWidget(self._charts)
 
         def failed(message: ErrorMessage) -> None:
             if request == self._chart_request:

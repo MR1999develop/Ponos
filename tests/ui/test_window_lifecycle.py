@@ -152,17 +152,19 @@ def test_the_dividers_between_the_panes_are_remembered(
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
     window.show()
+    window.resize(1600, 1200)  # room for the map's least height in the lower pane
     panes = window.panes
     total = sum(panes.sizes())
     panes.setSizes([total * 3 // 10, total * 7 // 10])
     panes.splitterMoved.emit(1, 1)  # setSizes does not say that the user dragged it
     for column in (panes.left_column, panes.right_column):
         height = sum(column.sizes())
-        column.setSizes([height * 7 // 10, height * 3 // 10])
+        column.setSizes([height * 6 // 10, height * 4 // 10])
         column.splitterMoved.emit(1, 1)
     again = compose(tmp_path / "again", settings)
     qtbot.addWidget(again)
     again.show()
+    again.resize(1600, 1200)
 
     columns = again.panes.sizes()
     assert columns[0] < columns[1]  # 3 : 7 and not the equal halves of a new window

@@ -748,7 +748,7 @@
     </message>
     <message>
         <source>Click an activity, or press Enter on it, to open it.</source>
-        <translation>Fai clic su un'attività, o premi Invio, per aprirla.</translation>
+        <translation>Fai clic su un&apos;attività, o premi Invio, per aprirla.</translation>
     </message>
     <message>
         <source>{meal} at {time}</source>
@@ -3665,7 +3665,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>There is no network, or the map server does not answer.</source>
-        <translation>Non c'è rete, oppure il server della mappa non risponde.</translation>
+        <translation>Non c&apos;è rete, oppure il server della mappa non risponde.</translation>
     </message>
     <message>
         <source>The map server sent something the map cannot use.</source>
@@ -3765,10 +3765,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Map background notice</source>
         <translation>Avviso sullo sfondo della mappa</translation>
-    </message>
-    <message>
-        <source>Activity detail...</source>
-        <translation>Dettaglio attività...</translation>
     </message>
     <message>
         <source>Moving time (h:mm:ss)</source>
@@ -4513,6 +4509,22 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Time in zones chart</source>
         <translation>Grafico del tempo nelle zone</translation>
+    </message>
+    <message>
+        <source>Overview charts</source>
+        <translation>Grafici della panoramica</translation>
+    </message>
+    <message>
+        <source>Fitness and fatigue</source>
+        <translation>Condizione e fatica</translation>
+    </message>
+    <message>
+        <source>Weekly load</source>
+        <translation>Carico settimanale</translation>
+    </message>
+    <message>
+        <source>Time in zones</source>
+        <translation>Tempo nelle zone</translation>
     </message>
     <message>
         <source>Calculate again</source>
@@ -5301,7 +5313,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>There is nothing to save on this page.</source>
-        <translation>In questa pagina non c'è nulla da salvare.</translation>
+        <translation>In questa pagina non c&apos;è nulla da salvare.</translation>
     </message>
     <message>
         <source>Unsaved changes</source>

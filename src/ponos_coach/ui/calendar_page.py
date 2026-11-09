@@ -86,6 +86,7 @@ _PHASE_SLOT = {
     Phase.TAPER: 1,
     Phase.RACE: 5,
 }
+_GRID_START_PX = 10_000  # the month first: the splitter gives the panel only its minimum
 
 
 def phase_color(phase: Phase, theme: Theme) -> str:
@@ -273,8 +274,10 @@ class CalendarPage(QWidget):
         splitter.setChildrenCollapsible(False)
         splitter.addWidget(self._table)
         splitter.addWidget(self._panel)
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 1)
+        # The month takes the room; the day's text stays a short band the user can drag taller.
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 0)
+        splitter.setSizes([_GRID_START_PX, self._panel.minimumHeight()])
         layout = QVBoxLayout(self)
         layout.setContentsMargins(SPACE_4, SPACE_4, SPACE_4, SPACE_4)
         layout.setSpacing(SPACE_3)
