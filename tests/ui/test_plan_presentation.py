@@ -31,6 +31,7 @@ from ponos_coach.planning.domain import (
     TargetClass,
     TargetTimeUnreachable,
 )
+from ponos_coach.planning.domain.plan import Block, BlockRole
 from ponos_coach.profiles.rebuild_plan import (
     NotBuiltReason,
     PlanBuilt,
@@ -52,6 +53,7 @@ from ponos_coach.ui.plan_presentation import (
     retest_proposal_of,
 )
 from ponos_coach.ui.plan_texts import (
+    block_text,
     goal_label,
     label_lookup,
     notice_texts,
@@ -306,3 +308,16 @@ def test_a_goal_is_named_in_one_phrase_with_its_distance_priority_and_day() -> N
         "Form goal, CTL 55, 9/1/26"
     )
     assert label_lookup({})("nobody") == "a goal"
+
+
+def test_a_running_block_names_the_pace_before_the_heart_rate() -> None:
+    # The watch follows the pace in running (the heart rate lags in intervals): the app says it in
+    # the same order. A block without a pace keeps the heart rate alone.
+    with_pace = Block(BlockRole.WORK, 4, 4, 5, 160, 170, 270, 255)
+    without = Block(BlockRole.STEADY, 30, 2, 1, 130, 145, None, None)
+
+    text = block_text(with_pace)
+
+    assert text.index("per km") < text.index("bpm")
+    assert "per km" not in block_text(without)
+    assert "130 to 145 bpm" in block_text(without)

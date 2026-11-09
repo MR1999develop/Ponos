@@ -80,16 +80,21 @@ def test_a_workout_is_one_segment_of_time_steps_with_the_heart_rate_as_target() 
     assert "secondaryTargetType" not in interval
 
 
-def test_a_pace_range_is_the_secondary_target_in_metres_per_second_slowest_first() -> None:
+def test_a_pace_range_is_the_main_target_and_the_heart_rate_the_secondary_one() -> None:
+    # The user's request of 2026-11-09: in running intervals the heart rate rises too slowly to
+    # guide the effort, so the watch follows the pace (m/s, slowest first) and shows the HR too.
     step = WorkoutStep(
         StepKind.INTERVAL, 600, 150, 165, pace_slow_s_per_km=400, pace_fast_s_per_km=250
     )
 
     (built,) = steps_of(workout_payload(a_spec(step)))
 
-    assert built["secondaryTargetType"]["workoutTargetTypeKey"] == "pace.zone"  # type: ignore[index]
-    assert built["secondaryTargetValueOne"] == pytest.approx(2.5)
-    assert built["secondaryTargetValueTwo"] == pytest.approx(4.0)
+    assert built["targetType"]["workoutTargetTypeKey"] == "pace.zone"  # type: ignore[index]
+    assert built["targetValueOne"] == pytest.approx(2.5)
+    assert built["targetValueTwo"] == pytest.approx(4.0)
+    assert built["secondaryTargetType"]["workoutTargetTypeKey"] == "heart.rate.zone"  # type: ignore[index]
+    assert built["secondaryTargetValueOne"] == 150.0
+    assert built["secondaryTargetValueTwo"] == 165.0
 
 
 @pytest.mark.parametrize(
@@ -134,16 +139,16 @@ def test_durations_and_targets_of_the_spec_are_what_the_json_says(spec: WorkoutS
     built = steps_of(payload)
     assert payload["estimatedDurationInSecs"] == sum(s.seconds for s in spec.steps)
     assert [s["endConditionValue"] for s in built] == [float(s.seconds) for s in spec.steps]
-    assert [(s["targetValueOne"], s["targetValueTwo"]) for s in built] == [
-        (float(s.hr_low_bpm), float(s.hr_high_bpm)) for s in spec.steps
-    ]
     for step, one in zip(spec.steps, built, strict=True):
+        hr = (float(step.hr_low_bpm), float(step.hr_high_bpm))
         if step.pace_slow_s_per_km is None or step.pace_fast_s_per_km is None:
+            assert (one["targetValueOne"], one["targetValueTwo"]) == hr
             assert "secondaryTargetValueOne" not in one
         else:
-            assert 1000.0 / one["secondaryTargetValueOne"] == pytest.approx(step.pace_slow_s_per_km)  # type: ignore[operator]
-            assert 1000.0 / one["secondaryTargetValueTwo"] == pytest.approx(step.pace_fast_s_per_km)  # type: ignore[operator]
-            assert one["secondaryTargetValueOne"] <= one["secondaryTargetValueTwo"]  # type: ignore[operator]
+            assert (one["secondaryTargetValueOne"], one["secondaryTargetValueTwo"]) == hr
+            assert 1000.0 / one["targetValueOne"] == pytest.approx(step.pace_slow_s_per_km)  # type: ignore[operator]
+            assert 1000.0 / one["targetValueTwo"] == pytest.approx(step.pace_fast_s_per_km)  # type: ignore[operator]
+            assert one["targetValueOne"] <= one["targetValueTwo"]  # type: ignore[operator]
 
 
 # --- Reading the calendar ------------------------------------------------------------------------

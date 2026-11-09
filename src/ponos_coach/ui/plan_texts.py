@@ -234,7 +234,7 @@ def _pace_phrase(slow: int | None, fast: int | None) -> str:
 
 
 def block_text(block: Block) -> str:
-    """One block of a session in one line: what, how long, which zone, heart rate and pace."""
+    """One block of a session in one line: what, how long, which zone, pace and heart rate."""
     if block.repeats > 1:
         # {repeats}: how many times; %n: the minutes of each repetition.
         duration = QCoreApplication.translate(
@@ -249,7 +249,8 @@ def block_text(block: Block) -> str:
         low=block.hr_low_bpm, high=block.hr_high_bpm
     )
     pace = _pace_phrase(block.pace_slow_s_per_km, block.pace_fast_s_per_km)
-    details = ", ".join(part for part in (duration, zone, heart_rate, pace) if part)
+    # The pace leads when there is one (running): it is what the watch follows.
+    details = ", ".join(part for part in (duration, zone, pace, heart_rate) if part)
     # {role}: the kind of block; {details}: its duration, zone, heart rate and pace.
     return QCoreApplication.translate("Plan", "{role}: {details}").format(
         role=_role_text(block.role), details=details

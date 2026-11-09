@@ -4,9 +4,10 @@
 
 Pure conversion, independent of Garmin's JSON (that lives in the adapter). A session becomes a
 flat list of steps: each repetition of an interval session is its own step, work and rest in turn,
-so the list says exactly how long the athlete is in each heart-rate range. The heart-rate range of
-the zone (whole bpm) is the main target of every step; the pace range is added when the plan has
-one (running only), and the work blocks of a race-pace session target the race pace.
+so the list says exactly how long the athlete is in each heart-rate range. Every step has the
+heart-rate range of its zone (whole bpm); when the plan has a pace range (running only) the pace
+leads and the heart rate is secondary, because in intervals the heart rate lags too much to guide
+the effort. The work blocks of a race-pace session target the race pace.
 
 The name of every workout the app creates starts with `WORKOUT_PREFIX`, which is how the app tells
 its own workouts from the athlete's.

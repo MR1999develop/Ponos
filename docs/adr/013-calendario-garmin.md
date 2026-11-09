@@ -18,7 +18,10 @@ protects what is the athlete's, and what is kept locally of a deletion.
 ### Shape of a workout
 
 1. **Flat steps, each repetition written out; heart-rate range in bpm as main target, pace range
-   as secondary target.**
+   as secondary target.** Amended 2026-11-09 at the user's request: a running step with a pace
+   range has the pace as main target and the heart-rate range as secondary target, because in
+   intervals the heart rate lags too much to guide the effort; steps without a pace range keep
+   the heart rate as main target.
    - Pro: nothing that depends on the least documented parts of the format (repeat groups); exact
      durations; the plan's own zones (threshold-based), not Garmin's.
    - Con: an interval session shows more steps on the watch.

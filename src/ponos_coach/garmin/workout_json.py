@@ -89,20 +89,32 @@ def _step(index: int, step: WorkoutStep) -> dict[str, object]:
         "stepType": {"stepTypeId": type_id, "stepTypeKey": key, "displayOrder": order},
         "endCondition": dict(_TIME_CONDITION),
         "endConditionValue": float(step.seconds),
-        "targetType": dict(_HR_TARGET),
-        "targetValueOne": float(step.hr_low_bpm),
-        "targetValueTwo": float(step.hr_high_bpm),
     }
-    if step.pace_slow_s_per_km is not None and step.pace_fast_s_per_km is not None:
-        body["secondaryTargetType"] = dict(_PACE_TARGET)
-        body["secondaryTargetValueOne"] = _mps(step.pace_slow_s_per_km)
-        body["secondaryTargetValueTwo"] = _mps(step.pace_fast_s_per_km)
+    hr = (dict(_HR_TARGET), float(step.hr_low_bpm), float(step.hr_high_bpm))
+    if step.pace_slow_s_per_km is None or step.pace_fast_s_per_km is None:
+        _put_target(body, "target", hr)
+        return body
+    # Pace first: in running intervals the heart rate lags too much to guide the effort.
+    pace = (dict(_PACE_TARGET), _mps(step.pace_slow_s_per_km), _mps(step.pace_fast_s_per_km))
+    _put_target(body, "target", pace)
+    _put_target(body, "secondaryTarget", hr)
     return body
+
+
+def _put_target(
+    body: dict[str, object], prefix: str, target: tuple[dict[str, object], float, float]
+) -> None:
+    """`<prefix>Type`, `<prefix>ValueOne` and `<prefix>ValueTwo` of a step."""
+    kind, low, high = target
+    body[f"{prefix}Type"] = kind
+    body[f"{prefix}ValueOne"] = low
+    body[f"{prefix}ValueTwo"] = high
 
 
 def workout_payload(spec: WorkoutSpec) -> dict[str, object]:
     """The body of the request that creates `spec` in the library: one segment, one time-based
-    step per step of the spec, heart-rate range as target and pace range as secondary target."""
+    step per step of the spec. A step with a pace range (running) has the pace as target and the
+    heart-rate range as secondary target; any other step has the heart-rate range as target."""
     sport = sport_type(spec.sport)
     return {
         "workoutName": spec.name,
