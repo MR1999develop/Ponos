@@ -816,6 +816,13 @@ only through the app scheme, cannot reach other hosts, holds no key, is freed wh
 closes) and `tests/ui/test_vendor_libraries.py` (closed list, local sources only, no network call
 in the script).
 
+Accepted risk: both `map.html` and `track.html` carry `style-src 'unsafe-inline'`, because Leaflet
+sets inline styles (position and size of tiles, markers and panes) and a strict style policy
+would break it. The risk is that injected markup could restyle the page; it is accepted because
+no HTML is composed from data (texts reach the page as text, never as markup: no `innerHTML`,
+tested), `script-src` stays strict, and `connect-src 'none'` means styling cannot be used to
+send anything out. Scripts are never allowed inline.
+
 - **Page**: `ponos://app/map.html`, same engine and interceptor as the charts;
   CSP `default-src 'none'`, `connect-src 'none'`, `img-src` only `data:`, `blob:`
   and `ponos://tiles`. Scripts: Leaflet and markercluster from `web/vendor/`

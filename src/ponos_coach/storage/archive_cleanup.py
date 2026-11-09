@@ -10,6 +10,7 @@ a link is never followed: only a regular file inside the archive folder is remov
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import stat
@@ -18,6 +19,7 @@ from pathlib import Path
 from typing import Final
 
 _GPX_PATH: Final = re.compile(r"[0-9]{4}/[0-9a-f]{64}\.gpx")
+_LOG = logging.getLogger(__name__)
 _REPARSE_POINT: Final = 0x400  # FILE_ATTRIBUTE_REPARSE_POINT
 
 
@@ -30,9 +32,10 @@ def remove_gpx_files(archive_root: Path, relative_paths: Iterable[str]) -> int:
     """Remove the listed GPX files from the archive and return how many were removed.
 
     A missing file, a path of another shape, a link or an I/O error does not stop the others:
-    the file stays (or was not there) and nothing more is lost.
+    the file stays (or was not there) and nothing more is lost. I/O errors are counted in the log.
     """
     removed = 0
+    failed = 0
     for relative in relative_paths:
         if not _GPX_PATH.fullmatch(relative):
             continue
@@ -42,6 +45,11 @@ def remove_gpx_files(archive_root: Path, relative_paths: Iterable[str]) -> int:
             if _is_plain_file(path.lstat()) and not (archive_root / year).is_symlink():
                 path.unlink()
                 removed += 1
-        except OSError:
+        except FileNotFoundError:
             continue
+        except OSError:
+            failed += 1
+    if failed:
+        # Only the count: a path would say where the user trains.
+        _LOG.warning("%d leftover GPX file(s) could not be removed", failed)
     return removed

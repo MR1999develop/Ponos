@@ -59,8 +59,8 @@ Constraints:
 ## How it is checked
 
 `tests/collaudo/test_fase8_solo_fit.py`: a v10 profile with FIT and GPX
-activities and files becomes a FIT-only v4 profile (records, archive files, copy,
+activities and files becomes a FIT-only v11 profile (records, archive files, copy,
 journal, cache, constraint, other tables intact); the migration killed at every
-statement leaves v3 and every file untouched and then resumes; a path outside the
+statement leaves v10 and every file untouched and then resumes; a path outside the
 archive form is never removed. `tests/storage/test_import_scan.py` and
 `tests/collaudo/test_import_pila_reale.py`: only `.fit` is read.

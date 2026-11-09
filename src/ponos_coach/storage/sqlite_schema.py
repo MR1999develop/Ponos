@@ -108,7 +108,7 @@ profile):
   otherwise the check-in that reported it (foreign key, so a check-in takes its signs with it).
   Deleting an injury deletes all of these (`ON DELETE CASCADE`).
 
-Migration v11 (FIT files only, ADR 008): GPX activities leave the database and `file_format`
+Migration v11 (FIT files only, ADR 014): GPX activities leave the database and `file_format`
 admits only `fit`; the `threshold_test` keys admit only `fit:`. SQLite cannot change a CHECK in
 place, so `activities` and `threshold_test` are rebuilt (copy of the FIT rows only, rename, index).
 The load cache is emptied (derived, rebuildable) and so are the tests that used a removed activity;
@@ -700,7 +700,7 @@ _V10_INJURY_SIGN_UNIQUE = (
 )
 
 
-# v11 (ADR 008): FIT files only. The tables are rebuilt with the shape they have after v10.
+# v11 (ADR 014): FIT files only. The tables are rebuilt with the shape they have after v10.
 _V11_ACTIVITY_COLUMNS = (
     "id, identity_key, file_format, sport, start_ms, elapsed_s, timer_s, distance_m, ascent_m, "
     "start_lat, start_lon, track_polyline, archive_path, archive_sha256, archive_size_bytes, "
