@@ -292,6 +292,18 @@ and the files untouched; opening the profile again runs it from the start. A
 backup made before this change may contain GPX activities: restoring it gives a
 profile that is migrated the same way when opened.
 
+### Profiles with the old weekly availability (schema version 12)
+
+A profile whose availability was saved as minutes per weekday is migrated when
+it is opened ([ADR 016](adr/016-disponibilita-giorni-e-sedute.md)), after the
+usual copy of the database in the `backup` folder (`ponos-v11-v12.sqlite3`),
+in one transaction: the available days are those that had minutes, the
+sessions per week are as many as the days, the day of the long session is
+added to the days if it was not one, and the weekly maximum is kept. A saved
+availability with no day with minutes becomes "nothing set". The minutes of
+each day are lost; the copy keeps them. A backup made before this change
+restores to a profile that is migrated the same way when opened.
+
 ## 5. Physiological parameters
 
 - The user enters minimum HR, maximum HR, sex and threshold HR.
@@ -594,12 +606,25 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
 ## 9. Adaptive plan
 
 - Settings, Training plan page (Calendar menu, "Training settings...", opens it)
-  holds the time available on each weekday, the day of the long session, the
-  most training in a week and the session types the plan may use. The page
-  starts with suggestions, nothing is saved until "Save settings". Below, the
+  holds the weekdays on which the user can train (check boxes), the number of
+  sessions a week, the day of the long session, the most hours of training in a
+  week and the session types the plan may use (decision: [ADR 016](adr/016-disponibilita-giorni-e-sedute.md);
+  before, the page asked for minutes on each day, which are gone). The page
+  starts with suggestions, nothing is saved until "Save changes". Below, the
   "Threshold test" section chooses the protocol that the test dialog starts with
   (30 or 20 minutes), remembered between sessions and applied at once. The plan never exceeds the availability and schedules only those
   types.
+- Which days get a session (when there are fewer sessions than available
+  days): the day of the long session first; then, each time, the available
+  day farthest from the ones already chosen, counting the week as a circle
+  (Sunday is next to Monday), the lowest weekday on a tie. The same
+  availability always gives the same days. The long day is always one of the
+  available days; the sessions are between 1 and the number of days.
+- The length of a day is not set by the user: a day holds at most 240 minutes
+  (the longest session type) and each session at most the maximum of its type.
+  The long session is always the longest of the week: easy and recovery
+  sessions last at most 75% of it and the others are shorter than it; when the
+  hours or the load do not allow all, the other sessions are shortened first.
 - The plan starts tomorrow and reaches the last goal, at most 52 weeks ahead; a
   goal further away stays in the list with a warning. It has one session a day
   and one sport (that of the first A race).
@@ -695,8 +720,12 @@ Rules: [injuries](../.claude/skills/ponos-allenamento/references/infortuni.md).
   (Ctrl+Shift+D), "Stop Garmin calendar task" (Ctrl+Shift+X). The work runs in
   the background with a progress bar and Stop.
 - A workout is made of flat steps with the heart-rate range in bpm and, for a
-  run with a threshold pace, the pace range. An interval session shows every
-  repetition on the watch.
+  run with a threshold pace, the pace range. In a running step that has a pace
+  range the pace is the main target on the watch and the heart rate the
+  secondary one (the heart rate lags too much in intervals); a step without a
+  pace range keeps the heart rate as main target (ADR 013). The app lists the
+  pace before the heart rate. An interval session shows every repetition on
+  the watch.
 - A send can be repeated: a workout with the same name on the same day is not
   created again, also after a lost answer. At most 60 workouts per send (the
   sessions not yet on the calendar, earliest first); the summary says how many
@@ -724,7 +753,7 @@ Rules: [injuries](../.claude/skills/ponos-allenamento/references/infortuni.md).
   goals, plan, injuries). Format: [backup format](backup-format.md).
 - The backup contains health data and GPS positions and **is not encrypted**:
   it must be kept as such, in a private place and not in a synchronised
-  folder. It does not contain the Garmin tokens, nor the map key.
+  folder. It does not contain the Garmin tokens.
 
 ### Interface (phase 8)
 
@@ -767,8 +796,13 @@ Rules: [injuries](../.claude/skills/ponos-allenamento/references/infortuni.md).
   Garmin account (status, connect and disconnect, synchronise when a profile
   opens), Sport weights, Training plan (and the threshold test protocol and
   the history of the tests), Nutrition, Map, Language. Each page keeps the way
-  of saving that its content always had (Save button on the page, or changes
-  that apply at once, with their own undo). The pages that read the profile read
+  of saving that its content always had (changes that apply at once, with their
+  own undo, or edits that wait to be saved). The window has a "Save changes"
+  button (Ctrl+S) always in view at the bottom, next to "Close": it saves the
+  page in view and is enabled only when that page has unsaved edits. It exists
+  because a page's own button could sit below the fold (the Profile page is
+  taller than the window, and a threshold with a past date was never saved).
+  The pages that read the profile read
   it when they open; without a profile open they say "Create or open a profile
   first." instead of showing fields. A category with unsaved edits has an
   asterisk and a tooltip; closing the window (or quitting) with unsaved edits
@@ -806,7 +840,11 @@ no diet or allergy restriction for now.
   maintenance.
 - "Previous month" (Ctrl+Left), "Next month" (Ctrl+Right), "Today" (Ctrl+T),
   "Open day" (Ctrl+Return) in the Calendar menu. A click or Enter on a day
-  opens its page.
+  opens its page. The calendar has no "Today" button (user's request of
+  2026-11-09): Ctrl+T and the menu of the day still go to today.
+- In the window of a day, a click (or Enter) on an activity of its list opens
+  the window of that activity, or brings it forward if it is already open; the
+  planned sessions of the plan open nothing.
 - Past days, today and the days of the plan can be opened. A day with no plan
   (no plan, a refused plan, past the last goal or the horizon) says why.
 
@@ -945,19 +983,36 @@ Decision: [ADR 010](adr/010-mappa.md).
   track in both directions, and the track can be coloured by heart-rate zone
   with the legend of the zones of that day. Without elevation the profile says
   why it is missing.
-- Settings, Map page: the Tracestrack key (hidden while typed, checked when saved,
-  cleared from the field after saving and never shown again) and the size of the
-  tile cache (4 GB by default); "Clear map cache" empties it.
+- Settings, Map page: the size of the tile cache (4 GB by default); "Clear map
+  cache" empties it. There is no key to enter: since 2026-11-09 the background
+  comes from OpenStreetMap (`tile.openstreetmap.org`), at the user's request
+  (ADR 010, amendment).
 - The page has no network: the tiles come through the app. The map's last view
-  is not saved. The tile provider sees which areas are looked at. Without a key, without network, with a refused key or with the credit
-  over, the map keeps working on a neutral background with a line that says why
-  and what to do; list and filters keep working.
-- The provider's attribution is on the map.
+  is not saved. The tile server sees which areas are looked at, and it is a
+  shared service with no guarantee: it can block the app without notice. Without
+  network or when the server refuses, the map keeps working on a neutral
+  background with a line that says why; list and filters keep working.
+- The app follows the server's usage policy:
+  - each request has the `User-Agent` `PonosCoach/<version>` with the contact
+    address of the project;
+  - "© OpenStreetMap contributors" is on the map and on the map of the activity
+    detail;
+  - a tile is kept as long as the response headers allow, 7 days when they say
+    nothing and at most 30 days; an expired tile is asked again with a
+    conditional request (`ETag`, `Last-Modified`) and, if the server says it has
+    not changed, kept;
+  - only the tiles that are looked at are asked: no pre-loading and no bulk
+    download;
+  - when the server refuses (403 or 429) the app asks for nothing for 300
+    seconds.
+- The tile cache (a file in the system cache folder, outside the profile) has
+  a format of its own, version 2, with the validators of each tile; an older file
+  is rebuilt empty, since it only holds copies.
 
 ## Open points
 
 - Three foods use an approximate CIQUAL entry (Greek yoghurt 0%, part-skim
   mozzarella, black beans) and three choices are to be reviewed by hand
   (Medjool dates, roast chicken, white bread): `ciqual_note` in the table.
-- The Garmin workout and calendar responses and the Tracestrack terms are not
-  verified live (section 11, section 15).
+- The Garmin workout and calendar responses are not verified live (section 11).
+  The OpenStreetMap usage policy is read again before the release (section 15).

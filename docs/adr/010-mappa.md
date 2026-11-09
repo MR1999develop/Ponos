@@ -3,6 +3,9 @@
 - Status: Accepted (2026-11-08, interface built: Leaflet and markercluster vendored with
   verified hashes, tile proxy behind `ponos://tiles/`, page without network)
 - Date: 2026-11-07
+- Amended 2026-11-09: the tile source is now OpenStreetMap, with no key (see the end). The text
+  above is the decision as it was taken; where it names Tracestrack or the key, the amendment
+  prevails.
 
 ## Context
 
@@ -216,3 +219,68 @@ interface is built and the measurements are repeated on it.
 - The vendored files match the hashes recorded in `docs/dependencies.md`
   (checked by `experiments/map_prototype/fetch_vendor.py` today, by the build
   in phase 5b).
+
+## Amendment 2026-11-09: tile source
+
+Only the tile source and what hangs on it change. The library, the page without network, the tile
+proxy, the own cache with an exact cap and what the page receives stay as decided above.
+
+### Context
+
+The owner asked for the standard OpenStreetMap map, without a key to obtain and to type in. The
+rejected option 2 of "Tile source" ("OpenStreetMap standard tiles", with the con that the usage
+policy discourages heavy and app-embedded use) comes back as the decision.
+
+### Options
+
+1. **Keep Tracestrack Topo with a personal key.**
+   - Con: the user must register and paste a key; a secret to store and keep out of logs, backups
+     and the page; a quota that can run out; terms read again before every release.
+2. **OpenStreetMap standard tiles (`tile.openstreetmap.org`), no key.**
+   - Pro: nothing to register; no secret; the key store, its setting page and its messages go
+     away.
+   - Con: a shared volunteer service with no guarantee; the usage policy limits what an app may
+     do and the server can block it without notice; no topographic detail.
+3. **Offline vector region.** Still deferred (same reasons as above).
+
+### Decision
+
+Option 2.
+
+- Host `tile.openstreetmap.org`, HTTPS only, path `/{z}/{x}/{y}.png`; the URL is fixed in the code
+  (no provider chosen by the user, no setting).
+- Usage policy, as code:
+  - `User-Agent: PonosCoach/<version> (+<URL of the repository on GitHub>)`;
+  - the attribution "© OpenStreetMap contributors" on both maps (the map and the activity map);
+  - the cache follows the response headers (`Cache-Control: max-age`, `Expires`), 7 days when they
+    say nothing, never more than 30 days;
+  - a tile that expired is asked again with a conditional request (`If-None-Match`,
+    `If-Modified-Since`) built from the `ETag` and `Last-Modified` stored with it; a 304 renews it;
+  - no prefetch and no bulk download: only tiles the page asks for;
+  - when the server answers 403 or 429 the app asks nothing for 300 s.
+- Tile cache schema 2: validators per tile, no style column. A version 1 file is rebuilt empty
+  (the cache is derived: nothing is lost).
+- Removed: the Tracestrack key, its store (DPAPI file and Secret Service entry), the key field of
+  the Map settings page and the messages about a missing, refused or exhausted key. `keyring`
+  stays for the Garmin tokens only.
+
+### Consequences
+
+- Risks that remain and are accepted: the server can block the app without notice, nothing
+  promises that the service continues, and the URL is fixed, so a change of source is a code change
+  in one module (`platform/tile_http.py` and the composition root). The tile host still sees the
+  areas that are looked at and the IP address of the user.
+- The threat model drops the secret and the key store (B16 removed), and gains the validators
+  taken from the answer (limited in length and characters) and the cool-down on refusal.
+- Existing users have an unused key in their key store; the app does not read it any more and
+  nothing deletes it.
+
+### How compliance is verified
+
+- T-SEC-15: the proxy calls only `https://tile.openstreetmap.org`, and rejects other hosts, HTTP
+  and out-of-range z/x/y; the header of a request carries the `User-Agent` above; odd validators
+  are dropped.
+- T-MAP-10: a 403 or 429 gives `REFUSED` and a 300 s pause; an expired tile with validators makes
+  a conditional request and a 304 renews it.
+- T-MAP-11: the cache of schema 2 keeps its cap; a version 1 file is rebuilt empty.
+- A test that both maps show the attribution.

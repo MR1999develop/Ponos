@@ -160,9 +160,11 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
     forme. Un indice univoco parziale (`WHERE kind = 'race'`) ammette una sola
     gara per giorno, anche con una scrittura diretta; gli obiettivi di forma
     possono dividere il giorno.
-  - `weekly_availability`: una sola riga (`id = 1`), `day0_min` (lunedì) ...
-    `day6_min` (0-720), `long_day` (0-6), `max_week_min` (0-6000). Assente =
-    non impostata.
+  - `weekly_availability`: una sola riga (`id = 1`). Dallo schema v12 (ADR 016) ha
+    `days_mask` (0-127, bit i = giorno i disponibile, lunedì = bit 0), `sessions_per_week`
+    (0-7, al massimo i giorni), `long_day` (0-6, un giorno disponibile), `max_week_min`
+    (0-6000); tutto a zero = non impostata. In v6-v11 erano `day0_min` (lunedì) ...
+    `day6_min` (0-720). Assente = non impostata.
   - `session_choice`: una riga per sport e tipologia scelti (insiemi chiusi).
   - `plan_state`: una sola riga (`id = 1`) con l'ultimo esito di `build_plan`:
     piano (`kind = 'plan'`: `method_version`, `plan_json` canonico fino a
@@ -226,6 +228,15 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
     il rilascio, uccisione a ogni istruzione, limiti dei CHECK, riempimento riprendibile). Gli
     altri test congelati leggono `activities` con l'helper `rows()` che nasconde le colonne
     aggiunte dopo (`LATER_COLUMNS`).
+- **Schema v12** (giorni e sedute a settimana al posto dei minuti per giorno; ADR 016):
+  - `weekly_availability` ricostruita (SQLite non toglie colonne con CHECK) nella stessa
+    transazione: i giorni sono quelli che avevano minuti, le sedute tante quanti i giorni, il
+    giorno del lungo si aggiunge ai giorni se non lo era, il massimo settimanale resta; una riga
+    senza minuti diventa la disponibilità vuota (tutto a zero). I minuti di ogni giorno si
+    perdono; restano nella copia in `backup/` fatta prima della migrazione.
+  - `METHOD_VERSION` del piano è 6. Il piano salvato è derivato: un piano con `method_version`
+    più bassa resta finché il ricalcolo (dopo ogni panoramica) non lo sostituisce; il codice non
+    confronta la versione.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.
@@ -390,40 +401,43 @@ Tutti sul thread dei dati (la connessione è di un solo thread), nessun log (pos
 
 ### Sfondo della mappa (`maps/`, `platform/tile_*.py`)
 
+Fonte: OpenStreetMap (`tile.openstreetmap.org`), senza chiave (dal 2026-11-09, ADR 010 emendato;
+prima Tracestrack con chiave nel portachiavi: tutto ciò che la riguardava è stato tolto).
+
 - `maps/domain.py`: `TileAddress(z, x, y)` (z 0-19, x e y in `[0, 2^z)`), `parse_tile_path`
-  (`/z/x/y` o `z/x/y.png`, lunghezza prima, solo cifre), `tile_style(lingua)` (`it`, `en`, altrimenti
-  `__`), `TileKey` (segreto: `repr` nascosto, non hashable né serializzabile, 8-128 caratteri
-  `A-Za-z0-9_-`), `CacheLimit` (64 MiB - 64 GiB, default 4 GiB), `parse_cache_limit_gib`
-  ("4", "0,5"), `MapSettings(has_key, cache_limit)`.
-- `maps/ports.py`: `TileSource.fetch(z, x, y, language) -> TileImage | TileUnavailable` (un solo
-  tentativo, mai eccezioni per rete o fornitore; `TileAddressError` per coordinate non valide),
-  `TileProblem` (`NO_KEY`, `KEY_REJECTED`, `NETWORK_UNAVAILABLE`, `CREDIT_EXHAUSTED`,
-  `INVALID_RESPONSE`), `TileKeyStore`, `TileCache`.
-- `maps/use_cases.py`: `TileProxy(source, cache, now_utc, monotonic)`: `serve(percorso, lingua)`
-  / `tile(indirizzo, lingua) -> TileAnswer(png, problem)`; prima la cache (fresca), poi il
-  fornitore; dopo un problema non richiede per un po' (`COOLDOWN_S`: chiave rifiutata e credito
-  300 s, rete e risposta non valida 15 s) finché non cambia la chiave (`key_changed()`); una
-  tile scaduta si serve comunque con il problema se il fornitore non risponde. Mai prefetch.
-  `TileKeySettings`: `set_key(testo) -> KeyCheck` (verifica con la tile 0/0/0; chiave rifiutata
-  non si tiene e torna la precedente), `remove_key()`, `settings(cache_limit) -> MapSettings`.
+  (`/z/x/y` o `z/x/y.png`, lunghezza prima, solo cifre), `CacheLimit` (64 MiB - 64 GiB, default
+  4 GiB), `parse_cache_limit_gib` ("4", "0,5"). Niente stile, niente chiave.
+- `maps/ports.py`: `TileSource.fetch(z, x, y, validatori) -> TileImage | TileNotModified |
+  TileUnavailable` (un solo tentativo, mai eccezioni per rete o fornitore; `TileAddressError` per
+  coordinate non valide), `TileProblem` (`REFUSED` = 403/429, `NETWORK_UNAVAILABLE`,
+  `INVALID_RESPONSE`), `TileValidators(etag, last_modified)` (valori opachi, ASCII stampabile,
+  già controllati dall'adattatore), `TileCache` (`get`, `put`, `renew`).
+- `maps/use_cases.py`: `TileProxy(source, cache, now_utc, monotonic)`: `serve(percorso)` /
+  `tile(indirizzo) -> TileAnswer(png, problem)`; prima la cache (fresca), poi il server; una tile
+  scaduta si richiede con i validatori salvati (richiesta condizionale) e un 304 la rinnova
+  (`renew`). Dopo un problema non richiede per un po' (`COOLDOWN_S`: `REFUSED` 300 s, rete e
+  risposta non valida 15 s; `INVALID_RESPONSE` solo per quella tile); una tile scaduta si serve
+  comunque con il problema se il server non risponde. Mai prefetch né scaricamenti in blocco.
 - `platform/tile_http.py`: `HttpTileSource` su `http.client` (nessun reindirizzamento seguito,
-  nessun proxy di sistema, nessun ritentativo). Solo `TRACESTRACK` (`https://tile.tracestrack.com`)
-  nell'app (`create_tracestrack_source`); un endpoint `http` solo su loopback. Timeout per
-  operazione (8 s) e scadenza totale (20 s); risposta: stato, `Content-Length` ed
-  `image/png`, al massimo 1 MiB, PNG completo con IHDR di lato 1-1024. Scadenza da
-  `Cache-Control` (`max-age`; `no-store`/`no-cache` = non tenere), poi `Expires`, altrimenti
-  24 h, mai oltre 30 giorni. La chiave sta solo nella query della richiesta: mai in log,
-  eccezioni, risultati; nemmeno l'indirizzo della tile nei log.
+  nessun proxy di sistema, nessun ritentativo). Solo `OPENSTREETMAP`
+  (`https://tile.openstreetmap.org`) nell'app (`create_osm_source(user_agent)`); un endpoint
+  `http` solo su loopback. `User-Agent` `PonosCoach/<versione> (+<URL del repository>)`, composto
+  in `__main__.py`, ASCII stampabile, al massimo 128 caratteri. Timeout per operazione (8 s) e
+  scadenza totale (20 s); risposta: stato, `Content-Length` ed `image/png`, al massimo 1 MiB, PNG
+  completo con IHDR di lato 1-1024. Scadenza da `Cache-Control` (`max-age`; `no-store`/`no-cache`
+  = non tenere), poi `Expires`, altrimenti 7 giorni (`DEFAULT_TTL_S`), mai oltre 30 giorni.
+  `ETag` e `Last-Modified` si tengono solo se ASCII stampabile di 1-256 caratteri, e tornano come
+  `If-None-Match` / `If-Modified-Since`. 403 e 429 sono `REFUSED`. Mai l'indirizzo della tile nei
+  log.
 - `platform/tile_cache.py`: `DiskTileCache(cartella, limite)` su un file SQLite
   (`tiles.sqlite3`, WAL) nella cartella cache dell'app (non nel profilo; cartella privata).
-  Tetto sul **conteggio per pagine** (`accounted_bytes`: byte + 160 di riga, arrotondati a 4096):
-  il file non supera il tetto più poche decine di KiB; rimozione LRU per contatore d'uso (non
-  per orologio); `clear()` cancella e ricrea il file; un file illeggibile o di altra versione si
-  ricostruisce vuoto. Thread-safe (un lock).
-- `platform/tile_key_store.py`: `DpapiTileKeyStore` (file `secrets/tracestrack-key.bin`, entropia
-  propria) / `KeyringTileKeyStore` (servizio "PonosCoach", utente "tracestrack-key");
-  `create_tile_key_store(base_dir)`. Stessa cartella `secrets` dei token, voce separata, fuori da
-  profilo e backup.
+  Schema 2 (`user_version`): una riga per `(z, x, y)` con `expires_ms`, `etag`, `modified`, senza
+  stile; il file v1 (aveva la colonna dello stile) si ricostruisce vuoto, come ogni file
+  illeggibile o di altra versione. Tetto sul **conteggio per pagine** (`accounted_bytes`: byte +
+  160 di riga, arrotondati a 4096): il file non supera il tetto più poche decine di KiB;
+  rimozione LRU per contatore d'uso (non per orologio); `clear()` cancella e ricrea il file.
+  Thread-safe (un lock).
+- Attribuzione "© OpenStreetMap contributors" su entrambe le mappe (`ui/map_texts.py`).
 - Pagina della mappa: chiede `ponos://tiles/{z}/{x}/{y}`; il gestore dello schema chiama
   `TileProxy.serve(percorso, lingua)` (fuori dal thread GUI), risponde 200 con il PNG, 400 per
   `TileAddressError`, 204/404 senza PNG; `problem` va all'avviso della vista (non nell'URL).
@@ -683,7 +697,11 @@ JSON (non verificate dal vivo, le controlla `T-MAN-01`) in `experiments/garmin_w
 
 - **Dominio** (`planning/domain/workouts.py`): `workout_from_session(PlannedSession) ->
   WorkoutSpec`; passi piatti (`WorkoutStep`: tipo, secondi, FC bassa e alta in bpm, ritmo lento e
-  veloce in s/km se noto). Le ripetizioni di una seduta a intervalli sono scritte una per una
+  veloce in s/km se noto). Obiettivi di un passo nell'allenamento Garmin (ADR 013 emendato il
+  2026-11-09): se il passo di corsa ha un intervallo di ritmo, il **ritmo è l'obiettivo
+  principale** e l'intervallo di FC il secondario (in intervalli la FC è in ritardo e guida male
+  lo sforzo); senza intervallo di ritmo la FC resta l'obiettivo principale. L'app elenca il
+  ritmo prima della FC. Le ripetizioni di una seduta a intervalli sono scritte una per una
   (lavoro, recupero, lavoro, ..., lavoro); i blocchi a ritmo gara puntano al ritmo gara ±5 s/km. Il
   nome è `"Ponos · " + tipo + minuti` (`WORKOUT_PREFIX`): da qui l'app riconosce i suoi
   allenamenti (`ScheduledWorkout.is_app_created`). Massimo 40 passi.

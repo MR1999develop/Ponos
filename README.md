@@ -144,10 +144,24 @@ did (a Save button, or at once); a category with unsaved changes is marked
 with an asterisk, and closing the window asks what to do with them (Save,
 Discard or Keep editing). The commands that used to open a dialog (Profile,
 Edit profile... and Sport weights..., Calendar, Training settings..., Profile,
-Threshold tests...) now open the window on the right page; the Map settings
-are reached with the button of the map notice. Sport weights... (Ctrl+Shift+W)
-changes how much each sport counts in the load; each activity is recalculated
-on its own when needed.
+Threshold tests...) now open the window on the right page; the Map page
+(size of the tile cache) is reached from Settings itself. Sport weights...
+(Ctrl+Shift+W) changes how much each sport counts in the load; each activity
+is recalculated on its own when needed.
+
+## The map
+
+The map background comes from OpenStreetMap (`tile.openstreetmap.org`). There
+is no key to get and nothing to set up. The app follows the usage policy of
+that server: it names itself and gives a contact address in each request,
+keeps tiles as long as the server says (7 days when it says nothing), asks
+again with a conditional request when a tile has expired, asks only for the
+tiles you look at (no pre-loading, no bulk download) and stops asking for five
+minutes if the server refuses. "© OpenStreetMap contributors" is shown on the
+map. The server sees which areas you look at, and it is a shared service with
+no guarantee: it can block the app, and then the map keeps a plain background
+while the list, the filters and the tracks keep working. If you had saved a
+Tracestrack key in an older build, the app no longer uses it.
 
 More profiles: File, New profile... (Ctrl+N). A profile moved or copied to
 another PC is opened with File, Open profile from folder... (Ctrl+O). With

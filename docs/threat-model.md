@@ -82,8 +82,8 @@ Boundaries:
 | B13 | FIT `record.distance` and `record.speed` (inside B1 and B2) → distance series → threshold test | cumulative distance and its time axis: untrusted until they form a valid series (finite, increasing time, non-decreasing metres) |
 | B14 | Map page (`ponos://app/map.html`, a web engine process) ↔ app | five numeric calls from the page (view, click, hover), the list, the totals and the simplified tracks that Python sends to it. Not drawn in the diagram: it sits next to B4 |
 | B14b | Activity map page (`ponos://app/track.html`, the same web engine) ← app | one call from Python with the thinned positions of the one activity open in the detail window (at most 2,000 points) and the colours. The page sends nothing back: no `QWebChannel`. Not drawn in the diagram: it sits next to B14 |
-| B15 | Tile proxy → Tracestrack (`https://tile.tracestrack.com`) | the tile address (z/x/y), which reveals the area looked at, the key in the query, the PNG that comes back: untrusted |
-| B16 | App ↔ tile key store (Windows: DPAPI file in `secrets/`; Ubuntu: Secret Service) | the Tracestrack key, app-wide, never per profile |
+| B15 | Tile proxy → OpenStreetMap (`https://tile.openstreetmap.org`, no key; since 2026-11-09, ADR 010 amendment) | the tile address (z/x/y), which reveals the area looked at, the `User-Agent` with the app's name, version and contact URL, the validators (`ETag`, `Last-Modified`) sent back for expired tiles; the PNG and the headers that come back are untrusted |
+| B16 | (removed on 2026-11-09) App ↔ tile key store | there is no tile key any more; the number is not reused |
 | B17 | App ↔ Garmin calendar (workouts and schedule, unofficial API) | structured workouts sent, the list of scheduled workouts that comes back (untrusted), the local copy of what is deleted |
 | B18 | App ↔ backup file (`.ponosbackup`, chosen by the user) | a whole profile in a ZIP: database, original files, manifest. On read it is untrusted input; on write it holds health and GPS data in the clear |
 | B19 | Saved plan and frozen days (inside B3) → plan decoder | JSON text and its SHA-256 in the profile database: input, because the file can be edited by hand |
@@ -99,7 +99,7 @@ Boundaries:
 | Threshold HR and threshold pace, with the history of the tests | health data: only in the profile database; never in logs, messages or error chains. They move the zones and the load of every later activity, so their integrity matters too |
 | GPS positions of the activities | they reveal home and habits; also the box and the simplified track of each activity (schema v8) and the areas looked at on the map |
 | Injuries, pain scores, warning signs, doctor's notes and illnesses (phase 6) | health data: only in the profile database; never in logs, messages, error chains or the saved plan (the plan carries a snapshot without free text) |
-| Tracestrack key | a personal key with a quota: its leak costs the user's credit and lets others use their account |
+| Standing with the tile server | OpenStreetMap tiles are a shared service with a usage policy and no guarantee: too many requests, a missing `User-Agent` or bulk download can get the app blocked for every user (this replaced the Tracestrack key, which is gone with its secret) |
 | Local copies of deleted Garmin workouts (`workout_backup`) | they are the only place that holds a definition after Garmin deletes it: integrity matters; they carry names and training structure |
 | Backup files (`.ponosbackup`) | one file holds the whole profile in the clear (health data, GPS, injuries); it leaves the profile folder and its permissions |
 | Frozen days of the plan (`plan_past_day`) | the history of what was planned: it must not be rewritten |
@@ -122,8 +122,9 @@ Boundaries:
 - An operating system lock on a local disk works; on a network or synchronised
   disk it is not guaranteed (warning to the user).
 - The attacker knows the code (it is public).
-- Tracestrack is not malicious, but its answers are input (PNG checked) and it
-  sees which areas the user looks at (accepted risk, section 5).
+- The tile server (OpenStreetMap) is not malicious, but its answers and headers
+  are input (PNG checked, validators limited) and it sees which areas the user
+  looks at (accepted risk, section 5). It can block the app without notice.
 - The Garmin workout and calendar responses have the shape inferred from the
   library, not verified against the live service (`T-MAN-01`).
 - A backup file is kept by the user in a place of their choosing; the app
@@ -254,13 +255,14 @@ service, E elevation of privilege.
 | B14 | Messages about an older list applied to the new one | T | T-SEC-14 (dropped and counted as stale) |
 | B15 | A tile address with Unicode digits, a query or a port passes the check and reaches the provider | T, I | T-SEC-15, D-F5B-01 |
 | B15 | Hostile tile answer: not a PNG, huge, huge in pixels, slow drip, lying length, redirect to another host | T, D | T-SEC-15, T-MAP-10 (cap of 1 MiB, 1,024 px, total deadline of 20 s, redirects never followed) |
-| B15 | Refused key, 429, no network, 5xx: endless retries, hammering the provider | D | T-MAP-10 (one attempt per call, cool-down per problem; the map stays usable on a neutral background) |
+| B15 | 403 or 429 (refused), no network, 5xx: endless retries, hammering the provider | D | T-MAP-10 (one attempt per call, cool-down per problem, 300 s when the server refuses; expired tiles asked with a conditional request; the map stays usable on a neutral background) |
+| B15 | Validators from the answer (`ETag`, `Last-Modified`) with odd characters or a huge length stored and sent back (header injection, cache bloat) | T, D | `_VALIDATOR`: printable ASCII, 1 to 256 characters, otherwise dropped; the cache `CHECK` repeats the length limit; tests of `HttpTileSource` and of the cache |
+| B15 | The `User-Agent` carries the contact URL: it is fixed in the code and checked (printable ASCII, at most 128 characters); it holds no profile data, no user name, no path | I | `tests/platform/` (the header of a request) |
 | B15 | One missing tile (404) silences all the tiles around it | D | T-MAP-10, D-F5B-02 |
 | B15 | The provider sees which areas are looked at | I | accepted risk (section 5), declared by the user |
-| B15 | Plain HTTP or another host used for tiles | T, I | T-SEC-15 (HTTPS and the one host only; plain HTTP only on loopback, for tests) |
-| B16 | The Tracestrack key in the page, a log, an exception, a profile folder, a backup or the tile cache | I | T-SEC-15, T-SEC-07 (placeholder key searched everywhere) |
-| B16 | Silent fallback to a plain file when no secure store exists | I | T-SEC-15 (`TileKeyStoreUnavailableError`, no fallback) |
-| B16 | A token file read as the key or the reverse | S, I | `tests/platform/` (own entropy and name) |
+| B15 | Plain HTTP or another host used for tiles | T, I | T-SEC-15 (HTTPS and the one host only, fixed in the code; plain HTTP only on loopback, for tests) |
+| B15 | The server blocks the app (the URL is fixed, there is no second source) | D | accepted risk (section 5); the map is a convenience and keeps a neutral background |
+| B16 | Removed on 2026-11-09 with the tile key: no secret, no key store, no fallback to a file | - | the tests of the key and of its store were removed with the code |
 | Map | Tile cache over its cap, WAL that grows beyond it, stale tiles forever, a full disk | D | T-MAP-11, D-F5B-03 |
 | Map | The areas looked at stay in the cache folder, readable by every process of the user | I | accepted risk (section 5); outside the profile and its backups; "Clear map cache" |
 | Map | GPS positions in logs or in `QSettings` | I | T-SEC-08, T-SEC-15 |
@@ -526,19 +528,23 @@ service, E elevation of privilege.
     with full verification, one attempt per call, a socket timeout and a total
     deadline, redirects never followed, no system proxy, an answer that must be
     a PNG within 1 MiB and 1,024 px. A problem sets a cool-down (15 s for a
-    network problem or a bad answer, 300 s for a refused key or exhausted
-    credit); a bad answer (a 404) cools down that tile only.
-  - Key: the Tracestrack key is in the key store (DPAPI file with its own
-    entropy on Windows; Secret Service on Ubuntu), app-wide, never in a profile
-    folder, a backup, a log, the page or the cache. It travels in the query of
-    the request, as the provider requires, and the URL is never logged. No
-    secure store means no key, never a plain file.
+    network problem or a bad answer, 300 s when the server refuses with 403 or
+    429); a bad answer (a 404) cools down that tile only.
+  - Source (amendment of 2026-11-09): `tile.openstreetmap.org`, no key and so
+    no secret. The usage policy is met in code: `User-Agent`
+    `PonosCoach/<version> (+<contact URL>)`; the cache follows the response
+    headers (7 days when they say nothing, at most 30 days); an expired tile is
+    asked again with `If-None-Match` or `If-Modified-Since` built from the
+    validators stored with it; no prefetch and no bulk download. The validators
+    come from the answer, so they are limited (printable ASCII, 1 to 256
+    characters) before they are stored or sent back.
   - Tile cache: own, on disk, in the user's cache folder, with an exact cap
     (default 4 GB), LRU eviction, the WAL truncated after every write, "Clear
-    map cache". Only tiles that were looked at are stored.
-  - Without a key, without network or with the credit over, the map shows a
-    neutral background and a line that says why and what to do; the tracks, the
-    list and the filters keep working.
+    map cache". Only tiles that were looked at are stored. Schema 2 keeps the
+    validators and no longer a style; a version 1 file is rebuilt empty.
+  - Without network or when the server refuses, the map shows a neutral
+    background and a line that says why; the tracks, the list and the filters
+    keep working.
   - Positions: the box and the simplified track of each activity are in the
     profile database (schema v8, `CHECK` constraints on the box), rebuildable
     from the original; never in a log.
@@ -809,9 +815,9 @@ Leaflet from `web/vendor/`), listed in `web_resources.py` and with the same CSP 
 way that narrows the surface: it has no channel at all (no `qwebchannel.js`, no bridge object),
 so the page cannot tell Python anything. Python sends one JSON call (`ponosTrack.show`) with the
 thinned positions of that activity, the colours of the theme and the texts; the tiles come from the
-same proxy (`ponos://tiles/z/x/y`), which holds the Tracestrack key, so the key never enters the
-page. Without a key or without network the page keeps a plain background with the track and the
-window shows one line with the reason. Tests: `tests/ui/test_activity_track.py` (the page asks
+same proxy (`ponos://tiles/z/x/y`), so the page never talks to the tile server. Without network or
+when the server refuses, the page keeps a plain background with the track and the
+window shows one line with the reason. Both maps show "© OpenStreetMap contributors". Tests: `tests/ui/test_activity_track.py` (the page asks
 only through the app scheme, cannot reach other hosts, holds no key, is freed when the window
 closes) and `tests/ui/test_vendor_libraries.py` (closed list, local sources only, no network call
 in the script).
@@ -843,8 +849,9 @@ send anything out. Scripts are never allowed inline.
   `QSettings` would be a file outside the planned folders). The tile cache keeps
   tile addresses (the areas looked at) in the app's cache folder, not in the
   profile.
-- **Key**: only the key store and the HTTP adapter see it; the settings dialog
-  hides what is typed, clears the field after saving and never shows a saved key.
+- **No key** (since 2026-11-09): the map has no secret, so the settings page, the
+  key store and the checks that searched for a placeholder key are gone. What the
+  adapter sends is the tile path, the `User-Agent` and the stored validators.
 
 ### Cases closed by the phase 4b acceptance testing (D-F4B)
 
@@ -912,7 +919,8 @@ only windows with valid HR on at least 90% of the last 20 minutes.
 | A threshold that is wrong but plausible (a field test, a hard day, a fast downhill window) | It cannot be told from a real effort within the limits of the refusals. Mitigations: the user chooses the activity, the refusals with reasons, the exact undo, the retest every 6–8 weeks; the zones are a training indication, not medical advice (ADR 009). |
 | Distance from a GPS or a treadmill sensor with a systematic error | The pace is only as good as the distance; the app cannot measure more. The HR threshold does not depend on it. |
 | Food names and nutrition advice only in English until translated; no allergy or diet restriction | User decision of 2026-11-07. The examples are an illustration, not a menu. |
-| The tile provider (Tracestrack) sees the areas the user looks at, and the key travels in the query of each request | Accepted by the user on 2026-11-07 (ADR 010). A map with tiles needs a tile host; the alternative, an offline vector region, is deferred. Mitigations: the page has no network, one host over HTTPS only, the URL is never logged, only tiles that were looked at are asked (no prefetch), no map at all without a key (neutral background). |
+| The tile server (`tile.openstreetmap.org`) sees the areas the user looks at, and its address (and so the IP of the user) | Accepted by the user on 2026-11-07 (ADR 010); the host changed on 2026-11-09 and the risk is the same. A map with tiles needs a tile host; the alternative, an offline vector region, is deferred. Mitigations: the page has no network, one host over HTTPS only, the URL is never logged, only tiles that were looked at are asked (no prefetch), the cache follows the headers and is checked with conditional requests, a neutral background when the server cannot be reached. |
+| OpenStreetMap can block the app at any time, with no notice and no guarantee of service; the URL is fixed in the code | Accepted by the user on 2026-11-09 (ADR 010 amendment). The usage policy is followed (see the section on the map), a refusal pauses all requests for 300 s, and the map is a convenience: list, filters and tracks keep working. If the block lasts, a change of source is a code change in one module. |
 | The areas looked at stay in the tile cache (a database in the user's cache folder) | Same readers as the profile (every process of the user). It is outside the profile folder and its backups, derived, and "Clear map cache" empties it. |
 | A compromised map page can delete its own bridge (`deleteLater`) | The only effect is that its own map goes quiet. No other call is open. |
 | Shape of the Garmin workout and calendar responses not verified on the live service | The adapter is written from the library's code; only `garmin/workout_json.py` changes if Garmin differs. Mitigations: hostile or odd entries are left out, deletion needs a copy and a still-matching entry, `T-MAN-01` is the check by the user. |
@@ -938,6 +946,7 @@ only windows with valid HR on at least 90% of the last 20 minutes.
 - The D-F1 and D-F2 defects are not yet recorded in `docs/collaudo.md`: the
   main session does it.
 - The rows of D-F5-02 and D-F5-04 are missing from the table of phase 5.
-- The Garmin workout and calendar responses and the Tracestrack terms
-  (quota, caching, attribution) are checked only on fixtures and on a local
-  server: `T-MAN-01` and the reading of the provider's terms before the release.
+- The Garmin workout and calendar responses are checked only on fixtures:
+  `T-MAN-01`. The OpenStreetMap tile server is checked only on a local server
+  that plays hostile answers; the reading of its usage policy before the
+  release stays open.

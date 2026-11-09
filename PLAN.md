@@ -32,7 +32,7 @@ completata e verificata.
 | Import da cartella | Oltre alla sincronizzazione, su richiesta: si sceglie una cartella e si aggiungono i file FIT che contiene |
 | Formati dei file | Solo FIT (decisione del 2026-11-09, fase 8, ADR 014): GPX e import di ZIP tolti; lo ZIP scaricato da Garmin con dentro il FIT resta |
 | Dati di salute sul disco | In chiaro nella cartella del profilo, protetti dai permessi del sistema (solo l'utente); il README consiglia la cifratura del disco; nessuna password dell'app |
-| Ricerca e mappa (fase 5b) | Filtri delle attività per data, durata, distanza e dislivello; mappa in stile Komoot con le tracce delle attività svolte (linee per sport; a zoom basso partenze raggruppate in cerchi numerati), sfondo Tracestrack Topo (dati OpenStreetMap) con chiave personale nel portachiavi del sistema ed etichette nella lingua dell'app, sfondo neutro con avviso senza chiave, rete o credito, tile servite da un proxy in Python (la pagina non ha rete), cache su disco LRU con tetto esatto scelto nelle impostazioni (default 4 GB); accanto alla mappa profilo altimetrico collegato alla traccia, traccia colorabile per zone FC, elenco e totali delle attività nell'area. Subito dopo la fase 5 (decisioni del 2026-11-07; prima era la fase 9, dopo il rilascio) |
+| Ricerca e mappa (fase 5b) | Filtri delle attività per data, durata, distanza e dislivello; mappa in stile Komoot con le tracce delle attività svolte (linee per sport; a zoom basso partenze raggruppate in cerchi numerati), sfondo OpenStreetMap senza chiave (dal 2026-11-09; prima Tracestrack Topo con chiave personale nel portachiavi), sfondo neutro con avviso senza rete o se il server rifiuta, tile servite da un proxy in Python (la pagina non ha rete), cache su disco LRU con tetto esatto scelto nelle impostazioni (default 4 GB); accanto alla mappa profilo altimetrico collegato alla traccia, traccia colorabile per zone FC, elenco e totali delle attività nell'area. Subito dopo la fase 5 (decisioni del 2026-11-07; prima era la fase 9, dopo il rilascio) |
 | Sincronizzazione | All'avvio e con il pulsante Sincronizza; la prima scarica tutto lo storico, le successive solo le attività mancanti; riprende da dove era rimasta dopo una chiusura; notifica a fine sincronizzazione; niente area di notifica |
 | Calendario Garmin | In una fase successiva: invio degli allenamenti a scelta dell'utente ed eliminazione degli allenamenti futuri programmati |
 | Lingue | Inglese come lingua predefinita, italiano scelto dal menu Lingua e ricordato (decisione del 2026-11-06; prima seguiva la lingua del sistema) |
@@ -70,8 +70,10 @@ completata e verificata.
 7. **Pesi di default degli sport** (provvisori, da tarare in fase 3): corsa
    1,0; trail 1,1; ciclismo 0,8; escursionismo 0,8; camminata 0,6; forza 1,2
    (la FC sottostima il carico della forza); altro 0,8.
-8. **Disponibilità settimanale** inserita dall'utente: giorni disponibili, ore
-   massime a settimana, giorno del lungo. Il piano non la supera mai.
+8. **Disponibilità settimanale** inserita dall'utente: giorni disponibili,
+   sedute a settimana, ore massime a settimana, giorno del lungo (dal
+   2026-11-09, ADR 016; prima i minuti di ogni giorno). Il piano non la supera
+   mai.
 9. **Dati sul disco:** file FIT originali come fonte di verità delle attività;
    SQLite come indice e per i dati dell'utente (obiettivi, piani, infortuni,
    impostazioni); carichi e PMC derivati e rigenerabili.
@@ -270,9 +272,11 @@ src/ponos_coach/
   dalla rampa massima (default +5 CTL a settimana, +3 dopo un infortunio).
 - **Mesocicli 3:1:** tre settimane di carico e una di scarico (60–70%).
 - **Obiettivi B:** 3–4 giorni di mini-scarico; **C:** nessuno scarico.
-- **Settimana:** carico obiettivo distribuito nei giorni disponibili,
-  alternanza duro/facile, al massimo 2–3 sedute intense, lungo nel giorno
-  scelto, distribuzione 80/20 dell'intensità in base.
+- **Settimana:** carico obiettivo distribuito nei giorni di seduta (tanti
+  quante le sedute a settimana scelte, tra i giorni disponibili, il più
+  distanziati possibile; ADR 016), alternanza duro/facile, al massimo 2–3
+  sedute intense, lungo nel giorno scelto e sempre la seduta più lunga,
+  distribuzione 80/20 dell'intensità in base.
 - **Sedute** da modelli per sport e fase (facile, lungo, medio, soglia a
   intervalli, VO2max, recupero, forza, alternativa), **solo tra le tipologie
   scelte dall'utente**: durata, zone FC o di ritmo, carico stimato (che
@@ -370,18 +374,19 @@ src/ponos_coach/
   grafici (intercettore che blocca tutto, CSP senza host esterni). Le tile le
   chiede a un proxy di tile in Python: la pagina carica
   `ponos://tiles/{z}/{x}/{y}`, il guscio valida z/x/y (interi nei limiti),
-  scarica da `https://tile.tracestrack.com` (Tracestrack Topo) con timeout,
-  User-Agent generico dell'app e l'attribuzione richiesta (dati ©
-  OpenStreetMap contributors e le altre fonti, mappe © Tracestrack). La
-  chiave personale sta nel portachiavi del sistema (DPAPI su Windows, Secret
-  Service su Linux) e solo il proxy la usa: mai nella cartella del profilo,
-  nella pagina, nei log o nella cache. Cache su disco propria, con tetto
+  scarica da `https://tile.openstreetmap.org` (dal 2026-11-09, ADR 010
+  emendato; prima Tracestrack con chiave) con timeout, User-Agent con nome,
+  versione e contatto dell'app e l'attribuzione "© OpenStreetMap
+  contributors". Nessuna chiave. Cache su disco propria, con tetto
   esatto e rimozione delle tile meno usate di recente (LRU), default 4 GB,
   nella cartella cache del sistema (non nel profilo); comando per svuotarla;
-  solo le tile guardate, mai scaricamenti in massa. `QWebChannel` con pochi
+  scadenza secondo gli header (7 giorni se mancano), richieste condizionali
+  per le tile scadute, pausa di 300 s se il server rifiuta (403/429); solo le
+  tile guardate, mai scaricamenti in massa. `QWebChannel` con pochi
   messaggi dalla pagina (area visibile, attività cliccata, punto del
-  profilo), validati. Tracestrack vede le aree consultate: rischio dichiarato
-  nel threat model e accettato dall'utente.
+  profilo), validati. Il server vede le aree consultate e può bloccare l'app
+  senza preavviso: rischi dichiarati nel threat model e accettati
+  dall'utente.
 
 ## 5. Fasi
 
@@ -581,7 +586,8 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       GPU e raggruppa le partenze, oppure Leaflet con canvas e
       raggruppamento dei marcatori; scelta: Leaflet con
       leaflet.markercluster, nessuna GPU richiesta), sfondo raster Tracestrack Topo nella
-      lingua dell'app (`topo_it`/`topo_en`, nomi locali dove manca), libreria
+      lingua dell'app (`topo_it`/`topo_en`, nomi locali dove manca; sostituito da
+      OpenStreetMap il 2026-11-09, vedi fase 8), libreria
       inclusa nel pacchetto e servita dallo schema `ponos://`, tile servite
       dal proxy in Python (`ponos://tiles/...`), pagina senza rete (bozza in
       `docs/adr/010-mappa.md`). Aggiornati
@@ -594,7 +600,8 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       e messaggio chiaro se rifiutata), dimensione della cache (default
       4 GB), "Svuota cache"; senza chiave, senza rete o con il credito
       esaurito la mappa resta usabile su sfondo neutro con un avviso che dice
-      perché e cosa fare.
+      perché e cosa fare. (Dal 2026-11-09 la chiave non c'è più: resta la
+      dimensione della cache e "Svuota cache"; vedi fase 8.)
 - [x] Filtri dell'elenco attività: data (da–a), durata, distanza, dislivello
       positivo, sport. Minimo e massimo facoltativi (vuoto = nessun limite),
       input tolleranti (virgola o punto, "1:30" o "90" per la durata),
@@ -693,6 +700,45 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       più tagliata; nome del profilo modificabile; obiettivi e infortuni dal
       menu del giorno nel calendario (sezioni tolte dalla barra laterale);
       impostazioni riunite in File → Settings.
+- [x] Sfondo della mappa da OpenStreetMap, senza chiave (richiesta
+      dell'utente del 2026-11-09, commit `6ca8b68`, ADR 010 emendato): host
+      `tile.openstreetmap.org`; tolti la chiave Tracestrack, il suo
+      portachiavi e i messaggi relativi. Regole d'uso rispettate:
+      User-Agent con nome, versione e contatto, attribuzione "© OpenStreetMap
+      contributors" su entrambe le mappe, cache secondo gli header (7 giorni
+      se mancano), richieste condizionali (`ETag`, `Last-Modified`) per le
+      tile scadute, niente prefetch né scaricamenti in blocco, pausa di 300 s
+      se il server rifiuta (403/429). Cache delle tile schema 2 (senza stile,
+      con validatori; il file v1 si ricostruisce vuoto). Rischi accettati
+      (threat model): il server può bloccare l'app senza preavviso, nessuna
+      garanzia di servizio, URL fisso nel codice. Resta da fare prima del
+      rilascio: rileggere le regole d'uso di OpenStreetMap.
+- [x] Impostazioni di allenamento: giorni disponibili (caselle), sedute a
+      settimana, giorno del lungo, ore massime a settimana; niente più minuti
+      per giorno (richiesta dell'utente del 2026-11-09, commit `58409cc`,
+      ADR 016). Giorni di seduta: prima il lungo, poi ogni volta il giorno
+      disponibile più lontano da quelli scelti (settimana circolare, a parità
+      il più basso); tetto di un giorno = massimo del tipo di seduta
+      (`DAY_MAX_MINUTES` = 240); il lungo è sempre la seduta più lunga della
+      settimana (facile e recupero al massimo il 75%). `METHOD_VERSION` 6.
+      Schema 12 con migrazione da 11 (copia in `backup/`).
+- [x] Altre richieste dell'utente del 2026-11-09, ognuna nel suo commit:
+      corsa negli allenamenti Garmin con il passo come obiettivo principale e
+      la FC come secondario quando c'è un intervallo di passo, e l'app elenca
+      il passo prima della FC (`9a14d4a`, ADR 013 emendato); bottone "Save
+      changes" (Ctrl+S) sempre visibile in Impostazioni, che salva la pagina in
+      vista (`aa34231`); clic su un'attività nella finestra del giorno ne apre
+      la finestra o la porta in primo piano (`f26cabf`); grafico del carico
+      settimanale con una serie per sport, senza "Other" che raggruppa
+      (`b94d67a`); calendario senza il bottone Today, restano Ctrl+T e il menu
+      del giorno (`2a52928`).
+- [ ] Sincronizzazione: una voce che Garmin non scarica mai (errore 5xx o
+      nessuna risposta a ogni giro, mentre l'elenco risponde) resta in attesa
+      per sempre e ferma ogni giro dopo 3 voci; serve un contatore di giri
+      senza risposta per voce (nuova colonna, schema 13) che dopo N giri la
+      segni come fallita, senza consumare tentativi nei guasti veri di Garmin.
+      Caso del 2026-11-09: 30 attività del 2012-2013, sistemate a mano nel
+      profilo dell'utente.
 
 ## 6. Squadra di agenti e modelli
 
@@ -937,10 +983,12 @@ model e gli esiti del collaudo possono citarlo.
   rifiutati senza effetti; la pagina non può chiamare altro.
 - **T-SEC-15** Rete della mappa (fase 5b): la pagina non fa nessuna richiesta
   di rete (tutto tranne `ponos://` bloccato); il proxy chiama solo
-  `https://tile.tracestrack.com` (altri host, HTTP e z/x/y fuori limite
-  rifiutati, timeout rispettati); nessuna posizione GPS nei log
-  né in file fuori dalle cartelle previste; la chiave Tracestrack mai nella
-  pagina, nei log, nella cartella del profilo o nella cache.
+  `https://tile.openstreetmap.org` (altri host, HTTP e z/x/y fuori limite
+  rifiutati, timeout rispettati, User-Agent presente, validatori anomali
+  scartati); nessuna posizione GPS nei log né in file fuori dalle cartelle
+  previste. (Fino al 2026-11-09 il test controllava anche che la chiave
+  Tracestrack non finisse in pagina, log, profilo o cache: la chiave non c'è
+  più.)
 
 ### 7.8 Prestazioni e durata (T-PERF)
 

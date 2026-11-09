@@ -15,9 +15,11 @@ invia. Nessun I/O nel motore.
 
 - `goals/domain`: `RaceGoal` (id, data, priorità A/B/C, sport, distanza in
   metri 400–500 000, tempo obiettivo facoltativo 60 s–7 giorni), `FitnessGoal`
-  (id, data, CTL 0–200), `WeeklyAvailability` (minuti massimi per giorno della
-  settimana, lunedì = 0, con 0 = non disponibile, massimo 720; giorno del
-  lungo; minuti massimi a settimana, ore × 60), `SessionChoices`
+  (id, data, CTL 0–200), `WeeklyAvailability` (giorni disponibili, lunedì = 0; sedute a
+  settimana, da 1 al numero dei giorni; giorno del lungo, sempre uno dei giorni;
+  minuti massimi a settimana, ore × 60, al massimo 6000; senza giorni non ci
+  sono sedute né tempo: la disponibilità vuota; ADR 016, prima erano i minuti
+  di ogni giorno), `SessionChoices`
   (tipologie scelte per sport: facile, lungo, medio, soglia, VO2max,
   recupero, forza, alternativa). Tutti validi per costruzione.
 - `planning/domain`: `PlanInputs` (obiettivi, disponibilità, tipologie,
@@ -72,7 +74,7 @@ Altrimenti il piano esiste sempre; ciò che non va sta negli avvisi
 | `CtlTargetNotReached` | il CTL richiesto non si raggiunge alla rampa massima (scarto oltre 5 punti) |
 | `TargetTimeUnreachable` | tempo obiettivo non raggiungibile entro la data |
 | `RecoveryInserted` | TSB o ATL/CTL fuori soglia: i primi giorni sono di recupero |
-| `LongDayUnavailable` | lungo scelto ma il giorno del lungo non ha tempo: nessun lungo |
+| `LongDayUnavailable` | non più prodotto dalla versione 6 (il giorno del lungo è sempre disponibile); resta perché i piani salvati prima si leggano |
 | `GoalBeyondHorizon` | obiettivo oltre le 52 settimane |
 
 Una tipologia mancante non si aggiunge mai.
@@ -134,7 +136,7 @@ picco):
 - Scarico prima di A (giorni di scarico finale) e B (mini scarico): sedute
   facili con le quote di sopra del riferimento (il mini scarico al 70%); la sera
   prima di una gara al massimo 30 minuti. **La frequenza si mantiene**: una
-  seduta per ogni giorno disponibile, anche da un carico di partenza nullo (il
+  seduta per ogni giorno di seduta, anche da un carico di partenza nullo (il
   budget ha come minimo il costo delle sedute più brevi, finché ore e rampa lo
   permettono). **Una seduta di qualità accorciata a settimana** nello scarico
   finale (TON14, SAN25): al massimo 45 minuti, struttura ridotta (soglia 10' + 2
@@ -142,9 +144,20 @@ picco):
   ultime 72 ore prima di una gara (valore del progetto: si guarda a ogni gara,
   A, B e C), non accanto a un giorno duro; tipologia a ritmo gara (vedi sotto).
   Nessun lungo. Il mini scarico delle B non ha qualità.
-- Il carico settimanale va nei giorni disponibili; ogni giorno al massimo i
-  minuti dell'utente e ogni settimana al massimo le sue ore (le gare non
-  contano).
+- **Giorni di seduta** (`WeeklyAvailability.session_days`, ADR 016): le
+  sedute a settimana vanno su altrettanti giorni disponibili. Prima il giorno
+  del lungo; poi, uno alla volta, il giorno disponibile più lontano da quelli
+  già scelti, contando la settimana come un cerchio (la domenica è accanto al
+  lunedì), a parità il giorno più basso. Stessa disponibilità, stessi giorni.
+- Il carico settimanale va nei giorni di seduta; l'utente non dà minuti per
+  giorno: un giorno regge al massimo `DAY_MAX_MINUTES` (240, il massimo del
+  lungo) e ogni seduta il massimo della propria tipologia (tabella sotto);
+  ogni settimana al massimo le ore dell'utente (le gare non contano).
+- **Il lungo è sempre la seduta più lunga della settimana** (versione 6):
+  facile e recupero durano al massimo il 75% del lungo
+  (`OTHER_SESSION_MAX_SHARE_OF_LONG_PERCENT`), medio e alternativa sempre meno
+  di lui. Quando ore o carico non bastano per tutto, si accorciano prima le
+  altre sedute, poi il lungo.
 - **Dure** = lungo, medio, soglia, VO2max; **intense** = medio, soglia,
   VO2max. Mai due dure di seguito (nemmeno tra settimane, né accanto a una
   gara); mai una intensa nelle 72 ore prima di una gara (valore del progetto).
@@ -165,7 +178,7 @@ picco):
   soglia; base soglia e medio; costruzione soglia e VO2max; le tipologie della
   fase **si alternano di settimana in settimana** (una per settimana per il
   limite del 25%); le intense si distanziano il più possibile; forza una volta a settimana se
-  scelta; gli altri giorni disponibili facile (altrimenti alternativa,
+  scelta; gli altri giorni di seduta facile (altrimenti alternativa,
   altrimenti recupero). Nelle settimane di scarico solo lungo e facili.
 - **80/20 per tempo:** in base e mantenimento almeno l'80% dei minuti in
   Z1–Z2; se non regge si tolgono le sedute intense, l'ultima per prima.
@@ -199,7 +212,9 @@ Z1 sotto 78% della soglia, Z2 78–86%, Z3 87–93%, Z4 94–99%, Z5 da 100%;
 `assessment.pace_zones`, invariate); gli intervalli di FC di ogni blocco seguono da sole le
 zone, e così quelli di ritmo; le strutture della tabella qui sotto non cambiano, ma una zona
 è più larga (la Z2 va da 78% a 87%). Ogni blocco ha il suo intervallo in bpm e in s/km (ritmo solo per corsa con
-ritmo di soglia).
+ritmo di soglia). Nell'allenamento Garmin, con un intervallo di ritmo il ritmo
+è l'obiettivo principale e la FC il secondario; senza, la FC resta la principale
+(sezione 10 di `dati-e-sincronizzazione.md`).
 
 | Tipologia | Durata | Struttura |
 |---|---|---|
@@ -317,12 +332,15 @@ Invarianti di `invariants.py` oltre a quelli di prima: al massimo
 `max(1, ⌊25%⌋)` sedute intense a settimana da 3 sedute in su, nessuna con meno (e 2 con meno di 6 sedute), al massimo 3 giorni
 duri, nessuna intensa nei 3 giorni prima di una gara, nessun VO2max nel picco
 di mezza e maratona, quote esposte coerenti con le sedute, settimana intera di
-scarico con una seduta per ogni giorno disponibile (non controllato con ore
-settimanali inferiori ai minuti dei giorni disponibili, dopo infortunio, con CTL
+scarico con una seduta per ogni giorno di seduta (non controllato con ore
+settimanali troppo basse per le sedute, dopo infortunio, con CTL
 sotto 10 o senza tipologia facile: lì le ore o la rampa decidono quali sedute
-togliere).
+togliere); solo i giorni di seduta, mai oltre `DAY_MAX_MINUTES`; il lungo è la
+seduta più lunga della settimana e facile e recupero al massimo il 75% di lui.
 
-Versione del metodo: **5** (il test di soglia è una seduta del piano: campo
+Versione del metodo: **6** (l'utente dà giorni disponibili e sedute a settimana,
+non minuti per giorno; giorni di seduta spaziati dalla regola della sezione 6;
+lungo sempre il più lungo: ADR 016; la 5 aveva i minuti per giorno). La **5** (il test di soglia è una seduta del piano: campo
 `threshold_test` nella seduta, `test_protocol` e `missed_tests` tra gli ingressi; i piani
 e i giorni congelati salvati con la 4 non si rileggono, il formato ha un campo in più; la 4
 aveva infortuni e malattie aperti; la 3 aveva le zone FC della 5ª edizione e FC rappresentative delle zone
