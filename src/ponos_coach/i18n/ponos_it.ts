@@ -6074,7 +6074,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>Load (hrTSS)</source>
-        <translation type="unfinished">Carico (hrTSS)</translation>
+        <translation>Carico (hrTSS)</translation>
     </message>
 </context>
 <context>
