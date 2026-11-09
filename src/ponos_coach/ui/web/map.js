@@ -363,6 +363,7 @@
     return {
       zoom: map.getZoom(), center: [centre.lat, centre.lng], tracks: tracksByIdx.size,
       starts: startsByIdx.size, selected: selected,
+      channelOpen: bridge !== null, viewPending: moveTimer !== null,
       attribution: document.querySelector(".leaflet-control-attribution").textContent,
       attributionVisible: document.querySelector(".leaflet-control-attribution").offsetWidth > 0,
       tileUrl: tileLayer._url,

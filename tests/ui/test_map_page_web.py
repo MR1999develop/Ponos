@@ -341,6 +341,24 @@ def test_the_page_can_reach_one_object_with_five_slots_and_nothing_else(
     assert named - plumbing == slots | {"deleteLater"}
 
 
+def wait_until_the_page_reported_its_view(qtbot: QtBot, view: MapWebView) -> None:
+    """Wait until the page's own view report reached Python, so it is not taken for an effect.
+
+    The page reports its view by itself once its channel opens, after a debounce. Once nothing is
+    pending, one rejected message sent on the same channel arrives after any report already sent:
+    the channel keeps the order of the messages.
+    """
+
+    def settled() -> bool:
+        state = page_state(qtbot, view)
+        return state["channelOpen"] is True and state["viewPending"] is False
+
+    qtbot.waitUntil(settled, timeout=WAIT_MS)
+    rejected = view.bridge.rejected
+    execute(qtbot, view, "window.__bridge.pointHovered(-1, 0);")
+    qtbot.waitUntil(lambda: view.bridge.rejected > rejected, timeout=WAIT_MS)
+
+
 @pytest.mark.parametrize(
     "script",
     [
@@ -368,6 +386,7 @@ def test_malformed_messages_from_the_page_are_rejected_without_effect(
     qtbot.waitUntil(
         lambda: evaluate(qtbot, view, "window.__bridge !== undefined") is True, timeout=WAIT_MS
     )
+    wait_until_the_page_reported_its_view(qtbot, view)
     controller = window.map_ui.controller
     before_view, before_selected = controller.view, controller.selected
     rejected_before = view.bridge.rejected
