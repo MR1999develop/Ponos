@@ -55,6 +55,7 @@ from ponos_coach.ui.activity_detail_loader import ActivityDetailLoader
 from ponos_coach.ui.activity_table import ActivitiesPage
 from ponos_coach.ui.backup_runner import BackupRunner, BackupUseCases
 from ponos_coach.ui.backup_ui import BackupUi
+from ponos_coach.ui.calendar_day_menu import CalendarDayMenu
 from ponos_coach.ui.calendar_page import CalendarPage
 from ponos_coach.ui.chart_view import ChartEngine
 from ponos_coach.ui.data_thread import SHUTDOWN_WAIT_MS
@@ -79,6 +80,7 @@ from ponos_coach.ui.overview_state import (
     Ready,
     summary_of,
 )
+from ponos_coach.ui.page_window import PageWindow
 from ponos_coach.ui.plan_presentation import plan_of
 from ponos_coach.ui.plan_ui import PlanUi
 from ponos_coach.ui.profile_dialogs import ProfileDialogs
@@ -115,16 +117,12 @@ _STATUS_MESSAGE_MS = 8000
 _SECTION_OVERVIEW = 0
 _SECTION_ACTIVITIES = 1
 _SECTION_CALENDAR = 2
-_SECTION_GOALS = 3
-_SECTION_MAP = 4
-_SECTION_INJURIES = 5
+_SECTION_MAP = 3
 _AVAILABLE_SECTIONS = (
     _SECTION_OVERVIEW,
     _SECTION_ACTIVITIES,
     _SECTION_CALENDAR,
-    _SECTION_GOALS,
     _SECTION_MAP,
-    _SECTION_INJURIES,
 )
 _SHUTDOWN_POLL_MS = 20
 
@@ -262,6 +260,12 @@ class MainWindow(QMainWindow):
         self._open_day_action = self._action(
             self.tr("Open day"), "Ctrl+Return", self._calendar_open_day
         )
+        self._goals_window_action = self._action(
+            self.tr("Goals and plan status..."), "Ctrl+Shift+P", self._show_goals
+        )
+        self._injury_history_action = self._action(
+            self.tr("Injury history..."), "Ctrl+H", self._show_injuries
+        )
         self._detail_action = self._action(
             self.tr("Activity detail..."), "Ctrl+D", self.show_selected_activity_detail
         )
@@ -337,6 +341,7 @@ class MainWindow(QMainWindow):
         for name in ("add_race", "add_form_goal", "change_goal", "remove_goal"):
             menu.addAction(actions[name])
         menu.addSeparator()
+        menu.addAction(self._goals_window_action)
         menu.addAction(actions["training"])
         menu.addSeparator()
         menu.addAction(actions["undo"])
@@ -348,6 +353,8 @@ class MainWindow(QMainWindow):
         actions = self._injuries.actions
         for name in ("report_injury", "report_illness", "check_in", "review", "close"):
             menu.addAction(actions[name])
+        menu.addSeparator()
+        menu.addAction(self._injury_history_action)
         menu.addSeparator()
         menu.addAction(actions["undo"])
         menu.addAction(actions["redo"])
@@ -379,9 +386,7 @@ class MainWindow(QMainWindow):
             (self.tr("Overview"), True),
             (self.tr("Activities"), True),
             (self.tr("Calendar"), True),
-            (self.tr("Goals"), True),
             (self.tr("Map"), True),
-            (self.tr("Injuries"), True),
             (self.tr("Tests"), False),
             (self.tr("Profile settings"), False),
         )
@@ -413,16 +418,20 @@ class MainWindow(QMainWindow):
             show_map=lambda: self._sidebar.setCurrentRow(_SECTION_MAP),
         )
         self._calendar = CalendarPage(self._today(), self)
-        self._goals = GoalsPage(self)
-        self._injuries_page = InjuriesPage(self)
+        self._goals = GoalsPage()
+        self._injuries_page = InjuriesPage()
+        self._goals_window = PageWindow(
+            self.tr("Goals and plan status"), self._goals, self, name="goalsWindow"
+        )
+        self._injuries_window = PageWindow(
+            self.tr("Injury history"), self._injuries_page, self, name="injuryHistoryWindow"
+        )
         self._pages = QStackedWidget(self)
         self._section_pages: dict[int, QWidget] = {
             _SECTION_OVERVIEW: self._overview,
             _SECTION_ACTIVITIES: self._activities,
             _SECTION_CALENDAR: self._calendar,
-            _SECTION_GOALS: self._goals,
             _SECTION_MAP: self._map_ui.page,
-            _SECTION_INJURIES: self._injuries_page,
         }
         for page in self._section_pages.values():
             self._pages.addWidget(page)
@@ -492,6 +501,12 @@ class MainWindow(QMainWindow):
             theme=system_theme,
             show_error=self._show_error,
             show_page=self._show_injuries,
+        )
+        self._day_menu = CalendarDayMenu(
+            self._calendar,
+            open_day=self._open_day_action,
+            plan_actions=self._plan.actions,
+            injury_actions=self._injuries.actions,
         )
         self._injuries.status_text_changed.connect(self._on_injury_status_changed)
         self._plan.retest_proposal_changed.connect(self._on_plan_retest_changed)
@@ -626,6 +641,31 @@ class MainWindow(QMainWindow):
     def goals_page(self) -> GoalsPage:
         """The Goals page."""
         return self._goals
+
+    @property
+    def goals_window(self) -> PageWindow:
+        """The window "Goals and plan status"."""
+        return self._goals_window
+
+    @property
+    def injury_history_window(self) -> PageWindow:
+        """The window "Injury history"."""
+        return self._injuries_window
+
+    @property
+    def day_menu(self) -> CalendarDayMenu:
+        """The menu of a day of the calendar."""
+        return self._day_menu
+
+    @property
+    def goals_window_action(self) -> QAction:
+        """Action "Goals and plan status..."."""
+        return self._goals_window_action
+
+    @property
+    def injury_history_action(self) -> QAction:
+        """Action "Injury history..."."""
+        return self._injury_history_action
 
     @property
     def plan(self) -> PlanUi:
@@ -873,10 +913,10 @@ class MainWindow(QMainWindow):
         self._plan_retest_label.setVisible(bool(text))
 
     def _show_goals(self) -> None:
-        self._sidebar.setCurrentRow(_SECTION_GOALS)
+        self._goals_window.bring_forward()
 
     def _show_injuries(self) -> None:
-        self._sidebar.setCurrentRow(_SECTION_INJURIES)
+        self._injuries_window.bring_forward()
 
     def _on_injury_status_changed(self, text: str) -> None:
         self._injury_label.setText(text)
@@ -1419,6 +1459,8 @@ class MainWindow(QMainWindow):
             self._threshold.close_dialogs()
             self._plan.close_dialogs()
             self._injuries.close_dialogs()
+            self._goals_window.close()
+            self._injuries_window.close()
             self._map_ui.close_dialogs()
             self.release_web_engine()
             if not self._controller.has_stopped:

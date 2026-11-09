@@ -20,10 +20,11 @@ from PySide6.QtCore import (
     QModelIndex,
     QObject,
     QPersistentModelIndex,
+    QPoint,
     Qt,
     Signal,
 )
-from PySide6.QtGui import QBrush, QColor, QFont, QKeyEvent, QPainter
+from PySide6.QtGui import QBrush, QColor, QContextMenuEvent, QFont, QKeyEvent, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
@@ -215,6 +216,13 @@ class MonthTable(QTableView):
     """The grid; Page Up and Page Down ask for the previous and the next month."""
 
     month_step_requested = Signal(int)
+    context_menu_requested = Signal(object, bool)  # QPoint (in the viewport), from the keyboard
+
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:  # noqa: N802 - Qt
+        """The right button or the Menu key (Shift+F10): ask for the menu of the day."""
+        from_keyboard = event.reason() == QContextMenuEvent.Reason.Keyboard
+        self.context_menu_requested.emit(event.pos(), from_keyboard)
+        event.accept()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 - Qt
         """Page Up and Page Down change month; every other key is the table's."""
@@ -236,6 +244,7 @@ class CalendarPage(QWidget):
     add_form_goal_requested = Signal(object)  # date
     change_goal_requested = Signal(str)  # goal id
     remove_goal_requested = Signal(str)  # goal id
+    day_menu_requested = Signal(object, object)  # CalendarDay, QPoint (global): a day's menu
 
     def __init__(self, today: date, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -319,6 +328,7 @@ class CalendarPage(QWidget):
         self._table.horizontalHeader().setHighlightSections(False)
         self._table.activated.connect(self._on_activated)
         self._table.month_step_requested.connect(self._step)
+        self._table.context_menu_requested.connect(self._on_context_menu)
         self._table.selectionModel().currentChanged.connect(self._on_current_changed)
 
     def _build_legends(self) -> QWidget:
@@ -471,6 +481,13 @@ class CalendarPage(QWidget):
         if index.isValid() and self._model.flags(index) & Qt.ItemFlag.ItemIsEnabled:
             self._table.setCurrentIndex(index)
 
+    def go_to(self, day: date) -> None:
+        """Show the month of a day (if the calendar reaches it) and select the day."""
+        target = first_of_month(day)
+        if target <= last_month_shown(self._today):
+            self._set_month(target)
+            self.select_day(day)
+
     def selected_day(self) -> date | None:
         """The day of the selected cell, if any."""
         cell = self._cell_at(self._table.currentIndex())
@@ -509,6 +526,24 @@ class CalendarPage(QWidget):
         cell = self._cell_at(index)
         if cell is not None and cell.can_open:
             self.day_requested.emit(cell.day)
+
+    def _on_context_menu(self, position: object, from_keyboard: bool) -> None:
+        """Select the day under the pointer (or keep the selected one, for the keyboard) and say
+        where its menu goes."""
+        if not isinstance(position, QPoint):
+            return
+        viewport = self._table.viewport()
+        if from_keyboard:
+            current = self._table.currentIndex()
+            where = viewport.mapToGlobal(self._table.visualRect(current).center())
+        else:
+            current = self._table.indexAt(position)
+            if self._cell_at(current) is not None:
+                self._table.setCurrentIndex(current)
+            where = viewport.mapToGlobal(position)
+        cell = self._cell_at(current)
+        if cell is not None:
+            self.day_menu_requested.emit(cell, where)
 
     def _on_current_changed(self, _current: QModelIndex, _previous: QModelIndex) -> None:
         if not self._refreshing:

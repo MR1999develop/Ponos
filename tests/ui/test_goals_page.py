@@ -10,8 +10,7 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import QLocale, Qt
-from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QFrame, QToolButton
+from PySide6.QtWidgets import QFrame
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.activities.domain import Sport
@@ -25,7 +24,7 @@ from ponos_coach.planning.domain import (
     TargetClass,
 )
 from ponos_coach.profiles.rebuild_plan import NotBuiltReason
-from ponos_coach.ui.goals_page import GoalsPage, GoalsPageActions
+from ponos_coach.ui.goals_page import GoalsPage
 from ponos_coach.ui.goals_table import GOAL_ID_ROLE, SORT_ROLE, GoalColumn
 from ponos_coach.ui.plan_presentation import Notice, NoticeAction, Severity
 from ponos_coach.ui.plan_texts import label_lookup
@@ -48,9 +47,6 @@ def english() -> Iterator[None]:
 def make_page(qtbot: QtBot) -> GoalsPage:
     page = GoalsPage()
     qtbot.addWidget(page)
-    page.attach_actions(
-        GoalsPageActions(*(QAction(name, page) for name in ("a", "b", "c", "d", "e", "f", "g")))
-    )
     return page
 
 
@@ -267,16 +263,6 @@ def test_the_two_levels_have_their_own_border_colour_in_both_themes(qtbot: QtBot
         assert tokens_for(theme).error not in sheets[0]  # no plan is not an error
         assert warning_color_for(theme) in sheets[1]
     assert warning_color_for(Theme.LIGHT) != warning_color_for(Theme.DARK)
-
-
-def test_the_commands_are_the_window_actions_shown_as_text_buttons(qtbot: QtBot) -> None:
-    page = make_page(qtbot)
-
-    buttons = page.findChildren(QToolButton)
-
-    assert [b.text() for b in buttons] == ["a", "b", "c", "d", "e", "f", "g"]
-    assert all(b.toolButtonStyle() == Qt.ToolButtonStyle.ToolButtonTextOnly for b in buttons)
-    assert all(b.focusPolicy() & Qt.FocusPolicy.TabFocus for b in buttons)
 
 
 @pytest.mark.parametrize("theme", list(Theme))

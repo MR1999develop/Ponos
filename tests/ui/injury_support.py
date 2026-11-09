@@ -38,6 +38,7 @@ from ponos_coach.ui.workspace import ProfileAccess
 from tests.injury.builders import questionnaire
 from tests.ui.goals_support import (
     RACE_DAY,
+    SECTION_CALENDAR,
     add_race,
     race_ids,
     ready_window,
@@ -45,9 +46,8 @@ from tests.ui.goals_support import (
     wait_for,
     wait_plan,
 )
+from tests.ui.nutrition_support import cell_of
 from tests.ui.workspace_support import TODAY, WAIT_MS
-
-SECTION_INJURIES = 5
 
 
 def injury_window(qtbot: QtBot, tmp_path: Path, settings: QSettings) -> MainWindow:
@@ -68,6 +68,14 @@ def wait_injuries(qtbot: QtBot, window: MainWindow, count: int | None = None) ->
             window.injuries.is_idle and (count is None or len(window.injuries.summaries) == count)
         ),
     )
+
+
+def select_record(qtbot: QtBot, window: MainWindow, index: int = 0) -> None:
+    """Select in the calendar the day a record began (what the injury commands act on)."""
+    day = summary_of(window, index).started_on
+    window.sidebar.setCurrentRow(SECTION_CALENDAR)
+    window.calendar_page.go_to(day)
+    wait_for(qtbot, lambda: bool(cell_of(window, day).problems))
 
 
 def summary_of(window: MainWindow, index: int = 0) -> ProblemSummary:
@@ -172,6 +180,7 @@ def check_in(
 ) -> None:
     """Answer today's check-in (menu command) and wait until it is stored."""
     wait_injuries(qtbot, window)
+    select_record(qtbot, window)
     window.injuries.actions["check_in"].trigger()
     wait_for(qtbot, lambda: window.injuries.checkin_dialog is not None)
     dialog = window.injuries.checkin_dialog
@@ -241,7 +250,6 @@ def stored(window: MainWindow) -> tuple[Problem, ...]:
 
 
 __all__ = [
-    "SECTION_INJURIES",
     "TODAY",
     "WAIT_MS",
 ]

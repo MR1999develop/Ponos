@@ -35,13 +35,13 @@ from tests.ui.goals_support import (
     EVERY_DAY,
     RACE_DAY,
     SECTION_CALENDAR,
-    SECTION_GOALS,
     add_race,
     choices_of,
     goals_of,
     race_ids,
     races_of,
     ready_window,
+    select_goal,
     set_training,
     wait_for,
     wait_idle,
@@ -87,21 +87,30 @@ def redo(window: MainWindow) -> None:
 # --- The section and the menu -----------------------------------------------------------------
 
 
-def test_the_goals_section_opens_with_an_invitation_and_the_commands_with_their_reasons(
+def test_the_goals_window_opens_from_the_menu_and_the_commands_have_their_reasons(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = ready_window(qtbot, tmp_path, settings)
 
-    window.sidebar.setCurrentRow(SECTION_GOALS)
+    window.goals_window_action.trigger()
 
-    assert window.current_page is window.goals_page
+    assert window.goals_window.isVisible()
+    assert window.goals_window.windowTitle() == "Goals and plan status"
+    assert [window.sidebar.item(row).text() for row in range(window.sidebar.count())] == [
+        "Overview",
+        "Activities",
+        "Calendar",
+        "Map",
+        "Tests",
+        "Profile settings",
+    ]
     assert window.goals_page.empty_text.startswith("No goals yet.")
     actions = window.plan.actions
     assert actions["add_race"].isEnabled()
     assert actions["training"].isEnabled()
     for name in ("change_goal", "remove_goal"):
         assert not actions[name].isEnabled()
-        assert actions[name].toolTip() == "Select a goal in the Goals section first."
+        assert actions[name].toolTip() == "Select a day with a goal in the Calendar first."
     assert not actions["undo"].isEnabled()
     assert actions["undo"].toolTip() == "There is no change to the goals to take back."
 
@@ -119,6 +128,7 @@ def test_the_plan_menu_lists_every_command_with_its_shortcut(
         ("Add form goal...", "Ctrl+Shift+F"),
         ("Change goal...", "Ctrl+Shift+E"),
         ("Remove goal", "Ctrl+Del"),
+        ("Goals and plan status...", "Ctrl+Shift+P"),
         ("Training settings...", "Ctrl+Shift+T"),
         ("Undo", ""),  # like the threshold test: no global shortcut
         ("Redo", ""),
@@ -218,8 +228,7 @@ def test_changing_a_race_and_taking_it_back_restores_the_old_version_exactly(
     window = plan_window(qtbot, tmp_path, settings)
     add_race(qtbot, window, RACE_DAY)
     (original,) = races_of(window)
-    window.sidebar.setCurrentRow(SECTION_GOALS)
-    window.goals_page.select_goal(original.goal_id.value)
+    select_goal(qtbot, window, original.goal_id.value)
     assert window.plan.actions["change_goal"].isEnabled()
 
     window.plan.actions["change_goal"].trigger()
@@ -247,7 +256,6 @@ def test_taking_a_change_back_restores_the_real_old_version_not_the_one_the_dial
     window = plan_window(qtbot, tmp_path, settings)
     add_race(qtbot, window, RACE_DAY)
     (original,) = races_of(window)
-    window.sidebar.setCurrentRow(SECTION_GOALS)
     window.plan.change_goal(original.goal_id.value)
     wait_for(qtbot, lambda: window.plan.goal_dialog is not None)
     dialog = window.plan.goal_dialog
@@ -343,8 +351,7 @@ def test_removing_a_goal_asks_nothing_and_taking_it_back_puts_the_same_goal_in_i
     window = plan_window(qtbot, tmp_path, settings)
     add_race(qtbot, window, RACE_DAY, target="3:20:00")
     (race,) = races_of(window)
-    window.sidebar.setCurrentRow(SECTION_GOALS)
-    window.goals_page.select_goal(race.goal_id.value)
+    select_goal(qtbot, window, race.goal_id.value)
 
     window.plan.actions["remove_goal"].trigger()
     wait_for(qtbot, lambda: window.plan.is_idle and goals_of(window) == ())

@@ -3,6 +3,10 @@
 """The plan in the window: goals, training settings, the plan's state, the calendar layer and the
 PMC projection.
 
+The goals are added, changed and removed on the days of the calendar: the commands work on the
+selected day (a new goal starts on it, a change or removal acts on the goal that falls on it; with
+two goals on a day a small menu asks which). The page "Goals and plan status" only shows.
+
 Owns the dialogs, the undo stack (goals, availability and session types share it: one Undo, one
 Redo) and the jobs of `PlanLoader`; the window only gives it callbacks and puts its actions in the
 menu. A change goes through a dialog and then through a command on the stack; the job runs on the
@@ -42,6 +46,7 @@ from ponos_coach.load.use_cases import ProfileOverview
 from ponos_coach.profiles.rebuild_plan import PlanBuilt, PlanNotBuilt, PlanRefused
 from ponos_coach.ui.calendar_model import plan_layer_of
 from ponos_coach.ui.calendar_page import CalendarPage
+from ponos_coach.ui.choice_menu import popup_choices
 from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.goal_dialog import GoalDialog
 from ponos_coach.ui.goal_draft import (
@@ -53,7 +58,7 @@ from ponos_coach.ui.goal_draft import (
 from ponos_coach.ui.goal_draft import (
     draft_of as draft_of_goal,
 )
-from ponos_coach.ui.goals_page import GoalsPage, GoalsPageActions
+from ponos_coach.ui.goals_page import GoalsPage
 from ponos_coach.ui.overview_page import OverviewPage
 from ponos_coach.ui.overview_state import OverviewState, Ready
 from ponos_coach.ui.plan_loader import PastLoaded, PlanLoader, PlanSnapshot
@@ -68,7 +73,12 @@ from ponos_coach.ui.plan_presentation import (
     projection_of,
     retest_proposal_of,
 )
-from ponos_coach.ui.plan_texts import label_lookup, race_short_name, retest_proposal_text
+from ponos_coach.ui.plan_texts import (
+    goal_label,
+    label_lookup,
+    race_short_name,
+    retest_proposal_text,
+)
 from ponos_coach.ui.plan_undo import (
     AddGoalCommand,
     ChangeGoalCommand,
@@ -198,17 +208,6 @@ class PlanUi(QObject):
         self._goal_dialog: GoalDialog | None = None
         self._training_dialog: TrainingSettingsDialog | None = None
         self._build_actions()
-        goals_page.attach_actions(
-            GoalsPageActions(
-                self._add_race_action,
-                self._add_form_goal_action,
-                self._change_goal_action,
-                self._remove_goal_action,
-                self._training_action,
-                self._undo_action,
-                self._redo_action,
-            )
-        )
         self._connect()
         self._update_actions()
 
@@ -222,9 +221,9 @@ class PlanUi(QObject):
         return action
 
     def _build_actions(self) -> None:
-        self._add_race_action = self._action(self.tr("Add race..."), "Ctrl+R", self.add_race)
+        self._add_race_action = self._action(self.tr("Add race..."), "Ctrl+R", self._add_race_here)
         self._add_form_goal_action = self._action(
-            self.tr("Add form goal..."), "Ctrl+Shift+F", self.add_form_goal
+            self.tr("Add form goal..."), "Ctrl+Shift+F", self._add_form_goal_here
         )
         self._change_goal_action = self._action(
             self.tr("Change goal..."), "Ctrl+Shift+E", self.change_selected_goal
@@ -255,7 +254,7 @@ class PlanUi(QObject):
         self._calendar.add_form_goal_requested.connect(self._on_day_add_form_goal)
         self._calendar.change_goal_requested.connect(self.change_goal)
         self._calendar.remove_goal_requested.connect(self.remove_goal)
-        self._goals_page.selection_changed.connect(self._update_actions)
+        self._calendar.selection_changed.connect(self._update_actions)
         self._goals_page.goal_activated.connect(self.change_goal)
         self._goals_page.notice_action_requested.connect(self._on_notice_action)
 
@@ -325,11 +324,15 @@ class PlanUi(QObject):
         if goal is not None:
             self._open_goal_dialog(None, None, goal)
 
+    def _add_race_here(self) -> None:
+        self.add_race(self._calendar.selected_day())
+
+    def _add_form_goal_here(self) -> None:
+        self.add_form_goal(self._calendar.selected_day())
+
     def change_selected_goal(self) -> None:
-        """Change the goal selected in the Goals section."""
-        goal_id = self._goals_page.selected_goal_id()
-        if goal_id is not None:
-            self.change_goal(goal_id)
+        """Change the goal on the day selected in the calendar (which one, if there are two)."""
+        self._on_selected_goal(self.change_goal)
 
     def remove_goal(self, goal_id: str) -> None:
         """Remove a goal; the removal can be undone, so nothing is asked first."""
@@ -338,10 +341,26 @@ class PlanUi(QObject):
             self._stack.push(RemoveGoalCommand(self._jobs, goal.goal_id))
 
     def remove_selected_goal(self) -> None:
-        """Remove the goal selected in the Goals section."""
-        goal_id = self._goals_page.selected_goal_id()
-        if goal_id is not None:
-            self.remove_goal(goal_id)
+        """Remove the goal on the day selected in the calendar (which one, if there are two)."""
+        self._on_selected_goal(self.remove_goal)
+
+    def _selected_goals(self) -> list[Goal]:
+        """The goals that fall on the day selected in the calendar."""
+        cell = self._calendar.selected_cell()
+        if cell is None:
+            return []
+        found = (self._goal_with_id(item.goal.goal_id.value) for item in cell.goals)
+        return [goal for goal in found if goal is not None]
+
+    def _on_selected_goal(self, command: Callable[[str], None]) -> None:
+        goals = self._selected_goals()
+        if len(goals) == 1:
+            command(goals[0].goal_id.value)
+        elif goals:
+            popup_choices(
+                self._window,
+                [(goal_label(g), partial(command, g.goal_id.value)) for g in goals],
+            )
 
     def _goal_with_id(self, goal_id: str) -> Goal | None:
         if self._snapshot is None:
@@ -571,12 +590,17 @@ class PlanUi(QObject):
             reason = self.tr("Create or open a profile first.")
         else:
             reason = self.tr("Wait a moment: the goals are being read.")
-        for action in (self._add_race_action, self._add_form_goal_action, self._training_action):
-            action.setEnabled(ready)
-            action.setToolTip(reason)
-        selected = self._goals_page.selected_goal_id()
-        has_goal = ready and selected is not None
-        why = reason or self.tr("Select a goal in the Goals section first.")
+        self._training_action.setEnabled(ready)
+        self._training_action.setToolTip(reason)
+        cell = self._calendar.selected_cell()
+        # a goal needs a day the plan can still reach; no day selected means "pick it in the form"
+        day_fits = cell is None or cell.day > self._today()
+        add_reason = reason or ("" if day_fits else self.tr("A goal needs a day after today."))
+        for action in (self._add_race_action, self._add_form_goal_action):
+            action.setEnabled(ready and day_fits)
+            action.setToolTip(add_reason)
+        has_goal = ready and cell is not None and bool(cell.goals)
+        why = reason or self.tr("Select a day with a goal in the Calendar first.")
         for action in (self._change_goal_action, self._remove_goal_action):
             action.setEnabled(has_goal)
             action.setToolTip("" if has_goal else why)

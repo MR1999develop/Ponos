@@ -1,29 +1,25 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Page "Injuries": the notices, the table of the records and the state of the selected one.
+"""Page "Injury history": the notices, the table of the records and the state of the selected one.
 
 Humble view: the notices, the sentences and the table come ready from `injury_presentation`,
 `injury_texts` and `injury_table`. A notice always opens with a word ("See a doctor", "Plan"), and
-its colour is only a border: the meaning never rests on the colour alone. The commands are the
-window's own actions, shown as buttons, so a button and a menu entry are the same command with the
-same tooltip. Health data: shown here and never logged.
+its colour is only a border: the meaning never rests on the colour alone. The page only shows:
+the injuries are reported and followed on the days of the calendar. It is a widget of its own, so
+that the settings window can take it in later. Health data: shown here and never logged.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 
 from PySide6.QtCore import QModelIndex, Qt, Signal
-from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
-    QHBoxLayout,
     QHeaderView,
     QLabel,
     QTableView,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -40,21 +36,8 @@ from ponos_coach.ui.tokens import SPACE_1, SPACE_2, SPACE_3, SPACE_4, Theme, war
 _BORDER_WIDTH = 4
 
 
-@dataclass(frozen=True, slots=True)
-class InjuriesPageActions:
-    """The window's actions that the page shows as buttons."""
-
-    report_injury: QAction
-    report_illness: QAction
-    check_in: QAction
-    review: QAction
-    close: QAction
-    undo: QAction
-    redo: QAction
-
-
 class InjuriesPage(QWidget):
-    """Notices, table of injuries and illnesses, the state of the selected one, and commands."""
+    """Notices, table of injuries and illnesses, and the state of the selected one."""
 
     selection_changed = Signal(object)  # str | None: the id of the record selected
     problem_activated = Signal(str)  # Enter or double click on a record
@@ -102,8 +85,6 @@ class InjuriesPage(QWidget):
         self._detail.setTextFormat(Qt.TextFormat.PlainText)
         self._detail.setWordWrap(True)
         self._detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._buttons = QHBoxLayout()
-        self._buttons.setSpacing(SPACE_2)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(SPACE_4, SPACE_4, SPACE_4, SPACE_4)
         layout.setSpacing(SPACE_3)
@@ -111,25 +92,6 @@ class InjuriesPage(QWidget):
         layout.addWidget(self._empty)
         layout.addWidget(self._table, stretch=1)
         layout.addWidget(self._detail)
-        layout.addLayout(self._buttons)
-
-    def attach_actions(self, actions: InjuriesPageActions) -> None:
-        """Show the window's actions as buttons under the table."""
-        for action, name in (
-            (actions.report_injury, "injuriesReportInjury"),
-            (actions.report_illness, "injuriesReportIllness"),
-            (actions.check_in, "injuriesCheckIn"),
-            (actions.review, "injuriesReview"),
-            (actions.close, "injuriesClose"),
-            (actions.undo, "injuriesUndo"),
-            (actions.redo, "injuriesRedo"),
-        ):
-            button = QToolButton(self)
-            button.setObjectName(name)
-            button.setDefaultAction(action)
-            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-            self._buttons.addWidget(button)
-        self._buttons.addStretch(1)
 
     # --- State for the tests ---------------------------------------------------------------
 

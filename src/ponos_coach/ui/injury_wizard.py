@@ -67,7 +67,7 @@ def _label(text: str, parent: QWidget, name: str = "") -> QLabel:
 class _WherePage(QWizardPage):
     """Where it hurts, which side, when it began and how."""
 
-    def __init__(self, today: date, parent: QWidget | None = None) -> None:
+    def __init__(self, today: date, onset_day: date | None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setTitle(self.tr("Where and since when"))
         self.setSubTitle(self.tr("Say where it hurts, in your own words. This is not a diagnosis."))
@@ -100,7 +100,7 @@ class _WherePage(QWizardPage):
         self.day.setCalendarPopup(True)
         self.day.setDisplayFormat(QLocale().dateFormat(QLocale.FormatType.ShortFormat))
         self.day.setDateRange(to_qdate(_FIRST_DAY), to_qdate(today))  # never after today
-        self.day.setDate(to_qdate(today))
+        self.day.setDate(to_qdate(min(onset_day or today, today)))
         form = QFormLayout()
         form.setVerticalSpacing(SPACE_2)
         add_field_row(form, self.tr("Where does it hurt?"), self.zone)
@@ -219,7 +219,9 @@ class _NotesPage(QWizardPage):
 class InjuryWizard(QWizard):
     """The questionnaire: `draft()` gives the answers once "Report injury" accepts it."""
 
-    def __init__(self, today: date, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, today: date, parent: QWidget | None = None, *, onset_day: date | None = None
+    ) -> None:
         super().__init__(parent)
         self._today = today
         self.setWindowTitle(self.tr("Report an injury"))
@@ -227,7 +229,7 @@ class InjuryWizard(QWizard):
         self.setMinimumWidth(DIALOG_MIN_WIDTH)
         self.setWindowModality(Qt.WindowModality.WindowModal)
         self.setOption(QWizard.WizardOption.NoBackButtonOnStartPage, True)
-        self._where = _WherePage(today, self)
+        self._where = _WherePage(today, onset_day, self)
         self._pain = _PainPage(self)
         self._signs = _SignsPage(self)
         self._notes = _NotesPage(self)

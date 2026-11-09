@@ -149,12 +149,12 @@ def test_a_saved_section_that_is_not_available_opens_the_overview(
 def test_the_map_section_is_remembered_like_the_others(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
-    settings.setValue("window/section", 4)
+    settings.setValue("window/section", 3)
 
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
 
-    assert window.sidebar.currentRow() == 4
+    assert window.sidebar.currentRow() == 3
     assert window.current_page is window.map_page
 
 

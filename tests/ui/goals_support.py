@@ -22,11 +22,10 @@ from ponos_coach.planning.domain import Plan
 from ponos_coach.ui.birth_date_edit import to_qdate
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.plan_presentation import PlanAvailable, PlanRefusedNow
-from tests.ui.nutrition_support import window_with_days
+from tests.ui.nutrition_support import cell_of, window_with_days
 from tests.ui.workspace_support import TODAY, WAIT_MS
 
 SECTION_CALENDAR = 2
-SECTION_GOALS = 3
 RACE_DAY = TODAY + timedelta(weeks=12)  # 22 September 2026
 EVERY_DAY = (60, 60, 60, 60, 60, 120, 180)
 
@@ -57,6 +56,14 @@ def races_of(window: MainWindow) -> list[RaceGoal]:
 
 def wait_for(qtbot: QtBot, condition: Callable[[], bool]) -> None:
     qtbot.waitUntil(condition, timeout=WAIT_MS)
+
+
+def select_goal(qtbot: QtBot, window: MainWindow, goal_id: str) -> None:
+    """Select in the calendar the day of a goal (what the goal commands act on)."""
+    goal = next(g for g in goals_of(window) if g.goal_id.value == goal_id)
+    window.sidebar.setCurrentRow(SECTION_CALENDAR)
+    window.calendar_page.go_to(goal.day)
+    wait_for(qtbot, lambda: bool(cell_of(window, goal.day).goals))
 
 
 def add_race(

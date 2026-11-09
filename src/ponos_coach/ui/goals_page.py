@@ -1,21 +1,20 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Page "Goals": the state of the plan, and the table of the goals with their commands.
+"""Page "Goals and plan status": the state of the plan, and the table of the goals.
 
 Humble view: what is wrong with the plan and what to do about it come ready from `plan_presentation`
 and `plan_texts` (notices with a remedy in plain words); the table is a model with a sorting proxy.
 A notice always opens with a word ("No plan", "Warning"), and its colour is only a border: the
-meaning never rests on the colour alone. The commands are the window's own actions, shown as
-buttons, so a button and a menu entry are the same command with the same tooltip.
+meaning never rests on the colour alone. The page only shows: the goals are added, changed and
+removed on the days of the calendar. It is a widget of its own, so that the settings window can
+take it in later.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
 
 from PySide6.QtCore import QCoreApplication, QModelIndex, Qt, Signal
-from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
@@ -24,7 +23,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QTableView,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -47,19 +45,6 @@ from ponos_coach.ui.tokens import (
 _BORDER_WIDTH = 4
 
 
-@dataclass(frozen=True, slots=True)
-class GoalsPageActions:
-    """The window's actions that the page shows as buttons."""
-
-    add_race: QAction
-    add_form_goal: QAction
-    change_goal: QAction
-    remove_goal: QAction
-    training_settings: QAction
-    undo: QAction
-    redo: QAction
-
-
 def _action_label(action: NoticeAction) -> str:
     texts = {
         NoticeAction.ADD_RACE: QCoreApplication.translate("GoalsPage", "Add race..."),
@@ -74,7 +59,7 @@ def _action_label(action: NoticeAction) -> str:
 
 
 class GoalsPage(QWidget):
-    """Plan status, goals table and commands."""
+    """Plan status and goals table."""
 
     notice_action_requested = Signal(object)  # NoticeAction
     selection_changed = Signal(object)  # str | None: the goal id selected
@@ -112,33 +97,12 @@ class GoalsPage(QWidget):
         self._empty.setTextFormat(Qt.TextFormat.PlainText)
         self._empty.setWordWrap(True)
         self._empty.setText(self.tr("No goals yet. To get a training plan, add your first race."))
-        self._buttons = QHBoxLayout()
-        self._buttons.setSpacing(SPACE_2)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(SPACE_4, SPACE_4, SPACE_4, SPACE_4)
         layout.setSpacing(SPACE_3)
         layout.addLayout(self._notices)
         layout.addWidget(self._empty)
         layout.addWidget(self._table, stretch=1)
-        layout.addLayout(self._buttons)
-
-    def attach_actions(self, actions: GoalsPageActions) -> None:
-        """Show the window's actions as buttons under the table."""
-        for action, name in (
-            (actions.add_race, "goalsAddRace"),
-            (actions.add_form_goal, "goalsAddFormGoal"),
-            (actions.change_goal, "goalsChange"),
-            (actions.remove_goal, "goalsRemove"),
-            (actions.training_settings, "goalsTraining"),
-            (actions.undo, "goalsUndo"),
-            (actions.redo, "goalsRedo"),
-        ):
-            button = QToolButton(self)
-            button.setObjectName(name)
-            button.setDefaultAction(action)
-            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-            self._buttons.addWidget(button)
-        self._buttons.addStretch(1)
 
     # --- State for the tests ---------------------------------------------------------------
 

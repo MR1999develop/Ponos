@@ -16,10 +16,9 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QLocale, QSettings, Qt
+from PySide6.QtCore import QLocale, QModelIndex, QSettings, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
-    QAbstractButton,
     QCheckBox,
     QComboBox,
     QLabel,
@@ -43,19 +42,20 @@ from ponos_coach.planning.domain import (
 )
 from ponos_coach.ui.birth_date_edit import from_qdate
 from ponos_coach.ui.calendar_texts import cell_text, day_detail_text
+from ponos_coach.ui.injury_dialogs import CheckInDialog
 from ponos_coach.ui.injury_presentation import HealthNotice, NoticeKind, ProblemKind, ProblemPhase
 from ponos_coach.ui.injury_texts import (
     doctor_invitation,
     halt_texts,
     notice_texts,
     plan_warning_texts,
+    problem_title,
     sign_text,
 )
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.plan_presentation import PlanAvailable
 from tests.ui.goals_support import wait_for
 from tests.ui.injury_support import (
-    SECTION_INJURIES,
     check_in,
     checkin,
     injury_window,
@@ -63,6 +63,7 @@ from tests.ui.injury_support import (
     report_illness,
     report_injury,
     seed_injury,
+    select_record,
     stored,
     summary_of,
     undo,
@@ -94,22 +95,23 @@ def stored_injury(window: MainWindow) -> Injury:
 # --- 1. The section, the menu, the commands with their reasons ---------------------------------
 
 
-def test_the_injuries_section_opens_with_an_invitation_and_the_commands_with_their_reasons(
+def test_the_history_opens_from_the_menu_and_the_commands_have_their_reasons(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = injury_window(qtbot, tmp_path, settings)
 
-    window.sidebar.setCurrentRow(SECTION_INJURIES)
+    window.injury_history_action.trigger()
 
-    assert window.current_page is window.injuries_page
+    assert window.injury_history_window.isVisible()
+    assert window.injury_history_window.windowTitle() == "Injury history"
     assert window.injuries_page.empty_text.startswith("No injuries or illnesses.")
     actions = window.injuries.actions
     assert actions["report_injury"].isEnabled()
     assert actions["report_illness"].isEnabled()
     for name, reason in (
-        ("check_in", "Select an open injury in the Injuries section first."),
+        ("check_in", "Select a day with an open injury in the Calendar first."),
         ("review", "No warning sign is waiting for a doctor's visit."),
-        ("close", "Select an open injury or illness in the Injuries section first."),
+        ("close", "Select a day with an open injury or illness in the Calendar first."),
     ):
         assert not actions[name].isEnabled()
         assert actions[name].toolTip() == reason
@@ -127,11 +129,12 @@ def test_the_injuries_menu_lists_every_command_with_its_shortcut(
 
     assert isinstance(menu, QMenu)
     assert [(a.text(), a.shortcut().toString()) for a in menu.actions() if not a.isSeparator()] == [
-        ("Report an injury...", "Ctrl+J"),
-        ("Report illness...", "Ctrl+Shift+J"),
+        ("Add injury...", "Ctrl+J"),
+        ("Add illness...", "Ctrl+Shift+J"),
         ("Daily check-in...", "Ctrl+K"),
         ("Medical review done", "Ctrl+Shift+V"),
         ("Close injury or illness...", ""),
+        ("Injury history...", "Ctrl+H"),
         ("Undo", ""),  # like the plan: no global shortcut
         ("Redo", ""),
     ]
@@ -150,12 +153,12 @@ def test_without_a_profile_the_injury_commands_are_off_with_the_reason(
     assert window.injury_status_text == ""
 
 
-def test_the_section_is_reachable_and_usable_from_the_keyboard(
+def test_the_history_is_usable_from_the_keyboard(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = injury_window(qtbot, tmp_path, settings)
     report_injury(qtbot, window)
-    window.sidebar.setCurrentRow(SECTION_INJURIES)
+    window.injury_history_action.trigger()
     page = window.injuries_page
     page.select_problem(summary_of(window).problem_id)
 
@@ -171,7 +174,6 @@ def test_the_section_is_reachable_and_usable_from_the_keyboard(
     for button in dialog.findChildren(QCheckBox):
         assert button.text()
     dialog.reject()
-    assert page.findChild(QAbstractButton, "injuriesReportInjury") is not None
 
 
 # --- 2. The questionnaire ------------------------------------------------------------------------
@@ -280,7 +282,7 @@ def test_a_warning_sign_stops_the_plan_and_invites_a_doctor_without_blocking_any
     (halt,) = [w for w in plan.warnings if isinstance(w, PlanHalted)]
     assert halt.reason is HaltReason.ZONE_SIGN
     assert all(day.session is None for day in plan.days)
-    # The notice sits on the section and on the Goals section, with the words and the remedy.
+    # The notice sits on the history and on the goals window, with the words and the remedy.
     notices = window.injuries_page.notice_texts
     assert notices[0].startswith("See a doctor\n")
     assert "deserves a doctor's visit" in notices[0]
@@ -296,6 +298,7 @@ def test_a_warning_sign_stops_the_plan_and_invites_a_doctor_without_blocking_any
     assert "cannot tell what it means" in alert.text()
     # Nothing else is blocked: the other commands work and the window answers.
     assert window.injuries.actions["report_illness"].isEnabled()
+    select_record(qtbot, window)
     assert window.injuries.actions["review"].isEnabled()
 
 
@@ -318,6 +321,8 @@ def test_a_medical_review_starts_the_path_again_and_can_be_taken_back_and_done_a
     report_injury(qtbot, window, signs={WarningSign.SWELLING_OR_DEFORMITY})
     wait_plan_state(qtbot, window, PlanHalted)
     before = stored(window)
+
+    select_record(qtbot, window)
 
     window.injuries.actions["review"].trigger()
     wait_injuries(qtbot, window)
@@ -384,6 +389,8 @@ def test_an_illness_with_fever_stops_the_plan_until_the_user_feels_well(
     report = window.injuries.actions["report_illness"]
     assert not report.isEnabled()
     assert report.toolTip() == "An illness is already open: close it first."
+
+    select_record(qtbot, window)
 
     window.injuries.actions["close"].trigger()
     wait_plan_state(qtbot, window, PlanHalted, present=False)
@@ -516,6 +523,8 @@ def test_the_check_in_of_the_same_day_replaces_the_one_before_and_shows_it_again
     report_injury(qtbot, window)
     check_in(qtbot, window, during=2, morning=1)
 
+    select_record(qtbot, window)
+
     window.injuries.actions["check_in"].trigger()
     wait_for(qtbot, lambda: window.injuries.checkin_dialog is not None)
     dialog = window.injuries.checkin_dialog
@@ -535,6 +544,7 @@ def test_the_check_in_dialog_edits_a_copy_and_cancel_changes_nothing(
     window = injury_window(qtbot, tmp_path, settings)
     report_injury(qtbot, window)
     before = stored(window)
+    select_record(qtbot, window)
     window.injuries.actions["check_in"].trigger()
     wait_for(qtbot, lambda: window.injuries.checkin_dialog is not None)
     dialog = window.injuries.checkin_dialog
@@ -554,6 +564,7 @@ def test_a_sign_ticked_in_the_check_in_shows_the_invitation_at_once(
 ) -> None:
     window = injury_window(qtbot, tmp_path, settings)
     report_injury(qtbot, window)
+    select_record(qtbot, window)
     window.injuries.actions["check_in"].trigger()
     wait_for(qtbot, lambda: window.injuries.checkin_dialog is not None)
     dialog = window.injuries.checkin_dialog
@@ -626,6 +637,8 @@ def test_closing_an_injury_can_be_taken_back_and_the_plan_follows(
     wait_plan_state(qtbot, window, PlanAdapted)
     before = stored(window)
 
+    select_record(qtbot, window)
+
     window.injuries.actions["close"].trigger()
     wait_plan_state(qtbot, window, PlanAdapted, present=False)
 
@@ -662,24 +675,39 @@ def test_undo_and_redo_say_what_they_take_back_at_the_end_of_the_menu(
 # --- 6. Which injury a command acts on ----------------------------------------------------------
 
 
-def test_with_two_injuries_the_commands_need_a_selection(
+def checkin_dialog_of(window: MainWindow) -> CheckInDialog | None:
+    """The open check-in dialog, read through a function (earlier checks narrow the type)."""
+    return window.injuries.checkin_dialog
+
+
+def test_with_two_injuries_on_a_day_the_command_asks_which(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = injury_window(qtbot, tmp_path, settings)
     report_injury(qtbot, window, zone_index=4)
     report_injury(qtbot, window, zone_index=5)
-    window.sidebar.setCurrentRow(SECTION_INJURIES)
-    page = window.injuries_page
-    page.table.clearSelection()
-    window.injuries.actions["check_in"].trigger()  # no selection and two candidates: nothing
+    check_in_action = window.injuries.actions["check_in"]
+    window.calendar_page.table.setCurrentIndex(QModelIndex())  # no day selected
+    check_in_action.trigger()
 
-    assert window.injuries.checkin_dialog is None
-    assert not window.injuries.actions["check_in"].isEnabled()
+    assert checkin_dialog_of(window) is None
+    assert not check_in_action.isEnabled()
+    assert check_in_action.toolTip() == "Select a day with an open injury in the Calendar first."
     assert window.injury_status_text == "Injuries: Check-in due today (2)"
 
-    page.select_problem(summary_of(window, 0).problem_id)
-    assert window.injuries.actions["check_in"].isEnabled()
-    assert "Shin" in page.detail_text or "Knee" in page.detail_text
+    select_record(qtbot, window)
+    assert check_in_action.isEnabled()
+    check_in_action.trigger()
+    menu = window.findChild(QMenu, "choiceMenu")
+    assert menu is not None
+    assert sorted(a.text() for a in menu.actions()) == sorted(
+        problem_title(item) for item in window.injuries.summaries
+    )
+    menu.actions()[0].trigger()
+    wait_for(qtbot, lambda: checkin_dialog_of(window) is not None)
+    dialog = checkin_dialog_of(window)
+    assert dialog is not None
+    dialog.reject()
 
 
 # --- 7. The calendar marks the days, in words -----------------------------------------------------
@@ -706,6 +734,8 @@ def test_the_calendar_marks_an_illness_and_stops_at_the_day_it_is_over(
     window = injury_window(qtbot, tmp_path, settings)
     report_illness(qtbot, window, IllnessKind.NECK_UP)
     assert "Illness" in cell_text(cell_of(window, TODAY))
+
+    select_record(qtbot, window)
 
     window.injuries.actions["close"].trigger()
     wait_injuries(qtbot, window)
@@ -761,11 +791,13 @@ def test_nothing_of_the_injuries_reaches_the_log(
         )
         injury_id = summary_of(window).problem_id
         check_in(qtbot, window, during=8, morning=6, signs={WarningSign.CHEST_PAIN})
+        select_record(qtbot, window)
         window.injuries.actions["review"].trigger()
         wait_injuries(qtbot, window)
         undo(window)
         wait_injuries(qtbot, window)
         report_illness(qtbot, window, IllnessKind.SYSTEMIC)
+        select_record(qtbot, window)
         window.injuries.actions["close"].trigger()
         wait_injuries(qtbot, window)
 

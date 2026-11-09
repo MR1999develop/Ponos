@@ -673,17 +673,10 @@ def test_sidebar_has_the_available_sections_enabled_and_the_rest_with_a_reason(
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
     items = [sidebar.item(row) for row in range(sidebar.count())]
-    assert [item.text() for item in items][:6] == [
-        "Overview",
-        "Activities",
-        "Calendar",
-        "Goals",
-        "Map",
-        "Injuries",
-    ]
-    for item in items[:6]:
+    assert [item.text() for item in items][:4] == ["Overview", "Activities", "Calendar", "Map"]
+    for item in items[:4]:
         assert item.flags() & item.flags().ItemIsEnabled
-    for item in items[6:]:
+    for item in items[4:]:
         assert not item.flags() & item.flags().ItemIsEnabled
         assert item.toolTip() == "Available in a later version"
 
@@ -747,8 +740,10 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Change goal...": QKeySequence("Ctrl+Shift+E").toString(),
         "Remove goal": QKeySequence("Ctrl+Delete").toString(),
         "Training settings...": QKeySequence("Ctrl+Shift+T").toString(),
-        "Report an injury...": QKeySequence("Ctrl+J").toString(),
-        "Report illness...": QKeySequence("Ctrl+Shift+J").toString(),
+        "Add injury...": QKeySequence("Ctrl+J").toString(),
+        "Add illness...": QKeySequence("Ctrl+Shift+J").toString(),
+        "Goals and plan status...": QKeySequence("Ctrl+Shift+P").toString(),
+        "Injury history...": QKeySequence("Ctrl+H").toString(),
         "Daily check-in...": QKeySequence("Ctrl+K").toString(),
         "Medical review done": QKeySequence("Ctrl+Shift+V").toString(),
         "Show map": QKeySequence("Ctrl+M").toString(),

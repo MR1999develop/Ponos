@@ -261,6 +261,7 @@ class ProblemSpan:
     illness_kind: IllnessKind | None
     start: date
     end: date | None
+    problem_id: str = ""  # the record, so that a command on the day can find it
 
     def covers(self, day: date, today: date) -> bool:
         """True if the record is on that day (an open one reaches today, not the future)."""
@@ -271,5 +272,6 @@ class ProblemSpan:
 def spans_of(summaries: Iterable[ProblemSummary]) -> tuple[ProblemSpan, ...]:
     """The spans of the records for the calendar."""
     return tuple(
-        ProblemSpan(s.kind, s.zone, s.illness_kind, s.started_on, s.ended_on) for s in summaries
+        ProblemSpan(s.kind, s.zone, s.illness_kind, s.started_on, s.ended_on, s.problem_id)
+        for s in summaries
     )

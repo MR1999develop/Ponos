@@ -141,7 +141,9 @@ class SignsGroup(QGroupBox):
 class IllnessDialog(QDialog):
     """Report an illness: which group of symptoms and since when."""
 
-    def __init__(self, today: date, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, today: date, parent: QWidget | None = None, *, started_on: date | None = None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Report illness"))
         self.setMinimumWidth(DIALOG_MIN_WIDTH)
@@ -165,7 +167,7 @@ class IllnessDialog(QDialog):
         self._date.setCalendarPopup(True)
         self._date.setDisplayFormat(QLocale().dateFormat(QLocale.FormatType.ShortFormat))
         self._date.setDateRange(to_qdate(_FIRST_DAY), to_qdate(today))
-        self._date.setDate(to_qdate(today))
+        self._date.setDate(to_qdate(min(started_on or today, today)))
         form = QFormLayout()
         add_field_row(form, self.tr("I have felt ill since"), self._date)
         self._buttons = QDialogButtonBox(self)

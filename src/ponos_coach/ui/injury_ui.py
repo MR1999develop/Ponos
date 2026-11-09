@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""The injuries in the window: the section, the commands, the notices, the status bar and the
-calendar marks.
+"""The injuries in the window: the commands, the notices, the status bar and the calendar marks.
+
+The commands work on the days of the calendar: a report starts on the selected day (an injury or an
+illness cannot begin after today), a check-in, a medical review or a closing acts on the record that
+covers the selected day (with two records a small menu asks which). The page "Injury history" only
+shows the records.
 
 Owns the dialogs, the undo stack (every command on injuries and illnesses shares it: one Undo, one
 Redo at the end of the menu "Injuries", no global shortcut) and the jobs of `InjuryLoader`; the
@@ -11,8 +15,8 @@ again and, if nothing else is waiting, shown. After each command the overview is
 with it the plan: the plan arrives through `WorkspaceController.plan_rebuilt` and says, if it must,
 that it is stopped or adapted (`PlanHalted`, `PlanAdapted`, `NoSessionPossible`).
 
-A warning sign never blocks anything and is never hidden: a notice at the top of the section and of
-the Goals section stays while the sign is not reviewed, the status bar says "See a doctor", and a
+A warning sign never blocks anything and is never hidden: a notice at the top of the history and of
+the goals window stays while the sign is not reviewed, the status bar says "See a doctor", and a
 message that does not block opens the first time the path is stopped. The app invites a visit and
 never says what a sign means. The profile is read only on the data thread. Health data: never in
 logs or error messages.
@@ -32,6 +36,7 @@ from ponos_coach.injury.domain import CheckIn, Injury, InjuryId, Problem
 from ponos_coach.injury.use_cases import ProblemChanged, ProblemOpened
 from ponos_coach.profiles.rebuild_plan import PlanBuilt
 from ponos_coach.ui.calendar_page import CalendarPage
+from ponos_coach.ui.choice_menu import popup_choices
 from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.injury_dialogs import CheckInDialog, IllnessDialog
 from ponos_coach.ui.injury_draft import (
@@ -42,7 +47,7 @@ from ponos_coach.ui.injury_draft import (
     new_problem_id,
 )
 from ponos_coach.ui.injury_loader import InjuryList, InjuryLoader
-from ponos_coach.ui.injury_page import InjuriesPage, InjuriesPageActions
+from ponos_coach.ui.injury_page import InjuriesPage
 from ponos_coach.ui.injury_presentation import (
     HealthWarning,
     ProblemKind,
@@ -169,17 +174,6 @@ class InjuryUi(QObject):
         self._checkin_dialog: CheckInDialog | None = None
         self._alert: QMessageBox | None = None
         self._build_actions()
-        page.attach_actions(
-            InjuriesPageActions(
-                self._report_injury_action,
-                self._report_illness_action,
-                self._check_in_action,
-                self._review_action,
-                self._close_action,
-                self._undo_action,
-                self._redo_action,
-            )
-        )
         self._connect()
         self._update_actions()
 
@@ -194,10 +188,10 @@ class InjuryUi(QObject):
 
     def _build_actions(self) -> None:
         self._report_injury_action = self._action(
-            self.tr("Report an injury..."), "Ctrl+J", self.report_injury
+            self.tr("Add injury..."), "Ctrl+J", self._report_injury_here
         )
         self._report_illness_action = self._action(
-            self.tr("Report illness..."), "Ctrl+Shift+J", self.report_illness
+            self.tr("Add illness..."), "Ctrl+Shift+J", self._report_illness_here
         )
         self._check_in_action = self._action(self.tr("Daily check-in..."), "Ctrl+K", self.check_in)
         self._review_action = self._action(
@@ -220,7 +214,7 @@ class InjuryUi(QObject):
         loader.command_failed.connect(self._on_command_failed)
         loader.failed.connect(self._on_failed)
         self._controller.plan_rebuilt.connect(self._on_plan_rebuilt)
-        self._page.selection_changed.connect(self._update_actions)
+        self._calendar.selection_changed.connect(self._update_actions)
         self._page.problem_activated.connect(self._on_activated)
 
     # --- Test accessors --------------------------------------------------------------------
@@ -285,15 +279,26 @@ class InjuryUi(QObject):
 
     # --- The commands -----------------------------------------------------------------------
 
-    def report_injury(self) -> None:
-        """Open the questionnaire that reports an injury."""
+    def _day_to_start_on(self) -> date | None:
+        """The selected day if a record can begin on it (not after today), else none."""
+        day = self._calendar.selected_day()
+        return day if day is not None and day <= self._today() else None
+
+    def _report_injury_here(self) -> None:
+        self.report_injury(self._day_to_start_on())
+
+    def _report_illness_here(self) -> None:
+        self.report_illness(self._day_to_start_on())
+
+    def report_injury(self, day: date | None = None) -> None:
+        """Open the questionnaire that reports an injury (the day it began is `day`, or today)."""
         if self._wizard is not None:
             self._wizard.raise_()
             self._wizard.activateWindow()
             return
         if not self._ready:
             return
-        wizard = InjuryWizard(self._today(), self._window)
+        wizard = InjuryWizard(self._today(), self._window, onset_day=day)
         wizard.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         wizard.accepted.connect(partial(self._on_wizard_accepted, wizard))
         wizard.finished.connect(self._on_wizard_closed)
@@ -310,15 +315,15 @@ class InjuryUi(QObject):
     def _on_wizard_closed(self) -> None:
         self._wizard = None
 
-    def report_illness(self) -> None:
-        """Open the dialog that reports an illness."""
+    def report_illness(self, day: date | None = None) -> None:
+        """Open the dialog that reports an illness (felt since `day`, or since today)."""
         if self._illness_dialog is not None:
             self._illness_dialog.raise_()
             self._illness_dialog.activateWindow()
             return
         if not self._ready or self._open_illness() is not None:
             return
-        dialog = IllnessDialog(self._today(), self._window)
+        dialog = IllnessDialog(self._today(), self._window, started_on=day)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         dialog.accepted.connect(partial(self._on_illness_accepted, dialog))
         dialog.finished.connect(self._on_illness_closed)
@@ -336,14 +341,16 @@ class InjuryUi(QObject):
         self._illness_dialog = None
 
     def check_in(self) -> None:
-        """Open today's check-in of the selected injury (or of the only open one)."""
+        """Open today's check-in of the injury on the selected day (which one, if there are two)."""
+        self._on_target(lambda item: item.can_check_in, self._open_checkin)
+
+    def _open_checkin(self, target: ProblemSummary) -> None:
         if self._checkin_dialog is not None:
             self._checkin_dialog.raise_()
             self._checkin_dialog.activateWindow()
             return
-        target = self._target(lambda item: item.can_check_in)
-        record = None if target is None else self._injury(target.problem_id)
-        if target is None or record is None:
+        record = self._injury(target.problem_id)
+        if record is None:
             return
         today = self._today()
         saved = next((c for c in record.checkins if c.day == today), None)
@@ -365,25 +372,28 @@ class InjuryUi(QObject):
         self._checkin_dialog = None
 
     def confirm_review(self) -> None:
-        """Say that a doctor has seen the warning signs of the selected injury: the path starts
-        again from the first step. It can be undone, so nothing is asked first."""
-        target = self._target(lambda item: item.can_review)
-        if target is not None:
-            self._stack.push(
-                MedicalReviewCommand(self._jobs, InjuryId(target.problem_id), self._today())
-            )
+        """Say that a doctor has seen the warning signs of the injury on the selected day: the path
+        starts again from the first step. It can be undone, so nothing is asked first."""
+        self._on_target(lambda item: item.can_review, self._review)
+
+    def _review(self, target: ProblemSummary) -> None:
+        self._stack.push(
+            MedicalReviewCommand(self._jobs, InjuryId(target.problem_id), self._today())
+        )
 
     def close_problem(self) -> None:
-        """Close the selected injury or illness; it can be undone, so nothing is asked first."""
-        target = self._target(lambda item: item.is_open)
-        if target is not None:
-            self._stack.push(CloseCommand(self._jobs, InjuryId(target.problem_id), self._today()))
+        """Close the injury or illness on the selected day; it can be undone, so nothing is asked
+        first."""
+        self._on_target(lambda item: item.is_open, self._close)
+
+    def _close(self, target: ProblemSummary) -> None:
+        self._stack.push(CloseCommand(self._jobs, InjuryId(target.problem_id), self._today()))
 
     def _on_activated(self, problem_id: str) -> None:
-        """Enter on a record: its check-in, if it takes one."""
+        """Enter on a record of the history: its check-in, if it takes one."""
         item = next((s for s in self._summaries if s.problem_id == problem_id), None)
-        if item is not None and item.can_check_in:
-            self.check_in()
+        if item is not None and item.can_check_in and self._ready:
+            self._open_checkin(item)
 
     # --- What the commands act on -------------------------------------------------------------
 
@@ -391,15 +401,23 @@ class InjuryUi(QObject):
     def _ready(self) -> bool:
         return self._controller.profile is not None and self._records is not None
 
-    def _target(self, fits: Callable[[ProblemSummary], bool]) -> ProblemSummary | None:
-        """The selected record if it fits; with no selection, the only record that fits."""
-        if not self._ready:
-            return None
-        selected = self._page.selected_summary()
-        if selected is not None:
-            return selected if fits(selected) else None
-        candidates = [item for item in self._summaries if fits(item)]
-        return candidates[0] if len(candidates) == 1 else None
+    def _day_targets(self, fits: Callable[[ProblemSummary], bool]) -> list[ProblemSummary]:
+        """The records on the day selected in the calendar that the command fits."""
+        cell = self._calendar.selected_cell()
+        if not self._ready or cell is None:
+            return []
+        ids = {span.problem_id for span in cell.problems}
+        return [item for item in self._summaries if item.problem_id in ids and fits(item)]
+
+    def _on_target(
+        self, fits: Callable[[ProblemSummary], bool], command: Callable[[ProblemSummary], None]
+    ) -> None:
+        """Run the command on the record of the day; with two records, ask which one."""
+        targets = self._day_targets(fits)
+        if len(targets) == 1:
+            command(targets[0])
+        elif targets:
+            popup_choices(self._window, [(problem_title(t), partial(command, t)) for t in targets])
 
     def _injury(self, problem_id: str) -> Injury | None:
         records = self._records
@@ -513,17 +531,27 @@ class InjuryUi(QObject):
             reason = self.tr("Create or open a profile first.")
         else:
             reason = self.tr("Wait a moment: the injuries are being read.")
-        self._report_injury_action.setEnabled(ready)
-        self._report_injury_action.setToolTip(reason)
+        cell = self._calendar.selected_cell()
+        # a record cannot begin after today; no day selected means "pick it in the form"
+        day_fits = cell is None or cell.day <= self._today()
+        self._report_injury_action.setEnabled(ready and day_fits)
+        self._report_injury_action.setToolTip(
+            reason or ("" if day_fits else self.tr("An injury cannot begin after today."))
+        )
         ill = ready and self._open_illness() is not None
-        self._report_illness_action.setEnabled(ready and not ill)
+        self._report_illness_action.setEnabled(ready and not ill and day_fits)
         self._report_illness_action.setToolTip(
-            reason or (self.tr("An illness is already open: close it first.") if ill else "")
+            reason
+            or (
+                self.tr("An illness is already open: close it first.")
+                if ill
+                else ("" if day_fits else self.tr("An illness cannot begin after today."))
+            )
         )
         self._set_target_action(
             self._check_in_action,
             lambda item: item.can_check_in,
-            reason or self.tr("Select an open injury in the Injuries section first."),
+            reason or self.tr("Select a day with an open injury in the Calendar first."),
         )
         self._set_target_action(
             self._review_action,
@@ -533,7 +561,7 @@ class InjuryUi(QObject):
         self._set_target_action(
             self._close_action,
             lambda item: item.is_open,
-            reason or self.tr("Select an open injury or illness in the Injuries section first."),
+            reason or self.tr("Select a day with an open injury or illness in the Calendar first."),
         )
         self._undo_action.setToolTip(
             "" if self._stack.canUndo() else self.tr("There is nothing to take back.")
@@ -545,7 +573,7 @@ class InjuryUi(QObject):
     def _set_target_action(
         self, action: QAction, fits: Callable[[ProblemSummary], bool], why_not: str
     ) -> None:
-        enabled = self._target(fits) is not None
+        enabled = bool(self._day_targets(fits))
         action.setEnabled(enabled)
         action.setToolTip("" if enabled else why_not)
 

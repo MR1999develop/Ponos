@@ -726,10 +726,6 @@
 <context>
     <name>DayPage</name>
     <message>
-        <source>Back to calendar</source>
-        <translation>Torna al calendario</translation>
-    </message>
-    <message>
         <source>Calculating the day...</source>
         <translation>Calcolo della giornata...</translation>
     </message>
@@ -3082,12 +3078,12 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
 <context>
     <name>InjuryUi</name>
     <message>
-        <source>Report an injury...</source>
-        <translation>Segnala un infortunio...</translation>
+        <source>Add injury...</source>
+        <translation>Aggiungi infortunio...</translation>
     </message>
     <message>
-        <source>Report illness...</source>
-        <translation>Segnala una malattia...</translation>
+        <source>Add illness...</source>
+        <translation>Aggiungi malattia...</translation>
     </message>
     <message>
         <source>Daily check-in...</source>
@@ -3138,20 +3134,28 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Attendi un momento: gli infortuni si stanno leggendo.</translation>
     </message>
     <message>
+        <source>An injury cannot begin after today.</source>
+        <translation>Un infortunio non può iniziare dopo oggi.</translation>
+    </message>
+    <message>
         <source>An illness is already open: close it first.</source>
         <translation>C&apos;è già una malattia aperta: chiudila prima.</translation>
     </message>
     <message>
-        <source>Select an open injury in the Injuries section first.</source>
-        <translation>Seleziona prima un infortunio aperto nella sezione Infortuni.</translation>
+        <source>An illness cannot begin after today.</source>
+        <translation>Una malattia non può iniziare dopo oggi.</translation>
+    </message>
+    <message>
+        <source>Select a day with an open injury in the Calendar first.</source>
+        <translation>Seleziona prima nel calendario un giorno con un infortunio aperto.</translation>
+    </message>
+    <message>
+        <source>Select a day with an open injury or illness in the Calendar first.</source>
+        <translation>Seleziona prima nel calendario un giorno con un infortunio o una malattia aperti.</translation>
     </message>
     <message>
         <source>No warning sign is waiting for a doctor&apos;s visit.</source>
         <translation>Nessun segnale d&apos;allarme aspetta una visita medica.</translation>
-    </message>
-    <message>
-        <source>Select an open injury or illness in the Injuries section first.</source>
-        <translation>Seleziona prima un infortunio o una malattia aperti nella sezione Infortuni.</translation>
     </message>
     <message>
         <source>There is nothing to take back.</source>
@@ -3315,10 +3319,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Apri giornata</translation>
     </message>
     <message>
-        <source>Back to calendar</source>
-        <translation>Torna al calendario</translation>
-    </message>
-    <message>
         <source>Activity detail...</source>
         <translation>Dettaglio attività...</translation>
     </message>
@@ -3403,10 +3403,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Calendario</translation>
     </message>
     <message>
-        <source>Goals</source>
-        <translation>Obiettivi</translation>
-    </message>
-    <message>
         <source>Injuries</source>
         <translation>Infortuni</translation>
     </message>
@@ -3421,6 +3417,14 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Profile settings</source>
         <translation>Impostazioni del profilo</translation>
+    </message>
+    <message>
+        <source>Goals and plan status</source>
+        <translation>Obiettivi e stato del piano</translation>
+    </message>
+    <message>
+        <source>Injury history</source>
+        <translation>Storico degli infortuni</translation>
     </message>
     <message>
         <source>Stop import</source>
@@ -3466,10 +3470,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>Open the Calendar section first.</source>
         <translation>Apri prima la sezione Calendario.</translation>
     </message>
-    <message>
-        <source>No day is open.</source>
-        <translation>Nessuna giornata aperta.</translation>
-    </message>
     <message numerus="yes">
         <source>Activities: %n</source>
         <translation>
@@ -3494,6 +3494,14 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Folder: {folder}</source>
         <translation>Cartella: {folder}</translation>
+    </message>
+    <message>
+        <source>Goals and plan status...</source>
+        <translation>Obiettivi e stato del piano...</translation>
+    </message>
+    <message>
+        <source>Injury history...</source>
+        <translation>Storico degli infortuni...</translation>
     </message>
     <message>
         <source>All data in the folder is deleted for good. This cannot be undone.</source>
@@ -5140,8 +5148,12 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Attendi un momento: gli obiettivi si stanno leggendo.</translation>
     </message>
     <message>
-        <source>Select a goal in the Goals section first.</source>
-        <translation>Seleziona prima un obiettivo nella sezione Obiettivi.</translation>
+        <source>A goal needs a day after today.</source>
+        <translation>Un obiettivo richiede un giorno dopo oggi.</translation>
+    </message>
+    <message>
+        <source>Select a day with a goal in the Calendar first.</source>
+        <translation>Seleziona prima nel calendario un giorno con un obiettivo.</translation>
     </message>
     <message>
         <source>There is no change to the goals to take back.</source>

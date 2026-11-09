@@ -31,7 +31,7 @@ from tests.ui.workspace_support import (
 
 PROFILE = "Atleta di prova"
 SECTION_ACTIVITIES = 1
-SECTION_MAP = 4
+SECTION_MAP = 3
 ACTIVITIES_WITH_POSITION = FILES_IN_FIXTURE_FOLDER  # all eight runs have positions
 
 # A view around the invented point at sea: zoomed in (tracks are drawn from zoom 11) and zoomed out.
