@@ -663,7 +663,12 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       rotella e spostamento trascinando nei grafici della panoramica, con le
       date sincronizzate fra PMC e grafici settimanali; carico (hrTSS) di
       ogni zona nel dettaglio attività; rifornimento rapido in 2 apporti ogni
-      2 ore, che si uniscono al pasto vicino, al posto di 4 apporti orari.
+      2 ore, che si uniscono al pasto vicino, al posto di 4 apporti orari;
+      una finestra per ogni attività e per ogni giorno del calendario; dati
+      dell'attività accanto all'altimetria della mappa; riga dei grassi non
+      più tagliata; nome del profilo modificabile; obiettivi e infortuni dal
+      menu del giorno nel calendario (sezioni tolte dalla barra laterale);
+      impostazioni riunite in File → Settings.
 
 ## 6. Squadra di agenti e modelli
 
