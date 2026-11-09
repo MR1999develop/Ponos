@@ -892,12 +892,13 @@ no diet or allergy restriction for now.
 
 ### Food values
 
-- The foods come from a small table of common foods. Its values come from
-  USDA FoodData Central and are **not yet verified** entry by entry: they must
-  be checked before the release ([dependency register](dipendenze.md)). Until
-  then a note above the meals says that the food values are not yet verified
-  against the source. Sports
-  drinks, gels and bars are not in the table yet.
+- The foods come from a small table of common foods. Its values come from the
+  French food composition table CIQUAL (ANSES, 2025 version, Licence Ouverte
+  2.0), one CIQUAL entry per food, checked by `experiments/verify_foods.py`
+  (`source.verified_on`), and compared with the Italian CREA tables, which are
+  not copied ([dependency register](dipendenze.md), ADR 008). While a table is
+  not verified a note above the meals says so. Sports drinks, gels and bars are
+  not in the table yet.
 - The names of the foods are in English until translated.
 
 ## 15. Map and filters (phase 5b)
@@ -954,6 +955,8 @@ Decision: [ADR 010](adr/010-mappa.md).
 
 ## Open points
 
-- Food values not verified against FoodData Central (section 14).
+- Three foods use an approximate CIQUAL entry (Greek yoghurt 0%, part-skim
+  mozzarella, black beans) and three choices are to be reviewed by hand
+  (Medjool dates, roast chicken, white bread): `ciqual_note` in the table.
 - The Garmin workout and calendar responses and the Tracestrack terms are not
   verified live (section 11, section 15).
