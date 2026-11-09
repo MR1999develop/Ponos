@@ -9,7 +9,7 @@ a test still lets the user pick the other protocol for that test, and remembers 
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QButtonGroup, QGroupBox, QLabel, QRadioButton, QVBoxLayout, QWidget
 
 from ponos_coach.assessment.domain import ThresholdProtocol
@@ -20,6 +20,8 @@ from ponos_coach.ui.tokens import SPACE_2
 
 class ThresholdProtocolSection(QGroupBox):
     """One radio button per protocol, checked on the one remembered."""
+
+    protocol_changed = Signal(object)  # ThresholdProtocol, chosen by the user here
 
     def __init__(self, preference: ProtocolPreference, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -49,6 +51,11 @@ class ThresholdProtocolSection(QGroupBox):
         """The radio button of a protocol."""
         return self._buttons[protocol]
 
+    @property
+    def chosen(self) -> ThresholdProtocol:
+        """The protocol remembered now."""
+        return self._preference.load()
+
     def refresh(self) -> None:
         """Check the protocol remembered now (the test dialog may have changed it)."""
         chosen = self._preference.load()
@@ -60,3 +67,4 @@ class ThresholdProtocolSection(QGroupBox):
     def _on_toggled(self, protocol: ThresholdProtocol, on: bool) -> None:
         if on:
             self._preference.save(protocol)
+            self.protocol_changed.emit(protocol)

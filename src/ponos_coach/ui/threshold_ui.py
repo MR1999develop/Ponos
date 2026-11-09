@@ -48,6 +48,7 @@ class ThresholdUi(QObject):
     """Owns the threshold test flow of the window."""
 
     retest_text_changed = Signal(str)  # the status bar sentence; empty without a profile
+    protocol_changed = Signal(object)  # ThresholdProtocol, picked in the review dialog
 
     def __init__(  # noqa: PLR0913 - every argument is a distinct callback of the window
         self,
@@ -163,6 +164,7 @@ class ThresholdUi(QObject):
         if not isinstance(protocol, ThresholdProtocol) or dialog is None or identity is None:
             return
         self._protocol.save(protocol)
+        self.protocol_changed.emit(protocol)
         self._protocol_shown = protocol
         self._review = None
         dialog.show_loading()

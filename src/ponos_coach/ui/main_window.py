@@ -47,6 +47,7 @@ from PySide6.QtWidgets import (
 
 import ponos_coach
 from ponos_coach.activities.domain import ActivityIdentity
+from ponos_coach.assessment.domain import ThresholdProtocol
 from ponos_coach.load.use_cases import ProfileOverview
 from ponos_coach.profiles.domain import ProfileId, RegistryEntry
 from ponos_coach.profiles.use_cases import FolderWarning, NewProfileRequest
@@ -396,6 +397,9 @@ class MainWindow(QMainWindow):
             footer=threshold_part,
         )
         self._training_settings.shown.connect(self._protocol_section.refresh)
+        self._protocol_section.protocol_changed.connect(self._on_test_protocol_chosen)
+        self._threshold.protocol_changed.connect(self._on_test_protocol_chosen)
+        self._controller.set_test_protocol(self._protocol_section.chosen)
         self._nutrition_settings = SettingsPage(
             SettingsCategory.NUTRITION, self.tr("Nutrition"), self
         )
@@ -815,6 +819,11 @@ class MainWindow(QMainWindow):
         return self._threshold
 
     @property
+    def threshold_protocol_section(self) -> ThresholdProtocolSection:
+        """The choice of the test protocol, in Settings > Training plan."""
+        return self._protocol_section
+
+    @property
     def threshold_instructions_action(self) -> QAction:
         """Action "Test instructions..."."""
         return self._threshold_instructions_action
@@ -948,6 +957,11 @@ class MainWindow(QMainWindow):
     def edit_sport_weights(self) -> None:
         """Open Settings > Sport weights."""
         self._dialogs.edit_sport_weights()
+
+    def _on_test_protocol_chosen(self, protocol: object) -> None:
+        """The plan schedules the test with the protocol the user chose: rebuild it."""
+        if isinstance(protocol, ThresholdProtocol):
+            self._controller.set_test_protocol(protocol)
 
     def _show_threshold_instructions(self) -> None:
         self._threshold.show_instructions()

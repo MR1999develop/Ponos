@@ -21,15 +21,16 @@ from PySide6.QtWidgets import QLabel, QMenu, QMessageBox
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.activities.domain import Sport
+from ponos_coach.assessment.domain import ThresholdProtocol
 from ponos_coach.goals.domain import GoalId, Priority, RaceGoal, SessionType, WeeklyAvailability
-from ponos_coach.planning.domain import Block, BlockRole, Phase, PlanDay, PlannedSession
+from ponos_coach.planning.domain import Block, BlockRole, Phase, Plan, PlanDay, PlannedSession
 from ponos_coach.planning.ports import FrozenDay
 from ponos_coach.ui.birth_date_edit import to_qdate
 from ponos_coach.ui.calendar_model import first_of_month
 from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.goal_draft import GoalField
 from ponos_coach.ui.main_window import MainWindow
-from ponos_coach.ui.plan_presentation import NoPlanYet, PlanRefusedNow
+from ponos_coach.ui.plan_presentation import NoPlanYet, PlanAvailable, PlanRefusedNow
 from ponos_coach.ui.plan_undo import OutcomeCell
 from ponos_coach.ui.settings_page import SettingsCategory
 from tests.ui.goals_support import (
@@ -776,6 +777,30 @@ def test_the_plan_proposes_the_next_threshold_test_beside_the_status_of_the_test
     label = window.findChild(QLabel, "planRetestLabel")
     assert label is not None
     assert not label.isHidden()
+
+
+def protocols_of(plan: Plan) -> set[ThresholdProtocol]:
+    return {d.session.threshold_test for d in plan.days if d.session and d.session.threshold_test}
+
+
+def test_the_test_the_plan_schedules_follows_the_protocol_chosen_in_the_settings(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = plan_window(qtbot, tmp_path, settings)
+    add_race(qtbot, window, RACE_DAY)
+    first = wait_plan(qtbot, window, race_ids(window))
+    assert protocols_of(first) == {ThresholdProtocol.THIRTY_MINUTES}
+
+    window.threshold_protocol_section.button(ThresholdProtocol.TWENTY_MINUTES).click()
+
+    def rebuilt() -> bool:
+        state = window.plan.state
+        return isinstance(state, PlanAvailable) and protocols_of(state.plan) == {
+            ThresholdProtocol.TWENTY_MINUTES
+        }
+
+    wait_for(qtbot, rebuilt)
+    assert window.controller.test_protocol is ThresholdProtocol.TWENTY_MINUTES
 
 
 def test_taking_the_goal_back_takes_the_proposal_off_the_status_bar(

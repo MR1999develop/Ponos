@@ -30,6 +30,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 from ponos_coach.activities.map_queries import TrackDecoder
 from ponos_coach.activities.ports import ActivityArchive, ArchiveError, Clock, ImportSource
 from ponos_coach.activities.use_cases import ImportSummary, import_activities
+from ponos_coach.assessment.domain import DEFAULT_PROTOCOL, ThresholdProtocol
 from ponos_coach.load.use_cases import (
     ComputeProfileOverview,
     Decoder,
@@ -322,6 +323,7 @@ class WorkspaceController(QObject):
         self._opening = False
         self._closing = False
         self._overview_stale = False
+        self._test_protocol = DEFAULT_PROTOCOL
         self._import_progress: ImportProgress | None = None
         self._overview_handle: JobHandle | None = None
         self._plan_handle: JobHandle | None = None
@@ -493,6 +495,22 @@ class WorkspaceController(QObject):
     def import_folder(self, folder: Path) -> bool:
         """Import a folder with its subfolders into the open profile."""
         return self._begin_import(lambda: self._services.import_sources.folder(folder))
+
+    @property
+    def test_protocol(self) -> ThresholdProtocol:
+        """The protocol of the threshold test that the plan schedules (the user's choice)."""
+        return self._test_protocol
+
+    def set_test_protocol(self, protocol: ThresholdProtocol) -> None:
+        """The user chose another test protocol: the plan is rebuilt with it from the overview
+        already computed (nothing else is recalculated), like for any other setting of the plan.
+        Without a ready overview the next one will carry it."""
+        if protocol is self._test_protocol:
+            return
+        self._test_protocol = protocol
+        state = self._overview_state
+        if isinstance(state, Ready):
+            self._start_plan(state.overview)
 
     def recalculate_overview(self) -> bool:
         """Recompute the open profile's overview."""
@@ -824,7 +842,7 @@ class WorkspaceController(QObject):
     # --- Piano ------------------------------------------------------------------------
 
     def _plan_job(
-        self, overview: ProfileOverview, profile_id: ProfileId
+        self, overview: ProfileOverview, profile_id: ProfileId, protocol: ThresholdProtocol
     ) -> Callable[[JobContext], object]:
         services = self._services
         data = self._data
@@ -833,7 +851,9 @@ class WorkspaceController(QObject):
             current = data.require()
             if current.session.info.profile_id != profile_id or context.is_cancelled():
                 raise JobCancelledError  # another profile is open now, or a newer overview began
-            rebuild = RebuildPlan(plan_sources_of(current.session), lambda: overview)
+            rebuild = RebuildPlan(
+                plan_sources_of(current.session), lambda: overview, test_protocol=protocol
+            )
             return rebuild(services.today(current.zone))
 
         return job
@@ -844,7 +864,8 @@ class WorkspaceController(QObject):
             return
         self._cancel_plan()
         self._plan_handle = self._submit(
-            self._plan_job(overview, self._profile.profile_id), self._after_plan
+            self._plan_job(overview, self._profile.profile_id, self._test_protocol),
+            self._after_plan,
         )
 
     def _cancel_plan(self) -> None:
