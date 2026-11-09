@@ -485,8 +485,6 @@ def test_the_plan_and_map_commands_open_their_pages(
     window.plan.actions["training"].trigger()
     assert current(window) is SettingsCategory.TRAINING_PLAN
     qtbot.waitUntil(lambda: window.plan.training_dialog is not None, timeout=WAIT_MS)
-    window.map_page.settings_requested.emit()  # the "Open map settings..." button of the notice
-    assert current(window) is SettingsCategory.MAP
     window.map_ui.actions["clear_cache"].trigger()
     assert current(window) is SettingsCategory.MAP
     assert window.map_ui.settings_dialog is not None

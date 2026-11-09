@@ -15,7 +15,6 @@ from PySide6.QtCore import QCoreApplication, QDate, QLocale, Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QGridLayout,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMenu,
@@ -35,6 +34,7 @@ from ponos_coach.ui.activity_filters import (
     problem_text,
 )
 from ponos_coach.ui.activity_text import sport_text
+from ponos_coach.ui.flow_layout import FlowLayout
 from ponos_coach.ui.tokens import SPACE_1, SPACE_2, SPACE_4, Theme, tokens_for
 
 _FIELD_MIN_WIDTH = 96
@@ -75,17 +75,16 @@ class FilterBar(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(SPACE_4, SPACE_2, SPACE_4, SPACE_2)
         outer.setSpacing(SPACE_1)
-        row = QHBoxLayout()
-        row.setSpacing(SPACE_4)
+        fields = QWidget(self)  # the groups wrap onto more rows when the pane is narrow
+        row = FlowLayout(fields, spacing=SPACE_4)
         for kind, first, second in _GROUPS:
             row.addWidget(self._group(kind, first, second))
         row.addWidget(self._sport_group())
-        row.addStretch(1)
         self._clear = QPushButton(self.tr("Clear filters"), self)
         self._clear.setToolTip(self.tr("Show every activity again"))
         self._clear.clicked.connect(self.clear_filters)
-        row.addWidget(self._clear, alignment=Qt.AlignmentFlag.AlignBottom)
-        outer.addLayout(row)
+        row.addWidget(self._clear)
+        outer.addWidget(fields)
         self._problems = QLabel(self)
         self._problems.setObjectName("filterProblems")
         self._problems.setTextFormat(Qt.TextFormat.PlainText)

@@ -29,7 +29,6 @@ THRESHOLD_RUN = "run_threshold_test.fit"
 NO_DISTANCE_RUN = "run_threshold_no_distance.fit"
 BIKE = "bike_easy.fit"
 SHORT_RUN = "run_gps_loop.fit"  # 20 minutes: too short for the test
-SECTION_ACTIVITIES = 1
 
 
 def plain(text: str) -> str:
@@ -74,7 +73,6 @@ def activities_of(window: MainWindow) -> list[ProfileActivity]:
 
 def select_where(window: MainWindow, wanted: Callable[[ProfileActivity], bool]) -> ProfileActivity:
     """Show the Activities list and select the first activity that satisfies `wanted`."""
-    window.sidebar.setCurrentRow(SECTION_ACTIVITIES)
     page = window.activities_page
     for row in range(page.proxy.rowCount()):
         activity = page.model.activity_at(page.proxy.mapToSource(page.proxy.index(row, 0)).row())

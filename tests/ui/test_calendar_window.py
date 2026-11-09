@@ -15,12 +15,13 @@ import pytest
 from PySide6.QtCore import QLocale, QSettings, Qt
 from PySide6.QtGui import QBrush
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QListWidget, QPushButton
+from PySide6.QtWidgets import QPushButton
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.nutrition.domain import GoalPeriod, WeightLossGoal
 from ponos_coach.ui.calendar_model import GoalKind
 from ponos_coach.ui.calendar_page import CalendarPage
+from ponos_coach.ui.main_panes import Pane
 from ponos_coach.ui.tokens import Theme
 from tests.ui.nutrition_support import (
     DAWN_AND_LUNCH_DAY,
@@ -46,20 +47,13 @@ def english_numbers() -> Iterator[None]:
     QLocale.setDefault(previous)
 
 
-def test_the_sidebar_offers_the_calendar_and_opening_it_shows_the_current_month(
+def test_the_calendar_pane_shows_the_current_month_from_the_start(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
-    sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar is not None
 
-    item = sidebar.item(2)
-    assert item.text() == "Calendar"
-    assert item.flags() & Qt.ItemFlag.ItemIsEnabled
-    sidebar.setCurrentRow(2)
-
-    assert window.current_page is window.calendar_page
+    assert window.panes.pane(Pane.CALENDAR) is window.calendar_page
     assert window.calendar_page.title_text == "June 2026"
 
 
@@ -89,7 +83,6 @@ def test_navigation_by_buttons_moves_one_month_and_next_stops_a_year_ahead(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with_days(qtbot, tmp_path, settings)
-    window.sidebar.setCurrentRow(2)
     page = window.calendar_page
 
     assert page.next_button.isEnabled()  # the plan fills the months ahead
@@ -121,9 +114,6 @@ def test_navigation_by_keyboard_uses_page_keys_and_the_menu_shortcuts(
     page = window.calendar_page
     actions = window.calendar_actions
 
-    assert not actions["previous"].isEnabled()  # on the Overview
-    assert actions["previous"].toolTip() == "Open the Calendar section first."
-    window.sidebar.setCurrentRow(2)
     assert actions["previous"].isEnabled()
     assert actions["next"].isEnabled()
     assert actions["today"].isEnabled()
@@ -146,7 +136,6 @@ def test_arrow_keys_move_between_past_days_and_enter_opens_the_day(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with_days(qtbot, tmp_path, settings)
-    window.sidebar.setCurrentRow(2)
     page = window.calendar_page
     page.select_day(date(2026, 6, 10))
 
@@ -158,7 +147,6 @@ def test_arrow_keys_move_between_past_days_and_enter_opens_the_day(
         QTest.keyClick(page.table, Qt.Key.Key_Return)
 
     assert opened.args == [date(2026, 6, 18)]
-    assert window.current_page is window.calendar_page  # the day opens in a window of its own
     assert window.nutrition.day_window(date(2026, 6, 18)) is not None
 
 
@@ -170,9 +158,7 @@ def test_opening_a_day_leaves_the_calendar_in_place_and_there_is_no_back_command
     actions = window.calendar_actions
 
     assert "back" not in actions
-    assert window.current_page is window.calendar_page
     assert actions["open_day"].isEnabled()
-    assert window.sidebar.currentRow() == 2
 
 
 def test_the_theme_changes_the_goal_tints_of_the_cells(qtbot: QtBot) -> None:

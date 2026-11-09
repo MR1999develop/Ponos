@@ -30,7 +30,6 @@ from tests.ui.workspace_support import (
 )
 
 PROFILE = "Atleta di prova"
-SECTION_ACTIVITIES = 1
 ACTIVITIES_WITH_POSITION = FILES_IN_FIXTURE_FOLDER  # all eight runs have positions
 
 # A view around the invented point at sea: zoomed in (tracks are drawn from zoom 11) and zoomed out.
@@ -52,7 +51,6 @@ def map_window(
     with qtbot.waitSignal(window.controller.import_finished, timeout=WAIT_MS):
         window.import_folder(make_import_folder(tmp_path))
     wait_ready(qtbot, window, ACTIVITIES_WITH_POSITION)
-    window.sidebar.setCurrentRow(SECTION_ACTIVITIES)
     window.map_ui.page.start_engines()
     qtbot.waitUntil(lambda: window.map_ui.controller.search is not None, timeout=WAIT_MS)
     return window

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QLocale, QSettings
-from PySide6.QtWidgets import QLabel, QMenu, QMessageBox
+from PySide6.QtWidgets import QLabel, QMessageBox
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.activities.domain import Sport
@@ -36,7 +36,6 @@ from ponos_coach.ui.settings_page import SettingsCategory
 from tests.ui.goals_support import (
     EVERY_DAY,
     RACE_DAY,
-    SECTION_CALENDAR,
     add_race,
     choices_of,
     goals_of,
@@ -98,12 +97,6 @@ def test_the_goals_window_opens_from_the_menu_and_the_commands_have_their_reason
 
     assert window.goals_window.isVisible()
     assert window.goals_window.windowTitle() == "Goals and plan status"
-    assert [window.sidebar.item(row).text() for row in range(window.sidebar.count())] == [
-        "Overview",
-        "Activities",
-        "Calendar",
-        "Tests",
-    ]
     assert window.goals_page.empty_text.startswith("No goals yet.")
     actions = window.plan.actions
     assert actions["add_race"].isEnabled()
@@ -115,25 +108,25 @@ def test_the_goals_window_opens_from_the_menu_and_the_commands_have_their_reason
     assert actions["undo"].toolTip() == "There is no change to the goals to take back."
 
 
-def test_the_plan_commands_are_in_the_calendar_menu_and_there_is_no_plan_menu(
+def test_there_is_no_plan_nor_calendar_menu_and_the_plan_shortcuts_stay(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
+    # The commands live in the calendar's day menu (right click); their shortcuts still work.
     window = ready_window(qtbot, tmp_path, settings)
 
-    assert not [a for a in window.menuBar().actions() if a.text() == "Plan"]
-    menu = next(a.menu() for a in window.menuBar().actions() if a.text() == "Calendar")
-
-    assert isinstance(menu, QMenu)
-    commands = [(a.text(), a.shortcut().toString()) for a in menu.actions() if not a.isSeparator()]
-    assert commands[4:] == [
+    titles = [a.text() for a in window.menuBar().actions()]
+    assert "Plan" not in titles
+    assert "Calendar" not in titles
+    actions = window.plan.actions
+    assert [
+        (actions[n].text(), actions[n].shortcut().toString())
+        for n in ("add_race", "add_form_goal", "change_goal", "remove_goal", "training")
+    ] == [
         ("Add race...", "Ctrl+R"),
         ("Add form goal...", "Ctrl+Shift+F"),
         ("Change goal...", "Ctrl+Shift+E"),
         ("Remove goal", "Ctrl+Del"),
-        ("Goals and plan status...", "Ctrl+Shift+P"),
         ("Training settings...", "Ctrl+Shift+T"),
-        ("Undo", ""),  # no global shortcut
-        ("Redo", ""),
     ]
 
 
@@ -283,7 +276,7 @@ def test_taking_back_the_training_time_restores_the_real_previous_one(
     wait_for(qtbot, lambda: window.plan.training_dialog is not None)
     dialog = window.plan.training_dialog
     assert dialog is not None
-    outside = WeeklyAvailability(EVERY_DAY, 6, 300)
+    outside = WeeklyAvailability(EVERY_DAY, 7, 6, 300)
     assert window.plan._jobs.set_availability(outside, OutcomeCell())
     wait_for(qtbot, lambda: window.plan.is_idle and _availability_of(window) == outside)
 
@@ -456,12 +449,13 @@ def test_training_settings_are_saved_and_taking_them_back_returns_to_not_set(
     assert window.plan.snapshot is not None
     assert window.plan.snapshot.availability is None
 
-    set_training(qtbot, window, minutes=(45, 0, 60, 0, 60, 120, 150), long_day=5, hours=7.5)
+    set_training(qtbot, window, days=frozenset({0, 2, 4, 5, 6}), sessions=4, long_day=5, hours=7.5)
 
     snapshot = window.plan.snapshot
     assert snapshot is not None
     assert snapshot.availability is not None
-    assert snapshot.availability.day_minutes == (45, 0, 60, 0, 60, 120, 150)
+    assert snapshot.availability.days == {0, 2, 4, 5, 6}
+    assert snapshot.availability.sessions_per_week == 4
     assert (snapshot.availability.long_day, snapshot.availability.max_week_minutes) == (5, 450)
     assert choices_of(window).for_sport(Sport.RUNNING) == frozenset(SessionType)
     assert window.plan.actions["undo"].text() == "Undo Change training settings"  # one step
@@ -490,7 +484,7 @@ def test_edits_discarded_when_closing_settings_change_nothing_and_push_nothing(
     dialog = window.plan.training_dialog
     assert dialog is not None
     assert dialog.note_is_shown  # nothing saved yet: the form starts from suggestions
-    dialog.day_spins[0].setValue(10)
+    dialog.day_checks[0].setChecked(False)
     assert window.settings_window.category_label(SettingsCategory.TRAINING_PLAN).endswith("*")
     window.settings_window.close()
     answer_unsaved(qtbot, window, "Discard")
@@ -532,7 +526,7 @@ def test_without_training_time_the_goals_section_says_there_is_no_plan_and_why(
     assert text.split("\n") == [
         "No plan",
         "No training time is set.",
-        "Set the minutes you can train each day in Training settings.",
+        "Choose the days you can train and the hours a week in Training settings.",
     ]
     (button,) = window.goals_page.notice_buttons()
     assert button.text() == "Training settings..."
@@ -593,7 +587,6 @@ def test_a_day_after_today_opens_on_the_planned_session_with_its_blocks(
     add_race(qtbot, window, RACE_DAY)
     plan = wait_plan(qtbot, window, race_ids(window))
     target = next(d for d in plan.days if d.session is not None and d.session.blocks)
-    window.sidebar.setCurrentRow(SECTION_CALENDAR)
     page = window.calendar_page
     while page.current_month < first_of_month(target.day):
         page.next_month()
@@ -618,7 +611,6 @@ def test_the_race_day_is_marked_with_its_priority_and_the_phases_are_in_the_lege
     window = plan_window(qtbot, tmp_path, settings)
     add_race(qtbot, window, RACE_DAY, target="3:20:00")
     wait_plan(qtbot, window, race_ids(window))
-    window.sidebar.setCurrentRow(SECTION_CALENDAR)
     page = window.calendar_page
     while page.current_month < first_of_month(RACE_DAY):
         page.next_month()
@@ -642,7 +634,6 @@ def test_a_goal_can_be_changed_and_removed_from_the_day_in_the_calendar_and_undo
     window = plan_window(qtbot, tmp_path, settings)
     add_race(qtbot, window, RACE_DAY)
     (race,) = races_of(window)
-    window.sidebar.setCurrentRow(SECTION_CALENDAR)
     page = window.calendar_page
     while page.current_month < first_of_month(RACE_DAY):
         page.next_month()
@@ -667,13 +658,12 @@ def test_a_goal_is_added_from_a_day_of_the_calendar_with_that_day_in_the_form(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = plan_window(qtbot, tmp_path, settings)
-    window.sidebar.setCurrentRow(SECTION_CALENDAR)
     page = window.calendar_page
     page.next_month()
     day = date(2026, 7, 18)
     page.select_day(day)
 
-    page.panel.add_race_button.click()
+    window.plan.actions["add_race"].trigger()  # what the day menu runs
     wait_for(qtbot, lambda: window.plan.goal_dialog is not None)
 
     dialog = window.plan.goal_dialog
@@ -695,7 +685,6 @@ def test_a_past_day_shows_what_was_planned_then_beside_what_was_done_and_how_it_
         lambda access: access.session.plans.freeze([frozen]), outcomes.append
     )
     wait_for(qtbot, lambda: bool(outcomes))
-    window.sidebar.setCurrentRow(SECTION_CALENDAR)
     page = window.calendar_page
 
     page.previous_month()  # leaving the month and coming back reads the past again

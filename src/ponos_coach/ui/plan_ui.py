@@ -224,7 +224,7 @@ class PlanUi(QObject):
         action = QAction(text, self)
         if shortcut is not None:
             action.setShortcut(QKeySequence(shortcut))
-        action.triggered.connect(slot)
+        action.triggered.connect(lambda _checked=False, run=slot: run())  # never the flag
         return action
 
     def _build_actions(self) -> None:
@@ -257,8 +257,6 @@ class PlanUi(QObject):
         self._controller.plan_rebuilt.connect(self._on_plan_rebuilt)
         self._controller.overview_changed.connect(self._on_overview_changed)
         self._calendar.month_changed.connect(self._reload_past)
-        self._calendar.add_race_requested.connect(self._on_day_add_race)
-        self._calendar.add_form_goal_requested.connect(self._on_day_add_form_goal)
         self._calendar.change_goal_requested.connect(self.change_goal)
         self._calendar.remove_goal_requested.connect(self.remove_goal)
         self._calendar.selection_changed.connect(self._update_actions)
@@ -489,14 +487,6 @@ class PlanUi(QObject):
                 self._stack.push(step)
             self._stack.endMacro()
         form.show_saved(after, suggested=False)
-
-    def _on_day_add_race(self, day: object) -> None:
-        if isinstance(day, date):
-            self.add_race(day)
-
-    def _on_day_add_form_goal(self, day: object) -> None:
-        if isinstance(day, date):
-            self.add_form_goal(day)
 
     def _on_notice_action(self, action: object) -> None:
         if action is NoticeAction.ADD_RACE:

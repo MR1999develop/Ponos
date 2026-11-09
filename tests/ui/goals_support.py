@@ -25,9 +25,8 @@ from ponos_coach.ui.plan_presentation import PlanAvailable, PlanRefusedNow
 from tests.ui.nutrition_support import cell_of, window_with_days
 from tests.ui.workspace_support import TODAY, WAIT_MS
 
-SECTION_CALENDAR = 2
 RACE_DAY = TODAY + timedelta(weeks=12)  # 22 September 2026
-EVERY_DAY = (60, 60, 60, 60, 60, 120, 180)
+EVERY_DAY = frozenset(range(7))
 
 
 def ready_window(qtbot: QtBot, tmp_path: Path, settings: QSettings) -> MainWindow:
@@ -61,7 +60,6 @@ def wait_for(qtbot: QtBot, condition: Callable[[], bool]) -> None:
 def select_goal(qtbot: QtBot, window: MainWindow, goal_id: str) -> None:
     """Select in the calendar the day of a goal (what the goal commands act on)."""
     goal = next(g for g in goals_of(window) if g.goal_id.value == goal_id)
-    window.sidebar.setCurrentRow(SECTION_CALENDAR)
     window.calendar_page.go_to(goal.day)
     wait_for(qtbot, lambda: bool(cell_of(window, goal.day).goals))
 
@@ -97,7 +95,8 @@ def set_training(
     qtbot: QtBot,
     window: MainWindow,
     *,
-    minutes: tuple[int, int, int, int, int, int, int] = EVERY_DAY,
+    days: frozenset[int] = EVERY_DAY,
+    sessions: int | None = None,
     long_day: int = 6,
     hours: float = 12.0,
     types: frozenset[SessionType] = frozenset(SessionType),
@@ -109,9 +108,11 @@ def set_training(
     wait_for(qtbot, lambda: window.plan.training_dialog is not None)
     dialog = window.plan.training_dialog
     assert dialog is not None
-    for spin, value in zip(dialog.day_spins, minutes, strict=True):
-        spin.setValue(value)
-    dialog.long_day_combo.setCurrentIndex(long_day)
+    for weekday, check in enumerate(dialog.day_checks):
+        check.setChecked(weekday in days)
+    count = len(days) if sessions is None else sessions
+    dialog.sessions_spin.setValue(count)
+    dialog.long_day_combo.setCurrentIndex(dialog.long_day_combo.findData(long_day))
     dialog.week_hours_spin.setValue(hours)
     for (check_sport, session_type), check in dialog.type_checks.items():
         check.setChecked(check_sport is sport and session_type in types)
@@ -119,7 +120,9 @@ def set_training(
     wait_for(qtbot, lambda: window.plan.is_idle and window.plan.snapshot is not None)
     wait_for(
         qtbot,
-        lambda: _availability(window) == WeeklyAvailability(minutes, long_day, round(hours * 60)),
+        lambda: (
+            _availability(window) == WeeklyAvailability(days, count, long_day, round(hours * 60))
+        ),
     )
 
 

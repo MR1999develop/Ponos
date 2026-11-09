@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QItemSelectionModel, QSettings
+from PySide6.QtGui import QAction
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.activities.ports import AuthenticationRequiredError, DefinitiveSourceError
@@ -63,6 +64,19 @@ def _names_by_day(window: MainWindow) -> dict[date, str]:
 def _open_send_dialog(qtbot: QtBot, window: MainWindow) -> None:
     window.garmin_calendar.send_plan_action.trigger()
     qtbot.waitUntil(lambda: window.garmin_calendar.send_dialog is not None, timeout=WAIT_MS)
+
+
+def send_session_action_of_the_day_menu(window: MainWindow, day: date) -> QAction:
+    """The command "Send this session to Garmin" as the menu of the day offers it."""
+    page = window.calendar_page
+    month = page.model.month
+    assert month is not None
+    cell = next(c for c in month.days if c.day == day)
+    menu = window.day_menu.build(cell)
+    try:
+        return next(a for a in menu.actions() if a.text() == "Send this session to Garmin")
+    finally:
+        menu.deleteLater()
 
 
 # --- Send ------------------------------------------------------------------------------------
@@ -135,11 +149,11 @@ def test_the_day_panel_sends_the_session_of_the_selected_day_only(
     window = window_with_plan(qtbot, tmp_path, settings, calendar)
     day = session_days(current_plan(window))[3]
     select_day(window, day)
-    button = window.calendar_page.panel.send_session_button
-    assert button.text() == "Send this session to Garmin"
-    assert button.isEnabled()
+    action = send_session_action_of_the_day_menu(window, day)
+    assert action is window.garmin_calendar.send_session_action
+    assert action.isEnabled()
 
-    result = wait_job(qtbot, window, button.click)
+    result = wait_job(qtbot, window, action.trigger)
 
     assert isinstance(result, Sent)
     assert [w.day for w in calendar.scheduled()] == [day]
@@ -178,9 +192,6 @@ def test_the_session_command_is_off_with_the_reason_on_a_day_that_has_passed(
     action = window.garmin_calendar.send_session_action
     assert not action.isEnabled()
     assert action.toolTip() == "Only sessions of today or later can be sent."
-    button = window.calendar_page.panel.send_session_button
-    assert not button.isEnabled()
-    assert button.toolTip() == action.toolTip()
     close_window(qtbot, window)
 
 
@@ -431,7 +442,6 @@ def test_an_adapter_that_cannot_do_workouts_is_told_once_and_the_commands_say_wh
     for action in (garmin.send_plan_action, garmin.browse_action, garmin.recreate_action):
         assert not action.isEnabled()
         assert action.toolTip() == "This Garmin connection cannot manage workouts."
-    assert not window.calendar_page.panel.send_session_button.isEnabled()
     close_window(qtbot, window)
 
 

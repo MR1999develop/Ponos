@@ -18,9 +18,11 @@ from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QLocale, Qt, QTime, Signal
 from PySide6.QtWidgets import (
+    QFrame,
     QLabel,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QStackedWidget,
     QVBoxLayout,
@@ -71,6 +73,8 @@ type ChartScheduler = Callable[
 
 # Relative heights of the three charts: the PMC has two panels, the others one.
 _CHART_STRETCH = (4, 3, 3)
+# Least height of a chart: in a small pane the three charts scroll instead of being squashed.
+_CHART_MIN_HEIGHT = 150
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,8 +173,13 @@ class OverviewPage(QWidget):
             self._charts.addWidget(view)
             self._charts.setStretchFactor(index, _CHART_STRETCH[index])
             view.x_range_changed.connect(partial(self._follow_dates, view))
+        self._charts.setMinimumHeight(_CHART_MIN_HEIGHT * len(_CHART_STRETCH))
+        self._charts_scroll = QScrollArea(self)
+        self._charts_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._charts_scroll.setWidgetResizable(True)  # the charts follow the width
+        self._charts_scroll.setWidget(self._charts)
         self._stack = QStackedWidget(self)
-        for widget in (self._state_page, self._loading_page, self._charts):
+        for widget in (self._state_page, self._loading_page, self._charts_scroll):
             self._stack.addWidget(widget)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -217,7 +226,8 @@ class OverviewPage(QWidget):
 
     def current_widget(self) -> QWidget | None:
         """Widget currently visible in the stack."""
-        return self._stack.currentWidget()
+        current = self._stack.currentWidget()
+        return self._charts if current is self._charts_scroll else current
 
     def apply_state(self, state: OverviewState, theme: Theme, zone: ZoneInfo) -> None:
         """Show the page decided by `page_of` for the state; `zone` is the profile's time zone.
@@ -275,7 +285,7 @@ class OverviewPage(QWidget):
                 self._chart.show_prepared(prepared.pmc)
                 self._load_chart.show_prepared(prepared.weekly_load)
                 self._zones_chart.show_prepared(prepared.weekly_zones)
-                self._stack.setCurrentWidget(self._charts)
+                self._stack.setCurrentWidget(self._charts_scroll)
 
         def failed(message: ErrorMessage) -> None:
             if request == self._chart_request:

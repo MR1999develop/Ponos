@@ -595,10 +595,6 @@
         <translation>Mese successivo</translation>
     </message>
     <message>
-        <source>Today</source>
-        <translation>Oggi</translation>
-    </message>
-    <message>
         <source>Calendar</source>
         <translation>Calendario</translation>
     </message>
@@ -700,28 +696,8 @@
         <translation>Giorno selezionato</translation>
     </message>
     <message>
-        <source>Add race here...</source>
-        <translation>Aggiungi gara qui...</translation>
-    </message>
-    <message>
-        <source>Add form goal here...</source>
-        <translation>Aggiungi obiettivo di forma qui...</translation>
-    </message>
-    <message>
-        <source>Send this session to Garmin</source>
-        <translation>Invia questa seduta a Garmin</translation>
-    </message>
-    <message>
         <source>Select a day to see what is planned, what was done and its goals.</source>
         <translation>Seleziona un giorno per vedere cosa è previsto, cosa è stato fatto e i suoi obiettivi.</translation>
-    </message>
-    <message>
-        <source>Select a day first.</source>
-        <translation>Seleziona prima un giorno.</translation>
-    </message>
-    <message>
-        <source>A goal needs a day after today.</source>
-        <translation>Un obiettivo richiede un giorno dopo oggi.</translation>
     </message>
     <message>
         <source>Change...</source>
@@ -769,6 +745,10 @@
     <message>
         <source>Day activities</source>
         <translation>Attività della giornata</translation>
+    </message>
+    <message>
+        <source>Click an activity, or press Enter on it, to open it.</source>
+        <translation>Fai clic su un'attività, o premi Invio, per aprirla.</translation>
     </message>
     <message>
         <source>{meal} at {time}</source>
@@ -3363,6 +3343,26 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Aiuto</translation>
     </message>
     <message>
+        <source>View</source>
+        <translation>Vista</translation>
+    </message>
+    <message>
+        <source>Go to Overview</source>
+        <translation>Vai alla Panoramica</translation>
+    </message>
+    <message>
+        <source>Go to Calendar</source>
+        <translation>Vai al Calendario</translation>
+    </message>
+    <message>
+        <source>Go to Activities</source>
+        <translation>Vai alle Attività</translation>
+    </message>
+    <message>
+        <source>Go to Map</source>
+        <translation>Vai alla Mappa</translation>
+    </message>
+    <message>
         <source>Sport weights</source>
         <translation>Pesi degli sport</translation>
     </message>
@@ -3379,26 +3379,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Lingua</translation>
     </message>
     <message>
-        <source>Sections</source>
-        <translation>Sezioni</translation>
-    </message>
-    <message>
-        <source>Available in a later version</source>
-        <translation>Disponibile in una versione successiva</translation>
-    </message>
-    <message>
-        <source>Overview</source>
-        <translation>Panoramica</translation>
-    </message>
-    <message>
-        <source>Activities</source>
-        <translation>Attività</translation>
-    </message>
-    <message>
-        <source>Calendar</source>
-        <translation>Calendario</translation>
-    </message>
-    <message>
         <source>Injuries</source>
         <translation>Infortuni</translation>
     </message>
@@ -3409,10 +3389,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Map</source>
         <translation>Mappa</translation>
-    </message>
-    <message>
-        <source>Tests</source>
-        <translation>Test</translation>
     </message>
     <message>
         <source>Goals and plan status</source>
@@ -3476,10 +3452,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Ponos Coach is closing.</source>
         <translation>Ponos Coach si sta chiudendo.</translation>
-    </message>
-    <message>
-        <source>Open the Calendar section first.</source>
-        <translation>Apri prima la sezione Calendario.</translation>
     </message>
     <message numerus="yes">
         <source>Activities: %n</source>
@@ -3668,48 +3640,12 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Nessuna attività corrisponde ai filtri.</translation>
     </message>
     <message>
-        <source>The map background needs a Tracestrack key</source>
-        <translation>Lo sfondo della mappa richiede una chiave Tracestrack</translation>
-    </message>
-    <message>
-        <source>Without a key the map shows a plain background.</source>
-        <translation>Senza chiave la mappa ha uno sfondo semplice.</translation>
-    </message>
-    <message>
-        <source>Add your key in Settings &gt; Map. Tracks, filters and the list work without it.</source>
-        <translation>Aggiungi la chiave in Impostazioni &gt; Mappa. Tracce, filtri ed elenco funzionano anche senza.</translation>
-    </message>
-    <message>
-        <source>Tracestrack refused the key</source>
-        <translation>Tracestrack ha rifiutato la chiave</translation>
-    </message>
-    <message>
-        <source>The map shows a plain background.</source>
-        <translation>La mappa ha uno sfondo semplice.</translation>
-    </message>
-    <message>
-        <source>Check the key in Settings &gt; Map, or enter a new one.</source>
-        <translation>Controlla la chiave in Impostazioni &gt; Mappa, oppure inseriscine una nuova.</translation>
-    </message>
-    <message>
-        <source>The Tracestrack credit is used up</source>
-        <translation>Il credito di Tracestrack è esaurito</translation>
-    </message>
-    <message>
         <source>The map shows a plain background; tiles already seen still appear.</source>
         <translation>La mappa ha uno sfondo semplice; le tessere già viste restano visibili.</translation>
     </message>
     <message>
-        <source>Check your Tracestrack account, or wait for the credit to renew.</source>
-        <translation>Controlla il tuo account Tracestrack, oppure attendi il rinnovo del credito.</translation>
-    </message>
-    <message>
         <source>The map background cannot be loaded</source>
         <translation>Lo sfondo della mappa non si può caricare</translation>
-    </message>
-    <message>
-        <source>There is no network, or Tracestrack does not answer.</source>
-        <translation>Manca la rete, oppure Tracestrack non risponde.</translation>
     </message>
     <message>
         <source>Check the connection. The map tries again by itself when you move it.</source>
@@ -3720,8 +3656,20 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Lo sfondo della mappa non si può mostrare</translation>
     </message>
     <message>
-        <source>Tracestrack sent something the map cannot use.</source>
-        <translation>Tracestrack ha inviato qualcosa che la mappa non può usare.</translation>
+        <source>The map server refuses the requests</source>
+        <translation>Il server della mappa rifiuta le richieste</translation>
+    </message>
+    <message>
+        <source>Wait a few minutes and move the map again. Tracks, filters and the list work without it.</source>
+        <translation>Aspetta qualche minuto e sposta di nuovo la mappa. Tracce, filtri ed elenco funzionano anche senza.</translation>
+    </message>
+    <message>
+        <source>There is no network, or the map server does not answer.</source>
+        <translation>Non c'è rete, oppure il server della mappa non risponde.</translation>
+    </message>
+    <message>
+        <source>The map server sent something the map cannot use.</source>
+        <translation>Il server della mappa ha inviato qualcosa che la mappa non può usare.</translation>
     </message>
     <message>
         <source>Try again later. Tracks, filters and the list are not affected.</source>
@@ -3819,10 +3767,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Avviso sullo sfondo della mappa</translation>
     </message>
     <message>
-        <source>Open map settings...</source>
-        <translation>Apri le impostazioni della mappa...</translation>
-    </message>
-    <message>
         <source>Activity detail...</source>
         <translation>Dettaglio attività...</translation>
     </message>
@@ -3860,54 +3804,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
 </context>
 <context>
-    <name>MapSettings</name>
-    <message>
-        <source>Key saved. Tracestrack accepted it.</source>
-        <translation>Chiave salvata. Tracestrack l&apos;ha accettata.</translation>
-    </message>
-    <message>
-        <source>Tracestrack refused this key, so it was not saved. Copy it again from your Tracestrack account and paste it here.</source>
-        <translation>Tracestrack ha rifiutato questa chiave, quindi non è stata salvata. Copiala di nuovo dal tuo account Tracestrack e incollala qui.</translation>
-    </message>
-    <message>
-        <source>This is not a Tracestrack key. A key has 8 to 128 letters, digits, hyphens or underscores. Copy it again from your Tracestrack account.</source>
-        <translation>Questa non è una chiave Tracestrack. Una chiave ha da 8 a 128 lettere, cifre, trattini o trattini bassi. Copiala di nuovo dal tuo account Tracestrack.</translation>
-    </message>
-    <message>
-        <source>Key saved, but Tracestrack could not be asked (no network, or the credit is used up). The map will use it when it can.</source>
-        <translation>Chiave salvata, ma non è stato possibile interpellare Tracestrack (manca la rete oppure il credito è esaurito). La mappa la userà appena possibile.</translation>
-    </message>
-    <message>
-        <source>The system key store is not available, so the key cannot be saved. On Linux, install and unlock a Secret Service provider (for example GNOME Keyring), then try again.</source>
-        <translation>L&apos;archivio delle chiavi del sistema non è disponibile, quindi la chiave non si può salvare. Su Linux installa e sblocca un provider Secret Service (per esempio GNOME Keyring), poi riprova.</translation>
-    </message>
-    <message>
-        <source>Key removed. The map shows a plain background.</source>
-        <translation>Chiave rimossa. La mappa ha uno sfondo semplice.</translation>
-    </message>
-</context>
-<context>
     <name>MapSettingsDialog</name>
-    <message>
-        <source>Tracestrack key</source>
-        <translation>Chiave Tracestrack</translation>
-    </message>
-    <message>
-        <source>The map background comes from Tracestrack (Topo style, data from OpenStreetMap). It needs your own key, which stays in the system key store, outside your profile folder. Without a key the map has a plain background; tracks, filters and the list work anyway.</source>
-        <translation>Lo sfondo della mappa viene da Tracestrack (stile Topo, dati di OpenStreetMap). Serve una tua chiave, che resta nell&apos;archivio delle chiavi del sistema, fuori dalla cartella del profilo. Senza chiave la mappa ha uno sfondo semplice; tracce, filtri ed elenco funzionano comunque.</translation>
-    </message>
-    <message>
-        <source>Paste your key here</source>
-        <translation>Incolla qui la chiave</translation>
-    </message>
-    <message>
-        <source>Save key</source>
-        <translation>Salva la chiave</translation>
-    </message>
-    <message>
-        <source>Remove key</source>
-        <translation>Rimuovi la chiave</translation>
-    </message>
     <message>
         <source>Map cache</source>
         <translation>Cache della mappa</translation>
@@ -3921,24 +3818,12 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Svuota la cache della mappa...</translation>
     </message>
     <message>
-        <source>A key is saved.</source>
-        <translation>Una chiave è salvata.</translation>
-    </message>
-    <message>
-        <source>No key is saved.</source>
-        <translation>Nessuna chiave salvata.</translation>
-    </message>
-    <message>
-        <source>There is no key to remove.</source>
-        <translation>Non c&apos;è nessuna chiave da rimuovere.</translation>
+        <source>The map downloads the tiles again when you look at those areas.</source>
+        <translation>La mappa scarica di nuovo le tessere quando guardi quelle zone.</translation>
     </message>
     <message>
         <source>{used} used of {total}. Only tiles you looked at are saved.</source>
         <translation>{used} usati su {total}. Si salvano solo le tessere che hai guardato.</translation>
-    </message>
-    <message>
-        <source>Checking the key with Tracestrack...</source>
-        <translation>Verifica della chiave con Tracestrack...</translation>
     </message>
     <message>
         <source>Enter a size in GB between {low} and {high}, for example 4.</source>
@@ -3951,10 +3836,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Clear the map cache? This frees {size}.</source>
         <translation>Svuotare la cache della mappa? Si liberano {size}.</translation>
-    </message>
-    <message>
-        <source>The map downloads the tiles again when you look at those areas, which uses your Tracestrack credit.</source>
-        <translation>La mappa scarica di nuovo le tessere quando guardi quelle aree, e questo usa il tuo credito Tracestrack.</translation>
     </message>
     <message>
         <source>Clear cache</source>
@@ -4998,8 +4879,8 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Non è impostato nessun tempo per allenarsi.</translation>
     </message>
     <message>
-        <source>Set the minutes you can train each day in Training settings.</source>
-        <translation>Imposta i minuti in cui puoi allenarti ogni giorno in Impostazioni di allenamento.</translation>
+        <source>Choose the days you can train and the hours a week in Training settings.</source>
+        <translation>Scegli i giorni in cui puoi allenarti e le ore a settimana nelle Impostazioni di allenamento.</translation>
     </message>
     <message>
         <source>No session type is chosen.</source>
@@ -5407,12 +5288,20 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Categorie delle impostazioni</translation>
     </message>
     <message>
+        <source>Save changes</source>
+        <translation>Salva modifiche</translation>
+    </message>
+    <message>
         <source>Close</source>
         <translation>Chiudi</translation>
     </message>
     <message>
         <source>This page has unsaved changes.</source>
         <translation>Questa pagina ha modifiche non salvate.</translation>
+    </message>
+    <message>
+        <source>There is nothing to save on this page.</source>
+        <translation>In questa pagina non c'è nulla da salvare.</translation>
     </message>
     <message>
         <source>Unsaved changes</source>
@@ -6112,12 +6001,8 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
 <context>
     <name>TrainingDialog</name>
     <message>
-        <source>No training time is set, so the plan cannot be made. Give at least one day some minutes, and the week some hours.</source>
-        <translation>Non è impostato nessun tempo per allenarsi, quindi il piano non può essere fatto. Dai qualche minuto ad almeno un giorno e qualche ora alla settimana.</translation>
-    </message>
-    <message>
-        <source>The long day has no time, so no long session will be planned. Give that day some minutes, or choose another long day.</source>
-        <translation>Il giorno del lungo non ha tempo, quindi non verrà pianificata nessuna seduta lunga. Dai a quel giorno qualche minuto, oppure scegli un altro giorno per il lungo.</translation>
+        <source>No training time is set, so the plan cannot be made. Tick at least one day, and give the week some hours.</source>
+        <translation>Non è impostato nessun tempo di allenamento, quindi il piano non si può fare. Spunta almeno un giorno e dai qualche ora alla settimana.</translation>
     </message>
 </context>
 <context>
@@ -6139,12 +6024,16 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Tempo disponibile</translation>
     </message>
     <message>
-        <source> min</source>
-        <translation> min</translation>
-    </message>
-    <message>
         <source> h</source>
         <translation> h</translation>
+    </message>
+    <message>
+        <source>Days available</source>
+        <translation>Giorni disponibili</translation>
+    </message>
+    <message>
+        <source>Sessions per week</source>
+        <translation>Sedute a settimana</translation>
     </message>
     <message>
         <source>Long session day</source>

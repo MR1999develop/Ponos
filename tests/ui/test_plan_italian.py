@@ -98,7 +98,8 @@ def test_a_refusal_and_its_remedy_are_in_plain_italian_without_formal_address(
     assert headline == "Non è impostato nessun tempo per allenarsi."
     assert (
         remedy
-        == "Imposta i minuti in cui puoi allenarti ogni giorno in Impostazioni di allenamento."
+        == "Scegli i giorni in cui puoi allenarti e le ore a settimana nelle Impostazioni di "
+        "allenamento."
     )
 
 

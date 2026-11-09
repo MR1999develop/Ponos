@@ -63,6 +63,7 @@ from ponos_coach.ui.calendar_texts import (
     month_title,
     weekday_names,
 )
+from ponos_coach.ui.flow_layout import FlowLayout
 from ponos_coach.ui.injury_presentation import ProblemSpan
 from ponos_coach.ui.plan_texts import phase_text
 from ponos_coach.ui.tokens import SPACE_2, SPACE_3, SPACE_4, Theme, goal_tints_for, tokens_for
@@ -240,8 +241,6 @@ class CalendarPage(QWidget):
     day_requested = Signal(object)  # date: Enter or double click on a day up to today
     month_changed = Signal(object)  # date: the first day of the month now shown
     selection_changed = Signal(object)  # date | None: the selected day
-    add_race_requested = Signal(object)  # date: from the panel of a day
-    add_form_goal_requested = Signal(object)  # date
     change_goal_requested = Signal(str)  # goal id
     remove_goal_requested = Signal(str)  # goal id
     day_menu_requested = Signal(object, object)  # CalendarDay, QPoint (global): a day's menu
@@ -268,8 +267,6 @@ class CalendarPage(QWidget):
         legends = self._build_legends()
         self._panel = DayDetailPanel(self)
         self._panel.setObjectName("calendarDayPanel")
-        self._panel.add_race_requested.connect(self.add_race_requested)
-        self._panel.add_form_goal_requested.connect(self.add_form_goal_requested)
         self._panel.change_goal_requested.connect(self.change_goal_requested)
         self._panel.remove_goal_requested.connect(self.remove_goal_requested)
         splitter = QSplitter(Qt.Orientation.Vertical, self)
@@ -335,35 +332,40 @@ class CalendarPage(QWidget):
         column.addWidget(self._build_phase_legend())
         return legends
 
+    def _legend_pair(self, swatch: QFrame, name: QLabel, parent: QWidget) -> QWidget:
+        """A swatch with its name, kept together when the legend wraps."""
+        pair = QWidget(parent)
+        row = QHBoxLayout(pair)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(SPACE_2)
+        row.addWidget(swatch)
+        row.addWidget(name)
+        return pair
+
     def _build_goal_legend(self) -> QWidget:
-        self._legend = QHBoxLayout()
-        self._legend.setSpacing(SPACE_2)
         legend_row = QWidget(self)
-        legend_row.setLayout(self._legend)
+        self._legend = FlowLayout(legend_row, spacing=SPACE_4)
         self._legend_swatches: dict[GoalKind, QFrame] = {}
-        self._legend.addWidget(QLabel(self.tr("Nutrition goal:"), self))
+        self._legend.addWidget(QLabel(self.tr("Nutrition goal:"), legend_row))
         for kind in GoalKind:
-            swatch = QFrame(self)
+            swatch = QFrame(legend_row)
             swatch.setFixedSize(_LEGEND_SWATCH, _LEGEND_SWATCH)
             swatch.setFrameShape(QFrame.Shape.Box)
             swatch.setAccessibleName(goal_kind_text(kind))
             self._legend_swatches[kind] = swatch
-            self._legend.addWidget(swatch)
-            self._legend.addWidget(QLabel(goal_kind_text(kind), self))
-        self._legend.addSpacing(SPACE_4)
-        self._legend.addWidget(
-            QLabel(self.tr("No colour: no goal period, maintenance assumed."), self)
-        )
-        self._legend.addStretch(1)
+            self._legend.addWidget(
+                self._legend_pair(swatch, QLabel(goal_kind_text(kind), legend_row), legend_row)
+            )
+        no_colour = QLabel(self.tr("No colour: no goal period, maintenance assumed."), legend_row)
+        no_colour.setWordWrap(True)  # a long sentence must not force the pane wide
+        self._legend.addWidget(no_colour)
         return legend_row
 
     def _build_phase_legend(self) -> QWidget:
         """The training phases of the month shown, each with its stripe colour and its name."""
-        self._phase_legend = QHBoxLayout()
-        self._phase_legend.setSpacing(SPACE_2)
         self._phase_legend_row = QWidget(self)
         self._phase_legend_row.setObjectName("calendarPhaseLegend")
-        self._phase_legend_row.setLayout(self._phase_legend)
+        self._phase_legend = FlowLayout(self._phase_legend_row, spacing=SPACE_4)
         self._phase_legend_row.hide()
         return self._phase_legend_row
 
@@ -542,7 +544,7 @@ class CalendarPage(QWidget):
     def _sync_panel(self) -> None:
         """Show the selected day in the panel and tell whoever follows the selection."""
         cell = self.selected_cell()
-        self._panel.show_day(cell, self._today)
+        self._panel.show_day(cell)
         self.selection_changed.emit(None if cell is None else cell.day)
 
     def _refresh(self) -> None:
@@ -594,6 +596,4 @@ class CalendarPage(QWidget):
             swatch.setAccessibleName(phase_text(phase))
             name = QLabel(phase_text(phase), self._phase_legend_row)
             name.setObjectName("phaseLegendName")
-            self._phase_legend.addWidget(swatch)
-            self._phase_legend.addWidget(name)
-        self._phase_legend.addStretch(1)
+            self._phase_legend.addWidget(self._legend_pair(swatch, name, self._phase_legend_row))

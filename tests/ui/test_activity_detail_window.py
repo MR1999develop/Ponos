@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from PySide6.QtCore import QModelIndex, QSettings, Qt, QTimer
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QListWidget, QTableView
+from PySide6.QtWidgets import QTableView
 from pytestqt.qtbot import QtBot
 from shiboken6 import isValid
 
@@ -83,10 +83,7 @@ def latency_of_one_event(qtbot: QtBot) -> float:
 
 
 def show_activities_section(window: MainWindow) -> None:
-    """Bring the Activities page to the front (the table is hidden in the Overview)."""
-    sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar is not None
-    sidebar.setCurrentRow(1)
+    """Show the window: the table of the activities is one of its four panes."""
     window.show()
 
 

@@ -14,6 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from PySide6.QtCore import QLocale, Qt
 from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QPushButton
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.assessment.domain import ThresholdProtocol
@@ -349,28 +350,10 @@ def test_the_visible_range_is_the_whole_weeks_of_the_grid(page: CalendarPage) ->
 # --- The panel's commands --------------------------------------------------------------------
 
 
-def test_the_panel_offers_to_add_a_goal_on_a_day_after_today(page: CalendarPage) -> None:
-    races: list[object] = []
-    forms: list[object] = []
-    page.add_race_requested.connect(races.append)
-    page.add_form_goal_requested.connect(forms.append)
-    day = PLAN_TODAY + timedelta(days=9)
+def test_the_panel_has_no_buttons_to_add_a_goal_or_send_the_session(page: CalendarPage) -> None:
+    page.select_day(PLAN_TODAY + timedelta(days=9))
 
-    page.select_day(day)
-    page.panel.add_race_button.click()
-    page.panel.add_form_goal_button.click()
-
-    assert page.panel.add_race_button.isEnabled()
-    assert races == [day]
-    assert forms == [day]
-
-
-def test_the_panel_does_not_offer_a_goal_on_a_past_day_and_says_why(page: CalendarPage) -> None:
-    page.select_day(PLAN_TODAY)
-
-    for button in (page.panel.add_race_button, page.panel.add_form_goal_button):
-        assert not button.isEnabled()
-        assert button.toolTip() == "A goal needs a day after today."
+    assert [b.text() for b in page.panel.findChildren(QPushButton)] == []
 
 
 def test_the_panel_lists_the_goals_of_the_day_with_change_and_remove(

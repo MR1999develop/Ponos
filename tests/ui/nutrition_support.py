@@ -130,7 +130,6 @@ def last_day_page(window: MainWindow) -> DayPage:
 def open_day(qtbot: QtBot, window: MainWindow, day: date, *, wait: bool = True) -> DayPage:
     """Show the calendar, select a day and press Enter: its window opens; wait for the guidance
     or what is missing. Returns the page of that window."""
-    window.sidebar.setCurrentRow(2)
     page = window.calendar_page
     page.select_day(day)
     assert page.selected_day() == day

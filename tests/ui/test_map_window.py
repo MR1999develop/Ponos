@@ -27,7 +27,6 @@ from tests.ui.map_support import (
     ELSEWHERE,
     FAR,
     NEAR,
-    SECTION_ACTIVITIES,
     map_window,
     show_view,
 )
@@ -59,22 +58,18 @@ def wait_search(qtbot: QtBot, window: MainWindow, count: int) -> None:
     )
 
 
-def test_the_map_is_beside_the_table_in_the_activities_section_and_counts_its_area(
+def test_the_map_is_under_the_table_and_counts_its_area(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = map_window(qtbot, tmp_path, settings)
 
     show_view(qtbot, window, NEAR)
 
-    assert [window.sidebar.item(r).text() for r in range(window.sidebar.count())] == [
-        "Overview",
-        "Activities",
-        "Calendar",
-        "Tests",
-    ]
-    assert window.activities_view.widget(0) is window.activities_page
-    assert window.activities_view.widget(1) is window.map_page
-    assert window.sidebar.currentRow() == SECTION_ACTIVITIES
+    right = window.panes.right_column
+    top = right.widget(0)
+    assert top is not None
+    assert top.isAncestorOf(window.activities_page)
+    assert right.widget(1) is window.map_page
     assert listed(window) == ACTIVITIES_WITH_POSITION
     count, totals, extra = window.map_page.summary_texts
     assert count == f"Activities in this area: {ACTIVITIES_WITH_POSITION}"

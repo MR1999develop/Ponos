@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QSettings, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QListWidget, QMenu
+from PySide6.QtWidgets import QMenu
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.ui import overview_page
@@ -132,90 +132,43 @@ def test_closing_a_window_without_a_profile_is_immediate(
 # --- D-F1-08, D-F1-09: the window remembers ---------------------------------------------------
 
 
-@pytest.mark.parametrize("saved", ["testo", "99", "-1", "6", 42, ""], ids=repr)
-def test_a_saved_section_that_is_not_available_opens_the_activities_beside_the_map(
-    qtbot: QtBot, tmp_path: Path, settings: QSettings, saved: object
-) -> None:
-    settings.setValue("window/section", saved)
-
-    window = compose(tmp_path, settings)
-    qtbot.addWidget(window)
-
-    sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar is not None
-    assert sidebar.currentRow() == 1
-    assert window.current_page is window.activities_view
-
-
-def test_the_first_time_the_window_shows_the_activities_beside_the_map(
-    qtbot: QtBot, tmp_path: Path, settings: QSettings
-) -> None:
-    window = compose(tmp_path, settings)
-    qtbot.addWidget(window)
-
-    assert window.sidebar.currentRow() == 1
-    assert window.current_page is window.activities_view
-    assert window.activities_view.widget(0) is window.activities_page
-    assert window.activities_view.widget(1) is window.map_page
-
-
-def test_the_overview_and_the_calendar_are_remembered_like_the_activities(
-    qtbot: QtBot, tmp_path: Path, settings: QSettings
-) -> None:
-    settings.setValue("window/section", 0)
-    first = compose(tmp_path, settings)
-    qtbot.addWidget(first)
-    settings.setValue("window/section", 2)
-    second = compose(tmp_path / "second", settings)
-    qtbot.addWidget(second)
-
-    assert first.sidebar.currentRow() == 0
-    assert second.sidebar.currentRow() == 2
-
-
-def test_the_old_map_section_that_was_saved_opens_the_activities(
-    qtbot: QtBot, tmp_path: Path, settings: QSettings
-) -> None:
-    settings.setValue("window/section", 3)  # "Map" in the versions that had it
-
-    window = compose(tmp_path, settings)
-    qtbot.addWidget(window)
-
-    assert window.sidebar.currentRow() == 1
-    assert window.current_page is window.activities_view
-
-
-def test_the_divider_between_the_table_and_the_map_is_remembered(
+def test_the_first_time_the_window_shows_the_four_panes_about_half_each(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
     window.show()
-    view = window.activities_view
-    view.setSizes([300, 700])
+    qtbot.waitExposed(window)
 
-    view.splitterMoved.emit(300, 1)  # setSizes does not say that the user dragged it
-    saved = settings.value("activities/splitter")
-    assert saved is not None
-    again = compose(tmp_path / "again", settings)
-    qtbot.addWidget(again)
-    again.show()
-
-    first, second = again.activities_view.sizes()
-    assert first < second  # 300 : 700 and not the equal halves of a new window
+    panes = window.panes
+    for splitter in (panes, panes.left_column, panes.right_column):
+        first, second = splitter.sizes()
+        assert min(first, second) >= (first + second) * 0.3  # none squeezed to a sliver
 
 
-def test_the_section_is_written_when_it_changes_not_only_at_close(
+def test_the_dividers_between_the_panes_are_remembered(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
-    sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar is not None
+    window.show()
+    panes = window.panes
+    total = sum(panes.sizes())
+    panes.setSizes([total * 3 // 10, total * 7 // 10])
+    panes.splitterMoved.emit(1, 1)  # setSizes does not say that the user dragged it
+    for column in (panes.left_column, panes.right_column):
+        height = sum(column.sizes())
+        column.setSizes([height * 7 // 10, height * 3 // 10])
+        column.splitterMoved.emit(1, 1)
+    again = compose(tmp_path / "again", settings)
+    qtbot.addWidget(again)
+    again.show()
 
-    sidebar.setCurrentRow(1)
-
-    assert settings.value("window/section", type=int) == 1
+    columns = again.panes.sizes()
+    assert columns[0] < columns[1]  # 3 : 7 and not the equal halves of a new window
+    for column in (again.panes.left_column, again.panes.right_column):
+        top, bottom = column.sizes()
+        assert top > bottom
 
 
 def test_a_geometry_of_the_wrong_type_does_not_stop_the_window_from_opening(

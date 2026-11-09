@@ -144,7 +144,6 @@ def test_use_as_test_says_why_it_is_disabled_without_a_selection_and_for_a_bike_
 
     window.activities_page.table.clearSelection()
     window.activities_page.table.setCurrentIndex(window.activities_page.proxy.index(-1, -1))
-    window.sidebar.setCurrentRow(1)
     window.controller.busy_changed.emit()
     assert not action.isEnabled()
     assert action.toolTip() == "Select an activity in the Activities list first."

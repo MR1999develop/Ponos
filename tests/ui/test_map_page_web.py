@@ -203,7 +203,7 @@ def test_the_numbers_of_the_visible_groups_add_up_to_the_starts_at_every_zoom(
         data += [round(lat, 5), round(lon, 5), index, 0]
     view.call("setStarts", {"data": data})
 
-    for zoom in (3, 5, 7, 8):
+    for zoom in (3, 5, 7):  # all the points in view: the map is a quarter of the window
         view.call("setView", {"lat": 40.5, "lon": 5.5, "zoom": zoom})
         qtbot.waitUntil(at_zoom(qtbot, view, zoom), timeout=WAIT_MS)
         groups = evaluate(qtbot, view, "window.ponosMap.visibleGroups()")

@@ -143,3 +143,11 @@ Ritmo di lavoro (regola dell'utente del 2026-11-07, per accelerare):
    - Motivo: progetto personale senza certificato di firma del codice.
    - Compensazione: `SHA256SUMS` accanto ai pacchetti; il README spiega
      l'avviso di SmartScreen e la verifica dell'hash.
+3. **Comandi del calendario solo nel menu del giorno** (permanente, richiesta
+   dell'utente del 2026-11-09: "in alto togliere menu calendario"). La regola
+   generale vuole ogni comando nei menu della barra in alto.
+   - Motivo: la barra dei menu resta corta; il calendario è sempre visibile
+     nel suo riquadro e i comandi agiscono sul giorno sotto il mouse.
+   - Compensazione: tutti i comandi stanno nel menu del tasto destro del
+     giorno, con la scorciatoia accanto, e le scorciatoie valgono senza menu
+     (test in `tests/ui/test_main_panes.py` e `tests/ui/test_goals_window.py`).

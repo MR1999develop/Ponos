@@ -693,21 +693,14 @@ def test_dropping_files_on_the_window_imports_them(
 # --- Sidebar, menus, time zone, command line ----------------------------------------------
 
 
-def test_sidebar_has_the_available_sections_enabled_and_the_rest_with_a_reason(
+def test_there_is_no_sidebar_and_no_calendar_menu(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
 
-    sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar is not None
-    items = [sidebar.item(row) for row in range(sidebar.count())]
-    assert [item.text() for item in items] == ["Overview", "Activities", "Calendar", "Tests"]
-    for item in items[:3]:
-        assert item.flags() & item.flags().ItemIsEnabled
-    for item in items[3:]:
-        assert not item.flags() & item.flags().ItemIsEnabled
-        assert item.toolTip() == "Available in a later version"
+    assert window.findChild(QListWidget, "sidebar") is None
+    assert "Calendar" not in [a.text() for a in window.menuBar().actions()]
 
 
 def test_import_commands_are_disabled_with_the_reason_until_a_profile_is_open(
@@ -783,6 +776,10 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Filter activities": QKeySequence("Ctrl+F").toString(),
         "Clear filters": QKeySequence("Ctrl+Shift+K").toString(),
         "Clear map cache...": QKeySequence("Ctrl+Shift+Backspace").toString(),
+        "Go to Overview": QKeySequence("Ctrl+1").toString(),
+        "Go to Calendar": QKeySequence("Ctrl+2").toString(),
+        "Go to Activities": QKeySequence("Ctrl+3").toString(),
+        "Go to Map": QKeySequence("Ctrl+4").toString(),
     }
 
 
@@ -812,18 +809,13 @@ def test_the_profile_menu_has_no_nutrition_settings_and_the_map_menu_no_map_sett
     assert not [a for a in window.menuBar().actions() if a.text() in ("Plan", "Threshold test")]
 
 
-def test_the_map_commands_say_to_open_the_activities_section_when_it_is_not_shown(
+def test_the_map_commands_and_the_filters_are_always_available(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
-    fit = window.map_ui.actions["fit"]
 
-    window.sidebar.setCurrentRow(0)
-    assert not fit.isEnabled()
-    assert fit.toolTip() == "Open the Activities section first."
-    window.sidebar.setCurrentRow(1)
-    assert fit.isEnabled()
+    assert window.map_ui.actions["fit"].isEnabled()
     assert window.map_ui.filter_bar.isVisibleTo(window)
 
 

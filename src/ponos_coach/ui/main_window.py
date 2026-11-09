@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Main window: sidebar, menus, status bar, pages and the Settings window.
+"""Main window: the four panes, menus, status bar and the Settings window.
 
 Humble view: state and decisions live in `WorkspaceController` and in the
 presentation models; here there are only widgets, commands and dialogs.
@@ -15,6 +15,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date
 from functools import partial
+from itertools import pairwise
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -31,16 +32,12 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QFileDialog,
-    QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
     QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
-    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -51,7 +48,6 @@ from ponos_coach.assessment.domain import ThresholdProtocol
 from ponos_coach.load.use_cases import ProfileOverview
 from ponos_coach.profiles.domain import ProfileId, RegistryEntry
 from ponos_coach.profiles.use_cases import FolderWarning, NewProfileRequest
-from ponos_coach.ui.activities_view import ActivitiesMapView
 from ponos_coach.ui.activity_detail_loader import ActivityDetailLoader
 from ponos_coach.ui.activity_table import ActivitiesPage
 from ponos_coach.ui.backup_runner import BackupRunner, BackupUseCases
@@ -69,6 +65,7 @@ from ponos_coach.ui.import_report_dialog import ImportReportDialog
 from ponos_coach.ui.injury_page import InjuriesPage
 from ponos_coach.ui.injury_ui import InjuryUi
 from ponos_coach.ui.language_form import LanguageForm
+from ponos_coach.ui.main_panes import MainPanes, Pane
 from ponos_coach.ui.map_page import MapPage
 from ponos_coach.ui.map_ui import MapServices, MapUi
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
@@ -96,7 +93,6 @@ from ponos_coach.ui.threshold_ui import ThresholdUi
 from ponos_coach.ui.tokens import (
     MIN_WINDOW_HEIGHT,
     MIN_WINDOW_WIDTH,
-    SIDEBAR_WIDTH,
     SPACE_2,
     SPACE_4,
     STATUS_PROGRESS_WIDTH,
@@ -113,19 +109,12 @@ from ponos_coach.ui.workspace import (
 
 APP_NAME = "Ponos Coach"
 _KEY_GEOMETRY = "window/geometry"
-_KEY_SECTION = "window/section"
 _KEY_LAST_FOLDER = "import/lastFolder"
 _KEY_LAST_FILES_FOLDER = "import/lastFilesFolder"
 _KEY_LAST_PROFILE_FOLDER = "profiles/lastOpenFolder"
 _KEY_LAST_EXPORT_FOLDER = "overview/lastExportFolder"
 _DEFAULT_SIZE = (1100, 720)
 _STATUS_MESSAGE_MS = 8000
-_SECTION_OVERVIEW = 0
-_SECTION_ACTIVITIES = 1
-_SECTION_CALENDAR = 2
-_AVAILABLE_SECTIONS = (_SECTION_OVERVIEW, _SECTION_ACTIVITIES, _SECTION_CALENDAR)
-_FIRST_SECTION = _SECTION_ACTIVITIES  # the activities beside the map, the first time and when the
-# section saved last no longer exists
 _SHUTDOWN_POLL_MS = 20
 
 
@@ -208,7 +197,6 @@ class MainWindow(QMainWindow):
         self._build_menus()
         self._build_status_bar()
         self._restore_geometry()
-        self._restore_section()
         self._connect_controller()
         QGuiApplication.styleHints().colorSchemeChanged.connect(self._on_color_scheme_changed)
         self._on_overview_changed(controller.overview_state)
@@ -220,7 +208,7 @@ class MainWindow(QMainWindow):
         action = QAction(text, self)
         if shortcut is not None:
             action.setShortcut(QKeySequence(shortcut))
-        action.triggered.connect(slot)
+        action.triggered.connect(lambda _checked=False, run=slot: run())  # never the flag
         return action
 
     def _build_actions(self) -> None:
@@ -322,7 +310,8 @@ class MainWindow(QMainWindow):
         profile_menu.addAction(self._detail_action)
         profile_menu.addAction(self._use_as_test_action)
         profile_menu.addAction(self._threshold_history_action)
-        self._build_calendar_menu()
+        self._build_view_menu()
+        self._register_calendar_shortcuts()
         self._map_ui.build_menu(self.menuBar())
         self._build_injuries_menu()
         self._garmin_calendar.add_to_menu(self._garmin.build_menu(self.menuBar()))
@@ -333,27 +322,42 @@ class MainWindow(QMainWindow):
         help_menu.addSeparator()
         help_menu.addAction(self._about_action)
 
-    def _build_calendar_menu(self) -> None:
-        """Menu "Calendar": moving about it and, since the plan is on the calendar, the plan's
-        commands (the same ones as in the menu of a day, which holds them by right click)."""
-        menu = self.menuBar().addMenu(self.tr("Calendar"))
-        for action in (
+    def _build_view_menu(self) -> None:
+        """Menu "View": the keyboard focus goes to each of the four panes."""
+        menu = self.menuBar().addMenu(self.tr("View"))
+        for pane, text, shortcut in (
+            (Pane.OVERVIEW, self.tr("Go to Overview"), "Ctrl+1"),
+            (Pane.CALENDAR, self.tr("Go to Calendar"), "Ctrl+2"),
+            (Pane.ACTIVITIES, self.tr("Go to Activities"), "Ctrl+3"),
+            (Pane.MAP, self.tr("Go to Map"), "Ctrl+4"),
+        ):
+            menu.addAction(self._action(text, shortcut, partial(self.focus_pane, pane)))
+
+    def _register_calendar_shortcuts(self) -> None:
+        """The commands that used to be in the menu "Calendar" keep their shortcuts: they are in
+        the menu of a day (right click) and are registered here so they work without a menu.
+        Moving about the month and removing the goal of the day act only while the calendar has the
+        focus (Ctrl+Left, Ctrl+Delete are also text editing keys elsewhere); the others work in
+        the whole window."""
+        actions = self._plan.actions
+        in_calendar = (
             self._previous_month_action,
             self._next_month_action,
             self._today_action,
             self._open_day_action,
+            actions["remove_goal"],
+        )
+        for action in in_calendar:
+            action.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            self._calendar.addAction(action)
+        for action in (
+            actions["add_race"],
+            actions["add_form_goal"],
+            actions["change_goal"],
+            actions["training"],
+            self._goals_window_action,
         ):
-            menu.addAction(action)
-        menu.addSeparator()
-        actions = self._plan.actions
-        for name in ("add_race", "add_form_goal", "change_goal", "remove_goal"):
-            menu.addAction(actions[name])
-        menu.addSeparator()
-        menu.addAction(self._goals_window_action)
-        menu.addAction(actions["training"])
-        menu.addSeparator()
-        menu.addAction(actions["undo"])
-        menu.addAction(actions["redo"])
+            self.addAction(action)
 
     def _build_injuries_menu(self) -> None:
         """Menu "Injuries": report, check in, medical review, close, and undo and redo of them."""
@@ -412,24 +416,6 @@ class MainWindow(QMainWindow):
         self._language_settings.show_form(language_form)
 
     def _build_content(self) -> None:
-        self._sidebar = QListWidget(self)
-        self._sidebar.setObjectName("sidebar")
-        self._sidebar.setAccessibleName(self.tr("Sections"))
-        self._sidebar.setFixedWidth(SIDEBAR_WIDTH)
-        later = self.tr("Available in a later version")
-        sections = (
-            (self.tr("Overview"), True),
-            (self.tr("Activities"), True),
-            (self.tr("Calendar"), True),
-            (self.tr("Tests"), False),
-        )
-        for label, available in sections:
-            item = QListWidgetItem(label, self._sidebar)
-            if not available:
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
-                item.setToolTip(later)
-        self._sidebar.currentRowChanged.connect(self._on_section_changed)
-
         self._engine = ChartEngine(self._choose_export_path, self, tiles=self._map_services.tiles)
         self._overview = OverviewPage(self._engine, self._controller.compute, self)
         self._overview.action_requested.connect(self._on_overview_action)
@@ -447,7 +433,7 @@ class MainWindow(QMainWindow):
             theme=system_theme,
             zone=lambda: self._zone,
             show_error=self._show_error,
-            show_map=lambda: self._sidebar.setCurrentRow(_SECTION_ACTIVITIES),
+            show_map=lambda: self.focus_pane(Pane.MAP),
             settings_page=self._map_settings,
             show_settings=partial(self.show_settings_page, SettingsCategory.MAP),
         )
@@ -460,34 +446,35 @@ class MainWindow(QMainWindow):
         self._injuries_window = PageWindow(
             self.tr("Injury history"), self._injuries_page, self, name="injuryHistoryWindow"
         )
-        self._pages = QStackedWidget(self)
-        self._activities_view = ActivitiesMapView(
-            self._activities, self._map_ui.page, self._settings, self
-        )
-        self._section_pages: dict[int, QWidget] = {
-            _SECTION_OVERVIEW: self._overview,
-            _SECTION_ACTIVITIES: self._activities_view,
-            _SECTION_CALENDAR: self._calendar,
-        }
-        for page in self._section_pages.values():
-            self._pages.addWidget(page)
-        self._pages.currentChanged.connect(self._update_actions)
         self._calendar.month_changed.connect(self._update_actions)
         self._calendar.selection_changed.connect(self._update_actions)
-
-        central = QWidget(self)
-        row = QHBoxLayout(central)
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(0)
-        row.addWidget(self._sidebar)
-        column = QVBoxLayout()
-        column.setContentsMargins(0, 0, 0, 0)
-        column.setSpacing(0)
-        self._map_ui.filter_bar.hide()  # shown over the table and the map only
-        column.addWidget(self._map_ui.filter_bar)
-        column.addWidget(self._pages, stretch=1)
-        row.addLayout(column, stretch=1)
-        self.setCentralWidget(central)
+        # the filters belong to the table and the map: they sit over the table, always visible
+        activities_pane = QWidget(self)
+        activities_column = QVBoxLayout(activities_pane)
+        activities_column.setContentsMargins(0, 0, 0, 0)
+        activities_column.setSpacing(0)
+        activities_column.addWidget(self._map_ui.filter_bar)
+        activities_column.addWidget(self._activities, stretch=1)
+        self._map_ui.section_changed(on_activities=True)
+        self._overview.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self._panes = MainPanes(
+            overview=self._overview,
+            calendar=self._calendar,
+            activities=activities_pane,
+            map_page=self._map_ui.page,
+            settings=self._settings,
+            parent=self,
+        )
+        self._focus_targets = {
+            Pane.OVERVIEW: self._overview,
+            Pane.CALENDAR: self._calendar.table,
+            Pane.ACTIVITIES: self._activities.table,
+            Pane.MAP: self._map_ui.page.map_view,
+        }
+        targets = list(self._focus_targets.values())
+        for before, after in pairwise(targets):
+            QWidget.setTabOrder(before, after)
+        self.setCentralWidget(self._panes)
 
     def _build_dialogs(self) -> None:
         """Edit profile, sport weights and detail: they work on the data thread."""
@@ -549,13 +536,6 @@ class MainWindow(QMainWindow):
             show_error=self._show_error,
             show_page=self._show_injuries,
         )
-        self._day_menu = CalendarDayMenu(
-            self._calendar,
-            open_day=self._open_day_action,
-            plan_actions=self._plan.actions,
-            goals_window=self._goals_window_action,
-            injury_actions=self._injuries.actions,
-        )
         self._injuries.status_text_changed.connect(self._on_injury_status_changed)
         self._plan.retest_proposal_changed.connect(self._on_plan_retest_changed)
         self._garmin_calendar = GarminCalendarUi(
@@ -566,6 +546,14 @@ class MainWindow(QMainWindow):
             selected_day=self._calendar.selected_day,
             remember_box=self._remember,
             connect_account=self._garmin.connect_account,
+        )
+        self._day_menu = CalendarDayMenu(
+            self._calendar,
+            open_day=self._open_day_action,
+            plan_actions=self._plan.actions,
+            goals_window=self._goals_window_action,
+            injury_actions=self._injuries.actions,
+            send_session=self._garmin_calendar.send_session_action,
         )
         self._backup = BackupUi(
             self,
@@ -591,7 +579,6 @@ class MainWindow(QMainWindow):
             self,
         )
         self._calendar.selection_changed.connect(self._garmin_calendar.refresh)
-        self._calendar.panel.attach_send_action(self._garmin_calendar.send_session_action)
         self._controller.plan_rebuilt.connect(self._garmin_calendar.refresh)
         self._controller.profile_changed.connect(self._garmin_calendar.refresh)
 
@@ -684,9 +671,9 @@ class MainWindow(QMainWindow):
         return self._map_ui
 
     @property
-    def activities_view(self) -> ActivitiesMapView:
-        """The Activities section: the table and the map side by side."""
-        return self._activities_view
+    def panes(self) -> MainPanes:
+        """The four panes: Overview and Calendar on the left, Activities and Map on the right."""
+        return self._panes
 
     @property
     def map_page(self) -> MapPage:
@@ -764,19 +751,8 @@ class MainWindow(QMainWindow):
         return self._nutrition
 
     @property
-    def current_page(self) -> QWidget:
-        """The page shown now."""
-        page = self._pages.currentWidget()
-        return self._overview if page is None else page
-
-    @property
-    def sidebar(self) -> QListWidget:
-        """The section list."""
-        return self._sidebar
-
-    @property
     def calendar_actions(self) -> dict[str, QAction]:
-        """The Calendar menu actions by name."""
+        """The calendar navigation commands by name (shortcuts only, no menu)."""
         return {
             "previous": self._previous_month_action,
             "next": self._next_month_action,
@@ -1012,6 +988,10 @@ class MainWindow(QMainWindow):
     def _calendar_open_day(self) -> None:
         self._calendar.request_selected_day()
 
+    def focus_pane(self, pane: Pane) -> None:
+        """Give the keyboard focus to a pane (the commands of the menu "View")."""
+        self._focus_targets[pane].setFocus(Qt.FocusReason.ShortcutFocusReason)
+
     def show_selected_activity_detail(self) -> None:
         """Open the detail of the activity selected in the table."""
         self._activities.request_detail()
@@ -1088,7 +1068,9 @@ class MainWindow(QMainWindow):
             action = menu.addAction(entry.cached_name.value.replace("&", "&&"))
             action.setToolTip(str(entry.folder))
             action.setEnabled(entry.profile_id != disabled_id)
-            action.triggered.connect(partial(command, entry.profile_id))
+            action.triggered.connect(
+                lambda _checked=False, run=command, profile_id=entry.profile_id: run(profile_id)
+            )
 
     def _on_profile_changed(self, view: ProfileView) -> None:
         self._zone = view.zone
@@ -1341,22 +1323,6 @@ class MainWindow(QMainWindow):
 
     # --- Reazione agli stati -------------------------------------------------------------
 
-    def _on_section_changed(self, row: int) -> None:
-        page = self._section_pages.get(row)
-        if page is not None:
-            self._pages.setCurrentWidget(page)
-            self._settings.setValue(_KEY_SECTION, row)
-            self._map_ui.section_changed(on_activities=row == _SECTION_ACTIVITIES)
-
-    def _restore_section(self) -> None:
-        """Reopen the section of last time; an invalid saved value, or one that no longer exists
-        (the old "Map" section), means the activities beside the map."""
-        try:
-            row = int(str(self._settings.value(_KEY_SECTION)))
-        except ValueError:
-            row = _FIRST_SECTION
-        self._sidebar.setCurrentRow(row if row in _AVAILABLE_SECTIONS else _FIRST_SECTION)
-
     def _on_overview_action(self, action: object) -> None:
         if action is PrimaryAction.NEW_PROFILE:
             self.show_new_profile()
@@ -1459,26 +1425,17 @@ class MainWindow(QMainWindow):
         self._use_as_test_action.setToolTip(why)
 
     def _update_calendar_actions(self) -> None:
-        """Calendar commands work on the Calendar page."""
-        on_calendar = self._pages.currentWidget() is self._calendar
-        not_here = self.tr("Open the Calendar section first.")
-        for action in (self._previous_month_action, self._today_action):
-            action.setEnabled(on_calendar)
-            action.setToolTip("" if on_calendar else not_here)
+        """Calendar commands: each with its reason if it cannot be given now."""
         selected = self._calendar.selected_cell()
-        can_open = on_calendar and selected is not None and selected.can_open
+        can_open = selected is not None and selected.can_open
         self._open_day_action.setEnabled(can_open)
-        if can_open:
-            open_reason = ""
-        elif on_calendar:
-            open_reason = self.tr("Select a day up to today, or a day of the plan, first.")
-        else:
-            open_reason = not_here
-        self._open_day_action.setToolTip(open_reason)
-        can_go_forward = on_calendar and self._calendar.next_button.isEnabled()
+        self._open_day_action.setToolTip(
+            "" if can_open else self.tr("Select a day up to today, or a day of the plan, first.")
+        )
+        can_go_forward = self._calendar.next_button.isEnabled()
         self._next_month_action.setEnabled(can_go_forward)
         self._next_month_action.setToolTip(
-            "" if can_go_forward else self._calendar.next_button.toolTip() or not_here
+            "" if can_go_forward else self._calendar.next_button.toolTip()
         )
 
     def _update_status_summary(self, state: OverviewState) -> None:

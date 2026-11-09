@@ -183,7 +183,7 @@ class InjuryUi(QObject):
         action = QAction(text, self)
         if shortcut is not None:
             action.setShortcut(QKeySequence(shortcut))
-        action.triggered.connect(slot)
+        action.triggered.connect(lambda _checked=False, run=slot: run())  # never the flag
         return action
 
     def _build_actions(self) -> None:

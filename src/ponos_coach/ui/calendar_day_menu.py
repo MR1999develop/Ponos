@@ -36,6 +36,7 @@ class CalendarDayMenu(QObject):
         plan_actions: Mapping[str, QAction],
         goals_window: QAction,
         injury_actions: Mapping[str, QAction],
+        send_session: QAction,
     ) -> None:
         super().__init__(calendar)
         self._calendar = calendar
@@ -43,6 +44,7 @@ class CalendarDayMenu(QObject):
         self._plan = plan_actions
         self._goals_window = goals_window
         self._injuries = injury_actions
+        self._send_session = send_session
         self._menu: QMenu | None = None
         calendar.day_menu_requested.connect(self._on_requested)
 
@@ -71,6 +73,8 @@ class CalendarDayMenu(QObject):
         if cell.problems:
             for name in _INJURY_COMMANDS:
                 menu.addAction(self._injuries[name])
+        menu.addSeparator()
+        menu.addAction(self._send_session)
         self._add_plan_commands(menu)
         return menu
 

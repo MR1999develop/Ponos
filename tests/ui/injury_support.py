@@ -38,7 +38,6 @@ from ponos_coach.ui.workspace import ProfileAccess
 from tests.injury.builders import questionnaire
 from tests.ui.goals_support import (
     RACE_DAY,
-    SECTION_CALENDAR,
     add_race,
     race_ids,
     ready_window,
@@ -73,7 +72,6 @@ def wait_injuries(qtbot: QtBot, window: MainWindow, count: int | None = None) ->
 def select_record(qtbot: QtBot, window: MainWindow, index: int = 0) -> None:
     """Select in the calendar the day a record began (what the injury commands act on)."""
     day = summary_of(window, index).started_on
-    window.sidebar.setCurrentRow(SECTION_CALENDAR)
     window.calendar_page.go_to(day)
     wait_for(qtbot, lambda: bool(cell_of(window, day).problems))
 

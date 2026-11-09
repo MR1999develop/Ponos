@@ -142,7 +142,7 @@ class MapUi(QObject):
     ) -> QAction:
         action = QAction(text, self._window)
         action.setShortcut(QKeySequence(shortcut))
-        action.triggered.connect(slot)
+        action.triggered.connect(lambda _checked=False, run=slot: run())  # never the flag
         return action
 
     def _build_actions(self) -> None:
@@ -198,7 +198,6 @@ class MapUi(QObject):
         self._activities.area_only_toggled.connect(self._on_area_only_toggled)
         self._controller.failed.connect(self._show_error)
         self._activities.selection_changed.connect(self._on_table_selection)
-        self._page.settings_requested.connect(self.show_settings)
         self._settings_page.shown.connect(self._fill_settings_page)
         self._filters.changed.connect(
             lambda *_: self.update_actions(on_activities=self._on_activities)

@@ -131,7 +131,7 @@ def test_the_garmin_menu_has_the_actions_and_not_the_account_settings(
     assert titles == [
         "File",
         "Profile",
-        "Calendar",
+        "View",
         "Map",
         "Injuries",
         "Garmin",

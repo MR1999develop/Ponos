@@ -85,7 +85,6 @@ def _calories_text(kcal: float | None) -> str:
 class MapPage(QWidget):
     """The map section."""
 
-    settings_requested = Signal()
     detail_requested = Signal(object)  # ActivityIdentity: open its detail window
 
     def __init__(  # noqa: PLR0913 - every argument is a distinct collaborator of the page
@@ -154,9 +153,6 @@ class MapPage(QWidget):
         self._notice_text.setWordWrap(True)
         self._notice_text.setAccessibleName(self.tr("Map background notice"))
         row.addWidget(self._notice_text, stretch=1)
-        self._notice_button = QPushButton(self.tr("Open map settings..."), self._notice)
-        self._notice_button.clicked.connect(self.settings_requested)
-        row.addWidget(self._notice_button)
         self._notice.hide()
         return self._notice
 

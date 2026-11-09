@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QFileDialog, QListWidget, QMessageBox
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.profiles.domain import PROFILE_DATABASE_NAME
@@ -328,24 +328,6 @@ def test_t_ui_07_settings_with_wrong_types_for_the_folders_do_not_break_the_dial
     window.choose_import_folder()
 
     assert len(seen) == 2
-
-
-def test_d_f1_08_the_open_section_is_remembered_at_the_next_start(
-    qtbot: QtBot, tmp_path: Path, settings: QSettings
-) -> None:
-    window = start(qtbot, tmp_path, settings)
-    create_profile(qtbot, window, "Atleta di prova")
-    sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar is not None
-    sidebar.setCurrentRow(1)  # Activity
-    close_window(qtbot, window)
-
-    again = start(qtbot, tmp_path, settings)
-    qtbot.waitUntil(lambda: again.controller.profile is not None, timeout=WAIT_MS)
-
-    again_sidebar = again.findChild(QListWidget, "sidebar")
-    assert again_sidebar is not None
-    assert again_sidebar.currentRow() == 1
 
 
 # --- T-SEC-08 ------------------------------------------------------------------------------------

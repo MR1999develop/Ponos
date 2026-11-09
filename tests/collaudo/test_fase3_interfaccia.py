@@ -28,7 +28,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QListWidget,
     QWidget,
 )
 from pytestqt.qtbot import QtBot
@@ -477,7 +476,7 @@ def test_t_ui_07_a_window_starts_in_english_and_usable_whatever_every_setting_ho
     close_window(qtbot, window)
 
 
-def test_t_ui_07_language_section_and_geometry_come_back_in_the_next_session(
+def test_t_ui_07_language_and_geometry_come_back_in_the_next_session(
     qtbot: QtBot, tmp_path: Path
 ) -> None:
     settings = QSettings(str(tmp_path / "ricordi.ini"), QSettings.Format.IniFormat)
@@ -487,10 +486,6 @@ def test_t_ui_07_language_section_and_geometry_come_back_in_the_next_session(
     window.show()
     window.resize(800, 711)
     language_form(window).button(Language.ITALIAN).click()
-    sidebar_row = 1
-    sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar is not None
-    sidebar.setCurrentRow(sidebar_row)
     size_before = window.size()  # the headless screen may limit the requested size
     close_window(qtbot, window)
 
@@ -501,9 +496,6 @@ def test_t_ui_07_language_section_and_geometry_come_back_in_the_next_session(
     qtbot.addWidget(reopened)
     reopened.start()
     reopened.show()
-    sidebar_again = reopened.findChild(QListWidget, "sidebar")
-    assert sidebar_again is not None
-    assert sidebar_again.currentRow() == sidebar_row
     assert reopened.height() == size_before.height() == 711
     close_window(qtbot, reopened)
 
