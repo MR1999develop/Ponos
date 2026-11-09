@@ -12,6 +12,7 @@ import logging
 import threading
 from collections.abc import Iterator
 from datetime import date
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -697,3 +698,22 @@ def test_the_name_alone_is_saved_without_recalculating_the_load(
     wait_profile_saved(qtbot, window)
     assert window.windowTitle() == "Solo il nome - Ponos Coach"
     assert "recalculated" not in window.statusBar().currentMessage()
+
+
+def test_a_failed_read_does_not_report_a_failed_save_but_a_failed_save_does(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    for dialog in (open_edit_dialog(qtbot, window), open_weights_dialog(qtbot, window)):
+        reports: list[bool] = []
+        dialog.save_failed.connect(partial(reports.append, True))
+
+        dialog.set_busy(False)  # a read failed: the page was not saving anything
+        assert reports == []
+
+        dialog.set_busy(True)  # a save is in flight
+        dialog.set_busy(False)  # and it did not complete
+        assert reports == [True]
+
+        dialog.set_busy(False)  # unlocking again is not a second failed save
+        assert reports == [True]

@@ -35,6 +35,7 @@ class SportWeightsDialog(SettingsForm):
 
     def __init__(self, form: SportWeightsForm, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._saving = False
         self._form = form
         self._boxes: dict[Sport, QDoubleSpinBox] = {}
         self._build()
@@ -142,10 +143,15 @@ class SportWeightsDialog(SettingsForm):
         self.save_requested.emit(self._form.build())
 
     def set_busy(self, busy: bool) -> None:
-        """While saving is in progress the page accepts no other edits."""
+        """While saving is in progress the page accepts no other edits. Unlocking a page that was
+        saving means the save did not complete (`save_failed`); unlocking one that was not (a
+        failed read) says nothing about a save, so a close the Settings window is waiting for
+        is not cancelled."""
+        was_saving = self._saving
+        self._saving = busy
         self._save.setEnabled(not busy and self._form.has_changes)
         self._restore.setEnabled(not busy and not self._form.is_default)
         for box in self._boxes.values():
             box.setEnabled(not busy)
-        if not busy:
+        if was_saving and not busy:
             self.save_failed.emit()
