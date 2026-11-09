@@ -23,11 +23,11 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from enum import Enum
 
 from ponos_coach.activities.ports import ActivityIndex
-from ponos_coach.assessment.domain import retest_status
+from ponos_coach.assessment.domain import DEFAULT_PROTOCOL, ThresholdProtocol, retest_status
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.domain import FitnessGoal, RaceGoal, WeeklyAvailability
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
@@ -45,13 +45,18 @@ from ponos_coach.planning.domain import (
     DayAdherence,
     FitnessState,
     Plan,
+    PlanDay,
     PlanInputs,
     PlanRefusal,
     build_plan,
+    missed_threshold_tests,
 )
 from ponos_coach.planning.ports import FrozenDay, PlanStore, StoredPlan
 from ponos_coach.profiles.use_cases import ProfileSession
 
+# How far back the frozen days are searched for a planned threshold test that was missed: the
+# engine proposes it again only in the following weeks (ADR 015), so a few months are plenty.
+MISSED_TEST_LOOKBACK_DAYS = 84
 _NO_AVAILABILITY = WeeklyAvailability((0, 0, 0, 0, 0, 0, 0), 6, 0)
 
 
@@ -149,9 +154,16 @@ class RebuildPlan:
     done (the overview use case: the load cache makes it cheap, or an overview just computed).
     """
 
-    def __init__(self, sources: PlanSources, overview: Callable[[], ProfileOverview]) -> None:
+    def __init__(
+        self,
+        sources: PlanSources,
+        overview: Callable[[], ProfileOverview],
+        *,
+        test_protocol: ThresholdProtocol = DEFAULT_PROTOCOL,
+    ) -> None:
         self._src = sources
         self._overview = overview
+        self._test_protocol = test_protocol  # the user's choice, for the test the plan schedules
 
     def __call__(self, today: date) -> RebuildResult:
         """The plan from tomorrow on (or the refusal), saved if different from the last result.
@@ -174,6 +186,8 @@ class RebuildPlan:
         saved_availability = src.availability.get()
         tests = [t for t in src.threshold_tests.list_tests() if t.test_day <= today]
         problems = src.injuries.list_problems()
+        test_days = [t.test_day for t in tests]
+        lived = self._lived_days(today)
         inputs = PlanInputs(
             races=tuple(g for g in goals if isinstance(g, RaceGoal)),
             fitness_goals=tuple(g for g in goals if isinstance(g, FitnessGoal)),
@@ -188,12 +202,30 @@ class RebuildPlan:
             retest=retest_status((t.test_day for t in tests), today),
             injuries=plan_injuries(problems),
             after_injury=recently_returned(problems, today),
+            test_protocol=self._test_protocol,
+            missed_tests=missed_threshold_tests(lived, test_days, today),
         )
         built = build_plan(inputs, today)
         saved = self._save(built, today)
         if isinstance(built, Plan):
             return PlanBuilt(built, saved)
         return PlanRefused(built, saved)
+
+    def _lived_days(self, today: date) -> list[PlanDay]:
+        """The planned days before today within the look-back: those already frozen and those
+        of the current plan that went by since it was made (they are frozen only when this
+        rebuild saves the new plan)."""
+        plans = self._src.plans
+        first = today - timedelta(days=MISSED_TEST_LOOKBACK_DAYS)
+        lived = [frozen.day for frozen in plans.past_days(first, today - timedelta(days=1))]
+        stored = plans.current()
+        if isinstance(stored, StoredPlan) and isinstance(stored.state, Plan):
+            lived += [
+                day
+                for day in stored.state.days
+                if stored.generated_on < day.day < today and day.day >= first
+            ]
+        return lived
 
     def _save(self, result: Plan | PlanRefusal, today: date) -> bool:
         """Replaces the saved result with this one, freezing the past days of the old plan."""

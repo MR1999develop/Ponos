@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 
 import pytest
@@ -254,3 +255,29 @@ def test_the_limits_themselves_are_valid() -> None:
     assert _a_session(minutes=1, load=0.0).minutes == 1
     assert _a_race(expected_time_s=1, distance_m=1, load=0.0).expected_time_s == 1
     assert PlanDay(TODAY, Phase.BASE, None, None, 0.0).load == 0.0
+
+
+def test_a_day_saved_before_the_threshold_test_field_is_read_as_a_day_without_a_test() -> None:
+    # Method 4 wrote the planned sessions without `threshold_test`: the days the user already lived
+    # (frozen for adherence) must still be read, with the default of the new field.
+    plan = PLANS[0]
+    day = next(d for d in plan.days if d.session is not None and d.session.threshold_test is None)
+    document = json.loads(canonical_json(day))
+    del document["session"]["threshold_test"]
+    old_text = json.dumps(document, sort_keys=True, separators=(",", ":"))
+
+    read = decode_plan_day(old_text, digest(old_text))
+
+    assert read.session is not None
+    assert read.session.threshold_test is None
+    assert canonical_json(read) == canonical_json(day)  # floats as written: 3 decimals
+
+
+def test_a_field_the_plan_does_not_know_is_still_refused() -> None:
+    day = next(d for d in PLANS[0].days if d.session is not None)
+    document = json.loads(canonical_json(day))
+    document["session"]["surprise"] = 1
+    text = json.dumps(document, sort_keys=True, separators=(",", ":"))
+
+    with pytest.raises(PlanDecodingError):
+        decode_plan_day(text, digest(text))

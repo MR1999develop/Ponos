@@ -15,7 +15,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 
 from ponos_coach.activities.domain import Sport
-from ponos_coach.assessment.domain import Overdue, ThresholdTest
+from ponos_coach.assessment.domain import Overdue, ThresholdProtocol, ThresholdTest
 from ponos_coach.goals.domain import GoalId, Priority, RaceGoal, SessionChoices, SessionType
 from ponos_coach.goals.use_cases import AddGoal, RemoveGoal, SetAvailability, SetSessionChoices
 from ponos_coach.injury.domain import (
@@ -112,6 +112,7 @@ class PlanWorld(World):
             self.spy,
             self.profile.injuries,
         )
+        self.sources = sources
         self.rebuild = RebuildPlan(sources, self.overview_now)
         self.current = CurrentPlan(self.spy)
         self.past = PastPlan(self.spy)
@@ -522,3 +523,38 @@ def test_the_current_plan_only_stands_in_after_the_last_frozen_day() -> None:
         (4, False),
     ]
     assert [r.planned_load for r in rows[1:]] == [first.days[2].load, first.days[3].load]
+
+
+# --- The threshold test the plan schedules (ADR 015) ------------------------------------------
+
+
+def first_test_day(plan: Plan) -> date | None:
+    return next(
+        (d.day for d in plan.days if d.session is not None and d.session.threshold_test), None
+    )
+
+
+def test_the_plan_schedules_the_test_with_the_protocol_the_user_chose() -> None:
+    world = PlanWorld()  # no threshold test in the history: one is due
+    world.rebuild = RebuildPlan(
+        world.sources, world.overview_now, test_protocol=ThresholdProtocol.TWENTY_MINUTES
+    )
+
+    plan = world.built().plan
+
+    assert plan.inputs.test_protocol is ThresholdProtocol.TWENTY_MINUTES
+    tested = [d for d in plan.days if d.session is not None and d.session.threshold_test]
+    assert [d.session.threshold_test for d in tested if d.session] == [
+        ThresholdProtocol.TWENTY_MINUTES
+    ]
+
+
+def test_a_planned_test_that_went_by_undone_is_told_to_the_engine() -> None:
+    world = PlanWorld()
+    planned = first_test_day(world.built().plan)
+    assert planned is not None
+    world.today = planned + timedelta(days=2)  # the day went by and no test was applied
+
+    plan = world.built().plan
+
+    assert plan.inputs.missed_tests == (planned,)

@@ -10,8 +10,10 @@ invariants as they are built. Whatever fails is a `PlanDecodingError`; nothing i
 text is never repeated in the error.
 
 The decoder follows the annotations of the types, so a new field of the plan is read back without
-touching this file. Floats come back as the 3-decimal numbers that were written: reading and
-writing again gives the same text.
+touching this file; a field with a default that an older text does not have takes its default (the
+days saved by an earlier method stay readable), while an unknown field is still refused. Floats
+come back as the 3-decimal numbers that were written: reading and writing again gives the same
+text.
 """
 
 from __future__ import annotations
@@ -118,6 +120,18 @@ def _fields_of(cls: type) -> tuple[tuple[str, object], ...]:
     return tuple((f.name, hints[f.name]) for f in dataclasses.fields(cls) if f.init)
 
 
+@cache
+def _required_fields_of(cls: type) -> frozenset[str]:
+    """The constructor fields without a default: a text written before a field with a default
+    existed (an older method version) leaves it out, and the default applies."""
+    missing = dataclasses.MISSING
+    return frozenset(
+        f.name
+        for f in dataclasses.fields(cls)
+        if f.init and f.default is missing and f.default_factory is missing
+    )
+
+
 def _unalias(hint: object) -> object:
     while isinstance(hint, typing.TypeAliasType):
         hint = hint.__value__
@@ -207,9 +221,11 @@ def _decode_dataclass(value: object, cls: type) -> object:
     fields = _fields_of(cls)
     if not isinstance(value, dict) or value.get(_TYPE_KEY) != cls.__name__:
         raise _MismatchError
-    if set(value) != {_TYPE_KEY, *(name for name, _ in fields)}:
-        raise _MismatchError
-    return cls(**{name: _decode(value[name], hint) for name, hint in fields})
+    keys = set(value) - {_TYPE_KEY}
+    known = {name for name, _ in fields}
+    if not keys <= known or not _required_fields_of(cls) <= keys:
+        raise _MismatchError  # an unknown field, or a field without a default left out
+    return cls(**{name: _decode(value[name], hint) for name, hint in fields if name in keys})
 
 
 def _decode_enum(value: object, cls: type[Enum]) -> Enum:
