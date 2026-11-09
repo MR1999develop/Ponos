@@ -25,6 +25,7 @@ datas = [
     (str(PACKAGE / "nutrition" / "foods.json"), "ponos_coach/nutrition"),
     (str(CATALOG), "ponos_coach/i18n"),
     (str(PACKAGE / "ui" / "web"), "ponos_coach/ui/web"),
+    (str(PACKAGE / "ui" / "icons"), "ponos_coach/ui/icons"),  # window icon (app_icon.py)
 ]
 datas += collect_data_files("tzdata")  # IANA time zones: Windows has no system copy
 datas += collect_data_files("desktop_notifier")  # its icon and platform backends
@@ -53,6 +54,7 @@ exe = EXE(  # noqa: F821
     exclude_binaries=True,
     name="ponos-coach",
     console=False,
+    icon=str(ROOT / "release" / "ponos-coach.ico"),  # made by release/make_icon.py
     upx=False,
     strip=False,
 )

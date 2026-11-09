@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- SPDX-License-Identifier: GPL-3.0-only -->
+  <!-- Copyright (C) 2026 MR -->
+  <!-- Ponos Coach icon: a heart-rate trace that is also a mountain ridge (effort over time),
+       white on the blue accent of the theme. Source of every icon size: release/make_icon.py -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0A84C6"/>
+      <stop offset="1" stop-color="#004A75"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#tile)"/>
+  <path d="M38 172 H78 L98 130 L118 194 L148 70 L180 156 L196 132 L218 172"
+        fill="none" stroke="#FFFFFF" stroke-width="20"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

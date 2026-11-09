@@ -86,6 +86,7 @@ from ponos_coach.storage.file_archive import FileArchive
 from ponos_coach.storage.import_scan import FilesImportSource, FolderImportSource
 from ponos_coach.storage.profile_backup import FileProfileBackup
 from ponos_coach.storage.sqlite_profile import SqliteProfileStorage
+from ponos_coach.ui.app_icon import app_icon
 from ponos_coach.ui.backup_runner import BackupUseCases
 from ponos_coach.ui.bootstrap import prepare_qt
 from ponos_coach.ui.data_thread import DataThread
@@ -576,6 +577,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     app.setOrganizationName(_ORGANIZATION)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(ponos_coach.__version__)
+    app.setWindowIcon(app_icon())  # every window and the taskbar
     settings = QSettings()
     report = setup_translations(app, command_line, saved=saved_language(settings))
     notifier = ErrorNotifier(app)
