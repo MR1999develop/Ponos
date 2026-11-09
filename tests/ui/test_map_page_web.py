@@ -28,7 +28,8 @@ from ponos_coach.ui.map_messages import page_call
 from ponos_coach.ui.map_web_view import MapWebView
 from ponos_coach.ui.web_policy import is_request_allowed
 from tests.fakes.tiles import FakeTileSource
-from tests.ui.map_support import FAR, NEAR, SEA_LAT_DEG, map_window, show_view
+from tests.fixtures.generators.tracks import SEA_LAT_DEG
+from tests.ui.map_support import FAR, NEAR, map_window, show_view
 from tests.ui.test_chart_view import evaluate, execute
 from tests.ui.workspace_support import WAIT_MS, TileFakes, make_settings
 
