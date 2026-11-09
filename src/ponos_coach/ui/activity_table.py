@@ -287,7 +287,7 @@ class ActivitiesPage(QWidget):
         self._empty = StatePage(self)
         self._empty.set_content(
             self.tr("No activities yet"),
-            self.tr("To get started, import FIT, GPX or ZIP files."),
+            self.tr("To get started, import FIT files."),
             self.tr("Import files..."),
         )
         self._empty.action_requested.connect(self.import_requested)

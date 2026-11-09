@@ -66,7 +66,7 @@ def write_frozen_v4(path: Path) -> None:
 
 
 KEPT = (
-    "meta", "physiology", "load_cache", "sync_journal", "sync_cursor", "sync_state",
+    "meta", "physiology", "sync_journal", "sync_cursor", "sync_state",
     "profile_body", "weight", "sport_weights", "activity_level", "meal_times", "nutrition_goal",
     "activities",
 )  # fmt: skip
@@ -209,7 +209,7 @@ def test_the_database_refuses_threshold_tests_outside_the_domain_limits(
 @pytest.mark.parametrize(
     "statement",
     [
-        row(key="gpx:" + "a" * 64),
+        row(key="fit:" + "a" * 60),
         row(day="1900-01-01"),
         row(bpm=40),
         row(bpm=250),
@@ -245,7 +245,7 @@ def test_the_history_survives_the_removal_of_the_activity_from_the_index(tmp_pat
 V4_AND_V5_TABLES = {"activity_level", "meal_times", "nutrition_goal", *V5_TABLES}
 V3_STATEMENTS = sum(len(statements) for statements in sqlite_schema.MIGRATIONS[3:])
 KEPT_FROM_V3 = (
-    "meta", "physiology", "load_cache", "sync_journal", "sync_cursor", "sync_state",
+    "meta", "physiology", "sync_journal", "sync_cursor", "sync_state",
     "profile_body", "weight", "sport_weights",
 )  # fmt: skip
 

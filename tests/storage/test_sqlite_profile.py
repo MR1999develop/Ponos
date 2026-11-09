@@ -47,7 +47,7 @@ from ponos_coach.storage import sqlite_database, sqlite_schema
 from ponos_coach.storage.sqlite_database import create_database, open_database
 from ponos_coach.storage.sqlite_profile import SqliteOpenProfile, SqliteProfileStorage
 from ponos_coach.storage.sqlite_schema import SCHEMA_VERSION
-from tests.builders import T0, fit_identity, gpx_identity, make_record
+from tests.builders import T0, fit_identity, make_record
 from tests.contracts.contract_assessment import (
     PhysiologyRemovalContract,
     ThresholdTestStoreContract,
@@ -238,10 +238,10 @@ def test_closed_database_leaves_a_single_file_after_the_checkpoint(tmp_path: Pat
     assert sorted(p.name for p in tmp_path.iterdir()) == [PROFILE_DATABASE_NAME]
 
 
-def test_closed_sets_of_schema_v1_match_the_domain_enums() -> None:
+def test_closed_sets_of_the_schema_match_the_domain_enums() -> None:
     """A new value in an enum forces writing a schema migration."""
     assert {s.value for s in Sport} == sqlite_schema.V1_SPORTS
-    assert {f.value for f in FileFormat} == sqlite_schema.V1_FORMATS
+    assert {f.value for f in FileFormat} == sqlite_schema.V11_FORMATS
     assert {o.value for o in ActivityOrigin} == sqlite_schema.V1_ORIGINS
     assert {s.value for s in Sex} == sqlite_schema.V1_SEXES
     assert {s.value for s in LoadSource} == sqlite_schema.V1_LOAD_SOURCES
@@ -559,6 +559,7 @@ def test_the_valid_baseline_row_is_accepted(raw_db: sqlite_database.SqliteDataba
     "changes",
     [
         {"file_format": "mp3"},
+        {"file_format": "gpx", "identity_key": "gpx:" + "a" * 64},  # il GPX non è più ammesso
         {"sport": "curling"},
         {"origin": "altro"},
         {"elapsed_s": 0.0},
@@ -697,7 +698,7 @@ def test_deleting_an_activity_deletes_its_cached_load(
 def test_sql_in_an_identity_or_a_path_is_data_not_code(tmp_path: Path) -> None:
     profile = SqliteProfileStorage().create(tmp_path, PROFILE_ID, NAME, "UTC")
     try:
-        record = make_record(gpx_identity())
+        record = make_record(fit_identity(9))
         profile.activities.add(record)
         assert profile.activities.get(record.identity) == record
     finally:
@@ -812,7 +813,7 @@ def test_possible_duplicates_match_the_naive_domain_rule(
 ) -> None:
     records: list[ActivityRecord] = [
         make_record(
-            gpx_identity(number),
+            fit_identity(number),
             start=T0 + timedelta(milliseconds=offset),
             elapsed_s=elapsed_ms / 1000,
         )
@@ -838,7 +839,7 @@ def test_possible_duplicates_window_is_not_narrower_than_the_rule(tmp_path: Path
     """Sub-millisecond in the query: the wide prefilter does not lose the boundary case."""
     profile = SqliteProfileStorage().create(tmp_path, PROFILE_ID, NAME, "UTC")
     try:
-        record = make_record(gpx_identity(), start=T0, elapsed_s=1000.0)
+        record = make_record(fit_identity(), start=T0, elapsed_s=1000.0)
         profile.activities.add(record)
         edge = T0 + timedelta(seconds=60) + timedelta(microseconds=500)
 

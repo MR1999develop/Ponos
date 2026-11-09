@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import math
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import numpy as np
 import pytest
@@ -31,7 +31,6 @@ from ponos_coach.activities.domain import (
     zoom_tolerance_m,
 )
 from tests.fixtures.generators import fit_writer as fw
-from tests.fixtures.generators import gpx_writer as gw
 
 START = datetime(2026, 3, 2, 7, 0, tzinfo=UTC)
 SEA = (-30.0, -20.0)  # invented coordinates, in open sea
@@ -386,31 +385,13 @@ def test_fit_without_positions_has_no_track() -> None:
     assert decode_stored_track(fit_with_gps([None] * 4), FileFormat.FIT) is None
 
 
-def test_gpx_track_splits_by_segment_and_by_pause() -> None:
-    first = gw.line_points(START, 3, step_s=10, lat_step_deg=0.001, ele_m=[1.0, 2.0, None])
-    second = gw.line_points(
-        START + timedelta(seconds=100), 2, step_s=10, lat_step_deg=0.001, first_lat=SEA[0]
-    )
-    pause = gw.line_points(START + timedelta(seconds=300), 2, step_s=10, first_lat=SEA[0])
-    data = gw.build_gpx(gw.GpxSpec([first, second + pause]))
-
-    track = decode_stored_track(data, FileFormat.GPX)
-
-    assert track is not None
-    assert [len(s) for s in track.segments] == [3, 2, 2]  # trkseg, then the 190 s pause
-    assert track.segments[0].altitude_m is not None
-    assert track.segments[0].altitude_m[:2].tolist() == [1.0, 2.0]
-    assert math.isnan(track.segments[0].altitude_m[2])
-    assert track.segments[1].seconds[0] == 100.0
-
-
 def test_corrupt_and_empty_files_are_activity_file_errors() -> None:
     with pytest.raises(ActivityFileError):
         decode_stored_track(b"", FileFormat.FIT)
     with pytest.raises(ActivityFileError):
         decode_stored_track(b"not a fit file at all", FileFormat.FIT)
     with pytest.raises(ActivityFileError):
-        decode_stored_track(b"<gpx", FileFormat.GPX)
+        decode_stored_track(b"<gpx", FileFormat.FIT)  # a GPX is no longer read: not a FIT
 
 
 def test_reading_the_track_does_not_change_the_activity() -> None:

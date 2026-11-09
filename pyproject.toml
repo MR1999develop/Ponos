@@ -8,7 +8,6 @@ license-files = ["LICENSE"]
 authors = [{ name = "MR" }]
 requires-python = ">=3.13"
 dependencies = [
-    "defusedxml>=0.7.1",
     "desktop-notifier>=6.2.0",
     "fitdecode>=0.11.0",
     "garminconnect>=0.3.20",
@@ -38,7 +37,6 @@ dev = [
     "pytest>=9.2.0",
     "pytest-qt>=4.5.0",
     "ruff>=0.17.3",
-    "types-defusedxml>=0.7.0.20260504",
 ]
 
 [tool.uv]

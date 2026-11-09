@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Acceptance of `PlanDayNutrition` on real FIT and GPX files (T-NUT-03, 04, 05).
+"""Acceptance of `PlanDayNutrition` on real FIT files (T-NUT-03, 04, 05).
 
 A day is planned from the profile's data: the activities are written by the fixture generators
 (invented people, invented tracks in the open sea), archived, indexed and read back. Checked: days
 with 0, 1, 2 and 3 sessions, a session at dawn and at night, an effort of 8 hours, calories that
-make no sense, GPX files without calories, other time zones, daylight saving time, and a weight, a
+make no sense, FIT files without calories, other time zones, daylight saving time, and a weight, a
 level and a goal that change on the same day.
 
 Defects found were kept as strict xfail until fixed; none is left.
@@ -41,7 +41,6 @@ from ponos_coach.profiles.day_nutrition import (
 from ponos_coach.profiles.domain import Weight, WeightEntry
 from tests.builders import IMPORTED_AT
 from tests.fixtures.generators import fit_writer as fw
-from tests.fixtures.generators import gpx_writer as gw
 from tests.profiles.test_day_nutrition import BORN, DAY, FOODS, ROME, Rig
 
 STEP_S = 10
@@ -258,11 +257,9 @@ def test_t_nut_03_the_file_boundary_of_the_calories_is_50000() -> None:
     assert activity.energy.source is EnergySource.DECLARED
 
 
-def test_t_nut_03_a_gpx_without_calories_is_estimated_from_its_heart_rate() -> None:
+def test_t_nut_03_a_fit_without_calories_is_estimated_from_its_heart_rate() -> None:
     lab = Lab()
-    start = local(18, 0)
-    points = gw.line_points(start, 361, step_s=10, lat_step_deg=0.0002, hr=[150] * 361)
-    record = lab.add_data(gw.build_gpx(gw.GpxSpec([points], sport_type="running")), FileFormat.GPX)
+    record = lab.add_fit(local(18, 0), 60.0, bpm=150)
 
     (activity,) = lab.report().activities
 
@@ -272,13 +269,9 @@ def test_t_nut_03_a_gpx_without_calories_is_estimated_from_its_heart_rate() -> N
     assert activity.energy.total_kcal == pytest.approx(14.697 * record.timer_s / 60.0, rel=1e-3)
 
 
-def test_t_nut_03_a_gpx_without_calories_and_without_heart_rate_uses_the_mets() -> None:
+def test_t_nut_03_a_fit_without_calories_and_without_heart_rate_uses_the_mets() -> None:
     lab = Lab()
-    points = gw.line_points(local(18, 0), 361, step_s=10, lat_step_deg=0.0002)
-    record = lab.add_data(
-        gw.build_gpx(gw.GpxSpec([points], sport_type="cycling", hr_extension=None)),
-        FileFormat.GPX,
-    )
+    record = lab.add_fit(local(18, 0), 60.0, bpm=None, sport=fw.Sport.CYCLING)
 
     (activity,) = lab.report().activities
 

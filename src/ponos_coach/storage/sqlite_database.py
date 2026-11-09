@@ -24,7 +24,11 @@ from typing import Final
 
 from ponos_coach.activities.ports import StorageBusyError, TransactionStateError
 from ponos_coach.fsio import make_subdirectory, replace_file, sync_directory
-from ponos_coach.profiles.domain import PROFILE_BACKUP_DIR, PROFILE_DATABASE_NAME
+from ponos_coach.profiles.domain import (
+    PROFILE_ARCHIVE_DIR,
+    PROFILE_BACKUP_DIR,
+    PROFILE_DATABASE_NAME,
+)
 from ponos_coach.profiles.ports import (
     ProfileAlreadyExistsError,
     ProfileCorruptError,
@@ -32,7 +36,13 @@ from ponos_coach.profiles.ports import (
     ProfileNotFoundError,
     ProfileStorageError,
 )
-from ponos_coach.storage.sqlite_schema import MIGRATIONS, SCHEMA_VERSION, V1_TABLES
+from ponos_coach.storage.archive_cleanup import remove_gpx_files
+from ponos_coach.storage.sqlite_schema import (
+    MIGRATIONS,
+    NON_FIT_REMOVED_IN,
+    SCHEMA_VERSION,
+    V1_TABLES,
+)
 
 BUSY_TIMEOUT_MS: Final = 5000
 _REPARSE_POINT: Final = 0x400  # FILE_ATTRIBUTE_REPARSE_POINT
@@ -50,12 +60,20 @@ def is_corruption(exc: sqlite3.Error) -> bool:
     return isinstance(code, int) and (code & _PRIMARY_CODE_MASK) in _CORRUPTION_CODES
 
 
+@dataclass(frozen=True, slots=True)
+class MigrationReport:
+    """What the migration done at open time removed (nothing if there was none)."""
+
+    removed_activities: int = 0  # non-FIT activities removed from the profile
+
+
 class SqliteDatabase:
     """An open, configured connection; shared by all the stores of a profile."""
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
         self._in_transaction = False
+        self.migration_report = MigrationReport()
 
     @property
     def connection(self) -> sqlite3.Connection:
@@ -262,7 +280,17 @@ def _back_up_before_migration(db: SqliteDatabase, folder: Path, from_version: in
         raise ProfileStorageError("backup copy before migration failed") from exc
 
 
-def _prepare_existing(db: SqliteDatabase, folder: Path, *, check_integrity: bool) -> None:
+def _non_fit_archive_paths(connection: sqlite3.Connection) -> list[str]:
+    """Archive paths of the non-FIT activities, to read before the migration removes them."""
+    rows = connection.execute(
+        "SELECT archive_path FROM activities WHERE file_format <> 'fit'"
+    ).fetchall()
+    return [str(row[0]) for row in rows]
+
+
+def _prepare_existing(
+    db: SqliteDatabase, folder: Path, *, check_integrity: bool
+) -> MigrationReport:
     version = db.user_version()
     _check_version(version)
     _require_profile_schema(db.connection)
@@ -273,8 +301,14 @@ def _prepare_existing(db: SqliteDatabase, folder: Path, *, check_integrity: bool
         # locked". The file is the previous one, intact, and the backup API copies it consistently.
         _back_up_before_migration(db, folder, version)
     _configure_durability(db.connection)
-    if version < SCHEMA_VERSION:
-        _migrate(db, version, {})
+    if version >= SCHEMA_VERSION:
+        return MigrationReport()
+    removed = _non_fit_archive_paths(db.connection) if version < NON_FIT_REMOVED_IN else []
+    _migrate(db, version, {})
+    # Database commit first, files after: an orphan file is harmless, a record without a
+    # file is not.
+    remove_gpx_files(folder / PROFILE_ARCHIVE_DIR, removed)
+    return MigrationReport(len(removed))
 
 
 def open_database(path: Path, *, check_integrity: bool = True) -> SqliteDatabase:
@@ -301,7 +335,9 @@ def open_database(path: Path, *, check_integrity: bool = True) -> SqliteDatabase
         connection = _connect(path)
         db = SqliteDatabase(connection)
         try:
-            _prepare_existing(db, path.parent, check_integrity=check_integrity)
+            db.migration_report = _prepare_existing(
+                db, path.parent, check_integrity=check_integrity
+            )
         except BaseException:
             connection.close()
             raise

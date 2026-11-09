@@ -339,6 +339,12 @@ class OpenProfile(Protocol):
         ...
 
     @property
+    def removed_unsupported_activities(self) -> int:
+        """Activities of a no longer supported format (GPX) removed by the migration done when
+        the profile was opened; 0 if no migration removed any."""
+        ...
+
+    @property
     def activities(self) -> ActivityIndex:
         """Activity index."""
         ...

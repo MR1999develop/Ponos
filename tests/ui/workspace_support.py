@@ -38,7 +38,7 @@ from tests.fakes.garmin import FakeActivitySource, FakeGarminAccount
 from tests.fakes.notifier import RecordingNotifier
 from tests.fakes.tiles import FakeTileSource, InMemoryTileKeyStore
 from tests.fakes.tokens import InMemoryTokenStore
-from tests.fixtures.generators.import_files import fit_run, gpx_run
+from tests.fixtures.generators.import_files import fit_run
 from tests.fixtures.generators.zip_writer import garmin_download
 
 TODAY = date(2026, 6, 30)
@@ -199,10 +199,10 @@ def make_import_folder(tmp_path: Path) -> Path:
     """Folder with 8 valid activities (FIT, GPX, ZIP, one in a subfolder) and a broken file."""
     folder = tmp_path / "to-import"
     (folder / "sub").mkdir(parents=True)
-    for number in range(5):
+    for number in (*range(5), 10, 20):
         (folder / f"run{number}.fit").write_bytes(fit_run(number))
-    (folder / "walk.gpx").write_bytes(gpx_run(10))
-    (folder / "garmin.zip").write_bytes(garmin_download(fit_run(20)))
+    (folder / "walk.gpx").write_bytes(b"<gpx/>")
+    (folder / "garmin.zip").write_bytes(garmin_download(fit_run(40)))
     (folder / "sub" / "deep.fit").write_bytes(fit_run(30))
     (folder / "bad.fit").write_bytes(b"this is not a FIT file")
     return folder

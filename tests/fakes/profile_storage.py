@@ -728,6 +728,10 @@ class _OpenProfile:
         return self._db.info
 
     @property
+    def removed_unsupported_activities(self) -> int:
+        return 0
+
+    @property
     def activities(self) -> ActivityIndex:
         return self._index
 

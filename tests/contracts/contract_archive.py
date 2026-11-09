@@ -35,11 +35,6 @@ class ActivityArchiveContract:
         assert archived.sha256_hex == hashlib.sha256(CONTENT).hexdigest()
         assert archived.size_bytes == len(CONTENT)
 
-    def test_gpx_files_get_the_gpx_extension(self, harness: ArchiveHarness) -> None:
-        archived = harness.archive.store(CONTENT, FileFormat.GPX, START)
-
-        assert archived.relative_path.suffix == ".gpx"
-
     def test_name_does_not_depend_on_anything_but_the_program(
         self, harness: ArchiveHarness
     ) -> None:

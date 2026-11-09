@@ -51,8 +51,8 @@
         <translation>Nessuna attività ancora</translation>
     </message>
     <message>
-        <source>To get started, import FIT, GPX or ZIP files.</source>
-        <translation>Per iniziare, importa file FIT, GPX o ZIP.</translation>
+        <source>To get started, import FIT files.</source>
+        <translation>Per iniziare, importa file FIT.</translation>
     </message>
     <message>
         <source>Import files...</source>
@@ -2506,10 +2506,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Questo formato di file non è supportato.</translation>
     </message>
     <message>
-        <source>The file content does not match its extension.</source>
-        <translation>Il contenuto del file non corrisponde alla sua estensione.</translation>
-    </message>
-    <message>
         <source>The activity has too many data points.</source>
         <translation>L&apos;attività ha troppi punti di dati.</translation>
     </message>
@@ -2532,26 +2528,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>The file path is too long.</source>
         <translation>Il percorso del file è troppo lungo.</translation>
-    </message>
-    <message>
-        <source>The name inside the archive is not safe.</source>
-        <translation>Il nome di un file nell&apos;archivio non è sicuro.</translation>
-    </message>
-    <message>
-        <source>The ZIP archive is damaged.</source>
-        <translation>L&apos;archivio ZIP è danneggiato.</translation>
-    </message>
-    <message>
-        <source>The ZIP archive is too large or too full.</source>
-        <translation>L&apos;archivio ZIP è troppo grande o contiene troppi file.</translation>
-    </message>
-    <message>
-        <source>The file is protected by a password.</source>
-        <translation>Il file è protetto da una password.</translation>
-    </message>
-    <message>
-        <source>A ZIP archive inside a ZIP archive.</source>
-        <translation>Un archivio ZIP dentro un altro archivio ZIP.</translation>
     </message>
     <message>
         <source>The file could not be saved in the profile folder.</source>
@@ -3447,6 +3423,21 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>{profile} - Ponos Coach</translation>
     </message>
     <message>
+        <source>Activities removed</source>
+        <translation>Attività tolte</translation>
+    </message>
+    <message numerus="yes">
+        <source>Ponos Coach now works only with FIT files. Activities imported from GPX files and removed from this profile: %n.</source>
+        <translation>
+            <numerusform>Ponos Coach ora lavora solo con file FIT. Attività importata da file GPX e tolta da questo profilo: %n.</numerusform>
+            <numerusform>Ponos Coach ora lavora solo con file FIT. Attività importate da file GPX e tolte da questo profilo: %n.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>A copy of the profile database made before the change is in the backup folder.</source>
+        <translation>Una copia del database del profilo, fatta prima della modifica, è nella cartella dei backup.</translation>
+    </message>
+    <message>
         <source>Network folder: the database may be slow or unreliable.</source>
         <translation>Cartella di rete: il database potrebbe essere lento o non affidabile.</translation>
     </message>
@@ -3461,6 +3452,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>The number of activities could not be read.</source>
         <translation>Non è stato possibile leggere il numero di attività.</translation>
+    </message>
+    <message>
+        <source>Activity files (*.fit)</source>
+        <translation>File di attività (*.fit)</translation>
     </message>
     <message>
         <source>Ponos Coach is closing.</source>
@@ -3510,10 +3505,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Delete folder</source>
         <translation>Elimina cartella</translation>
-    </message>
-    <message>
-        <source>Activity files (*.fit *.gpx *.zip)</source>
-        <translation>File di attività (*.fit *.gpx *.zip)</translation>
     </message>
     <message>
         <source>All files (*)</source>
@@ -4659,8 +4650,8 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Nessuna attività ancora</translation>
     </message>
     <message>
-        <source>To get started, import FIT, GPX or ZIP files.</source>
-        <translation>Per iniziare, importa file FIT, GPX o ZIP.</translation>
+        <source>To get started, import FIT files.</source>
+        <translation>Per iniziare, importa file FIT.</translation>
     </message>
     <message>
         <source>Import files...</source>

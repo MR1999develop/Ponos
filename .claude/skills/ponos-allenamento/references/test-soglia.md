@@ -157,8 +157,7 @@ progetto, `threshold_for_sport`). Un test in bici è fuori dal piano attuale.
 
 La serie della distanza (`DistanceSeries`, secondi dal primo record come la FC,
 metri cumulativi non decrescenti) viene dal FIT (`record.distance`, o in
-mancanza `speed` integrata, senza inventare distanza sui buchi oltre 10 s) e
-dal GPX (haversine lungo la traccia, nessun passo tra due segmenti). Una
+mancanza `speed` integrata, senza inventare distanza sui buchi oltre 10 s). Una
 distanza che va all'indietro non è affidabile: niente serie (e niente ritmo),
 l'attività resta valida. Gli sport ammessi al test sono
 `defaults.THRESHOLD_TEST_SPORTS`, usato anche dall'interfaccia.

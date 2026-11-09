@@ -136,6 +136,11 @@ class SqliteOpenProfile:
         return self._info
 
     @property
+    def removed_unsupported_activities(self) -> int:
+        """Non-FIT activities removed by the migration done at open time (0 if none)."""
+        return self._db.migration_report.removed_activities
+
+    @property
     def activities(self) -> ActivityIndex:
         """Activity index."""
         return self._activities

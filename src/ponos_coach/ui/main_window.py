@@ -1031,6 +1031,31 @@ class MainWindow(QMainWindow):
         self._warning_label.setText(self._warning_text(view.warnings))
         self._warning_label.setVisible(bool(view.warnings))
         self._rebuild_profile_menus(self._controller.profiles)
+        if view.removed_unsupported:
+            self._show_removed_unsupported(view.removed_unsupported)
+
+    def _show_removed_unsupported(self, count: int) -> None:
+        """Tell once, when the profile opens, how many GPX activities were removed."""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle(self.tr("Activities removed"))
+        box.setTextFormat(Qt.TextFormat.PlainText)
+        box.setText(
+            self.tr(
+                "Ponos Coach now works only with FIT files. "
+                "Activities imported from GPX files and removed from this profile: %n.",
+                "",
+                count,
+            )
+        )
+        box.setInformativeText(
+            self.tr(
+                "A copy of the profile database made before the change is in the backup folder."
+            )
+        )
+        box.setObjectName("removedUnsupported")
+        self._remember(box)
+        box.open()
 
     def _warning_text(self, warnings: Sequence[FolderWarning]) -> str:
         texts = {
@@ -1091,7 +1116,7 @@ class MainWindow(QMainWindow):
     def choose_import_files(self) -> None:
         """Ask for the files to import (starting from the last folder used)."""
         start = str(self._settings.value(_KEY_LAST_FILES_FOLDER, "", type=str))
-        activity_files = self.tr("Activity files (*.fit *.gpx *.zip)")
+        activity_files = self.tr("Activity files (*.fit)")
         all_files = self.tr("All files (*)")
         chosen, _ = QFileDialog.getOpenFileNames(
             self, self.tr("Import files"), start, f"{activity_files};;{all_files}"

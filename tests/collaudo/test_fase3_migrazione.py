@@ -216,7 +216,7 @@ def test_t_dati_01_a_v3_migration_that_fails_halfway_leaves_the_v2_database_as_i
     assert table_names(path) == tables_before  # no half table
     assert rows(path, "load_cache") == cache_before  # and the cache was not emptied
     monkeypatch.undo()
-    SqliteProfileStorage().open(tmp_path).close()  # the good round succeeds
+    SqliteProfileStorage().open(tmp_path).close()  # il giro buono riesce
     assert user_version(path) == sqlite_schema.SCHEMA_VERSION
 
 

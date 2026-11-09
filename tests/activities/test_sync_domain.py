@@ -23,7 +23,6 @@ from ponos_coach.activities.domain import (
     MAX_TOKEN_CHARS,
     RETRYABLE_REASONS,
     ActivityPage,
-    ActivityRecord,
     FailureReason,
     GarminActivityId,
     InvalidTransitionError,
@@ -50,7 +49,7 @@ from ponos_coach.activities.domain import (
     sport_from_garmin_key,
 )
 from ponos_coach.activities.ports import IMPLAUSIBLE_RETRY_AFTER_S, RateLimitedError
-from tests.builders import IMPORTED_AT, T0, fit_identity, gpx_identity, make_record, remote_activity
+from tests.builders import IMPORTED_AT, T0, fit_identity, make_record, remote_activity
 
 NOW = IMPORTED_AT
 RETRYABLE: list[FailureReason] = sorted(RETRYABLE_REASONS, key=lambda reason: reason.value)
@@ -209,10 +208,6 @@ class TestActivityPage:
             ActivityPage(**kwargs)  # type: ignore[arg-type]
 
 
-def gpx_record() -> ActivityRecord:
-    return make_record(gpx_identity(), start=T0 + timedelta(seconds=30))
-
-
 class TestFindMatchingImport:
     def test_same_sport_and_close_start_and_duration_match(self) -> None:
         record = make_record(start=T0 + timedelta(seconds=30), elapsed_s=3500.0)
@@ -254,7 +249,6 @@ class TestFindMatchingImport:
         assert (
             find_matching_import(remote_activity(1), [twin_a, near]) == near
         )  # tie: fit:..1:2 < :3
-        assert find_matching_import(remote_activity(1), [gpx_record(), near]) == near
 
     @given(st.permutations([0, 1, 2, 3]))
     def test_the_result_does_not_depend_on_the_order_of_the_candidates(
@@ -263,7 +257,7 @@ class TestFindMatchingImport:
         records = [
             make_record(fit_identity(1), start=T0 + timedelta(seconds=10)),
             make_record(fit_identity(2), start=T0 - timedelta(seconds=10)),
-            make_record(gpx_identity(1), start=T0 + timedelta(seconds=50)),
+            make_record(fit_identity(4), start=T0 + timedelta(seconds=50)),
             make_record(fit_identity(3), start=T0 + timedelta(seconds=200)),
         ]
 

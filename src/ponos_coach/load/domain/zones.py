@@ -9,7 +9,7 @@ belongs to the higher zone (`bpm >= 78% of the threshold` is Z2). Comparisons ar
 values but exact: `bpm * 100` against `percentage * threshold` (integer), never a
 floating-point percentage at the boundary.
 
-Exactness: the decoders give integer bpm (FIT and GPX carry integers, from 0 to 255 and 0 to 999),
+Exactness: the decoders give integer bpm (FIT carries integers, from 0 to 255),
 so `bpm * 100` and `percentage * threshold` are small integers, represented exactly by
 float64, and the comparison at the boundary has no rounding. For a fractional bpm (which no
 decoder produces) the product `bpm * 100` would be rounded and a sample one unit in the

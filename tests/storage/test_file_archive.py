@@ -309,7 +309,7 @@ def test_file_missing_from_an_existing_year_folder_is_reported(tmp_path: Path) -
 def test_verify_streams_a_file_larger_than_one_block(tmp_path: Path) -> None:
     content = os.urandom(2 * 1024 * 1024 + 5)
     archive = FileArchive(tmp_path / "archivio")
-    archived = archive.store(content, FileFormat.GPX, START)
+    archived = archive.store(content, FileFormat.FIT, START)
 
     archive.verify(archived)
     assert archive.read(archived, len(content)) == content
@@ -375,13 +375,13 @@ def test_final_name_is_year_sha256_extension_and_nothing_else_is_left(tmp_path: 
     root = tmp_path / "archivio"
     start = datetime(2024, 12, 31, 23, 59, tzinfo=UTC)
 
-    archived = FileArchive(root).store(CONTENT, FileFormat.GPX, start)
+    archived = FileArchive(root).store(CONTENT, FileFormat.FIT, start)
 
     digest = hashlib.sha256(CONTENT).hexdigest()
-    assert str(archived.relative_path) == f"2024/{digest}.gpx"
+    assert str(archived.relative_path) == f"2024/{digest}.fit"
     assert sorted(p.relative_to(root).as_posix() for p in root.rglob("*")) == [
         "2024",
-        f"2024/{digest}.gpx",
+        f"2024/{digest}.fit",
     ]
 
 

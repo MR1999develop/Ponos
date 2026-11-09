@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Activity read from a FIT or GPX file."""
+"""Activity read from a FIT file."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from datetime import datetime
 
 from ponos_coach.activities.domain.distance_series import DistanceSeries
 from ponos_coach.activities.domain.heart_rate_series import HeartRateSeries
-from ponos_coach.activities.domain.identity import ActivityIdentity, FileFormat, format_of
+from ponos_coach.activities.domain.identity import ActivityIdentity, FileFormat
 from ponos_coach.activities.domain.sport import Sport
 from ponos_coach.activities.domain.summary import ActivitySummary
 from ponos_coach.activities.domain.timing import (
@@ -50,8 +50,6 @@ class Activity:
     first_record_offset_s: float = 0.0
 
     def __post_init__(self) -> None:
-        if format_of(self.identity) is not self.file_format:
-            raise ValueError("the format does not match the identity")
         check_utc(self.start)
         check_durations(self.elapsed_s, self.timer_s)
         if not is_plausible_span(self.start, self.elapsed_s):

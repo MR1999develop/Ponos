@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Cumulative distance series: the domain type and what the FIT and GPX readers give."""
+"""Cumulative distance series: the domain type and what the FIT reader gives."""
 
 from __future__ import annotations
 
@@ -13,9 +13,7 @@ from hypothesis import strategies as st
 
 from ponos_coach.activities.domain import DistanceSeries
 from ponos_coach.activities.fit_decoder import decode_activity
-from ponos_coach.activities.gpx_decoder import decode_gpx
 from tests.fixtures.generators import fit_writer as fw
-from tests.fixtures.generators import gpx_writer as gw
 
 START = datetime(2026, 3, 2, 7, 0, tzinfo=UTC)
 
@@ -160,31 +158,3 @@ def test_fit_records_with_repeated_times_keep_the_first_distance() -> None:
 
     assert activity.distance is not None
     assert activity.distance.meters == pytest.approx([0.0, 3.0, 6.0])
-
-
-# --- GPX -------------------------------------------------------------------------------------
-
-
-def test_gpx_distance_is_the_cumulative_haversine_along_the_track() -> None:
-    # 11 points 10 s apart along a meridian: 111.19508 m per step
-    points = gw.line_points(START, 11, step_s=10, lat_step_deg=0.001)
-
-    activity = decode_gpx(gw.build_gpx(gw.GpxSpec([points])))
-
-    assert activity.distance is not None
-    assert activity.distance.seconds.tolist() == [10.0 * i for i in range(11)]
-    assert activity.distance.meters == pytest.approx([111.19508 * i for i in range(11)], rel=1e-6)
-    assert activity.summary.distance_m == pytest.approx(activity.distance.meters[-1])
-
-
-def test_gpx_distance_does_not_count_the_jump_between_two_segments() -> None:
-    first = gw.line_points(START, 3, step_s=10, lat_step_deg=0.001)
-    second = gw.line_points(
-        START.replace(minute=5), 3, step_s=10, lat_step_deg=0.001, first_lat=-20.0
-    )
-
-    activity = decode_gpx(gw.build_gpx(gw.GpxSpec([first, second])))
-
-    assert activity.distance is not None
-    assert activity.distance.meters[-1] == pytest.approx(4 * 111.19508, rel=1e-6)
-    assert activity.summary.distance_m == pytest.approx(activity.distance.meters[-1])

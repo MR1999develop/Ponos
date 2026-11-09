@@ -52,7 +52,6 @@ from tests.builders import (
     IMPORTED_AT,
     T0,
     fit_identity,
-    gpx_identity,
     make_record,
     physiology_entry,
     remote_activity,
@@ -108,7 +107,7 @@ class ProfileStorageContract:
         folder = harness.new_folder()
         with closing(harness.storage.create(folder, PROFILE_ID, NAME, "Europe/Rome")) as profile:
             profile.activities.add(make_record())
-            profile.activities.add(make_record(gpx_identity()))
+            profile.activities.add(make_record(fit_identity(2)))
 
         peeked = harness.storage.peek(folder)
 
@@ -194,16 +193,16 @@ class ActivityIndexContract:
 
     def test_records_are_listed_by_start_then_identity(self, harness: StorageHarness) -> None:
         later = make_record(fit_identity(1), start=T0 + timedelta(days=1))
-        earlier = make_record(fit_identity(2), start=T0)
-        same_start_gpx = make_record(gpx_identity(1), start=T0)
+        earlier = make_record(fit_identity(3), start=T0)
+        same_start = make_record(fit_identity(2), start=T0)
         with closing(create(harness)) as profile:
-            for record in (later, same_start_gpx, earlier):
+            for record in (later, same_start, earlier):
                 profile.activities.add(record)
 
             listed = profile.activities.list_by_start()
 
-        # On equal start the order of the identity keys applies: "fit:" comes before "gpx:".
-        assert listed == [earlier, same_start_gpx, later]
+        # On equal start the order of the identity keys applies (serial number 2 before 3).
+        assert listed == [same_start, earlier, later]
 
     def test_range_query_includes_the_first_bound_and_excludes_the_last(
         self, harness: StorageHarness
@@ -243,13 +242,6 @@ class ActivityIndexContract:
                 T0 + timedelta(hours=1, microseconds=1)
             ) == T0 + timedelta(hours=3)
             assert index.first_start_at_or_after(T0 + timedelta(hours=3, milliseconds=1)) is None
-
-    def test_fit_and_gpx_identities_are_different_activities(self, harness: StorageHarness) -> None:
-        with closing(create(harness)) as profile:
-            profile.activities.add(make_record(fit_identity(1)))
-            profile.activities.add(make_record(gpx_identity(1)))
-
-            assert len(profile.activities.list_by_start()) == 2
 
     def test_duplicate_identity_is_refused_and_changes_nothing(
         self, harness: StorageHarness
@@ -317,7 +309,7 @@ class ActivityIndexContract:
     def test_possible_duplicates_are_found_by_start_and_duration(
         self, harness: StorageHarness
     ) -> None:
-        record = make_record(gpx_identity(), start=T0, elapsed_s=1000.0)
+        record = make_record(fit_identity(), start=T0, elapsed_s=1000.0)
         with closing(create(harness)) as profile:
             profile.activities.add(record)
             find = profile.activities.find_possible_duplicates

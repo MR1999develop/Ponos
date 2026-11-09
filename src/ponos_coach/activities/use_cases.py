@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Use case "import activities": chosen files, folders and ZIP archives into the open profile.
+"""Use case "import activities": chosen FIT files and folders into the open profile.
 
 The shell (interface, worker) creates the source and closes it; here, for each listed file, the
 file is
@@ -55,7 +55,6 @@ class ImportStatus(Enum):
     REPAIRED = (
         "repaired"  # already in the index, but its file in the archive was missing or altered
     )
-    DUPLICATE_OF_OTHER_FORMAT = "duplicate_of_other_format"  # same activity, other format
     IGNORED = "ignored"  # the file is not an activity (e.g. a settings FIT)
     FAILED = "failed"  # unreadable, rejected or not saved: `issue` says why
 
@@ -64,8 +63,7 @@ class ImportStatus(Enum):
 class FileImportResult:
     """Per-file outcome. `issue` is present if and only if the outcome is IGNORED or FAILED;
     `matches` is
-    the identity of the activity already present for ALREADY_PRESENT, REPAIRED and
-    DUPLICATE_OF_OTHER_FORMAT."""
+    the identity of the activity already present for ALREADY_PRESENT and REPAIRED."""
 
     name: str
     status: ImportStatus
@@ -74,11 +72,7 @@ class FileImportResult:
 
     def __post_init__(self) -> None:
         has_issue = self.status in (ImportStatus.IGNORED, ImportStatus.FAILED)
-        has_match = self.status in (
-            ImportStatus.ALREADY_PRESENT,
-            ImportStatus.REPAIRED,
-            ImportStatus.DUPLICATE_OF_OTHER_FORMAT,
-        )
+        has_match = self.status in (ImportStatus.ALREADY_PRESENT, ImportStatus.REPAIRED)
         if has_issue != (self.issue is not None) or has_match != (self.matches is not None):
             raise ValueError("reason and matching activity inconsistent with the outcome")
 
@@ -106,15 +100,6 @@ def _ignore_progress(_done: int, _total: int) -> None:
 
 def _never_cancelled() -> bool:
     return False
-
-
-def _other_format_twin(index: ActivityIndex, activity: Activity) -> ActivityIdentity | None:
-    """Identity of an activity already present, in another format, with the same start and
-    duration."""
-    for record in index.find_possible_duplicates(activity.start, activity.elapsed_s):
-        if record.file_format is not activity.file_format:
-            return record.identity
-    return None
 
 
 def _is_the_archived_content(archived: ArchivedFile, data: bytes) -> bool:
@@ -153,9 +138,6 @@ def _add_if_new(
     existing = index.get(activity.identity)
     if existing is not None:
         return _check_archived_file(existing, data, name, archive)
-    twin = _other_format_twin(index, activity)
-    if twin is not None:
-        return FileImportResult(name, ImportStatus.DUPLICATE_OF_OTHER_FORMAT, matches=twin)
     archived = archive.store(data, activity.file_format, activity.start)
     record = ActivityRecord.from_activity(
         activity,

@@ -110,7 +110,7 @@ def write_frozen_v3(path: Path) -> None:
 
 
 KEPT = (
-    "meta", "physiology", "load_cache", "sync_journal", "sync_cursor", "sync_state",
+    "meta", "physiology", "sync_journal", "sync_cursor", "sync_state",
     "profile_body", "weight", "sport_weights",
 )  # fmt: skip
 

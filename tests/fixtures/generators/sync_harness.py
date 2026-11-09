@@ -109,7 +109,7 @@ class MidpointRandom:
 
 
 def extract_original(zipped: bytes) -> ExtractedOriginal:
-    """Extracts the first `.fit` or `.gpx` of a ZIP (minimal, for the tests)."""
+    """Extracts the first `.fit` of a ZIP (minimal, for the tests)."""
     others = 0
     try:
         with zipfile.ZipFile(io.BytesIO(zipped)) as archive:
@@ -117,8 +117,6 @@ def extract_original(zipped: bytes) -> ExtractedOriginal:
                 name = info.filename.lower()
                 if name.endswith(".fit"):
                     return ExtractedOriginal(archive.read(info), FileFormat.FIT)
-                if name.endswith(".gpx"):
-                    return ExtractedOriginal(archive.read(info), FileFormat.GPX)
                 others += 1
     except (zipfile.BadZipFile, zlib.error, EOFError):
         raise OriginalExtractionError(FailureReason.ARCHIVE_INVALID) from None

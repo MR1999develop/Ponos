@@ -122,6 +122,11 @@ class ProfileSession:
         return self._opened.info
 
     @property
+    def removed_unsupported_activities(self) -> int:
+        """GPX activities removed by the migration done at open time (0 if none)."""
+        return self._opened.removed_unsupported_activities
+
+    @property
     def activities(self) -> ActivityIndex:
         """Activity index (valid while the profile is open)."""
         return self._opened.activities

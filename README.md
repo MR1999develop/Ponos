@@ -29,7 +29,8 @@ use: use it at your own risk. Manual import of FIT files is always available.
 
 - Several profiles, each with a folder chosen by the user for all its data.
 - Synchronisation of activities from Garmin Connect, resumable, and import of
-  FIT and GPX files, also inside ZIP archives, from files or from a folder.
+  FIT files, from files or from a folder (FIT only: GPX and ZIP files are not
+  imported).
 - To try the app without your own data: `uv run python -m
   tests.fixtures.generators.demo_history <folder>` creates a synthetic
   history of FIT files, to load into a profile with "Import from folder...".
@@ -197,11 +198,14 @@ test.
 
 ## Importing activities
 
-A profile must be open. You can import FIT and GPX files, also inside ZIP
-files, such as the archive you download from the Garmin site.
+A profile must be open. Only FIT files are imported. GPX files and ZIP
+archives are not: in a folder they are ignored, and chosen by hand they are
+reported as an unsupported format. A profile created with an earlier version that
+contains activities imported from GPX loses them the first time it is opened: the
+app first copies the database into the `backup` folder of the profile and tells you
+how many activities it removed.
 
-- File, Import files... (Ctrl+I): choose one or more `.fit`, `.gpx` or `.zip`
-  files.
+- File, Import files... (Ctrl+I): choose one or more `.fit` files.
 - File, Import from folder... (Ctrl+Shift+I): choose a folder; the app looks
   for files in the subfolders too. If there are too many (over 50,000
   activity files, 500,000 entries or 32 levels) it imports nothing and asks

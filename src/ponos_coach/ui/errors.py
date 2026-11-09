@@ -559,9 +559,6 @@ def import_issue_text(issue: ImportIssue) -> str:
         ImportIssue.UNSUPPORTED_FORMAT: QCoreApplication.translate(
             "ImportIssues", "This file format is not supported."
         ),
-        ImportIssue.EXTENSION_MISMATCH: QCoreApplication.translate(
-            "ImportIssues", "The file content does not match its extension."
-        ),
         ImportIssue.TOO_MANY_RECORDS: QCoreApplication.translate(
             "ImportIssues", "The activity has too many data points."
         ),
@@ -579,21 +576,6 @@ def import_issue_text(issue: ImportIssue) -> str:
         ),
         ImportIssue.PATH_TOO_LONG: QCoreApplication.translate(
             "ImportIssues", "The file path is too long."
-        ),
-        ImportIssue.UNSAFE_NAME: QCoreApplication.translate(
-            "ImportIssues", "The name inside the archive is not safe."
-        ),
-        ImportIssue.ARCHIVE_INVALID: QCoreApplication.translate(
-            "ImportIssues", "The ZIP archive is damaged."
-        ),
-        ImportIssue.ARCHIVE_LIMIT: QCoreApplication.translate(
-            "ImportIssues", "The ZIP archive is too large or too full."
-        ),
-        ImportIssue.ENCRYPTED: QCoreApplication.translate(
-            "ImportIssues", "The file is protected by a password."
-        ),
-        ImportIssue.NESTED_ARCHIVE: QCoreApplication.translate(
-            "ImportIssues", "A ZIP archive inside a ZIP archive."
         ),
         ImportIssue.STORAGE_FAILED: QCoreApplication.translate(
             "ImportIssues", "The file could not be saved in the profile folder."

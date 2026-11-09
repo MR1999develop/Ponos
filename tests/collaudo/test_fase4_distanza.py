@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Phase 4 distance series, from FIT and GPX files, and proof that the load did not change.
+"""Phase 4 distance series, from FIT files, and proof that the load did not change.
 
 The distance series is new in phase 4 (commit d5b7b3b is the last one without it). The load and
 the cache fingerprint must be exactly what they were: the frozen numbers below were computed with
@@ -10,12 +10,10 @@ distance, a speed, or neither, and the load must be the same for all three.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-
 import numpy as np
 import pytest
 
-from ponos_coach.activities.decoding import ActivityFileError, decode_activity_file
+from ponos_coach.activities.decoding import decode_activity_file
 from ponos_coach.activities.domain import Activity, Sport
 from ponos_coach.assessment.domain import (
     SegmentSelection,
@@ -42,7 +40,6 @@ from tests.collaudo.fase4_support import (
     standard_legs,
 )
 from tests.fixtures.generators import fit_writer as fw
-from tests.fixtures.generators import gpx_writer as gw
 
 PHYSIOLOGY = Physiology(HeartRateLimits(*LIMITS), ThresholdHeartRate(170), Sex.MALE)
 LEGS = [Leg(300, 110, 2.5), Leg(300, 150, 3.0), Leg(300, 160, 3.2), Leg(300, 172, 3.6),
@@ -292,75 +289,6 @@ def test_repeated_and_backward_timestamps_do_not_break_the_distance_axis() -> No
     assert seconds.tolist() == [0.0, 1.0, 2.0, 5.0, 6.0]  # the first of a repetition counts
     assert (np.diff(seconds) > 0).all()
     assert (np.diff(activity.distance.meters) >= 0).all()
-
-
-# --- GPX -------------------------------------------------------------------------------------
-
-BASE = datetime(2026, 3, 14, 7, 0, tzinfo=UTC)
-
-
-def gpx_points(positions: list[tuple[float, float]], step_s: int = 1) -> list[gw.GpxPoint]:
-    return [
-        gw.GpxPoint(lat, lon, BASE + timedelta(seconds=i * step_s), None, 150)
-        for i, (lat, lon) in enumerate(positions)
-    ]
-
-
-def test_a_gpx_distance_is_the_haversine_along_the_track() -> None:
-    # 0.001 degrees of latitude is 111.195 m on the mean-radius sphere, whatever the longitude
-    positions = [(-30.0 + i * 0.001, -20.0) for i in range(5)]
-    activity = decode(gw.build_gpx(gw.GpxSpec([gpx_points(positions)], "running")), "x.gpx")
-
-    assert activity.distance is not None
-    assert activity.distance.meters.tolist() == pytest.approx(
-        [i * 111.19508 for i in range(5)], abs=0.01
-    )
-
-
-def test_a_gpx_with_two_segments_adds_no_step_between_them() -> None:
-    first = gpx_points([(-30.0, -20.0), (-30.0, -19.999)])
-    second = [
-        gw.GpxPoint(
-            10.0, 50.0, BASE + timedelta(seconds=60), None, 150
-        ),  # far away, a minute later
-        gw.GpxPoint(10.0, 50.001, BASE + timedelta(seconds=61), None, 150),
-    ]
-
-    activity = decode(gw.build_gpx(gw.GpxSpec([first, second], "running")), "x.gpx")
-
-    assert activity.distance is not None
-    step = activity.distance.meters[1]
-    assert activity.distance.meters.tolist() == pytest.approx([0.0, step, step, 2 * step], rel=0.2)
-    assert activity.distance.meters[-1] < 500.0  # not the thousands of km between the segments
-
-
-@pytest.mark.parametrize("bad", ["nan", "inf", "-inf", "1e999", "NaN"])
-def test_hostile_gpx_coordinates_are_refused_never_turned_into_a_distance(bad: str) -> None:
-    data = gw.build_gpx(gw.GpxSpec([gpx_points([(-30.0, -20.0), (-30.0, -19.99)])], "running"))
-    hostile = data.replace(b'lon="-19.9900000"', f'lon="{bad}"'.encode())
-    assert hostile != data
-
-    with pytest.raises(ActivityFileError):
-        decode(hostile, "x.gpx")
-
-
-def test_a_gpx_jump_across_the_planet_is_finite_and_monotone() -> None:
-    positions = [(0.0, 0.0), (0.0, 180.0), (0.0, -179.0), (89.9, 0.0)]
-    activity = decode(gw.build_gpx(gw.GpxSpec([gpx_points(positions)], "running")), "x.gpx")
-
-    assert activity.distance is not None
-    assert np.isfinite(activity.distance.meters).all()
-    assert (np.diff(activity.distance.meters) >= 0).all()
-
-
-def test_a_gpx_point_with_the_time_of_the_previous_one_is_left_out_of_the_distance() -> None:
-    points = gpx_points([(-30.0, -20.0), (-30.0, -19.999), (-30.0, -19.998)])
-    points[2] = gw.GpxPoint(-30.0, -19.998, points[1].time, None, 150)
-
-    activity = decode(gw.build_gpx(gw.GpxSpec([points], "running")), "x.gpx")
-
-    assert activity.distance is not None
-    assert (np.diff(activity.distance.seconds) > 0).all()
 
 
 def test_standard_test_evaluation_rejects_a_series_with_one_sample_only() -> None:

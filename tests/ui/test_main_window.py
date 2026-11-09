@@ -451,7 +451,36 @@ def test_folder_warnings_are_shown_without_blocking(
     assert window.controller.can_change_profile  # the warning blocks nothing
 
 
-# --- Responsiveness, cancellation, closing --------------------------------------------------------
+def test_the_removal_of_gpx_activities_is_told_when_the_profile_opens(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = compose(tmp_path, settings)
+    qtbot.addWidget(window)
+    view = ProfileView(
+        ProfileId(uuid.uuid4()), ProfileName("Ada"), tmp_path, "UTC", (), removed_unsupported=3
+    )
+
+    window.controller.profile_changed.emit(view)
+
+    box = open_message_box(qtbot, window, "removedUnsupported")
+    assert "FIT" in box.text()
+    assert box.text().endswith("3.")  # il numero di attività tolte
+
+
+def test_no_notice_is_shown_when_nothing_was_removed(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = compose(tmp_path, settings)
+    qtbot.addWidget(window)
+    view = ProfileView(ProfileId(uuid.uuid4()), ProfileName("Ada"), tmp_path, "UTC", ())
+
+    window.controller.profile_changed.emit(view)
+
+    qtbot.wait(50)
+    assert not window.open_boxes
+
+
+# --- Reattività, annullamento, chiusura --------------------------------------------------------
 
 
 def latency_of_one_event(qtbot: QtBot) -> float:
