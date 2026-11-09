@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 import numpy as np
 import pytest
+from PySide6.QtCore import Qt
 
 from ponos_coach.activities.domain import (
     ActivitySummary,
@@ -26,6 +27,7 @@ from ponos_coach.load.domain import (
 )
 from ponos_coach.load.use_cases import ExclusionReason
 from ponos_coach.ui.activity_detail import zone_rows
+from ponos_coach.ui.activity_detail_dialog import ZoneTableModel
 from ponos_coach.ui.errors import unavailable_detail_message
 
 START = datetime(2026, 5, 1, 7, 0, tzinfo=UTC)
@@ -59,6 +61,33 @@ def test_one_row_per_zone_with_the_share_of_the_time_in_zones() -> None:
     assert [row.seconds for row in rows] == [300.0, 100.0, 0.0, 0.0, 100.0]
     assert [row.share for row in rows] == pytest.approx([0.6, 0.2, 0.0, 0.0, 0.2])
     assert sum(row.share for row in rows) == pytest.approx(1.0)
+
+
+def test_each_zone_row_has_its_whole_bpm_range_of_the_day() -> None:
+    rows = zone_rows(detail_with(ZoneSeconds.ZERO))  # threshold 171, limits 50 to 190
+
+    assert [row.bpm for row in rows] == [
+        (50, 133),
+        (134, 148),
+        (149, 160),
+        (161, 170),
+        (171, 190),
+    ]
+
+
+def test_the_zone_table_shows_the_bpm_range_next_to_the_zone(qtbot: object) -> None:
+    del qtbot  # the model needs the application, which pytest-qt creates
+    model = ZoneTableModel()
+    model.set_rows(zone_rows(detail_with(ZoneSeconds((300.0, 100.0, 0.0, 0.0, 100.0)))))
+
+    assert model.columnCount() == 5
+    assert model.headerData(0, Qt.Orientation.Horizontal) == "Zone (% of threshold)"
+    assert model.headerData(1, Qt.Orientation.Horizontal) == "Heart rate (bpm)"
+    assert model.data(model.index(0, 1)) == f"50{chr(0x2013)}133"
+    assert model.data(model.index(4, 1)) == f"171{chr(0x2013)}190"
+    assert model.data(model.index(1, 1), Qt.ItemDataRole.TextAlignmentRole) == int(
+        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+    )
 
 
 def test_without_time_in_zones_every_share_is_zero_not_a_division_error() -> None:

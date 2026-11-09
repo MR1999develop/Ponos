@@ -18,6 +18,7 @@ from ponos_coach.load.domain import (
     compute_activity_load,
     load_fingerprint,
     seconds_per_zone,
+    zone_bpm_ranges,
     zone_indices,
     zone_starts_bpm,
 )
@@ -227,3 +228,53 @@ def test_new_zone_percentages_change_the_seconds_and_the_fingerprint_but_not_the
     assert (current.trimp, current.hr_tss) == (previous.trimp, previous.hr_tss)
     assert current.zone_seconds != previous.zone_seconds
     assert current_print != previous_print
+
+
+# --- bpm of each zone ---------------------------------------------------------------------
+
+
+def test_the_bpm_of_each_zone_start_at_the_whole_bpm_that_reaches_the_boundary() -> None:
+    # Boundaries 132.6, 147.9, 159.8, 170: Z2 starts at 133, not at 132 (132 is still Z1).
+    assert zone_bpm_ranges(170, 50, 190) == (
+        (50, 132),
+        (133, 147),
+        (148, 159),
+        (160, 169),
+        (170, 190),
+    )
+
+
+def test_a_boundary_that_is_a_whole_bpm_belongs_to_the_higher_zone() -> None:
+    # Threshold 150: Z2 starts at exactly 117, Z3 at 130.5 -> 131, Z4 at 141, Z5 at 150.
+    ranges = zone_bpm_ranges(150, 45, 185)
+
+    assert ranges[1] is not None
+    assert ranges[1][0] == 117
+    assert zones_of(116, 117, threshold=150) == [0, 1]
+
+
+def test_z1_starts_at_the_minimum_and_z5_ends_at_the_maximum() -> None:
+    ranges = zone_bpm_ranges(160, 42, 181)
+
+    assert ranges[0] is not None
+    assert ranges[0][0] == 42
+    assert ranges[4] is not None
+    assert ranges[4][1] == 181
+
+
+def test_the_ranges_agree_with_the_zone_of_every_whole_bpm() -> None:
+    for threshold in (120, 151, 170, 199):
+        ranges = zone_bpm_ranges(threshold, 40, 220)
+        for bpm in range(40, 221):
+            zone = zones_of(float(bpm), threshold=threshold)[0]
+            span = ranges[zone]
+            assert span is not None
+            assert span[0] <= bpm <= span[1]
+
+
+def test_a_zone_with_no_whole_bpm_inside_the_limits_is_none() -> None:
+    # A threshold above the maximum HR leaves Z5 (and part of Z4) out of reach.
+    ranges = zone_bpm_ranges(240, 50, 190)
+
+    assert ranges[4] is None
+    assert ranges[0] == (50, 187)

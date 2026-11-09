@@ -158,7 +158,7 @@ def _distance_m(
     return _haversine_cumulative_m(lat_deg, lon_deg)
 
 
-def _kept_indices(count: int) -> NDArray[np.intp]:
+def kept_indices(count: int) -> NDArray[np.intp]:
     """Evenly spaced points, first and last included, at most `MAX_PROFILE_POINTS`."""
     if count <= MAX_PROFILE_POINTS:
         return np.arange(count, dtype=np.intp)
@@ -242,7 +242,7 @@ class GetActivityProfile:
         distance = _distance_m(
             seconds, lat, lon, None if series is None else (series.seconds, series.meters)
         )
-        keep = _kept_indices(seconds.size)
+        keep = kept_indices(seconds.size)
         local_day = local_day_of(record.start, self._timezone)
         zone, absence, threshold = self._zones(
             activity.heart_rate, activity.sport, local_day, seconds[keep]
@@ -283,5 +283,6 @@ __all__ = [
     "GetActivityProfile",
     "NoTrack",
     "ZoneAbsence",
+    "kept_indices",
     "zones_at",
 ]

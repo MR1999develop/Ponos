@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QObject, Signal, Slot
 
+from ponos_coach.activities.map_queries import TrackDecoder
 from ponos_coach.activities.ports import ActivityArchive, ArchiveError, Clock, ImportSource
 from ponos_coach.activities.use_cases import ImportSummary, import_activities
 from ponos_coach.load.use_cases import (
@@ -131,6 +132,7 @@ class WorkspaceServices:
     archive_for: Callable[[Path], ActivityArchive]
     import_sources: ImportSources
     decode: Decoder
+    decode_track: TrackDecoder
     clock: Clock
     today: Callable[[ZoneInfo], date]
     sync: SyncServices
@@ -195,6 +197,7 @@ class ProfileAccess:
     archive: ActivityArchive
     zone: ZoneInfo
     decode: Decoder
+    decode_track: TrackDecoder
     today: Callable[[], date]
     context: JobContext
     rename: Callable[[str], RenamedProfile]
@@ -532,6 +535,7 @@ class WorkspaceController(QObject):
                 current.archive,
                 current.zone,
                 services.decode,
+                services.decode_track,
                 lambda: services.today(current.zone),
                 context,
                 lambda text: services.profiles.rename(current.session, text),

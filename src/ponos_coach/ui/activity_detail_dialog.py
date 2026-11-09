@@ -9,6 +9,7 @@ The figures arrive already prepared by the data thread.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import (
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QHeaderView,
     QLabel,
     QPushButton,
@@ -56,24 +58,29 @@ from ponos_coach.ui.chart_view import ChartEngine, ChartView
 from ponos_coach.ui.errors import ErrorMessage, unavailable_detail_message
 from ponos_coach.ui.state_page import StatePage
 from ponos_coach.ui.threshold_presentation import can_be_threshold_test, not_a_run_reason
-from ponos_coach.ui.tokens import SPACE_2, SPACE_4
+from ponos_coach.ui.tokens import SPACE_2, SPACE_4, Theme, tokens_for
+from ponos_coach.ui.track_view import TrackPanel, TrackStrings
 
 _ALIGN_RIGHT = int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 _ALIGN_LEFT = int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 _PERCENT = 100
 _ONE_DECIMAL_BELOW = 10.0
-_DEFAULT_SIZE = (860, 700)
-_CHART_MIN_HEIGHT = 280
+_DEFAULT_SIZE = (940, 780)
+_CHART_MIN_HEIGHT = 190  # the plot area keeps about 90 px between the legend and the axis
 _ZONE_TABLE_HEIGHT = 170
+_MAP_MIN_SIZE = (320, 240)
 
 
-_COLUMNS = 4  # zone, time, share, load
-_SHARE_COLUMN = 2
+_COLUMNS = 5  # zone, heart rate, time, share, load
+_BPM_COLUMN = 1
+_TIME_COLUMN = 2
+_SHARE_COLUMN = 3
+_EN_DASH = "–"  # noqa: RUF001 - the range separator is the character itself
 
 
 class ZoneTableModel(QAbstractTableModel):
-    """Time and load per zone of an activity: zone, time, share, load. Read-only, numbers on the
-    right."""
+    """Heart rate, time and load per zone of an activity: zone, heart rate, time, share, load.
+    Read-only, numbers on the right."""
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -96,7 +103,7 @@ class ZoneTableModel(QAbstractTableModel):
     def columnCount(  # noqa: N802 - Qt
         self, parent: QModelIndex | QPersistentModelIndex | None = None
     ) -> int:
-        """Zone, time, share, load."""
+        """Zone, heart rate, time, share, load."""
         if parent is not None and parent.isValid():
             return 0
         return _COLUMNS
@@ -113,6 +120,7 @@ class ZoneTableModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.DisplayRole:
             return (
                 self.tr("Zone (% of threshold)"),
+                self.tr("Heart rate (bpm)"),
                 self.tr("Time (h:mm:ss)"),
                 self.tr("Share of the time in zones (%)"),
                 self.tr("Load (hrTSS)"),
@@ -141,11 +149,21 @@ class ZoneTableModel(QAbstractTableModel):
 def _cell_text(row: ZoneRow, column: int) -> str:
     if column == 0:
         return row.label
-    if column == 1:
+    if column == _BPM_COLUMN:
+        return _bpm_range_text(row.bpm)
+    if column == _TIME_COLUMN:
         return duration_text(row.seconds)
     if column == _SHARE_COLUMN:
         return QLocale().toString(round(row.share * _PERCENT))
     return _zone_load_text(row.load)
+
+
+def _bpm_range_text(bpm: tuple[int, int] | None) -> str:
+    """Heart-rate range of a zone, whole bpm, ends included, joined by an en dash; empty if none."""
+    if bpm is None:
+        return ""
+    locale = QLocale()
+    return f"{locale.toString(bpm[0])}{_EN_DASH}{locale.toString(bpm[1])}"
 
 
 def _zone_load_text(load: float | None) -> str:
@@ -162,18 +180,29 @@ class ActivityDetailDialog(QDialog):
 
     threshold_test_requested = Signal(object)  # ActivityIdentity
 
-    def __init__(self, engine: ChartEngine, zone: ZoneInfo, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        engine: ChartEngine,
+        zone: ZoneInfo,
+        parent: QWidget | None = None,
+        *,
+        theme: Callable[[], Theme],
+    ) -> None:
         super().__init__(parent)
         self._zone = zone
+        self._theme = theme
         self._identity: ActivityIdentity | None = None
         self.setWindowTitle(self.tr("Activity detail"))
         self.setModal(False)
         self.resize(*_DEFAULT_SIZE)
         self._chart = ChartView(engine, self.tr("Heart rate chart"), self)
         self._chart.setMinimumHeight(_CHART_MIN_HEIGHT)
+        self._track = TrackPanel(engine, self.tr("Map of the activity"), self)
+        self._track.setMinimumSize(*_MAP_MIN_SIZE)
         self._zone_model = ZoneTableModel(self)
         self._build()
         self.finished.connect(self._chart.dispose)
+        self.finished.connect(self._track.view.dispose)
         self.show_loading()
 
     # --- Costruzione ------------------------------------------------------------------
@@ -201,17 +230,8 @@ class ActivityDetailDialog(QDialog):
         self._notice.setWordWrap(True)
         self._notice.setVisible(False)
 
-        self._table = QTableView(self)
-        self._table.setObjectName("detailZones")
-        self._table.setAccessibleName(self.tr("Time in each zone"))
-        self._table.setModel(self._zone_model)
-        self._table.setShowGrid(False)  # no vertical or horizontal lines
-        self._table.setAlternatingRowColors(True)
-        self._table.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
-        self._table.setSelectionMode(QTableView.SelectionMode.NoSelection)
-        self._table.verticalHeader().setVisible(False)
-        self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._table.setMaximumHeight(_ZONE_TABLE_HEIGHT)
+        self._build_table()
+        self._build_map_area()
 
         self._message = StatePage(self)
         self._message.button.setVisible(False)
@@ -229,11 +249,38 @@ class ActivityDetailDialog(QDialog):
         outer = QVBoxLayout(self)
         outer.setSpacing(SPACE_4)
         outer.addWidget(self._title)
-        outer.addLayout(self._summary)
+        top = QHBoxLayout()
+        top.setSpacing(SPACE_4)
+        top.addLayout(self._summary, stretch=1)
+        top.addWidget(self._map_area, stretch=1)
+        outer.addLayout(top)
         outer.addWidget(self._notice)
         outer.addWidget(self._body, stretch=1)
         outer.addWidget(self._table)
         outer.addWidget(buttons)
+
+    def _build_table(self) -> None:
+        self._table = QTableView(self)
+        self._table.setObjectName("detailZones")
+        self._table.setAccessibleName(self.tr("Time in each zone"))
+        self._table.setModel(self._zone_model)
+        self._table.setShowGrid(False)  # no vertical or horizontal lines
+        self._table.setAlternatingRowColors(True)
+        self._table.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
+        self._table.setSelectionMode(QTableView.SelectionMode.NoSelection)
+        self._table.verticalHeader().setVisible(False)
+        self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self._table.setMaximumHeight(_ZONE_TABLE_HEIGHT)
+
+    def _build_map_area(self) -> None:
+        self._no_gps = QLabel(self.tr("No GPS track in this activity."), self)
+        self._no_gps.setObjectName("detailNoGps")
+        self._no_gps.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._no_gps.setWordWrap(True)
+        self._map_area = QStackedWidget(self)
+        self._map_area.addWidget(self._no_gps)
+        self._map_area.addWidget(self._track)
+        self._map_area.setMinimumSize(*_MAP_MIN_SIZE)
 
     def _summary_rows(self) -> tuple[tuple[str, str], ...]:
         return (
@@ -254,6 +301,20 @@ class ActivityDetailDialog(QDialog):
     def chart(self) -> ChartView:
         """The HR chart."""
         return self._chart
+
+    @property
+    def track(self) -> TrackPanel:
+        """The map of the activity."""
+        return self._track
+
+    @property
+    def no_gps_text(self) -> str:
+        """The message shown instead of the map (empty while the map is the visible page)."""
+        return "" if self.shows_track() else self._no_gps.text()
+
+    def shows_track(self) -> bool:
+        """True if the map is the visible page of its area."""
+        return self._map_area.currentWidget() is self._track
 
     @property
     def zone_model(self) -> ZoneTableModel:
@@ -329,6 +390,7 @@ class ActivityDetailDialog(QDialog):
         )
         self._set_details_visible(True)
         self._fill_summary(detail)
+        self._show_map(detail)
         self._zone_model.set_rows(zone_rows(detail))
         self._table.setVisible(
             ready.chart is not None
@@ -341,6 +403,21 @@ class ActivityDetailDialog(QDialog):
         else:
             self._chart.show_prepared(ready.chart)
             self._body.setCurrentWidget(self._chart)
+
+    def _show_map(self, detail: ActivityDetail) -> None:
+        """The track on the map; without GPS (indoor) a short message takes its place."""
+        if detail.outline is None:
+            self._map_area.setCurrentWidget(self._no_gps)
+            return
+        strings = TrackStrings(
+            map=self.tr("Map of the activity"),
+            zoom_in=self.tr("Zoom in"),
+            zoom_out=self.tr("Zoom out"),
+            start=self.tr("Start"),
+            finish=self.tr("Finish"),
+        )
+        self._map_area.setCurrentWidget(self._track)
+        self._track.view.show_outline(detail.outline, tokens_for(self._theme()), strings)
 
     def _fill_summary(self, detail: ActivityDetail) -> None:
         local = detail.start.astimezone(self._zone)
@@ -407,6 +484,7 @@ class ActivityDetailDialog(QDialog):
         for label in self._summary_values.values():
             label.setVisible(visible)
         self._table.setVisible(visible)
+        self._map_area.setVisible(visible)
         if not visible:
             self._notice.setVisible(False)
             self._title.setText("")

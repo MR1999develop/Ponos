@@ -10,7 +10,11 @@ from datetime import UTC, datetime
 import numpy as np
 import pytest
 
-from ponos_coach.activities.decoding import ActivityFileError, ActivityFileReason
+from ponos_coach.activities.decoding import (
+    ActivityFileError,
+    ActivityFileReason,
+    decode_stored_track,
+)
 from ponos_coach.activities.domain import (
     Activity,
     ActivityOrigin,
@@ -20,6 +24,7 @@ from ponos_coach.activities.domain import (
 )
 from ponos_coach.activities.ports import ActivityNotFoundError
 from ponos_coach.load.activity_detail import ActivityDetail, GetActivityDetail
+from ponos_coach.load.activity_profile import MAX_PROFILE_POINTS
 from ponos_coach.load.domain import (
     LoadSource,
     MissingPhysiologyError,
@@ -41,11 +46,25 @@ START = datetime(2026, 2, 10, 7, 0, tzinfo=UTC)
 
 
 def add_activity(
-    world: World, bpm: Sequence[int | None], *, serial: int = 1, start: datetime = START
+    world: World,
+    bpm: Sequence[int | None],
+    *,
+    serial: int = 1,
+    start: datetime = START,
+    with_gps: bool = False,
 ) -> ActivityRecord:
-    """A 1 Hz activity with these bpm (None = no valid HR) in the world's archive."""
+    """A 1 Hz activity with these bpm (None = no valid HR) in the world's archive; with
+    `with_gps` it runs north-east from a made-up point, one step of 0.0001 degrees per second."""
     first = fw.datetime_to_fit(start)
-    samples = [fw.Sample(first + i, value) for i, value in enumerate(bpm)]
+    samples = [
+        fw.Sample(
+            first + i,
+            value,
+            lat_deg=45.0 + i * 0.0001 if with_gps else None,
+            lon_deg=9.0 + i * 0.0001 if with_gps else None,
+        )
+        for i, value in enumerate(bpm)
+    ]
     spec = fw.ActivitySpec(
         start, fw.Sport.RUNNING, fw.SubSport.GENERIC, samples, serial_number=serial
     )
@@ -58,7 +77,11 @@ def add_activity(
 
 
 def use_case(
-    world: World, *, decode: object = decode_fit, max_file_bytes: int = 50_000_000
+    world: World,
+    *,
+    decode: object = decode_fit,
+    decode_track: object = decode_stored_track,
+    max_file_bytes: int = 50_000_000,
 ) -> GetActivityDetail:
     return GetActivityDetail(
         world.profile.activities,
@@ -66,6 +89,7 @@ def use_case(
         world.profile.physiology,
         world.profile.sport_weights,
         decode,  # type: ignore[arg-type]
+        decode_track,  # type: ignore[arg-type]
         timezone=ROME,
         max_file_bytes=max_file_bytes,
     )
@@ -173,6 +197,59 @@ def test_an_activity_without_heart_rate_has_no_trace_and_an_estimated_load() -> 
     assert detail.load.source is LoadSource.ESTIMATE
     assert detail.load.zone_seconds.total == 0.0
     assert detail.zone_load is None  # an estimate does not come from the zones
+
+
+def test_an_activity_with_gps_has_its_track_outline_without_gaps() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [150] * 60, with_gps=True)
+
+    outline = detail_of(world, record).outline
+
+    assert outline is not None
+    assert len(outline) == 60
+    assert outline.lat_deg[0] == pytest.approx(45.0)
+    assert outline.lon_deg[-1] == pytest.approx(9.0059)
+    assert set(outline.segment.tolist()) == {0}
+
+
+def test_a_long_track_is_thinned_to_the_profile_cap_keeping_first_and_last() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [150] * 3000, with_gps=True)
+
+    outline = detail_of(world, record).outline
+
+    assert outline is not None
+    assert len(outline) <= MAX_PROFILE_POINTS
+    assert outline.lat_deg[0] == pytest.approx(45.0)
+    assert outline.lat_deg[-1] == pytest.approx(45.0 + 2999 * 0.0001)
+
+
+def test_an_activity_without_gps_has_no_outline_but_the_rest_of_the_detail() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [150] * 60)
+
+    detail = detail_of(world, record)
+
+    assert detail.outline is None
+    assert detail.trace is not None
+
+
+def test_a_track_that_cannot_be_read_only_costs_the_map_not_the_detail() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [150] * 60, with_gps=True)
+
+    def broken(_data: bytes, _file_format: FileFormat) -> None:
+        raise ActivityFileError(ActivityFileReason.CORRUPT)
+
+    found = use_case(world, decode_track=broken)(record.identity)
+
+    assert isinstance(found, ActivityDetail)
+    assert found.outline is None
+    assert found.trace is not None
 
 
 def test_the_load_of_each_zone_adds_up_to_the_load_and_harder_zones_earn_more() -> None:

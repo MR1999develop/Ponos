@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ponos://app; style-src ponos://app 'unsafe-inline'; img-src data: blob: ponos://tiles; connect-src 'none'; font-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Track</title>
+<link rel="stylesheet" href="leaflet.css">
+<style>
+:root { --map-bg: #e6e8eb; --map-fg: #1f2328; --map-panel: #ffffff; }
+html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+#map { background: var(--map-bg); font: 12px system-ui, sans-serif; }
+.leaflet-container { background: var(--map-bg); }
+.leaflet-control-attribution { background: var(--map-panel); color: var(--map-fg); padding: 2px 6px; }
+.leaflet-bar a, .leaflet-bar a:hover { background-color: var(--map-panel); color: var(--map-fg); border-bottom-color: var(--map-fg); }
+.leaflet-container:focus-visible { outline: 2px solid var(--map-fg); outline-offset: -2px; }
+.ponos-pin { box-sizing: border-box; width: 16px; height: 16px; border: 3px solid var(--map-fg); background: var(--map-panel); }
+.ponos-pin-start { border-radius: 50%; }
+.ponos-pin-finish { border-radius: 0; background: var(--map-fg); border-color: var(--map-panel); }
+</style>
+</head>
+<body>
+<div id="map" role="application"></div>
+<script src="leaflet.js"></script>
+<script src="track.js"></script>
+</body>
+</html>

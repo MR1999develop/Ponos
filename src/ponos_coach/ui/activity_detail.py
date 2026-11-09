@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ponos_coach.load.activity_detail import ActivityDetail
-from ponos_coach.load.domain import ZONE_COUNT
+from ponos_coach.load.domain import ZONE_COUNT, zone_bpm_ranges
 from ponos_coach.load.use_cases import ExclusionReason
 from ponos_coach.ui.chart_payload import PreparedChart
 from ponos_coach.ui.load_figures import zone_label
@@ -38,13 +38,15 @@ type DetailOutcome = DetailReady | DetailUnavailable
 
 @dataclass(frozen=True, slots=True)
 class ZoneRow:
-    """One zone: name with its bounds, seconds, share of the time in zone (0-1) and the load
-    earned there (None when the activity's load is an estimate)."""
+    """One zone: name with its bounds, seconds, share of the time in zone (0-1), the load
+    earned there (None when the activity's load is an estimate) and the whole-bpm range of the zone
+    that day (None when the zone has no bpm inside the limits)."""
 
     label: str
     seconds: float
     share: float
     load: float | None = None
+    bpm: tuple[int, int] | None = None
 
 
 def zone_rows(detail: ActivityDetail) -> tuple[ZoneRow, ...]:
@@ -52,12 +54,14 @@ def zone_rows(detail: ActivityDetail) -> tuple[ZoneRow, ...]:
     seconds = detail.load.zone_seconds
     total = seconds.total
     zone_load = detail.zone_load
+    bpm = zone_bpm_ranges(detail.threshold_bpm, detail.limits.min_bpm, detail.limits.max_bpm)
     return tuple(
         ZoneRow(
             zone_label(zone),
             seconds.values[zone],
             seconds.values[zone] / total if total else 0.0,
             None if zone_load is None else zone_load[zone],
+            bpm[zone],
         )
         for zone in range(ZONE_COUNT)
     )

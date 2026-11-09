@@ -30,6 +30,7 @@ from ponos_coach.ui.hr_figure import prepare_heart_rate_chart
 from ponos_coach.ui.load_figures import prepare_weekly_zones_chart
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.overview_state import Ready
+from ponos_coach.ui.tokens import Theme
 from tests.ui.test_activity_detail import detail_with
 from tests.ui.workspace_support import (
     FILES_IN_FIXTURE_FOLDER,
@@ -43,6 +44,8 @@ from tests.ui.workspace_support import (
 )
 
 PROFILE = "Atleta di prova"
+DASH = chr(0x2013)  # the separator of a bpm range
+BPM_RANGES = ((50, 133), (134, 148), (149, 160), (161, 170), (171, 190))
 
 
 @pytest.fixture
@@ -174,11 +177,17 @@ def test_double_click_opens_the_detail_with_summary_chart_and_time_in_zones(
     assert dialog.summary_text("threshold") == "171"
     assert dialog.summary_text("limits") == "50 to 190"
     assert dialog.zone_model.rowCount() == 5
-    zone_times = [dialog.zone_model.data(dialog.zone_model.index(r, 1)) for r in range(5)]
+    zone_times = [dialog.zone_model.data(dialog.zone_model.index(r, 2)) for r in range(5)]
     assert sum(_seconds(text) for text in zone_times) > 1500  # almost all of the 1800 s counted
-    assert dialog.zone_model.headerData(3, Qt.Orientation.Horizontal) == "Load (hrTSS)"
-    zone_loads = [dialog.zone_model.data(dialog.zone_model.index(r, 3)) for r in range(5)]
+    assert dialog.zone_model.headerData(1, Qt.Orientation.Horizontal) == "Heart rate (bpm)"
+    zone_bpm = [dialog.zone_model.data(dialog.zone_model.index(r, 1)) for r in range(5)]
+    # threshold 171, limits 50 to 190: Z2 starts at 133.4 -> 134, Z3 at 148.8 -> 149, ...
+    assert zone_bpm == [f"{a}{DASH}{b}" for a, b in BPM_RANGES]
+    assert dialog.zone_model.headerData(4, Qt.Orientation.Horizontal) == "Load (hrTSS)"
+    zone_loads = [dialog.zone_model.data(dialog.zone_model.index(r, 4)) for r in range(5)]
     assert all(isinstance(text, str) and text for text in zone_loads)
+    assert dialog.shows_track()  # the synthetic runs have positions: the map is beside the summary
+    assert dialog.no_gps_text == ""
     figure = dialog.chart.current_figure
     assert figure is not None
     assert figure.data[0].name == "Heart rate"
@@ -344,7 +353,9 @@ def test_releasing_the_web_engine_twice_is_harmless_and_after_it_no_page_is_crea
 
 
 def test_without_heart_rate_the_detail_hides_the_table_of_the_zones(qtbot: QtBot) -> None:
-    dialog = ActivityDetailDialog(ChartEngine(lambda _name: None), ZoneInfo("Europe/Rome"))
+    dialog = ActivityDetailDialog(
+        ChartEngine(lambda _name: None), ZoneInfo("Europe/Rome"), theme=lambda: Theme.LIGHT
+    )
     qtbot.addWidget(dialog)
     dialog.show()
 

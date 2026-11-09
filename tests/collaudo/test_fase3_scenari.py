@@ -22,7 +22,7 @@ import pytest
 from PySide6.QtCore import QSettings
 from pytestqt.qtbot import QtBot
 
-from ponos_coach.activities.decoding import decode_stored_activity
+from ponos_coach.activities.decoding import decode_stored_activity, decode_stored_track
 from ponos_coach.activities.domain import (
     ActivityPage,
     ActivityRecord,
@@ -184,6 +184,7 @@ def test_a_file_that_vanishes_between_the_index_and_the_read_is_a_reason_not_a_c
             session.physiology,
             session.sport_weights,
             decode_stored_activity,
+            decode_stored_track,
             timezone=ZoneInfo("Europe/Rome"),
         )
 

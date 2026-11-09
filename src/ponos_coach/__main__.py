@@ -495,6 +495,7 @@ def compose_main_window(  # noqa: PLR0913 - every argument is an injectable vola
         archive_for=FileArchive.in_profile_folder,
         import_sources=import_sources or _default_import_sources(),
         decode=decode or decode_stored_activity,
+        decode_track=decode_stored_track,
         clock=_SystemClock(),
         today=today_in,
         sync=SyncServices(

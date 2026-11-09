@@ -49,6 +49,7 @@ from ponos_coach.load.domain.zones import (
     ZONE_STARTS_PERCENT,
     ZoneSeconds,
     seconds_per_zone,
+    zone_bpm_ranges,
     zone_indices,
     zone_starts_bpm,
 )
@@ -91,6 +92,7 @@ __all__ = [
     "typical_intensity",
     "weekly_load_by_sport",
     "weekly_zone_seconds",
+    "zone_bpm_ranges",
     "zone_indices",
     "zone_starts_bpm",
 ]

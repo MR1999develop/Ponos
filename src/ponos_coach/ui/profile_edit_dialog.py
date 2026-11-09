@@ -360,8 +360,10 @@ class ProfileEditDialog(SettingsForm):
         return label.text() if label.isVisibleTo(self) else ""
 
     def has_unsaved_changes(self) -> bool:
-        """True while something typed differs from what the profile holds."""
-        return self._form.has_changes
+        """True while something typed differs from what the profile holds, or a day other than
+        today was chosen: a re-read of the saved values must not put today back under the user's
+        eyes (the threshold would then be saved from today)."""
+        return self._form.has_changes or self._form.valid_from != self._form.today
 
     def request_save(self) -> None:
         """Save what is typed (the "Save changes" button)."""

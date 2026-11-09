@@ -81,6 +81,7 @@ Boundaries:
 | B12 | FIT `session.total_calories` (inside B1 and B2) → model | calories declared by the device: untrusted until checked against the duration |
 | B13 | FIT `record.distance` and `record.speed` (inside B1 and B2) → distance series → threshold test | cumulative distance and its time axis: untrusted until they form a valid series (finite, increasing time, non-decreasing metres) |
 | B14 | Map page (`ponos://app/map.html`, a web engine process) ↔ app | five numeric calls from the page (view, click, hover), the list, the totals and the simplified tracks that Python sends to it. Not drawn in the diagram: it sits next to B4 |
+| B14b | Activity map page (`ponos://app/track.html`, the same web engine) ← app | one call from Python with the thinned positions of the one activity open in the detail window (at most 2,000 points) and the colours. The page sends nothing back: no `QWebChannel`. Not drawn in the diagram: it sits next to B14 |
 | B15 | Tile proxy → Tracestrack (`https://tile.tracestrack.com`) | the tile address (z/x/y), which reveals the area looked at, the key in the query, the PNG that comes back: untrusted |
 | B16 | App ↔ tile key store (Windows: DPAPI file in `secrets/`; Ubuntu: Secret Service) | the Tracestrack key, app-wide, never per profile |
 | B17 | App ↔ Garmin calendar (workouts and schedule, unofficial API) | structured workouts sent, the list of scheduled workouts that comes back (untrusted), the local copy of what is deleted |
@@ -801,6 +802,19 @@ Closed on 2026-11-08.
 | D-F8-04 | The pattern of the entry names used `\d` (any Unicode digit): a backup could carry a year folder in Arabic-Indic digits and the restore created it; the writer (`str.isdecimal`) was as lenient | The year is 4 ASCII digits, in the reader and in the writer | T-SEC-02 | `tests/collaudo/test_fase8_zip_ostili.py` |
 
 ### The map page (phase 5b, T-SEC-14 and T-SEC-15)
+
+The activity-detail window has its own small map page, `ponos://app/track.html` (`track.js`,
+Leaflet from `web/vendor/`), listed in `web_resources.py` and with the same CSP as the map
+(`connect-src 'none'`, `img-src` only `data:`, `blob:` and `ponos://tiles`). It differs in one
+way that narrows the surface: it has no channel at all (no `qwebchannel.js`, no bridge object),
+so the page cannot tell Python anything. Python sends one JSON call (`ponosTrack.show`) with the
+thinned positions of that activity, the colours of the theme and the texts; the tiles come from the
+same proxy (`ponos://tiles/z/x/y`), which holds the Tracestrack key, so the key never enters the
+page. Without a key or without network the page keeps a plain background with the track and the
+window shows one line with the reason. Tests: `tests/ui/test_activity_track.py` (the page asks
+only through the app scheme, cannot reach other hosts, holds no key, is freed when the window
+closes) and `tests/ui/test_vendor_libraries.py` (closed list, local sources only, no network call
+in the script).
 
 - **Page**: `ponos://app/map.html`, same engine and interceptor as the charts;
   CSP `default-src 'none'`, `connect-src 'none'`, `img-src` only `data:`, `blob:`

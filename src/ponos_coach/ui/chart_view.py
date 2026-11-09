@@ -234,6 +234,11 @@ class ChartEngine(QObject):
         self._views.append(view)
 
     @property
+    def tiles(self) -> TileService | None:
+        """The tile service the pages' tile requests go to (None where there is no map)."""
+        return self._tiles
+
+    @property
     def started(self) -> bool:
         """True if the profile has been created (and not yet destroyed)."""
         return self._profile is not None

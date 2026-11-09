@@ -37,6 +37,7 @@ def _detail_of(
         session.physiology,
         session.sport_weights,
         access.decode,
+        access.decode_track,
         timezone=access.zone,
     )(identity)
     if isinstance(result, ExcludedActivity):

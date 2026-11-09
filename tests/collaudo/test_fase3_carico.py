@@ -23,7 +23,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from ponos_coach.activities.decoding import decode_stored_activity
+from ponos_coach.activities.decoding import decode_stored_activity, decode_stored_track
 from ponos_coach.activities.domain import FileFormat, HeartRateSeries, Sport
 from ponos_coach.load.activity_detail import ActivityDetail, GetActivityDetail
 from ponos_coach.load.domain import (
@@ -271,6 +271,7 @@ def test_t_calc_05_the_detail_of_every_activity_gives_the_same_load_as_the_overv
         session.physiology,
         session.sport_weights,
         decode_stored_activity,
+        decode_stored_track,
         timezone=ZoneInfo("Europe/Rome"),
     )
 

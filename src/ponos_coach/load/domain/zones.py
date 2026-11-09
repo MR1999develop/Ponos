@@ -64,6 +64,26 @@ def zone_starts_bpm(threshold_bpm: int) -> tuple[float, float, float, float]:
     )
 
 
+def zone_bpm_ranges(
+    threshold_bpm: int, min_bpm: int, max_bpm: int
+) -> tuple[tuple[int, int] | None, ...]:
+    """Whole-bpm range `(low, high)` of each zone Z1 ... Z5, both ends included.
+
+    Same rule as `zone_indices`: the lower boundary belongs to the higher zone, so a zone
+    starts at the smallest whole bpm with `bpm * 100 >= percentage * threshold` and ends one bpm
+    before the next. Z1 starts at `min_bpm` and Z5 ends at `max_bpm`; every range is clamped to
+    `[min_bpm, max_bpm]` and a zone left with no whole bpm inside the limits is `None`.
+    """
+    starts = [min_bpm]
+    starts += [-(-p * threshold_bpm // _PERCENT) for p in ZONE_STARTS_PERCENT]  # ceiling
+    ends = [start - 1 for start in starts[1:]] + [max_bpm]
+    ranges: list[tuple[int, int] | None] = []
+    for start, end in zip(starts, ends, strict=True):
+        low, high = max(start, min_bpm), min(end, max_bpm)
+        ranges.append((low, high) if low <= high else None)
+    return tuple(ranges)
+
+
 def zone_indices(bpm: NDArray[np.float64], threshold_bpm: int) -> NDArray[np.intp]:
     """Zone index (0 for Z1 ... 4 for Z5) of each sample, in vectorized form.
 

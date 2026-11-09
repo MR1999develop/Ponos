@@ -90,7 +90,9 @@ def new_profile_dialog() -> QWidget:
 
 
 def detail_dialog() -> QWidget:
-    return ActivityDetailDialog(ChartEngine(lambda _name: None), ZoneInfo("Europe/Rome"))
+    return ActivityDetailDialog(
+        ChartEngine(lambda _name: None), ZoneInfo("Europe/Rome"), theme=lambda: Theme.LIGHT
+    )
 
 
 DIALOGS: dict[str, Callable[[], QWidget]] = {

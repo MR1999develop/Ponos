@@ -285,7 +285,7 @@ class ProfileDialogs(QObject):
         if known is not None:
             _bring_forward(known[0])
             return
-        dialog = ActivityDetailDialog(self._engine, self._zone(), self._window)
+        dialog = ActivityDetailDialog(self._engine, self._zone(), self._window, theme=self._theme)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         loader = self._new_loader(dialog)
         loader.loaded.connect(dialog.show_outcome_of)
