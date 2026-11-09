@@ -143,9 +143,3 @@ Ritmo di lavoro (regola dell'utente del 2026-11-07, per accelerare):
    - Motivo: progetto personale senza certificato di firma del codice.
    - Compensazione: `SHA256SUMS` accanto ai pacchetti; il README spiega
      l'avviso di SmartScreen e la verifica dell'hash.
-3. **CI e pacchetti solo su Windows** (temporanea, regola dell'utente del
-   2026-11-09: "per ora portiamo avanti solo windows").
-   - Motivo: accelerare; i fallimenti della CI su Ubuntu rallentavano le PR.
-   - Compensazione: il codice per Linux resta (Secret Service, permessi 0700/0600,
-     test POSIX, `mypy --platform linux` nella sessione `types`); Ubuntu torna nelle
-     matrici di `ci.yml` e `release.yml` prima del collaudo finale (voce in `PLAN.md`).

@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest]  # Ubuntu paused for now: see CLAUDE.md, exception 3
+        os: [windows-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -25,8 +25,8 @@ jobs:
         with:
           version: "0.13.7"
 
-      # Librerie di sistema per Qt e QtWebEngine in modalità offscreen.
-      - name: Pacchetti di sistema per Qt
+      # System libraries for Qt and QtWebEngine in offscreen mode.
+      - name: System packages for Qt and QtWebEngine
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -37,5 +37,5 @@ jobs:
             libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
             libxcb-shape0 libxcb-xinerama0
 
-      - name: Controlli obbligatori
+      - name: All the mandatory checks
         run: uv run --locked nox

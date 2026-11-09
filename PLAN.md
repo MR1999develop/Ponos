@@ -659,8 +659,10 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
 - [ ] Collaudo completo (sezione 7) superato sull'eseguibile, su Windows e
       Ubuntu, con esiti registrati in `docs/collaudo.md`.
 - [ ] Ubuntu di nuovo nelle matrici di `ci.yml` e `release.yml` (tolto il
-      2026-11-09 su richiesta dell'utente, eccezione 3 di `CLAUDE.md`) e CI verde
-      su Ubuntu.
+      2026-11-09 su richiesta dell'utente, rimesso lo stesso giorno: eccezione 3
+      di `CLAUDE.md` chiusa) e CI verde su Ubuntu. Fatto: matrici e crash di
+      `test_tile_service` su Ubuntu (oggetto Qt distrutto da un worker,
+      `ui/worker_handover.py`); manca la CI verde su Ubuntu.
 - [x] Valori della tabella degli alimenti verificati contro ANSES-CIQUAL 2025
       (file del 2025-11-03, Etalab 2.0) con `experiments/verify_foods.py
       --ciqual-dir <cartella> --apply` (`source.verified_on` = 2026-11-09, 42
