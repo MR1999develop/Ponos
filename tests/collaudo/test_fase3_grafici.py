@@ -292,7 +292,7 @@ def activities(draw: st.DrawFn) -> list[DayLoad]:
 
 @settings(max_examples=60, deadline=None)
 @given(activities())
-def test_t_ui_04_the_bars_hold_the_weekly_sums_of_the_last_26_weeks_only(
+def test_t_ui_04_the_bars_hold_the_weekly_sums_of_every_week_and_open_on_the_last_26(
     items: list[DayLoad],
 ) -> None:
     tokens = tokens_for(Theme.LIGHT)
@@ -304,8 +304,17 @@ def test_t_ui_04_the_bars_hold_the_weekly_sums_of_the_last_26_weeks_only(
         weekly_zone_seconds(items, THROUGH), ZONES_LABELS, tokens
     )
     last_monday = THROUGH - timedelta(days=THROUGH.isoweekday() - 1)
-    shown_weeks = [last_monday - timedelta(weeks=n) for n in range(CHART_WEEKS - 1, -1, -1)]
     first_monday = min((w for w, _ in load_by_week), default=None)
+    # every week of the history is drawn (zooming out reaches them); the chart opens on the last 26
+    weeks_count = 0 if first_monday is None else (last_monday - first_monday).days // 7 + 1
+    shown_weeks = [last_monday - timedelta(weeks=n) for n in range(weeks_count - 1, -1, -1)]
+    opening = load_figure.layout.xaxis.range
+    if weeks_count > CHART_WEEKS:
+        assert opening is not None
+        assert opening[0] < shown_weeks[-CHART_WEEKS] < opening[1]
+        assert opening[0] > shown_weeks[-CHART_WEEKS - 1]
+    else:
+        assert opening is None
 
     shown_set = set(shown_weeks)
     totals = {
