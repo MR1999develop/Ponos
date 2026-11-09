@@ -503,3 +503,28 @@ def test_the_edit_profile_link_of_the_day_page_opens_the_profile_page(
 
     assert window.settings_window.isVisible()
     assert current(window) is SettingsCategory.PROFILE
+
+
+def test_the_window_save_button_is_always_in_view_and_saves_the_page_in_view(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    # The Profile page is taller than the window: its own "Save changes" sat below the fold and
+    # the user could not find it (2026-11-09), so a past-dated threshold was never saved.
+    window = window_with_activities(qtbot, tmp_path, settings)
+    shown = window.settings_window
+    window.edit_profile_action.trigger()
+    dialog = open_edit_dialog(qtbot, window)
+    save = shown.save_button
+    assert not save.isEnabled()  # nothing typed yet
+    assert save.toolTip() == "There is nothing to save on this page."
+    assert save.shortcut() == QKeySequence(QKeySequence.StandardKey.Save)
+
+    dialog.valid_from_edit.setDate(dialog.valid_from_edit.date().addDays(-30))
+    dialog.threshold_box.setValue(150)
+
+    assert save.isEnabled()
+    assert save.visibleRegion().boundingRect().height() == save.height()  # fully on screen
+    click(save)
+    wait_profile_saved(qtbot, window)
+    assert not shown.page(SettingsCategory.PROFILE).is_dirty
+    assert not save.isEnabled()

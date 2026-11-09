@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QCloseEvent, QKeyEvent, QShowEvent
+from PySide6.QtGui import QCloseEvent, QKeyEvent, QKeySequence, QShowEvent
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QListWidget,
@@ -63,12 +63,19 @@ class SettingsWindow(QWidget):
             page.dirty_changed.connect(self._on_dirty_changed)
             page.save_failed.connect(self._cancel_pending_close)
         self._list.currentRowChanged.connect(self._on_row_changed)
+        # Always in view, whatever the height of the page: a page's own button can sit below the
+        # fold (the Profile page is taller than the window).
+        self._save = QPushButton(self.tr("Save changes"), self)
+        self._save.setObjectName("settingsSave")
+        self._save.setShortcut(QKeySequence(QKeySequence.StandardKey.Save))
+        self._save.clicked.connect(self._save_page_in_view)
         self._close = QPushButton(self.tr("Close"), self)
         self._close.setObjectName("settingsClose")
         self._close.clicked.connect(self.close)
         buttons = QHBoxLayout()
         buttons.setContentsMargins(SPACE_4, 0, SPACE_4, 0)
         buttons.addStretch(1)
+        buttons.addWidget(self._save)
         buttons.addWidget(self._close)
         body = QHBoxLayout()
         body.setSpacing(0)
@@ -80,6 +87,7 @@ class SettingsWindow(QWidget):
         outer.addLayout(body, stretch=1)
         outer.addLayout(buttons)
         self._list.setCurrentRow(0)
+        self._update_save_button()
 
     # --- What the window shows ------
 
@@ -107,6 +115,11 @@ class SettingsWindow(QWidget):
         return self._list
 
     @property
+    def save_button(self) -> QPushButton:
+        """The "Save changes" button of the page in view."""
+        return self._save
+
+    @property
     def close_button(self) -> QPushButton:
         """The "Close" button."""
         return self._close
@@ -128,6 +141,7 @@ class SettingsWindow(QWidget):
             return
         page = self._pages[self._order[row]]
         self._stack.setCurrentWidget(page)
+        self._update_save_button()
         if self.isVisible():
             page.notify_shown()
 
@@ -151,10 +165,22 @@ class SettingsWindow(QWidget):
             item = self._list.item(row)
             item.setText(page.title + (_UNSAVED_MARK if page.is_dirty else ""))
             item.setToolTip(self.tr("This page has unsaved changes.") if page.is_dirty else "")
+        self._update_save_button()
         after_save = self._after_save
         if after_save is not None and not self.has_unsaved_changes():
             self._after_save = None
             after_save()
+
+    def _update_save_button(self) -> None:
+        """Enabled while the page in view holds unsaved edits; otherwise it says why not."""
+        if self._list.currentRow() < 0:
+            return
+        dirty = self._pages[self.current_category].is_dirty
+        self._save.setEnabled(dirty)
+        self._save.setToolTip("" if dirty else self.tr("There is nothing to save on this page."))
+
+    def _save_page_in_view(self) -> None:
+        self._pages[self.current_category].save()
 
     def confirm_leaving(self, proceed: Callable[[], None]) -> None:
         """Run `proceed` when no edit would be lost: at once if everything is saved, otherwise
