@@ -26,6 +26,7 @@ from ponos_coach.maps.ports import (
     TileKeyStoreUnavailableError,
 )
 from ponos_coach.maps.use_cases import KeyCheck, TileKeySettings, TileProxy
+from ponos_coach.ui.worker_handover import Handover
 
 _LOG = logging.getLogger(__name__)
 KEY_CACHE_GIB: Final = "map/cacheGiB"
@@ -80,6 +81,7 @@ class MapSettingsModel(QObject):
             max_workers=1, thread_name_prefix="ponos-tilekey"
         )
         self._checking = False
+        self._handover = Handover(self)  # the worker never holds the model
         # Always queued: a finished future calls back in the caller's thread, and the answer
         # must not arrive before `save_key` has returned.
         self._key_checked.connect(self._on_key_checked, Qt.ConnectionType.QueuedConnection)
@@ -105,7 +107,10 @@ class MapSettingsModel(QObject):
         if pool is None or self._checking:
             return False
         self._checking = True
-        pool.submit(self._check, text).add_done_callback(self._after_check)
+        handover = self._handover
+        pool.submit(_check, self._key_settings, text).add_done_callback(
+            lambda done: _after_check(handover, done)
+        )
         return True
 
     def remove_key(self) -> KeyOutcome:
@@ -117,28 +122,12 @@ class MapSettingsModel(QObject):
         return KeyOutcome.REMOVED
 
     def close(self) -> None:
-        """Stop the worker (a check in progress ends by itself within its timeouts)."""
+        """Stop the worker (a check in progress ends by itself within its timeouts; its outcome
+        is dropped)."""
+        self._handover.close()
         pool, self._pool = self._pool, None
         if pool is not None:
             pool.shutdown(wait=False, cancel_futures=True)
-
-    def _check(self, text: str) -> KeyOutcome:
-        try:
-            return _OF_CHECK[self._key_settings.set_key(text)]
-        except TileKeyStoreUnavailableError:
-            return KeyOutcome.STORE_UNAVAILABLE
-
-    def _after_check(self, future: Future[KeyOutcome]) -> None:
-        """Worker thread: hand the outcome to the UI thread (never the key, never the error)."""
-        try:
-            outcome = future.result()
-        except Exception as error:  # worker boundary: the dialog gets a plain failure
-            _LOG.error("Checking the tile key failed: %s", type(error).__name__)
-            outcome = KeyOutcome.STORE_UNAVAILABLE
-        try:
-            self._key_checked.emit(outcome)
-        except RuntimeError:  # the model was destroyed while the check ran
-            return
 
     @Slot(object)
     def _on_key_checked(self, outcome: object) -> None:
@@ -224,3 +213,21 @@ def outcome_text(outcome: KeyOutcome) -> str:
         ),
     }
     return texts[outcome]
+
+
+def _check(key_settings: TileKeySettings, text: str) -> KeyOutcome:
+    """Worker thread: check the key with the provider and keep it if it is not refused."""
+    try:
+        return _OF_CHECK[key_settings.set_key(text)]
+    except TileKeyStoreUnavailableError:
+        return KeyOutcome.STORE_UNAVAILABLE
+
+
+def _after_check(handover: Handover[MapSettingsModel], future: Future[KeyOutcome]) -> None:
+    """Worker thread: hand the outcome to the UI thread (never the key, never the error)."""
+    try:
+        outcome = future.result()
+    except Exception as error:  # worker boundary: the dialog gets a plain failure
+        _LOG.error("Checking the tile key failed: %s", type(error).__name__)
+        outcome = KeyOutcome.STORE_UNAVAILABLE
+    handover.post(lambda model: model._key_checked.emit(outcome))  # queued

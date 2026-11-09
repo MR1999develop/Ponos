@@ -12,7 +12,6 @@ it. The path of a tile says which area is looked at: it is never logged.
 from __future__ import annotations
 
 import logging
-import threading
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 
@@ -21,6 +20,7 @@ from PySide6.QtCore import QObject, Qt, Signal, Slot
 from ponos_coach.maps.domain import TileAddressError
 from ponos_coach.maps.ports import TileProblem
 from ponos_coach.maps.use_cases import TileAnswer, TileProxy
+from ponos_coach.ui.worker_handover import Handover
 
 _LOG = logging.getLogger(__name__)
 _WORKERS = 4  # the provider's connections are slow, not heavy
@@ -54,10 +54,7 @@ class TileService(QObject):
         self._pending: dict[int, TileDone] = {}
         self._next_id = 1
         self._problem: TileProblem | None = None
-        # Held while a worker hands over an answer and while `shutdown` closes the service: once
-        # `shutdown` returns no worker touches this object, which may then be destroyed.
-        self._handover = threading.Lock()
-        self._closed = False
+        self._handover = Handover(self)  # the workers never hold the service
         self._completed.connect(self._on_completed, Qt.ConnectionType.QueuedConnection)
 
     @property
@@ -76,13 +73,9 @@ class TileService(QObject):
         request_id = self._next_id
         self._next_id += 1
         self._pending[request_id] = on_done
-        language = self._language()
-
-        def work() -> TileAnswer | None:
-            return self._serve(path, language)
-
-        future = pool.submit(work)
-        future.add_done_callback(lambda done: self._finished(request_id, done))
+        future = pool.submit(_serve, self._proxy, path, self._language())
+        handover = self._handover
+        future.add_done_callback(lambda done: _hand_over(handover, request_id, done))
         return True
 
     def shutdown(self) -> None:
@@ -90,31 +83,11 @@ class TileService(QObject):
 
         After it returns no worker thread emits on this object any more.
         """
-        with self._handover:
-            self._closed = True
+        self._handover.close()
         pool, self._pool = self._pool, None
         self._pending.clear()
         if pool is not None:
             pool.shutdown(wait=False, cancel_futures=True)
-
-    def _serve(self, path: str, language: str) -> TileAnswer | None:
-        try:
-            return self._proxy.serve(path, language)
-        except TileAddressError:
-            return None
-        except Exception as error:  # worker boundary: the page just gets "no tile"
-            # Only the type: the message could carry an address, which says where the user looks.
-            _LOG.error("Tile request failed: %s", type(error).__name__)
-            return None
-
-    def _finished(self, request_id: int, future: Future[TileAnswer | None]) -> None:
-        """Runs on a worker thread: hand the result to the UI thread through a queued signal."""
-        if future.cancelled():
-            return
-        answer = future.result()
-        with self._handover:
-            if not self._closed:
-                self._completed.emit(request_id, answer)  # queued: only posts an event
 
     @Slot(int, object)
     def _on_completed(self, request_id: int, answer: object) -> None:
@@ -131,3 +104,25 @@ class TileService(QObject):
         if problem != self._problem:
             self._problem = problem
             self.problem_changed.emit(problem)
+
+
+def _serve(proxy: TileProxy, path: str, language: str) -> TileAnswer | None:
+    """Runs on a worker thread: the tile, or `None` for a bad address or a failure."""
+    try:
+        return proxy.serve(path, language)
+    except TileAddressError:
+        return None
+    except Exception as error:  # worker boundary: the page just gets "no tile"
+        # Only the type: the message could carry an address, which says where the user looks.
+        _LOG.error("Tile request failed: %s", type(error).__name__)
+        return None
+
+
+def _hand_over(
+    handover: Handover[TileService], request_id: int, future: Future[TileAnswer | None]
+) -> None:
+    """Runs on a worker thread when a request ends: posts the answer to the UI thread."""
+    if future.cancelled():
+        return
+    answer = future.result()
+    handover.post(lambda service: service._completed.emit(request_id, answer))  # queued

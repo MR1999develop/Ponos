@@ -8,7 +8,10 @@ real key store. The keys in the tests are made up.
 
 from __future__ import annotations
 
+import gc
+import threading
 import time
+import weakref
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -122,6 +125,40 @@ def test_removing_the_key_forgets_it_and_the_check_runs_one_at_a_time(
     qtbot.waitUntil(lambda: not model.is_checking, timeout=WAIT_MS)
     model.close()
     assert not model.save_key(GOOD)  # closed: nothing starts
+
+
+def test_a_check_still_running_after_close_keeps_no_reference_to_the_model(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    # The last reference to the QObject must never be dropped on the worker thread (see
+    # `ui/worker_handover.py`): once closed and released, the model is gone at once.
+    gate = threading.Event()
+    started = threading.Event()
+    keys = InMemoryTileKeyStore()
+
+    class Blocked(FakeTileSource):
+        def fetch(self, z: int, x: int, y: int, language: str) -> TileResult:
+            started.set()
+            gate.wait(timeout=30)
+            return super().fetch(z, x, y, language)
+
+    source = Blocked(keys)
+    proxy = TileProxy(source, InMemoryTileCache(), lambda: datetime.now(UTC), time.monotonic)
+    settings = QSettings(str(tmp_path / "map.ini"), QSettings.Format.IniFormat)
+    model = MapSettingsModel(
+        TileKeySettings(keys, source, proxy), proxy, InMemoryTileCache(), settings
+    )
+    try:
+        assert model.save_key(GOOD)
+        assert started.wait(timeout=WAIT_MS / 1000)
+        model.close()
+        released = weakref.ref(model)
+        del model
+        gc.collect()
+
+        assert released() is None
+    finally:
+        gate.set()
 
 
 # --- Model: the cache -----------------------------------------------------------------------

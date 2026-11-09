@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
+import gc
 import threading
 import time
+import weakref
 from datetime import UTC, datetime
 
 from pytestqt.qtbot import QtBot
@@ -99,6 +101,37 @@ def test_a_service_that_was_shut_down_takes_no_more_requests(qtbot: QtBot) -> No
 
     assert not service.request("/1/0/0", lambda _png: None)
     assert source.calls == []
+
+
+def test_a_worker_still_busy_after_shutdown_keeps_no_reference_to_the_service(
+    qtbot: QtBot,
+) -> None:
+    # The QObject lives on the UI thread: if a worker dropped the last reference, the object
+    # would be destroyed off that thread while the UI thread delivers its events (a crash on
+    # Ubuntu in CI). So once shut down and released, the service must be gone at once.
+    gate = threading.Event()
+    started = threading.Event()
+    keys = InMemoryTileKeyStore(TileKey(FakeTileSource.ACCEPTED_KEY))
+
+    class Blocked(FakeTileSource):
+        def fetch(self, z: int, x: int, y: int, language: str) -> TileResult:  # noqa: ARG002
+            started.set()
+            gate.wait(timeout=30)
+            return TileImage(make_png(), 3600)
+
+    proxy = TileProxy(Blocked(keys), InMemoryTileCache(), lambda: datetime.now(UTC), time.monotonic)
+    service = TileService(proxy, lambda: "en")
+    try:
+        assert service.request("/5/1/1", lambda _png: None)
+        assert started.wait(timeout=WAIT_MS / 1000)
+        service.shutdown()
+        released = weakref.ref(service)
+        del service
+        gc.collect()
+
+        assert released() is None
+    finally:
+        gate.set()
 
 
 def test_the_requests_that_wait_are_limited(qtbot: QtBot) -> None:
