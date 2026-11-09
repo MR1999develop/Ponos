@@ -117,6 +117,32 @@ def test_the_totals_give_basal_metabolism_spending_deficit_target_and_macros(
     assert window.day_page.summary_line.startswith("Goal: Maintenance. Day: ")
 
 
+def test_every_row_of_the_day_tables_is_on_screen_even_with_a_larger_font(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+    font = window.font()
+    font.setPointSizeF(font.pointSizeF() * 1.5)  # as with display scaling or a large system font
+    window.setFont(font)
+    window.show()
+    qtbot.waitExposed(window)
+
+    open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
+
+    tables = window.day_page.findChildren(QTableView)
+    assert tables
+
+    def last_row_inside(table: QTableView) -> bool:
+        rows = table.model().rowCount()
+        if rows == 0:
+            return True
+        last = table.visualRect(table.model().index(rows - 1, 0))
+        return last.height() > 0 and last.bottom() < table.viewport().height()
+
+    for table in tables:
+        qtbot.waitUntil(lambda table=table: last_row_inside(table), timeout=WAIT_MS)
+
+
 def test_the_meal_cards_come_in_time_order_with_amounts_and_a_moved_lunch(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:

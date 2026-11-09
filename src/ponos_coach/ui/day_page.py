@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QStackedWidget,
     QTableView,
     QVBoxLayout,
@@ -69,22 +70,45 @@ def _label(text: str, parent: QWidget | None = None, *, bold: bool = False) -> Q
     return label
 
 
-def _fit_table(table: QTableView, rows: int) -> None:
-    """Size a table to its rows (no scroll bars: the page scrolls)."""
-    table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    table.setFixedHeight(
-        table.horizontalHeader().sizeHint().height()
-        + rows * table.verticalHeader().defaultSectionSize()
-        + _FRAME_ROWS_EXTRA * table.frameWidth()
-        + _FRAME_ROWS_EXTRA
-    )
+class _FittedTable(QTableView):
+    """A table as tall as its rows, with no scroll bars (the page scrolls).
+
+    The rows take the height their text needs, and the height is worked out at layout time with
+    the font the table really has (a larger font or display scaling makes rows taller than the
+    default section), so the last row is never cut off.
+    """
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        rows = self.verticalHeader()
+        rows.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        rows.sectionResized.connect(self.updateGeometry)
+        self.horizontalHeader().geometriesChanged.connect(self.updateGeometry)
+
+    def _fitted_height(self) -> int:
+        return (
+            self.horizontalHeader().sizeHint().height()
+            + self.verticalHeader().length()
+            + _FRAME_ROWS_EXTRA * self.frameWidth()
+            + _FRAME_ROWS_EXTRA
+        )
+
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt
+        """As wide as Qt suggests, as tall as the rows."""
+        return QSize(super().sizeHint().width(), self._fitted_height())
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt
+        """Never shorter than the rows."""
+        return QSize(super().minimumSizeHint().width(), self._fitted_height())
 
 
 def _plain_table(
     model: TextTableModel, name: str, parent: QWidget, *, stretch_last: bool
 ) -> QTableView:
-    table = QTableView(parent)
+    table = _FittedTable(parent)
     table.setObjectName(name)
     table.setAccessibleName(name)
     table.setModel(model)
@@ -414,7 +438,6 @@ class DayPage(QWidget):
         table = _plain_table(
             self._totals_model, self.tr("Energy and macros"), box, stretch_last=False
         )
-        _fit_table(table, len(view.totals))
         table.setMaximumWidth(_MAX_TEXT_WIDTH // 2)
         inner.addWidget(table)
         return box
@@ -433,7 +456,6 @@ class DayPage(QWidget):
         table = _plain_table(
             self._activities_model, self.tr("Day activities"), box, stretch_last=True
         )
-        _fit_table(table, len(view.activities))
         inner.addWidget(table)
         return box
 
