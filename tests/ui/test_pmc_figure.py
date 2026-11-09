@@ -198,3 +198,15 @@ def test_the_load_unit_comes_from_the_labels_for_axes_and_tooltips() -> None:
     assert figure.layout.yaxis.title.text == "Load (hrTSS al giorno)"
     assert figure.layout.yaxis2.title.text == "Form (hrTSS al giorno)"
     assert "hrTSS al giorno" in figure.data[0].hovertemplate
+
+
+def test_the_fitness_hint_gives_the_share_of_the_recent_best() -> None:
+    pmc, entries = small_history()
+
+    ctl = build_pmc_figure(pmc, entries, LABELS, tokens_for(Theme.LIGHT)).data[0]
+
+    assert ctl.name == "Fitness (CTL)"
+    assert "% of your best of the last two years" in ctl.hovertemplate
+    assert "%{customdata:.0f}" in ctl.hovertemplate
+    assert max(ctl.customdata) == 100  # the highest day of the series is its own best
+    assert all(0 <= share <= 100 for share in ctl.customdata)

@@ -4768,6 +4768,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Oggi</translation>
     </message>
     <message>
+        <source>{share}% of your best of the last two years</source>
+        <translation>{share}% del tuo massimo degli ultimi due anni</translation>
+    </message>
+    <message>
         <source>Week (starting Monday)</source>
         <translation>Settimana (da lunedì)</translation>
     </message>

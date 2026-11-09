@@ -11,7 +11,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from ponos_coach.load.domain import PmcSeries, compute_pmc
+from ponos_coach.load.domain import PmcSeries, compute_pmc, ctl_share_of_recent_peak
 
 DAY0 = date(2026, 3, 2)
 
@@ -117,3 +117,43 @@ def test_pmc_equals_closed_form_convolution(loads: list[float]) -> None:
             for n in range(len(loads))
         ]
         assert got == pytest.approx(expected, rel=1e-9, abs=1e-9)
+
+
+# --- CTL as a share of the recent personal peak --------------------------------------------
+
+
+def series_of_ctl(values: list[float]) -> PmcSeries:
+    ctl = np.array(values, dtype=np.float64)
+    return PmcSeries(date(2026, 1, 1), np.zeros_like(ctl), ctl, np.zeros_like(ctl))
+
+
+def test_the_share_is_of_the_best_ctl_inside_the_window_only() -> None:
+    pmc = series_of_ctl([10.0, 40.0, 20.0, 30.0, 15.0])
+
+    shares = ctl_share_of_recent_peak(pmc, window_days=3)
+
+    # day 4 (15) looks back at days 2-4 (20, 30, 15): the 40 of day 1 has left the window
+    assert shares.tolist() == pytest.approx([1.0, 1.0, 0.5, 0.75, 0.5])
+
+
+def test_a_series_that_never_rose_has_a_share_of_zero_not_a_division_error() -> None:
+    assert ctl_share_of_recent_peak(series_of_ctl([0.0, 0.0])).tolist() == [0.0, 0.0]
+
+
+def test_the_window_must_be_at_least_one_day() -> None:
+    with pytest.raises(ValueError, match="window"):
+        ctl_share_of_recent_peak(series_of_ctl([1.0]), window_days=0)
+
+
+@given(
+    st.lists(st.floats(0.0, 200.0), min_size=1, max_size=60),
+    st.integers(1, 20),
+)
+def test_the_sliding_maximum_equals_the_naive_one(values: list[float], window: int) -> None:
+    shares = ctl_share_of_recent_peak(series_of_ctl(values), window_days=window)
+
+    for index, value in enumerate(values):
+        peak = max(values[max(0, index - window + 1) : index + 1])
+        expected = value / peak if peak > 0 else 0.0
+        assert shares[index] == pytest.approx(expected)
+        assert 0.0 <= shares[index] <= 1.0

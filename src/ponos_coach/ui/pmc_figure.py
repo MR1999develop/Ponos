@@ -18,11 +18,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from ponos_coach.goals.domain import Priority
-from ponos_coach.load.domain import PmcSeries
+from ponos_coach.load.domain import PmcSeries, ctl_share_of_recent_peak
 from ponos_coach.planning.domain import PmcPoint
 from ponos_coach.ui.chart_payload import (
     LEGEND_Y,
@@ -44,6 +45,7 @@ _TOP_ROW_SHARE = 0.68
 _PROJECTION_DASH = "dot"  # the plan's part: dotted; the real part is solid (CTL, TSB) or dashed
 _PAST_DAYS_SHOWN = 90  # with a projection the chart opens on the last three months and the plan
 _MARKER_SIZE = 11
+_PERCENT = 100
 EXPORT_FILE_STEM = "ponos-coach-pmc"
 
 
@@ -76,6 +78,8 @@ class PmcChartLabels:
     races: str = "Races"
     race_hint: str = "Race {priority}: {name}"  # {priority}: A, B or C; {name}: the race
     today: str = "Today"
+    # {share}: the CTL of the day as a percentage of the user's highest CTL of the last two years.
+    peak_share: str = "{share}% of your best of the last two years"
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,7 +158,12 @@ def build_pmc_figure(
             hovertemplate=hover,
         )
 
-    figure.add_trace(line(labels.ctl, pmc.ctl, tokens.ctl), row=1, col=1)
+    ctl_line = line(labels.ctl, pmc.ctl, tokens.ctl)
+    ctl_line.customdata = np.round(ctl_share_of_recent_peak(pmc) * _PERCENT)
+    # the share of the recent best: the absolute CTL depends on parameters and sports
+    share_text = html.escape(labels.peak_share).replace("{share}", "%{customdata:.0f}")
+    ctl_line.hovertemplate = hover.replace("<extra>", f" ({share_text})<extra>")
+    figure.add_trace(ctl_line, row=1, col=1)
     figure.add_trace(line(labels.atl, pmc.atl, tokens.atl, _ATL_DASH), row=1, col=1)
     figure.add_trace(line(labels.tsb, pmc.tsb, tokens.tsb), row=2, col=1)
     figure.add_trace(

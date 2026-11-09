@@ -35,7 +35,12 @@ from ponos_coach.load.domain.parameters import (
     load_fingerprint,
     physiology_for_day,
 )
-from ponos_coach.load.domain.pmc import PmcSeries, compute_pmc
+from ponos_coach.load.domain.pmc import (
+    PEAK_WINDOW_DAYS,
+    PmcSeries,
+    compute_pmc,
+    ctl_share_of_recent_peak,
+)
 from ponos_coach.load.domain.sport import (
     SportWeight,
     customised_weights,
@@ -57,6 +62,7 @@ from ponos_coach.load.domain.zones import (
 __all__ = [
     "LOAD_MODEL_VERSION",
     "MAX_GAP_S",
+    "PEAK_WINDOW_DAYS",
     "ZONE_COUNT",
     "ZONE_STARTS_PERCENT",
     "ActivityLoad",
@@ -77,6 +83,7 @@ __all__ = [
     "ZoneSeconds",
     "compute_activity_load",
     "compute_pmc",
+    "ctl_share_of_recent_peak",
     "customised_weights",
     "default_weight",
     "effective_weight",

@@ -338,6 +338,9 @@ class OverviewPage(QWidget):
             # {priority}: A, B or C; {name}: the race, for example the distance.
             race_hint=self.tr("Race {priority}: {name}"),
             today=self.tr("Today"),
+            # {share}: the day's fitness as a percentage of the user's highest fitness of the
+            # last two years (a whole number).
+            peak_share=self.tr("{share}% of your best of the last two years"),
         )
 
     def _load_labels(self, chrome: ChartChrome) -> WeeklyLoadLabels:

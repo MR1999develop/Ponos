@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import math
+from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -14,6 +15,10 @@ from numpy.typing import NDArray
 
 ATL_DAYS = 7.0  # time constant of ATL (fatigue)
 CTL_DAYS = 42.0  # time constant of CTL (fitness)
+# Project default: "your recent best" is the highest CTL of the last two years. CTL means little
+# in absolute terms (it depends on threshold, HR limits and the mix of sports): compared with the
+# user's own recent peak it tells how close to top form a day is (user's days of 2026-11-09).
+PEAK_WINDOW_DAYS = 730
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -87,3 +92,29 @@ def compute_pmc(daily_loads: Mapping[date, float], first_day: date, last_day: da
     tsb = np.zeros(count, dtype=np.float64)
     tsb[1:] = ctl[:-1] - atl[:-1]
     return PmcSeries(first_day, atl, ctl, tsb)
+
+
+def ctl_share_of_recent_peak(
+    pmc: PmcSeries, window_days: int = PEAK_WINDOW_DAYS
+) -> NDArray[np.float64]:
+    """Each day's CTL as a share (0 to 1) of the highest CTL of the `window_days` days up to
+    and including that day; 0 where that peak is 0. Linear time (a sliding maximum).
+
+    Raises:
+        ValueError: if `window_days` is not positive.
+    """
+    if window_days <= 0:
+        raise ValueError("the window must be at least one day")
+    ctl = pmc.ctl
+    shares = np.zeros(len(pmc), dtype=np.float64)
+    candidates: deque[int] = deque()  # indices of decreasing CTL inside the window
+    for index in range(len(pmc)):
+        while candidates and ctl[candidates[-1]] <= ctl[index]:
+            candidates.pop()
+        candidates.append(index)
+        if candidates[0] <= index - window_days:
+            candidates.popleft()
+        peak = float(ctl[candidates[0]])
+        shares[index] = float(ctl[index]) / peak if peak > 0 else 0.0
+    shares.setflags(write=False)
+    return shares
