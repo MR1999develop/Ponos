@@ -292,9 +292,6 @@ class CalendarPage(QWidget):
         self._next = QPushButton(self.tr("Next month"), self)
         self._next.setObjectName("calendarNext")
         self._next.clicked.connect(self.next_month)
-        self._current = QPushButton(self.tr("Today"), self)
-        self._current.setObjectName("calendarToday")
-        self._current.clicked.connect(self.go_today)
         self._title = QLabel(self)
         self._title.setObjectName("calendarTitle")
         self._title.setTextFormat(Qt.TextFormat.PlainText)
@@ -306,8 +303,6 @@ class CalendarPage(QWidget):
         top = QHBoxLayout()
         for widget in (self._previous, self._title, self._next):
             top.addWidget(widget)
-        top.addSpacing(SPACE_4)
-        top.addWidget(self._current)
         top.addStretch(1)
         return top
 
@@ -408,11 +403,6 @@ class CalendarPage(QWidget):
     def next_button(self) -> QPushButton:
         """The "Next month" button."""
         return self._next
-
-    @property
-    def today_button(self) -> QPushButton:
-        """The "Today" button."""
-        return self._current
 
     @property
     def phase_legend_texts(self) -> tuple[str, ...]:

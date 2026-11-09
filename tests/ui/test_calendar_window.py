@@ -15,7 +15,7 @@ import pytest
 from PySide6.QtCore import QLocale, QSettings, Qt
 from PySide6.QtGui import QBrush
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QListWidget
+from PySide6.QtWidgets import QListWidget, QPushButton
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.nutrition.domain import GoalPeriod, WeightLossGoal
@@ -102,7 +102,9 @@ def test_navigation_by_buttons_moves_one_month_and_next_stops_a_year_ahead(
     page.previous_button.click()
     page.previous_button.click()
     assert page.title_text == "March 2026"
-    page.today_button.click()
+    # No "Today" button on the page (user's request): Ctrl+T and the day menu bring today back.
+    assert page.findChild(QPushButton, "calendarToday") is None
+    page.go_today()
     assert page.title_text == "June 2026"
     assert page.selected_day() == date(2026, 6, 30)
     for _ in range(12):
