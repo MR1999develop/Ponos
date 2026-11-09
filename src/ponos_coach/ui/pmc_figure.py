@@ -2,8 +2,9 @@
 # Copyright (C) 2026 MR
 """Plotly PMC figure: pure function from `PmcSeries` and activities to `go.Figure`.
 
-Two panels with the same date axis: on top CTL, ATL and daily load (bars from
-zero), below the form (TSB), which can be negative. The legend follows the series order.
+Two panels with the same date axis: on top CTL, ATL and daily load (from zero, drawn as one
+stepped area: a bar per day costs the browser a shape each, and with years of days zooming
+lagged), below the form (TSB), which can be negative. The legend follows the series order.
 CTL and ATL are told apart even without colour: ATL is dashed and each line carries its name
 next to the last point.
 The page payload is a JSON produced by `json.dumps` (`render_script`).
@@ -94,6 +95,12 @@ class PmcProjection:
     races: tuple[ProjectedRace, ...] = ()
 
 
+def _with_opacity(color: str, opacity: float) -> str:
+    """A `#rrggbb` colour with an opacity, as CSS `rgba()`."""
+    red, green, blue = (int(color[i : i + 2], 16) for i in (1, 3, 5))
+    return f"rgba({red},{green},{blue},{opacity})"
+
+
 def daily_load_of(activities: Sequence[ChartActivity], days: Sequence[date]) -> list[float]:
     """(Weighted) load of each day of the series: sum of that local day's activities."""
     totals: dict[date, float] = defaultdict(float)
@@ -150,11 +157,14 @@ def build_pmc_figure(
     figure.add_trace(line(labels.atl, pmc.atl, tokens.atl, _ATL_DASH), row=1, col=1)
     figure.add_trace(line(labels.tsb, pmc.tsb, tokens.tsb), row=2, col=1)
     figure.add_trace(
-        go.Bar(
+        go.Scatter(
             x=days,
             y=daily_load_of(activities, days),
             name=labels.daily_load,
-            marker={"color": tokens.daily_load, "opacity": tokens.daily_load_opacity},
+            mode="lines",
+            line={"color": tokens.daily_load, "width": 0, "shape": "hv"},
+            fill="tozeroy",  # from zero, like the bars it replaces
+            fillcolor=_with_opacity(tokens.daily_load, tokens.daily_load_opacity),
             customdata=_day_hover_text(activities, days),
             hovertemplate=hover.replace("<extra>", "<br>%{customdata}<extra>"),
         ),

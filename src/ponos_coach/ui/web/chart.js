@@ -66,17 +66,27 @@
     });
   }
 
-  // Show the dates from `start` to `end` (ISO strings); with null the whole series.
-  window.ponosSetXRange = function (start, end) {
+  // Show the dates from `start` to `end` (ISO strings); with null the whole series. A burst of
+  // calls (one per wheel step on the linked chart) redraws at most once per frame, with the latest.
+  var wantedRange;
+  var rangeFrame = null;
+
+  function applyWantedRange() {
+    rangeFrame = null;
     if (host.data === undefined) { return; }
-    var update = start === null
+    var update = wantedRange === null
       ? { "xaxis.autorange": true }
-      : { "xaxis.range": [start, end] };
+      : { "xaxis.range": wantedRange };
     applyingRange = true;
     Plotly.relayout(host, update).then(
       function () { applyingRange = false; },
       function () { applyingRange = false; }
     );
+  }
+
+  window.ponosSetXRange = function (start, end) {
+    wantedRange = start === null ? null : [start, end];
+    if (rangeFrame === null) { rangeFrame = window.requestAnimationFrame(applyWantedRange); }
   };
 
   window.ponosCursor = function (x) {

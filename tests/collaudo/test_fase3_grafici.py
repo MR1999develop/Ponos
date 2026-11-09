@@ -208,9 +208,10 @@ def test_t_ui_04_bar_charts_start_at_zero_stack_and_never_go_negative(theme: The
             assert trace.base is None  # no offset: the height is the value
             assert (np.asarray(trace.y) >= 0).all()
     pmc = CHARTS["pmc"](tokens).figure
-    (bars,) = [t for t in pmc.data if t.type == "bar"]
-    assert (np.asarray(bars.y) >= 0).all()
-    assert pmc.layout.yaxis.rangemode == "tozero"  # the bar panel
+    (daily,) = [t for t in pmc.data if t.name == "Daily load"]
+    assert daily.fill == "tozeroy"  # an area from zero, one step a day
+    assert (np.asarray(daily.y) >= 0).all()
+    assert pmc.layout.yaxis.rangemode == "tozero"  # the load panel
 
 
 @pytest.mark.parametrize("theme", THEMES)

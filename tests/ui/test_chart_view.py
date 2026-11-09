@@ -79,7 +79,7 @@ def test_plotly_draws_the_series_and_legend_in_order_from_local_files_only(qtbot
         "Array.from(document.querySelectorAll('.legendtext')).map(e => e.textContent)",
     )
     assert legend == ["Fitness (CTL)", "Fatigue (ATL)", "Form (TSB)", "Daily load"]
-    assert evaluate(qtbot, view, "document.querySelectorAll('.bars .point').length") == 10
+    assert evaluate(qtbot, view, "document.getElementById('chart').data[3].y.length") == 10
     assert view.page.url() == QUrl("ponos://app/chart.html")
 
 

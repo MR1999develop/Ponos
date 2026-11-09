@@ -27,7 +27,7 @@ def test_series_are_ctl_atl_tsb_lines_then_daily_load_bars_in_legend_order() -> 
         ("Fitness (CTL)", "scatter"),
         ("Fatigue (ATL)", "scatter"),
         ("Form (TSB)", "scatter"),
-        ("Daily load", "bar"),
+        ("Daily load", "scatter"),
     ]
     assert figure.layout.legend.traceorder == "normal"
 
@@ -69,7 +69,8 @@ def test_series_use_okabe_ito_colors_and_themes_change_the_surface() -> None:
         line_colors = {trace.line.color for trace in figure.data[:3]}
         assert line_colors <= okabe_ito
         assert len(line_colors) == 3
-        assert figure.data[3].marker.color not in line_colors  # the bars are neutral
+        assert figure.data[3].line.color not in line_colors  # the daily load is neutral
+        assert figure.data[3].fill == "tozeroy"
 
 
 def test_daily_load_sums_activities_of_the_same_day() -> None:
