@@ -240,6 +240,8 @@ def test_the_composition_root_logs_to_the_user_log_folder_and_installs_the_hooks
     monkeypatch.setattr(platformdirs, "user_log_dir", lambda *_a, **_k: str(logs), raising=True)
     monkeypatch.setattr(platformdirs, "user_config_dir", lambda *_a, **_k: str(tmp_path / "config"))
     monkeypatch.setattr(platformdirs, "user_data_dir", lambda *_a, **_k: str(tmp_path / "data"))
+    # The map's tile cache too: never the user's own cache folder.
+    monkeypatch.setattr(platformdirs, "user_cache_dir", lambda *_a, **_k: str(tmp_path / "cache"))
 
     assert entry_point.main([]) == 0
 

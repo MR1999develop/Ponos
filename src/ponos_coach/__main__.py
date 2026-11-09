@@ -42,6 +42,7 @@ from ponos_coach.maps.domain import TileAddress
 from ponos_coach.maps.ports import (
     CachedTile,
     TileCache,
+    TileCacheError,
     TileImage,
     TileSource,
 )
@@ -331,10 +332,19 @@ class _LazyDiskTileCache:
         self._folder = folder
         self._limit = limit_bytes
         self._cache: DiskTileCache | None = None
+        self._closed = False
         self._lock = threading.Lock()
 
     def _real(self) -> DiskTileCache:
+        """The open cache. After `close` it never opens again: a tile request still on its way
+        when the window closed would leave a connection that nothing closes.
+
+        Raises:
+            TileCacheError: the cache was closed (the proxy takes it as a miss).
+        """
         with self._lock:
+            if self._closed:
+                raise TileCacheError("the tile cache is closed")
             if self._cache is None:
                 self._cache = DiskTileCache(self._folder, self._limit)
             return self._cache
@@ -368,8 +378,9 @@ class _LazyDiskTileCache:
             cache.set_limit(limit_bytes)
 
     def close(self) -> None:
-        """Close the file if it was opened."""
+        """Close the file if it was opened; afterwards the cache stays closed."""
         with self._lock:
+            self._closed = True
             cache, self._cache = self._cache, None
         if cache is not None:
             cache.close()
