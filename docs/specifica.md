@@ -378,9 +378,10 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 - Stacked bars starting from zero, one per ISO week (Monday to Sunday, local
   days of the profile), the last 26 weeks; with the chart toolbar you can zoom
   in. Weeks without activity are there, at zero.
-- At most five series: the four sports with the most load in the period and
-  the entry "Other" for the rest. No red or orange colour, reserved for errors
-  and warnings.
+- One series per sport with load, each with its own fixed colour (seven sports,
+  seven colours): no sport is grouped into "Other", which holds only the
+  activities of sport "Other" (user's request of 2026-11-09). No red or orange
+  colour, reserved for errors and warnings.
 - Unit: hrTSS per week. The tooltip on the segment gives sport and value.
 
 ### Time in zones

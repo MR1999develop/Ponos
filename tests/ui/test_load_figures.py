@@ -257,24 +257,14 @@ def traces_of(items: list[DayLoad]) -> dict[str, float]:
     return {str(trace.name): float(np.sum(trace.y)) for trace in figure.data}
 
 
-def test_up_to_five_sports_each_get_their_own_series() -> None:
-    loads = {
-        Sport.RUNNING: 50.0,
-        Sport.CYCLING: 40.0,
-        Sport.STRENGTH: 30.0,
-        Sport.HIKING: 20.0,
-        Sport.OTHER: 10.0,
-    }
-
-    assert traces_of(every_sport_week(loads)) == {SPORT_NAMES[s]: v for s, v in loads.items()}
-
-
-def test_with_more_than_five_sports_the_least_loaded_are_grouped_in_other() -> None:
+def test_every_sport_gets_its_own_series_strength_is_never_merged_into_other() -> None:
+    # The user's request of 2026-11-09: "Strength" instead of "Other" in the weekly load. With
+    # seven sports and seven colours there is no grouping: a light sport keeps its name.
     loads = {
         Sport.RUNNING: 70.0,
         Sport.TRAIL: 5.0,
         Sport.CYCLING: 60.0,
-        Sport.STRENGTH: 50.0,
+        Sport.STRENGTH: 3.0,
         Sport.HIKING: 40.0,
         Sport.WALKING: 8.0,
         Sport.OTHER: 2.0,
@@ -282,18 +272,16 @@ def test_with_more_than_five_sports_the_least_loaded_are_grouped_in_other() -> N
 
     series = traces_of(every_sport_week(loads))
 
-    assert len(series) == 5
-    assert series == {
-        SPORT_NAMES[Sport.RUNNING]: 70.0,
-        SPORT_NAMES[Sport.CYCLING]: 60.0,
-        SPORT_NAMES[Sport.STRENGTH]: 50.0,
-        SPORT_NAMES[Sport.HIKING]: 40.0,
-        SPORT_NAMES[Sport.OTHER]: 15.0,  # trail + walking + other
-    }
-    assert sum(series.values()) == sum(loads.values())  # total load does not change
+    assert series == {SPORT_NAMES[s]: v for s, v in loads.items()}
 
 
-def test_the_grouping_keeps_the_sport_order_other_last_and_the_color_of_each_sport() -> None:
+def test_only_sports_with_load_are_drawn() -> None:
+    loads = {Sport.RUNNING: 50.0, Sport.STRENGTH: 30.0}
+
+    assert traces_of(every_sport_week(loads)) == {SPORT_NAMES[s]: v for s, v in loads.items()}
+
+
+def test_the_series_keep_the_sport_order_and_the_color_of_each_sport() -> None:
     weekly = weekly_load_by_sport(
         every_sport_week({sport: float(10 + number) for number, sport in enumerate(Sport)}),
         MONDAY + timedelta(days=3),
@@ -303,24 +291,8 @@ def test_the_grouping_keeps_the_sport_order_other_last_and_the_color_of_each_spo
     figure = build_weekly_load_figure(weekly, LOAD_LABELS, tokens)
 
     names = [str(trace.name) for trace in figure.data]
-    assert names[-1] == SPORT_NAMES[Sport.OTHER]
-    order = [next(s for s, n in SPORT_NAMES.items() if n == name) for name in names]
-    assert order == sorted(order, key=list(Sport).index)
-    assert [trace.marker.color for trace in figure.data] == [sport_color(s, tokens) for s in order]
-
-
-def test_a_tie_in_the_load_is_broken_by_the_order_of_the_sports() -> None:
-    loads = dict.fromkeys(Sport, 10.0)
-
-    series = traces_of(every_sport_week(loads))
-
-    assert set(series) == {
-        SPORT_NAMES[Sport.RUNNING],
-        SPORT_NAMES[Sport.TRAIL],
-        SPORT_NAMES[Sport.CYCLING],
-        SPORT_NAMES[Sport.STRENGTH],
-        SPORT_NAMES[Sport.OTHER],
-    }
+    assert names == [SPORT_NAMES[s] for s in Sport]
+    assert [trace.marker.color for trace in figure.data] == [sport_color(s, tokens) for s in Sport]
 
 
 @pytest.mark.parametrize("theme", list(Theme))

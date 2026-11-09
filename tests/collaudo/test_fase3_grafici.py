@@ -51,7 +51,6 @@ from ponos_coach.ui.hr_figure import (
 )
 from ponos_coach.ui.load_figures import (
     CHART_WEEKS,
-    MAX_SPORT_SERIES,
     WeeklyLoadLabels,
     WeeklyZonesLabels,
     build_weekly_load_figure,
@@ -323,14 +322,8 @@ def test_t_ui_04_the_bars_hold_the_weekly_sums_of_every_week_and_open_on_the_las
         for sport in Sport
     }
     with_load = [sport for sport in Sport if totals[sport] > 0]
-    # At most five series (R4): beyond that, the four sports with the most load remain (on a tie the
-    # order of `Sport` counts) and all the others, with "Other", are summed into "Other".
+    # One series per sport with load (R4): no grouping, each sport keeps its name and colour.
     members: dict[Sport, list[Sport]] = {sport: [sport] for sport in with_load}
-    if len(with_load) > MAX_SPORT_SERIES:
-        named = [sport for sport in with_load if sport is not Sport.OTHER]
-        kept = sorted(named, key=lambda sport: -totals[sport])[: MAX_SPORT_SERIES - 1]
-        members = {sport: [sport] for sport in kept}
-        members[Sport.OTHER] = [sport for sport in with_load if sport not in kept]
 
     drawn: set[Sport] = set()
     for trace in load_figure.data:
@@ -348,7 +341,7 @@ def test_t_ui_04_the_bars_hold_the_weekly_sums_of_every_week_and_open_on_the_las
             expected = sum(load_by_week.get((week, member), 0.0) for member in members[sport])
             assert value == pytest.approx(expected)
     assert drawn == set(members)
-    assert len(load_figure.data) <= MAX_SPORT_SERIES
+    assert len(load_figure.data) <= len(Sport)
     for zone, trace in enumerate(zones_figure.data):
         for week, value in zip(trace.x, trace.y, strict=True):
             monday = week if isinstance(week, date) else date.fromisoformat(str(week))

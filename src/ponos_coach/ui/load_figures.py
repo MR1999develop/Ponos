@@ -7,7 +7,8 @@ Pure functions from `WeeklyLoad` and `WeeklyZones` (already aggregated by the do
 bars starting at zero, the whole history, opened on the last 26 weeks (the wheel zooms and a drag
 pans, together with the PMC). A
 sport's colour is always the same and never red or orange (reserved for errors and warnings);
-there are at most five series: sports with less load are grouped into "Other". Zones use
+each sport with load has its own series (seven sports, seven colours: none is grouped into
+"Other"). Zones use
 a sequential scale of increasing lightness, so the order reads even without the colours
 (legend and hints give the name).
 """
@@ -41,7 +42,6 @@ WEEKLY_LOAD_UNIT = (
 )
 ZONES_AXIS_UNIT = "hours per week"
 ZONE_TIME_UNIT = "h"  # in a bar's hint: the symbol is the same in every language
-MAX_SPORT_SERIES = 5  # beyond that, sports with less load are grouped into "Other"
 LOAD_EXPORT_STEM = "ponos-coach-weekly-load"
 ZONES_EXPORT_STEM = "ponos-coach-zones"
 _SECONDS_PER_HOUR = 3600.0
@@ -155,29 +155,12 @@ def _style_weekly_layout(
 def sport_series(
     sports: Sequence[Sport], load: NDArray[np.float64]
 ) -> list[tuple[Sport, NDArray[np.float64]]]:
-    """The series to draw: sports with load in the window, in `Sport` order.
-
-    With more than `MAX_SPORT_SERIES` sports, those with the most load remain (one fewer than the
-    cap) and
-    all the others, together with `Sport.OTHER`, are summed into `Sport.OTHER`, which closes the
-    stack. On
-    a load tie the `Sport` order applies.
-    """
-    present = [
+    """The series to draw: one per sport with load, in `Sport` order (never grouped)."""
+    return [
         (sport, load[:, column])
         for column, sport in enumerate(sports)
         if np.any(load[:, column] > 0)
     ]
-    if len(present) <= MAX_SPORT_SERIES:
-        return present
-    named = [item for item in present if item[0] is not Sport.OTHER]
-    ranked = sorted(named, key=lambda item: -float(item[1].sum()))  # stable: ties by order
-    kept = {sport for sport, _ in ranked[: MAX_SPORT_SERIES - 1]}
-    merged = np.zeros(load.shape[0], dtype=np.float64)
-    for sport, values in present:
-        if sport not in kept:
-            merged = merged + values
-    return [*(item for item in named if item[0] in kept), (Sport.OTHER, merged)]
 
 
 def build_weekly_load_figure(
