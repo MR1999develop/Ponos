@@ -12,6 +12,7 @@ it. The path of a tile says which area is looked at: it is never logged.
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 
@@ -53,6 +54,10 @@ class TileService(QObject):
         self._pending: dict[int, TileDone] = {}
         self._next_id = 1
         self._problem: TileProblem | None = None
+        # Held while a worker hands over an answer and while `shutdown` closes the service: once
+        # `shutdown` returns no worker touches this object, which may then be destroyed.
+        self._handover = threading.Lock()
+        self._closed = False
         self._completed.connect(self._on_completed, Qt.ConnectionType.QueuedConnection)
 
     @property
@@ -81,7 +86,12 @@ class TileService(QObject):
         return True
 
     def shutdown(self) -> None:
-        """Stop accepting requests; answers still on their way are dropped. Idempotent."""
+        """Stop accepting requests; answers still on their way are dropped. Idempotent.
+
+        After it returns no worker thread emits on this object any more.
+        """
+        with self._handover:
+            self._closed = True
         pool, self._pool = self._pool, None
         self._pending.clear()
         if pool is not None:
@@ -102,10 +112,9 @@ class TileService(QObject):
         if future.cancelled():
             return
         answer = future.result()
-        try:
-            self._completed.emit(request_id, answer)
-        except RuntimeError:  # the service was destroyed while the request was running
-            return
+        with self._handover:
+            if not self._closed:
+                self._completed.emit(request_id, answer)  # queued: only posts an event
 
     @Slot(int, object)
     def _on_completed(self, request_id: int, answer: object) -> None:
