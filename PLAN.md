@@ -638,6 +638,9 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
 
 - [ ] Collaudo completo (sezione 7) superato sull'eseguibile, su Windows e
       Ubuntu, con esiti registrati in `docs/collaudo.md`.
+- [ ] Ubuntu di nuovo nelle matrici di `ci.yml` e `release.yml` (tolto il
+      2026-11-09 su richiesta dell'utente, eccezione 3 di `CLAUDE.md`) e CI verde
+      su Ubuntu.
 - [ ] Valori della tabella degli alimenti verificati contro USDA FoodData
       Central con `experiments/verify_foods.py --apply` (`source.verified_on`
       valorizzato); il 2026-11-07 `api.nal.usda.gov` non si risolveva.
