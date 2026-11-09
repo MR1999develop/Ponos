@@ -250,6 +250,26 @@ def test_two_activities_open_in_two_windows_and_the_same_one_is_not_opened_twice
     assert second.shows_chart()
 
 
+def test_a_profile_change_closes_the_detail_windows_of_the_old_profile(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    show_activities_section(window)
+    dialogs = window.profile_dialogs
+    window.activities_page.table.selectRow(0)
+    window.detail_action.trigger()
+    old = open_detail(qtbot, window)
+    qtbot.waitUntil(old.shows_chart, timeout=WAIT_MS)
+
+    dialogs.profile_changed()
+
+    assert dialogs.detail_dialogs == ()
+    assert dialogs.detail_dialog is None
+    window.detail_action.trigger()  # the same identity opens a new window, not the old one
+    new = open_detail(qtbot, window)
+    assert new is not old
+
+
 def test_a_missing_file_gives_a_clear_message_instead_of_a_chart(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:

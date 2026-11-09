@@ -135,7 +135,8 @@ class ProfileDialogs(QObject):
         return tuple(dialog for dialog, _loader in self._details.values())
 
     def close_all(self) -> None:
-        """Close the open detail windows (when the window closes): the web pages are released."""
+        """Close the open detail windows (the window closes or the profile changes): the web pages
+        are released and their loaders cancelled."""
         for dialog in self.detail_dialogs:
             dialog.close()
 
@@ -258,6 +259,7 @@ class ProfileDialogs(QObject):
         """Another profile opened: what the pages show belongs to the old one."""
         self._waiting_for_edit = False
         self._waiting_for_weights = False
+        self.close_all()  # health data and a GPS track of the old profile must not stay open
         for page, load in (
             (self._profile_page, self.load_profile_page),
             (self._weights_page, self.load_weights_page),
