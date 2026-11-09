@@ -298,8 +298,12 @@ def test_every_uploaded_workout_keeps_the_duration_and_the_heart_rate_ranges_of_
         low = [b.hr_low_bpm for b in session.blocks]
         high = [b.hr_high_bpm for b in session.blocks]
         for step in steps:
-            assert min(low) <= step["targetValueOne"] <= step["targetValueTwo"] <= max(high)
-            assert step["targetType"]["workoutTargetTypeKey"] == "heart.rate.zone"
+            # A running step with a pace leads with the pace; the heart rate is then secondary.
+            hr_key = "target"
+            if step["targetType"]["workoutTargetTypeKey"] == "pace.zone":
+                hr_key = "secondaryTarget"
+            assert step[f"{hr_key}Type"]["workoutTargetTypeKey"] == "heart.rate.zone"
+            assert min(low) <= step[f"{hr_key}ValueOne"] <= step[f"{hr_key}ValueTwo"] <= max(high)
 
 
 # --- Listing: hostile answers ---------------------------------------------------------------------

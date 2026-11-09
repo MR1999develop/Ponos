@@ -391,13 +391,15 @@ def test_d_f5_close_a_races_keep_the_rules_of_the_taper(races: list[RaceGoal]) -
     check_scenario(inputs, date(2026, 3, 2))
 
 
-def test_the_oracle_catches_a_session_longer_than_the_day_allows() -> None:
+def test_the_oracle_catches_a_session_that_breaks_the_weekly_hours() -> None:
+    # Since 2026-11-09 there are no minutes per day: a session too long shows as a week over the
+    # user's hours.
     plan, today = _good_plan()
     index = next(i for i, d in enumerate(plan.days) if d.session is not None)
     session = plan.days[index].session
     assert session is not None
     broken = _with_day(plan, index, session=replace(session, minutes=999))
-    assert any("999 min" in p for p in violations(broken, today))
+    assert any(" min over " in p for p in violations(broken, today))
 
 
 def test_the_oracle_catches_an_intense_session_the_day_before_a_race() -> None:

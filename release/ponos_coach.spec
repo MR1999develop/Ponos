@@ -46,6 +46,9 @@ a = Analysis(  # noqa: F821
     excludes=["tkinter", "unittest", "pydoc"],
     noarchive=False,
 )
+# The project's own metadata comes along (the map's User-Agent reads the version from it), and with
+# an editable install it holds `direct_url.json`: the path of the project folder. Never shipped.
+a.datas = [entry for entry in a.datas if Path(entry[0]).name != "direct_url.json"]
 pyz = PYZ(a.pure)  # noqa: F821
 exe = EXE(  # noqa: F821
     pyz,
