@@ -16,8 +16,11 @@ of the Qt children.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import plotly.graph_objects as go
@@ -55,6 +58,51 @@ type ExportPathChooser = Callable[[str], Path | None]
 
 _HOVER_PARTS = 3  # "hover", the index, a counter that makes every title new
 _MAX_INDEX_DIGITS = 6
+_RANGE_PARTS = 4  # "xrange", start, end, a counter
+_AUTO_RANGE_PARTS = 3  # "xrange", "auto", a counter
+_MAX_DATE_CHARS = 32
+_DATE_CHARS = frozenset("0123456789-: .T")
+
+
+@dataclass(frozen=True, slots=True)
+class DateRange:
+    """Dates shown on a chart's x axis, from `start` to `end` (naive: the chart's own days)."""
+
+    start: datetime
+    end: datetime
+
+
+def _parse_date(text: str) -> datetime | None:
+    """A date written by Plotly (`2026-03-01` or `2026-03-01 12:30:15.25`); None otherwise."""
+    if not 0 < len(text) <= _MAX_DATE_CHARS or not set(text) <= _DATE_CHARS:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class RangeReport:
+    """What the page reported after a zoom or pan: the dates shown, or None for the whole series."""
+
+    shown: DateRange | None
+
+
+def parse_range_title(title: str) -> RangeReport | None:
+    """The report in a page title `xrange|START|END|N` or `xrange|auto|N`; None if the title is
+    not a valid range report (a page title is untrusted text: only well-formed dates pass)."""
+    parts = title.split("|")
+    if parts[0] != "xrange":
+        return None
+    if len(parts) == _AUTO_RANGE_PARTS and parts[1] == "auto":
+        return RangeReport(None)
+    if len(parts) != _RANGE_PARTS:
+        return None
+    start, end = _parse_date(parts[1]), _parse_date(parts[2])
+    if start is None or end is None or not start < end:
+        return None
+    return RangeReport(DateRange(start, end))
 
 
 class AppOnlyInterceptor(QWebEngineUrlRequestInterceptor):
@@ -250,6 +298,7 @@ class ChartView(QWidget):
     load_failed = Signal()
     hovered = Signal(int)  # index of the point under the pointer (the chart asked for it)
     hover_left = Signal()
+    x_range_changed = Signal(object)  # DateRange, or None for the whole series (user's zoom/pan)
 
     _page_url = APP_PAGE_URL  # a subclass shows another page of the same scheme
 
@@ -309,6 +358,16 @@ class ChartView(QWidget):
             self._page.runJavaScript(script)
         else:
             self._queued.append(script)
+
+    def set_x_range(self, shown: DateRange | None) -> None:
+        """Show these dates on the x axis (None: the whole series), without reporting it back."""
+        if shown is None:
+            arguments = "null, null"
+        else:
+            arguments = ", ".join(
+                json.dumps(moment.isoformat(sep=" ")) for moment in (shown.start, shown.end)
+            )
+        self.run_script(f"ponosSetXRange({arguments});")
 
     @property
     def current_figure(self) -> go.Figure | None:
@@ -376,12 +435,18 @@ class ChartView(QWidget):
             self._page.runJavaScript(script)
 
     def _on_title_changed(self, title: str) -> None:
-        """The page talks through its title (no channel): `drawn-N`, `hover-I-N`, `leave-N`.
+        """The page talks through its title (no channel): `drawn-N`, `hover-I-N`, `leave-N`,
+        `xrange|START|END|N`, `xrange|auto|N`.
 
         The index is parsed as digits only; the caller checks it against its data.
         """
         if title.startswith("drawn-"):
             self.drawn.emit()
+            return
+        if title.startswith("xrange|"):
+            report = parse_range_title(title)
+            if report is not None:
+                self.x_range_changed.emit(report.shown)
             return
         parts = title.split("-")
         if parts[0] == "leave":

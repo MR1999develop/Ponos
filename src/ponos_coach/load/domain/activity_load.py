@@ -17,7 +17,7 @@ from numpy.typing import NDArray
 from ponos_coach.activities.domain import HeartRateSeries, Sport
 from ponos_coach.load.domain.heart_rate import HeartRateLimits, Physiology, threshold_for_sport
 from ponos_coach.load.domain.sport import SportWeight, typical_intensity
-from ponos_coach.load.domain.zones import ZoneSeconds, seconds_per_zone
+from ponos_coach.load.domain.zones import ZONE_COUNT, ZoneSeconds, seconds_per_zone, zone_indices
 
 MAX_GAP_S = 10.0  # project default: beyond this interval between samples, it is not counted
 MAX_BAD_FRACTION = 0.30  # project default: beyond this, the load is an estimate
@@ -167,9 +167,7 @@ def compute_activity_load(
             zones=zones,
         )
 
-    hrr = (series.bpm[counted] - limits.min_bpm) / limits.reserve_bpm
-    per_minute = hrr * _BANISTER_COEFFICIENT * np.exp(physiology.sex.banister_k * hrr)
-    trimp = float(np.sum(validity[counted] / 60.0 * per_minute))
+    trimp = float(np.sum(_sample_trimp(series.bpm[counted], validity[counted], physiology)))
     hr_tss = 100.0 * trimp / hour_at_threshold_trimp(sport, physiology)
     return ActivityLoad(
         trimp,
@@ -181,3 +179,43 @@ def compute_activity_load(
         LoadSource.HEART_RATE,
         zones,
     )
+
+
+def _sample_trimp(
+    bpm: NDArray[np.float64], validity_s: NDArray[np.float64], physiology: Physiology
+) -> NDArray[np.float64]:
+    """Banister TRIMP of each counted sample, over its validity seconds."""
+    limits = physiology.limits
+    hrr = (bpm - limits.min_bpm) / limits.reserve_bpm
+    per_minute = hrr * _BANISTER_COEFFICIENT * np.exp(physiology.sex.banister_k * hrr)
+    return validity_s / 60.0 * per_minute
+
+
+type ZoneLoad = tuple[float, float, float, float, float]
+"""Part of an activity's load earned in each HR zone (Z1 ... Z5), same unit as the load."""
+
+
+def load_per_zone(
+    sport: Sport,
+    series: HeartRateSeries | None,
+    physiology: Physiology,
+    load: ActivityLoad,
+) -> ZoneLoad | None:
+    """How the (weighted) load of an activity splits among the HR zones.
+
+    Each counted sample (the same as `compute_activity_load`) brings its TRIMP to its zone, so the
+    five parts add up to `load.load`. None if the load is an estimate (it does not come from the
+    HR) or no TRIMP was counted. Pure and deterministic.
+    """
+    if series is None or load.source is not LoadSource.HEART_RATE:
+        return None
+    validity = sample_validity_s(series.seconds)
+    counted = _in_range(series, physiology.limits) & (validity <= MAX_GAP_S)
+    trimp = _sample_trimp(series.bpm[counted], validity[counted], physiology)
+    zones = zone_indices(series.bpm[counted], threshold_for_sport(physiology, sport))
+    per_zone = np.bincount(zones, weights=trimp, minlength=ZONE_COUNT)
+    total = float(per_zone.sum())
+    if not total > 0:
+        return None
+    z1, z2, z3, z4, z5 = (float(value) * load.load / total for value in per_zone)
+    return (z1, z2, z3, z4, z5)

@@ -4,7 +4,8 @@
 
 Pure functions from `WeeklyLoad` and `WeeklyZones` (already aggregated by the domain) to
 `go.Figure`. Stacked
-bars starting at zero, last 26 weeks (zoom with the chart toolbar). A
+bars starting at zero, the whole history, opened on the last 26 weeks (the wheel zooms and a drag
+pans, together with the PMC). A
 sport's colour is always the same and never red or orange (reserved for errors and warnings);
 there are at most five series: sports with less load are grouped into "Other". Zones use
 a sequential scale of increasing lightness, so the order reads even without the colours
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date, timedelta
 
 import numpy as np
 import plotly.graph_objects as go
@@ -32,7 +34,7 @@ from ponos_coach.ui.chart_payload import (
 )
 from ponos_coach.ui.tokens import ThemeTokens
 
-CHART_WEEKS = 26  # weeks shown: about six months
+CHART_WEEKS = 26  # weeks shown when the chart opens: about six months
 WEEKLY_LOAD_UNIT = (
     "hrTSS per week"  # whole sentences: the view translates them (`unit` of the labels)
 )
@@ -111,10 +113,27 @@ def zone_label(index: int, starts: Sequence[float] = ZONE_STARTS_PERCENT) -> str
     return f"{name} {_percent_text(start)}\u2013<{_percent_text(end)}%"
 
 
+def opening_range(weeks: Sequence[date]) -> list[date] | None:
+    """Dates shown when the chart opens: the last `CHART_WEEKS` weeks, each bar whole (a bar
+    is centred on its Monday); None with fewer weeks, so the whole series shows."""
+    if len(weeks) <= CHART_WEEKS:
+        return None
+    margin = timedelta(days=4)  # half a week, rounded up to a whole day
+    return [weeks[-CHART_WEEKS] - margin, weeks[-1] + margin]
+
+
 def _style_weekly_layout(
-    figure: go.Figure, tokens: ThemeTokens, x_title: str, y_title: str, legend_title: str = ""
+    figure: go.Figure,
+    tokens: ThemeTokens,
+    x_title: str,
+    y_title: str,
+    weeks: Sequence[date],
+    legend_title: str = "",
 ) -> None:
     figure.update_xaxes(axis_style(tokens, x_title), type="date", hoverformat="%Y-%m-%d")
+    shown = opening_range(weeks)
+    if shown is not None:
+        figure.update_xaxes(range=shown)
     figure.update_yaxes(axis_style(tokens, y_title), rangemode="tozero")  # bars from zero
     figure.update_layout(
         **base_layout(tokens),
@@ -163,10 +182,10 @@ def sport_series(
 def build_weekly_load_figure(
     weekly: WeeklyLoad, labels: WeeklyLoadLabels, tokens: ThemeTokens
 ) -> go.Figure:
-    """Load per week, one segment per sport present in the last `CHART_WEEKS` weeks
-    (at most `MAX_SPORT_SERIES`: see `sport_series`), in `Sport` order."""
-    weeks = weekly.weeks[-CHART_WEEKS:]
-    load = weekly.load[-CHART_WEEKS:, :]
+    """Load per week, one segment per sport with load in the history (at most
+    `MAX_SPORT_SERIES`: see `sport_series`), in `Sport` order."""
+    weeks = weekly.weeks
+    load = weekly.load
     figure = go.Figure()
     hover = f"%{{y:.0f}} {labels.unit}<extra>%{{fullData.name}}</extra>"
     for sport, values in sport_series(weekly.sports, load):
@@ -182,16 +201,16 @@ def build_weekly_load_figure(
                 hovertemplate=hover,
             )
         )
-    _style_weekly_layout(figure, tokens, labels.x_axis, f"{labels.y_axis} ({labels.unit})")
+    _style_weekly_layout(figure, tokens, labels.x_axis, f"{labels.y_axis} ({labels.unit})", weeks)
     return figure
 
 
 def build_weekly_zones_figure(
     weekly: WeeklyZones, labels: WeeklyZonesLabels, tokens: ThemeTokens
 ) -> go.Figure:
-    """Hours per zone and week (Z1 at the bottom, Z5 at the top), last `CHART_WEEKS` weeks."""
-    weeks = weekly.weeks[-CHART_WEEKS:]
-    hours = weekly.seconds[-CHART_WEEKS:, :] / _SECONDS_PER_HOUR
+    """Hours per zone and week (Z1 at the bottom, Z5 at the top), the whole history."""
+    weeks = weekly.weeks
+    hours = weekly.seconds / _SECONDS_PER_HOUR
     figure = go.Figure()
     hover = f"%{{y:.1f}} {ZONE_TIME_UNIT}<extra>%{{fullData.name}}</extra>"
     for zone in range(ZONE_COUNT):
@@ -212,6 +231,7 @@ def build_weekly_zones_figure(
         tokens,
         labels.x_axis,
         f"{labels.y_axis} ({labels.unit})",
+        weeks,
         labels.legend_title,
     )
     return figure
@@ -222,7 +242,7 @@ def prepare_weekly_load_chart(
 ) -> PreparedChart:
     """Figure and JSON of the weekly load (pure work, suited to a non-UI thread)."""
     figure = build_weekly_load_figure(weekly, labels, tokens)
-    return prepare_figure(figure, labels.chrome, LOAD_EXPORT_STEM, tokens)
+    return prepare_figure(figure, labels.chrome, LOAD_EXPORT_STEM, tokens, linked_x=True)
 
 
 def prepare_weekly_zones_chart(
@@ -230,4 +250,4 @@ def prepare_weekly_zones_chart(
 ) -> PreparedChart:
     """Time-in-zones figure and JSON (pure work, suited to a non-UI thread)."""
     figure = build_weekly_zones_figure(weekly, labels, tokens)
-    return prepare_figure(figure, labels.chrome, ZONES_EXPORT_STEM, tokens)
+    return prepare_figure(figure, labels.chrome, ZONES_EXPORT_STEM, tokens, linked_x=True)

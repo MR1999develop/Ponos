@@ -172,6 +172,21 @@ def test_an_activity_without_heart_rate_has_no_trace_and_an_estimated_load() -> 
     assert detail.trace is None
     assert detail.load.source is LoadSource.ESTIMATE
     assert detail.load.zone_seconds.total == 0.0
+    assert detail.zone_load is None  # an estimate does not come from the zones
+
+
+def test_the_load_of_each_zone_adds_up_to_the_load_and_harder_zones_earn_more() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
+    record = add_activity(world, [140] * 300 + [175] * 300)  # 5 minutes in Z2, 5 in Z5
+
+    detail = detail_of(world, record)
+
+    assert detail.zone_load is not None
+    z1, z2, z3, z4, z5 = detail.zone_load
+    assert (z1, z3, z4) == (0.0, 0.0, 0.0)
+    assert z2 + z5 == pytest.approx(detail.load.load)
+    assert z5 > 1.5 * z2  # same time, higher heart rate
 
 
 def test_the_detail_reads_the_file_but_leaves_the_load_cache_alone() -> None:

@@ -176,6 +176,9 @@ def test_double_click_opens_the_detail_with_summary_chart_and_time_in_zones(
     assert dialog.zone_model.rowCount() == 5
     zone_times = [dialog.zone_model.data(dialog.zone_model.index(r, 1)) for r in range(5)]
     assert sum(_seconds(text) for text in zone_times) > 1500  # almost all of the 1800 s counted
+    assert dialog.zone_model.headerData(3, Qt.Orientation.Horizontal) == "Load (hrTSS)"
+    zone_loads = [dialog.zone_model.data(dialog.zone_model.index(r, 3)) for r in range(5)]
+    assert all(isinstance(text, str) and text for text in zone_loads)
     figure = dialog.chart.current_figure
     assert figure is not None
     assert figure.data[0].name == "Heart rate"

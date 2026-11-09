@@ -23,6 +23,7 @@ from ponos_coach.load.domain import (
     SportWeight,
     compute_activity_load,
     default_weight,
+    load_per_zone,
     typical_intensity,
 )
 from tests.load.helpers import PHYSIOLOGY, WEIGHT_ONE
@@ -344,3 +345,29 @@ def test_t_calc_06_bike_threshold_is_four_bpm_lower() -> None:
 
     assert bike.hr_tss == pytest.approx(100.0, rel=REL_TOL)
     assert run.hr_tss < 100.0
+
+
+# --- Load per zone ---------------------------------------------------------------
+
+
+@given(random_activities())
+def test_the_load_per_zone_adds_up_to_the_measured_load(
+    case: tuple[Sport, float, HeartRateSeries, SportWeight],
+) -> None:
+    sport, duration, series, weight = case
+    load = compute_activity_load(sport, duration, series, PHYSIOLOGY, weight)
+
+    parts = load_per_zone(sport, series, PHYSIOLOGY, load)
+
+    if load.source is LoadSource.ESTIMATE or load.trimp == 0:
+        assert parts is None
+    else:
+        assert parts is not None
+        assert all(part >= 0 for part in parts)
+        assert math.fsum(parts) == pytest.approx(load.load, rel=REL_TOL, abs=1e-9)
+
+
+def test_an_estimated_load_has_no_load_per_zone() -> None:
+    load = compute_activity_load(Sport.RUNNING, 1800.0, None, PHYSIOLOGY, WEIGHT_ONE)
+
+    assert load_per_zone(Sport.RUNNING, None, PHYSIOLOGY, load) is None

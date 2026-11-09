@@ -28,6 +28,57 @@
     });
   }
 
+  // Date range of the x axis after a zoom or a pan by the user: `xrange|START|END|N`, or
+  // `xrange|auto|N` after a reset. A range set by `ponosSetXRange` is not reported back, so linked
+  // charts do not echo each other.
+  var applyingRange = false;
+  var rangeCount = 0;
+
+  function reportedRange(event) {
+    var keys = Object.keys(event);
+    for (var i = 0; i < keys.length; i += 1) {
+      var match = /^(xaxis\d*)\.range\[0\]$/.exec(keys[i]);
+      if (match !== null && (match[1] + ".range[1]") in event) {
+        return [event[keys[i]], event[match[1] + ".range[1]"]];
+      }
+      match = /^(xaxis\d*)\.range$/.exec(keys[i]);
+      if (match !== null && Array.isArray(event[keys[i]])) {
+        return [event[keys[i]][0], event[keys[i]][1]];
+      }
+      if (/^xaxis\d*\.autorange$/.test(keys[i]) && event[keys[i]] === true) {
+        return "auto";
+      }
+    }
+    return null;
+  }
+
+  function bindRange(gd) {
+    if (gd.ponosRangeBound) { return; }
+    gd.ponosRangeBound = true;
+    gd.on("plotly_relayout", function (event) {
+      if (applyingRange) { return; }
+      var range = reportedRange(event);
+      if (range === null) { return; }
+      rangeCount += 1;
+      document.title = range === "auto"
+        ? "xrange|auto|" + rangeCount
+        : "xrange|" + String(range[0]) + "|" + String(range[1]) + "|" + rangeCount;
+    });
+  }
+
+  // Show the dates from `start` to `end` (ISO strings); with null the whole series.
+  window.ponosSetXRange = function (start, end) {
+    if (host.data === undefined) { return; }
+    var update = start === null
+      ? { "xaxis.autorange": true }
+      : { "xaxis.range": [start, end] };
+    applyingRange = true;
+    Plotly.relayout(host, update).then(
+      function () { applyingRange = false; },
+      function () { applyingRange = false; }
+    );
+  };
+
   window.ponosCursor = function (x) {
     var shapes = [];
     if (x !== null) {
@@ -62,7 +113,9 @@
       locale: payload.locale.name,
       displaylogo: false,
       responsive: true,
-      scrollZoom: false,
+      // With `linkedX` the wheel zooms and a left drag pans the dates (the figure sets
+      // `dragmode` and fixes the y axes); the other charts keep the toolbar only.
+      scrollZoom: payload.linkedX === true,
       modeBarButtonsToRemove: ["toImage", "select2d", "lasso2d"],
       modeBarButtonsToAdd: [
         exportButton("ponosPng", labels.png, "png", payload.filename),
@@ -73,6 +126,7 @@
     cursorColor = payload.figure.layout.font.color;
     Plotly.react(host, payload.figure.data, payload.figure.layout, config).then(function (gd) {
       if (payload.hover === true) { bindHover(gd); }
+      if (payload.linkedX === true) { bindRange(gd); }
       // Signal to Python without channels: the page title changes at every draw.
       drawCount += 1;
       document.title = "drawn-" + drawCount;

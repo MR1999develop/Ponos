@@ -27,6 +27,8 @@ from ponos_coach.activities.ports import ActivityArchive, ActivityIndex, Activit
 from ponos_coach.load.domain import (
     ActivityLoad,
     HeartRateLimits,
+    ZoneLoad,
+    load_per_zone,
     out_of_limits,
     physiology_for_day,
     threshold_for_sport,
@@ -80,7 +82,8 @@ class ActivityDetail:
     day for the sport; `zone_starts_bpm` are the HRs where Z2, Z3, Z4 and Z5 start (Z1 is
     below the first). `unordered_hr_samples` counts the HR samples discarded by the file reader
     because of repeated or backwards times; samples out of limits are in `trace` and in
-    `load.discarded_samples`.
+    `load.discarded_samples`. `zone_load` is the load earned in each zone (it adds up to
+    `load.load`); None when the load is an estimate.
     """
 
     identity: ActivityIdentity
@@ -96,6 +99,7 @@ class ActivityDetail:
     threshold_bpm: int
     zone_starts_bpm: tuple[float, float, float, float]
     unordered_hr_samples: int
+    zone_load: ZoneLoad | None = None
 
 
 class GetActivityDetail:
@@ -158,4 +162,5 @@ class GetActivityDetail:
             threshold_bpm=threshold,
             zone_starts_bpm=zone_starts_bpm(threshold),
             unordered_hr_samples=activity.discarded_hr_samples,
+            zone_load=load_per_zone(activity.sport, series, physiology, load),
         )

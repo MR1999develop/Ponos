@@ -61,13 +61,19 @@ from ponos_coach.ui.tokens import SPACE_2, SPACE_4
 _ALIGN_RIGHT = int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 _ALIGN_LEFT = int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 _PERCENT = 100
+_ONE_DECIMAL_BELOW = 10.0
 _DEFAULT_SIZE = (860, 700)
 _CHART_MIN_HEIGHT = 280
 _ZONE_TABLE_HEIGHT = 170
 
 
+_COLUMNS = 4  # zone, time, share, load
+_SHARE_COLUMN = 2
+
+
 class ZoneTableModel(QAbstractTableModel):
-    """Time per zone of an activity: zone, time, share. Read-only, numbers on the right."""
+    """Time and load per zone of an activity: zone, time, share, load. Read-only, numbers on the
+    right."""
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -90,10 +96,10 @@ class ZoneTableModel(QAbstractTableModel):
     def columnCount(  # noqa: N802 - Qt
         self, parent: QModelIndex | QPersistentModelIndex | None = None
     ) -> int:
-        """Zone, time, share."""
+        """Zone, time, share, load."""
         if parent is not None and parent.isValid():
             return 0
-        return 3
+        return _COLUMNS
 
     def headerData(  # noqa: N802 - Qt
         self,
@@ -102,13 +108,14 @@ class ZoneTableModel(QAbstractTableModel):
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> object:
         """Headers, with the unit."""
-        if orientation != Qt.Orientation.Horizontal or not 0 <= section < 3:
+        if orientation != Qt.Orientation.Horizontal or not 0 <= section < _COLUMNS:
             return None
         if role == Qt.ItemDataRole.DisplayRole:
             return (
                 self.tr("Zone (% of threshold)"),
                 self.tr("Time (h:mm:ss)"),
                 self.tr("Share of the time in zones (%)"),
+                self.tr("Load (hrTSS)"),
             )[section]
         if role == Qt.ItemDataRole.TextAlignmentRole:
             return _ALIGN_LEFT if section == 0 else _ALIGN_RIGHT
@@ -128,11 +135,26 @@ class ZoneTableModel(QAbstractTableModel):
             return _ALIGN_LEFT if column == 0 else _ALIGN_RIGHT
         if role != Qt.ItemDataRole.DisplayRole:
             return None
-        if column == 0:
-            return row.label
-        if column == 1:
-            return duration_text(row.seconds)
+        return _cell_text(row, column)
+
+
+def _cell_text(row: ZoneRow, column: int) -> str:
+    if column == 0:
+        return row.label
+    if column == 1:
+        return duration_text(row.seconds)
+    if column == _SHARE_COLUMN:
         return QLocale().toString(round(row.share * _PERCENT))
+    return _zone_load_text(row.load)
+
+
+def _zone_load_text(load: float | None) -> str:
+    """Load earned in a zone, one decimal under 10 (short sessions); empty for an estimate."""
+    if load is None:
+        return ""
+    if load < _ONE_DECIMAL_BELOW:
+        return QLocale().toString(load, "f", 1)
+    return QLocale().toString(round(load))
 
 
 class ActivityDetailDialog(QDialog):

@@ -6072,6 +6072,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>Share of the time in zones (%)</source>
         <translation>Quota del tempo in zona (%)</translation>
     </message>
+    <message>
+        <source>Load (hrTSS)</source>
+        <translation type="unfinished">Carico (hrTSS)</translation>
+    </message>
 </context>
 <context>
     <name>_NotesPage</name>

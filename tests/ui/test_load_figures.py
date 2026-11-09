@@ -71,15 +71,30 @@ def test_weekly_load_has_one_stacked_bar_series_per_sport_in_sport_order() -> No
     assert figure.layout.barmode == "stack"
 
 
-def test_weekly_load_shows_only_the_last_26_weeks() -> None:
+def test_weekly_load_keeps_the_whole_history_and_opens_on_the_last_26_weeks() -> None:
     weekly = weekly_load_by_sport(long_history(40), through_of(40))
 
     figure = build_weekly_load_figure(weekly, LOAD_LABELS, tokens_for(Theme.LIGHT))
 
     running = figure.data[0]
-    assert len(running.x) == CHART_WEEKS == 26
-    assert running.x[-1] == through_of(40) - timedelta(days=3)  # the Monday of this week
-    assert list(running.y) == [50.0 + i for i in range(14, 40)]
+    this_monday = through_of(40) - timedelta(days=3)
+    assert len(running.x) == 40  # zooming out shows the older weeks
+    assert running.x[-1] == this_monday
+    assert list(running.y) == [50.0 + i for i in range(40)]
+    first_shown = this_monday - timedelta(weeks=CHART_WEEKS - 1)
+    assert CHART_WEEKS == 26
+    assert list(figure.layout.xaxis.range) == [
+        first_shown - timedelta(days=4),
+        this_monday + timedelta(days=4),
+    ]
+
+
+def test_a_short_history_opens_on_all_its_weeks() -> None:
+    weekly = weekly_load_by_sport(long_history(10), through_of(10))
+
+    figure = build_weekly_load_figure(weekly, LOAD_LABELS, tokens_for(Theme.LIGHT))
+
+    assert figure.layout.xaxis.range is None
 
 
 def test_weekly_load_values_are_the_weekly_sums_per_sport() -> None:
@@ -96,14 +111,15 @@ def test_weekly_load_values_are_the_weekly_sums_per_sport() -> None:
     assert by_name == {"Sport running": [65.0], "Sport trail": [10.0]}
 
 
-def test_a_sport_without_load_in_the_window_has_no_legend_entry() -> None:
+def test_a_sport_with_load_only_long_ago_keeps_its_series() -> None:
     old = [DayLoad(MONDAY, Sport.HIKING, 20.0)]
     recent = [DayLoad(MONDAY + timedelta(weeks=40 + i), Sport.RUNNING, 30.0) for i in range(3)]
     weekly = weekly_load_by_sport(old + recent, MONDAY + timedelta(weeks=42))
 
     figure = build_weekly_load_figure(weekly, LOAD_LABELS, tokens_for(Theme.LIGHT))
 
-    assert [trace.name for trace in figure.data] == ["Sport running"]
+    # the old sport stays: zooming out reaches its week
+    assert [trace.name for trace in figure.data] == ["Sport running", "Sport hiking"]
 
 
 def test_weekly_load_axes_have_names_and_units_and_bars_start_at_zero() -> None:

@@ -3,7 +3,8 @@
 """Page "Overview": humble view that shows the state decided by `overview_state`.
 
 When the computation is ready it shows three charts one below the other: PMC, weekly load per
-sport and time in zones. The three figures (and their JSON) are built together off the
+sport and time in zones. They share the dates: the wheel zooms and a left drag pans one chart,
+and the other two follow. The three figures (and their JSON) are built together off the
 UI thread.
 """
 
@@ -12,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, timedelta
+from functools import partial
 from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QLocale, Qt, QTime, Signal
@@ -31,7 +33,7 @@ from ponos_coach.load.use_cases import ProfileActivity
 from ponos_coach.ui.activity_text import sport_text
 from ponos_coach.ui.chart_payload import ChartChrome, PreparedChart
 from ponos_coach.ui.chart_texts import chart_chrome
-from ponos_coach.ui.chart_view import ChartEngine, ChartView
+from ponos_coach.ui.chart_view import ChartEngine, ChartView, DateRange
 from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.load_figures import (
     WeeklyLoadLabels,
@@ -166,6 +168,7 @@ class OverviewPage(QWidget):
         for index, view in enumerate((self._chart, self._load_chart, self._zones_chart)):
             self._charts.addWidget(view)
             self._charts.setStretchFactor(index, _CHART_STRETCH[index])
+            view.x_range_changed.connect(partial(self._follow_dates, view))
         self._stack = QStackedWidget(self)
         for widget in (self._state_page, self._loading_page, self._charts):
             self._stack.addWidget(widget)
@@ -200,6 +203,12 @@ class OverviewPage(QWidget):
 
     def _views(self) -> tuple[ChartView, ChartView, ChartView]:
         return (self._chart, self._load_chart, self._zones_chart)
+
+    def _follow_dates(self, source: ChartView, shown: DateRange | None) -> None:
+        """The user zoomed or panned one chart: the other two show the same dates."""
+        for view in self._views():
+            if view is not source:
+                view.set_x_range(shown)
 
     @property
     def state_page(self) -> StatePage:

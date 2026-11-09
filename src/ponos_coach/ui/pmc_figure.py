@@ -333,4 +333,4 @@ def prepare_chart(
     """Build figure and JSON: pure, heavy work (about 100 ms for the first chart), suited
     to a thread other than the UI."""
     figure = build_pmc_figure(pmc, activities, labels, tokens, projection)
-    return prepare_figure(figure, labels.chrome, EXPORT_FILE_STEM, tokens)
+    return prepare_figure(figure, labels.chrome, EXPORT_FILE_STEM, tokens, linked_x=True)

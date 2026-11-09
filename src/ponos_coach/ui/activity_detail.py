@@ -38,20 +38,26 @@ type DetailOutcome = DetailReady | DetailUnavailable
 
 @dataclass(frozen=True, slots=True)
 class ZoneRow:
-    """Time in one zone: name with its bounds, seconds and share of the time in zone (0-1)."""
+    """One zone: name with its bounds, seconds, share of the time in zone (0-1) and the load
+    earned there (None when the activity's load is an estimate)."""
 
     label: str
     seconds: float
     share: float
+    load: float | None = None
 
 
 def zone_rows(detail: ActivityDetail) -> tuple[ZoneRow, ...]:
     """One row per zone, Z1 to Z5. Without time in zone (estimated load) the shares are 0."""
     seconds = detail.load.zone_seconds
     total = seconds.total
+    zone_load = detail.zone_load
     return tuple(
         ZoneRow(
-            zone_label(zone), seconds.values[zone], seconds.values[zone] / total if total else 0.0
+            zone_label(zone),
+            seconds.values[zone],
+            seconds.values[zone] / total if total else 0.0,
+            None if zone_load is None else zone_load[zone],
         )
         for zone in range(ZONE_COUNT)
     )
