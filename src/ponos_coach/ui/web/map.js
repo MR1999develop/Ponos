@@ -87,6 +87,7 @@
     container.setAttribute("aria-label", cfg.strings.map);
     map = L.map(container, {
       preferCanvas: true,
+      renderer: L.canvas({ tolerance: 6 }),  // clicks a few pixels off a start still hit it
       zoomControl: false,
       attributionControl: false,
       minZoom: 0,
@@ -109,6 +110,7 @@
     cluster = makeCluster();
     map.addLayer(cluster);
     map.on("moveend zoomend", scheduleView);
+    map.on("zoomend", resizeStarts);
     map.on("mousemove", onMouseMove);
     map.on("mouseout", leaveProfile);
     scheduleView();
@@ -116,16 +118,30 @@
 
   // --- Start points -------------------------------------------------------------------
 
+  // A single start grows with the zoom: close up it is a target easy to click (user's request).
+  var startMarkers = [];
+
+  function startRadius() {
+    var zoom = map.getZoom();
+    return zoom >= 15 ? 12 : (zoom >= 13 ? 9 : 6);
+  }
+
+  function resizeStarts() {
+    var radius = startRadius();
+    startMarkers.forEach(function (marker) { marker.setRadius(radius); });
+  }
+
   function setStarts(payload) {
     var data = payload.data;
     var markers = [];
+    var radius = startRadius();
     startsByIdx = new Map();
     for (var k = 0; k + 3 < data.length; k += 4) {
       var idx = data[k + 2];
       var sport = data[k + 3];
       startsByIdx.set(idx, [data[k], data[k + 1], sport]);
       var marker = L.circleMarker([data[k], data[k + 1]], {
-        radius: 6, color: cfg.colors.background, weight: 1.5,
+        radius: radius, color: cfg.colors.background, weight: 1.5,
         fillColor: sportStyle(sport).color, fillOpacity: 1,
       });
       marker.ponosIdx = idx;
@@ -133,6 +149,7 @@
       marker.on("click", onItemClick);
       markers.push(marker);
     }
+    startMarkers = markers;
     cluster.clearLayers();
     cluster.addLayers(markers);
     drawSelection(false);
@@ -161,24 +178,44 @@
         });
         line.ponosIdx = track.idx;
         line.ponosGen = payload.gen;
-        line.on("click", onItemClick);
-        trackLayer.addLayer(line);
+        // Kept, not drawn: only the selected activity's track is on the map (user's request).
         return line;
       });
       tracksByIdx.set(track.idx, lines);
     });
     drawSelection(false);
+    tryFit();
   }
 
   // --- Selection ----------------------------------------------------------------------
 
-  function drawSelectedTrack(lines, sport) {
+  // The selected activity's track: from its profile points (they arrive at any zoom), otherwise
+  // from the track of the visible area while the points are on their way.
+  function selectedLatLngs() {
+    if (profile !== null && profile.idx === selected) {
+      var runs = [];
+      var run = [];
+      for (var i = 0; i < profile.lat.length; i++) {
+        if (i > 0 && profile.segment[i] !== profile.segment[i - 1]) {
+          if (run.length >= 2) { runs.push(run); }
+          run = [];
+        }
+        if (finite(profile.lat[i]) && finite(profile.lon[i])) { run.push([profile.lat[i], profile.lon[i]]); }
+      }
+      if (run.length >= 2) { runs.push(run); }
+      return runs;
+    }
+    var lines = tracksByIdx.get(selected);
+    return lines === undefined ? null : lines.map(function (line) { return line.getLatLngs(); });
+  }
+
+  function drawSelectedTrack(runs, sport) {
     var style = sportStyle(sport);
-    lines.forEach(function (line) {
-      L.polyline(line.getLatLngs(), {
+    runs.forEach(function (run) {
+      L.polyline(run, {
         color: cfg.colors.background, weight: 9, opacity: 0.9, interactive: false,
       }).addTo(selectionLayer);
-      L.polyline(line.getLatLngs(), {
+      L.polyline(run, {
         color: style.color, weight: 5, opacity: 1, dashArray: style.dash || null, interactive: false,
       }).addTo(selectionLayer);
     });
@@ -188,10 +225,10 @@
     selectionLayer.clearLayers();
     if (selected === null) { return; }
     var start = startsByIdx.get(selected);
-    var lines = tracksByIdx.get(selected);
+    var runs = selectedLatLngs();
     var zonesShown = profile !== null && profile.mode === "zones" && profile.idx === selected;
-    if (lines !== undefined && !zonesShown) {
-      drawSelectedTrack(lines, start === undefined ? 0 : start[2]);
+    if (runs !== null && !zonesShown) {
+      drawSelectedTrack(runs, start === undefined ? 0 : start[2]);
     }
     if (start === undefined) { return; }
     L.circleMarker([start[0], start[1]], {
@@ -204,7 +241,33 @@
 
   function setSelected(payload) {
     selected = payload.idx;
+    if (selected === null) { fitPending = false; }
     drawSelection(payload.reveal === true);
+    tryFit();
+  }
+
+  // A double click in the list: the map shows the whole track of the selected activity. The
+  // points may arrive later: the start is shown at once and the track fitted when it comes.
+  var fitPending = false;
+
+  function focusSelected() {
+    fitPending = true;
+    tryFit();
+  }
+
+  function tryFit() {
+    if (!fitPending || selected === null) { return; }
+    var runs = selectedLatLngs();
+    var points = runs === null ? [] : [].concat.apply([], runs);
+    if (points.length >= 2) {
+      fitPending = false;
+      map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 15, animate: false });
+      return;
+    }
+    var start = startsByIdx.get(selected);
+    if (start !== undefined) {
+      map.setView([start[0], start[1]], Math.max(map.getZoom(), 13), { animate: false });
+    }
   }
 
   // --- Profile of the selected activity (zones and cursor) ----------------------------
@@ -260,6 +323,7 @@
     cursor = null;
     if (profile.mode === "zones") { drawZones(); }
     drawSelection(false);
+    tryFit();
   }
 
   function setCursor(payload) {
@@ -362,7 +426,8 @@
     var zoneLines = profileLayer.getLayers().filter(function (layer) { return layer !== cursor; });
     return {
       zoom: map.getZoom(), center: [centre.lat, centre.lng], tracks: tracksByIdx.size,
-      starts: startsByIdx.size, selected: selected,
+      starts: startsByIdx.size, selected: selected, trackLines: trackLayer.getLayers().length,
+      startRadius: startRadius(),
       channelOpen: bridge !== null, viewPending: moveTimer !== null,
       attribution: document.querySelector(".leaflet-control-attribution").textContent,
       attributionVisible: document.querySelector(".leaflet-control-attribution").offsetWidth > 0,
@@ -376,6 +441,7 @@
 
   window.ponosMap = {
     init: init, setStarts: setStarts, setTracks: setTracks, setSelected: setSelected,
+    focusSelected: focusSelected,
     setProfile: setProfile, setProfileView: setProfileView, setCursor: setCursor, setTheme: setTheme, fitAll: fitAll,
     setView: setView, zoomBy: zoomBy, visibleGroups: visibleGroups, state: state, pixelOf: pixelOf,
     clearProfile: function () { clearProfile(); drawSelection(false); },

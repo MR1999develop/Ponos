@@ -398,6 +398,10 @@ class MapPage(QWidget):
         self._call("setSelected", {"idx": position, "reveal": reveal is True})
         self._update_detail_title()
 
+    def focus_selected(self) -> None:
+        """Show the whole track of the selected activity (its start until the points arrive)."""
+        self._call("focusSelected", {})
+
     def _on_profile(self, outcome: object) -> None:
         if isinstance(outcome, ActivityProfileData | NoTrack | ExcludedActivity):
             self._profile = outcome

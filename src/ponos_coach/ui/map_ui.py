@@ -231,6 +231,12 @@ class MapUi(QObject):
         keys = self._area_keys if area_only and self._area_keys is not None else self._filter_keys
         self._activities.set_visible_identities(keys)
 
+    def focus_activity(self, identity: object) -> None:
+        """Select the activity and centre the map on its track (a double click in the list)."""
+        if isinstance(identity, ActivityIdentity):
+            self._controller.select_identity(identity, reveal=True)
+            self._page.focus_selected()
+
     def _on_table_selection(self) -> None:
         if self._activities.is_syncing:
             return

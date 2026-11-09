@@ -3628,10 +3628,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         </translation>
     </message>
     <message>
-        <source>Zoom in to see the tracks. Circles with a number group the starts of activities.</source>
-        <translation>Ingrandisci per vedere le tracce. I cerchi numerati raggruppano le partenze delle attività.</translation>
-    </message>
-    <message>
         <source>No activity in this area. Move or zoom the map, or change the filters.</source>
         <translation>Nessuna attività in quest&apos;area. Sposta o ingrandisci la mappa, oppure cambia i filtri.</translation>
     </message>
@@ -3658,6 +3654,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>The map server refuses the requests</source>
         <translation>Il server della mappa rifiuta le richieste</translation>
+    </message>
+    <message>
+        <source>Select an activity to see its track. Circles with a number group the starts of activities.</source>
+        <translation>Seleziona un'attività per vederne la traccia. I cerchi con un numero raggruppano le partenze delle attività.</translation>
     </message>
     <message>
         <source>Wait a few minutes and move the map again. Tracks, filters and the list work without it.</source>

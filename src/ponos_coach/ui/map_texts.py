@@ -63,7 +63,9 @@ def tracks_omitted_text(count: int) -> str:
 def zoom_for_tracks_text() -> str:
     """Why no tracks are drawn at a low zoom."""
     return QCoreApplication.translate(
-        "Map", "Zoom in to see the tracks. Circles with a number group the starts of activities."
+        "Map",
+        "Select an activity to see its track. Circles with a number group the starts of "
+        "activities.",
     )
 
 

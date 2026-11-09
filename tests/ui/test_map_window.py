@@ -99,7 +99,7 @@ def test_zoomed_out_the_list_still_counts_the_starts_and_tells_why_there_are_no_
     show_view(qtbot, window, FAR)
 
     assert listed(window) == ACTIVITIES_WITH_POSITION
-    assert "Zoom in to see the tracks" in window.map_page.summary_texts[2]
+    assert "Select an activity to see its track" in window.map_page.summary_texts[2]
 
 
 def test_the_list_follows_the_shared_filter_and_so_does_the_table(

@@ -32,6 +32,7 @@ PAGE_FUNCTIONS: Final = frozenset(
         "setStarts",
         "setTracks",
         "setSelected",
+        "focusSelected",
         "setProfile",
         "setProfileView",
         "setCursor",

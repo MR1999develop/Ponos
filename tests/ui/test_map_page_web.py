@@ -16,7 +16,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QSettings, QUrl
+from PySide6.QtCore import QSettings, Qt, QUrl
+from PySide6.QtTest import QTest
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.load.activity_profile import ActivityProfileData
@@ -27,7 +28,7 @@ from ponos_coach.ui.map_messages import page_call
 from ponos_coach.ui.map_web_view import MapWebView
 from ponos_coach.ui.web_policy import is_request_allowed
 from tests.fakes.tiles import FakeTileSource
-from tests.ui.map_support import NEAR, map_window, show_view
+from tests.ui.map_support import FAR, NEAR, SEA_LAT_DEG, map_window, show_view
 from tests.ui.test_chart_view import evaluate, execute
 from tests.ui.workspace_support import WAIT_MS, TileFakes, make_settings
 
@@ -247,17 +248,59 @@ def select_first(qtbot: QtBot, window: MainWindow) -> ActivityProfileData:
     return next(p for p in profiles if isinstance(p, ActivityProfileData))
 
 
-def test_tracks_are_drawn_from_zoom_11_with_the_selected_one_highlighted(
+def test_only_the_track_of_the_selected_activity_is_drawn(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
+    # The user's request of 2026-11-09: the other tracks are not drawn; the starts still are.
     window, view = window_with_page(qtbot, tmp_path, settings)
     show_view(qtbot, window, NEAR)
 
     qtbot.waitUntil(lambda: page_state(qtbot, view)["tracks"] == 8, timeout=WAIT_MS)
     assert page_state(qtbot, view)["starts"] == 8
+    assert page_state(qtbot, view)["trackLines"] == 0  # none drawn without a selection
     window.map_ui.controller.select_index(2)
     qtbot.waitUntil(lambda: page_state(qtbot, view)["selected"] == 2, timeout=WAIT_MS)
     assert page_state(qtbot, view)["selectedColors"]  # casing, line and ring of the selection
+    assert page_state(qtbot, view)["trackLines"] == 0
+
+
+def test_a_double_click_in_the_list_centres_the_map_on_that_activity(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window, view = window_with_page(qtbot, tmp_path, settings)
+    show_view(qtbot, window, FAR)  # far from the activities
+    table = window.activities_page.table
+    index = table.model().index(0, 0)
+    qtbot.waitUntil(lambda: page_state(qtbot, view)["starts"] == 8, timeout=WAIT_MS)
+
+    qtbot.waitExposed(window)
+    spot = table.visualRect(index).center()
+    QTest.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=spot)
+    QTest.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=spot)
+
+    qtbot.waitUntil(lambda: page_state(qtbot, view)["selected"] is not None, timeout=WAIT_MS)
+    qtbot.waitUntil(
+        lambda: abs(float(page_state(qtbot, view)["center"][0]) - SEA_LAT_DEG) < 0.2,  # type: ignore[index]
+        timeout=WAIT_MS,
+    )
+    assert int(page_state(qtbot, view)["zoom"]) >= 11  # type: ignore[call-overload]
+    qtbot.waitUntil(lambda: window.profile_dialogs.detail_dialog is not None, timeout=WAIT_MS)
+
+
+def test_zoomed_in_the_single_activities_grow_to_be_easy_to_click(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    # The user's request of 2026-11-09: close up, a single start is a bigger target.
+    window, view = window_with_page(qtbot, tmp_path, settings)
+    show_view(qtbot, window, NEAR)
+    qtbot.waitUntil(lambda: page_state(qtbot, view)["starts"] == 8, timeout=WAIT_MS)
+    radius = {}
+    for zoom in (8, 13, 16):
+        view.call("setView", {"lat": SEA_LAT_DEG, "lon": 0.0, "zoom": zoom})
+        qtbot.waitUntil(at_zoom(qtbot, view, zoom), timeout=WAIT_MS)
+        radius[zoom] = page_state(qtbot, view)["startRadius"]
+
+    assert radius == {8: 6, 13: 9, 16: 12}
 
 
 def test_the_cursor_goes_from_the_profile_to_the_map_and_back(

@@ -496,6 +496,7 @@ class MainWindow(QMainWindow):
             unavailable_reason=lambda: self._unavailable_reason(self._controller.can_edit_profile),
         )
         self._activities.detail_requested.connect(self._dialogs.show_activity_detail)
+        self._activities.detail_requested.connect(self._map_ui.focus_activity)
         self._dialogs.threshold_test_requested.connect(self._on_detail_threshold_test)
         self._nutrition = NutritionUi(
             self,
