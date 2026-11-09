@@ -1,13 +1,16 @@
 # Dependency register
 
 Register of the direct dependencies of `pyproject.toml`: runtime, the `dev`
-group and the build backend. Validation: **2026-11-05**.
+group and the build backend. Last validation: **2026-11-09**.
 
 ## Register rules
 
-- **Allowed licences** (compatible with GPLv3): MIT, BSD, Apache-2.0, ISC,
-  PSF, LGPL, GPL-3.0. Any other licence is a problem to report and is not
-  approved without an explicit decision, recorded in this file.
+- **Allowed licences** (compatible with GPLv3): MIT, BSD (2- and 3-clause),
+  0BSD, Zlib, CC0-1.0, Apache-2.0, ISC, PSF, MPL-2.0, LGPL, GPL-3.0. The list
+  was aligned on 2026-11-09 with the project's licence policy; the decisions
+  taken on 2026-11-09 are recorded in the validation section of that date.
+  Any other licence is a problem to report and is not approved without an
+  explicit decision, recorded in this file.
 - **Waiting period for new versions**: `exclude-newer = "7 days"` in
   `[tool.uv]` of `pyproject.toml`. A version published less than 7 days ago
   does not enter the lock. Exception: security fixes, decided by hand and
@@ -29,7 +32,7 @@ group and the build backend. Validation: **2026-11-05**.
   found`. Result also checked on the whole environment, dev included, with
   `uv run --locked pip-audit`: no vulnerability. The `ponos-coach` package is
   skipped because it is not on PyPI: this is expected.
-- **Licences to report** (not approved):
+- **Licences to report** (both resolved on 2026-11-09, see that section):
   - `hypothesis` 6.170.13: **MPL-2.0**, not in the list. It is only in the
     `dev` group and does not enter the distributed package.
   - `numpy` 2.5.4: the licence expression is `BSD-3-Clause AND 0BSD AND MIT
@@ -37,7 +40,9 @@ group and the build backend. Validation: **2026-11-05**.
     Numpy is a runtime dependency and ends up in the package: we must check
     which components are really distributed in the wheel.
 - **Licence notes** (allowed, but with obligations to meet): `pyside6` (see
-  entry), `plotly` with `plotly.js` included (MIT).
+  entry), `plotly` with `plotly.js` included (MIT), `numpy` (GCC runtime under
+  GPL-3.0-or-later with the GCC Runtime Library Exception; the MSVC runtime
+  bundled in the wheel is still to decide, see the entry).
 - **Recent releases** (less than 7 days old at the validation date): no
   pinned version in the lock. Not pinned and newer than the lock:
   `platformdirs` 4.14.3, 4.14.4, 4.14.5 (1-4 November 2026) and `uv_build`
@@ -62,6 +67,63 @@ group and the build backend. Validation: **2026-11-05**.
   `pyproject.toml` before this validation. Released 2026-09-12, so it is not a
   new release under the waiting period.
 
+## Validation result (2026-11-09)
+
+- **Audit** (`uv run --locked pip-audit`, run on the locked environment):
+  `No known vulnerabilities found`. The `ponos-coach` package is skipped
+  because it is not on PyPI: this is expected.
+- **New direct dependency**: `tzdata` 2026.6 (runtime), missing from the
+  register; see its entry. Uploaded on 2026-10-28, twelve days old at the
+  validation date: outside the waiting period. No version in the lock changed
+  in this validation.
+- **Licence decisions**. Each component was read from the installed wheel in
+  `.venv` (`numpy-2.5.4.dist-info/licenses/`, `numpy.libs/`) or from the built
+  package (`dist/app/PonosCoach/_internal`).
+  - `numpy` 2.5.4, components of the wheel:
+    - `0BSD`: pythoncapi-compat (`COPYING`, BSD Zero Clause). **Approved.**
+    - `Zlib`: libdivide (`numpy/_core/include/numpy/libdivide/LICENSE.txt` and
+      `numpy/_core/include/numpy/random/LICENSE.txt`). **Approved.**
+    - `CC0-1.0`: only the file `hwy/contrib/random/random-inl.h` of Highway
+      (`numpy/_core/src/highway/LICENSE`; Highway itself is Apache-2.0 or
+      BSD-3-Clause). **Approved.**
+    - `BSD-3-Clause` (NumPy, OpenBLAS, pocketfft, x86-simd-sort, and so on),
+      `BSD-3-Clause-Open-MPI` (LAPACK, in OpenBLAS): **approved**.
+    - `MIT` (PCG64, SFC64 and others, as in the NumPy metadata): **approved**.
+    - `NCSA` (`numpy/random/LICENSE.md`): dual licence with BSD-3-Clause; the
+      BSD-3-Clause option is taken. The NCSA text stays in the package.
+      **Decided: BSD-3-Clause option.**
+    - `GPL-3.0-or-later WITH GCC-exception-3.1`: GCC runtime library (libgfortran)
+      statically linked into `numpy.libs/libscipy_openblas64_*.dll`. It is in the
+      GPL-3.0 family, and the GCC Runtime Library Exception allows the
+      combination with a program under GPL-3.0. The text is in the wheel's
+      `LICENSE.txt`, which is in the built package. **Approved.**
+    - Public domain dedication (`numpy/random/src/splitmix64/LICENSE.md`, Vigna):
+      a waiver of rights, not a licence with terms. **To report**: it is not in
+      the list; decision needed.
+    - `msvcp140.dll` (`numpy.libs/`, Microsoft C++ runtime bundled by delvewheel):
+      not named in NumPy's `LICENSE.txt`. Its licence is the Microsoft runtime
+      redistribution terms, not an open-source licence. **To report: not approved,
+      decision needed.** To check whether the PyInstaller package carries the same
+      runtime.
+  - `hypothesis` 6.170.13 (MPL-2.0, dev group): **approved for this dev-only
+    tool.** It is not in the built package (no `hypothesis` distribution in
+    `dist/app/PonosCoach/_internal`). MPL-2.0 is file-level and allows the files
+    to be combined in a larger work under GPL (section 3.3).
+  - `certifi` 2026.10.23 (MPL-2.0, runtime, transitive): **approved.** The files
+    in the package (`certifi/cacert.pem`, `certifi/py.typed`) are identical by
+    SHA-256 to the installed ones. See the entry. **To close before release**: the
+    package has no MPL-2.0 text and no source reference for certifi.
+  - `pyinstaller` 6.22.3: the approval of 2026-11-08 is confirmed. The line "not
+    approved, decision needed" of 2026-11-05 is superseded.
+  - Other distributions in the built package not in the register (transitive):
+    `curl_cffi` 0.17.0 (MIT), `pluggy` 1.7.0 (MIT), `importlib_metadata` 8.7.1
+    (Apache-2.0). All in the list.
+- **Open before release** (not decided here): the LGPL obligations of
+  PySide6/Qt and QtWebEngine, see the `pyside6` entry.
+- **Maintenance**: `tzdata` repository (`python/tzdata`) with a push on
+  2026-11-01, not archived; `certifi` repository (`certifi/python-certifi`) with
+  a push on 2026-11-04, not archived.
+
 ## Entries
 
 ### pyside6 (runtime)
@@ -74,6 +136,20 @@ group and the build backend. Validation: **2026-11-05**.
   in phase 8 with PyInstaller. QtWebEngine (pyside6-webengine, pyside6-addons,
   pyside6-essentials, pyside6-pdf, shiboken6) brings Chromium, with third-party
   licences: these too must be checked in phase 8.
+- **To close before release** (checked on 2026-11-09 in
+  `dist/app/PonosCoach/_internal`; not decided here): the package has no
+  LGPL-3.0 text, no link to the sources and no third-party notice for
+  QtWebEngine. What is needed:
+  1. the LGPL-3.0 text in the package. The wheel's `licenses/` folder holds
+     `LicenseRef-Qt-Commercial.txt`, which is the commercial licence, not the
+     LGPL text;
+  2. a link to the Qt and PySide sources (Qt download site, and
+     `pyside/pyside-setup`) and a statement that the Qt libraries are shipped as
+     separate dynamic files (`Qt6*.dll`, `PySide6/*.pyd`), so they can be
+     replaced; the check that the replacement works is to be done on the built
+     package;
+  3. for QtWebEngine (Chromium and its third-party components): the third-party
+     credits and licences that Qt ships with QtWebEngine, in the package.
 - Purpose: Qt interface (window, model/view tables, dialogs) and
   `QWebEngineView` for the Plotly charts (ADR 001).
 - Last release: 6.12.0 (2026-10-08); repository `pyside/pyside-setup` with a
@@ -135,8 +211,11 @@ group and the build backend. Validation: **2026-11-05**.
 
 - Pinned version: **2.5.4** (released 2026-10-10).
 - Licence: `BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0` (installed
-  metadata). **To report**: `0BSD`, `Zlib` and `CC0-1.0` are not in the list
-  of allowed licences. See the notes above.
+  metadata). **Decided 2026-11-09**: the components were read in the installed
+  wheel; `0BSD`, `Zlib` and `CC0-1.0` are approved, the GCC runtime
+  (`GPL-3.0-or-later WITH GCC-exception-3.1`) is approved, the MSVC runtime
+  `msvcp140.dll` is **not approved, decision needed**. See the validation of
+  that date.
 - Planned purpose: numerical calculations on contiguous collections of
   values, for example the exponential averages of ATL, CTL and TSB
   (PLAN.md). To be confirmed in the domain phases.
@@ -144,7 +223,7 @@ group and the build backend. Validation: **2026-11-05**.
   2026-11-04, not archived.
 - Alternatives: the standard library (`statistics`, `math`) for simple
   calculations; no alternative has been discussed in the project.
-- Validated: 2026-11-05, with the licence to report above.
+- Validated: 2026-11-09 (licence decided on that date).
 
 ### keyring (runtime)
 
@@ -210,9 +289,9 @@ group and the build backend. Validation: **2026-11-05**.
 ### hypothesis (dev group)
 
 - Pinned version: **6.170.13** (released 2026-10-28).
-- Licence: **MPL-2.0** (installed metadata). **To report**: MPL-2.0 is not in
-  the list of allowed licences. It is only in the `dev` group and does not
-  enter the distributed package. Not approved: an explicit decision is needed.
+- Licence: **MPL-2.0** (installed metadata). **Decided 2026-11-09**: approved
+  for this dev-only tool; it does not enter the distributed package (see the
+  validation of that date).
 - Purpose: property tests and fuzzing of the FIT reader and the parsers
   (T-SEC-01).
 - Last release: 6.170.13 (2026-10-28); 6.170.14 (2026-10-30) is newer and is
@@ -220,7 +299,48 @@ group and the build backend. Validation: **2026-11-05**.
   2026-11-03, not archived.
 - Alternatives: `pytest` with hand-written inputs; `atheris` for pure
   fuzzing. Not discussed in the project.
-- Validated: 2026-11-05, with the licence to report above.
+- Validated: 2026-11-09 (licence decided on that date).
+
+### tzdata (runtime)
+
+- Pinned version: **2026.6** (uploaded 2026-10-28).
+- Licence: **Apache-2.0** (installed metadata; the wheel's `LICENSE`, "Apache
+  Software License 2.0", copyright Paul Ganssle and Stan Ulbrych). The wheel does
+  not state the licence of the IANA time zone data it ships; upstream the IANA
+  tz database is described as public domain. **To check** on the built package
+  before release.
+- Purpose: IANA time zone data for `zoneinfo.ZoneInfo`, used by the profiles
+  (`profiles/timezones.py`) and by the activity, load, assessment and nutrition
+  code. Windows has no system zone database, so the app needs this package
+  (declared in `pyproject.toml`).
+- Last release: 2026.6 (2026-10-28), twelve days old at validation; repository
+  `python/tzdata` with a push on 2026-11-01, not archived.
+- Alternatives: the system zone database (not on Windows); `pytz` (MIT, its
+  own copy of the data, not used with `zoneinfo`); `python-dateutil` (its own
+  zone data, not used).
+- Registered and validated: 2026-11-09 (the entry was missing; found by the
+  conformity check).
+
+### certifi (runtime, transitive)
+
+- Pinned version: **2026.10.23** (uploaded 2026-10-23).
+- Licence: **MPL-2.0** (installed metadata; the wheel's `LICENSE`). Weak,
+  file-level copyleft: it covers the certifi files only.
+- Not a direct dependency: required by `requests` and `curl-cffi` in the lock.
+  It is in the built package (`certifi/cacert.pem`, `certifi/py.typed`), and
+  both files are identical by SHA-256 to the installed ones.
+- Purpose: the CA bundle (Mozilla root store) for the verification of TLS
+  certificates of the HTTPS calls made by those libraries.
+- Decision **2026-11-09**: approved. The MPL-2.0 files are distributed
+  unchanged, and MPL-2.0 section 3.3 allows them in a larger GPL work.
+- **To close before release**: the built package has no certifi `LICENSE` and no
+  source reference. Add the MPL-2.0 text and the link to
+  `https://github.com/certifi/python-certifi` to the notices of the package.
+- Last release: 2026.10.23 (2026-10-23); repository `certifi/python-certifi`
+  with a push on 2026-11-04, not archived.
+- Alternatives: the certificate store of the system (not discussed in the
+  project).
+- Validated: 2026-11-09.
 
 ### ruff (dev group)
 
@@ -285,8 +405,8 @@ group and the build backend. Validation: **2026-11-05**.
 - Pinned version: **6.22.3** (released 2026-09-12).
 - Licence: `GPLv2-or-later with a special exception` (installed metadata, free
   text; `licenses/COPYING.txt` gives the SPDX form `GPL-2.0-or-later WITH
-  Bootloader-exception`). **To report**: `GPL-2.0-or-later` is not in the list
-  of allowed licences, so it is not approved. Decision needed.
+  Bootloader-exception`). **Approved on 2026-11-08** (see the validation of
+  that date).
 - Reasoning to evaluate: the exception allows to embed the compiled bootloader
   and related files in programs distributed under any licence. PyInstaller is
   used only to build the package (`nox -s dist`); the bootloader is the part
@@ -302,7 +422,7 @@ group and the build backend. Validation: **2026-11-05**.
   licence in the PyPI metadata, not evaluated); **briefcase** (no licence in
   the PyPI metadata, not evaluated; packages for store and installers, more
   than needed here).
-- Validated: 2026-11-08, with the licence to report above.
+- Validated: 2026-11-08 (licence approved on that date).
 
 ### ANSES-CIQUAL French food composition table (data, not a package)
 
