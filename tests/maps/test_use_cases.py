@@ -71,7 +71,7 @@ def test_the_language_is_part_of_the_cache_key() -> None:
     rig.proxy.tile(HERE, "en")
     rig.proxy.tile(HERE, "de")  # no labels in German: the neutral style
 
-    assert [call[3] for call in rig.source.calls] == ["it", "en", "__"]
+    assert [call[3] for call in rig.source.calls] == ["it", "en", ""]
 
 
 def test_t_map_11_an_expired_tile_is_renewed() -> None:

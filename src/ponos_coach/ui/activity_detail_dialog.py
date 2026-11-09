@@ -312,6 +312,16 @@ class ActivityDetailDialog(QDialog):
             return
         self._show_detail(outcome)
 
+    def show_outcome_of(self, outcome: object) -> None:
+        """Slot for the loader's `loaded` signal (it carries an `object`)."""
+        if isinstance(outcome, DetailReady | DetailUnavailable):
+            self.show_outcome(outcome)
+
+    def show_error_of(self, message: object) -> None:
+        """Slot for the loader's `failed` signal (it carries an `object`)."""
+        if isinstance(message, ErrorMessage):
+            self.show_error(message)
+
     def _show_detail(self, ready: DetailReady) -> None:
         detail = ready.detail
         self._set_test_command(

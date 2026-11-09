@@ -453,11 +453,10 @@ class MainWindow(QMainWindow):
     def _build_dialogs(self) -> None:
         """Edit profile, sport weights and detail: they work on the data thread."""
         self._editor = ProfileEditor(self._controller, self)
-        self._detail_loader = ActivityDetailLoader(self._controller, self)
         self._dialogs = ProfileDialogs(
             self,
             self._editor,
-            self._detail_loader,
+            lambda parent: ActivityDetailLoader(self._controller, parent),
             self._engine,
             theme=system_theme,
             today=lambda: self._defaults.today(self._zone),
@@ -467,6 +466,7 @@ class MainWindow(QMainWindow):
             notify=lambda text: self.statusBar().showMessage(text, _STATUS_MESSAGE_MS),
         )
         self._activities.detail_requested.connect(self._dialogs.show_activity_detail)
+        self._map_ui.page.detail_requested.connect(self._dialogs.show_activity_detail)
         self._dialogs.threshold_test_requested.connect(self._on_detail_threshold_test)
         self._nutrition = NutritionUi(
             self,

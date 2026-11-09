@@ -21,7 +21,7 @@ _PATH: Final = re.compile(r"/?([0-9]{1,2})/([0-9]{1,6})/([0-9]{1,6})(?:\.png)?")
 
 _LANGUAGE_CODE: Final = re.compile(r"([a-z]{2})(?:[-_][a-z0-9]{1,8})?")  # "it", "it_IT", "en-gb"
 _LANGUAGES: Final = frozenset({"it", "en"})  # labels the topographic style offers
-NEUTRAL_STYLE: Final = "__"  # the style with local names, used when the language is not offered
+NEUTRAL_STYLE: Final = ""  # local names (map `topo_`), used when the language is not offered
 
 _KEY: Final = re.compile(r"[A-Za-z0-9_-]{8,128}")  # URL-safe: it needs no escaping in a query
 

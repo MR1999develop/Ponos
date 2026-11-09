@@ -216,6 +216,31 @@ def test_enter_in_the_table_opens_the_detail_and_the_command_is_in_the_menu(
     qtbot.waitUntil(again.shows_chart, timeout=WAIT_MS)
 
 
+def test_two_activities_open_in_two_windows_and_the_same_one_is_not_opened_twice(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    table = window.activities_page.table
+    show_activities_section(window)
+    dialogs = window.profile_dialogs
+
+    for row in (0, 2):
+        table.selectRow(row)
+        window.detail_action.trigger()
+    qtbot.waitUntil(lambda: len(dialogs.detail_dialogs) == 2, timeout=WAIT_MS)
+    first, second = dialogs.detail_dialogs
+    qtbot.waitUntil(lambda: first.shows_chart() and second.shows_chart(), timeout=WAIT_MS)
+    assert first.title_text != second.title_text  # each window keeps its own activity
+
+    table.selectRow(0)
+    window.detail_action.trigger()  # already open: brought forward, not opened again
+    assert dialogs.detail_dialogs == (first, second)
+
+    first.close()
+    qtbot.waitUntil(lambda: dialogs.detail_dialogs == (second,), timeout=WAIT_MS)
+    assert second.shows_chart()
+
+
 def test_a_missing_file_gives_a_clear_message_instead_of_a_chart(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:

@@ -26,6 +26,7 @@ from PySide6.QtCore import (
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -42,7 +43,12 @@ from ponos_coach.load.activity_profile import ActivityProfileData, NoTrack, Zone
 from ponos_coach.load.use_cases import ExcludedActivity
 from ponos_coach.maps.ports import TileProblem
 from ponos_coach.ui import map_texts as texts
-from ponos_coach.ui.activity_text import ascent_m_text, distance_km_text, sport_text
+from ponos_coach.ui.activity_text import (
+    ascent_m_text,
+    distance_km_text,
+    duration_text,
+    sport_text,
+)
 from ponos_coach.ui.chart_payload import prepare_figure
 from ponos_coach.ui.chart_texts import chart_chrome
 from ponos_coach.ui.chart_view import ChartEngine, ChartView
@@ -70,15 +76,28 @@ MODE_ZONES = "zones"
 _INITIAL_VIEW = {"lat": 30.0, "lon": 10.0, "zoom": 2}  # the world, not a place of the user
 _LIST_MIN_WIDTH = 280
 _DETAIL_MIN_HEIGHT = 160
+_MS_TO_KMH = 3.6
 _STACK_CHART = 0
 _STACK_MESSAGE = 1
 type _Profile = ActivityProfileData | NoTrack | ExcludedActivity | None
+
+
+def _speed_text(distance_m: float | None, moving_s: float) -> str:
+    """Average speed over the moving time, one decimal; empty without a distance."""
+    if distance_m is None or moving_s <= 0:
+        return ""
+    return QLocale().toString(distance_m / moving_s * _MS_TO_KMH, "f", 1)
+
+
+def _calories_text(kcal: float | None) -> str:
+    return "" if kcal is None else QLocale().toString(round(kcal))
 
 
 class MapPage(QWidget):
     """The map section."""
 
     settings_requested = Signal()
+    detail_requested = Signal(object)  # ActivityIdentity: open its detail window
 
     def __init__(  # noqa: PLR0913 - every argument is a distinct collaborator of the page
         self,
@@ -192,8 +211,52 @@ class MapPage(QWidget):
         self._detail_message.setWordWrap(True)
         self._detail_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._detail_stack.addWidget(self._detail_message)
-        column.addWidget(self._detail_stack, stretch=1)
+        body = QHBoxLayout()
+        body.setSpacing(SPACE_4)
+        body.addWidget(self._detail_stack, stretch=1)
+        body.addWidget(self._build_summary(detail))
+        column.addLayout(body, stretch=1)
         return detail
+
+    def _build_summary(self, parent: QWidget) -> QWidget:
+        """The data of the selected activity, beside its elevation profile."""
+        self._summary = QWidget(parent)
+        self._summary.setObjectName("mapActivitySummary")
+        column = QVBoxLayout(self._summary)
+        column.setContentsMargins(0, 0, 0, 0)
+        form = QFormLayout()
+        form.setVerticalSpacing(SPACE_1)
+        self._summary_values: dict[str, QLabel] = {}
+        for key, text in self._summary_rows():
+            value = QLabel(self._summary)
+            value.setTextFormat(Qt.TextFormat.PlainText)
+            value.setObjectName(f"mapSummary-{key}")
+            value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self._summary_values[key] = value
+            form.addRow(text, value)
+        column.addLayout(form)
+        column.addStretch(1)
+        self._open_detail = QPushButton(self.tr("Activity detail..."), self._summary)
+        self._open_detail.setObjectName("mapOpenDetail")
+        self._open_detail.clicked.connect(self._on_open_detail)
+        column.addWidget(self._open_detail)
+        self._summary.hide()
+        return self._summary
+
+    def _summary_rows(self) -> tuple[tuple[str, str], ...]:
+        return (
+            ("moving", self.tr("Moving time (h:mm:ss)")),
+            ("elapsed", self.tr("Elapsed time (h:mm:ss)")),
+            ("distance", self.tr("Distance (km)")),
+            ("ascent", self.tr("Ascent (m)")),
+            ("speed", self.tr("Average speed (km/h)")),
+            ("calories", self.tr("Energy (kcal)")),
+        )
+
+    def _on_open_detail(self) -> None:
+        if self._selected is not None:
+            self.detail_requested.emit(self._selected)
 
     def _build_list(self) -> QWidget:
         right = QWidget(self)
@@ -544,6 +607,7 @@ class MapPage(QWidget):
 
     def _update_detail_title(self) -> None:
         record = self._record_of(self._selected)
+        self._update_summary(record)
         if record is None:
             self._detail_title.setText("")
             return
@@ -554,6 +618,27 @@ class MapPage(QWidget):
             _with_unit(ascent_m_text(record.summary.ascent_m), "m"),
         ]
         self._detail_title.setText("  |  ".join(part for part in parts if part))
+
+    def _update_summary(self, record: ActivityRecord | None) -> None:
+        """Fill the data beside the elevation profile; hidden with no activity selected."""
+        self._summary.setVisible(record is not None)
+        if record is None:
+            return
+        summary = record.summary
+        values = {
+            "moving": duration_text(record.timer_s),
+            "elapsed": duration_text(record.elapsed_s),
+            "distance": distance_km_text(summary.distance_m),
+            "ascent": ascent_m_text(summary.ascent_m),
+            "speed": _speed_text(summary.distance_m, record.timer_s),
+            "calories": _calories_text(summary.calories_kcal),
+        }
+        for key, text in values.items():
+            self._summary_values[key].setText(text)
+
+    def summary_text(self, key: str) -> str:
+        """One value of the data beside the elevation profile (empty when it is hidden)."""
+        return "" if self._summary.isHidden() else self._summary_values[key].text()
 
     def _record_of(self, identity: ActivityIdentity | None) -> ActivityRecord | None:
         search = self._search

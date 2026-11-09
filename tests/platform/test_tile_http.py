@@ -199,9 +199,7 @@ def test_the_request_has_the_style_path_key_and_a_generic_user_agent(server: Til
     assert "authorization" not in headers
 
 
-@pytest.mark.parametrize(
-    ("language", "style"), [("it", "it"), ("en", "en"), ("de", "__"), ("", "__")]
-)
+@pytest.mark.parametrize(("language", "style"), [("it", "it"), ("en", "en"), ("de", ""), ("", "")])
 def test_the_label_language_picks_the_style_or_the_neutral_one(
     server: TileServer, language: str, style: str
 ) -> None:

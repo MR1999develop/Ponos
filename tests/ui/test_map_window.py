@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QSettings
+from PySide6.QtWidgets import QPushButton
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.activities.domain import Sport
@@ -255,6 +256,13 @@ def test_the_selected_activity_shows_its_profile_below_the_map(
     title, _ = window.map_page.detail_texts
     assert "Running" in title
     assert window.map_page.shows_chart
+    # beside the profile, the activity's data, and a way to its detail window
+    assert window.map_page.summary_text("moving").count(":") == 2
+    assert window.map_page.summary_text("elapsed").count(":") == 2
+    button = window.map_page.findChild(QPushButton, "mapOpenDetail")
+    assert button is not None
+    button.click()
+    qtbot.waitUntil(lambda: window.profile_dialogs.detail_dialog is not None, timeout=WAIT_MS)
 
 
 def test_an_activity_removed_by_the_filter_is_no_longer_selected(

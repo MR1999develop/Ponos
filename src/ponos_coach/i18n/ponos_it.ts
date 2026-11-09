@@ -3808,6 +3808,34 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Apri le impostazioni della mappa...</translation>
     </message>
     <message>
+        <source>Activity detail...</source>
+        <translation>Dettaglio attività...</translation>
+    </message>
+    <message>
+        <source>Moving time (h:mm:ss)</source>
+        <translation>Tempo in movimento (h:mm:ss)</translation>
+    </message>
+    <message>
+        <source>Elapsed time (h:mm:ss)</source>
+        <translation>Tempo trascorso (h:mm:ss)</translation>
+    </message>
+    <message>
+        <source>Distance (km)</source>
+        <translation>Distanza (km)</translation>
+    </message>
+    <message>
+        <source>Ascent (m)</source>
+        <translation>Dislivello (m)</translation>
+    </message>
+    <message>
+        <source>Average speed (km/h)</source>
+        <translation>Velocità media (km/h)</translation>
+    </message>
+    <message>
+        <source>Energy (kcal)</source>
+        <translation>Energia (kcal)</translation>
+    </message>
+    <message>
         <source>Activities in the visible area</source>
         <translation>Attività nell&apos;area visibile</translation>
     </message>
