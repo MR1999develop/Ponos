@@ -85,7 +85,6 @@ def _calories_text(kcal: float | None) -> str:
 class MapPage(QWidget):
     """The map section."""
 
-
     def __init__(  # noqa: PLR0913 - every argument is a distinct collaborator of the page
         self,
         engine: ChartEngine,
