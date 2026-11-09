@@ -123,9 +123,9 @@
       locale: payload.locale.name,
       displaylogo: false,
       responsive: true,
-      // With `linkedX` the wheel zooms and a left drag pans the dates (the figure sets
+      // With `zoom` the wheel zooms and a left drag pans the x axis (the figure sets
       // `dragmode` and fixes the y axes); the other charts keep the toolbar only.
-      scrollZoom: payload.linkedX === true,
+      scrollZoom: payload.zoom === true,
       modeBarButtonsToRemove: ["toImage", "select2d", "lasso2d"],
       modeBarButtonsToAdd: [
         exportButton("ponosPng", labels.png, "png", payload.filename),

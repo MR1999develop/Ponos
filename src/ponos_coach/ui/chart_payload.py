@@ -82,8 +82,8 @@ def base_layout(tokens: ThemeTokens) -> dict[str, object]:
     }
 
 
-def enable_date_navigation(figure: go.Figure) -> None:
-    """The wheel zooms and a left drag pans the dates; the y axes stay as drawn."""
+def enable_wheel_navigation(figure: go.Figure) -> None:
+    """The wheel zooms and a left drag pans the x axis; the y axes stay as drawn."""
     figure.update_layout(dragmode="pan")
     figure.update_yaxes(fixedrange=True)
 
@@ -94,13 +94,14 @@ def render_script(
     filename: str,
     *,
     hover: bool = False,
+    zoomable: bool = False,
     linked_x: bool = False,
 ) -> str:
     """JavaScript call that draws the figure: the argument is a single JSON (`json.dumps`).
 
     With `hover` the page reports the point under the pointer (see `ChartView.hovered`); with
-    `linked_x` the wheel and a drag move the dates and the page reports the range it shows
-    (see `ChartView.x_range_changed`).
+    `zoomable` the wheel zooms and a drag pans the x axis; with `linked_x` (zoomable too) the page
+    also reports the range of dates it shows (see `ChartView.x_range_changed`).
     """
     payload: dict[str, object] = {
         "figure": json.loads(pio.to_json(figure)),
@@ -111,6 +112,8 @@ def render_script(
     }
     if hover:
         payload["hover"] = True
+    if zoomable or linked_x:
+        payload["zoom"] = True
     if linked_x:
         payload["linkedX"] = True
     return f"ponosRender({json.dumps(payload, ensure_ascii=True, allow_nan=False)});"
@@ -123,16 +126,18 @@ def prepare_figure(
     tokens: ThemeTokens,
     *,
     hover: bool = False,
+    zoomable: bool = False,
     linked_x: bool = False,
 ) -> PreparedChart:
     """Figure, JSON and background together: pure, heavy work, suited to a non-UI thread.
 
-    With `linked_x` the dates move with the wheel and a drag (`enable_date_navigation`).
+    With `zoomable` (or `linked_x`) the x axis moves with the wheel and a drag
+    (`enable_wheel_navigation`).
     """
-    if linked_x:
-        enable_date_navigation(figure)
+    if zoomable or linked_x:
+        enable_wheel_navigation(figure)
     return PreparedChart(
         figure,
-        render_script(figure, chrome, filename, hover=hover, linked_x=linked_x),
+        render_script(figure, chrome, filename, hover=hover, zoomable=zoomable, linked_x=linked_x),
         tokens.background,
     )
