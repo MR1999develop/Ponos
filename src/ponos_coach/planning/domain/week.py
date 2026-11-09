@@ -9,6 +9,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 
+from ponos_coach.assessment.domain import ThresholdProtocol
 from ponos_coach.goals.domain import HARD_TYPES, INTENSE_TYPES, SessionType
 from ponos_coach.planning.domain import defaults
 from ponos_coach.planning.domain.phases import LOADED_PHASES, TAPER_PHASES, Phase, RaceClass
@@ -18,6 +19,8 @@ from ponos_coach.planning.domain.sessions import (
     raw_blocks,
     session_load,
     shape_options,
+    threshold_test_minutes,
+    threshold_test_shape,
     zone_minutes,
 )
 
@@ -44,6 +47,14 @@ class DayInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class ThresholdTestRequest:
+    """The week should hold the threshold test of `protocol`, on `not_before` or a later day."""
+
+    protocol: ThresholdProtocol
+    not_before: date
+
+
+@dataclass(frozen=True, slots=True)
 class WeekSetup:
     """What the week needs to be laid out.
 
@@ -52,7 +63,8 @@ class WeekSetup:
     day of the week before: no hard session on them or next to them. `race_days` are all the
     races of the plan: no intense session in the 72 hours before one. `rotation` (consecutive
     weeks differ by one) makes the intense types alternate. `fillers` is the order of the types
-    that fill the days with nothing special.
+    that fill the days with nothing special. `test` asks for the threshold test (a hard session
+    of its own, placed before the quality sessions; none in an unload week).
     """
 
     days: tuple[DayInfo, ...]
@@ -64,6 +76,7 @@ class WeekSetup:
     race_days: frozenset[date] = frozenset()
     rotation: int = 0
     fillers: tuple[SessionType, ...] = FILLERS
+    test: ThresholdTestRequest | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +124,10 @@ class Sizer:
             loads = [session_load(raw_blocks(shape, phase), rates) for shape in shapes]
             self._cache[key] = (shapes, loads)
         return self._cache[key]
+
+    def load_of(self, shape: Shape, phase: Phase) -> float:
+        """The load of one session of a given shape."""
+        return session_load(raw_blocks(shape, phase), self._rates_of[shape.session_type])
 
     def minimum_load(self, slots: Sequence[Slot]) -> float:
         """The load of the shortest sessions of all the slots (those that have one)."""
@@ -290,6 +307,30 @@ def _place_long(
             hard.add(info.day)
 
 
+def _place_test(
+    free: list[DayInfo], hard: set[date], taken: dict[date, SessionType], setup: WeekSetup
+) -> tuple[date, Phase] | None:
+    """The threshold test goes on the earliest free day from `not_before` that has time for it,
+    is not in the 72 hours before a race and is not next to a hard day (so it is preceded, and
+    followed, by an easy day or a rest). None if the week has no such day or is an unload week."""
+    request = setup.test
+    if request is None or setup.unload:
+        return None
+    minutes = threshold_test_minutes(request.protocol)
+    for info in free:  # in date order
+        if (
+            info.day >= request.not_before
+            and info.day not in taken
+            and info.minutes >= minutes
+            and not _before_race(info.day, setup.race_days)
+            and _distance_to(info.day, hard) >= 2
+        ):
+            taken[info.day] = SessionType.THRESHOLD
+            hard.add(info.day)
+            return info.day, info.phase
+    return None
+
+
 def _place_strength(free: list[DayInfo], hard: set[date], taken: dict[date, SessionType]) -> None:
     """Strength goes on the free day farthest from the hard days."""
     spots = [d for d in free if d.day not in taken]
@@ -298,18 +339,29 @@ def _place_strength(free: list[DayInfo], hard: set[date], taken: dict[date, Sess
         taken[best.day] = SessionType.STRENGTH
 
 
-def choose_loaded_slots(
-    setup: WeekSetup, quality: Sequence[SessionType]
-) -> tuple[list[Slot], set[date]]:
-    """Types for the days with normal load: the long session on the long day, the `quality`
-    sessions spread apart and never next to a hard day, strength, easy sessions on the remaining
-    days. Also the hard days of the week (with the seed), for the taper's quality session.
+@dataclass(frozen=True, slots=True)
+class LoadedLayout:
+    """The days with normal load as `choose_loaded_slots` lays them out: the sessions to size,
+    the hard days of the week (with the seed) and, if the week holds it, the day and phase of the
+    threshold test, whose session has a fixed size and is not among the slots."""
+
+    slots: list[Slot]
+    hard: set[date]
+    test: tuple[date, Phase] | None
+
+
+def choose_loaded_slots(setup: WeekSetup, quality: Sequence[SessionType]) -> LoadedLayout:
+    """Types for the days with normal load: the long session on the long day, the threshold test
+    (if asked for), the `quality` sessions spread apart and never next to a hard day, strength,
+    easy sessions on the remaining days. Also the hard days of the week (with the seed), for the
+    taper's quality session.
     """
     free = [d for d in setup.days if d.phase in LOADED_PHASES and d.minutes > 0]
     hard = set(setup.hard_seed)
     taken: dict[date, SessionType] = {}
     if SessionType.LONG in setup.chosen:
         _place_long(free, hard, taken, setup.long_weekday)
+    test = _place_test(free, hard, taken, setup)
     for session_type in quality:
         _place_hard(free, hard, taken, session_type, _allowed_for(session_type, setup))
     if SessionType.STRENGTH in setup.chosen:
@@ -317,11 +369,13 @@ def choose_loaded_slots(
     filler = _filler(setup)
     slots: list[Slot] = []
     for d in free:
+        if test is not None and d.day == test[0]:
+            continue
         chosen_type = taken.get(d.day, filler)
         if chosen_type is not None:
             race_pace = chosen_type in INTENSE_TYPES and _is_race_pace(chosen_type, d)
             slots.append(Slot(d.day, chosen_type, d.phase, d.minutes, race_pace))
-    return slots, hard
+    return LoadedLayout(slots, hard, test)
 
 
 def _taper_quality_minutes(info: DayInfo) -> int:
@@ -400,10 +454,13 @@ def recovery_sessions(setup: WeekSetup) -> dict[date, Placed]:
 
 
 def low_zone_share_ok(placed: Mapping[date, Placed]) -> bool:
-    """True if at least 80% of the time of these sessions is in Z1-Z2 (the 80/20 by time)."""
+    """True if at least 80% of the time of these sessions is in Z1-Z2 (the 80/20 by time). The
+    threshold test is left out: it is a measurement, once a period, not the week's training."""
     total = 0
     low = 0
     for item in placed.values():
+        if item.shape.test is not None:
+            continue
         zones = zone_minutes(raw_blocks(item.shape, item.phase))
         total += sum(zones)
         low += zones[0] + zones[1]
@@ -414,10 +471,12 @@ def week_ok(setup: WeekSetup, placed: Mapping[date, Placed]) -> bool:
     """True if the sessions respect the weekly distribution: at most 25% of the sessions
     intense (at least one from 3 sessions, none with fewer; at most 2 with fewer than 6), at most
     3 hard days, and in base and
-    maintenance weeks 80% of the time in Z1-Z2."""
+    maintenance weeks 80% of the time in Z1-Z2. The threshold test counts as an intense session
+    and a hard day, and is always allowed: the other intense sessions make room for it."""
     types = [item.shape.session_type for item in placed.values()]
     intense = sum(t in INTENSE_TYPES for t in types)
-    if intense > intense_allowed(len(types)):
+    tests = sum(item.shape.test is not None for item in placed.values())
+    if intense > max(intense_allowed(len(types)), tests):
         return False
     if len(types) < defaults.FEW_SESSIONS and intense > defaults.MAX_INTENSE_FEW_SESSIONS:
         return False
@@ -451,8 +510,15 @@ def plan_week(
     keep = len(quality)
     with_taper_quality = True
     while True:
-        loaded, hard = choose_loaded_slots(setup, quality[:keep])
-        placed = _placed(loaded, sizer.size(loaded, loaded_budget))
+        layout = choose_loaded_slots(setup, quality[:keep])
+        loaded, hard = layout.slots, layout.hard
+        left = loaded_budget
+        placed: dict[date, Placed] = {}
+        if (test := layout.test) is not None and setup.test is not None:
+            shape = threshold_test_shape(setup.test.protocol)
+            placed[test[0]] = Placed(shape, test[1])
+            left = max(0.0, left - sizer.load_of(shape, test[1]))  # the test is paid first
+        placed.update(_placed(loaded, sizer.size(loaded, left)))
         taper = choose_taper_slots(setup, hard, sizer, with_quality=with_taper_quality)
         budget = taper_budget
         if keep_frequency:

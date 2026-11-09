@@ -33,9 +33,9 @@ from ponos_coach.goals.domain import Priority
 from ponos_coach.load.domain.zones import zone_indices
 from ponos_coach.planning.domain import (
     Plan,
-    RetestBeforePlan,
     RetestInUnloadWeek,
     RetestNotPlaceable,
+    RetestScheduled,
     WeekKind,
 )
 from tests.collaudo.fase4_support import (
@@ -386,7 +386,11 @@ def test_t_piano_06_the_retest_goes_in_the_first_unload_week_that_touches_the_wi
 
     proposal = plan.retest_proposal
 
-    if expected is None:
+    if not isinstance(status, NotYet):
+        # method 5 (ADR 015): a test that is due is a session of the plan, in its first week
+        (scheduled,) = (d for d in plan.days if d.session and d.session.threshold_test)
+        assert proposal == RetestScheduled(scheduled.day)
+    elif expected is None:
         assert proposal == RetestNotPlaceable()
     else:
         assert proposal == RetestInUnloadWeek(expected)
@@ -395,10 +399,13 @@ def test_t_piano_06_the_retest_goes_in_the_first_unload_week_that_touches_the_wi
         )
 
 
-def test_t_piano_06_without_a_test_the_plan_asks_for_one_before_it_starts(world: World) -> None:
+def test_t_piano_06_without_a_test_the_plan_has_one_in_its_first_week(world: World) -> None:
     plan: Plan = world.built().plan
 
-    assert isinstance(plan.retest_proposal, RetestBeforePlan)
+    # method 5 (ADR 015): the test is a session, no more "do it before the plan starts"
+    assert isinstance(plan.retest_proposal, RetestScheduled)
+    first_week_end = plan.days[0].day + timedelta(days=(6 - plan.days[0].day.weekday()))
+    assert plan.days[0].day <= plan.retest_proposal.day <= first_week_end
 
 
 def test_the_local_day_of_a_late_evening_test_is_the_day_in_the_profile_zone(

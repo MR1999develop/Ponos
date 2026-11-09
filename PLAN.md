@@ -285,8 +285,9 @@ src/ponos_coach/
   pianificato e si ricalcola da domani; il passato resta storia. TSB sotto
   −30 o ATL/CTL oltre 1,5 inseriscono recupero; il carico perso non si
   recupera oltre la rampa massima.
-- **Test:** test di soglia 30' prima del piano e ogni 6–8 settimane in una
-  settimana di scarico; dopo il test si aggiornano soglia e zone.
+- **Test:** test di soglia (30' o 20') come seduta dura nella prima settimana del
+  piano se non c'è un test recente (ADR 015, versione 5 del metodo), poi ogni 6–8
+  settimane in una settimana di scarico; dopo il test si aggiornano soglia e zone.
 - Piano salvato con versione e con i parametri che l'hanno generato.
 
 ### 4.7 Infortuni
@@ -644,6 +645,17 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       `threshold_test` a `fit`, svuota la cache dei carichi e riarma le voci
       del giornale; poi elimina i file GPX dall'archivio. Avviso una volta con il numero di attività tolte.
       Test: `tests/collaudo/test_fase8_solo_fit.py`.
+- [x] Test di soglia nel piano, motore (richiesta dell'utente del 2026-11-09,
+      ADR 015): il motore programma la seduta "Threshold test" nella prima
+      settimana (versione 5 del metodo) con regole scritte, la ripropone una
+      sola volta se salta, workout Garmin con nome e passi propri. Test:
+      `T-PIANO-10` in `tests/planning/test_threshold_test_session.py`, oracoli
+      di `tests/planning/invariants.py` e del collaudo del piano aggiornati.
+- [ ] Test di soglia nel piano, guscio e interfaccia: `RebuildPlan` passa
+      `test_protocol` (impostazione dell'utente) e `missed_tests`
+      (`missed_threshold_tests` sui giorni congelati e i test applicati); la
+      finestra mostra la seduta "Threshold test" e `RetestScheduled`
+      (`ui/plan_texts.py`, ora `mypy` fallisce lì finché manca il caso).
 - [ ] Collaudo completo (sezione 7) superato sull'eseguibile, su Windows e
       Ubuntu, con esiti registrati in `docs/collaudo.md`.
 - [ ] Ubuntu di nuovo nelle matrici di `ci.yml` e `release.yml` (tolto il
@@ -778,6 +790,14 @@ model e gli esiti del collaudo possono citarlo.
   pianificate, attività vecchie arrivate tardi che cambiano il passato.
 - **T-PIANO-05** Tempo obiettivo: classificazione realistico, ambizioso o
   irraggiungibile, verificata ai confini.
+- **T-PIANO-10** Test di soglia nel piano (ADR 015): piano senza test recente
+  (nessun test, finestra aperta o passata) → test del protocollo scelto nella
+  prima settimana, in un giorno non accanto al lungo né a un giorno duro; con un
+  test recente nessuno; gara vicina → mai nelle 72 ore prima, spostato dopo o assente;
+  infortunio o malattia aperti, o rientro recente → assente; un test saltato torna
+  una volta la settimana dopo, due volte saltato mai più; seduta dura (limiti
+  settimanali, carico nella rampa e nella proiezione); determinismo; nome e
+  passi del workout Garmin; piano salvato che si rilegge.
 - **T-PIANO-06** Test di soglia: FC di soglia = media degli ultimi 20' su
   tracciati sintetici; test interrotto o troppo corto rifiutato; retest
   proposto tra 6 e 8 settimane dopo l'ultimo test (dalla fase 5 anche in una

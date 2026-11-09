@@ -10,6 +10,7 @@ from datetime import date
 from enum import Enum
 
 from ponos_coach.activities.domain import Sport
+from ponos_coach.assessment.domain import ThresholdProtocol
 from ponos_coach.goals.domain import Priority, SessionType
 from ponos_coach.injury.domain import HaltReason
 from ponos_coach.planning.domain.inputs import PlanInputs
@@ -66,6 +67,8 @@ class PlannedSession:
 
     `race_pace` marks a session of the peak or the taper whose work is at the pace of the A race
     (medium for a marathon, threshold for a half marathon or a 10 km or shorter race).
+    `threshold_test` marks the threshold test, of that protocol: a hard session (its type is
+    `THRESHOLD`) that is not one of the types the user chose.
     """
 
     sport: Sport
@@ -74,12 +77,17 @@ class PlannedSession:
     blocks: tuple[Block, ...]
     load: float
     race_pace: bool = False
+    threshold_test: ThresholdProtocol | None = None
 
     def __post_init__(self) -> None:
         if self.minutes < 1 or not _is_load(self.load):
             raise ValueError(
                 "a session lasts at least a minute and has a finite load, not negative"
             )
+        if self.threshold_test is not None and (
+            self.session_type is not SessionType.THRESHOLD or self.race_pace
+        ):
+            raise ValueError("the threshold test is a threshold session, never at race pace")
 
 
 @dataclass(frozen=True, slots=True)
@@ -287,7 +295,14 @@ class RetestNotPlaceable:
     """No unload week falls in the retest window within the plan."""
 
 
-type RetestProposal = RetestBeforePlan | RetestInUnloadWeek | RetestNotPlaceable
+@dataclass(frozen=True, slots=True)
+class RetestScheduled:
+    """The threshold test is a session of the plan, on `day`."""
+
+    day: date
+
+
+type RetestProposal = RetestBeforePlan | RetestInUnloadWeek | RetestNotPlaceable | RetestScheduled
 
 
 @dataclass(frozen=True, slots=True)

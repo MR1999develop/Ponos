@@ -82,7 +82,7 @@ def test_without_injuries_the_plan_is_the_same_as_before() -> None:
     assert not any(
         isinstance(w, PlanAdapted | PlanHalted | NoSessionPossible) for w in free.warnings
     )
-    assert free.method_version == defaults.METHOD_VERSION == 4
+    assert free.method_version == defaults.METHOD_VERSION == 5
     assert dict(free.parameters)["max_ramp_per_week"] == defaults.MAX_RAMP_PER_WEEK
     assert violations(free) == []
 

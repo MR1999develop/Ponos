@@ -9,7 +9,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from ponos_coach.assessment.domain import NotYet, Overdue, Recommended
+from ponos_coach.assessment.domain import NoTest, NotYet, Overdue
 from ponos_coach.goals.domain import Priority, SessionType
 from ponos_coach.planning.domain import (
     CloseARaces,
@@ -334,14 +334,21 @@ def test_the_plan_never_goes_beyond_52_weeks() -> None:
 
 
 # --- Where to repeat the threshold test ----------------------------------------------------------
-def test_without_a_test_it_is_proposed_before_the_plan() -> None:
-    assert _plan([race("a", _weeks_ahead(12))]).retest_proposal == RetestBeforePlan()
+# Since method 5 a test that is due is a session of the plan (test_threshold_test_session.py): the
+# proposals below remain for what the plan does not schedule: a test planned and missed twice, a
+# recent test whose window falls in the plan.
+_GIVEN_UP = (TODAY - timedelta(days=17), TODAY - timedelta(days=3))  # two planned tests missed
+
+
+def test_without_a_test_that_the_plan_gave_up_it_is_asked_before_the_plan() -> None:
+    plan = _plan([race("a", _weeks_ahead(12))], retest=NoTest(), missed_tests=_GIVEN_UP)
+    assert plan.retest_proposal == RetestBeforePlan()
 
 
 def test_the_retest_goes_in_an_unload_week_inside_the_window() -> None:
     window = (TODAY + timedelta(days=14), TODAY + timedelta(days=42))
     base = inputs([race("a", _weeks_ahead(30))], avail=BIG_WEEK)
-    plan = build_plan(replace(base, retest=Recommended(*window)), TODAY)
+    plan = build_plan(replace(base, retest=NotYet(*window)), TODAY)
     assert isinstance(plan, Plan)
     proposal = plan.retest_proposal
     assert isinstance(proposal, RetestInUnloadWeek)
@@ -352,7 +359,7 @@ def test_the_retest_goes_in_an_unload_week_inside_the_window() -> None:
 
 
 def test_an_overdue_retest_takes_the_first_unload_week() -> None:
-    base = inputs([race("a", _weeks_ahead(30))], avail=BIG_WEEK)
+    base = inputs([race("a", _weeks_ahead(30))], avail=BIG_WEEK, missed_tests=_GIVEN_UP)
     plan = build_plan(replace(base, retest=Overdue(3, TODAY - timedelta(days=3))), TODAY)
     assert isinstance(plan, Plan)
     first_unload = next(w.week_start for w in plan.weeks if w.kind is WeekKind.UNLOAD)

@@ -74,7 +74,8 @@ Dettagli: `references/piano.md`.
 Due protocolli a scelta: 30' (FC media degli ultimi 20', FRI) e 20' (FC media × 0,95,
 ritmo + 5% del tempo, FRI5); segmento scelto per distanza (o FC), ritmo, zone FC (5ª
 edizione) e di ritmo, rifiuti con motivo, retest tra 42 e 56 giorni, soglia in bici.
-Fonti: FRI, FRI5.
+Un test dovuto è una seduta dura del piano, in una delle prime settimane (ADR 015). Fonti:
+FRI, FRI5.
 Dettagli: `references/test-soglia.md`.
 
 ## 4. Infortuni
@@ -115,7 +116,9 @@ tetti, esiti dell'import, lock, dati personali, schema da v3 a v7. Dettagli:
   ripararlo.
 - Il piano è deterministico: stessi ingressi, stesso piano serializzato.
 - Il piano non supera mai disponibilità, rampa, numero di sedute intense né
-  tipologie scelte dall'utente.
+  tipologie scelte dall'utente; unica eccezione, la seduta di test di soglia
+  (`threshold_test`), che non è una tipologia ma una misura, conta come intensa e dura e
+  non sta mai nelle 72 ore prima di una gara né accanto a un giorno duro.
 - Con un segnale d'allarme la zona si ferma: nessuna eccezione.
 - Dati di salute mai nei log; altezza, peso e data di nascita compresi, anche
   nei messaggi e nelle catene d'errore.

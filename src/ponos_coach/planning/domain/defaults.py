@@ -21,7 +21,9 @@ from ponos_coach.planning.domain.phases import Phase, RaceClass
 # 3: heart-rate zones of the 5th edition (Z2 from 78%, Z3 from 87%, Z4 from 94% of the threshold).
 # 4: open injuries and illnesses (`PlanInputs.injuries`): the plan stops, or drops the sessions
 # that load the injured zone, and the weekly ramp is the lower one while they last.
-METHOD_VERSION: Final = 4
+# 5: the threshold test is a session of the plan (`threshold_test` on the planned session,
+# the protocol and the missed tests among the inputs): ADR 015.
+METHOD_VERSION: Final = 5
 
 # --- Horizon -----------------------------------------------------------------------------------
 HORIZON_DAYS: Final = 364  # a plan covers 52 weeks from tomorrow at most
@@ -175,6 +177,18 @@ MAX_MINUTES: Final[dict[SessionType, int]] = {
     SessionType.ALTERNATIVE: 120,
 }
 
+# --- Threshold test in the plan (ADR 015) -----------------------------------------------------
+# The test (FRI, FRI5: at the start of a period) is a hard session: warm-up, the test, cool-down.
+TEST_WARMUP_MINUTES: Final = 15
+TEST_COOLDOWN_MINUTES: Final = 10
+TEST_ZONE: Final = 4  # the zone the test effort is expected in (FRI: 30' mean HR of the last 20')
+# The weeks, from the first one that can take it, in which the engine tries to place the test: a
+# week with no day that fits (a short first week, a race in it) leaves a second chance.
+TEST_ATTEMPT_WEEKS: Final = 2
+# The test is planned at most this many times: a test that went by without being done is
+# proposed once more, the week after, and then the plan stops asking.
+TEST_MAX_PLANNED: Final = 2
+
 # --- Session models ----------------------------------------------------------------------------
 # Continuous sessions: (role, share of the duration in percent, zone); the shares add up to 100.
 CONTINUOUS_MODELS: Final[dict[SessionType, tuple[tuple[str, int, int], ...]]] = {
@@ -273,6 +287,10 @@ PARAMETER_NAMES: Final = (
     "recovery_days_adaptation",
     "riegel_exponent",
     "ambitious_margin_percent",
+    "test_warmup_minutes",
+    "test_cooldown_minutes",
+    "test_attempt_weeks",
+    "test_max_planned",
 )
 
 
@@ -308,5 +326,9 @@ def parameter_snapshot(max_ramp: float) -> tuple[tuple[str, float], ...]:
         RECOVERY_DAYS_ADAPTATION,
         RIEGEL_EXPONENT,
         AMBITIOUS_MARGIN_PERCENT,
+        TEST_WARMUP_MINUTES,
+        TEST_COOLDOWN_MINUTES,
+        TEST_ATTEMPT_WEEKS,
+        TEST_MAX_PLANNED,
     )
     return tuple((name, float(value)) for name, value in zip(PARAMETER_NAMES, values, strict=True))

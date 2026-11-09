@@ -4,12 +4,20 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from ponos_coach.activities.domain import Sport
+from ponos_coach.assessment.domain import (
+    NoTest,
+    NotYet,
+    Overdue,
+    Recommended,
+    RetestStatus,
+    ThresholdProtocol,
+)
 from ponos_coach.goals.domain import (
     FitnessGoal,
     GoalId,
@@ -77,6 +85,19 @@ def _injuries(draw: st.DrawFn) -> tuple[PlanInjury, ...]:
     return tuple(found)
 
 
+_retests: st.SearchStrategy[RetestStatus] = st.sampled_from(
+    [
+        NoTest(),
+        NotYet(TODAY + timedelta(days=20), TODAY + timedelta(days=34)),
+        Recommended(TODAY - timedelta(days=3), TODAY + timedelta(days=11)),
+        Overdue(5, TODAY - timedelta(days=5)),
+    ]
+)
+_missed: st.SearchStrategy[tuple[date, ...]] = st.sampled_from(
+    [(), (), (TODAY - timedelta(days=3),), (TODAY - timedelta(days=17), TODAY - timedelta(days=3))]
+)
+
+
 @st.composite
 def _inputs(draw: st.DrawFn) -> PlanInputs:
     offsets = draw(st.lists(st.integers(-2, 420), min_size=0, max_size=5, unique=True))
@@ -113,7 +134,10 @@ def _inputs(draw: st.DrawFn) -> PlanInputs:
         FitnessState(ctl, atl),
         threshold_pace_s_per_km=pace,
         after_injury=draw(st.booleans()),
+        retest=draw(_retests),
         injuries=draw(_injuries()),
+        test_protocol=draw(st.sampled_from(list(ThresholdProtocol))),
+        missed_tests=draw(_missed),
     )
 
 
@@ -141,8 +165,8 @@ def assert_base_weeks_are_80_20(plan: Plan) -> None:
             continue
         low = total = 0
         for day in days:
-            if day.session is None:
-                continue
+            if day.session is None or day.session.threshold_test is not None:
+                continue  # the test is a measurement: the 80/20 is of the rest of the week
             for block in day.session.blocks:
                 minutes = block.minutes * block.repeats
                 total += minutes

@@ -6,9 +6,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import replace
-from datetime import date
+from datetime import date, timedelta
 
 from ponos_coach.activities.domain import Sport
+from ponos_coach.assessment.domain import NotYet, RetestStatus, ThresholdProtocol
 from ponos_coach.goals.domain import (
     FitnessGoal,
     GoalId,
@@ -24,6 +25,8 @@ from ponos_coach.planning.domain import FitnessState, PlanInputs
 
 TODAY = date(2026, 3, 2)  # a Monday
 ALL_TYPES = frozenset(SessionType)
+# The test athlete tested recently: the plan schedules no threshold test unless a test says so.
+RECENT_TEST = NotYet(TODAY + timedelta(days=30), TODAY + timedelta(days=44))
 
 
 def physiology() -> Physiology:
@@ -72,6 +75,9 @@ def inputs(
     after_injury: bool = False,
     choices_for: Sport = Sport.RUNNING,
     injuries: Iterable[PlanInjury] = (),
+    retest: RetestStatus = RECENT_TEST,
+    test_protocol: ThresholdProtocol = ThresholdProtocol.THIRTY_MINUTES,
+    missed_tests: Iterable[date] = (),
 ) -> PlanInputs:
     """Plan inputs for the test athlete with the given goals."""
     return PlanInputs(
@@ -84,6 +90,9 @@ def inputs(
         threshold_pace_s_per_km=pace,
         after_injury=after_injury,
         injuries=tuple(injuries),
+        retest=retest,
+        test_protocol=test_protocol,
+        missed_tests=tuple(missed_tests),
     )
 
 

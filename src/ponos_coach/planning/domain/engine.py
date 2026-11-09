@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from ponos_coach.activities.domain import Sport
-from ponos_coach.assessment.domain import NoTest, Overdue
+from ponos_coach.assessment.domain import NoTest, NotYet, Overdue, ThresholdProtocol
 from ponos_coach.goals.domain import HARD_TYPES, INTENSE_TYPES, Priority, RaceGoal, SessionType
 from ponos_coach.injury.domain import PlanRestriction
 from ponos_coach.planning.domain import defaults
@@ -51,6 +51,7 @@ from ponos_coach.planning.domain.plan import (
     RetestInUnloadWeek,
     RetestNotPlaceable,
     RetestProposal,
+    RetestScheduled,
     TargetAssessment,
     TargetTimeUnreachable,
     WeekKind,
@@ -76,10 +77,19 @@ from ponos_coach.planning.domain.target import (
     taper_days_for,
     target_ctl_for_distance,
 )
-from ponos_coach.planning.domain.week import FILLERS, DayInfo, Placed, Sizer, WeekSetup, plan_week
+from ponos_coach.planning.domain.week import (
+    FILLERS,
+    DayInfo,
+    Placed,
+    Sizer,
+    ThresholdTestRequest,
+    WeekSetup,
+    plan_week,
+)
 
 _DAYS_PER_WEEK = 7
 _RUNNING = (Sport.RUNNING, Sport.TRAIL)
+_TEST_SPORTS = (*_RUNNING, Sport.CYCLING)  # the sports a threshold test exists for
 _KIND_OF_PHASE = {
     Phase.MAINTENANCE: WeekKind.MAINTENANCE,
     Phase.BASE: WeekKind.BASE,
@@ -100,6 +110,8 @@ class _Run:
     ref_daily: float
     loaded_weeks: int = 0
     last_hard: date | None = None
+    test_pending: bool = False
+    test_weeks_tried: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +121,14 @@ class _RaceTarget:
     day: date
     race_class: RaceClass
     pace_s_per_km: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class _TestPlan:
+    """The threshold test the plan has to schedule: its protocol, and the first day it may be on."""
+
+    protocol: ThresholdProtocol
+    not_before: date
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +147,7 @@ class _Context:
     targets: tuple[_RaceTarget, ...]
     restriction: PlanRestriction
     chosen: frozenset[SessionType]
+    test: _TestPlan | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,7 +178,11 @@ def build_plan(inputs: PlanInputs, today: date) -> Plan | PlanRefusal:
         defaults.MAX_RAMP_PER_WEEK_AFTER_INJURY if norm.ramp_reduced else defaults.MAX_RAMP_PER_WEEK
     )
     context = _context(norm, macro, today, max_ramp)
-    run = _Run(Fitness(norm.fitness.ctl, norm.fitness.atl), norm.fitness.ctl)
+    run = _Run(
+        Fitness(norm.fitness.ctl, norm.fitness.atl),
+        norm.fitness.ctl,
+        test_pending=context.test is not None,
+    )
     results = [_plan_one_week(context, run, week) for week in _week_groups(start, end)]
     days = tuple(day for result in results for day in result.days)
     projection = tuple(point for result in results for point in result.points)
@@ -305,7 +330,26 @@ def _context(inputs: PlanInputs, macro: Macrocycle, today: date, max_ramp: float
         targets,
         restriction,
         chosen,
+        _threshold_test_plan(inputs, today + timedelta(days=1)),
     )
+
+
+def _threshold_test_plan(inputs: PlanInputs, start: date) -> _TestPlan | None:
+    """The threshold test the plan has to schedule, or None. It is scheduled when the retest
+    window says a test is due (none yet, the window open, the window gone), for a sport a test
+    exists for, with no open injury or illness and none closed recently, and while it was planned
+    and missed fewer than `TEST_MAX_PLANNED` times. A missed test goes to the week after the one
+    it was missed in (ADR 015)."""
+    if isinstance(inputs.retest, NotYet) or inputs.plan_sport() not in _TEST_SPORTS:
+        return None
+    if inputs.ramp_reduced or len(inputs.missed_tests) >= defaults.TEST_MAX_PLANNED:
+        return None
+    not_before = start
+    if inputs.missed_tests:
+        last = inputs.missed_tests[-1]
+        next_week = last - timedelta(days=last.weekday()) + timedelta(days=_DAYS_PER_WEEK)
+        not_before = max(start, next_week)
+    return _TestPlan(inputs.test_protocol, not_before)
 
 
 def _race_pace_s_per_km(race: RaceGoal, pace: int | None, days_to_race: int) -> int | None:
@@ -376,12 +420,26 @@ def _daily_level(
     return max(level, defaults.MIN_DAILY_LOAD)
 
 
+def _test_request(
+    context: _Context, run: _Run, week: Sequence[date], *, unload: bool
+) -> ThresholdTestRequest | None:
+    """The threshold test this week is asked to hold: while it is pending, from its first day,
+    in at most `TEST_ATTEMPT_WEEKS` weeks and never in an unload week."""
+    plan = context.test
+    if plan is None or not run.test_pending or unload or week[-1] < plan.not_before:
+        return None
+    if run.test_weeks_tried >= defaults.TEST_ATTEMPT_WEEKS:
+        return None
+    return ThresholdTestRequest(plan.protocol, plan.not_before)
+
+
 def _setup(
     context: _Context,
     run: _Run,
     week: Sequence[date],
     week_phase: Phase | None,
     unload: bool,
+    test: ThresholdTestRequest | None,
 ) -> WeekSetup:
     availability = context.inputs.availability
     race_days = frozenset(context.races)
@@ -398,6 +456,7 @@ def _setup(
         race_days,
         monday.toordinal() // _DAYS_PER_WEEK,
         _fillers(context),
+        test,
     )
 
 
@@ -517,10 +576,14 @@ def _plan_one_week(context: _Context, run: _Run, week: Sequence[date]) -> _WeekR
     run.loaded_weeks += int(counted)
     ramping = any(context.macro.phase_on(d) in (Phase.BASE, Phase.BUILD) for d in week)
     level = _daily_level(context, run, week, ramping=ramping, unload=unload)
-    setup = _setup(context, run, week, week_phase, unload)
+    request = _test_request(context, run, week, unload=unload)
+    setup = _setup(context, run, week, week_phase, unload, request)
     taper_share = sum(d.taper_fraction for d in setup.days)
     budgets = (level * loaded_days, run.ref_daily * taper_share)
     placed = _fit_week(context, run, setup, week, budgets)
+    if request is not None:
+        run.test_weeks_tried += 1
+        run.test_pending = not any(i.shape.test is not None for i in placed.values())
     if counted and not unload:
         run.ref_daily = _realised_daily_load(context, week, placed, loaded_days)
     return _advance(context, run, week, placed, unload)
@@ -681,10 +744,18 @@ def _ctl_warnings(context: _Context, projection: Sequence[PmcPoint]) -> list[Pla
 
 
 def _retest(
-    inputs: PlanInputs, weeks: Sequence[PlanWeek], start: date, end: date
+    inputs: PlanInputs, weeks: Sequence[PlanWeek], days: Sequence[PlanDay]
 ) -> RetestProposal:
-    """The threshold test goes in an unload week of the retest window (before the plan if there
-    is no test yet; any unload week if the window has passed)."""
+    """Where the threshold test goes: the day the plan has it on; otherwise in an unload week of
+    the retest window (before the plan if there is no test yet; any unload week if the window has
+    passed)."""
+    scheduled = next(
+        (d.day for d in days if d.session is not None and d.session.threshold_test is not None),
+        None,
+    )
+    if scheduled is not None:
+        return RetestScheduled(scheduled)
+    start, end = days[0].day, days[-1].day
     status = inputs.retest
     if isinstance(status, NoTest):
         return RetestBeforePlan()
@@ -723,5 +794,5 @@ def _assemble(
         projection,
         targets,
         warnings,
-        _retest(inputs, weeks, days[0].day, days[-1].day),
+        _retest(inputs, weeks, days),
     )

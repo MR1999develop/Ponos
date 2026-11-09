@@ -552,10 +552,13 @@ activity is reported as excluded, with the reason, not as a rejected test.
 - A retest is recommended from 42 to 56 days after the last applied test
   (both days included). Before day 42 the app only says when the window
   opens; from day 57 it says the retest is overdue. With no test, it proposes
-  the first. Only the most recent test counts. The plan places the retest in
-  the first recovery week of the 3:1 cycle that touches the window (not in the
-  taper before a race); if none can be placed, only the dates are given. Without
-  a test the plan asks for one before it starts.
+  the first. Only the most recent test counts.
+- The test is a session of the plan (ADR 015). With no test, with the retest
+  window open or with the window gone, the plan puts it in one of its first
+  weeks (section 9). With a recent test the plan has none; it only says, in an
+  easy week of the 3:1 cycle that touches the window (not in the taper before a
+  race), where a retest could go; if none can be placed, only the dates are
+  given.
 - "Threshold tests..." shows the history (most recent first: date, activity,
   threshold HR, pace, method) and the retest message below it; with no test,
   an empty state with the first step. The retest message is also in the status
@@ -597,6 +600,25 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
   session type for the sport. Otherwise it always exists and what is not right
   goes in warnings (for example a half marathon without a long session, two A
   races three weeks apart, a CTL that cannot be reached at the maximum ramp).
+- The threshold test, when one is due, is a session of the plan (ADR 015):
+  - due with no test, with the retest window open or gone; not with a recent
+    test, with an open injury or illness (or one closed within 28 days), or
+    after two planned tests went by undone;
+  - the protocol is the one chosen in the settings (30 minutes: 15 warm-up,
+    the test, 10 cool-down, 55 in all; 20 minutes: 45 in all), in the sport of
+    the plan if it is running, trail or cycling;
+  - it goes in the first week of the plan, on the earliest day with time for
+    it that is not next to the long session or another hard day (so it follows
+    and is followed by an easy day or a rest) and not in the 72 hours before a
+    race; if that week has no such day, in the second week; never in a taper,
+    recovery or easy week, and even if the user chose no threshold session;
+  - it is a hard session: it counts in the weekly limits of intense sessions
+    and hard days and its load is part of the week's load and of the projection;
+  - it is sent to the Garmin calendar like the other sessions, as the workout
+    "Threshold test <minutes> min";
+  - when the activity of that day is applied as a test the plan has no more
+    tests; if the day goes by with no test applied, the test comes back once,
+    in the week after, and then the plan stops asking.
 - The CTL grows at most 5 points a week (3 with an injury or illness open, or
   closed within 28 days). Every goal A has a taper before it and every goal B
   a short one; three weeks of load are followed by one of recovery.

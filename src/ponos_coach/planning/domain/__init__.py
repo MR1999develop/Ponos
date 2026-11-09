@@ -30,11 +30,13 @@ from ponos_coach.planning.domain.plan import (
     RetestInUnloadWeek,
     RetestNotPlaceable,
     RetestProposal,
+    RetestScheduled,
     TargetAssessment,
     TargetTimeUnreachable,
     WeekKind,
 )
 from ponos_coach.planning.domain.target import TargetClass, classify_target
+from ponos_coach.planning.domain.threshold_test import missed_threshold_tests
 from ponos_coach.planning.domain.workouts import (
     WORKOUT_PREFIX,
     ScheduledWorkout,
@@ -75,6 +77,7 @@ __all__ = [
     "RetestInUnloadWeek",
     "RetestNotPlaceable",
     "RetestProposal",
+    "RetestScheduled",
     "ScheduledWorkout",
     "StepKind",
     "TargetAssessment",
@@ -86,5 +89,6 @@ __all__ = [
     "build_plan",
     "classify_target",
     "compare_with_actual",
+    "missed_threshold_tests",
     "workout_from_session",
 ]

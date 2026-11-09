@@ -23,7 +23,9 @@ invia. Nessun I/O nel motore.
 - `planning/domain`: `PlanInputs` (obiettivi, disponibilità, tipologie,
   `Physiology`, `FitnessState` = CTL e ATL a fine di oggi, pesi degli sport,
   ritmo di soglia `int | None`, `after_injury`, `injuries` = istantanee dei
-  casi aperti di `injury`, `retest` = esito di `assessment.retest_status`). Funzione unica:
+  casi aperti di `injury`, `retest` = esito di `assessment.retest_status`,
+  `test_protocol` = protocollo scelto dall'utente, `missed_tests` = giorni in cui il
+  piano aveva un test non fatto: `missed_threshold_tests`). Funzione unica:
   `build_plan(inputs, today) -> Plan | PlanRefusal`.
 - Il piano parte da **domani**; l'orizzonte arriva all'ultimo obiettivo, al
   massimo 364 giorni (52 settimane). Un obiettivo oltre l'orizzonte resta
@@ -253,11 +255,41 @@ saltato).
 
 ## 10. Test di soglia nel piano
 
-`Plan.retest_proposal`: senza test (`NoTest`) `RetestBeforePlan`; nella
-finestra di `NextRetest` (o scaduta: da domani in poi) la prima settimana di
-scarico del 3:1 che la tocca, `RetestInUnloadWeek(week_start)`; altrimenti
-`RetestNotPlaceable`. Le settimane di scarico finale prima di una gara non
-valgono.
+Dalla versione 5 (ADR 015, richiesta dell'utente del 2026-11-09) il test è una seduta
+del piano: `PlannedSession.threshold_test` (il protocollo), tipo `THRESHOLD`, che non
+è una tipologia scelta dall'utente (si pianifica anche se non ha scelto la soglia).
+
+- **Dovuto** se `retest` non è `NotYet` (nessun test, finestra aperta, finestra
+  passata), lo sport del piano è corsa, trail o bici, non c'è un infortunio o una
+  malattia aperti né chiusi da poco (`ramp_reduced`) e il test non è stato pianificato e
+  saltato due volte (`TEST_MAX_PLANNED`).
+- **Struttura** (`threshold_test_shape`, `defaults.TEST_*`): 15' riscaldamento in Z2, la
+  prova (30' o 20', Z4 come zona attesa; l'utente va a sensazione), 10' defaticamento in
+  Z1: 55' o 45'. Con il protocollo scelto in `PlanInputs.test_protocol`.
+- **Dove** (`week._place_test`): nella prima settimana del piano (se non ha un giorno
+  adatto, nella seconda: `TEST_ATTEMPT_WEEKS`), il primo giorno di carico normale (base,
+  costruzione, mantenimento, picco; mai scarico finale, recupero o settimana di scarico) con
+  abbastanza minuti per tutta la seduta, non nelle 72 ore prima di una gara e non
+  accanto a un giorno duro (lungo, gara, ultimo giorno duro della settimana prima): precede
+  e segue un giorno facile o di riposo. Si piazzano prima il lungo, poi il test, poi la
+  qualità.
+- **Seduta dura**: conta come intensa e come giorno duro nei limiti settimanali (le altre
+  sedute intense gli fanno posto; è sempre ammessa, anche in una settimana di due sedute);
+  fuori dalla quota 80/20 per tempo; il suo carico si paga dal budget della settimana,
+  quindi è nella rampa e nella proiezione.
+- **Fatto o saltato**: il motore non ha memoria. Con l'attività del giorno applicata
+  come test `retest` diventa `NotYet` e il piano non ha più test. Se il giorno passa
+  senza test, il guscio dà `missed_tests` (`missed_threshold_tests`: giorni passati con un
+  test pianificato e nessun test applicato da quel giorno in poi): con un test saltato il
+  motore lo ripropone dal lunedì dopo la settimana in cui è stato saltato, con due mai più.
+- **Proposta**: `Plan.retest_proposal` è `RetestScheduled(day)` se il piano ha il test.
+  Altrimenti, come prima: senza test (`NoTest`) `RetestBeforePlan`; nella finestra
+  di `NextRetest` (o scaduta: da domani in poi) la prima settimana di scarico del 3:1 che
+  la tocca, `RetestInUnloadWeek(week_start)`; altrimenti `RetestNotPlaceable`. Le settimane
+  di scarico finale prima di una gara non valgono. Un retest dentro un piano già avviato
+  (la finestra si apre alla settimana 7) resta una proposta.
+- **Garmin**: `workout_from_session` dà il nome "Threshold test 55 min" e tre passi
+  (riscaldamento, intervallo, defaticamento).
 
 ## 11. Semplificazioni da ricordare
 
@@ -274,7 +306,8 @@ valgono.
 
 ## 12. Test
 
-`T-PIANO-01…05` in `PLAN.md` sezione 7.4: `tests/planning/` (determinismo,
+`T-PIANO-01…05` e `T-PIANO-10` (test nel piano: `test_threshold_test_session.py`) in
+`PLAN.md` sezione 7.4: `tests/planning/` (determinismo,
 proprietà con Hypothesis su ingressi casuali con `invariants.violations`,
 scenari, adattamento, classi del tempo obiettivo ai confini, modelli di
 seduta, distribuzione e scarico in `test_distribution.py`, prestazioni: 52
@@ -289,7 +322,10 @@ settimanali inferiori ai minuti dei giorni disponibili, dopo infortunio, con CTL
 sotto 10 o senza tipologia facile: lì le ore o la rampa decidono quali sedute
 togliere).
 
-Versione del metodo: **4** (infortuni e malattie aperti; la 3 aveva le zone FC della 5ª edizione e FC rappresentative delle zone
+Versione del metodo: **5** (il test di soglia è una seduta del piano: campo
+`threshold_test` nella seduta, `test_protocol` e `missed_tests` tra gli ingressi; i piani
+e i giorni congelati salvati con la 4 non si rileggono, il formato ha un campo in più; la 4
+aveva infortuni e malattie aperti; la 3 aveva le zone FC della 5ª edizione e FC rappresentative delle zone
 per il carico stimato; la 2 aveva scarico a gradini, distribuzione 80/20 per sedute,
 giorni duri, ritmo gara, scarico del 3:1 al 70%). I piani salvati con la
 versione 1 non si rileggono (il formato ha campi in più), né quelli della 3 (il campo

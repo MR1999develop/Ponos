@@ -13,7 +13,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from ponos_coach.activities.domain import Sport
-from ponos_coach.assessment.domain import pace_zone_starts_s_per_km
+from ponos_coach.assessment.domain import ThresholdProtocol, pace_zone_starts_s_per_km
 from ponos_coach.goals.domain import SessionType
 from ponos_coach.load.domain import (
     Physiology,
@@ -38,11 +38,13 @@ _ROLES = {
 @dataclass(frozen=True, slots=True)
 class Shape:
     """A session of a type and duration; `reps` is the number of repetitions of an interval
-    session, 0 for a continuous one."""
+    session, 0 for a continuous one. `test` makes it the threshold test of that protocol (its
+    type is then `THRESHOLD`, its structure fixed: see `threshold_test_shape`)."""
 
     session_type: SessionType
     minutes: int
     reps: int
+    test: ThresholdProtocol | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,8 +86,30 @@ def shape_options(session_type: SessionType, phase: Phase, max_minutes: int) -> 
     )
 
 
+def threshold_test_minutes(protocol: ThresholdProtocol) -> int:
+    """Duration of the threshold test session: warm-up, the test, cool-down."""
+    test = protocol.duration_s // 60
+    return defaults.TEST_WARMUP_MINUTES + test + defaults.TEST_COOLDOWN_MINUTES
+
+
+def threshold_test_shape(protocol: ThresholdProtocol) -> Shape:
+    """The threshold test session of a protocol: a hard session of fixed duration."""
+    return Shape(SessionType.THRESHOLD, threshold_test_minutes(protocol), 0, protocol)
+
+
+def _threshold_test_blocks(protocol: ThresholdProtocol) -> tuple[RawBlock, ...]:
+    return (
+        RawBlock(BlockRole.WARMUP, defaults.TEST_WARMUP_MINUTES, 2, 1),
+        RawBlock(BlockRole.WORK, protocol.duration_s // 60, defaults.TEST_ZONE, 1),
+        RawBlock(BlockRole.COOLDOWN, defaults.TEST_COOLDOWN_MINUTES, 1, 1),
+    )
+
+
 def raw_blocks(shape: Shape, phase: Phase) -> tuple[RawBlock, ...]:
-    """The structure of a shape: warm-up, work, rests, cool-down (see `defaults`)."""
+    """The structure of a shape: warm-up, work, rests, cool-down (see `defaults`); the threshold
+    test is a warm-up, one block of the test and a cool-down, whatever the phase."""
+    if shape.test is not None:
+        return _threshold_test_blocks(shape.test)
     model = _interval_model(shape.session_type, phase)
     if model is None:
         return _continuous_blocks(shape)
@@ -215,6 +239,7 @@ def make_session(
         attach_ranges(raw, ranges, race_pace),
         session_load(raw, rates),
         race_pace is not None,
+        shape.test,
     )
 
 

@@ -7,10 +7,11 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import date
 from enum import Enum
 
 from ponos_coach.activities.domain import Sport
-from ponos_coach.assessment.domain import NoTest, RetestStatus
+from ponos_coach.assessment.domain import DEFAULT_PROTOCOL, NoTest, RetestStatus, ThresholdProtocol
 from ponos_coach.goals.domain import (
     FitnessGoal,
     Priority,
@@ -51,6 +52,8 @@ class PlanInputs:
     (what the plan needs of them, no free text); `after_injury` says one was closed recently.
     Either lowers the maximum ramp (`ramp_reduced`). `retest` says where today stands against the
     threshold-test window.
+    `test_protocol` is the protocol the user chose for the test the plan schedules; `missed_tests`
+    are the days on which the plan had a test that was not done (see `missed_threshold_tests`).
     """
 
     races: tuple[RaceGoal, ...]
@@ -64,6 +67,8 @@ class PlanInputs:
     after_injury: bool = False
     retest: RetestStatus = field(default_factory=NoTest)
     injuries: tuple[PlanInjury, ...] = ()
+    test_protocol: ThresholdProtocol = DEFAULT_PROTOCOL
+    missed_tests: tuple[date, ...] = ()
 
     def __post_init__(self) -> None:
         pace = self.threshold_pace_s_per_km
@@ -72,6 +77,8 @@ class PlanInputs:
         ids = [injury.injury_id.value for injury in self.injuries]
         if len(set(ids)) != len(ids):
             raise ValueError("an injury is given twice")
+        if len(set(self.missed_tests)) != len(self.missed_tests):
+            raise ValueError("a missed test is given twice")
 
     @property
     def ramp_reduced(self) -> bool:
@@ -96,6 +103,8 @@ class PlanInputs:
             self.after_injury,
             self.retest,
             tuple(sorted(self.injuries, key=lambda i: i.injury_id.value)),
+            self.test_protocol,
+            tuple(sorted(self.missed_tests)),
         )
 
     def plan_sport(self) -> Sport:

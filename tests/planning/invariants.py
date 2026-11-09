@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import timedelta
 
+from ponos_coach.assessment.domain import NotYet
 from ponos_coach.goals.domain import HARD_TYPES, INTENSE_TYPES, Priority, SessionType
 from ponos_coach.planning.domain import Phase, Plan, PlanDay
 
@@ -49,7 +50,7 @@ def _check_days(plan: Plan) -> list[str]:
         minutes = inputs.availability.minutes_on(day.day.weekday())
         if day.session.minutes > minutes:
             problems.append(f"{day.day}: {day.session.minutes} min on a day with {minutes}")
-        if day.session.session_type not in allowed:
+        if day.session.session_type not in allowed and day.session.threshold_test is None:
             problems.append(f"{day.day}: {day.session.session_type} was not chosen")
         long_day = inputs.availability.long_day
         if day.session.session_type.value == "long" and day.day.weekday() != long_day:
@@ -82,13 +83,16 @@ def _check_distribution(start: object, days: list[PlanDay]) -> list[str]:
     """80/20 by sessions and hard days: at most 25% of the sessions intense, at most 2 intense
     if there are fewer than 6 sessions, at most 3 hard days (the long run counts)."""
     types = [d.session.session_type for d in days if d.session]
+    tests = sum(1 for d in days if d.session and d.session.threshold_test is not None)
     intense = sum(t in INTENSE_TYPES for t in types)
     hard = sum(t in HARD_TYPES for t in types)
     problems: list[str] = []
-    allowed = (
+    # the threshold test is an intense session that the week always makes room for
+    allowed = max(
+        tests,
         0
         if len(types) < MIN_SESSIONS_FOR_INTENSE
-        else max(1, len(types) * MAX_INTENSE_SHARE_PERCENT // 100)
+        else max(1, len(types) * MAX_INTENSE_SHARE_PERCENT // 100),
     )
     if intense > allowed:
         problems.append(f"week {start}: {intense} intense of {len(types)} sessions")
@@ -229,6 +233,36 @@ def _check_projection(plan: Plan) -> list[str]:
     return problems
 
 
+def _check_threshold_test(plan: Plan) -> list[str]:
+    """The test is planned only when it is due and nothing forbids it, once, with the protocol
+    the user chose, never on a day before the week it was asked for, and it is a hard day."""
+    inputs = plan.inputs
+    tests = [d for d in plan.days if d.session and d.session.threshold_test is not None]
+    if not tests:
+        return []
+    problems: list[str] = []
+    if len(tests) > 1:
+        problems.append(f"{len(tests)} threshold tests in one plan")
+    if isinstance(inputs.retest, NotYet):
+        problems.append("a threshold test with a recent test")
+    if inputs.ramp_reduced:
+        problems.append("a threshold test with an injury, an illness or a recent return")
+    if len(inputs.missed_tests) >= 2:
+        problems.append("a threshold test that was already missed twice")
+    for day in tests:
+        session = day.session
+        assert session is not None
+        if session.threshold_test is not inputs.test_protocol:
+            problems.append(f"{day.day}: not the protocol the user chose")
+        if inputs.missed_tests:
+            last = inputs.missed_tests[-1]
+            if day.day < last - timedelta(days=last.weekday()) + timedelta(days=7):
+                problems.append(f"{day.day}: the missed test comes back before the next week")
+        if not _is_hard(day):
+            problems.append(f"{day.day}: the test is not a hard day")
+    return problems
+
+
 def violations(plan: Plan) -> list[str]:
     """Every broken constraint of the plan, in words (empty = the plan is valid)."""
     return [
@@ -241,4 +275,5 @@ def violations(plan: Plan) -> list[str]:
         *_check_ramp(plan),
         *_check_unloads(plan),
         *_check_projection(plan),
+        *_check_threshold_test(plan),
     ]

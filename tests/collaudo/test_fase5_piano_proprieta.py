@@ -25,6 +25,14 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from ponos_coach.activities.domain import Sport
+from ponos_coach.assessment.domain import (
+    NoTest,
+    NotYet,
+    Overdue,
+    Recommended,
+    RetestStatus,
+    ThresholdProtocol,
+)
 from ponos_coach.goals.domain import (
     FitnessGoal,
     GoalId,
@@ -91,7 +99,8 @@ def violations(plan: Plan, today: date) -> list[str]:  # noqa: PLR0912, PLR0915 
             minutes = inputs.availability.minutes_on(d.day.weekday())
             if d.session.minutes > minutes:
                 problems.append(f"{d.day}: {d.session.minutes} min with {minutes} available")
-            if d.session.session_type not in allowed:
+            # the threshold test is a measurement, not one of the chosen types (ADR 015)
+            if d.session.session_type not in allowed and d.session.threshold_test is None:
                 problems.append(f"{d.day}: {d.session.session_type.value} was not chosen")
             if (
                 d.session.session_type is SessionType.LONG
@@ -118,7 +127,8 @@ def violations(plan: Plan, today: date) -> list[str]:  # noqa: PLR0912, PLR0915 
                 f"week {start}: {total} min over {inputs.availability.max_week_minutes}"
             )
         intense = sum(s.session_type in INTENSE for s in sessions)
-        cap = 0 if len(sessions) < 3 else max(1, len(sessions) * 25 // 100)
+        tests = sum(s.threshold_test is not None for s in sessions)
+        cap = max(tests, 0 if len(sessions) < 3 else max(1, len(sessions) * 25 // 100))
         if intense > cap:
             problems.append(f"week {start}: {intense} intense of {len(sessions)} sessions")
         if intense > 3 or (len(sessions) < 6 and intense > 2):
@@ -219,6 +229,15 @@ _types = st.sets(st.sampled_from(list(SessionType)), min_size=1)
 _distances = st.sampled_from([1_500, 5_000, 10_000, 10_001, 21_097, 21_098, 42_195, 80_000])
 _starts = st.integers(0, 13).map(lambda n: date(2026, 3, 2) + timedelta(days=n))
 PHYSIOLOGY = Physiology(HeartRateLimits(50, 190), ThresholdHeartRate(170), Sex.MALE)
+_retests: st.SearchStrategy[RetestStatus] = st.sampled_from(
+    [
+        NoTest(),
+        NoTest(),
+        NotYet(date(2026, 4, 1), date(2026, 4, 15)),
+        Recommended(date(2026, 3, 1), date(2026, 3, 15)),
+        Overdue(5, date(2026, 2, 20)),
+    ]
+)
 
 
 @st.composite
@@ -253,6 +272,8 @@ def scenarios(draw: st.DrawFn) -> tuple[PlanInputs, date]:
         FitnessState(draw(st.floats(0, 140)), draw(st.floats(0, 200))),
         threshold_pace_s_per_km=draw(st.one_of(st.none(), st.integers(180, 600))),
         after_injury=draw(st.booleans()),
+        retest=draw(_retests),
+        test_protocol=draw(st.sampled_from(list(ThresholdProtocol))),
     )
     return inputs, today
 
@@ -270,15 +291,10 @@ def check_scenario(inputs: PlanInputs, today: date) -> None:
     shuffled_races = list(inputs.races)
     random.Random(len(text)).shuffle(shuffled_races)
     other = build_plan(
-        PlanInputs(
-            tuple(shuffled_races),
-            tuple(reversed(inputs.fitness_goals)),
-            inputs.availability,
-            inputs.choices,
-            inputs.physiology,
-            inputs.fitness,
-            threshold_pace_s_per_km=inputs.threshold_pace_s_per_km,
-            after_injury=inputs.after_injury,
+        replace(
+            inputs,
+            races=tuple(shuffled_races),
+            fitness_goals=tuple(reversed(inputs.fitness_goals)),
         ),
         today,
     )

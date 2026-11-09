@@ -129,6 +129,10 @@ esito: `NoTest`, `NotYet(first_day, last_day)` (fino a 41 giorni dopo),
 giorno: 1 giorno di ritardo). Conta solo il test più recente. Lo storico dei
 test si conserva (tabella `threshold_test`, schema v5).
 
+Dalla versione 5 del piano un test dovuto (nessun test, finestra aperta o passata) è una
+seduta di quel protocollo nella prima settimana del piano, e l'attività del giorno usata come
+test lo fa considerare fatto: regole in `references/piano.md`, sezione 10, e ADR 015.
+
 ## 5. Soglia in bici
 
 Finché non c'è un test in bici: FC di soglia della corsa − 4 bpm (default del
