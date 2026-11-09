@@ -166,7 +166,7 @@ def test_t_nut_04_a_day_with_zero_one_two_or_three_files_is_complete_and_consist
     recoveries = [
         m.meal
         for m in report.meals
-        if MealSlot.POST_TRAINING in m.meal.slots and m.meal.refuel_hour in (None, 1)
+        if MealSlot.POST_TRAINING in m.meal.slots and m.meal.refuel_intake in (None, 1)
     ]
     assert len(recoveries) == count
 

@@ -36,7 +36,7 @@ from ponos_coach.ui.nutrition_texts import (
     in_progress_text,
     lean_mass_note_text,
     load_level_text,
-    refuel_hour_text,
+    refuel_hours_text,
     slots_text,
     unavailable_text,
 )
@@ -177,9 +177,10 @@ def _hourly_text(hourly: HourlyIntake) -> str:
 
 
 def _meal_title(meal: MealItem) -> str:
-    """The name of the moment; an hourly refuel intake says its hour instead of the slot."""
-    if meal.refuel_hour is not None:
-        return refuel_hour_text(meal.refuel_hour)
+    """The name of the moment; a refuel intake says the hours it covers instead of the slot."""
+    hours = meal.refuel_hours
+    if hours is not None:
+        return refuel_hours_text(*hours)
     return slots_text(meal.slots)
 
 

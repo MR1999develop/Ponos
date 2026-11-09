@@ -4363,8 +4363,8 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Dopo l&apos;allenamento</translation>
     </message>
     <message>
-        <source>Refuel, hour {hour}</source>
-        <translation>Rifornimento, ora {hour}</translation>
+        <source>Refuel for hours {first} to {last}</source>
+        <translation>Rifornimento per le ore da {first} a {last}</translation>
     </message>
     <message>
         <source>The limit on energy availability uses your measured lean mass.</source>

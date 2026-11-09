@@ -143,70 +143,74 @@ def test_two_sessions_in_a_day_each_get_their_recovery_and_meals_move_around_the
     assert not items[2].moved
 
 
-def test_sessions_less_than_8_hours_apart_give_the_first_recovery_hourly_carbohydrates() -> None:
+def test_sessions_less_than_8_hours_apart_give_the_first_recovery_two_refuel_intakes() -> None:
     items = schedule(session(7 * 60, 60.0), session(15 * 60, 60.0))
 
-    # 08:00 to 15:00 is 7 h: rapid refuelling, 88 g of carbohydrates (1.1 g/kg x 80 kg) an hour for
-    # 4 hours would be 352 g, but lunch and dinner keep their 80 g each (1 g/kg) out of the day's
-    # 400 g: 240 g are left for the intakes, given in time order (88, 88, 64, none for the fourth
-    # hour); the main meals share the rest as they do today
-    assert [(i.minute, i.refuel_hour, i.macros.carbs_g) for i in items if i.refuel_hour] == [
-        (8 * 60 + 30, 1, 88),
-        (9 * 60 + 30, 2, 88),
-        (10 * 60 + 30, 3, 64),
+    # 08:00 to 15:00 is 7 h: rapid refuelling, 1.1 g/kg an hour for 4 hours in two intakes of
+    # 176 g (2 hours x 88 g at 80 kg) would be 352 g, but lunch and dinner keep their 80 g each
+    # (1 g/kg) out of the day's 400 g: 240 g are left, given in time order (176, then 64). The
+    # first intake (08:30) merges with breakfast, moved to 09:00 after the session.
+    assert shape(items) == [
+        (540, (B, POST)),
+        (630, (POST,)),
+        (780, (L,)),
+        (990, (POST,)),
+        (1200, (D,)),
     ]
-    assert [i.macros.carbs_g for i in items if i.slots in ((B,), (L,), (D,))] == [0, 80, 80]
+    assert [i.macros.carbs_g for i in items] == [176, 64, 80, 0, 80]
+    assert items[1].refuel_intake == 2
     assert total(items) == DAY
 
 
-def test_the_hourly_recovery_is_one_intake_an_hour_with_the_protein_in_the_first() -> None:
+def test_the_rapid_refuel_is_two_intakes_two_hours_apart_with_the_protein_in_the_first() -> None:
     big = Macros(900, 120, 80)
 
-    items = schedule(session(7 * 60, 60.0), session(15 * 60, 60.0), day=big)
+    # ends 15:00, the next session 6 hours later: intakes at 15:30 and 17:30, far from the meals
+    items = schedule(session(14 * 60, 60.0), day=big, next_in=360.0)
 
-    refuel = [i for i in items if i.refuel_hour]
-    assert [(i.refuel_hour, i.minute) for i in refuel] == [(1, 510), (2, 570), (3, 630), (4, 690)]
-    assert [i.macros.carbs_g for i in refuel] == [88] * 4  # 1.1 g/kg x 80 kg, every hour
-    assert [i.macros.protein_g for i in refuel] == [32, 0, 0, 0]  # 0.4 g/kg once
+    refuel = [i for i in items if i.refuel_intake]
+    assert [(i.refuel_intake, i.minute) for i in refuel] == [(1, 930), (2, 1050)]
+    assert [i.refuel_hours for i in refuel] == [(1, 2), (3, 4)]
+    assert [i.macros.carbs_g for i in refuel] == [176] * 2  # 1.1 g/kg x 80 kg x 2 hours
+    assert [i.macros.protein_g for i in refuel] == [32, 0]  # 0.4 g/kg once
     assert all(i.slots == (POST,) for i in refuel)
     assert total(items) == big
 
 
-def test_hourly_intakes_are_never_merged_with_a_meal_or_with_each_other() -> None:
-    # lunch (13:00) falls in the 4 hours after a session that ends at 10:30: it stays a meal
+def test_a_refuel_intake_close_to_a_meal_merges_with_it() -> None:
+    # the session ends at 10:30: the first intake is at 11:00, the second (12:30) is 30 minutes
+    # before lunch and becomes one with it, at the time of lunch
     items = schedule(session(9 * 60 + 30, 60.0), session(16 * 60, 60.0), day=Macros(900, 120, 80))
 
-    refuel = [i for i in items if i.refuel_hour]
-    assert [i.minute for i in refuel] == [660, 720, 780, 840]  # 11:00, 12:00, 13:00, 14:00
-    assert all(i.slots == (POST,) for i in refuel)
-    assert any(L in i.slots and i.refuel_hour is None for i in items)
+    assert [(i.minute, i.slots, i.refuel_intake) for i in items if POST in i.slots][:2] == [
+        (660, (POST,), 1),
+        (780, (L, POST), None),
+    ]
+    assert total(items) == Macros(900, 120, 80)
 
 
 @pytest.mark.parametrize(
-    ("next_in", "hours"),
+    ("next_in", "intakes"),
     [
-        (None, 0),  # no next session: one dose, no hourly intakes
+        (None, 0),  # no next session: one dose, no refuel intakes
         (481.0, 0),
         (480.0, 0),  # exactly 8 h: "less than 8 hours" is false
-        (479.0, 4),
-        (240.0, 4),  # the first waits 30 minutes, the fourth is 30 minutes before the session
-        (239.0, 3),
-        (180.0, 3),
-        (179.0, 2),
-        (120.0, 2),
-        (119.0, 1),
+        (479.0, 2),
+        (180.0, 2),  # the first waits 30 minutes, the second is 30 minutes before the session
+        (179.0, 1),
         (60.0, 1),
         (0.0, 1),  # the first intake is always given
     ],
 )
-def test_hourly_intakes_stop_30_minutes_before_the_next_session_and_after_4_hours(
-    next_in: float | None, hours: int
+def test_refuel_intakes_stop_30_minutes_before_the_next_session_and_after_4_hours(
+    next_in: float | None, intakes: int
 ) -> None:
-    items = schedule(session(10 * 60, 60.0), day=Macros(1200, 120, 80), next_in=next_in)
+    # ends 15:30: intakes at 16:00 and 18:00, two hours from lunch and dinner
+    items = schedule(session(14 * 60 + 30, 60.0), day=Macros(1200, 120, 80), next_in=next_in)
 
-    refuel = [i for i in items if i.refuel_hour]
-    assert [i.refuel_hour for i in refuel] == list(range(1, hours + 1))
-    if hours == 0:
+    refuel = [i for i in items if i.refuel_intake]
+    assert [i.refuel_intake for i in refuel] == list(range(1, intakes + 1))
+    if intakes == 0:
         # a single dose after a short session: protein only
         (post,) = [i for i in items if POST in i.slots]
         assert post.macros.protein_g == 32
@@ -218,13 +222,17 @@ def test_the_order_in_which_sessions_are_given_does_not_matter() -> None:
     assert schedule(evening, morning) == schedule(morning, evening)
 
 
-def test_the_hourly_intakes_come_out_of_the_budget_of_the_days_carbohydrates() -> None:
+def test_the_refuel_intakes_come_out_of_the_budget_of_the_days_carbohydrates() -> None:
     items = schedule(session(18 * 60, 60.0), next_in=479.0)  # a day of 400 g carbohydrates
 
     assert total(items) == DAY
-    refuel = [i for i in items if i.refuel_hour]
-    assert sum(i.macros.carbs_g for i in refuel) == 240  # 400 g minus 80 g each for lunch, dinner
-    assert [i.macros.carbs_g for i in items if i.slots in ((L,), (D,))] == [80, 80]
+    # 400 g minus 80 g each for lunch and dinner leave 240 g: 176 g in the first intake (19:30,
+    # merged with dinner at 20:00) and 64 g in the second (21:30)
+    assert [(i.minute, i.slots, i.macros.carbs_g) for i in items if POST in i.slots] == [
+        (1200, (D, POST), 80 + 176),
+        (1290, (POST,), 64),
+    ]
+    assert [i.macros.carbs_g for i in items if i.slots == (L,)] == [80]
 
 
 # --- A long session --------------------------------------------------------------------------
@@ -447,18 +455,18 @@ def test_splitting_rejects_impossible_requests(total_g: int, weights: list[float
 def test_hourly_intakes_that_would_fall_after_midnight_are_left_out_not_piled_on_23_59() -> None:
     items = schedule(session(21 * 60 + 30, 60.0), next_in=330.0)  # ends 22:30: 23:00, then 24:00
 
-    hourly = [i for i in items if i.refuel_hour is not None]
+    hourly = [i for i in items if i.refuel_intake is not None]
 
-    assert [(i.minute, i.refuel_hour) for i in hourly] == [(23 * 60, 1)]
+    assert [(i.minute, i.refuel_intake) for i in hourly] == [(23 * 60, 1)]
     assert total(items) == DAY  # the grams of the left-out hours stay in the day
 
 
 def test_the_first_intake_after_a_session_is_kept_even_when_it_falls_after_midnight() -> None:
     items = schedule(session(22 * 60 + 40, 60.0), next_in=300.0)  # ends 23:40: the first at 00:10
 
-    hourly = [i for i in items if i.refuel_hour is not None]
+    hourly = [i for i in items if i.refuel_intake is not None]
 
-    assert [i.refuel_hour for i in hourly] == [1]
+    assert [i.refuel_intake for i in hourly] == [1]
     assert hourly[0].minute == 1439
 
 

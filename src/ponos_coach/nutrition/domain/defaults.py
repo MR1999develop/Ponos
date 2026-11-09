@@ -173,13 +173,18 @@ POST_CARBS_G_PER_KG: Final = 1.1  # 1-1.2 g/kg
 # 8 hours apart. Project choice: it applies to any following session within 8 h, however short,
 # because extra carbohydrates are not a risk and the rule stays simple.
 SPEEDY_REFUEL_WITHIN_MIN: Final = 8 * 60
-# Within that time the "after" is hourly (ACSM, ISSN, GJSN): 1.0-1.2 g/kg of carbohydrates every
-# hour for the first 4 hours after the end (project default: 1.1, the middle), one intake per hour
-# from POST_LEAD_MIN after the end, the last at least REFUEL_LAST_BEFORE_NEXT_MIN before the next
-# session. The first intake is always given. They count inside the day's carbohydrate budget.
+# Within that time the "after" is a rapid refuel (ACSM, ISSN, GJSN): 1.0-1.2 g/kg of carbohydrates
+# an hour for the first 4 hours after the end (project default: 1.1, the middle). Project choice
+# (user request of 2026-11-09: one intake an hour was unmanageable): the 4 hours are served as
+# REFUEL_INTAKES intakes REFUEL_STEP_MIN apart, each with the carbohydrates of its hours (with an
+# adequate total, frequent small feedings and fewer larger ones refuel alike). The first comes
+# POST_LEAD_MIN after the end and is always given; the last is at least REFUEL_LAST_BEFORE_NEXT_MIN
+# before the next session. They count inside the day's carbohydrate budget and merge with a meal
+# that is close.
 REFUEL_CARBS_G_PER_KG_H: Final = 1.1
 REFUEL_HOURS: Final = 4
-REFUEL_STEP_MIN: Final = 60
+REFUEL_STEP_MIN: Final = 120
+REFUEL_INTAKES: Final = REFUEL_HOURS * 60 // REFUEL_STEP_MIN  # 2
 REFUEL_LAST_BEFORE_NEXT_MIN: Final = 30
 # Lunch and dinner always keep at least this much carbohydrate (project default), however long the
 # training of the day: the intakes around it give way first (see `meals.py`).

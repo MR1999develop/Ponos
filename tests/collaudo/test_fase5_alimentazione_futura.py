@@ -276,7 +276,7 @@ def test_t_nut_07_the_next_planned_session_is_a_day_away_so_the_refuelling_is_a_
         if planned.session is None:
             continue
         items = loss.report(planned.day).nutrition.meals
-        assert all(item.refuel_hour is None for item in items), planned.day
+        assert all(item.refuel_intake is None for item in items), planned.day
 
 
 def test_t_nut_07_the_same_data_gives_byte_for_byte_the_same_guidance(loss: World) -> None:

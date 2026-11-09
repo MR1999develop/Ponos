@@ -160,15 +160,21 @@ Per ogni seduta di almeno 30 minuti (le più brevi non cambiano nulla):
   600 ml/h e sodio 300 mg/h, indicativi (ACSM).
 - **Post**, proteine 0,4 g/kg (GJSN). Due casi:
   - **un'altra seduta a meno di 8 ore** (`SPEEDY_REFUEL_WITHIN_MIN`, ACSM,
-    ISSN, GJSN; a 8 h esatte no): rifornimento rapido **orario**, un apporto di
-    carboidrati ogni ora per le prime 4 ore (`REFUEL_HOURS`), **1,1 g/kg** ciascuno
-    (`REFUEL_CARBS_G_PER_KG_H`, il mezzo di 1,0–1,2), il primo 30 minuti dopo la
-    fine e poi ogni 60 minuti; l'ultimo almeno 30 minuti prima della seduta
-    successiva, il primo sempre. Le proteine stanno nel primo. Ogni apporto è un
-    `MealItem` con `refuel_hour` da 1 a 4, mai fuso con un pasto né con un altro
-    apporto orario. Stanno **dentro il budget dei carboidrati del giorno**: pranzo
-    e cena tengono i loro minimi e gli apporti si servono in ordine di tempo
-    (durante, dopo, prima); un'ora rimasta senza carboidrati e senza proteine
+    ISSN, GJSN; a 8 h esatte no): rifornimento rapido, **1,1 g/kg di carboidrati
+    all'ora per le prime 4 ore** (`REFUEL_HOURS`, `REFUEL_CARBS_G_PER_KG_H`, il
+    mezzo di 1,0–1,2), servito in **2 apporti a 2 ore di distanza**
+    (`REFUEL_INTAKES`, `REFUEL_STEP_MIN`), ciascuno con i carboidrati delle sue
+    due ore (176 g a 80 kg). Scelta dell'utente del 2026-11-09: un apporto ogni
+    ora era ingestibile; con un totale adeguato pasti frequenti e meno frequenti
+    riforniscono allo stesso modo. Il primo apporto è 30 minuti dopo la fine e
+    c'è sempre, il secondo almeno 30 minuti prima della seduta successiva. Le
+    proteine stanno nel primo. Ogni apporto è un `MealItem` con `refuel_intake`
+    1 o 2 (`refuel_hours` dà le ore coperte, 1–2 o 3–4) e **si fonde** come gli
+    altri apporti con un pasto o un apporto a meno di 90 minuti (l'elemento fuso
+    perde il numero ed elenca i suoi slot). Stanno **dentro il budget dei
+    carboidrati del giorno**: pranzo e cena tengono i loro minimi e gli apporti
+    si servono in ordine di tempo (durante, dopo, prima); un apporto rimasto
+    senza carboidrati e senza proteine
     sparisce. Scelta del progetto: scatta per qualunque seduta successiva entro 8 h, anche
     breve;
   - **altrimenti** il «dopo» resta **una dose** 30 minuti dopo la fine: carboidrati

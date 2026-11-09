@@ -50,7 +50,7 @@ from ponos_coach.ui.nutrition_texts import (
     fixed_notice_text,
     goal_text,
     load_level_text,
-    refuel_hour_text,
+    refuel_hours_text,
     slot_text,
     unavailable_text,
 )
@@ -333,10 +333,11 @@ def test_the_hourly_intakes_after_a_session_say_their_hour() -> None:
     view = present_day(DAY, report)
 
     assert isinstance(view, DayView)
-    hours = [card.title for card in view.meals if card.title.startswith("Refuel")]
-    assert hours == [f"Refuel, hour {hour}" for hour in range(1, len(hours) + 1)]
-    assert len(hours) >= 2
-    assert refuel_hour_text(1) == "Refuel, hour 1"
+    refuels = [card.title for card in view.meals if card.title.startswith("Refuel")]
+    # an intake merged with a meal takes the meal's title instead
+    assert set(refuels) <= {"Refuel for hours 1 to 2", "Refuel for hours 3 to 4"}
+    assert refuels == sorted(refuels)
+    assert refuel_hours_text(3, 4) == "Refuel for hours 3 to 4"
 
 
 def test_the_day_says_which_lean_mass_the_energy_availability_limit_uses() -> None:

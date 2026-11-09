@@ -152,9 +152,11 @@ Keytel et al. (2005); Boer (1984); *Compendium of Physical Activities*.
 - **Moments.** Before (session over 60 min): 1 g/kg carbohydrate. During (over
   75 min): 45 g/h, 60 g/h beyond 2.5 h. The ceiling is 60 g/h because the
   table does not tell glucose-fructose blends apart; higher figures need
-  them. After: 0.3 g/kg protein and, for a session of at least 90 min or
-  another one less than 8 hours later (rapid refuelling), 1.1 g/kg
-  carbohydrate.
+  them. After: 0.4 g/kg protein and, for a session of at least 90 min, 1.1 g/kg
+  carbohydrate. With another session less than 8 hours later (rapid
+  refuelling), 1.1 g/kg carbohydrate an hour for the first 4 hours, served as
+  two intakes two hours apart that merge with a close meal (user choice of
+  2026-11-09: one intake an hour made the day unmanageable).
 - **Foods.** The table of option 1; its source and licence are in
   `docs/dipendenze.md`. The release is blocked until `verified_on` is set.
 - **Constants.** Every threshold, factor and coefficient is in

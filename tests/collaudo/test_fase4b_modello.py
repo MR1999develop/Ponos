@@ -142,13 +142,17 @@ def check_day(day: DayInput, result: DayNutrition) -> None:
         assert shown <= len(during)  # an intake cut down to nothing is not shown (and says so)
     else:
         assert shown == len(during)
-    # one recovery per session: a single dose or, with another session within 8 hours, up to 4
-    # hourly intakes, each marked with its hour
+    # one recovery per session: a single dose or, with another session within 8 hours, up to 2
+    # rapid-refuel intakes (a numbered one is a lone post-training item, a fused one is not)
     recoveries = sum(MealSlot.POST_TRAINING in i.slots for i in result.meals)
     long_enough = sum(s.duration_min >= 30 for s in day.sessions)
     assert (recoveries >= 1) is (long_enough >= 1)
-    assert recoveries <= long_enough * defaults.REFUEL_HOURS
-    assert all(1 <= i.refuel_hour <= defaults.REFUEL_HOURS for i in result.meals if i.refuel_hour)
+    assert recoveries <= long_enough * defaults.REFUEL_INTAKES
+    assert all(
+        i.slots == (MealSlot.POST_TRAINING,) and 1 <= i.refuel_intake <= defaults.REFUEL_INTAKES
+        for i in result.meals
+        if i.refuel_intake is not None
+    )
     # determinism
     assert plan_day(day) == result
 
@@ -556,13 +560,14 @@ def test_t_nut_04_two_sessions_a_few_hours_apart_each_get_their_recovery_carbohy
     result = plan_day(day_of(ADULT_MAN, sessions=(first, second)))
 
     posts = [i for i in result.meals if MealSlot.POST_TRAINING in i.slots]
-    recoveries = [i for i in posts if i.refuel_hour in (None, 1)]
-    assert len(recoveries) == 2
-    assert all(p.macros.protein_g > 0 for p in recoveries)
-    # the first one is hourly (another session within 8 h): 1.1 g/kg x 70 kg = 77 g an hour
-    hourly = [i for i in posts if i.refuel_hour]
-    assert [i.refuel_hour for i in hourly] == [1, 2, 3, 4]
-    assert hourly[0].macros.carbs_g == 77
+    # the first recovery is 30 minutes after 07:15 (08:15 = 495), the first intake of the rapid
+    # refuel (another session within 8 h): 1.1 g/kg/h x 2 h x 70 kg = 154 g, fused with breakfast;
+    # the second is two hours later, 154 g and no protein; the second session's recovery follows
+    assert [(i.minute, i.refuel_intake) for i in posts] == [(495, None), (585, 2), (940, None)]
+    assert all(p.macros.protein_g > 0 for p in (posts[0], posts[2]))
+    assert posts[0].slots == (MealSlot.BREAKFAST, MealSlot.POST_TRAINING)
+    assert (posts[1].macros.carbs_g, posts[1].macros.protein_g) == (154, 0)
+    assert posts[1].refuel_hours == (3, 4)
 
 
 def test_t_nut_04_three_sessions_with_the_same_start_do_not_break_the_day() -> None:

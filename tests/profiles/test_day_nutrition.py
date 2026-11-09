@@ -364,24 +364,29 @@ def test_only_the_activities_of_the_local_day_count() -> None:
     assert len(rig.report(date(2026, 3, 3)).activities) == 1
 
 
-def evening_refuel_hours(next_start: datetime | None) -> list[int]:
-    """The hours of rapid refuelling after the evening session (none: a single dose)."""
+def evening_recovery(next_start: datetime | None) -> list[tuple[int, int | None]]:
+    """Time and refuel number of the items after the evening session that hold its recovery."""
     rig = Rig()
     rig.add_file(fit_bytes(at(18), 1, calories=500))
     if next_start is not None:
         rig.add_file(fit_bytes(next_start, 2, calories=500))
-    return [m.meal.refuel_hour for m in rig.report().meals if m.meal.refuel_hour is not None]
+    return [
+        (m.meal.minute, m.meal.refuel_intake)
+        for m in rig.report().meals
+        if MealSlot.POST_TRAINING in m.meal.slots and m.meal.minute >= 19 * 60
+    ]
 
 
-def test_a_session_within_8_hours_makes_the_recovery_hourly_for_the_first_four_hours() -> None:
-    # the evening session ends at 19:00 and the next starts at 02:00: 7 h later
-    assert evening_refuel_hours(at(2, day=3)) == [1, 2, 3, 4]
+def test_a_session_within_8_hours_makes_the_recovery_a_rapid_refuel_in_two_intakes() -> None:
+    # the evening session ends at 19:00 and the next starts at 02:00: 7 h later. The first intake
+    # (19:30) merges with dinner (20:00); the second is two hours after the first.
+    assert evening_recovery(at(2, day=3)) == [(20 * 60, None), (21 * 60 + 30, 2)]
 
 
 def test_a_session_the_next_morning_is_too_far_for_rapid_refuelling() -> None:
-    # 19:00 to 07:00 is 12 h: more than the 8 h of rapid refuelling
-    assert evening_refuel_hours(at(7, day=3)) == []
-    assert evening_refuel_hours(None) == []
+    # 19:00 to 07:00 is 12 h: more than the 8 h of rapid refuelling, one dose with dinner
+    assert evening_recovery(at(7, day=3)) == [(20 * 60, None)]
+    assert evening_recovery(None) == [(20 * 60, None)]
 
 
 # --- Measured lean mass and the long weight-loss advisory ---------------------------------

@@ -259,12 +259,12 @@ def slot_text(slot: MealSlot) -> str:
     return texts[slot]
 
 
-def refuel_hour_text(hour: int) -> str:
-    """The title of an hourly intake after a session that is followed by another soon (hour 1 to
-    4 after the end)."""
-    # {hour}: the hour after the end of the session, as a number.
-    return QCoreApplication.translate("Nutrition", "Refuel, hour {hour}").format(
-        hour=QLocale().toString(hour)
+def refuel_hours_text(first: int, last: int) -> str:
+    """The title of a rapid-refuel intake after a session that is followed by another soon: the
+    hours after the end that it covers."""
+    # {first}, {last}: hours after the end of the session, as numbers (for example 1 and 2).
+    return QCoreApplication.translate("Nutrition", "Refuel for hours {first} to {last}").format(
+        first=QLocale().toString(first), last=QLocale().toString(last)
     )
 
 
