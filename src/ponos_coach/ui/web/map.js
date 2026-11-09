@@ -67,17 +67,27 @@
     });
   }
 
+  // Close up, groups are tight (near starts part), and starts at the very same place (most
+  // activities start from home) fan out around their group on a click at the highest zoom, so
+  // each one can be clicked (user's report of 2026-11-09).
+  var fannedOut = 0;
+
+  function clusterRadius(zoom) { return zoom >= 15 ? 15 : 50; }
+
   function makeCluster() {
-    return L.markerClusterGroup({
+    var group = L.markerClusterGroup({
       chunkedLoading: true,
       animate: !reduceMotion,
-      maxClusterRadius: 50,
-      disableClusteringAtZoom: 15,
-      spiderfyOnMaxZoom: false,
+      maxClusterRadius: clusterRadius,
+      spiderfyOnMaxZoom: true,
+      spiderfyDistanceMultiplier: 1.6,
       showCoverageOnHover: false,
       zoomToBoundsOnClick: true,
       iconCreateFunction: clusterIcon,
     });
+    group.on("spiderfied", function (event) { fannedOut = event.markers.length; });
+    group.on("unspiderfied", function () { fannedOut = 0; });
+    return group;
   }
 
   function init(config) {
@@ -415,7 +425,17 @@
 
   // Diagnostics hook: where the profile point `index` is drawn, in pixels of the map container.
   function pixelOf(payload) {
-    var p = map.latLngToContainerPoint([profile.lat[payload.index], profile.lon[payload.index]]);
+    var at;
+    if (payload.start !== undefined) {
+      // Where the start is drawn now: fanned out around its group, or at its own place.
+      var marker = startMarkers.find(function (m) { return m.ponosIdx === payload.start; });
+      var where = marker.getLatLng();
+      at = [where.lat, where.lng];
+      if (payload.zoom !== undefined) { map.setView(at, payload.zoom, { animate: false }); }
+    } else {
+      at = [profile.lat[payload.index], profile.lon[payload.index]];
+    }
+    var p = map.latLngToContainerPoint(at);
     var box = document.getElementById("map").getBoundingClientRect();
     return { x: p.x + box.left, y: p.y + box.top };
   }
@@ -427,7 +447,7 @@
     return {
       zoom: map.getZoom(), center: [centre.lat, centre.lng], tracks: tracksByIdx.size,
       starts: startsByIdx.size, selected: selected, trackLines: trackLayer.getLayers().length,
-      startRadius: startRadius(),
+      startRadius: startRadius(), fannedOut: fannedOut,
       channelOpen: bridge !== null, viewPending: moveTimer !== null,
       attribution: document.querySelector(".leaflet-control-attribution").textContent,
       attributionVisible: document.querySelector(".leaflet-control-attribution").offsetWidth > 0,

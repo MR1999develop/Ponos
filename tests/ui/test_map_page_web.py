@@ -304,6 +304,40 @@ def test_zoomed_in_the_single_activities_grow_to_be_easy_to_click(
     assert radius == {8: 6, 13: 9, 16: 12}
 
 
+def test_starts_at_the_same_place_fan_out_and_a_click_selects_one(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    # The user's report of 2026-11-09: most activities start from home and hid each other, so
+    # they could not be clicked. At the highest zoom a click on their group spreads them around
+    # it, and a real click on one (not a call of the bridge) selects that activity.
+    window, view = window_with_page(qtbot, tmp_path, settings)
+    show_view(qtbot, window, NEAR)  # the eight test activities start at the same point
+    qtbot.waitUntil(lambda: page_state(qtbot, view)["starts"] == 8, timeout=WAIT_MS)
+    evaluate(qtbot, view, "window.ponosMap.pixelOf({start: 3, zoom: 19})")
+    qtbot.waitUntil(lambda: cluster_icons(qtbot, view) == 1, timeout=WAIT_MS)
+
+    execute(qtbot, view, "document.querySelector('.ponos-cluster').click();")
+    qtbot.waitUntil(lambda: page_state(qtbot, view)["fannedOut"] == 8, timeout=WAIT_MS)
+    spot = evaluate(qtbot, view, "window.ponosMap.pixelOf({start: 3})")
+    assert isinstance(spot, dict)
+    execute(
+        qtbot,
+        view,
+        f"var target = document.elementFromPoint({spot['x']}, {spot['y']});"
+        f"var init = {{clientX: {spot['x']}, clientY: {spot['y']}, bubbles: true}};"
+        "['mousedown', 'mouseup', 'click'].forEach(function (kind) {"
+        "  target.dispatchEvent(new MouseEvent(kind, init)); });",
+    )
+
+    qtbot.waitUntil(lambda: page_state(qtbot, view)["selected"] == 3, timeout=WAIT_MS)
+
+
+def cluster_icons(qtbot: QtBot, view: MapWebView) -> int:
+    count = evaluate(qtbot, view, "document.querySelectorAll('.ponos-cluster').length")
+    assert isinstance(count, int)
+    return count
+
+
 def test_the_cursor_goes_from_the_profile_to_the_map_and_back(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
