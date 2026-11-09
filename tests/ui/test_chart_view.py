@@ -218,6 +218,46 @@ def test_a_zoom_by_the_user_is_reported_and_a_range_set_by_the_app_is_not(qtbot:
     assert reports == [DateRange(datetime(2026, 1, 2), datetime(2026, 1, 5, 12))]
 
 
+def test_two_overlapping_range_changes_by_the_app_are_never_reported_back(qtbot: QtBot) -> None:
+    view = drawn_view(qtbot, navigation=XNavigation.LINKED)
+    reports: list[object] = []
+    view.x_range_changed.connect(reports.append)
+    # Hold every relayout the page starts, so that the two are in flight at the same time and
+    # we decide in which order they complete.
+    execute(
+        qtbot,
+        view,
+        "window.__held = []; window.__released = 0;"
+        "var realRelayout = Plotly.relayout;"
+        "Plotly.relayout = function (gd, update) {"
+        "  return new Promise(function (resolve, reject) {"
+        "    window.__held.push(function () {"
+        "      realRelayout.call(Plotly, gd, update).then(resolve, reject)"
+        "        .then(function () { window.__released += 1; });"
+        "    });"
+        "  });"
+        "};",
+    )
+
+    def wait_for(expression: str, expected: int) -> None:
+        qtbot.waitUntil(lambda: evaluate(qtbot, view, expression) == expected, timeout=WAIT_MS)
+
+    for count, (start, end) in enumerate(
+        (("2026-01-03", "2026-01-06"), ("2026-01-04", "2026-01-07")), 1
+    ):
+        execute(qtbot, view, f"window.ponosSetXRange('{start}', '{end}');")
+        wait_for("window.__held.length", count)
+    for done in (1, 2):
+        execute(qtbot, view, "window.__held.shift()();")
+        wait_for("window.__released", done)
+
+    assert reports == []
+    assert (
+        evaluate(qtbot, view, "document.getElementById('chart').layout.xaxis.range[0]")
+        == "2026-01-04"
+    )  # both were really applied
+
+
 @pytest.mark.parametrize(
     ("title", "expected"),
     [
@@ -239,3 +279,32 @@ def test_only_well_formed_ranges_pass_from_the_page_title(
     title: str, expected: RangeReport | None
 ) -> None:
     assert parse_range_title(title) == expected
+
+
+@pytest.mark.parametrize(
+    ("title", "signal"),
+    [
+        ("drawn-1", "drawn"),
+        ("hover-3-1", "hovered"),
+        ("leave-1", "hover_left"),
+        ("xrange|auto|1", "x_range_changed"),
+        ("xrange|2026-01-02|2026-01-03|1", "x_range_changed"),
+    ],
+)
+def test_a_page_title_over_the_limit_is_dropped_before_it_is_parsed(
+    qtbot: QtBot, title: str, signal: str
+) -> None:
+    host = QWidget()
+    qtbot.addWidget(host)
+    engine = ChartEngine(lambda _name: None, host)
+    view = ChartView(engine, "Chart", host)
+    heard: list[object] = []
+    getattr(view, signal).connect(lambda *args: heard.append(args))
+
+    view.page.titleChanged.emit(title)
+    assert len(heard) == 1  # the well-formed title is heard
+
+    separator = "-" if "-" in title.split("|", maxsplit=1)[0] else "|"
+    view.page.titleChanged.emit(title + "1" * 500 + separator)
+    view.page.titleChanged.emit(title + "9" * 5000)
+    assert len(heard) == 1

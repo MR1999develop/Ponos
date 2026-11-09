@@ -23,6 +23,8 @@
     root.setProperty("--map-panel", colors.panel);
   }
 
+  var tiles = null;  // the tile layer, kept to report its URL
+
   function build(config) {
     var container = document.getElementById("map");
     container.setAttribute("aria-label", config.strings.map);
@@ -34,7 +36,7 @@
     L.control.zoom({ zoomInTitle: config.strings.zoomIn, zoomOutTitle: config.strings.zoomOut })
       .addTo(map);
     L.control.attribution({ prefix: false }).addTo(map).addAttribution(config.attribution);
-    L.tileLayer(config.tileUrl, {
+    tiles = L.tileLayer(config.tileUrl, {
       minZoom: 0, maxZoom: MAX_ZOOM, tileSize: 256, keepBuffer: 0, updateWhenZooming: false,
     }).addTo(map);
     layers = L.layerGroup().addTo(map);
@@ -90,7 +92,7 @@
     return {
       drawn: last, zoom: map === null ? null : map.getZoom(),
       bounds: bounds === null ? null : [bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast()],
-      tileUrl: map === null ? null : Object.values(map._layers).filter(function (l) { return l._url; })[0]._url,
+      tileUrl: map === null || tiles === null || !map.hasLayer(tiles) ? null : tiles._url,
       pins: document.querySelectorAll(".ponos-pin").length,
     };
   }

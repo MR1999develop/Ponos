@@ -39,7 +39,9 @@ def test_a_removal_that_fails_is_counted_in_the_log_without_any_path(
     with caplog.at_level(logging.WARNING, logger=archive_cleanup.__name__):
         removed = remove_gpx_files(root, [_FIRST, _SECOND])
     assert removed == 1
-    assert [r.getMessage() for r in caplog.records] == ["1 leftover GPX file(s) could not be removed"]
+    assert [r.getMessage() for r in caplog.records] == [
+        "1 leftover GPX file(s) could not be removed"
+    ]
     assert "aa" * 8 not in caplog.text
     assert str(tmp_path) not in caplog.text
 

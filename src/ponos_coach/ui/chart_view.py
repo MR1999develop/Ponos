@@ -62,6 +62,8 @@ _RANGE_PARTS = 4  # "xrange", start, end, a counter
 _AUTO_RANGE_PARTS = 3  # "xrange", "auto", a counter
 _MAX_DATE_CHARS = 32
 _DATE_CHARS = frozenset("0123456789-: .T")
+# The longest well-formed title is a range report: "xrange|" + two dates + separators + a counter.
+_MAX_TITLE_CHARS = 7 + 2 * _MAX_DATE_CHARS + 2 + 16
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +94,8 @@ class RangeReport:
 def parse_range_title(title: str) -> RangeReport | None:
     """The report in a page title `xrange|START|END|N` or `xrange|auto|N`; None if the title is
     not a valid range report (a page title is untrusted text: only well-formed dates pass)."""
+    if len(title) > _MAX_TITLE_CHARS:
+        return None
     parts = title.split("|")
     if parts[0] != "xrange":
         return None
@@ -443,8 +447,11 @@ class ChartView(QWidget):
         """The page talks through its title (no channel): `drawn-N`, `hover-I-N`, `leave-N`,
         `xrange|START|END|N`, `xrange|auto|N`.
 
-        The index is parsed as digits only; the caller checks it against its data.
+        The index is parsed as digits only; the caller checks it against its data. The title is
+        untrusted text: one over the limit is dropped before anything is split.
         """
+        if len(title) > _MAX_TITLE_CHARS:
+            return
         if title.startswith("drawn-"):
             self.drawn.emit()
             return

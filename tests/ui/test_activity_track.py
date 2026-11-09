@@ -199,6 +199,28 @@ def test_the_page_receives_the_track_and_frames_it_with_start_and_finish_marked(
     assert east >= LON.max()
 
 
+def test_the_page_state_survives_a_map_without_a_tile_layer(qtbot: QtBot, rig: Rig) -> None:
+    track = outline()
+    dialog = rig.dialog(qtbot, track)
+    wait_drawn(qtbot, dialog)
+    view = dialog.track.view
+    # The next fit takes the tile layer off the map (the page keeps no reference to it).
+    execute(
+        qtbot,
+        view,
+        "L.Map.prototype.fitBounds = function () {"
+        " var map = this;"
+        " this.eachLayer(function (l) { if (l._url) { map.removeLayer(l); } });"
+        " return this; };",
+    )
+    execute(qtbot, view, track_script(track, tokens_for(Theme.LIGHT), STRINGS))
+
+    state = evaluate(qtbot, view, "window.ponosTrack.state()")
+
+    assert isinstance(state, dict)
+    assert state["tileUrl"] is None
+
+
 def test_the_page_asks_for_tiles_only_through_the_proxy_and_never_holds_the_key(
     qtbot: QtBot, rig: Rig, caplog: pytest.LogCaptureFixture
 ) -> None:
