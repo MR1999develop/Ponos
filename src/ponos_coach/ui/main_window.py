@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Main window: sidebar, menus, status bar and pages.
+"""Main window: sidebar, menus, status bar, pages and the Settings window.
 
 Humble view: state and decisions live in `WorkspaceController` and in the
 presentation models; here there are only widgets, commands and dialogs.
@@ -21,7 +21,6 @@ from zoneinfo import ZoneInfo
 from PySide6.QtCore import QByteArray, QSettings, Qt, QTimer, QUrl
 from PySide6.QtGui import (
     QAction,
-    QActionGroup,
     QCloseEvent,
     QDesktopServices,
     QDragEnterEvent,
@@ -67,6 +66,7 @@ from ponos_coach.ui.import_report import ImportReport
 from ponos_coach.ui.import_report_dialog import ImportReportDialog
 from ponos_coach.ui.injury_page import InjuriesPage
 from ponos_coach.ui.injury_ui import InjuryUi
+from ponos_coach.ui.language_form import LanguageForm
 from ponos_coach.ui.map_page import MapPage
 from ponos_coach.ui.map_ui import MapServices, MapUi
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
@@ -85,7 +85,11 @@ from ponos_coach.ui.plan_presentation import plan_of
 from ponos_coach.ui.plan_ui import PlanUi
 from ponos_coach.ui.profile_dialogs import ProfileDialogs
 from ponos_coach.ui.profile_editor import ProfileEditor
+from ponos_coach.ui.settings_page import SettingsCategory, SettingsPage
+from ponos_coach.ui.settings_window import SettingsWindow
+from ponos_coach.ui.threshold_preferences import ProtocolPreference
 from ponos_coach.ui.threshold_presentation import can_be_threshold_test, not_a_run_reason
+from ponos_coach.ui.threshold_protocol_section import ThresholdProtocolSection
 from ponos_coach.ui.threshold_ui import ThresholdUi
 from ponos_coach.ui.tokens import (
     MIN_WINDOW_HEIGHT,
@@ -96,7 +100,7 @@ from ponos_coach.ui.tokens import (
     STATUS_PROGRESS_WIDTH,
     Theme,
 )
-from ponos_coach.ui.translations import Language, save_language
+from ponos_coach.ui.translations import Language, save_language, saved_language
 from ponos_coach.ui.workspace import (
     DeletionPreview,
     FolderCheck,
@@ -182,6 +186,7 @@ class MainWindow(QMainWindow):
         self.shutdown_wait_ms = SHUTDOWN_WAIT_MS  # cap on the wait at close
         self._shutdown_deadline = 0.0
         self._closed = False
+        self._settings_confirmed = False
         self._engine_requested = False
         self._shutdown_timer = QTimer(self)
         self._shutdown_timer.setInterval(_SHUTDOWN_POLL_MS)
@@ -199,6 +204,7 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
         self._build_actions()
         self._garmin = GarminUi(self, controller.sync, system_theme, self._remember)
+        self._build_settings_pages()
         self._build_content()
         self._build_dialogs()
         self._build_menus()
@@ -241,6 +247,16 @@ class MainWindow(QMainWindow):
         )
         self._stop_action = self._action(self.tr("Stop"), "Esc", self._controller.cancel_current)
         self._quit_action = self._action(self.tr("Quit"), "Ctrl+Q", self.close)
+        self._settings_action = self._action(self.tr("Settings..."), None, self.show_settings)
+        preferences = QKeySequence(QKeySequence.StandardKey.Preferences)
+        # Qt has no standard "Preferences" key on Windows: Ctrl+, is the usual one there
+        self._settings_action.setShortcut(
+            preferences if not preferences.isEmpty() else QKeySequence("Ctrl+,")
+        )
+        self._settings_action.setMenuRole(QAction.MenuRole.PreferencesRole)
+        self._garmin_account_action = self._action(
+            self.tr("Garmin account settings..."), None, self.edit_garmin_account
+        )
         self._edit_profile_action = self._action(
             self.tr("Edit profile..."), "Ctrl+E", self.edit_profile
         )
@@ -302,6 +318,8 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self._import_folder_action)
         file_menu.addAction(self._stop_action)
         file_menu.addSeparator()
+        file_menu.addAction(self._settings_action)
+        file_menu.addSeparator()
         file_menu.addAction(self._quit_action)
         profile_menu = self.menuBar().addMenu(self.tr("Profile"))
         profile_menu.addAction(self._edit_profile_action)
@@ -327,8 +345,9 @@ class MainWindow(QMainWindow):
         self._map_ui.build_menu(self.menuBar())
         self._build_plan_menu()
         self._build_injuries_menu()
-        self._garmin_calendar.add_to_menu(self._garmin.build_menu(self.menuBar()))
-        self._build_language_menu()
+        self._garmin_calendar.add_to_menu(
+            self._garmin.build_menu(self.menuBar(), self._garmin_account_action)
+        )
         help_menu = self.menuBar().addMenu(self.tr("Help"))
         help_menu.addAction(self._log_action)
         help_menu.addSeparator()
@@ -359,22 +378,36 @@ class MainWindow(QMainWindow):
         menu.addAction(actions["undo"])
         menu.addAction(actions["redo"])
 
-    def _build_language_menu(self) -> None:
-        """Menu "Language": English and Italian, with the choice remembered for the next
-        launches."""
-        menu = self.menuBar().addMenu(self.tr("Language"))
-        group = QActionGroup(self)
-        group.setExclusive(True)
-        self._language_actions: dict[Language, QAction] = {}
-        for language in (Language.ENGLISH, Language.ITALIAN):
-            # A language's name in the language itself is not translated: it serves to recognise it.
-            action = QAction(language.native_name, self)
-            action.setCheckable(True)
-            action.setChecked(language is self._language)
-            action.triggered.connect(partial(self._on_language_chosen, language))
-            group.addAction(action)
-            menu.addAction(action)
-            self._language_actions[language] = action
+    def _build_settings_pages(self) -> None:
+        """The pages of the Settings window: empty hosts that the owners of the data fill in (the
+        profile, the plan, the nutrition and the map flows), and the one that needs no profile."""
+        self._profile_settings = SettingsPage(
+            SettingsCategory.PROFILE,
+            self.tr("Profile"),
+            self,
+            footer=self._garmin.account_section,
+        )
+        self._weights_settings = SettingsPage(
+            SettingsCategory.SPORT_WEIGHTS, self.tr("Sport weights"), self
+        )
+        self._protocol_section = ThresholdProtocolSection(ProtocolPreference(self._settings))
+        self._training_settings = SettingsPage(
+            SettingsCategory.TRAINING_PLAN,
+            self.tr("Training plan"),
+            self,
+            footer=self._protocol_section,
+        )
+        self._training_settings.shown.connect(self._protocol_section.refresh)
+        self._nutrition_settings = SettingsPage(
+            SettingsCategory.NUTRITION, self.tr("Nutrition"), self
+        )
+        self._map_settings = SettingsPage(SettingsCategory.MAP, self.tr("Map"), self)
+        self._language_settings = SettingsPage(SettingsCategory.LANGUAGE, self.tr("Language"), self)
+        language_form = LanguageForm(
+            self._language, saved_language(self._settings) or self._language
+        )
+        language_form.language_chosen.connect(self._on_language_chosen)
+        self._language_settings.show_form(language_form)
 
     def _build_content(self) -> None:
         self._sidebar = QListWidget(self)
@@ -388,7 +421,6 @@ class MainWindow(QMainWindow):
             (self.tr("Calendar"), True),
             (self.tr("Map"), True),
             (self.tr("Tests"), False),
-            (self.tr("Profile settings"), False),
         )
         for label, available in sections:
             item = QListWidgetItem(label, self._sidebar)
@@ -416,6 +448,8 @@ class MainWindow(QMainWindow):
             zone=lambda: self._zone,
             show_error=self._show_error,
             show_map=lambda: self._sidebar.setCurrentRow(_SECTION_MAP),
+            settings_page=self._map_settings,
+            show_settings=partial(self.show_settings_page, SettingsCategory.MAP),
         )
         self._calendar = CalendarPage(self._today(), self)
         self._goals = GoalsPage()
@@ -467,6 +501,10 @@ class MainWindow(QMainWindow):
             profile_name=self._profile_name,
             show_error=self._show_error,
             notify=lambda text: self.statusBar().showMessage(text, _STATUS_MESSAGE_MS),
+            profile_page=self._profile_settings,
+            weights_page=self._weights_settings,
+            show_settings=self.show_settings_page,
+            unavailable_reason=lambda: self._unavailable_reason(self._controller.can_edit_profile),
         )
         self._activities.detail_requested.connect(self._dialogs.show_activity_detail)
         self._map_ui.page.detail_requested.connect(self._dialogs.show_activity_detail)
@@ -478,6 +516,9 @@ class MainWindow(QMainWindow):
             today=self._today,
             edit_profile=self._edit_profile_from_day,
             show_error=self._show_error,
+            settings_page=self._nutrition_settings,
+            show_settings=partial(self.show_settings_page, SettingsCategory.NUTRITION),
+            no_profile_text=lambda: self._unavailable_reason(False),
         )
         self._plan = PlanUi(
             self,
@@ -491,6 +532,9 @@ class MainWindow(QMainWindow):
             show_goals_page=self._show_goals,
             edit_profile=self._edit_profile_from_day,
             show_injuries_page=self._show_injuries,
+            training_page=self._training_settings,
+            show_training_page=partial(self.show_settings_page, SettingsCategory.TRAINING_PLAN),
+            no_profile_text=lambda: self._unavailable_reason(False),
         )
         self._injuries = InjuryUi(
             self,
@@ -528,6 +572,18 @@ class MainWindow(QMainWindow):
             remember_box=self._remember,
             show_error=self._show_error,
             open_profile_folder=self.open_profile_folder,
+        )
+        self._settings_window = SettingsWindow(
+            (
+                self._profile_settings,
+                self._weights_settings,
+                self._training_settings,
+                self._nutrition_settings,
+                self._map_settings,
+                self._language_settings,
+            ),
+            self._remember,
+            self,
         )
         self._calendar.selection_changed.connect(self._garmin_calendar.refresh)
         self._calendar.panel.attach_send_action(self._garmin_calendar.send_session_action)
@@ -694,7 +750,7 @@ class MainWindow(QMainWindow):
 
     @property
     def nutrition(self) -> NutritionUi:
-        """The nutrition flow (day windows and settings dialog)."""
+        """The nutrition flow (day windows and the Settings > Nutrition page)."""
         return self._nutrition
 
     @property
@@ -725,13 +781,18 @@ class MainWindow(QMainWindow):
 
     @property
     def profile_dialogs(self) -> ProfileDialogs:
-        """The profile data dialogs (edit, weights, detail)."""
+        """The profile data in the window (Profile and Sport weights pages, activity detail)."""
         return self._dialogs
 
     @property
-    def language_actions(self) -> dict[Language, QAction]:
-        """The Language menu entries."""
-        return self._language_actions
+    def settings_window(self) -> SettingsWindow:
+        """The Settings window (one for the whole app)."""
+        return self._settings_window
+
+    @property
+    def settings_action(self) -> QAction:
+        """Action "Settings..." of the File menu."""
+        return self._settings_action
 
     @property
     def edit_profile_action(self) -> QAction:
@@ -860,38 +921,41 @@ class MainWindow(QMainWindow):
 
     # --- Lingua ----------------------------------------------------------------------------
 
-    def _on_language_chosen(self, language: Language) -> None:
+    def _on_language_chosen(self, language: object) -> None:
         """Remember the chosen language. It applies at the next launch: retranslating every window,
-        menu
-        and chart live would duplicate every text, for a change made once."""
-        save_language(self._settings, language)
-        if language is self._language:
-            return
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Icon.Information)
-        box.setWindowTitle(self.tr("Language"))
-        box.setTextFormat(Qt.TextFormat.PlainText)
-        box.setText(self.tr("The language changes the next time Ponos Coach starts."))
-        box.setObjectName("languageChanged")
-        self._remember(box)
-        box.open()
+        menu and chart live would duplicate every text, for a change made once. The Language page
+        says so."""
+        if isinstance(language, Language):
+            save_language(self._settings, language)
+
+    # --- Settings -----------------------------------------------------------------------------
+
+    def show_settings(self) -> None:
+        """Open the Settings window (one only: if it is open it comes forward), on the page it
+        showed last."""
+        self.show_settings_page(self._settings_window.current_category)
+
+    def show_settings_page(self, category: SettingsCategory) -> None:
+        """Open the Settings window (or bring it forward) on the page of `category`."""
+        self._settings_window.show_page(category)
+
+    def edit_garmin_account(self) -> None:
+        """Open Settings on the page that has the Garmin account."""
+        self.show_settings_page(SettingsCategory.PROFILE)
 
     # --- Profile data ------------------------------------------------------------------
 
     def edit_profile(self) -> None:
-        """Open "Edit profile" (no effect if it cannot be done now)."""
-        if self._controller.can_edit_profile:
-            self._dialogs.edit_profile()
+        """Open Settings > Profile (the page says why it cannot be edited now, if so)."""
+        self._dialogs.edit_profile()
 
     def edit_sport_weights(self) -> None:
-        """Open "Sport weights" (no effect if it cannot be done now)."""
-        if self._controller.can_edit_profile:
-            self._dialogs.edit_sport_weights()
+        """Open Settings > Sport weights."""
+        self._dialogs.edit_sport_weights()
 
     def edit_nutrition_settings(self) -> None:
-        """Open "Nutrition settings" (no effect without an open profile)."""
-        if self._controller.profile is not None:
-            self._nutrition.show_settings()
+        """Open Settings > Nutrition."""
+        self._nutrition.show_settings()
 
     def use_selected_as_threshold_test(self) -> None:
         """Evaluate the activity selected in the list as the threshold test (no effect if the
@@ -923,12 +987,8 @@ class MainWindow(QMainWindow):
         self._injury_label.setVisible(bool(text))
 
     def _edit_profile_from_day(self) -> None:
-        """Open "Edit profile" from the day page's missing-data message."""
-        if self._controller.can_edit_profile:
-            self._dialogs.edit_profile()
-        else:
-            reason = self._unavailable_reason(False)
-            self.statusBar().showMessage(reason, _STATUS_MESSAGE_MS)
+        """Open Settings > Profile from the day page's missing-data message."""
+        self._dialogs.edit_profile()
 
     def _calendar_step_back(self) -> None:
         self._calendar.previous_month()
@@ -1024,6 +1084,7 @@ class MainWindow(QMainWindow):
         self._zone = view.zone
         self._creating_form = None
         self._nutrition.profile_changed()
+        self._dialogs.profile_changed()
         self._threshold.profile_changed()
         self._plan.profile_changed()
         self._injuries.profile_changed()
@@ -1340,7 +1401,8 @@ class MainWindow(QMainWindow):
         )
 
     def _update_profile_data_actions(self) -> None:
-        """Import, edit profile, weights and detail: each with its reason if it cannot be done."""
+        """Import, edit profile, weights and detail: each with its reason if it cannot be done.
+        Settings itself is always available: its pages say why they cannot be filled."""
         controller = self._controller
         for action, allowed in (
             (self._import_files_action, controller.can_import),
@@ -1351,6 +1413,7 @@ class MainWindow(QMainWindow):
         ):
             action.setEnabled(allowed)
             action.setToolTip(self._unavailable_reason(allowed))
+        self._dialogs.availability_changed()
         self._update_calendar_actions()
         self._update_threshold_actions()
         has_selection = self._activities.selected_activity() is not None
@@ -1477,6 +1540,12 @@ class MainWindow(QMainWindow):
         the web engine needs. If the wait expires the charts stay empty.
         """
         if not self._closed:
+            if self._settings_window.has_unsaved_changes() and not self._settings_confirmed:
+                event.ignore()
+                self._settings_window.show_page(self._settings_window.current_category)
+                self._settings_window.confirm_leaving(self._close_after_settings)
+                return
+            self._settings_window.close()
             self._remember_window_state()
             self._controller.begin_shutdown()
             self._dialogs.close_all()
@@ -1494,6 +1563,11 @@ class MainWindow(QMainWindow):
                 return
             self._finish_closing()
         super().closeEvent(event)
+
+    def _close_after_settings(self) -> None:
+        """The settings with unsaved edits were saved or discarded: closing goes on."""
+        self._settings_confirmed = True
+        self.close()
 
     def _remember_window_state(self) -> None:
         self._settings.setValue(_KEY_GEOMETRY, self.saveGeometry())

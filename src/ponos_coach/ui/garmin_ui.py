@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""View of the Garmin account in the main window: menu, status bar and dialogs.
+"""View of the Garmin account in the main window: menu, status bar, dialogs and the account section
+of Settings > Profile.
 
 Humble view: the decisions (which commands are available, what the summary says, whether a
 window is needed) live in `sync_model` and `sync_text`; here there are only widgets and commands.
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from ponos_coach.activities.sync import SyncMode, SyncPhase, SyncProgress
+from ponos_coach.ui.garmin_account_section import GarminAccountSection
 from ponos_coach.ui.garmin_dialogs import GarminLoginDialog, MfaCodeDialog
 from ponos_coach.ui.sync_controller import SyncController
 from ponos_coach.ui.sync_model import (
@@ -35,6 +37,7 @@ from ponos_coach.ui.sync_model import (
     needs_reconnect,
 )
 from ponos_coach.ui.sync_text import (
+    account_status_text,
     disabled_reason_text,
     headline_text,
     login_failure_text,
@@ -66,6 +69,9 @@ class GarminUi(QObject):
         self._mfa: MfaCodeDialog | None = None
         self._build_actions()
         self._build_status_widgets()
+        self._section = GarminAccountSection(
+            self._connect_action, self._disconnect_action, self._auto_action
+        )
         controller.state_changed.connect(self.refresh)
         controller.account_changed.connect(self.refresh)
         controller.progress_changed.connect(self._on_progress)
@@ -77,18 +83,19 @@ class GarminUi(QObject):
 
     # --- Costruzione -----
 
-    def _action(self, text: str, shortcut: str, slot: Callable[[], object]) -> QAction:
+    def _action(self, text: str, shortcut: str | None, slot: Callable[[], object]) -> QAction:
         action = QAction(text, self._window)
-        action.setShortcut(QKeySequence(shortcut))
+        if shortcut is not None:
+            action.setShortcut(QKeySequence(shortcut))
         action.triggered.connect(slot)
         return action
 
     def _build_actions(self) -> None:
         self._connect_action = self._action(
-            self.tr("Connect Garmin account..."), "Ctrl+G", self.connect_account
+            self.tr("Connect Garmin account..."), None, self.connect_account
         )
         self._disconnect_action = self._action(
-            self.tr("Disconnect Garmin account"), "Ctrl+Shift+G", self.confirm_disconnect
+            self.tr("Disconnect Garmin account"), None, self.confirm_disconnect
         )
         self._sync_action = self._action(
             self.tr("Synchronise"), "F5", lambda: self._controller.start_sync(SyncMode.SYNC)
@@ -103,7 +110,7 @@ class GarminUi(QObject):
         )
         self._auto_action = self._action(
             self.tr("Synchronise when a profile opens"),
-            "Ctrl+Shift+A",
+            None,
             lambda: None,
         )
         self._auto_action.setCheckable(True)
@@ -119,17 +126,16 @@ class GarminUi(QObject):
             (self._auto_action, lambda: self._controller.commands.auto_sync),
         )
 
-    def build_menu(self, menu_bar: QMenuBar) -> QMenu:
-        """Add the "Garmin" menu to the menu bar and return it."""
+    def build_menu(self, menu_bar: QMenuBar, account_settings: QAction) -> QMenu:
+        """Add the "Garmin" menu to the menu bar and return it. Connecting and disconnecting the
+        account and the preference to synchronise when a profile opens are settings: they live in
+        Settings > Profile, and the menu opens that page with `account_settings`."""
         menu = menu_bar.addMenu(self.tr("Garmin"))
-        menu.addAction(self._connect_action)
-        menu.addAction(self._disconnect_action)
+        menu.addAction(account_settings)
         menu.addSeparator()
         menu.addAction(self._sync_action)
         menu.addAction(self._verify_action)
         menu.addAction(self._stop_action)
-        menu.addSeparator()
-        menu.addAction(self._auto_action)
         self._verify_action.setStatusTip(
             self.tr("List the whole Garmin history to find activities uploaded late.")
         )
@@ -153,6 +159,11 @@ class GarminUi(QObject):
         for widget in self._widgets:
             status_bar.addPermanentWidget(widget)
             widget.setVisible(False)
+
+    @property
+    def account_section(self) -> GarminAccountSection:
+        """The "Garmin account" section of Settings > Profile."""
+        return self._section
 
     # --- Test accessors -----
 
@@ -218,6 +229,8 @@ class GarminUi(QObject):
             )
         self._stop_button.setEnabled(self._controller.commands.stop.enabled)
         self._auto_action.setChecked(self._controller.auto_sync_enabled)
+        self._section.set_status(account_status_text(self._controller.account_status))
+        self._section.refresh()
         syncing = self._controller.is_syncing
         for widget in self._widgets:
             widget.setVisible(syncing)

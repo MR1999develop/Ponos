@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QCoreApplication, QSettings
 from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QRadioButton
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.__main__ import compose_main_window, main, parse_command_line, setup_translations
@@ -92,7 +93,9 @@ def window_action_texts(tmp_path: Path, qtbot: QtBot) -> set[str]:
         map_cache_dir=tmp_path / "map-cache",
     )
     qtbot.addWidget(window)
-    return {action.text() for action in window.findChildren(QAction)}
+    pages = {window.settings_window.page(c).title for c in window.settings_window.categories}
+    radios = {button.text() for button in window.settings_window.findChildren(QRadioButton)}
+    return {action.text() for action in window.findChildren(QAction)} | pages | radios
 
 
 @pytest.mark.parametrize(
@@ -247,7 +250,9 @@ def test_the_real_italian_catalog_translates_the_new_menus_and_keeps_language_na
 
     assert report.language is Language.ITALIAN
     assert report.app_loaded
-    assert {"Profilo", "Lingua", "Modifica profilo...", "Pesi degli sport..."} <= texts
+    assert {"Profilo", "Impostazioni...", "Modifica profilo...", "Pesi degli sport..."} <= texts
+    assert {"Piano di allenamento", "Alimentazione", "Mappa", "Lingua"} <= texts  # the pages
+    assert "Language" not in texts
     assert {"Dettaglio attività...", "Aiuto"} <= texts
     assert {"English", "Italiano"} <= texts  # the name of a language is not translated
     assert "Edit profile..." not in texts

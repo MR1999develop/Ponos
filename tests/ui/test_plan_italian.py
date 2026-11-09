@@ -178,7 +178,6 @@ def test_the_dialogs_are_in_italian_and_a_problem_is_a_sentence(
         suggested=True,
     )
     qtbot.addWidget(training)
-    assert training.windowTitle() == "Impostazioni di allenamento"
     assert training.save_button.text() == "Salva impostazioni"
     assert training.long_day_combo.itemText(0) == "lunedì"
 

@@ -727,6 +727,10 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
 
+    preferences = QKeySequence(QKeySequence.StandardKey.Preferences)
+    settings_shortcut = (
+        preferences if not preferences.isEmpty() else QKeySequence("Ctrl+,")
+    ).toString()
     shortcuts = {
         action.text(): action.shortcut().toString()
         for action in window.findChildren(QAction)
@@ -739,6 +743,7 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Import from folder...": QKeySequence("Ctrl+Shift+I").toString(),
         "Stop": QKeySequence("Esc").toString(),
         "Quit": QKeySequence("Ctrl+Q").toString(),
+        "Settings...": settings_shortcut,
         "Back up profile...": QKeySequence("Ctrl+Shift+B").toString(),
         "Restore profile from backup...": QKeySequence("Ctrl+Shift+O").toString(),
         "Open the log folder": QKeySequence("Ctrl+Shift+L").toString(),
@@ -750,12 +755,9 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Next month": QKeySequence("Ctrl+Right").toString(),
         "Today": QKeySequence("Ctrl+T").toString(),
         "Open day": QKeySequence("Ctrl+Return").toString(),
-        "Connect Garmin account...": QKeySequence("Ctrl+G").toString(),
-        "Disconnect Garmin account": QKeySequence("Ctrl+Shift+G").toString(),
         "Synchronise": QKeySequence("F5").toString(),
         "Full check": QKeySequence("Ctrl+F5").toString(),
         "Stop synchronisation": QKeySequence("Shift+F5").toString(),
-        "Synchronise when a profile opens": QKeySequence("Ctrl+Shift+A").toString(),
         "Send plan to Garmin...": QKeySequence("Ctrl+Shift+S").toString(),
         "Send this session to Garmin": QKeySequence("Ctrl+Shift+Y").toString(),
         "Garmin calendar...": QKeySequence("Ctrl+Shift+C").toString(),

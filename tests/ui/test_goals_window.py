@@ -31,6 +31,7 @@ from ponos_coach.ui.goal_draft import GoalField
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.plan_presentation import NoPlanYet, PlanRefusedNow
 from ponos_coach.ui.plan_undo import OutcomeCell
+from ponos_coach.ui.settings_page import SettingsCategory
 from tests.ui.goals_support import (
     EVERY_DAY,
     RACE_DAY,
@@ -49,7 +50,7 @@ from tests.ui.goals_support import (
     wait_refusal,
 )
 from tests.ui.nutrition_support import DAWN_AND_LUNCH_DAY, cell_of
-from tests.ui.workspace_support import TODAY, compose, make_settings
+from tests.ui.workspace_support import TODAY, answer_unsaved, compose, make_settings
 
 
 @pytest.fixture
@@ -102,7 +103,6 @@ def test_the_goals_window_opens_from_the_menu_and_the_commands_have_their_reason
         "Calendar",
         "Map",
         "Tests",
-        "Profile settings",
     ]
     assert window.goals_page.empty_text.startswith("No goals yet.")
     actions = window.plan.actions
@@ -478,7 +478,7 @@ def _availability_is_none(window: MainWindow) -> bool:
     return snapshot is not None and snapshot.availability is None
 
 
-def test_a_dialog_cancelled_changes_nothing_and_pushes_nothing(
+def test_edits_discarded_when_closing_settings_change_nothing_and_push_nothing(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = ready_window(qtbot, tmp_path, settings)
@@ -489,7 +489,9 @@ def test_a_dialog_cancelled_changes_nothing_and_pushes_nothing(
     assert dialog is not None
     assert dialog.note_is_shown  # nothing saved yet: the form starts from suggestions
     dialog.day_spins[0].setValue(10)
-    dialog.reject()
+    assert window.settings_window.category_label(SettingsCategory.TRAINING_PLAN).endswith("*")
+    window.settings_window.close()
+    answer_unsaved(qtbot, window, "Discard")
 
     assert window.plan.undo_stack.count() == 0
     assert _availability_is_none(window)

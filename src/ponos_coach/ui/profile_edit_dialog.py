@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dialog "Edit profile": humble view on the `MeasurementsForm` model.
+"""Content of the Settings > Profile page: humble view on the `MeasurementsForm` model.
 
 At the top the editable name and the fixed data, read-only (or to complete, once only, for an
 old profile); below the updatable measurements, which apply from a chosen day (today by
-default); at the bottom the history. The dialog edits a copy: "Cancel" changes nothing. Saving
-starts with `save_requested`; the outcome (ok or rejected measurements) is reported by the window.
+default); at the bottom the history. The page edits a copy: nothing changes until "Save changes".
+Saving starts with `save_requested`; the outcome (ok or rejected measurements) is reported by the
+coordinator, which builds the page again from what was saved.
 """
 
 from __future__ import annotations
@@ -14,10 +15,8 @@ from datetime import date
 from itertools import pairwise
 
 from PySide6.QtCore import QDate, QLocale, Qt, Signal
-from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QDateEdit,
-    QDialog,
     QDialogButtonBox,
     QFormLayout,
     QGroupBox,
@@ -56,13 +55,14 @@ from ponos_coach.ui.measurements_form import (
     MeasurementsRequest,
     NameProblem,
 )
-from ponos_coach.ui.tokens import DIALOG_MIN_WIDTH, SPACE_1, SPACE_2, SPACE_4, Theme, tokens_for
+from ponos_coach.ui.settings_form import SettingsForm
+from ponos_coach.ui.tokens import SPACE_1, SPACE_2, SPACE_4, Theme, tokens_for
 
 _TABLE_MIN_HEIGHT = 140
 _NOTE_FIELDS = (EditField.WEIGHT, EditField.MIN_BPM, EditField.MAX_BPM, EditField.THRESHOLD)
 
 
-class ProfileEditDialog(QDialog):
+class ProfileEditDialog(SettingsForm):
     """Read-only fixed data, dated measurements to update and history."""
 
     save_requested = Signal(object)  # MeasurementsRequest
@@ -82,9 +82,6 @@ class ProfileEditDialog(QDialog):
         self._notes = {field: self._note_label() for field in _NOTE_FIELDS}
         self._validity_notice = self._note_label()
         self._history_model = MeasurementHistoryModel(self)
-        self.setWindowTitle(self.tr("Edit profile"))
-        self.setMinimumWidth(DIALOG_MIN_WIDTH)
-        self.setWindowModality(Qt.WindowModality.WindowModal)
         self._build()
         self.set_history(history)
         self._load_from_form()
@@ -160,13 +157,10 @@ class ProfileEditDialog(QDialog):
             self.tr("Save changes"), QDialogButtonBox.ButtonRole.AcceptRole
         )
         self._save.setDefault(True)
-        self._buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         self._buttons.accepted.connect(self._on_save)
-        self._buttons.rejected.connect(self.reject)
 
     def _set_tab_order(self) -> None:
         """Tab follows the visual order, top to bottom: first the fixed data to complete."""
-        cancel = self._buttons.button(QDialogButtonBox.StandardButton.Cancel)
         order = [
             self._name,
             self._height,
@@ -178,7 +172,6 @@ class ProfileEditDialog(QDialog):
             self._threshold,
             self._table,
             self._save,
-            cancel,
         ]
         for first, second in pairwise(order):
             QWidget.setTabOrder(first, second)
@@ -366,6 +359,14 @@ class ProfileEditDialog(QDialog):
         label = self._validity_notice
         return label.text() if label.isVisibleTo(self) else ""
 
+    def has_unsaved_changes(self) -> bool:
+        """True while something typed differs from what the profile holds."""
+        return self._form.has_changes
+
+    def request_save(self) -> None:
+        """Save what is typed (the "Save changes" button)."""
+        self._on_save()
+
     # --- From the model to the view -------------------------------------------------------
 
     def set_history(self, history: MeasurementHistory) -> None:
@@ -434,6 +435,7 @@ class ProfileEditDialog(QDialog):
         has_changes = self._form.has_changes
         self._save.setEnabled(has_changes)
         self._save.setToolTip("" if has_changes else self.tr("Change at least one value first."))
+        self.edited.emit()
 
     # --- From the view to the model -------------------------------------------------------
 
@@ -502,6 +504,7 @@ class ProfileEditDialog(QDialog):
             return
         self._refresh_errors()
         self._focus_first(result[0].field)
+        self.save_failed.emit()
 
     def _focus_first(self, field: EditField) -> None:
         targets: dict[EditField, QWidget] = {
@@ -521,7 +524,7 @@ class ProfileEditDialog(QDialog):
     # --- Save outcome --------------------------------------------------------
 
     def set_busy(self, busy: bool) -> None:
-        """While saving is in progress the dialog accepts no other edits."""
+        """While saving is in progress the page accepts no other edits."""
         self._save.setEnabled(not busy and self._form.has_changes)
         for widget in (
             self._name,
@@ -534,6 +537,8 @@ class ProfileEditDialog(QDialog):
             self._birth,
         ):
             widget.setEnabled(not busy)
+        if not busy:
+            self.save_failed.emit()
 
     def show_rejection(self, issue: EditIssue) -> None:
         """Measurements rejected by the use case: the problem appears on the right field."""
@@ -541,8 +546,3 @@ class ProfileEditDialog(QDialog):
         self._show_errors = True
         self._refresh_errors((issue,))
         self._focus_first(issue.field)
-
-    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt
-        """The first field to type in has the focus: weight, or height if it must be completed."""
-        super().showEvent(event)
-        (self._height if self._form.needs_fixed_data else self._weight).setFocus()

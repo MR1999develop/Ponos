@@ -131,13 +131,22 @@ At the first start the "New profile" dialog opens. You need:
 
 Height, weight and date of birth are health data: they stay in the profile
 database and never go to the logs. Height and date of birth cannot be changed
-afterwards. Weight and heart rates are updated with a validity date from
-Profile, Edit profile... (Ctrl+E), where the history is also shown; a profile
-created before phase 3 fills in height and date of birth there, once. The
-rules are in the specification (section 5).
+afterwards. Weight and heart rates are updated with a validity date in
+File, Settings... (Ctrl+,), Profile page (Profile, Edit profile... or Ctrl+E
+open it directly), where the history is also shown; a profile created before
+phase 3 fills in height and date of birth there, once. The rules are in the
+specification (section 5).
 
-Profile, Sport weights... (Ctrl+Shift+W) changes how much each sport counts
-in the load; each activity is recalculated on its own when needed.
+All the settings are in one window, File, Settings... (Ctrl+,), with the
+categories on the left: Profile (with the Garmin account), Sport weights,
+Training plan, Nutrition, Map and Language. Each page saves the way it always
+did (a Save button, or at once); a category with unsaved changes is marked
+with an asterisk, and closing the window asks what to do with them (Save,
+Discard or Keep editing). The commands that used to open a dialog (Profile,
+Edit profile... and Sport weights..., Plan, Training settings..., Map, Map
+settings...) now open the window on the right page. Sport weights... (Ctrl+Shift+W)
+changes how much each sport counts in the load; each activity is recalculated
+on its own when needed.
 
 More profiles: File, New profile... (Ctrl+N). A profile moved or copied to
 another PC is opened with File, Open profile from folder... (Ctrl+O). With
@@ -155,7 +164,8 @@ last folders used.
 
 A profile must be open. Connecting is optional: file import always works.
 
-1. Garmin menu, Connect Garmin account... (Ctrl+G).
+1. File, Settings..., Profile page, Garmin account, Connect Garmin account...
+   (Garmin, Garmin account settings... opens that page).
 2. Enter your Garmin Connect email and password. They go only to Garmin and
    the app does not save them.
 3. If your account uses two-step verification, enter the code Garmin sends
@@ -233,8 +243,8 @@ by the project (see the specification, section 6, and
 
 ## Language
 
-The interface starts in English. For Italian: Language menu, Italiano; the
-choice is remembered and applies from the next start. `--lang it` or
+The interface starts in English. For Italian: File, Settings..., Language,
+Italiano; the choice is remembered and applies from the next start. `--lang it` or
 `--lang en` takes precedence.
 
 ## Where the data is

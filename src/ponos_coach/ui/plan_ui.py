@@ -87,6 +87,7 @@ from ponos_coach.ui.plan_undo import (
     SetAvailabilityCommand,
     SetChoicesCommand,
 )
+from ponos_coach.ui.settings_page import SettingsPage
 from ponos_coach.ui.tokens import Theme
 from ponos_coach.ui.training_dialog import TrainingSettingsDialog
 from ponos_coach.ui.training_draft import draft_of, is_suggestion
@@ -182,6 +183,9 @@ class PlanUi(QObject):
         show_error: Callable[[ErrorMessage], None],
         show_goals_page: Callable[[], None],
         edit_profile: Callable[[], None],
+        training_page: SettingsPage,
+        show_training_page: Callable[[], None],
+        no_profile_text: Callable[[], str],
         show_injuries_page: Callable[[], None] = lambda: None,
         make_goal_id: Callable[[], str] = new_goal_id,
     ) -> None:
@@ -206,7 +210,10 @@ class PlanUi(QObject):
         self._overview: ProfileOverview | None = None
         self._jobs = CountedJobs(self._loader)
         self._goal_dialog: GoalDialog | None = None
-        self._training_dialog: TrainingSettingsDialog | None = None
+        self._training_page = training_page
+        self._show_training_page = show_training_page
+        self._no_profile_text = no_profile_text
+        training_page.shown.connect(self.refresh_training_page)
         self._build_actions()
         self._connect()
         self._update_actions()
@@ -292,8 +299,9 @@ class PlanUi(QObject):
 
     @property
     def training_dialog(self) -> TrainingSettingsDialog | None:
-        """The open training settings dialog, if any."""
-        return self._training_dialog
+        """The content of the Training plan page, once the settings have been read."""
+        form = self._training_page.form
+        return form if isinstance(form, TrainingSettingsDialog) else None
 
     @property
     def actions(self) -> dict[str, QAction]:
@@ -435,27 +443,36 @@ class PlanUi(QObject):
         self._goal_dialog = None
 
     def show_training_settings(self) -> None:
-        """Open "Training settings" (no effect before the choices have been read)."""
-        if self._training_dialog is not None:
-            self._training_dialog.raise_()
-            self._training_dialog.activateWindow()
-            return
-        snapshot = self._snapshot
-        if snapshot is None or self._controller.profile is None:
-            return
-        dialog = TrainingSettingsDialog(
-            draft_of(snapshot.availability, snapshot.choices),
-            suggested=is_suggestion(snapshot.availability, snapshot.choices),
-            parent=self._window,
-        )
-        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        dialog.accepted.connect(partial(self._on_training_accepted, dialog, snapshot))
-        dialog.finished.connect(self._on_training_dialog_closed)
-        self._training_dialog = dialog
-        dialog.open()
+        """Open Settings on the Training plan page."""
+        self._show_training_page()
 
-    def _on_training_accepted(self, dialog: TrainingSettingsDialog, before: PlanSnapshot) -> None:
-        after = dialog.draft()
+    def refresh_training_page(self) -> None:
+        """Fill the Training plan page from the choices read (or say why it cannot be filled). A
+        form the user is editing is left alone; a clean one shows what is saved now."""
+        page = self._training_page
+        snapshot = self._snapshot
+        if self._controller.profile is None:
+            page.show_notice(self._no_profile_text())
+            return
+        if snapshot is None:
+            page.show_notice(self.tr("Wait a moment: the goals are being read."))
+            return
+        draft = draft_of(snapshot.availability, snapshot.choices)
+        suggested = is_suggestion(snapshot.availability, snapshot.choices)
+        form = self.training_dialog
+        if form is None:
+            form = TrainingSettingsDialog(draft, suggested=suggested)
+            form.save_requested.connect(partial(self._on_training_save_requested, form))
+            page.show_form(form)
+        elif not form.has_unsaved_changes():
+            form.show_saved(draft, suggested=suggested)
+
+    def _on_training_save_requested(self, form: TrainingSettingsDialog) -> None:
+        before = self._snapshot
+        if before is None:
+            form.save_failed.emit()
+            return
+        after = form.draft()
         availability = after.availability()
         steps: list[SetAvailabilityCommand | SetChoicesCommand] = []
         if availability != before.availability:
@@ -471,9 +488,7 @@ class PlanUi(QObject):
             for step in steps:
                 self._stack.push(step)
             self._stack.endMacro()
-
-    def _on_training_dialog_closed(self) -> None:
-        self._training_dialog = None
+        form.show_saved(after, suggested=False)
 
     def _on_day_add_race(self, day: object) -> None:
         if isinstance(day, date):
@@ -524,6 +539,7 @@ class PlanUi(QObject):
     def _apply_snapshot(self, snapshot: PlanSnapshot) -> None:
         self._snapshot = snapshot
         self._refresh_view()
+        self.refresh_training_page()
 
     def _on_plan_rebuilt(self, result: object) -> None:
         if isinstance(result, PlanBuilt | PlanRefused | PlanNotBuilt):
@@ -625,6 +641,7 @@ class PlanUi(QObject):
         self._loader.cancel_past()
         self._jobs.forget()
         self._snapshot = None
+        self.refresh_training_page()
         self._state = NoPlanYet()
         self._past = None
         self._overview = None
@@ -637,6 +654,5 @@ class PlanUi(QObject):
 
     def close_dialogs(self) -> None:
         """Close the open dialogs (another profile opens, or the window is closing)."""
-        for dialog in (self._goal_dialog, self._training_dialog):
-            if dialog is not None:
-                dialog.close()
+        if self._goal_dialog is not None:
+            self._goal_dialog.close()

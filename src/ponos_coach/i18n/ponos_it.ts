@@ -1609,6 +1609,13 @@
     </message>
 </context>
 <context>
+    <name>GarminAccountSection</name>
+    <message>
+        <source>Garmin account</source>
+        <translation>Account Garmin</translation>
+    </message>
+</context>
+<context>
     <name>GarminCalendar</name>
     <message>
         <source>{day}: {name}</source>
@@ -3177,6 +3184,13 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
 </context>
 <context>
+    <name>LanguageForm</name>
+    <message>
+        <source>The language changes the next time Ponos Coach starts.</source>
+        <translation>La lingua cambia al prossimo avvio di Ponos Coach.</translation>
+    </message>
+</context>
+<context>
     <name>LeanMass</name>
     <message>
         <source>Enter the lean mass in kilograms.</source>
@@ -3267,6 +3281,14 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Esci</translation>
     </message>
     <message>
+        <source>Settings...</source>
+        <translation>Impostazioni...</translation>
+    </message>
+    <message>
+        <source>Garmin account settings...</source>
+        <translation>Impostazioni dell&apos;account Garmin...</translation>
+    </message>
+    <message>
         <source>Edit profile...</source>
         <translation>Modifica profilo...</translation>
     </message>
@@ -3355,6 +3377,18 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Piano</translation>
     </message>
     <message>
+        <source>Sport weights</source>
+        <translation>Pesi degli sport</translation>
+    </message>
+    <message>
+        <source>Training plan</source>
+        <translation>Piano di allenamento</translation>
+    </message>
+    <message>
+        <source>Nutrition</source>
+        <translation>Alimentazione</translation>
+    </message>
+    <message>
         <source>Language</source>
         <translation>Lingua</translation>
     </message>
@@ -3391,10 +3425,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Test</translation>
     </message>
     <message>
-        <source>Profile settings</source>
-        <translation>Impostazioni del profilo</translation>
-    </message>
-    <message>
         <source>Goals and plan status</source>
         <translation>Obiettivi e stato del piano</translation>
     </message>
@@ -3405,10 +3435,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Stop import</source>
         <translation>Interrompi importazione</translation>
-    </message>
-    <message>
-        <source>The language changes the next time Ponos Coach starts.</source>
-        <translation>La lingua cambierà al prossimo avvio di Ponos Coach.</translation>
     </message>
     <message>
         <source>Choose the profile folder</source>
@@ -3876,10 +3902,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
 </context>
 <context>
     <name>MapSettingsDialog</name>
-    <message>
-        <source>Map settings</source>
-        <translation>Impostazioni della mappa</translation>
-    </message>
     <message>
         <source>Tracestrack key</source>
         <translation>Chiave Tracestrack</translation>
@@ -4490,10 +4512,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Weight loss pace (kg per week)</source>
         <translation>Ritmo di dimagrimento (kg a settimana)</translation>
-    </message>
-    <message>
-        <source>Nutrition settings</source>
-        <translation>Impostazioni alimentari</translation>
     </message>
     <message>
         <source>Problem</source>
@@ -5216,10 +5234,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
 <context>
     <name>ProfileEditDialog</name>
     <message>
-        <source>Edit profile</source>
-        <translation>Modifica profilo</translation>
-    </message>
-    <message>
         <source>Valid from</source>
         <translation>Valido dal</translation>
     </message>
@@ -5389,6 +5403,49 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
 </context>
 <context>
+    <name>SettingsWindow</name>
+    <message>
+        <source>Settings</source>
+        <translation>Impostazioni</translation>
+    </message>
+    <message>
+        <source>Settings categories</source>
+        <translation>Categorie delle impostazioni</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Chiudi</translation>
+    </message>
+    <message>
+        <source>This page has unsaved changes.</source>
+        <translation>Questa pagina ha modifiche non salvate.</translation>
+    </message>
+    <message>
+        <source>Unsaved changes</source>
+        <translation>Modifiche non salvate</translation>
+    </message>
+    <message>
+        <source>Some settings have changes that are not saved.</source>
+        <translation>Alcune impostazioni hanno modifiche non salvate.</translation>
+    </message>
+    <message>
+        <source>Unsaved: {pages}.</source>
+        <translation>Non salvate: {pages}.</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>Salva</translation>
+    </message>
+    <message>
+        <source>Discard</source>
+        <translation>Scarta</translation>
+    </message>
+    <message>
+        <source>Keep editing</source>
+        <translation>Continua a modificare</translation>
+    </message>
+</context>
+<context>
     <name>SignsGroup</name>
     <message>
         <source>Do you have any of these?</source>
@@ -5397,10 +5454,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
 </context>
 <context>
     <name>SportWeightsDialog</name>
-    <message>
-        <source>Sport weights</source>
-        <translation>Pesi degli sport</translation>
-    </message>
     <message>
         <source>The weight of a sport multiplies the load of each of its activities: 1.00 leaves the load as calculated, 0 removes the sport from the load. Changing a weight recalculates every activity.</source>
         <translation>Il peso di uno sport moltiplica il carico di ogni sua attività: 1,00 lascia il carico com&apos;è calcolato, 0 toglie lo sport dal carico. Cambiare un peso ricalcola ogni attività.</translation>
@@ -5579,6 +5632,22 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>  {reason}: {count}</source>
         <translation>  {reason}: {count}</translation>
+    </message>
+    <message>
+        <source>A Garmin account is connected to this profile.</source>
+        <translation>Un account Garmin è collegato a questo profilo.</translation>
+    </message>
+    <message>
+        <source>The Garmin sign-in is no longer valid. Connect the account again.</source>
+        <translation>L&apos;accesso a Garmin non è più valido. Collega di nuovo l&apos;account.</translation>
+    </message>
+    <message>
+        <source>The system keychain cannot be used, so a Garmin account cannot be connected.</source>
+        <translation>Il portachiavi di sistema non è utilizzabile, quindi non si può collegare un account Garmin.</translation>
+    </message>
+    <message>
+        <source>Open a profile to see its Garmin account.</source>
+        <translation>Apri un profilo per vedere il suo account Garmin.</translation>
     </message>
     <message>
         <source>Garmin did not provide a valid original file for this activity</source>
@@ -5766,6 +5835,17 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>A test is not a diagnosis. If you have symptoms or any doubt about your health, talk to a doctor before you do it.</source>
         <translation>Un test non è una diagnosi. Se hai disturbi o dubbi sulla tua salute, parlane con un medico prima di farlo.</translation>
+    </message>
+</context>
+<context>
+    <name>ThresholdProtocolSection</name>
+    <message>
+        <source>Threshold test</source>
+        <translation>Test di soglia</translation>
+    </message>
+    <message>
+        <source>The test you start from an activity begins with this protocol.</source>
+        <translation>Il test che avvii da un&apos;attività parte con questo protocollo.</translation>
     </message>
 </context>
 <context>
@@ -6048,10 +6128,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
 </context>
 <context>
     <name>TrainingSettingsDialog</name>
-    <message>
-        <source>Training settings</source>
-        <translation>Impostazioni di allenamento</translation>
-    </message>
     <message>
         <source>Nothing is saved yet. These are suggestions: change them, then save.</source>
         <translation>Non è ancora salvato nulla. Questi sono suggerimenti: modificali, poi salva.</translation>

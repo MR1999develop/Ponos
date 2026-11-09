@@ -4,8 +4,8 @@
 
 The pages that used to be sections of the sidebar (the goals and plan status, the injury history)
 are widgets that other parts of the window fill in; they now live in windows of their own, opened
-from a menu command, until the settings window gathers them. Closing the window only hides it: the
-page keeps what it shows and the next opening is immediate.
+from a menu command. Closing the window only hides it: the page keeps what it shows and the next
+opening is immediate.
 """
 
 from __future__ import annotations

@@ -18,6 +18,7 @@ from ponos_coach.activities.domain import FailureReason
 from ponos_coach.activities.sync import StopReason, SyncPhase, SyncProgress
 from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.sync_model import (
+    AccountStatus,
     DisabledReason,
     LoginFailure,
     RemainingUnit,
@@ -363,3 +364,21 @@ _DISABLED_REASONS: dict[DisabledReason, Callable[[], str]] = {
     DisabledReason.BUSY: _busy,
     DisabledReason.NOT_SYNCING: _not_syncing,
 }
+
+
+def account_status_text(status: AccountStatus) -> str:
+    """What is known about the profile's Garmin account, for the Settings > Profile page."""
+    translate = QCoreApplication.translate
+    if status is AccountStatus.LINKED:
+        return translate("Sync", "A Garmin account is connected to this profile.")
+    if status is AccountStatus.NOT_LINKED:
+        return translate("Sync", "No Garmin account is connected to this profile.")
+    if status is AccountStatus.NEEDS_RECONNECT:
+        return translate(
+            "Sync", "The Garmin sign-in is no longer valid. Connect the account again."
+        )
+    if status is AccountStatus.KEYCHAIN_UNAVAILABLE:
+        return translate(
+            "Sync", "The system keychain cannot be used, so a Garmin account cannot be connected."
+        )
+    return translate("Sync", "Open a profile to see its Garmin account.")

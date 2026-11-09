@@ -96,7 +96,7 @@ folder, height, weight, date of birth, resting, maximum and threshold HR
 Height, weight and date of birth are mandatory and are health data: they stay
 in the profile database (section 5). The next steps arrive with their phases.
 In phase 2 the Garmin login is not a step of the dialog: it is done from
-Garmin, Connect Garmin account... (section 3).
+File, Settings..., Profile page, Garmin account (section 3).
 
 ## 3. Synchronisation with Garmin
 
@@ -104,12 +104,17 @@ Technical rules: [data and synchronisation](../.claude/skills/ponos-allenamento/
 Decisions: [ADR 006](adr/006-token-e-sincronizzazione.md). The login is not
 official (ADR 002): it can stop working, and file import is always available.
 
-### Garmin menu
+### Garmin menu and Garmin account settings
+
+The account is a setting of the profile: it is connected, disconnected and
+configured in File, Settings..., Profile page, "Garmin account" section (see
+"Settings window"). The Garmin menu keeps the commands that act and has
+"Garmin account settings..." ("Impostazioni dell'account Garmin..."), which
+opens that page.
 
 | Entry | Shortcut | When it is available |
 |---|---|---|
-| Connect Garmin account... | Ctrl+G | profile open, no account connected or login to redo |
-| Disconnect Garmin account | Ctrl+Shift+G | account connected or to reconnect |
+| Garmin account settings... | none | always |
 | Synchronise | F5 | account connected, no other operation |
 | Full check | Ctrl+F5 | as Synchronise |
 | Stop synchronisation | Shift+F5 | only during a synchronisation |
@@ -117,8 +122,15 @@ official (ADR 002): it can stop working, and file import is always available.
 A greyed-out entry gives the reason in the tooltip (no profile, account not
 connected, login to redo, operation in progress, keychain not available).
 
-The Italian labels are: Collega account Garmin..., Scollega account Garmin,
-Sincronizza, Verifica completa, Interrompi sincronizzazione.
+The Italian labels are: Impostazioni dell'account Garmin..., Sincronizza,
+Verifica completa, Interrompi sincronizzazione.
+
+The "Garmin account" section of the Profile page shows what is known about the
+account (one sentence: connected, not connected, sign-in to redo, keychain not
+available, no profile), the buttons "Connect Garmin account..." and
+"Disconnect Garmin account" ("Collega account Garmin...", "Scollega account
+Garmin"), with the same availability and tooltips as the commands they trigger,
+and the check box "Synchronise when a profile opens".
 
 ### Connecting and disconnecting the account
 
@@ -147,7 +159,7 @@ Sincronizza, Verifica completa, Interrompi sincronizzazione.
 
 - With a connected account it starts when the profile opens, if the toggle
   "Synchronise when a profile opens" ("Sincronizza all'apertura del profilo",
-  Garmin menu, Ctrl+Shift+A) is on: it is on by default and the choice is
+  Settings, Profile page, Garmin account) is on: it is on by default and the choice is
   remembered per profile. By hand you can always synchronise with Synchronise
   (F5).
 - The first synchronisation lists and downloads the whole history. It can
@@ -303,7 +315,8 @@ profile that is migrated the same way when opened.
   in force that day. The date cannot be in the future or before 1900-01-01.
   The constraint minimum HR < threshold <= maximum HR is checked on the
   result. Decision: [ADR 007](adr/007-dati-del-profilo-e-zone.md).
-- **Edit profile** (Profile menu, Ctrl+E; in Italian "Modifica profilo"):
+- **Edit profile** (Settings, Profile page; Profile menu, Ctrl+E, opens it; in
+  Italian "Modifica profilo"):
   - at the top the name, editable (1 to 60 characters; an invalid name is
     reported on the field), and the fixed data, read only (height, date of
     birth, sex); the new name is written first to the profile database (source
@@ -335,7 +348,8 @@ profile that is migrated the same way when opened.
 
 ### Sport weights
 
-- Profile menu, "Sport weights..." ("Pesi degli sport...", Ctrl+Shift+W): a
+- Settings, Sport weights page (Profile menu, "Sport weights..." ("Pesi degli
+  sport...", Ctrl+Shift+W), opens it): a
   weight from 0 to 5 for each sport, with two decimals. The weight multiplies
   the load of every activity of that sport: 1.00 leaves the load as
   calculated, 0 removes the sport from the load.
@@ -568,10 +582,12 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
 
 ## 9. Adaptive plan
 
-- "Training settings..." holds the time available on each weekday, the day of
-  the long session, the most training in a week and the session types the plan
-  may use. The dialog opens with suggestions, nothing is saved until "Save
-  settings". The plan never exceeds the availability and schedules only those
+- Settings, Training plan page (Plan menu, "Training settings...", opens it)
+  holds the time available on each weekday, the day of the long session, the
+  most training in a week and the session types the plan may use. The page
+  starts with suggestions, nothing is saved until "Save settings". Below, the
+  "Threshold test" section chooses the protocol that the test dialog starts with
+  (30 or 20 minutes), remembered between sessions and applied at once. The plan never exceeds the availability and schedules only those
   types.
 - The plan starts tomorrow and reaches the last goal, at most 52 weeks ahead; a
   goal further away stays in the list with a warning. It has one session a day
@@ -708,11 +724,28 @@ Rules: [injuries](../.claude/skills/ponos-allenamento/references/infortuni.md).
 ## 13. General behaviour
 
 - Interface in Italian and English. The default language is English, not that
-  of the system. The Language menu has "English" and "Italiano" (the names are
-  not translated) and the choice is remembered: it applies at the next start.
+  of the system. Settings, Language page has "English" and "Italiano" (the names
+  are not translated) and the choice is remembered at once: it applies at the
+  next start, and the page says so.
   `ponos-coach --lang en` or `--lang it` takes precedence. If the Italian
   catalogue is missing, the app starts in English and writes it in the log.
 - Complete menus with shortcuts; everything usable from the keyboard.
+- **Settings window** (File menu, "Settings..." ("Impostazioni..."), Ctrl+, or the
+  standard Preferences key of the system). One window, not modal, one instance
+  (opening it again brings it forward on the page it showed). On the left the
+  categories, on the right the page: Profile (name, measurements and history,
+  and the "Garmin account" section), Sport weights, Training plan (and the
+  threshold test protocol), Nutrition, Map, Language. Each page keeps the way
+  of saving that its content always had (Save button on the page, or changes
+  that apply at once, with their own undo). The pages that read the profile read
+  it when they open; without a profile open they say "Create or open a profile
+  first." instead of showing fields. A category with unsaved edits has an
+  asterisk and a tooltip; closing the window (or quitting) with unsaved edits
+  asks "Some settings have changes that are not saved." with the buttons Save,
+  Discard and Keep editing (default). The commands that open a page from where
+  the user looks for them (Profile menu, Plan menu, Map menu, the map notice and
+  the day page) open the same window on that page; there is no other dialog for
+  the same setting.
 - Undo and redo for goals and calendar.
 - The app remembers window, panels, last profile and last folders. In phase 1:
   size and position of the window, the open section (saved as soon as it
@@ -774,7 +807,8 @@ no diet or allergy restriction for now.
 
 ### Nutrition settings
 
-- Profile menu, "Nutrition settings..." (Ctrl+Shift+N). Three parts:
+- Settings, Nutrition page (Profile menu, "Nutrition settings...", Ctrl+Shift+N,
+  opens it). Three parts:
   - **Daily activity outside sport**: sedentary, light, active or very
     active, from a chosen day until the next one is set. Without a level the
     day is sedentary and a warning says so.
@@ -866,7 +900,7 @@ Decision: [ADR 010](adr/010-mappa.md).
   track in both directions, and the track can be coloured by heart-rate zone
   with the legend of the zones of that day. Without elevation the profile says
   why it is missing.
-- Settings: the Tracestrack key (hidden while typed, checked when saved,
+- Settings, Map page ("Map settings..." opens it): the Tracestrack key (hidden while typed, checked when saved,
   cleared from the field after saving and never shown again) and the size of the
   tile cache (4 GB by default); "Clear map cache" empties it.
 - The page has no network: the tiles come through the app. The map's last view

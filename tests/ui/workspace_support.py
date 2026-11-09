@@ -13,7 +13,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QMessageBox, QWidget
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.__main__ import compose_main_window, parse_command_line
@@ -28,9 +28,11 @@ from ponos_coach.activities.ports import (
     ImportSource,
 )
 from ponos_coach.storage.import_scan import FilesImportSource, FolderImportSource
+from ponos_coach.ui.language_form import LanguageForm
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
 from ponos_coach.ui.overview_state import Ready
+from ponos_coach.ui.settings_page import SettingsCategory
 from ponos_coach.ui.sync_worker import MFA_WAIT_S
 from ponos_coach.ui.translations import Language
 from ponos_coach.ui.workspace import ImportSources
@@ -193,6 +195,53 @@ def close_window(qtbot: QtBot, window: MainWindow) -> None:
     """Close the window and wait for the end of the two-phase closing (profile closed)."""
     window.close()
     qtbot.waitUntil(lambda: window.is_closed, timeout=WAIT_MS)
+
+
+def language_form(window: MainWindow) -> LanguageForm:
+    """The content of the Settings > Language page."""
+    form = window.settings_window.page(SettingsCategory.LANGUAGE).form
+    assert isinstance(form, LanguageForm)
+    return form
+
+
+def wait_profile_saved(qtbot: QtBot, window: MainWindow) -> None:
+    """The Profile page shows a form again, built from what was saved (nothing left to save)."""
+
+    def saved() -> bool:
+        dialog = window.profile_dialogs.edit_dialog
+        return dialog is not None and not dialog.has_unsaved_changes()
+
+    qtbot.waitUntil(saved, timeout=WAIT_MS)
+
+
+def wait_weights_saved(qtbot: QtBot, window: MainWindow) -> None:
+    """The Sport weights page shows a form again, built from what was saved."""
+
+    def saved() -> bool:
+        dialog = window.profile_dialogs.weights_dialog
+        return dialog is not None and not dialog.has_unsaved_changes()
+
+    qtbot.waitUntil(saved, timeout=WAIT_MS)
+
+
+def answer_unsaved(qtbot: QtBot, window: MainWindow, verb: str) -> None:
+    """Click `verb` ("Save", "Discard" or "Keep editing") in the box that asks what to do with the
+    settings edits that are not saved."""
+
+    def find() -> QMessageBox | None:
+        return next(
+            (
+                box
+                for box in window.open_boxes
+                if isinstance(box, QMessageBox) and box.objectName() == "settingsUnsaved"
+            ),
+            None,
+        )
+
+    qtbot.waitUntil(lambda: find() is not None, timeout=WAIT_MS)
+    box = find()
+    assert box is not None
+    next(button for button in box.buttons() if button.text() == verb).click()
 
 
 def make_import_folder(tmp_path: Path) -> Path:

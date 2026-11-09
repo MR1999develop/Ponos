@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dialog Settings > Map: the Tracestrack key, the size of the tile cache, "Clear map cache".
+"""Content of the Settings > Map page: the Tracestrack key, the size of the tile cache, "Clear map
+cache".
 
-A humble view of `MapSettingsModel`. The key field hides what is typed and the dialog never shows
+A humble view of `MapSettingsModel`. The key field hides what is typed and the page never shows
 a saved key, only whether there is one. The cache size applies when the field is left (no Apply
 button); clearing the cache asks first, says how much it frees and names the action on its button.
 """
@@ -11,8 +12,6 @@ from __future__ import annotations
 
 from PySide6.QtCore import QLocale, Qt, Signal
 from PySide6.QtWidgets import (
-    QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -26,10 +25,11 @@ from PySide6.QtWidgets import (
 
 from ponos_coach.maps.domain import GIB, MAX_CACHE_BYTES, MIN_CACHE_BYTES
 from ponos_coach.ui.map_settings import KeyOutcome, MapSettingsModel, outcome_text
-from ponos_coach.ui.tokens import DIALOG_MIN_WIDTH, SPACE_2, SPACE_4
+from ponos_coach.ui.settings_form import SettingsForm
+from ponos_coach.ui.tokens import SPACE_2, SPACE_4
 
 
-class MapSettingsDialog(QDialog):
+class MapSettingsDialog(SettingsForm):
     """Settings of the map. `key_changed` tells the window that the key was saved or removed."""
 
     key_changed = Signal()
@@ -38,17 +38,13 @@ class MapSettingsDialog(QDialog):
     def __init__(self, model: MapSettingsModel, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("mapSettingsDialog")
-        self.setWindowTitle(self.tr("Map settings"))
-        self.setMinimumWidth(DIALOG_MIN_WIDTH)
         self._model = model
         self._boxes: list[QMessageBox] = []
         layout = QVBoxLayout(self)
         layout.setSpacing(SPACE_4)
         layout.addWidget(self._build_key_group())
         layout.addWidget(self._build_cache_group())
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        layout.addStretch(1)
         model.key_finished.connect(self._on_key_finished)
         self.refresh()
 
@@ -79,6 +75,7 @@ class MapSettingsDialog(QDialog):
         self._key_field.setAccessibleName(self.tr("Tracestrack key"))
         self._key_field.setPlaceholderText(self.tr("Paste your key here"))
         self._key_field.returnPressed.connect(self.save_key)
+        self._key_field.textChanged.connect(self.edited)
         column.addWidget(self._key_field)
         row = QHBoxLayout()
         self._save_button = QPushButton(self.tr("Save key"), group)
@@ -166,6 +163,15 @@ class MapSettingsDialog(QDialog):
         """The confirmation boxes still open."""
         return [box for box in self._boxes if box.isVisible()]
 
+    def has_unsaved_changes(self) -> bool:
+        """True while a key is typed and not saved (the cache size applies when the field is
+        left)."""
+        return bool(self._key_field.text())
+
+    def request_save(self) -> None:
+        """Check and save the typed key (the "Save key" button)."""
+        self.save_key()
+
     # --- Showing -----------------------------------------------------------------------------
 
     def refresh(self) -> None:
@@ -195,6 +201,7 @@ class MapSettingsDialog(QDialog):
     def save_key(self) -> None:
         """Check the key typed with Tracestrack and save it unless it is refused."""
         if not self._model.save_key(self._key_field.text()):
+            self.save_failed.emit()
             return
         self._save_button.setEnabled(False)
         self._remove_button.setEnabled(False)
@@ -214,6 +221,8 @@ class MapSettingsDialog(QDialog):
         if outcome in {KeyOutcome.ACCEPTED, KeyOutcome.SAVED_UNVERIFIED, KeyOutcome.REMOVED}:
             self._key_field.clear()  # the typed key does not stay on screen
             self.key_changed.emit()
+        else:
+            self.save_failed.emit()
         self.refresh()
 
     # --- Cache -------------------------------------------------------------------------------
@@ -265,9 +274,3 @@ class MapSettingsDialog(QDialog):
             return
         self.cache_cleared.emit()
         self.refresh()
-
-    def done(self, result: int) -> None:
-        """Closing the dialog drops the open confirmations."""
-        for box in self._boxes:
-            box.close()
-        super().done(result)

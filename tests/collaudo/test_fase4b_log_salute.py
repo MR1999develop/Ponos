@@ -30,6 +30,7 @@ from ponos_coach.ui.day_page import DayState
 from ponos_coach.ui.diagnostics import LOG_FILE_NAME, LOGGER_NAME, SafeFormatter, configure_logging
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.nutrition_settings_model import MealField
+from ponos_coach.ui.settings_page import SettingsCategory
 from tests.collaudo.support import format_logs
 from tests.collaudo.test_fase3_log_salute import box_texts, strip_timestamps, visible_boxes
 from tests.ui.nutrition_support import fit_at, last_day_page, open_settings
@@ -140,8 +141,7 @@ def drive_the_failures(
     qtbot.waitUntil(lambda: dialog.failure_text != "", timeout=WAIT_MS)
     shown += [dialog.failure_text, box_texts()]
     monkeypatch.undo()
-    dialog.close()
-    qtbot.waitUntil(lambda: window.nutrition.settings_dialog is None, timeout=WAIT_MS)
+    window.settings_window.page(SettingsCategory.NUTRITION).discard()  # the failed times go away
 
     # 3. the calculation of a day raises an exception with the values in its text
     def leaky_day(*_args: object) -> None:

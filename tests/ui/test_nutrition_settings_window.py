@@ -24,6 +24,7 @@ from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.nutrition_settings_dialog import NutritionSettingsDialog
 from ponos_coach.ui.nutrition_settings_model import MealField
 from ponos_coach.ui.nutrition_texts import advisory_text
+from ponos_coach.ui.settings_page import SettingsCategory
 from tests.ui.nutrition_support import (
     DAWN_AND_LUNCH_DAY,
     EMPTY_DAY,
@@ -84,7 +85,7 @@ def test_the_settings_open_from_the_profile_menu_with_the_defaults_and_nothing_t
     dialog = open_settings(qtbot, window)
 
     assert window.nutrition_action.shortcut().toString() == "Ctrl+Shift+N"
-    assert dialog.windowTitle() == "Nutrition settings"
+    assert window.settings_window.page(SettingsCategory.NUTRITION).form is dialog
     assert dialog.levels_model.rowCount() == 0
     assert dialog.periods_model.rowCount() == 0
     assert [e.time() for e in dialog.time_edits.values()] == [
@@ -312,19 +313,17 @@ def test_removing_a_period_is_undoable_and_the_weight_loss_pace_stays_in_the_dom
     assert dialog.undo_button.isEnabled()
 
 
-def test_the_periods_survive_closing_and_reopening_the_dialog(
+def test_the_periods_survive_closing_and_reopening_the_settings(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with_days(qtbot, tmp_path, settings)
     dialog = open_settings(qtbot, window)
     add_period(qtbot, window, dialog)
-    dialog.close()
-    qtbot.waitUntil(lambda: window.nutrition.settings_dialog is None, timeout=WAIT_MS)
+    window.settings_window.close()
 
     reopened = open_settings(qtbot, window)
 
     assert reopened.periods_model.rowCount() == 1
-    assert reopened.undo_stack.count() == 0  # a new dialog starts with a new history
 
 
 def test_a_change_the_store_refuses_is_reported_in_the_dialog_and_the_history_is_cleared(

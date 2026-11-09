@@ -33,6 +33,7 @@ from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.measurements_form import EditField
 from ponos_coach.ui.overview_state import Ready
 from ponos_coach.ui.profile_edit_dialog import ProfileEditDialog
+from ponos_coach.ui.settings_page import SettingsCategory
 from tests.collaudo.support import format_logs
 from tests.ui.test_profile_data_window import (
     PROFILE,
@@ -47,6 +48,8 @@ from tests.ui.workspace_support import (
     fill_body_data,
     make_settings,
     pick_profile_folder,
+    wait_profile_saved,
+    wait_weights_saved,
 )
 
 HEIGHT = "187"
@@ -136,7 +139,7 @@ def drive_the_interface(
     edit.weight_edit.clear()
     QTest.keyClicks(edit.weight_edit, FIRST_WEIGHT_UPDATE)
     click(edit.save_button)
-    qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
+    wait_profile_saved(qtbot, window)
 
     # 2. inputs refused on the spot: non-numeric text, weight out of range, inconsistent HR
     edit = open_edit_dialog(qtbot, window)
@@ -158,7 +161,7 @@ def drive_the_interface(
     def leaky_failure(*_args: object) -> None:
         raise RuntimeError(LEAKY)
 
-    edit.reject()
+    window.settings_window.page(SettingsCategory.PROFILE).discard()
     for failure in (known_failure, leaky_failure):
         monkeypatch.setattr(sqlite_profile_data.SqliteWeightStore, "put", failure)
         again = open_edit_dialog(qtbot, window)
@@ -171,13 +174,13 @@ def drive_the_interface(
         for box in visible_boxes():
             box.close()
         monkeypatch.undo()
-        again.reject()
+        window.settings_window.page(SettingsCategory.PROFILE).discard()
 
     # 4. sport weights
     weights = open_weights_dialog(qtbot, window)
     weights.box(Sport.CYCLING).setValue(1.25)
     click(weights.save_button)
-    qtbot.waitUntil(lambda: window.profile_dialogs.weights_dialog is None, timeout=WAIT_MS)
+    wait_weights_saved(qtbot, window)
     return shown
 
 
@@ -249,7 +252,7 @@ def test_t_sec_08_the_last_resort_handler_shows_a_generic_message_and_logs_only_
     assert texts.strip()  # but a message is there
     for box in visible_boxes():
         box.close()
-    edit.reject()
+    window.settings_window.page(SettingsCategory.PROFILE).discard()
     close_window(qtbot, window)
     log = (tmp_path / "logs" / LOG_FILE_NAME).read_text(encoding="utf-8")
     assert "RuntimeError" in log  # the detail for whoever investigates: the type

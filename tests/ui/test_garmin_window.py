@@ -137,17 +137,14 @@ def test_the_garmin_menu_sits_after_the_plan_menu_with_every_command(
         "Plan",
         "Injuries",
         "Garmin",
-        "Language",
         "Help",
     ]
     assert isinstance(garmin_menu, QMenu)
     assert [a.text() for a in garmin_menu.actions() if not a.isSeparator()] == [
-        "Connect Garmin account...",
-        "Disconnect Garmin account",
+        "Garmin account settings...",
         "Synchronise",
         "Full check",
         "Stop synchronisation",
-        "Synchronise when a profile opens",
         "Send plan to Garmin...",
         "Send this session to Garmin",
         "Garmin calendar...",

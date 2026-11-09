@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
 """The map and the filters in the window: owns the shared filter, the controller, the page, the
-settings dialog and the commands of the Map menu.
+Settings > Map page and the commands of the Map menu.
 
 The window only gives it callbacks and places its widgets (the filter bar above the pages, the map
 page in the stack). The table of the activities and the map list the same activities: both follow
@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
-from PySide6.QtCore import QObject, QSettings, Qt
+from PySide6.QtCore import QObject, QSettings
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QMenuBar, QWidget
 
@@ -32,6 +32,7 @@ from ponos_coach.ui.map_page import MapPage
 from ponos_coach.ui.map_query_host import MapQueryHost
 from ponos_coach.ui.map_settings import MapSettingsModel
 from ponos_coach.ui.map_settings_dialog import MapSettingsDialog
+from ponos_coach.ui.settings_page import SettingsPage
 from ponos_coach.ui.tile_service import TileService
 from ponos_coach.ui.tokens import Theme
 from ponos_coach.ui.workspace import WorkspaceController
@@ -64,6 +65,8 @@ class MapUi(QObject):
         zone: Callable[[], ZoneInfo],
         show_error: Callable[[ErrorMessage], None],
         show_map: Callable[[], None],
+        settings_page: SettingsPage,
+        show_settings: Callable[[], None],
     ) -> None:
         super().__init__(window)
         self._window = window
@@ -71,7 +74,8 @@ class MapUi(QObject):
         self._activities = activities
         self._show_error = show_error
         self._show_map = show_map
-        self._dialog: MapSettingsDialog | None = None
+        self._settings_page = settings_page
+        self._show_settings = show_settings
         self._notice_checked = False
         self._on_map = False
         self._filters = SharedFilterState(settings, self)
@@ -88,6 +92,7 @@ class MapUi(QObject):
         )
         self._build_actions()
         self._connect()
+        self._fill_settings_page()
         self.update_actions(on_map=False)
 
     # --- Parts ----------------------------------------------------------------------------
@@ -114,8 +119,9 @@ class MapUi(QObject):
 
     @property
     def settings_dialog(self) -> MapSettingsDialog | None:
-        """The open Map settings, if any."""
-        return self._dialog
+        """The content of the Map settings page."""
+        form = self._settings_page.form
+        return form if isinstance(form, MapSettingsDialog) else None
 
     @property
     def actions(self) -> dict[str, QAction]:
@@ -188,6 +194,7 @@ class MapUi(QObject):
         self._controller.failed.connect(self._show_error)
         self._activities.selection_changed.connect(self._on_table_selection)
         self._page.settings_requested.connect(self.show_settings)
+        self._settings_page.shown.connect(self._fill_settings_page)
         self._filters.changed.connect(lambda *_: self.update_actions(on_map=self._on_map))
 
     def _on_search(self, result: object) -> None:
@@ -241,23 +248,26 @@ class MapUi(QObject):
     # --- Settings ----------------------------------------------------------------------------
 
     def show_settings(self) -> None:
-        """Open Settings > Map."""
-        if self._dialog is not None:
-            self._dialog.raise_()
-            self._dialog.activateWindow()
-            return
-        dialog = MapSettingsDialog(self._services.settings, self._window)
-        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        dialog.key_changed.connect(self._after_key_change)
-        dialog.finished.connect(self._on_dialog_closed)
-        self._dialog = dialog
-        dialog.open()
+        """Open Settings on the Map page."""
+        self._show_settings()
+
+    def _fill_settings_page(self) -> None:
+        """Show the page's content: built the first time (and after the edits were discarded),
+        brought up to date every time the page comes into view."""
+        form = self.settings_dialog
+        if form is None:
+            form = MapSettingsDialog(self._services.settings)
+            form.key_changed.connect(self._after_key_change)
+            self._settings_page.show_form(form)
+        else:
+            form.refresh()
 
     def ask_clear_cache(self) -> None:
-        """The "Clear map cache..." command: the settings dialog asks, with the size it frees."""
+        """The "Clear map cache..." command: the settings page asks, with the size it frees."""
         self.show_settings()
-        if self._dialog is not None:
-            self._dialog.ask_clear_cache()
+        form = self.settings_dialog
+        if form is not None:
+            form.ask_clear_cache()
 
     def _after_key_change(self) -> None:
         self._notice_checked = True
@@ -265,14 +275,8 @@ class MapUi(QObject):
         self._page.show_tile_problem(None if has_key else TileProblem.NO_KEY)
         self._page.refresh_tiles()
 
-    def _on_dialog_closed(self) -> None:
-        self._dialog = None
-
     def close_dialogs(self) -> None:
-        """Close the dialog and stop what runs behind it (the window is closing)."""
-        if self._dialog is not None:
-            self._dialog.close()
-            self._dialog = None
+        """Stop what runs behind the settings page (the window is closing)."""
         self._services.settings.close()
         self._services.tiles.shutdown()
 

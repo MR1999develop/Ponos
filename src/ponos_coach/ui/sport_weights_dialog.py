@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dialog "Sport weights": one value per sport, humble view on `SportWeightsForm`.
+"""Content of the Settings > Sport weights page: one value per sport, humble view on
+`SportWeightsForm`.
 
-The dialog edits a copy: "Cancel" changes nothing. Saving starts with
-`save_requested`; it closes the window when the use case has finished.
+The page edits a copy: nothing changes until "Save weights". Saving starts with `save_requested`;
+the coordinator builds the page again when the use case has finished.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -23,11 +23,12 @@ from PySide6.QtWidgets import (
 from ponos_coach.activities.domain import Sport
 from ponos_coach.load.domain import SportWeight
 from ponos_coach.ui.activity_text import sport_text
+from ponos_coach.ui.settings_form import SettingsForm
 from ponos_coach.ui.sport_weights_form import WEIGHT_DECIMALS, WEIGHT_STEP, SportWeightsForm
-from ponos_coach.ui.tokens import DIALOG_MIN_WIDTH, SPACE_2, SPACE_4
+from ponos_coach.ui.tokens import SPACE_2, SPACE_4
 
 
-class SportWeightsDialog(QDialog):
+class SportWeightsDialog(SettingsForm):
     """A weight from 0 to 5 for each sport, with "Restore defaults"."""
 
     save_requested = Signal(object)  # dict[Sport, SportWeight]
@@ -36,9 +37,6 @@ class SportWeightsDialog(QDialog):
         super().__init__(parent)
         self._form = form
         self._boxes: dict[Sport, QDoubleSpinBox] = {}
-        self.setWindowTitle(self.tr("Sport weights"))
-        self.setMinimumWidth(DIALOG_MIN_WIDTH)
-        self.setWindowModality(Qt.WindowModality.WindowModal)
         self._build()
         self._show_values()
         self._update_buttons()
@@ -72,10 +70,8 @@ class SportWeightsDialog(QDialog):
             self.tr("Save weights"), QDialogButtonBox.ButtonRole.AcceptRole
         )
         self._save.setDefault(True)
-        self._buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         self._restore.clicked.connect(self._on_restore)
         self._buttons.accepted.connect(self._on_save)
-        self._buttons.rejected.connect(self.reject)
         outer = QVBoxLayout(self)
         outer.setSpacing(SPACE_4)
         outer.addWidget(explanation)
@@ -122,6 +118,15 @@ class SportWeightsDialog(QDialog):
         self._restore.setToolTip(
             self.tr("All weights already have their default value.") if is_default else ""
         )
+        self.edited.emit()
+
+    def has_unsaved_changes(self) -> bool:
+        """True while a weight differs from the saved one."""
+        return self._form.has_changes
+
+    def request_save(self) -> None:
+        """Save the weights (the "Save weights" button)."""
+        self._on_save()
 
     def _on_value_changed(self, sport: Sport, value: float) -> None:
         self._form.set_value(sport, value)
@@ -137,8 +142,10 @@ class SportWeightsDialog(QDialog):
         self.save_requested.emit(self._form.build())
 
     def set_busy(self, busy: bool) -> None:
-        """While saving is in progress the dialog accepts no other edits."""
+        """While saving is in progress the page accepts no other edits."""
         self._save.setEnabled(not busy and self._form.has_changes)
         self._restore.setEnabled(not busy and not self._form.is_default)
         for box in self._boxes.values():
             box.setEnabled(not busy)
+        if not busy:
+            self.save_failed.emit()

@@ -1,21 +1,20 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dialog "Training settings": the time available each day, the long day, the most time a week and
-the session types the plan may use for each sport.
+"""Content of the Settings > Training plan page: the time available each day, the long day, the
+most time a week and the session types the plan may use for each sport.
 
-The dialog edits a copy: "Cancel" changes nothing. What the plan cannot do with the settings (no
-time at all, a long session on a day without time) is written under the fields as soon as it
-appears; it does not stop saving, because the plan says the same in its own notices. A profile that
-saved nothing yet starts from suggested values, and the dialog says so.
+The page edits a copy: nothing changes until "Save settings". What the plan cannot do with the
+settings (no time at all, a long session on a day without time) is written under the fields as
+soon as it appears; it does not stop saving, because the plan says the same in its own notices. A
+profile that saved nothing yet starts from suggested values, and the page says so.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import QCoreApplication, Qt
+from PySide6.QtCore import QCoreApplication, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -34,7 +33,8 @@ from ponos_coach.goals.domain.availability import MAX_DAY_MINUTES, WEEKDAYS
 from ponos_coach.ui.activity_text import sport_text
 from ponos_coach.ui.form_rows import add_field_row
 from ponos_coach.ui.plan_texts import session_type_text, weekday_name
-from ponos_coach.ui.tokens import DIALOG_MIN_WIDTH, SPACE_2, SPACE_4
+from ponos_coach.ui.settings_form import SettingsForm
+from ponos_coach.ui.tokens import SPACE_2, SPACE_4
 from ponos_coach.ui.training_draft import (
     DAY_MINUTES_STEP,
     MAX_WEEK_HOURS,
@@ -64,8 +64,10 @@ def hint_text(hint: TrainingHint) -> str:
     )
 
 
-class TrainingSettingsDialog(QDialog):
+class TrainingSettingsDialog(SettingsForm):
     """Weekly availability and session types of the open profile."""
+
+    save_requested = Signal()  # the coordinator reads `draft()` and saves it
 
     def __init__(
         self,
@@ -79,9 +81,6 @@ class TrainingSettingsDialog(QDialog):
         self._draft = draft
         self._suggested = suggested
         self._loading = True
-        self.setWindowTitle(self.tr("Training settings"))
-        self.setMinimumWidth(DIALOG_MIN_WIDTH)
-        self.setWindowModality(Qt.WindowModality.WindowModal)
         self._build()
         self._show_draft(draft)
         self._loading = False
@@ -109,9 +108,7 @@ class TrainingSettingsDialog(QDialog):
         )
         self._save.setObjectName("trainingSave")
         self._save.setDefault(True)
-        self._buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
-        self._buttons.accepted.connect(self.accept)
-        self._buttons.rejected.connect(self.reject)
+        self._buttons.accepted.connect(self.request_save)
         layout = QVBoxLayout(self)
         layout.setSpacing(SPACE_4)
         layout.addWidget(self._note)
@@ -241,6 +238,28 @@ class TrainingSettingsDialog(QDialog):
         changed = self._draft != self._initial
         self._save.setEnabled(changed or self._suggested)
         self._save.setToolTip("" if changed or self._suggested else self.tr("Nothing has changed."))
+        self.edited.emit()
+
+    def has_unsaved_changes(self) -> bool:
+        """True while a field differs from what was saved."""
+        return self._draft != self._initial
+
+    def request_save(self) -> None:
+        """Ask the coordinator to save the fields (the "Save settings" button)."""
+        if self._save.isEnabled():
+            self.save_requested.emit()
+
+    def show_saved(self, draft: TrainingDraft, *, suggested: bool) -> None:
+        """What is saved now: the fields show it and nothing is left to save (also used when the
+        saved settings changed elsewhere, for example by an undo)."""
+        self._loading = True
+        self._initial = draft
+        self._draft = draft
+        self._suggested = suggested
+        self._note.setVisible(suggested)
+        self._show_draft(draft)
+        self._loading = False
+        self._update()
 
     # --- State for the tests -----------------------------------------------------------------
 

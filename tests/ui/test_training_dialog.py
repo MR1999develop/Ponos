@@ -131,12 +131,29 @@ def test_every_type_box_has_a_name_with_its_sport_and_its_type(qtbot: QtBot) -> 
     assert len(set(names.values())) == len(names) == 5 * 8
 
 
-def test_cancel_changes_nothing(qtbot: QtBot) -> None:
+def test_nothing_is_saved_until_save_is_clicked_and_the_form_knows_what_is_unsaved(
+    qtbot: QtBot,
+) -> None:
     dialog = saved_dialog(qtbot)
-    accepted: list[bool] = []
-    dialog.accepted.connect(lambda: accepted.append(True))
+    requested: list[bool] = []
+    dialog.save_requested.connect(lambda: requested.append(True))
+    assert not dialog.has_unsaved_changes()
 
     dialog.day_spins[0].setValue(10)
-    dialog.reject()
 
-    assert accepted == []
+    assert dialog.has_unsaved_changes()
+    assert requested == []
+    dialog.save_button.click()
+    assert requested == [True]
+
+
+def test_showing_what_is_saved_leaves_nothing_to_save(qtbot: QtBot) -> None:
+    dialog = saved_dialog(qtbot)
+    dialog.day_spins[0].setValue(10)
+    edited = dialog.draft()
+
+    dialog.show_saved(edited, suggested=False)
+
+    assert not dialog.has_unsaved_changes()
+    assert dialog.draft() == edited
+    assert not dialog.save_button.isEnabled()

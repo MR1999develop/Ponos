@@ -185,8 +185,7 @@ def test_the_dialog_opens_with_the_measurements_the_profile_already_holds(
     window = window_with_days(qtbot, tmp_path, settings)
     first = open_settings(qtbot, window)
     set_lean_mass(qtbot, window, first, "50.5")
-    first.close()
-    qtbot.waitUntil(lambda: window.nutrition.settings_dialog is None, timeout=WAIT_MS)
+    window.settings_window.close()
 
     reopened = open_settings(qtbot, window)
 
@@ -205,8 +204,7 @@ def test_the_day_page_says_whether_the_lean_mass_is_estimated_or_measured(
 
     dialog = open_settings(qtbot, window)
     set_lean_mass(qtbot, window, dialog, "50.5")
-    dialog.close()
-    qtbot.waitUntil(lambda: window.nutrition.settings_dialog is None, timeout=WAIT_MS)
+    window.settings_window.close()
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
 
     qtbot.waitUntil(

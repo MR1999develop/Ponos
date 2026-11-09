@@ -41,6 +41,7 @@ from ponos_coach.load.use_cases import (
 from ponos_coach.profiles.domain import PROFILE_ARCHIVE_DIR
 from ponos_coach.storage.file_archive import FileArchive
 from ponos_coach.ui.overview_state import Ready
+from ponos_coach.ui.settings_page import SettingsCategory
 from tests.collaudo.fase3_support import profile_with_mixed
 from tests.fakes.garmin import FakeActivitySource
 from tests.ui.garmin_support import (
@@ -57,7 +58,13 @@ from tests.ui.test_profile_data_window import (
     open_weights_dialog,
     window_with_activities,
 )
-from tests.ui.workspace_support import GarminFakes, close_window, make_fakes, make_settings
+from tests.ui.workspace_support import (
+    GarminFakes,
+    close_window,
+    make_fakes,
+    make_settings,
+    wait_weights_saved,
+)
 
 WAIT_MS = 60_000
 D_ERRORS = ("errorMessage", "unexpectedError")
@@ -108,7 +115,7 @@ def test_a_file_that_disappears_with_the_detail_open_leaves_every_window_usable_
             1.5
         )  # the fingerprint changes: every load is recalculated
         click(weights.save_button)
-        qtbot.waitUntil(lambda: window.profile_dialogs.weights_dialog is None, timeout=WAIT_MS)
+        wait_weights_saved(qtbot, window)
         qtbot.waitUntil(
             lambda: (
                 isinstance(window.controller.overview_state, Ready)
@@ -266,7 +273,7 @@ def test_changing_the_sport_weights_during_a_synchronisation_gives_the_load_of_t
         weights = open_weights_dialog(qtbot, window)
         weights.box(Sport.RUNNING).setValue(2.0)
         click(weights.save_button)
-        qtbot.waitUntil(lambda: window.profile_dialogs.weights_dialog is None, timeout=WAIT_MS)
+        wait_weights_saved(qtbot, window)
         assert sync_of(window).is_syncing  # the synchronisation was not touched
         with qtbot.waitSignal(sync_of(window).sync_finished, timeout=WAIT_MS):
             gate.set()
@@ -298,7 +305,7 @@ def test_weights_are_not_persisted_by_a_cancelled_dialog_even_during_a_synchroni
     weights = open_weights_dialog(qtbot, window)
     weights.box(Sport.RUNNING).setValue(4.0)
 
-    weights.reject()
+    window.settings_window.page(SettingsCategory.SPORT_WEIGHTS).discard()
     with qtbot.waitSignal(sync_of(window).sync_finished, timeout=WAIT_MS):
         gate.set()
     wait_activities(qtbot, window, 2)

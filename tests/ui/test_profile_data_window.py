@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QDate, QLocale, QSettings, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QLabel, QMenu, QWidget
+from PySide6.QtWidgets import QLabel, QWidget
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.activities.domain import Sport
@@ -40,12 +40,11 @@ from ponos_coach.ui.new_profile_form import Field
 from ponos_coach.ui.overview_state import Loading, Ready
 from ponos_coach.ui.profile_edit_dialog import ProfileEditDialog
 from ponos_coach.ui.sport_weights_dialog import SportWeightsDialog
-from ponos_coach.ui.translations import Language, saved_language
-from tests.ui.test_main_window import open_message_box
 from tests.ui.workspace_support import (
     FILES_IN_FIXTURE_FOLDER,
     TODAY,
     WAIT_MS,
+    answer_unsaved,
     close_window,
     compose,
     create_profile,
@@ -53,7 +52,9 @@ from tests.ui.workspace_support import (
     make_import_folder,
     make_settings,
     pick_profile_folder,
+    wait_profile_saved,
     wait_ready,
+    wait_weights_saved,
 )
 
 PROFILE = "Atleta di prova"
@@ -116,69 +117,6 @@ def chosen_birth(dialog: NewProfileDialog) -> date | None:
 
 def click(button: QWidget) -> None:
     QTest.mouseClick(button, Qt.MouseButton.LeftButton)
-
-
-# --- Language -----------------------------------------------------------------------------------
-
-
-def test_the_language_menu_offers_english_and_italian_with_english_checked_by_default(
-    qtbot: QtBot, tmp_path: Path, settings: QSettings
-) -> None:
-    window = compose(tmp_path, settings)
-    qtbot.addWidget(window)
-
-    titles = [action.text() for action in window.menuBar().actions()]
-    menu = next(a.menu() for a in window.menuBar().actions() if a.text() == "Language")
-    assert isinstance(menu, QMenu)
-
-    assert titles == [
-        "File",
-        "Profile",
-        "Threshold test",
-        "Calendar",
-        "Map",
-        "Plan",
-        "Injuries",
-        "Garmin",
-        "Language",
-        "Help",
-    ]
-    assert [a.text() for a in menu.actions()] == ["English", "Italiano"]
-    actions = window.language_actions
-    assert actions[Language.ENGLISH].isChecked()
-    assert not actions[Language.ITALIAN].isChecked()
-
-
-def test_choosing_italian_is_remembered_and_the_window_says_when_it_applies(
-    qtbot: QtBot, tmp_path: Path, settings: QSettings
-) -> None:
-    window = compose(tmp_path, settings)
-    qtbot.addWidget(window)
-
-    window.language_actions[Language.ITALIAN].trigger()
-
-    box = open_message_box(qtbot, window, "languageChanged")
-    assert box.text() == "The language changes the next time Ponos Coach starts."
-    assert saved_language(settings) is Language.ITALIAN
-    assert window.windowTitle() == "Ponos Coach"  # does not change live
-    box.close()
-
-    chosen = saved_language(settings) or Language.ENGLISH
-    restarted = compose(tmp_path / "second", settings, language=chosen)
-    qtbot.addWidget(restarted)
-    assert restarted.language_actions[Language.ITALIAN].isChecked()
-
-
-def test_choosing_the_active_language_again_shows_no_message(
-    qtbot: QtBot, tmp_path: Path, settings: QSettings
-) -> None:
-    window = compose(tmp_path, settings)
-    qtbot.addWidget(window)
-
-    window.language_actions[Language.ENGLISH].trigger()
-
-    assert not [b for b in window.open_boxes if b.objectName() == "languageChanged"]
-    assert saved_language(settings) is Language.ENGLISH
 
 
 # --- New profile with height, weight and date of birth ---------------------------------
@@ -308,7 +246,7 @@ def test_body_data_never_reach_the_logs(
         edit.weight_edit.clear()
         QTest.keyClicks(edit.weight_edit, "72,4")
         click(edit.save_button)
-        qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
+        wait_profile_saved(qtbot, window)
 
     text = "\n".join(record.getMessage() for record in caplog.records)
     for secret in ("183", "71.3", "71,3", "72,4", "1987", "06-09"):
@@ -334,7 +272,7 @@ def test_a_past_measurement_changes_the_load_and_the_overview_is_recalculated(
     assert dialog.save_button.isEnabled()
     click(dialog.save_button)
 
-    qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
+    wait_profile_saved(qtbot, window)
     qtbot.waitUntil(
         lambda: (
             isinstance(window.controller.overview_state, Ready) and first_load(window) != before
@@ -353,7 +291,7 @@ def test_only_the_changed_fields_are_stored_and_the_history_lists_the_new_row(
     dialog.valid_from_edit.setDate(QDate(2026, 5, 1))
     dialog.threshold_box.setValue(150)
     click(dialog.save_button)
-    qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
+    wait_profile_saved(qtbot, window)
     qtbot.waitUntil(lambda: isinstance(window.controller.overview_state, Ready), timeout=WAIT_MS)
 
     again = open_edit_dialog(qtbot, window)
@@ -380,7 +318,7 @@ def test_a_weight_with_a_past_date_is_added_to_the_history(
     dialog.weight_edit.clear()
     QTest.keyClicks(dialog.weight_edit, "64,0")
     click(dialog.save_button)
-    qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
+    wait_profile_saved(qtbot, window)
 
     again = open_edit_dialog(qtbot, window)
 
@@ -467,7 +405,7 @@ def test_a_profile_created_without_height_and_birth_date_completes_them_once(
     assert first.error_text(EditField.BIRTH_DATE) == "Enter the date of birth."
     first.birth_edit.select(date(1991, 11, 5))
     click(first.save_button)
-    qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
+    wait_profile_saved(qtbot, window)
 
     second = open_edit_dialog(qtbot, window)
 
@@ -539,7 +477,7 @@ def test_saving_a_sport_weight_rescales_the_load_and_restoring_defaults_brings_i
     assert dialog.save_button.isEnabled()
     assert dialog.restore_button.isEnabled()
     click(dialog.save_button)
-    qtbot.waitUntil(lambda: window.profile_dialogs.weights_dialog is None, timeout=WAIT_MS)
+    wait_weights_saved(qtbot, window)
     qtbot.waitUntil(
         lambda: (
             isinstance(window.controller.overview_state, Ready) and first_load(window) != before
@@ -553,7 +491,7 @@ def test_saving_a_sport_weight_rescales_the_load_and_restoring_defaults_brings_i
     click(again.restore_button)
     assert again.box(Sport.RUNNING).value() == default_weight(Sport.RUNNING).value
     click(again.save_button)
-    qtbot.waitUntil(lambda: window.profile_dialogs.weights_dialog is None, timeout=WAIT_MS)
+    wait_weights_saved(qtbot, window)
     qtbot.waitUntil(
         lambda: (
             isinstance(window.controller.overview_state, Ready)
@@ -563,7 +501,7 @@ def test_saving_a_sport_weight_rescales_the_load_and_restoring_defaults_brings_i
     )
 
 
-def test_cancel_leaves_the_weights_unchanged(
+def test_discarding_leaves_the_weights_unchanged(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with_activities(qtbot, tmp_path, settings)
@@ -571,11 +509,13 @@ def test_cancel_leaves_the_weights_unchanged(
     dialog = open_weights_dialog(qtbot, window)
     dialog.box(Sport.RUNNING).setValue(3.0)
 
-    dialog.reject()
+    window.settings_window.close()
+    answer_unsaved(qtbot, window, "Discard")
 
-    assert window.profile_dialogs.weights_dialog is None or not dialog.isVisible()
+    assert not window.settings_window.isVisible()
     assert first_load(window) == before
     reopened = open_weights_dialog(qtbot, window)
+    qtbot.waitUntil(lambda: reopened.box(Sport.RUNNING).value() != 3.0, timeout=WAIT_MS)
     assert reopened.box(Sport.RUNNING).value() == default_weight(Sport.RUNNING).value
 
 
@@ -588,7 +528,6 @@ def test_closing_the_window_with_the_dialogs_open_finishes_the_closing(
     close_window(qtbot, window)
 
     assert window.is_closed
-    assert window.profile_dialogs.weights_dialog is None
 
 
 # --- Validity period (R6) ----------------------------------------------------------------
@@ -619,7 +558,7 @@ def test_a_day_before_a_later_measurement_warns_before_saving_and_the_status_giv
     assert dialog.note_text(EditField.WEIGHT) == "No weight is recorded for this day."
     assert window.profile_dialogs.edit_dialog is dialog  # the warning is not a blocking dialog
     click(dialog.save_button)
-    qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
+    wait_profile_saved(qtbot, window)
 
     message = window.statusBar().currentMessage()
     assert "Weight valid from 5/10/26 to 6/29/26." in message
@@ -636,7 +575,7 @@ def test_the_status_says_from_when_an_open_period_holds_onwards(
 
     assert dialog.validity_notice_text == ""  # today: no later entry
     click(dialog.save_button)
-    qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
+    wait_profile_saved(qtbot, window)
 
     assert "Heart rate valid from 6/30/26 onwards." in window.statusBar().currentMessage()
 
@@ -694,7 +633,7 @@ def test_renaming_from_edit_profile_updates_the_title_the_menu_and_the_registry(
     assert dialog.save_button.isEnabled()
     click(dialog.save_button)
 
-    qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
+    wait_profile_saved(qtbot, window)
     renamed = ProfileName.parse("Atleta rinominato")
     profile = window.controller.profile
     assert profile is not None
@@ -735,6 +674,6 @@ def test_the_name_alone_is_saved_without_recalculating_the_load(
     dialog.name_edit.textEdited.emit("Solo il nome")
     click(dialog.save_button)
 
-    qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
+    wait_profile_saved(qtbot, window)
     assert window.windowTitle() == "Solo il nome - Ponos Coach"
     assert "recalculated" not in window.statusBar().currentMessage()

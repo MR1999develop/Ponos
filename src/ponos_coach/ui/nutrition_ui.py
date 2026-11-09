@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Nutrition in the window: the day windows and the settings dialog.
+"""Nutrition in the window: the day windows and the Settings > Nutrition page.
 
-Connects the calendar, the windows of the days and the "Nutrition settings" dialog to the jobs of
+Connects the calendar, the windows of the days and the "Nutrition" settings page to the jobs of
 `NutritionLoader`. Every day clicked in the calendar opens a window of its own, in the "calculating"
 state, and fills in when the data thread answers; a day already open comes forward instead of
 opening twice. Closing a window drops the answer that is on its way for that day only. After a data
 or settings change every open day is calculated again and the calendar's goal colours are
-refreshed; another profile closes every day window. The profile is read only on the data thread.
+refreshed; another profile closes every day window and empties the page. The profile is read only
+on the data thread.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from ponos_coach.ui.nutrition_loader import (
 )
 from ponos_coach.ui.nutrition_settings_dialog import NutritionSettingsDialog
 from ponos_coach.ui.nutrition_texts import fixed_notice_text
+from ponos_coach.ui.settings_page import SettingsPage
 from ponos_coach.ui.workspace import WorkspaceController
 
 _CASCADE_PX = 32
@@ -49,7 +51,7 @@ def _bring_forward(window: QWidget) -> None:
 class NutritionUi(QObject):
     """Owns the nutrition flow of the window; the window gives it the calendar and callbacks."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - each argument is a piece of the window it works with
         self,
         window: QWidget,
         controller: WorkspaceController,
@@ -58,6 +60,9 @@ class NutritionUi(QObject):
         today: Callable[[], date],
         edit_profile: Callable[[], None],
         show_error: Callable[[ErrorMessage], None],
+        settings_page: SettingsPage,
+        show_settings: Callable[[], None],
+        no_profile_text: Callable[[], str],
     ) -> None:
         super().__init__(window)
         self._window = window
@@ -69,7 +74,9 @@ class NutritionUi(QObject):
         self._loader = NutritionLoader(controller, controller.foods, self)
         self._days: dict[date, DayWindow] = {}  # the open day windows, oldest first
         self._opened = 0  # windows opened so far, for the cascade
-        self._dialog: NutritionSettingsDialog | None = None
+        self._page = settings_page
+        self._show_settings = show_settings
+        self._no_profile_text = no_profile_text
         self._waiting_for_settings = False
         self._lean_masses: tuple[LeanMassEntry, ...] = ()
         self._loader.day_loaded.connect(self._on_day_loaded)
@@ -82,6 +89,7 @@ class NutritionUi(QObject):
         self._loader.command_failed.connect(self._on_command_failed)
         self._loader.failed.connect(self._on_failed)
         calendar.day_requested.connect(self._on_day_requested)
+        settings_page.shown.connect(self.load_settings_page)
 
     # --- Test accessors --------------------------------------------------------------------
 
@@ -92,8 +100,9 @@ class NutritionUi(QObject):
 
     @property
     def settings_dialog(self) -> NutritionSettingsDialog | None:
-        """The open "Nutrition settings" dialog, if any."""
-        return self._dialog
+        """The content of the Nutrition page, once it has been read."""
+        form = self._page.form
+        return form if isinstance(form, NutritionSettingsDialog) else None
 
     @property
     def day_windows(self) -> tuple[DayWindow, ...]:
@@ -187,12 +196,17 @@ class NutritionUi(QObject):
     # --- Profile and data changes ------------------------------------------------------------
 
     def profile_changed(self) -> None:
-        """Another profile opened: close the days and the dialog, read the new goal periods."""
+        """Another profile opened: close the days and empty the page, read the new goal periods
+        (and fill the page again if it is in view)."""
         self._loader.cancel_days()
         self.close_days()
-        if self._dialog is not None:
-            self._dialog.close()
-        self.refresh_periods()
+        self._waiting_for_settings = False
+        self._lean_masses = ()
+        self._page.show_notice("")
+        if self._page.isVisible():
+            self.load_settings_page()
+        else:
+            self.refresh_periods()
 
     def refresh_periods(self) -> None:
         """Read the goal periods for the calendar's colours."""
@@ -203,59 +217,56 @@ class NutritionUi(QObject):
         self.reload_days()
 
     def close_dialogs(self) -> None:
-        """Close the day windows and the settings dialog (the window is closing)."""
+        """Close the day windows (the window is closing)."""
         self.close_days()
-        if self._dialog is not None:
-            self._dialog.close()
 
     # --- Settings ----------------------------------------------------------------------------
 
     def show_settings(self) -> None:
-        """Read the settings and open "Nutrition settings" (no effect if already open)."""
-        if self._dialog is not None:
-            self._dialog.raise_()
-            self._dialog.activateWindow()
+        """Open Settings on the Nutrition page."""
+        self._show_settings()
+
+    def load_settings_page(self) -> None:
+        """Read the settings and fill the Nutrition page (the form in view is brought up to
+        date)."""
+        if self._controller.profile is None:
+            self._page.show_notice(self._no_profile_text())
             return
-        if self._waiting_for_settings or self._controller.profile is None:
-            return
-        self._waiting_for_settings = self._loader.load_settings()
+        if not self._waiting_for_settings:
+            self._waiting_for_settings = self._loader.load_settings()
 
     def _on_settings_loaded(self, settings: object) -> None:
         if not isinstance(settings, NutritionSettings):
             return
         self._calendar.set_periods(settings.goal_periods)
-        if self._dialog is not None:
-            self._dialog.apply(settings)
+        form = self.settings_dialog
+        if form is not None:
+            form.apply(settings)
         elif self._waiting_for_settings:
-            self._waiting_for_settings = False
-            self._open_dialog(settings)
-
-    def _open_dialog(self, settings: NutritionSettings) -> None:
-        dialog = NutritionSettingsDialog(
-            settings, self._loader, self._today(), self._window, lean_masses=self._lean_masses
-        )
-        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        dialog.finished.connect(self._on_dialog_closed)
-        self._dialog = dialog
-        dialog.open()
-
-    def _on_dialog_closed(self) -> None:
-        self._dialog = None
+            self._page.show_form(
+                NutritionSettingsDialog(
+                    settings, self._loader, self._today(), lean_masses=self._lean_masses
+                )
+            )
+        self._waiting_for_settings = False
 
     def _on_lean_masses_loaded(self, entries: object) -> None:
         if not isinstance(entries, tuple):
             return
         self._lean_masses = entries
-        if self._dialog is not None:
-            self._dialog.apply_lean_masses(entries)
+        form = self.settings_dialog
+        if form is not None:
+            form.apply_lean_masses(entries)
 
     def _on_lean_mass_applied(self, applied: object) -> None:
-        if isinstance(applied, LeanMassApplied) and self._dialog is not None:
-            self._dialog.lean_mass_applied(applied)
+        form = self.settings_dialog
+        if isinstance(applied, LeanMassApplied) and form is not None:
+            form.lean_mass_applied(applied)
 
     def _on_lean_mass_refused(self, message: object) -> None:
-        if isinstance(message, ErrorMessage) and self._dialog is not None:
-            self._dialog.show_lean_mass_problem(message)
+        form = self.settings_dialog
+        if isinstance(message, ErrorMessage) and form is not None:
+            form.show_lean_mass_problem(message)
 
     def _on_settings_changed(self, _settings: object) -> None:
         self.reload_days()
@@ -263,8 +274,9 @@ class NutritionUi(QObject):
     def _on_command_failed(self, message: object) -> None:
         if not isinstance(message, ErrorMessage):
             return
-        if self._dialog is not None:
-            self._dialog.show_failure(message)
+        form = self.settings_dialog
+        if form is not None:
+            form.show_failure(message)
         else:
             self._show_error(message)
         self.refresh_periods()  # the dialog and the calendar show what is really stored

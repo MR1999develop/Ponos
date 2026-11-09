@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dialog "Nutrition settings": activity level, typical meal times and goal periods.
+"""Content of the Settings > Nutrition page: activity level, typical meal times and goal periods.
 
-The dialog shows what the profile holds (`NutritionSettings`, re-read after every change: it is
+The page shows what the profile holds (`NutritionSettings`, re-read after every change: it is
 the only source of truth) and starts the changes on the data thread through `SettingsOps`.
 Changes of goal periods, meal times and activity level go through a `QUndoStack` (Ctrl+Z,
 Ctrl+Shift+Z). Problems are written on the field that has them.
@@ -19,8 +19,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDateEdit,
-    QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -69,8 +67,9 @@ from ponos_coach.ui.nutrition_undo import (
     SetMealTimesCommand,
     SettingsOps,
 )
+from ponos_coach.ui.settings_form import SettingsForm
 from ponos_coach.ui.text_table_model import TextTableModel
-from ponos_coach.ui.tokens import DIALOG_MIN_WIDTH, SPACE_2, SPACE_4
+from ponos_coach.ui.tokens import SPACE_2, SPACE_4
 
 _MINUTES_PER_HOUR = 60
 _TABLE_MIN_HEIGHT = 110
@@ -91,7 +90,7 @@ def _qtime(minute_of_day: int) -> QTime:
     return QTime(minute_of_day // _MINUTES_PER_HOUR, minute_of_day % _MINUTES_PER_HOUR)
 
 
-class NutritionSettingsDialog(QDialog):
+class NutritionSettingsDialog(SettingsForm):
     """Level, meal times and goal periods of the open profile."""
 
     def __init__(
@@ -121,9 +120,6 @@ class NutritionSettingsDialog(QDialog):
             self,
         )
         self._period_dialog: GoalPeriodDialog | None = None
-        self.setWindowTitle(self.tr("Nutrition settings"))
-        self.setMinimumWidth(DIALOG_MIN_WIDTH)
-        self.setWindowModality(Qt.WindowModality.WindowModal)
         self._build()
         self.apply(settings, reset_times=True)
         self.apply_lean_masses(lean_masses)
@@ -137,8 +133,6 @@ class NutritionSettingsDialog(QDialog):
         self._failure.setWordWrap(True)
         self._failure.setAccessibleName(self.tr("Problem"))
         self._failure.hide()
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
-        buttons.rejected.connect(self.reject)
         outer = QVBoxLayout(self)
         outer.setSpacing(SPACE_4)
         outer.addWidget(self._level_group())
@@ -146,7 +140,6 @@ class NutritionSettingsDialog(QDialog):
         outer.addWidget(self._times_group())
         outer.addWidget(self._periods_group(), stretch=1)
         outer.addWidget(self._failure)
-        outer.addWidget(buttons)
 
     def _level_group(self) -> QGroupBox:
         box = QGroupBox(self.tr("Daily activity outside sport"), self)
@@ -488,6 +481,16 @@ class NutritionSettingsDialog(QDialog):
             reason = self.tr("The times are already saved.")
         self._save_times.setEnabled(not problems and (changed or not self._settings.meal_times_set))
         self._save_times.setToolTip(reason)
+        self.edited.emit()
+
+    def has_unsaved_changes(self) -> bool:
+        """True while the meal times typed differ from the saved ones (everything else on the page
+        applies as soon as it is set)."""
+        return self._entered_minutes() != self._saved_times.minutes
+
+    def request_save(self) -> None:
+        """Save the meal times (the "Save meal times" button)."""
+        self._on_save_times()
 
     def _time_problem_text(self, field: MealField, has_problem: bool) -> str:
         if not has_problem:
@@ -504,6 +507,7 @@ class NutritionSettingsDialog(QDialog):
     def _on_save_times(self) -> None:
         times = meal_times_of(self._entered_minutes())
         if times is None:
+            self.save_failed.emit()
             return
         self._stack.push(SetMealTimesCommand(self._ops, self._saved_times, times))
         self._saved_times = times

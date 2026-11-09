@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
     QAbstractSpinBox,
-    QDialog,
     QHeaderView,
     QLabel,
     QLineEdit,
@@ -60,7 +59,7 @@ from ponos_coach.ui.translations import (
 )
 from tests.ui.test_measurements_form import TODAY, make_history
 from tests.ui.test_translations import build_real_catalog
-from tests.ui.workspace_support import close_window, compose, make_settings
+from tests.ui.workspace_support import close_window, compose, language_form, make_settings
 
 TS_FILE = Path(__file__).resolve().parents[2] / "src" / "ponos_coach" / "i18n" / "ponos_it.ts"
 
@@ -73,28 +72,28 @@ def settings(tmp_path: Path) -> QSettings:
 # --- The four new dialogs ----------------------------------------------------------------------
 
 
-def edit_dialog(*, fixed_missing: bool = False) -> QDialog:
+def edit_dialog(*, fixed_missing: bool = False) -> QWidget:
     history = make_history(fixed=None if fixed_missing else make_history().fixed)
     return ProfileEditDialog(
         MeasurementsForm(history, TODAY, "Atleta di prova"), history, Theme.LIGHT
     )
 
 
-def weights_dialog() -> QDialog:
+def weights_dialog() -> QWidget:
     return SportWeightsDialog(SportWeightsForm({s: default_weight(s) for s in Sport}))
 
 
-def new_profile_dialog() -> QDialog:
+def new_profile_dialog() -> QWidget:
     return NewProfileDialog(
         NewProfileForm("Europe/Rome"), date(2026, 6, 30), lambda _p: None, lambda: "", Theme.LIGHT
     )
 
 
-def detail_dialog() -> QDialog:
+def detail_dialog() -> QWidget:
     return ActivityDetailDialog(ChartEngine(lambda _name: None), ZoneInfo("Europe/Rome"))
 
 
-DIALOGS: dict[str, Callable[[], QDialog]] = {
+DIALOGS: dict[str, Callable[[], QWidget]] = {
     "edit": edit_dialog,
     "edit_fixed_missing": lambda: edit_dialog(fixed_missing=True),
     "weights": weights_dialog,
@@ -103,14 +102,14 @@ DIALOGS: dict[str, Callable[[], QDialog]] = {
 }
 
 
-def shown(qtbot: QtBot, name: str) -> QDialog:
+def shown(qtbot: QtBot, name: str) -> QWidget:
     dialog = DIALOGS[name]()
     qtbot.addWidget(dialog)
     dialog.show()
     return dialog
 
 
-def interactive(dialog: QDialog) -> list[QWidget]:
+def interactive(dialog: QWidget) -> list[QWidget]:
     """The controls the user acts with, visible and enabled (not Qt's internals)."""
     found: list[QWidget] = []
     for widget in dialog.findChildren(QWidget):
@@ -129,7 +128,7 @@ def accessible_name(widget: QWidget) -> str:
     return QAccessible.queryAccessibleInterface(widget).text(QAccessible.Text.Name)
 
 
-def tab_order(dialog: QDialog) -> list[QWidget]:
+def tab_order(dialog: QWidget) -> list[QWidget]:
     """The controls in the order the Tab visits them (Qt's focus chain)."""
     allowed = {id(w) for w in interactive(dialog)}
     order: list[QWidget] = []
@@ -183,7 +182,7 @@ def test_t_ui_05_the_accessible_names_of_a_dialog_are_distinct(qtbot: QtBot, nam
     assert len(set(names)) == len(names), names
 
 
-def y_of(widget: QWidget, dialog: QDialog) -> int:
+def y_of(widget: QWidget, dialog: QWidget) -> int:
     return widget.mapTo(dialog, QPoint(0, 0)).y()
 
 
@@ -237,7 +236,7 @@ def catalog_messages() -> tuple[Message, ...]:
     )
 
 
-def texts_of(dialog: QDialog) -> set[str]:
+def texts_of(dialog: QWidget) -> set[str]:
     """Every text the user sees or hears: labels, buttons, titles, hints, names."""
     texts = {dialog.windowTitle()}
     for widget in dialog.findChildren(QWidget):
@@ -273,7 +272,7 @@ def test_t_ui_06_in_italian_the_standard_buttons_come_from_qt_and_are_translated
     qtbot: QtBot, italian: TranslationReport
 ) -> None:
     assert italian.qt_loaded
-    dialog = shown(qtbot, "weights")
+    dialog = shown(qtbot, "new_profile")
     buttons = {w.text() for w in dialog.findChildren(QAbstractButton)}
 
     assert "Annulla" in buttons
@@ -367,7 +366,7 @@ def inside_state_page(widget: QWidget) -> bool:
     return False
 
 
-def clipped(dialog: QDialog) -> list[str]:
+def clipped(dialog: QWidget) -> list[str]:
     """Labels and buttons whose text does not fit in the space they have."""
     dialog.resize(dialog.sizeHint().expandedTo(dialog.size()))  # never below the usable size
     QCoreApplication.processEvents()
@@ -470,7 +469,7 @@ def test_t_ui_07_a_window_starts_in_english_and_usable_whatever_every_setting_ho
 
     assert window.isVisible()
     assert saved_language(again) is None
-    assert window.language_actions[Language.ENGLISH].isChecked()
+    assert language_form(window).button(Language.ENGLISH).isChecked()
     assert window.windowTitle()
     close_window(qtbot, window)
 
@@ -484,7 +483,7 @@ def test_t_ui_07_language_section_and_geometry_come_back_in_the_next_session(
     window.start()
     window.show()
     window.resize(800, 711)
-    window.language_actions[Language.ITALIAN].trigger()
+    language_form(window).button(Language.ITALIAN).click()
     sidebar_row = 1
     sidebar = window.findChild(QListWidget, "sidebar")
     assert sidebar is not None
