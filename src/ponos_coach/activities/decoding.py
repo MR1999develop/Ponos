@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 MR
 """Single entry point to decode a FIT activity file.
 
 Only the FIT format is accepted: the file name extension must be `.fit` and the reader checks
