@@ -19,7 +19,7 @@ from pytestqt.qtbot import QtBot
 
 from ponos_coach.nutrition.domain import GoalPeriod
 from ponos_coach.ui.calendar_model import CalendarDay
-from ponos_coach.ui.day_page import DayState
+from ponos_coach.ui.day_page import DayPage, DayState
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.nutrition_settings_dialog import NutritionSettingsDialog
 from tests.fixtures.generators import fit_writer as fw
@@ -119,19 +119,29 @@ def cell_of(window: MainWindow, day: date) -> CalendarDay:
     return cell
 
 
-def open_day(qtbot: QtBot, window: MainWindow, day: date, *, wait: bool = True) -> None:
-    """Show the calendar, select a day and press Enter; wait for the guidance or what is missing."""
+def last_day_page(window: MainWindow) -> DayPage:
+    """The page of the day window opened last (and still open)."""
+    windows = window.nutrition.day_windows
+    assert windows, "no day window is open"
+    return windows[-1].page
+
+
+def open_day(qtbot: QtBot, window: MainWindow, day: date, *, wait: bool = True) -> DayPage:
+    """Show the calendar, select a day and press Enter: its window opens; wait for the guidance
+    or what is missing. Returns the page of that window."""
     window.sidebar.setCurrentRow(2)
     page = window.calendar_page
     page.select_day(day)
     assert page.selected_day() == day
     QTest.keyClick(page.table, Qt.Key.Key_Return)
-    assert window.current_page is window.day_page
+    day_window = window.nutrition.day_window(day)
+    assert day_window is not None
     if wait:
         qtbot.waitUntil(
-            lambda: window.day_page.state in (DayState.CONTENT, DayState.UNAVAILABLE),
+            lambda: day_window.page.state in (DayState.CONTENT, DayState.UNAVAILABLE),
             timeout=WAIT_MS,
         )
+    return day_window.page
 
 
 def open_settings(qtbot: QtBot, window: MainWindow) -> NutritionSettingsDialog:

@@ -12,6 +12,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Iterator
 from datetime import date
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -39,6 +40,7 @@ from tests.ui.nutrition_support import (
     LONG_DAY,
     PROFILE,
     clock_minutes,
+    last_day_page,
     open_day,
     plain,
     window_with_days,
@@ -67,7 +69,7 @@ def all_label_texts(page: QWidget) -> list[str]:
 
 def state_of(window: MainWindow) -> DayState:
     """The day page's state, read through a function (earlier checks narrow the type)."""
-    return window.day_page.state
+    return last_day_page(window).state
 
 
 def test_a_day_with_a_run_at_dawn_and_one_at_lunch_lists_both_with_time_duration_load_and_energy(
@@ -76,7 +78,7 @@ def test_a_day_with_a_run_at_dawn_and_one_at_lunch_lists_both_with_time_duration
     window = window_with_days(qtbot, tmp_path, settings)
 
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
-    page = window.day_page
+    page = last_day_page(window)
     rows = page.activities_model.rows
 
     assert page.state is DayState.CONTENT
@@ -98,7 +100,7 @@ def test_the_totals_give_basal_metabolism_spending_deficit_target_and_macros(
     window = window_with_days(qtbot, tmp_path, settings)
 
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
-    totals = {row[0]: row[1] for row in window.day_page.totals_model.rows}
+    totals = {row[0]: row[1] for row in last_day_page(window).totals_model.rows}
 
     assert list(totals) == [
         "Basal metabolism (kcal)",
@@ -114,7 +116,7 @@ def test_the_totals_give_basal_metabolism_spending_deficit_target_and_macros(
         totals["Basal metabolism (kcal)"].replace(",", "")
     )
     assert totals["Energy target (kcal)"] == totals["Energy spent (kcal)"]
-    assert window.day_page.summary_line.startswith("Goal: Maintenance. Day: ")
+    assert last_day_page(window).summary_line.startswith("Goal: Maintenance. Day: ")
 
 
 def test_every_row_of_the_day_tables_is_on_screen_even_with_a_larger_font(
@@ -129,7 +131,7 @@ def test_every_row_of_the_day_tables_is_on_screen_even_with_a_larger_font(
 
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
 
-    tables = window.day_page.findChildren(QTableView)
+    tables = last_day_page(window).findChildren(QTableView)
     assert tables
 
     def last_row_inside(table: QTableView) -> bool:
@@ -140,7 +142,7 @@ def test_every_row_of_the_day_tables_is_on_screen_even_with_a_larger_font(
         return last.height() > 0 and last.bottom() < table.viewport().height()
 
     for table in tables:
-        qtbot.waitUntil(lambda table=table: last_row_inside(table), timeout=WAIT_MS)
+        qtbot.waitUntil(partial(last_row_inside, table), timeout=WAIT_MS)
 
 
 def test_the_meal_cards_come_in_time_order_with_amounts_and_a_moved_lunch(
@@ -149,7 +151,7 @@ def test_the_meal_cards_come_in_time_order_with_amounts_and_a_moved_lunch(
     window = window_with_days(qtbot, tmp_path, settings)
 
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
-    page = window.day_page
+    page = last_day_page(window)
     titles = page.meal_titles
     minutes = [clock_minutes(t) for t in titles]
 
@@ -173,7 +175,7 @@ def test_a_three_hour_session_has_a_during_training_card_with_the_hourly_amounts
     window = window_with_days(qtbot, tmp_path, settings)
 
     open_day(qtbot, window, LONG_DAY)
-    page = window.day_page
+    page = last_day_page(window)
     during = [i for i, title in enumerate(page.meal_titles) if title.startswith("During training")]
 
     assert len(during) == 1
@@ -192,7 +194,7 @@ def test_a_day_without_activities_is_a_rest_day_with_breakfast_lunch_and_dinner(
     window = window_with_days(qtbot, tmp_path, settings)
 
     open_day(qtbot, window, EMPTY_DAY)
-    page = window.day_page
+    page = last_day_page(window)
 
     assert page.activities_model.rowCount() == 0
     assert "No activities on this day." in all_label_texts(page)
@@ -211,7 +213,7 @@ def test_the_advisories_and_the_fixed_notice_are_always_on_screen_with_the_guida
     window = window_with_days(qtbot, tmp_path, settings)
 
     open_day(qtbot, window, EMPTY_DAY)
-    page = window.day_page
+    page = last_day_page(window)
     notice = page.findChild(QLabel, "dayNotice")
 
     assert advisory_text(Advisory.ACTIVITY_LEVEL_ASSUMED) in page.advisory_texts  # no level yet
@@ -244,7 +246,7 @@ def test_a_profile_without_body_data_says_what_to_complete_and_opens_edit_profil
     qtbot.waitUntil(lambda: isinstance(window.controller.overview_state, Ready), timeout=WAIT_MS)
 
     open_day(qtbot, window, EMPTY_DAY)
-    page = window.day_page
+    page = last_day_page(window)
 
     assert page.state is DayState.UNAVAILABLE
     assert page.missing_texts == (
@@ -281,7 +283,7 @@ def test_a_profile_with_body_data_but_no_weight_asks_for_the_weight(
 
     open_day(qtbot, window, EMPTY_DAY)
 
-    assert window.day_page.missing_texts[0] == "No weight is saved"
+    assert last_day_page(window).missing_texts[0] == "No weight is saved"
 
 
 def test_t_ui_02_the_ui_stays_responsive_while_a_day_is_calculated_and_leaving_drops_it(
@@ -293,19 +295,20 @@ def test_t_ui_02_the_ui_stays_responsive_while_a_day_is_calculated_and_leaving_d
 
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY, wait=False)
 
-    assert window.day_page.state is DayState.LOADING
+    assert last_day_page(window).state is DayState.LOADING
     assert latency_of_one_event(qtbot) < 0.1  # T-UI-02
     assert state_of(window) is DayState.LOADING
-    window.calendar_actions["back"].trigger()  # leave while it is being calculated
-    gate.set()
-    qtbot.wait(300)  # the answer arrives and is dropped
-    assert window.current_page is window.calendar_page
-    assert state_of(window) is not DayState.CONTENT
+    day_window = window.nutrition.day_window(DAWN_AND_LUNCH_DAY)
+    assert day_window is not None
+    day_window.close()  # leave while it is being calculated
+    assert window.nutrition.day_windows == ()
+    with qtbot.assertNotEmitted(window.nutrition.loader.day_loaded, wait=300):
+        gate.set()  # the answer arrives and is dropped
 
     gate.clear()
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY, wait=False)
     gate.set()
-    qtbot.waitUntil(lambda: window.day_page.state is DayState.CONTENT, timeout=WAIT_MS)
+    qtbot.waitUntil(lambda: last_day_page(window).state is DayState.CONTENT, timeout=WAIT_MS)
 
 
 def test_the_day_page_has_named_controls_in_reading_order(
@@ -313,12 +316,10 @@ def test_the_day_page_has_named_controls_in_reading_order(
 ) -> None:
     window = window_with_days(qtbot, tmp_path, settings)
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
-    page = window.day_page
+    page = last_day_page(window)
 
     tables = page.findChildren(QTableView)
 
-    assert page.back_button.text() == "Back to calendar"
-    assert page.back_button.focusPolicy() != 0
     assert tables
     assert all(table.accessibleName() for table in tables)
     assert window.calendar_page.table.accessibleName() == "Calendar"
@@ -333,7 +334,7 @@ def test_an_empty_profile_has_a_calendar_but_cannot_open_nutrition_settings(
     assert not window.nutrition_action.isEnabled()
     assert window.nutrition_action.toolTip() == "Create or open a profile first."
     window.nutrition.open_day(EMPTY_DAY)  # no profile: nothing happens
-    assert window.nutrition.current_day is None
+    assert window.nutrition.day_windows == ()
 
 
 def test_the_shipped_food_values_are_marked_as_not_yet_verified_above_the_examples(
@@ -343,8 +344,12 @@ def test_the_shipped_food_values_are_marked_as_not_yet_verified_above_the_exampl
 
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
 
-    assert window.day_page.foods_note_text == "Food values not yet verified against the source."
-    assert "Food values not yet verified against the source." in all_label_texts(window.day_page)
+    assert (
+        last_day_page(window).foods_note_text == "Food values not yet verified against the source."
+    )
+    assert "Food values not yet verified against the source." in all_label_texts(
+        last_day_page(window)
+    )
 
 
 def test_today_says_that_the_day_is_in_progress_and_a_past_day_does_not(
@@ -353,20 +358,20 @@ def test_today_says_that_the_day_is_in_progress_and_a_past_day_does_not(
     window = window_with_days(qtbot, tmp_path, settings)
 
     open_day(qtbot, window, TODAY)
-    today_note = window.day_page.in_progress_text
-    today_labels = all_label_texts(window.day_page)
+    today_note = last_day_page(window).in_progress_text
+    today_labels = all_label_texts(last_day_page(window))
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
 
     assert "not over yet" in today_note
     assert today_note in today_labels
-    assert window.day_page.in_progress_text == ""
+    assert last_day_page(window).in_progress_text == ""
 
 
 def test_a_day_of_a_minor_shows_no_numbers_and_no_edit_profile_button(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with_days(qtbot, tmp_path, settings)
-    page = window.day_page
+    page = open_day(qtbot, window, EMPTY_DAY)
 
     page.show_content(present_day(EMPTY_DAY, NutritionUnavailable(UnavailableReason.UNDER_18)))
 
@@ -377,3 +382,87 @@ def test_a_day_of_a_minor_shows_no_numbers_and_no_edit_profile_button(
         present_day(EMPTY_DAY, NutritionUnavailable(UnavailableReason.MISSING_WEIGHT))
     )
     assert not page.edit_profile_button.isHidden()
+
+
+def test_every_day_opens_in_a_window_of_its_own_with_its_own_content(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+
+    first = open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
+    second = open_day(qtbot, window, EMPTY_DAY)
+
+    windows = window.nutrition.day_windows
+    assert [w.day for w in windows] == [DAWN_AND_LUNCH_DAY, EMPTY_DAY]
+    assert windows[0].page is first and windows[1].page is second
+    assert windows[0].windowTitle() == first.title_text != windows[1].windowTitle()
+    assert first.state is DayState.CONTENT
+    assert first.activities_model.rows != second.activities_model.rows
+    assert all(w.isVisible() and not w.isModal() for w in windows)
+
+
+def test_opening_a_day_again_brings_its_window_forward_instead_of_opening_a_second(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+    open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
+
+    open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
+
+    assert len(window.nutrition.day_windows) == 1
+
+
+def test_closing_one_day_window_leaves_the_other_open_and_working(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+    open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
+    open_day(qtbot, window, EMPTY_DAY)
+    closing = window.nutrition.day_window(DAWN_AND_LUNCH_DAY)
+    assert closing is not None
+
+    closing.close()
+
+    assert [w.day for w in window.nutrition.day_windows] == [EMPTY_DAY]
+    kept = window.nutrition.day_windows[0]
+    with qtbot.waitSignal(window.nutrition.loader.day_loaded, timeout=WAIT_MS):
+        window.nutrition.reload_days()  # the surviving day is calculated again and still shows
+    assert kept.isVisible()
+
+
+def test_new_day_windows_cascade_and_a_data_change_calculates_every_open_day_again(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+    open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
+    open_day(qtbot, window, EMPTY_DAY)
+    first, second = window.nutrition.day_windows
+
+    assert second.pos() != first.pos()
+    with qtbot.waitSignals(
+        [window.nutrition.loader.day_loaded, window.nutrition.loader.day_loaded], timeout=WAIT_MS
+    ):
+        window.nutrition.data_changed()
+
+
+def test_another_profile_closes_every_day_window(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+    open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
+    open_day(qtbot, window, LONG_DAY)
+
+    window.nutrition.profile_changed()
+
+    assert window.nutrition.day_windows == ()
+
+
+def test_closing_the_application_closes_the_day_windows(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+    open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
+
+    window.nutrition.close_dialogs()
+
+    assert window.nutrition.day_windows == ()

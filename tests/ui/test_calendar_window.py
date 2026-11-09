@@ -156,25 +156,20 @@ def test_arrow_keys_move_between_past_days_and_enter_opens_the_day(
         QTest.keyClick(page.table, Qt.Key.Key_Return)
 
     assert opened.args == [date(2026, 6, 18)]
-    assert window.current_page is window.day_page
-    assert window.nutrition.current_day == date(2026, 6, 18)
+    assert window.current_page is window.calendar_page  # the day opens in a window of its own
+    assert window.nutrition.day_window(date(2026, 6, 18)) is not None
 
 
-def test_double_click_on_a_past_day_opens_it_and_back_returns_to_the_calendar(
+def test_opening_a_day_leaves_the_calendar_in_place_and_there_is_no_back_command(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with_days(qtbot, tmp_path, settings)
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
     actions = window.calendar_actions
 
-    assert actions["back"].isEnabled()
-    assert not actions["open_day"].isEnabled()  # the day page is not the calendar
-    actions["back"].trigger()
-
+    assert "back" not in actions
     assert window.current_page is window.calendar_page
-    assert window.nutrition.current_day is None
-    assert not actions["back"].isEnabled()
-    assert actions["back"].toolTip() == "No day is open."
+    assert actions["open_day"].isEnabled()
     assert window.sidebar.currentRow() == 2
 
 

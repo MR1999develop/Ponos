@@ -21,6 +21,7 @@ from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.nutrition_settings_dialog import NutritionSettingsDialog
 from tests.ui.nutrition_support import (
     DAWN_AND_LUNCH_DAY,
+    last_day_page,
     open_day,
     open_settings,
     short_date,
@@ -197,7 +198,7 @@ def test_the_day_page_says_whether_the_lean_mass_is_estimated_or_measured(
 ) -> None:
     window = window_with_days(qtbot, tmp_path, settings)
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
-    assert window.day_page.lean_mass_note_text == (
+    assert last_day_page(window).lean_mass_note_text == (
         "The limit on energy availability uses an estimate of your lean mass. You can enter a "
         "measured value in Nutrition settings."
     )
@@ -210,7 +211,7 @@ def test_the_day_page_says_whether_the_lean_mass_is_estimated_or_measured(
 
     qtbot.waitUntil(
         lambda: (
-            window.day_page.lean_mass_note_text
+            last_day_page(window).lean_mass_note_text
             == "The limit on energy availability uses your measured lean mass."
         ),
         timeout=WAIT_MS,

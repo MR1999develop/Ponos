@@ -28,6 +28,7 @@ from tests.ui.nutrition_support import (
     DAWN_AND_LUNCH_DAY,
     EMPTY_DAY,
     cell_of,
+    last_day_page,
     open_day,
     open_settings,
     plain,
@@ -128,7 +129,9 @@ def test_setting_the_activity_level_from_a_day_is_saved_listed_and_used_by_the_d
 
     assert dialog.levels_model.rows == ((short_date(date(2026, 6, 1)), "Active"),)
     open_day(qtbot, window, EMPTY_DAY)
-    assert advisory_text(Advisory.ACTIVITY_LEVEL_ASSUMED) not in window.day_page.advisory_texts
+    assert (
+        advisory_text(Advisory.ACTIVITY_LEVEL_ASSUMED) not in last_day_page(window).advisory_texts
+    )
 
 
 def test_the_activity_level_cannot_hold_from_a_day_that_has_not_come(
@@ -171,7 +174,7 @@ def test_saved_meal_times_move_the_meals_of_the_day_and_undo_brings_them_back(
     with changed(qtbot, window):
         dialog.save_times_button.click()
     open_day(qtbot, window, EMPTY_DAY)
-    assert [plain(t.split(" at ")[1]) for t in window.day_page.meal_titles][-1] == "9:00 PM"
+    assert [plain(t.split(" at ")[1]) for t in last_day_page(window).meal_titles][-1] == "9:00 PM"
 
     assert dialog.undo_stack.count() == 1
     assert dialog.undo_stack.undoText() == "Change meal times"
@@ -179,7 +182,9 @@ def test_saved_meal_times_move_the_meals_of_the_day_and_undo_brings_them_back(
         dialog.undo_stack.undo()
     assert dialog.time_edits[MealField.DINNER].time() == QTime(20, 0)
     qtbot.waitUntil(
-        lambda: [plain(t.split(" at ")[1]) for t in window.day_page.meal_titles][-1] == "8:00 PM",
+        lambda: (
+            [plain(t.split(" at ")[1]) for t in last_day_page(window).meal_titles][-1] == "8:00 PM"
+        ),
         timeout=WAIT_MS,
     )
 
@@ -246,7 +251,9 @@ def test_a_period_is_changed_through_the_sub_dialog_and_the_open_day_follows(
     add_period(qtbot, window, dialog)
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
     qtbot.waitUntil(
-        lambda: window.day_page.summary_line.startswith("Goal: Weight loss, 0.50 kg per week"),
+        lambda: last_day_page(window).summary_line.startswith(
+            "Goal: Weight loss, 0.50 kg per week"
+        ),
         timeout=WAIT_MS,
     )
 
@@ -267,7 +274,7 @@ def test_a_period_is_changed_through_the_sub_dialog_and_the_open_day_follows(
     )
     assert dialog.undo_stack.undoText() == "Change goal period"
     qtbot.waitUntil(
-        lambda: window.day_page.summary_line.startswith("Goal: Performance"), timeout=WAIT_MS
+        lambda: last_day_page(window).summary_line.startswith("Goal: Performance"), timeout=WAIT_MS
     )
     assert cell_of(window, date(2026, 6, 8)).goal is None
     assert cell_of(window, date(2026, 6, 30)).goal is GoalKind.PERFORMANCE
@@ -378,7 +385,7 @@ def test_undoing_the_first_level_of_a_day_removes_the_entry_and_the_assumed_noti
 
     assert dialog.levels_model.rowCount() == 0  # the store is as before, not a "sedentary" row
     open_day(qtbot, window, EMPTY_DAY)
-    assert advisory_text(Advisory.ACTIVITY_LEVEL_ASSUMED) in window.day_page.advisory_texts
+    assert advisory_text(Advisory.ACTIVITY_LEVEL_ASSUMED) in last_day_page(window).advisory_texts
     with changed(qtbot, window):
         dialog.undo_stack.redo()
     assert dialog.levels_model.rows == ((short_date(date(2026, 6, 1)), "Active"),)

@@ -58,6 +58,7 @@ from tests.ui.helpers import profile_activity
 from tests.ui.nutrition_support import (
     DAWN_AND_LUNCH_DAY,
     EMPTY_DAY,
+    last_day_page,
     open_day,
     open_settings,
     plain,
@@ -345,9 +346,9 @@ def test_t_ui_07_level_meal_times_and_goal_survive_a_restart_and_drive_the_next_
     dialog.close()
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
     before = (
-        window.day_page.totals_model.rows,
-        window.day_page.meal_titles,
-        window.day_page.summary_line,
+        last_day_page(window).totals_model.rows,
+        last_day_page(window).meal_titles,
+        last_day_page(window).summary_line,
     )
     close_window(qtbot, window)
 
@@ -359,12 +360,14 @@ def test_t_ui_07_level_meal_times_and_goal_survive_a_restart_and_drive_the_next_
     open_day(qtbot, second, DAWN_AND_LUNCH_DAY)
 
     after = (
-        second.day_page.totals_model.rows,
-        second.day_page.meal_titles,
-        second.day_page.summary_line,
+        last_day_page(second).totals_model.rows,
+        last_day_page(second).meal_titles,
+        last_day_page(second).summary_line,
     )
     assert after == before
-    assert "Weight loss" in second.day_page.summary_line
+    assert "Weight loss" in last_day_page(second).summary_line
     open_day(qtbot, second, EMPTY_DAY)
-    assert advisory_text(Advisory.ACTIVITY_LEVEL_ASSUMED) not in second.day_page.advisory_texts
-    assert plain(second.day_page.meal_titles[0]) == "Breakfast at 6:15 AM"
+    assert (
+        advisory_text(Advisory.ACTIVITY_LEVEL_ASSUMED) not in last_day_page(second).advisory_texts
+    )
+    assert plain(last_day_page(second).meal_titles[0]) == "Breakfast at 6:15 AM"

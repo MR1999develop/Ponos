@@ -30,7 +30,12 @@ from ponos_coach.ui.nutrition_texts import (
 )
 from ponos_coach.ui.workspace import ProfileAccess
 from tests.planning.builders import BIG_WEEK, inputs, race
-from tests.ui.nutrition_support import DAWN_AND_LUNCH_DAY, open_day, window_with_days
+from tests.ui.nutrition_support import (
+    DAWN_AND_LUNCH_DAY,
+    last_day_page,
+    open_day,
+    window_with_days,
+)
 from tests.ui.test_plan_after_sync import run_on_data_thread
 from tests.ui.workspace_support import TODAY, WAIT_MS, make_settings
 
@@ -67,7 +72,8 @@ def save_plan_and_weight_loss(qtbot: QtBot, window: MainWindow) -> Plan:
 def show_day(qtbot: QtBot, window: MainWindow, day: date) -> None:
     window.nutrition.open_day(day)
     qtbot.waitUntil(
-        lambda: window.day_page.state in (DayState.CONTENT, DayState.UNAVAILABLE), timeout=WAIT_MS
+        lambda: last_day_page(window).state in (DayState.CONTENT, DayState.UNAVAILABLE),
+        timeout=WAIT_MS,
     )
 
 
@@ -80,7 +86,7 @@ def test_a_day_ahead_lists_the_planned_session_and_says_it_is_an_estimate_from_t
     assert target.session is not None
 
     show_day(qtbot, window, target.day)
-    page = window.day_page
+    page = last_day_page(window)
 
     assert page.state is DayState.CONTENT
     assert page.estimate_text == estimate_from_plan_text()
@@ -100,7 +106,7 @@ def test_in_the_taper_before_the_race_the_page_says_that_there_is_no_deficit(
 
     show_day(qtbot, window, taper.day)
 
-    assert advisory_text(Advisory.DEFICIT_PAUSED_FOR_RACE) in window.day_page.advisory_texts
+    assert advisory_text(Advisory.DEFICIT_PAUSED_FOR_RACE) in last_day_page(window).advisory_texts
 
 
 def test_a_day_ahead_without_a_plan_says_that_the_plan_does_not_cover_it(
@@ -109,7 +115,7 @@ def test_a_day_ahead_without_a_plan_says_that_the_plan_does_not_cover_it(
     window = window_with_days(qtbot, tmp_path, settings)
 
     show_day(qtbot, window, TODAY + timedelta(days=1))
-    page = window.day_page
+    page = last_day_page(window)
 
     assert page.state is DayState.UNAVAILABLE
     missing = unavailable_text(UnavailableReason.NO_PLAN_FOR_DAY)
@@ -126,4 +132,4 @@ def test_a_past_day_has_no_estimate_note_even_with_a_plan(
 
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
 
-    assert window.day_page.estimate_text == ""
+    assert last_day_page(window).estimate_text == ""

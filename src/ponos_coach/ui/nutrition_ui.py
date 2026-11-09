@@ -1,64 +1,79 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Nutrition in the window: the day page flow and the settings dialog.
+"""Nutrition in the window: the day windows and the settings dialog.
 
-Connects the calendar, the day page and the "Nutrition settings" dialog to the jobs of
-`NutritionLoader`. A day opens at once in the "calculating" state and fills in when the data thread
-answers; leaving the day (or opening another) drops the answer that is on its way. After a settings
-change the calendar's goal colours and the open day are refreshed. The profile is read only on the
-data thread.
+Connects the calendar, the windows of the days and the "Nutrition settings" dialog to the jobs of
+`NutritionLoader`. Every day clicked in the calendar opens a window of its own, in the "calculating"
+state, and fills in when the data thread answers; a day already open comes forward instead of
+opening twice. Closing a window drops the answer that is on its way for that day only. After a data
+or settings change every open day is calculated again and the calendar's goal colours are
+refreshed; another profile closes every day window. The profile is read only on the data thread.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import date
+from functools import partial
 
-from PySide6.QtCore import QObject, Qt
+from PySide6.QtCore import QObject, QPoint, Qt
 from PySide6.QtWidgets import QWidget
 
 from ponos_coach.nutrition.domain import LeanMassEntry
 from ponos_coach.nutrition.use_cases import NutritionSettings
 from ponos_coach.ui.calendar_page import CalendarPage
-from ponos_coach.ui.day_page import DayPage, DayState
+from ponos_coach.ui.day_page import DayState
 from ponos_coach.ui.day_presentation import day_title, present_day
+from ponos_coach.ui.day_window import DayWindow
 from ponos_coach.ui.errors import ErrorMessage
-from ponos_coach.ui.nutrition_loader import DayLoaded, LeanMassApplied, NutritionLoader
+from ponos_coach.ui.nutrition_loader import (
+    DayFailed,
+    DayLoaded,
+    LeanMassApplied,
+    NutritionLoader,
+)
 from ponos_coach.ui.nutrition_settings_dialog import NutritionSettingsDialog
 from ponos_coach.ui.nutrition_texts import fixed_notice_text
 from ponos_coach.ui.workspace import WorkspaceController
 
+_CASCADE_PX = 32
+_CASCADE_STEPS = 8  # after this many windows the cascade starts again from the first position
+
+
+def _bring_forward(window: QWidget) -> None:
+    window.show()
+    window.raise_()
+    window.activateWindow()
+
 
 class NutritionUi(QObject):
-    """Owns the nutrition flow of the window; the window only gives it pages and callbacks."""
+    """Owns the nutrition flow of the window; the window gives it the calendar and callbacks."""
 
-    def __init__(  # noqa: PLR0913 - each argument is a piece of the window it works with
+    def __init__(
         self,
         window: QWidget,
         controller: WorkspaceController,
         calendar: CalendarPage,
-        day_page: DayPage,
         *,
         today: Callable[[], date],
-        show_day_page: Callable[[], None],
-        show_calendar_page: Callable[[], None],
+        edit_profile: Callable[[], None],
         show_error: Callable[[ErrorMessage], None],
     ) -> None:
         super().__init__(window)
         self._window = window
         self._controller = controller
         self._calendar = calendar
-        self._day_page = day_page
         self._today = today
-        self._show_day_page = show_day_page
-        self._show_calendar_page = show_calendar_page
+        self._edit_profile = edit_profile
         self._show_error = show_error
         self._loader = NutritionLoader(controller, controller.foods, self)
-        self._day: date | None = None
+        self._days: dict[date, DayWindow] = {}  # the open day windows, oldest first
+        self._opened = 0  # windows opened so far, for the cascade
         self._dialog: NutritionSettingsDialog | None = None
         self._waiting_for_settings = False
         self._lean_masses: tuple[LeanMassEntry, ...] = ()
         self._loader.day_loaded.connect(self._on_day_loaded)
+        self._loader.day_failed.connect(self._on_day_failed)
         self._loader.settings_loaded.connect(self._on_settings_loaded)
         self._loader.settings_changed.connect(self._on_settings_changed)
         self._loader.lean_masses_loaded.connect(self._on_lean_masses_loaded)
@@ -81,45 +96,75 @@ class NutritionUi(QObject):
         return self._dialog
 
     @property
-    def current_day(self) -> date | None:
-        """The day the day page is showing, if it is open."""
-        return self._day
+    def day_windows(self) -> tuple[DayWindow, ...]:
+        """The open day windows, oldest first."""
+        return tuple(self._days.values())
 
-    @property
-    def is_day_open(self) -> bool:
-        """True while the day page is the page shown."""
-        return self._day is not None
+    def day_window(self, day: date) -> DayWindow | None:
+        """The window of a day, if it is open."""
+        return self._days.get(day)
 
-    # --- A day -------------------------------------------------------------------------------
+    # --- Days ----------------------------------------------------------------------------------
 
     def _on_day_requested(self, day: object) -> None:
         if isinstance(day, date):
             self.open_day(day)
 
     def open_day(self, day: date) -> None:
-        """Open the page of a past day and start calculating its guidance."""
+        """Open the window of a day and start calculating its guidance; a day that is already
+        open comes forward (and is calculated again if the last calculation failed)."""
         if self._controller.profile is None:
             return
-        self._day = day
-        self._day_page.show_loading(day_title(day), fixed_notice_text())
-        self._show_day_page()
+        known = self._days.get(day)
+        if known is not None:
+            _bring_forward(known)
+            if known.page.state is DayState.FAILED:
+                known.page.show_loading(day_title(day), fixed_notice_text())
+                if not self._loader.load_day(day):
+                    known.close()
+            return
+        window = DayWindow(day, self._window)
+        window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        page = window.page
+        page.edit_profile_requested.connect(self._edit_profile)
+        window.finished.connect(partial(self._on_day_closed, day))
+        self._cascade(window)
+        self._days[day] = window
+        page.show_loading(day_title(day), fixed_notice_text())
+        _bring_forward(window)
         if not self._loader.load_day(day):
-            self.back_to_calendar()
+            window.close()
 
-    def back_to_calendar(self) -> None:
-        """Leave the day page and show the month again."""
-        self._loader.cancel_day()
-        self._day = None
-        self._show_calendar_page()
+    def _cascade(self, window: DayWindow) -> None:
+        """A new window sits a little below and to the right of the main window's corner, one
+        step further each time, so none hides another completely."""
+        step = self._opened % _CASCADE_STEPS
+        self._opened += 1
+        offset = _CASCADE_PX * (step + 1)
+        window.move(self._window.pos() + QPoint(offset, offset))
 
-    def reload_day(self) -> None:
-        """Calculate the open day again (the data it depends on changed)."""
-        if self._day is not None and self._controller.profile is not None:
-            self._loader.load_day(self._day)
+    def _on_day_closed(self, day: date, _result: int = 0) -> None:
+        self._days.pop(day, None)
+        self._loader.cancel_day(day)
+
+    def close_days(self) -> None:
+        """Close every day window."""
+        for window in tuple(self._days.values()):
+            window.close()
+
+    def reload_days(self) -> None:
+        """Calculate the open days again (the data they depend on changed)."""
+        if self._controller.profile is None:
+            return
+        for day in self._days:
+            self._loader.load_day(day)
 
     def _on_day_loaded(self, loaded: object) -> None:
-        if isinstance(loaded, DayLoaded) and loaded.day == self._day:
-            self._day_page.show_content(
+        if not isinstance(loaded, DayLoaded):
+            return
+        window = self._days.get(loaded.day)
+        if window is not None:
+            window.page.show_content(
                 present_day(
                     loaded.day,
                     loaded.result,
@@ -128,18 +173,25 @@ class NutritionUi(QObject):
                 )
             )
 
+    def _on_day_failed(self, failed: object) -> None:
+        if not isinstance(failed, DayFailed):
+            return
+        window = self._days.get(failed.day)
+        if window is None:
+            return
+        if window.page.state is DayState.LOADING:
+            window.page.show_failure(failed.message)
+        else:
+            self._show_error(failed.message)
+
     # --- Profile and data changes ------------------------------------------------------------
 
     def profile_changed(self) -> None:
-        """Another profile opened: forget the day and the dialog, read the new goal periods."""
-        was_open = self._day is not None
-        self._loader.cancel_day()
-        self._day = None
-        self._day_page.clear()
+        """Another profile opened: close the days and the dialog, read the new goal periods."""
+        self._loader.cancel_days()
+        self.close_days()
         if self._dialog is not None:
             self._dialog.close()
-        if was_open:
-            self._show_calendar_page()
         self.refresh_periods()
 
     def refresh_periods(self) -> None:
@@ -147,11 +199,12 @@ class NutritionUi(QObject):
         self._loader.load_settings()
 
     def data_changed(self) -> None:
-        """Activities or the profile's data changed: the open day is calculated again."""
-        self.reload_day()
+        """Activities or the profile's data changed: the open days are calculated again."""
+        self.reload_days()
 
     def close_dialogs(self) -> None:
-        """Close the settings dialog (the window is closing)."""
+        """Close the day windows and the settings dialog (the window is closing)."""
+        self.close_days()
         if self._dialog is not None:
             self._dialog.close()
 
@@ -205,7 +258,7 @@ class NutritionUi(QObject):
             self._dialog.show_lean_mass_problem(message)
 
     def _on_settings_changed(self, _settings: object) -> None:
-        self.reload_day()
+        self.reload_days()
 
     def _on_command_failed(self, message: object) -> None:
         if not isinstance(message, ErrorMessage):
@@ -221,8 +274,4 @@ class NutritionUi(QObject):
             return
         if self._waiting_for_settings:
             self._waiting_for_settings = False
-            self._show_error(message)
-        elif self._day is not None and self._day_page.state is DayState.LOADING:
-            self._day_page.show_failure(message)
-        else:
-            self._show_error(message)
+        self._show_error(message)

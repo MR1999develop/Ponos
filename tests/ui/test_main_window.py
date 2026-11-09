@@ -728,7 +728,6 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Next month": QKeySequence("Ctrl+Right").toString(),
         "Today": QKeySequence("Ctrl+T").toString(),
         "Open day": QKeySequence("Ctrl+Return").toString(),
-        "Back to calendar": QKeySequence("Alt+Left").toString(),
         "Connect Garmin account...": QKeySequence("Ctrl+G").toString(),
         "Disconnect Garmin account": QKeySequence("Ctrl+Shift+G").toString(),
         "Synchronise": QKeySequence("F5").toString(),

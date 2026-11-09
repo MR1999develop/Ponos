@@ -125,7 +125,6 @@ def _plain_table(
 class DayPage(QWidget):
     """The page of one day, in whichever state the day's calculation is."""
 
-    back_requested = Signal()
     edit_profile_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -145,9 +144,6 @@ class DayPage(QWidget):
     # --- Construction -------------------------------------------------------------------
 
     def _build(self) -> None:
-        self._back = QPushButton(self.tr("Back to calendar"), self)
-        self._back.setObjectName("dayBack")
-        self._back.clicked.connect(self.back_requested)
         self._title = QLabel(self)
         self._title.setObjectName("dayTitle")
         self._title.setTextFormat(Qt.TextFormat.PlainText)
@@ -156,7 +152,6 @@ class DayPage(QWidget):
         font.setWeight(font.Weight.DemiBold)
         self._title.setFont(font)
         header = QVBoxLayout()
-        header.addWidget(self._back, alignment=Qt.AlignmentFlag.AlignLeft)
         header.addWidget(self._title)
 
         self._notice = _label("", self)
@@ -242,11 +237,6 @@ class DayPage(QWidget):
     def notice_text(self) -> str:
         """The fixed notice (general guidance, not medical advice)."""
         return self._notice.text()
-
-    @property
-    def back_button(self) -> QPushButton:
-        """The "Back to calendar" button."""
-        return self._back
 
     @property
     def edit_profile_button(self) -> QPushButton:

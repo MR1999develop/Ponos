@@ -3,8 +3,9 @@
 """Nutrition jobs on the data thread: a day's guidance and the nutrition settings.
 
 Every job builds its use case inside the data thread with the open profile's connection and
-returns the result as a signal on the UI thread; the UI never reads the profile. A day request
-superseded by another (or cancelled) delivers nothing. A change of the settings is a job that saves
+returns the result as a signal on the UI thread; the UI never reads the profile. Every open day has
+its own request, so several days load independently; a day request superseded by a newer one for the
+same day (or cancelled) delivers nothing. A change of the settings is a job that saves
 and then re-reads everything, so the interface always shows what is really stored. Health data:
 never in logs or error messages.
 """
@@ -49,6 +50,7 @@ from ponos_coach.profiles.lean_mass import (
     UndoLeanMass,
 )
 from ponos_coach.ui.data_thread import JobFailed, JobOutcome, JobSucceeded
+from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.nutrition_undo import LeanMassCell
 from ponos_coach.ui.workspace import ProfileAccess, WorkspaceController
 
@@ -62,6 +64,14 @@ class DayLoaded:
     day: date
     result: DayNutritionResult
     foods_verified: bool  # the food table's values were checked against their source
+
+
+@dataclass(frozen=True, slots=True)
+class DayFailed:
+    """The guidance of one day could not be calculated."""
+
+    day: date
+    message: ErrorMessage
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,13 +166,14 @@ class NutritionLoader(QObject):
     """Runs the nutrition jobs; outcomes arrive as signals on the UI thread."""
 
     day_loaded = Signal(object)  # DayLoaded
+    day_failed = Signal(object)  # DayFailed: the guidance of one day could not be calculated
     settings_loaded = Signal(object)  # NutritionSettings: read, or re-read after a change
     settings_changed = Signal(object)  # NutritionSettings: only after a change
     lean_masses_loaded = Signal(object)  # tuple[LeanMassEntry]: read, or re-read after a change
     lean_mass_applied = Signal(object)  # LeanMassApplied: the first set went through
     lean_mass_refused = Signal(object)  # ErrorMessage: the first set was refused (a field problem)
     command_failed = Signal(object)  # ErrorMessage: a change did not go through, nothing changed
-    failed = Signal(object)  # ErrorMessage: a read failed
+    failed = Signal(object)  # ErrorMessage: a read of the settings failed
 
     def __init__(
         self,
@@ -173,31 +184,40 @@ class NutritionLoader(QObject):
         super().__init__(parent)
         self._controller = controller
         self._foods = foods
-        self._day_request = 0
+        self._day_serial = 0
+        self._day_requests: dict[date, int] = {}  # the request that counts, for each day
 
     # --- A day's guidance ----------------------------------------------------------------
 
     def load_day(self, day: date) -> bool:
-        """Start computing the day's guidance. False if no profile is open or the app closes."""
-        self._day_request += 1
-        request = self._day_request
+        """Start computing the day's guidance. False if no profile is open or the app closes.
+
+        Other days keep loading; a request for the same day made before is dropped."""
+        self._day_serial += 1
+        request = self._day_serial
+        self._day_requests[day] = request
 
         def work(access: ProfileAccess) -> DayLoaded:
             return _plan_day(self._foods, day, access)
 
         def done(outcome: JobOutcome) -> None:
-            if request != self._day_request:
+            if self._day_requests.get(day) != request:
                 return
             if isinstance(outcome, JobSucceeded) and isinstance(outcome.value, DayLoaded):
                 self.day_loaded.emit(outcome.value)
             elif isinstance(outcome, JobFailed):
-                self.failed.emit(self._controller.describe_failure(outcome.error))
+                message = self._controller.describe_failure(outcome.error)
+                self.day_failed.emit(DayFailed(day, message))
 
         return self._controller.run_on_profile(work, done)
 
-    def cancel_day(self) -> None:
-        """The day page was left: the incoming outcome no longer matters."""
-        self._day_request += 1
+    def cancel_day(self, day: date) -> None:
+        """The day's window was closed: the incoming outcome no longer matters."""
+        self._day_requests.pop(day, None)
+
+    def cancel_days(self) -> None:
+        """Every day's window was closed (another profile opened)."""
+        self._day_requests.clear()
 
     # --- Settings -------------------------------------------------------------------------
 

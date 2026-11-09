@@ -58,7 +58,6 @@ from ponos_coach.ui.backup_ui import BackupUi
 from ponos_coach.ui.calendar_page import CalendarPage
 from ponos_coach.ui.chart_view import ChartEngine
 from ponos_coach.ui.data_thread import SHUTDOWN_WAIT_MS
-from ponos_coach.ui.day_page import DayPage
 from ponos_coach.ui.errors import ErrorMessage, exclusion_reason_text, unexpected_error_message
 from ponos_coach.ui.garmin_calendar_ui import GarminCalendarUi
 from ponos_coach.ui.garmin_ui import GarminUi
@@ -263,9 +262,6 @@ class MainWindow(QMainWindow):
         self._open_day_action = self._action(
             self.tr("Open day"), "Ctrl+Return", self._calendar_open_day
         )
-        self._back_action = self._action(
-            self.tr("Back to calendar"), "Alt+Left", self._back_to_calendar
-        )
         self._detail_action = self._action(
             self.tr("Activity detail..."), "Ctrl+D", self.show_selected_activity_detail
         )
@@ -322,7 +318,6 @@ class MainWindow(QMainWindow):
             self._next_month_action,
             self._today_action,
             self._open_day_action,
-            self._back_action,
         ):
             calendar_menu.addAction(action)
         self._map_ui.build_menu(self.menuBar())
@@ -420,7 +415,6 @@ class MainWindow(QMainWindow):
         self._calendar = CalendarPage(self._today(), self)
         self._goals = GoalsPage(self)
         self._injuries_page = InjuriesPage(self)
-        self._day_page = DayPage(self)
         self._pages = QStackedWidget(self)
         self._section_pages: dict[int, QWidget] = {
             _SECTION_OVERVIEW: self._overview,
@@ -430,7 +424,7 @@ class MainWindow(QMainWindow):
             _SECTION_MAP: self._map_ui.page,
             _SECTION_INJURIES: self._injuries_page,
         }
-        for page in (*self._section_pages.values(), self._day_page):
+        for page in self._section_pages.values():
             self._pages.addWidget(page)
         self._pages.currentChanged.connect(self._update_actions)
         self._calendar.month_changed.connect(self._update_actions)
@@ -472,14 +466,10 @@ class MainWindow(QMainWindow):
             self,
             self._controller,
             self._calendar,
-            self._day_page,
             today=self._today,
-            show_day_page=lambda: self._pages.setCurrentWidget(self._day_page),
-            show_calendar_page=self._show_calendar,
+            edit_profile=self._edit_profile_from_day,
             show_error=self._show_error,
         )
-        self._day_page.back_requested.connect(self._back_to_calendar)
-        self._day_page.edit_profile_requested.connect(self._edit_profile_from_day)
         self._plan = PlanUi(
             self,
             self._controller,
@@ -663,13 +653,8 @@ class MainWindow(QMainWindow):
         return self._plan_retest_label.text()
 
     @property
-    def day_page(self) -> DayPage:
-        """The page of a day."""
-        return self._day_page
-
-    @property
     def nutrition(self) -> NutritionUi:
-        """The nutrition flow (day page and settings dialog)."""
+        """The nutrition flow (day windows and settings dialog)."""
         return self._nutrition
 
     @property
@@ -696,7 +681,6 @@ class MainWindow(QMainWindow):
             "next": self._next_month_action,
             "today": self._today_action,
             "open_day": self._open_day_action,
-            "back": self._back_action,
         }
 
     @property
@@ -905,13 +889,6 @@ class MainWindow(QMainWindow):
         else:
             reason = self._unavailable_reason(False)
             self.statusBar().showMessage(reason, _STATUS_MESSAGE_MS)
-
-    def _show_calendar(self) -> None:
-        self._sidebar.setCurrentRow(_SECTION_CALENDAR)
-        self._pages.setCurrentWidget(self._calendar)
-
-    def _back_to_calendar(self) -> None:
-        self._nutrition.back_to_calendar()
 
     def _calendar_step_back(self) -> None:
         self._calendar.previous_month()
@@ -1346,9 +1323,8 @@ class MainWindow(QMainWindow):
         self._use_as_test_action.setToolTip(why)
 
     def _update_calendar_actions(self) -> None:
-        """Calendar commands work on the Calendar page; the day page only has "Back"."""
+        """Calendar commands work on the Calendar page."""
         on_calendar = self._pages.currentWidget() is self._calendar
-        on_day = self._pages.currentWidget() is self._day_page
         not_here = self.tr("Open the Calendar section first.")
         for action in (self._previous_month_action, self._today_action):
             action.setEnabled(on_calendar)
@@ -1368,8 +1344,6 @@ class MainWindow(QMainWindow):
         self._next_month_action.setToolTip(
             "" if can_go_forward else self._calendar.next_button.toolTip() or not_here
         )
-        self._back_action.setEnabled(on_day)
-        self._back_action.setToolTip("" if on_day else self.tr("No day is open."))
 
     def _update_status_summary(self, state: OverviewState) -> None:
         summary = summary_of(state)

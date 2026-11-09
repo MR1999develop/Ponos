@@ -32,7 +32,7 @@ from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.nutrition_settings_model import MealField
 from tests.collaudo.support import format_logs
 from tests.collaudo.test_fase3_log_salute import box_texts, strip_timestamps, visible_boxes
-from tests.ui.nutrition_support import fit_at, open_settings
+from tests.ui.nutrition_support import fit_at, last_day_page, open_settings
 from tests.ui.workspace_support import (
     WAIT_MS,
     close_window,
@@ -149,8 +149,8 @@ def drive_the_failures(
 
     monkeypatch.setattr(PlanDayNutrition, "__call__", leaky_day)
     window.nutrition.open_day(DAY)
-    qtbot.waitUntil(lambda: window.day_page.state is DayState.FAILED, timeout=WAIT_MS)
-    shown += [*window.day_page.failure_texts, box_texts()]
+    qtbot.waitUntil(lambda: last_day_page(window).state is DayState.FAILED, timeout=WAIT_MS)
+    shown += [*last_day_page(window).failure_texts, box_texts()]
     monkeypatch.undo()
     for box in visible_boxes():
         box.close()
@@ -169,7 +169,7 @@ def test_t_sec_08_no_nutrition_datum_reaches_the_log_the_messages_or_the_error_t
         enter_the_values(qtbot, window)
         shown = drive_the_failures(qtbot, window, monkeypatch)
         window.nutrition.open_day(DAY)  # the day computed for real, with every value in force
-        qtbot.waitUntil(lambda: window.day_page.state is DayState.CONTENT, timeout=WAIT_MS)
+        qtbot.waitUntil(lambda: last_day_page(window).state is DayState.CONTENT, timeout=WAIT_MS)
         close_window(qtbot, window)
 
     log_file = tmp_path / "logs" / LOG_FILE_NAME
@@ -210,8 +210,8 @@ def test_t_sec_08_the_day_failure_shows_a_generic_message_and_no_exception_text(
 
     monkeypatch.setattr(PlanDayNutrition, "__call__", leaky_day)
     window.nutrition.open_day(DAY)
-    qtbot.waitUntil(lambda: window.day_page.state is DayState.FAILED, timeout=WAIT_MS)
-    title, detail = window.day_page.failure_texts
+    qtbot.waitUntil(lambda: last_day_page(window).state is DayState.FAILED, timeout=WAIT_MS)
+    title, detail = last_day_page(window).failure_texts
     monkeypatch.undo()
 
     assert title.strip() and detail.strip()
@@ -231,7 +231,7 @@ def test_t_sec_08_a_day_that_computes_logs_nothing_about_the_person(
         enter_the_values(qtbot, window)
         before = len(caplog.records)
         window.nutrition.open_day(DAY)
-        qtbot.waitUntil(lambda: window.day_page.state is DayState.CONTENT, timeout=WAIT_MS)
+        qtbot.waitUntil(lambda: last_day_page(window).state is DayState.CONTENT, timeout=WAIT_MS)
         day_records = caplog.records[before:]
         close_window(qtbot, window)
 
