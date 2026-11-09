@@ -64,23 +64,35 @@ def encode(document: object) -> bytes:
 # --- The table: source, licence, shape ----------------------------------------------------------
 
 
-def test_the_shipped_table_has_between_40_and_60_foods_with_a_registered_public_domain_source() -> (
+def test_the_shipped_table_has_between_40_and_60_foods_with_a_registered_open_licence_source() -> (
     None
 ):
     assert 40 <= len(TABLE.foods) <= 60
-    assert TABLE.source.name == "USDA FoodData Central"
-    assert TABLE.source.license == "CC0-1.0"
-    assert TABLE.source.url.startswith("https://fdc.nal.usda.gov")
+    assert TABLE.source.name == "ANSES-CIQUAL French food composition table"
+    assert TABLE.source.version == "Ciqual 2025 (2025-11-03)"
+    assert TABLE.source.license == "Etalab-2.0"
+    assert TABLE.source.url.startswith("https://ciqual.anses.fr")
 
 
-def test_the_check_against_the_source_is_still_to_do_and_the_file_says_so() -> None:
-    assert TABLE.source.verified_on is None
+def test_the_check_against_the_source_was_done_and_the_file_says_so() -> None:
+    # set by experiments/verify_foods.py --apply, only when every food was found in CIQUAL
+    assert TABLE.source.verified_on == date(2026, 11, 9)
 
 
-def test_every_food_has_its_food_data_central_id_and_unique_ids() -> None:
-    assert all(food.fdc_id > 0 for food in TABLE.foods)
-    assert len({food.fdc_id for food in TABLE.foods}) == len(TABLE.foods)
+def test_every_food_has_its_ciqual_code_and_unique_ids() -> None:
+    assert all(food.ciqual_code > 0 for food in TABLE.foods)
+    assert len({food.ciqual_code for food in TABLE.foods}) == len(TABLE.foods)
     assert len({food.food_id for food in TABLE.foods}) == len(TABLE.foods)
+
+
+def test_every_food_keeps_the_original_ciqual_name_and_the_approximations_say_so() -> None:
+    foods = raw_document()["foods"]
+
+    assert all(food["ciqual_name"].strip() for food in foods)
+    approximate = {f["id"] for f in foods if f.get("ciqual_note", "").startswith("APPROXIMATE")}
+    # the foods CIQUAL does not have: no fat-free Greek yogurt, no part-skim mozzarella, no black
+    # beans; the user is told in the table, not in a log
+    assert approximate == {"greek_yogurt_nonfat", "mozzarella_part_skim", "black_beans_cooked"}
 
 
 def test_the_foods_are_sorted_by_id() -> None:
@@ -104,9 +116,15 @@ def test_every_meal_role_has_foods_to_build_examples_from(role: MealRole) -> Non
 def test_a_sample_of_values_matches_the_published_ones_per_100_g() -> None:
     by_id = {f.food_id: f for f in TABLE.foods}
 
-    assert (by_id["banana"].kcal_100g, by_id["banana"].carbs_100g) == (89.0, 22.8)
-    assert by_id["olive_oil"].fat_100g == 100.0
-    assert (by_id["chicken_breast_roasted"].protein_100g, by_id["banana"].fdc_id) == (31.0, 173944)
+    assert (by_id["banana"].kcal_100g, by_id["banana"].carbs_100g) == (87.6, 19.7)
+    assert by_id["olive_oil"].fat_100g == 99.9
+    assert (by_id["chicken_breast_roasted"].protein_100g, by_id["banana"].ciqual_code) == (
+        30.1,
+        13005,
+    )
+    # "< 0,5" g of fat is stored as half of the bound, "traces" of carbohydrates as zero
+    assert by_id["banana"].fat_100g == 0.25
+    assert by_id["avocado"].carbs_100g == 0.0
 
 
 # --- Parsing at the boundary --------------------------------------------------------------------
@@ -138,8 +156,11 @@ def test_an_unknown_format_version_is_refused() -> None:
 @pytest.mark.parametrize(
     "change",
     [
-        {"fdc_id": 0},  # no identifier
-        {"fdc_id": "173944"},  # a text where a number is expected
+        {"ciqual_code": 0},  # no identifier
+        {"ciqual_code": "13005"},  # a text where a number is expected
+        {"ciqual_name": ""},  # the original name is required
+        {"ciqual_name": 7},
+        {"ciqual_note": 7},  # a note, when there is one, is a text
         {"kcal_100g": -1},
         {"carbs_100g": 60.0, "protein_100g": 60.0},  # more than 100 g of macros per 100 g
         {"kcal_100g": 900},  # energy does not agree with the macros
@@ -178,6 +199,14 @@ def test_too_few_or_too_many_foods_are_refused(count: int) -> None:
     ]
 
     with pytest.raises(FoodTableError, match="foods"):
+        parse_food_table(encode(document))
+
+
+def test_a_source_without_a_version_is_refused() -> None:
+    document = raw_document()
+    del document["source"]["version"]
+
+    with pytest.raises(FoodTableError):
         parse_food_table(encode(document))
 
 
@@ -244,7 +273,10 @@ def test_the_examples_during_a_session_come_only_from_foods_marked_for_it() -> N
     assert during_foods
     assert during_foods.isdisjoint(NOT_DURING_A_SESSION)  # never sugar, bread or honey
 
-    for carbs in (30, 60, 100, 180):
+    # up to 175 g: above that the dates, the densest food of the session, bring more protein than
+    # the 5 g tolerance of a meal without any (CIQUAL dates have 65 g of carbohydrates per 100 g,
+    # the USDA ones had 75 g)
+    for carbs in (30, 60, 100, 175):
         item = MealItem((MealSlot.DURING_TRAINING,), 480, Macros(carbs, 0, 0))
         examples = suggest_examples(item, TABLE.foods)
 
@@ -328,6 +360,54 @@ def test_a_food_cannot_be_built_with_a_wrong_portion() -> None:
         FoodPortion(banana, 125)  # not a multiple of 10
     with pytest.raises(ValueError, match="step"):
         FoodPortion(banana, 10_000)  # above the maximum
+
+
+def make_food(kcal: float, carbs: float, protein: float, fat: float) -> Food:
+    roles = frozenset({MealRole.MAIN})
+    return Food("f", "F", 1, FoodGroup.CARB, roles, kcal, carbs, protein, fat, 10, 100)
+
+
+@pytest.mark.parametrize(
+    ("carbs", "protein", "fat", "accepted"),
+    [
+        (0.0, 0.25, 99.9, True),  # extra virgin olive oil as CIQUAL measures it: 100.15 g
+        (0.0, 0.0, 100.5, True),  # on the limit
+        (0.0, 0.0, 100.6, False),  # just over it
+        (60.0, 40.5, 0.0, True),
+        (60.0, 40.6, 0.0, False),
+    ],
+)
+def test_macros_may_exceed_100_g_by_at_most_the_measurement_slack(
+    carbs: float, protein: float, fat: float, accepted: bool
+) -> None:
+    kcal = 4 * carbs + 4 * protein + 9 * fat
+    if accepted:
+        make_food(kcal, carbs, protein, fat)
+    else:
+        with pytest.raises(ValueError, match="weigh"):
+            make_food(kcal, carbs, protein, fat)
+
+
+@pytest.mark.parametrize(
+    ("extra_kcal", "accepted"),
+    [
+        (23.0, True),  # boiled red beans: 116 kcal for 93 kcal of macros (fibre at 2 kcal/g)
+        (25.0, True),  # the absolute slack, on the limit
+        (25.1, False),
+        (-25.0, True),
+        (-25.1, False),
+    ],
+)
+def test_energy_may_differ_from_the_macros_by_the_fibre_slack(
+    extra_kcal: float, accepted: bool
+) -> None:
+    carbs, protein, fat = 12.3, 9.6, 0.6  # 93 kcal: 15% of it is below the 25 kcal slack
+    kcal = 4 * carbs + 4 * protein + 9 * fat + extra_kcal
+    if accepted:
+        make_food(kcal, carbs, protein, fat)
+    else:
+        with pytest.raises(ValueError, match="energy"):
+            make_food(kcal, carbs, protein, fat)
 
 
 def test_foods_and_the_table_are_immutable_values() -> None:

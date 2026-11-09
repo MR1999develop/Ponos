@@ -20,8 +20,11 @@ from ponos_coach.nutrition.domain.macros import Macros
 from ponos_coach.nutrition.domain.meals import MealItem, MealSlot
 
 _PERCENT_MAX = 100.0
+_MACRO_SUM_TOLERANCE_G = 0.5  # measured macros of an oil or a sugar may add to a hair over 100 g
 _ATWATER_TOLERANCE_FRACTION = 0.15  # a food's kcal must agree with its macros within this...
-_ATWATER_TOLERANCE_KCAL = 15.0  # ...or this many kcal per 100 g (fibre and rounding)
+# ...or this many kcal per 100 g: the energy of the EU labelling counts fibre at 2 kcal/g, which
+# is up to about 12 g (24 kcal) per 100 g in the pulses of the table
+_ATWATER_TOLERANCE_KCAL = 25.0
 _MAX_PORTION_G = 2000
 
 
@@ -60,14 +63,14 @@ def role_of(slots: Sequence[MealSlot]) -> MealRole:
 class Food:
     """A food with its energy and macros per 100 g and where the numbers come from.
 
-    `food_id` is a stable key (also the key of its translated name); `fdc_id` is the USDA
-    FoodData Central identifier of the entry the numbers come from. A portion is a multiple of
+    `food_id` is a stable key (also the key of its translated name); `ciqual_code` is the
+    ANSES-CIQUAL `alim_code` of the entry the numbers come from. A portion is a multiple of
     `portion_step_g`, at most `max_portion_g`.
     """
 
     food_id: str
     name: str
-    fdc_id: int
+    ciqual_code: int
     group: FoodGroup
     roles: frozenset[MealRole]
     kcal_100g: float
@@ -78,12 +81,15 @@ class Food:
     max_portion_g: int
 
     def __post_init__(self) -> None:
-        if not self.food_id or not self.name or self.fdc_id <= 0 or not self.roles:
-            raise ValueError("a food has an id, a name, a FoodData Central id and roles")
+        if not self.food_id or not self.name or self.ciqual_code <= 0 or not self.roles:
+            raise ValueError("a food has an id, a name, a CIQUAL code and roles")
         values = (self.kcal_100g, self.carbs_100g, self.protein_100g, self.fat_100g)
         if not all(math.isfinite(v) and v >= 0 for v in values):
             raise ValueError("food values must be finite and not negative")
-        if self.carbs_100g + self.protein_100g + self.fat_100g > _PERCENT_MAX:
+        if (
+            self.carbs_100g + self.protein_100g + self.fat_100g
+            > _PERCENT_MAX + _MACRO_SUM_TOLERANCE_G
+        ):
             raise ValueError("macros cannot weigh more than the food")
         atwater = 4 * self.carbs_100g + 4 * self.protein_100g + 9 * self.fat_100g
         slack = max(_ATWATER_TOLERANCE_KCAL, _ATWATER_TOLERANCE_FRACTION * atwater)

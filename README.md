@@ -308,3 +308,8 @@ To report a vulnerability see `SECURITY.md`.
 ## Licence
 
 GPL-3.0-only. The full text is in the `LICENSE` file.
+
+The food values of the nutrition guidance come from the ANSES-CIQUAL table,
+published under the Open Licence 2.0 (Etalab): ANSES. Table de composition
+nutritionnelle des aliments Ciqual 2025 (<https://ciqual.anses.fr/>). The app
+is not endorsed by ANSES.

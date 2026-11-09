@@ -51,7 +51,7 @@ come "punto aperto" nei file `references/`.
 | MSJ | Mifflin e altri, equazione del metabolismo a riposo (1990) | metabolismo di base |
 | KEYTEL | Keytel e altri, spesa energetica dalla FC (2005) | calorie senza il dato del dispositivo |
 | COMPENDIUM | *Compendium of Physical Activities* | MET per sport |
-| FDC | USDA FoodData Central (CC0) | valori degli alimenti |
+| CIQUAL | ANSES-CIQUAL 2025 (Etalab 2.0; CREA solo come confronto) | valori degli alimenti |
 
 ## 1. Modello di carico
 
@@ -90,7 +90,7 @@ Calorie delle attività (dichiarate, Keytel, MET), metabolismo di base,
 spesa del giorno, obiettivi per periodi, deficit con i limiti di sicurezza,
 macro per carico, pre/durante/post, pasti spostati o fusi, tabella degli
 alimenti, massa magra misurata, avviso di dimagrimento lungo. Indicazioni generali, mai consigli medici. Fonti: ISSN, ACSM, IOC,
-GJSN, CSN, MSJ, KEYTEL, COMPENDIUM, FDC. Dettagli: `references/alimentazione.md`; tutti i
+GJSN, CSN, MSJ, KEYTEL, COMPENDIUM, CIQUAL. Dettagli: `references/alimentazione.md`; tutti i
 valori in `nutrition/domain/defaults.py`.
 
 ## 6. Dati e sincronizzazione

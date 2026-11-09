@@ -27,7 +27,7 @@ anche questo file e i test `T-NUT`.
 | IOC | Consenso del CIO sulla nutrizione dello sportivo | carboidrati durante, recupero |
 | GJSN | Jeukendrup, Gleeson, *Sport Nutrition* 3ª ed. (Human Kinetics 2019) | rifornimento rapido orario (1,0–1,2 g/kg all'ora per 4 ore con meno di 8 ore alla seduta successiva), proteine in dosi da 0,4 g/kg, disponibilità energetica, dimagrimento negli atleti |
 | CSN | Burke, Deakin, *Clinical Sports Nutrition* 5ª ed. (McGraw-Hill 2015) | disponibilità energetica (30–45 tollerabile solo per brevi periodi di dimagrimento pianificato), massa magra misurata meglio di quella stimata |
-| FDC | USDA FoodData Central (dominio pubblico, CC0 1.0) | valori degli alimenti |
+| CIQUAL | ANSES-CIQUAL, tabella francese di composizione degli alimenti 2025 (Licence Ouverte / Etalab 2.0, con citazione della fonte); confronto con le tabelle CREA (solo rapporto, non si copiano) | valori degli alimenti |
 
 ## 1. Calorie delle attività
 
@@ -200,25 +200,40 @@ tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):
 
 ## 6. Alimenti (`nutrition/foods.json`, `food_table.py`)
 
-- 42 alimenti comuni con kcal e macro per 100 g e l'id di USDA FoodData Central
-  di ciascuno; sorgente dichiarata nel file (`source`, licenza CC0-1.0).
+- 42 alimenti comuni con kcal (Regolamento UE 1169/2011, fibra compresa) e
+  macro per 100 g (carboidrati disponibili, proteine, lipidi) da ANSES-CIQUAL
+  2025 (file del 2025-11-03); per ciascuno `ciqual_code` (`alim_code`),
+  `ciqual_name` (nome originale francese) e, se la scelta non è ovvia,
+  `ciqual_note`. Sorgente dichiarata nel file (`source`: nome, `version`,
+  licenza `Etalab-2.0`, url, `verified_on`); formato versione 2 (la 1 aveva gli
+  id USDA, sostituiti il 2026-11-09 per richiesta dell'utente e perché circa
+  dieci id puntavano all'alimento sbagliato).
+- Regola per i valori CIQUAL non numerici: `traces` = 0, `< x` = x/2, `-`
+  (mancante) non si ripara mai (alimento non verificato). Tre alimenti sono
+  **approssimazioni** dichiarate (`ciqual_note` che inizia con `APPROXIMATE`):
+  yogurt greco 0% (fromage blanc 0%), mozzarella parzialmente scremata
+  (mozzarella di mucca), fagioli neri (fagioli rossi).
 - Il pacchetto `nutrition` ha solo il **parsing** (`parse_food_table(bytes)`):
   il file lo legge il Composition Root una volta (alla prima richiesta) e passa il
   `FoodTable`. Prima del decoder JSON si controllano dimensione (256 KiB) e
   profondità di annidamento (al massimo 8): un documento troppo annidato è un
   `FoodTableError`.
-- **Da verificare**: valori e id sono stati scritti senza accesso a FDC;
-  `source.verified_on` è `null` finché qualcuno non li controlla voce per voce e
-  scrive la data. Il test `T-NUT-06` ricorda che manca.
+- **Verificata** il 2026-11-09 con `experiments/verify_foods.py --ciqual-dir`
+  (42 su 42 voci trovate, `source.verified_on` valorizzato, il test lo
+  controlla). La scelta della voce per ogni alimento è però un giudizio: da
+  rivedere a mano prima del rilascio, a partire dalle approssimazioni.
 - Ogni alimento ha gruppo (carboidrati, proteine, grassi, verdure), pasti adatti,
   passo e massimo della porzione. Il parser rifiuta energia incoerente con i
-  macro (±15% o 15 kcal), file oltre 256 KiB, annidamento oltre 8 livelli, id
+  macro (±15% o 25 kcal: l'energia UE conta la fibra a 2 kcal/g, fino a circa
+  24 kcal nei legumi), macro che sommano oltre 100,5 g (0,5 g di margine per i
+  valori misurati), file oltre 256 KiB, annidamento oltre 8 livelli, id
   ripetuti, meno di 40 o più di 200 voci.
 - **Durante lo sforzo** gli esempi vengono solo dagli alimenti con il ruolo
   `during` (banana, datteri, uvetta, succo d'arancia); mai zucchero, pane o
   miele. Mancano bevande o gel sportivi e barrette: servono voci verificate
-  contro FDC (nessun dato inventato). Con porzioni grandi i datteri e l'uvetta
-  portano proteine oltre la tolleranza: in quel caso nessun esempio.
+  contro CIQUAL (nessun dato inventato). Con porzioni grandi i datteri e l'uvetta
+  portano proteine oltre la tolleranza: in quel caso nessun esempio (con i valori
+  CIQUAL da 180 g di carboidrati in su; il test arriva a 175 g).
 - **Esempi**: per ogni pasto 2–3 combinazioni (carboidrato + proteina, eventuale
   grasso, contorno di verdura per pranzo e cena) con porzioni arrotondate al passo;
   ogni macro dell'esempio dista dal pasto al massimo il 15% (almeno 5 g).
@@ -267,10 +282,20 @@ tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):
   `first_start_at_or_after`: mai la lista intera a ogni giorno.
 - Il trigger `nutrition_goal_no_overlap_on_update` (accanto a quello su
   `INSERT`) impedisce la sovrapposizione anche con un `UPDATE` delle date.
-- `experiments/verify_foods.py --apply`: rifiutato se un alimento ha problemi (id
-  mancante, voce scartata, differenza oltre il 10%, descrizione sospetta) a meno
-  di `--force`; il documento nuovo si rivalida con il parser prima di scriverlo;
-  `verified_on` solo se tutti gli alimenti sono verificati.
+- `experiments/verify_foods.py --ciqual-dir <cartella> --apply`: legge i file
+  XML della tabella (limite di dimensione, DTD rifiutato, lettura a flusso) e
+  rifiuta se un alimento non ha una voce utilizzabile (codice mancante o valore
+  mancante) a meno di `--force`; segnala anche nome originale memorizzato
+  diverso da quello del codice e differenze oltre il 10% (e oltre 0,5 g o
+  5 kcal); il documento nuovo si rivalida con il parser prima di scriverlo;
+  `verified_on` solo se tutti gli alimenti sono verificati. Uscita 0, 1 (errore
+  di input o rete), 2 (problemi nella tabella).
+- **CREA** (alimentinutrizione.it, tabelle 2019): il sito non permette di
+  riprodurre i dati senza citare la fonte, non offre scaricamento né licenza
+  aperta: i valori non si copiano. `experiments/crea_mapping.json` ha solo
+  codice e titolo della voce di ogni alimento; `--crea-fetch` (o `--crea-dir`)
+  stampa le differenze come rapporto, mai come errore (rese di cottura e metodi
+  diversi: la maggioranza degli alimenti differisce oltre il 10%).
 
 ## 8. Giorni futuri dal piano (fase 5, ADR 011)
 
@@ -317,8 +342,9 @@ tipici (default 07:30, 13:00, 20:00; almeno due ore tra l'uno e l'altro):
 
 ## Punti aperti
 
-- Verifica degli alimenti contro FDC (vedi sopra) e traduzione dei loro nomi.
-- Alimenti per il "durante" (bevanda o gel sportivo, barretta) con voci FDC
+- Revisione a mano della scelta delle voci CIQUAL (soprattutto le tre
+  approssimazioni) e traduzione dei nomi degli alimenti.
+- Alimenti per il "durante" (bevanda o gel sportivo, barretta) con voci CIQUAL
   verificate.
 - Le calorie lette dal file per le attività indicizzate prima della v4 non
   aggiornano l'indice (la pagina usa il valore letto).

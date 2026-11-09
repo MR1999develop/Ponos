@@ -337,17 +337,15 @@ def test_an_empty_profile_has_a_calendar_but_cannot_open_nutrition_settings(
     assert window.nutrition.day_windows == ()
 
 
-def test_the_shipped_food_values_are_marked_as_not_yet_verified_above_the_examples(
+def test_the_shipped_food_values_are_verified_so_the_page_has_no_note_about_it(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with_days(qtbot, tmp_path, settings)
 
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
 
-    assert (
-        last_day_page(window).foods_note_text == "Food values not yet verified against the source."
-    )
-    assert "Food values not yet verified against the source." in all_label_texts(
+    assert last_day_page(window).foods_note_text == ""
+    assert "Food values not yet verified against the source." not in all_label_texts(
         last_day_page(window)
     )
 

@@ -540,8 +540,10 @@ posto e documentati nella skill del progetto; non sono consigli medici.
         vicino all'allenamento; due sedute nello stesso giorno gestite.
 - [x] **Alimenti**: tabella curata di alimenti comuni con kcal e macro per
       100 g da una fonte con licenza compatibile (USDA FoodData Central, di
-      pubblico dominio: da verificare nel registro delle dipendenze), nomi
-      tradotti; 2–3 esempi per pasto con porzioni arrotondate.
+      pubblico dominio; dal 2026-11-09 ANSES-CIQUAL 2025, Etalab 2.0, per
+      richiesta dell'utente: riferimenti europei, vedi ADR 008 e
+      `docs/dipendenze.md`), nomi tradotti; 2–3 esempi per pasto con porzioni
+      arrotondate.
 - [x] **Calendario** dei giorni passati (vista mese, carico e attività per
       giorno): clic su un giorno → dettaglio con attività, carico e
       indicazione alimentare; base del calendario della fase 5.
@@ -647,9 +649,17 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
 - [ ] Ubuntu di nuovo nelle matrici di `ci.yml` e `release.yml` (tolto il
       2026-11-09 su richiesta dell'utente, eccezione 3 di `CLAUDE.md`) e CI verde
       su Ubuntu.
-- [ ] Valori della tabella degli alimenti verificati contro USDA FoodData
-      Central con `experiments/verify_foods.py --apply` (`source.verified_on`
-      valorizzato); il 2026-11-07 `api.nal.usda.gov` non si risolveva.
+- [x] Valori della tabella degli alimenti verificati contro ANSES-CIQUAL 2025
+      (file del 2025-11-03, Etalab 2.0) con `experiments/verify_foods.py
+      --ciqual-dir <cartella> --apply` (`source.verified_on` = 2026-11-09, 42
+      alimenti su 42 trovati); confronto con CREA solo come rapporto (licenza
+      che non permette di copiare i valori), codici in
+      `experiments/crea_mapping.json`. Tre alimenti sono approssimazioni
+      dichiarate nella tabella (yogurt greco 0%, mozzarella parzialmente
+      scremata, fagioli neri); la scelta di ogni voce CIQUAL è da rivedere a
+      mano prima del rilascio (vedi `ciqual_note`). Il codice USDA sbagliato
+      di circa dieci alimenti è superato dal cambio di fonte. Test:
+      `tests/experiments/test_verify_foods.py`, `tests/nutrition/test_foods.py`.
 - [x] `nutrition/foods.json` incluso nel pacchetto PyInstaller.
 - [x] Backup e ripristino di un profilo in un file versionato, con test di
       ripristino.

@@ -25,7 +25,7 @@ MAX_FOOD_TABLE_DEPTH: Final = 8  # the real table nests 4 levels (document, food
 # quote is optional so that an unterminated string consumes the rest once (a scan that restarted
 # at every stray quote would be quadratic); valid JSON has no unterminated string.
 _TOKEN: Final = re.compile(rb'"(?:[^"\\]|\\.)*"?|[\[\]{}]')
-FOOD_TABLE_FORMAT: Final = 1
+FOOD_TABLE_FORMAT: Final = 2  # 2: CIQUAL codes and names (1 was USDA FoodData Central ids)
 _MIN_FOODS: Final = 40
 _MAX_FOODS: Final = 200
 
@@ -38,11 +38,12 @@ class FoodTableError(Exception):
 class FoodSource:
     """Where the food numbers come from.
 
-    `verified_on` is the day somebody checked every entry against the source, None while that has
-    not been done.
+    `version` names the release of the source table; `verified_on` is the day somebody checked
+    every entry against the source, None while that has not been done.
     """
 
     name: str
+    version: str
     url: str
     license: str
     verified_on: date | None
@@ -101,11 +102,15 @@ def _food(raw: object) -> Food:
     roles = entry.get("roles")
     if not isinstance(roles, list) or not all(isinstance(r, str) for r in roles):
         raise FoodTableError("a food has a list of roles")
+    if not _text(entry, "ciqual_name").strip():  # the entry's original name: required, unused
+        raise FoodTableError("a food has the original name of its CIQUAL entry")
+    if "ciqual_note" in entry:
+        _text(entry, "ciqual_note")
     try:
         return Food(
             _text(entry, "id"),
             _text(entry, "name"),
-            _whole(entry, "fdc_id"),
+            _whole(entry, "ciqual_code"),
             FoodGroup(_text(entry, "group")),
             frozenset(MealRole(r) for r in roles),
             _number(entry, "kcal_100g"),
@@ -126,7 +131,13 @@ def _source(raw: object) -> FoodSource:
         day = None if verified is None else date.fromisoformat(str(verified))
     except ValueError as exc:
         raise FoodTableError("the verification date is not a date") from exc
-    return FoodSource(_text(entry, "name"), _text(entry, "url"), _text(entry, "license"), day)
+    return FoodSource(
+        _text(entry, "name"),
+        _text(entry, "version"),
+        _text(entry, "url"),
+        _text(entry, "license"),
+        day,
+    )
 
 
 def parse_food_table(data: bytes) -> FoodTable:

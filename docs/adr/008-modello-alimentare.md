@@ -1,6 +1,6 @@
 # 008. Nutrition model of the day
 
-- Status: Accepted
+- Status: Accepted; the food source was amended on 2026-11-09 (see the end)
 - Date: 2026-11-07
 
 ## Context
@@ -110,20 +110,29 @@ Keytel et al. (2005); Boer (1984); *Compendium of Physical Activities*.
 ### Food values
 
 1. **A small curated table of common foods (42 entries), values per 100 g
-   from USDA FoodData Central (CC0), read from a file shipped with the app
-   and checked before release with `experiments/verify_foods.py`.**
+   from the ANSES-CIQUAL table (Etalab 2.0), read from a file shipped with
+   the app and checked with `experiments/verify_foods.py`.**
    - Pro: no network call from the app; the licence allows copying and
-     redistribution; the table is small enough to verify by hand; examples
-     are reproducible.
+     redistribution with the citation of the source; a European, official
+     reference, with a downloadable release that the script can re-read; the
+     table is small enough to verify by hand; examples are reproducible.
    - Con: few foods, no sports drinks, gels or bars yet; names are English
-     only until translated; the first version was written without access to
-     the database, so it is not verified (`verified_on` is empty) and a
-     release is not allowed until it is.
-2. **Queries to the FoodData Central API at run time.**
+     only until translated; CIQUAL has no entry for some foods (fat-free
+     Greek yogurt, part-skim mozzarella, black beans: the closest one is used
+     and flagged as approximate in the table); its energy follows EU
+     Regulation 1169/2011 (fibre counts), so the Atwater check of a food has a
+     wider slack than before (25 kcal).
+2. **Queries to a food composition API at run time.**
    - Pro: complete and current.
-   - Con: needs the network, a key and a response parser at a new trust
-     boundary; guidance would change with the source data; nothing works
-     offline.
+   - Con: needs the network, possibly a key and a response parser at a new
+     trust boundary; guidance would change with the source data; nothing
+     works offline.
+3. **USDA FoodData Central (CC0), the first choice.**
+   - Pro: public domain, no obligation.
+   - Con: American foods and preparations; replaced on 2026-11-09 (see the
+     amendment at the end): the owner asked for European references, and
+     about ten of the FoodData Central ids written without access to the
+     database pointed at the wrong food.
 
 ## Decision
 
@@ -158,7 +167,8 @@ Keytel et al. (2005); Boer (1984); *Compendium of Physical Activities*.
   two intakes two hours apart that merge with a close meal (user choice of
   2026-11-09: one intake an hour made the day unmanageable).
 - **Foods.** The table of option 1; its source and licence are in
-  `docs/dipendenze.md`. The release is blocked until `verified_on` is set.
+  `docs/dipendenze.md` (ANSES-CIQUAL since the amendment). The release is
+  blocked while `verified_on` is empty.
 - **Constants.** Every threshold, factor and coefficient is in
   `nutrition/domain/defaults.py` with its source or the words "project
   default". The detail is in the project skill, `references/alimentazione.md`.
@@ -208,4 +218,33 @@ Keytel et al. (2005); Boer (1984); *Compendium of Physical Activities*.
 - All constants in one file: checked in code review; no automatic test yet.
 - `import-linter` in the CI: the nutrition domain stays pure.
 - Before the release: `experiments/verify_foods.py` has run on the table and
-  `verified_on` holds the date.
+  `verified_on` holds the date (`tests/nutrition/test_foods.py` checks that
+  the shipped file says it was verified).
+
+## Amendment 2026-11-09: food source
+
+Only the food table changes; the model above does not.
+
+- **Decision:** the values of `foods.json` come from the ANSES-CIQUAL 2025
+  table (Etalab 2.0), identified by `alim_code`, instead of USDA FoodData
+  Central. Format of the file: version 2 (`ciqual_code`, `ciqual_name`, optional
+  `ciqual_note` per food; `source.version`).
+- **Why:** the owner asked for European references (CIQUAL and CREA), and about
+  ten of the FoodData Central ids of the first table, written without access to
+  the database, pointed at the wrong food: the table could not be verified as
+  it was.
+- **CREA** (the Italian tables) is not copied: its site forbids reproducing data
+  without a clear citation and offers no bulk download or open licence. It is
+  only compared, entry by entry, by `experiments/verify_foods.py --crea-fetch`
+  (report, not a failure).
+- **Consequences:** the table is verified against a release that can be
+  downloaded again (`--ciqual-dir`); three foods are flagged as approximate;
+  the check of a food's energy against its macros allows 25 kcal (the EU
+  labelling counts fibre) and the macros of a food may add up to 100.5 g
+  (measured values); with the new values a meal of 175 g of carbohydrates or
+  more during a session, and one breakfast of 89 g carbohydrates and 49 g
+  protein, get no example (the examples are only an illustration; the grams of
+  the meal are not affected).
+- **How it is verified:** as above, plus `tests/experiments/test_verify_foods.py`
+  (reading of the release, DTD and size refusal, rule for traces and bounds,
+  round trip of the shipped file).
