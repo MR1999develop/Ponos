@@ -2,11 +2,10 @@
 # Copyright (C) 2026 MR
 """Dialog "Edit profile": humble view on the `MeasurementsForm` model.
 
-At the top the fixed data, read-only (or to complete, once only, for an old profile);
-below the updatable measurements, which apply from a chosen day (today by default); at the bottom
-the
-history. The dialog edits a copy: "Cancel" changes nothing. Saving starts with
-`save_requested`; the outcome (ok or rejected measurements) is reported by the window.
+At the top the editable name and the fixed data, read-only (or to complete, once only, for an
+old profile); below the updatable measurements, which apply from a chosen day (today by
+default); at the bottom the history. The dialog edits a copy: "Cancel" changes nothing. Saving
+starts with `save_requested`; the outcome (ok or rejected measurements) is reported by the window.
 """
 
 from __future__ import annotations
@@ -32,7 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from ponos_coach.load.domain import Sex
-from ponos_coach.profiles.domain import MIN_MEASUREMENT_DATE
+from ponos_coach.profiles.domain import MIN_MEASUREMENT_DATE, NAME_MAX_CHARS
 from ponos_coach.profiles.measurements import MeasurementHistory, MeasurementProblem
 from ponos_coach.ui.birth_date_edit import BirthDateEdit, to_qdate
 from ponos_coach.ui.body_input import BodyProblem, body_problem_text
@@ -55,6 +54,7 @@ from ponos_coach.ui.measurements_form import (
     EditIssue,
     MeasurementsForm,
     MeasurementsRequest,
+    NameProblem,
 )
 from ponos_coach.ui.tokens import DIALOG_MIN_WIDTH, SPACE_1, SPACE_2, SPACE_4, Theme, tokens_for
 
@@ -71,13 +71,11 @@ class ProfileEditDialog(QDialog):
         self,
         form: MeasurementsForm,
         history: MeasurementHistory,
-        profile_name: str,
         theme: Theme,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._form = form
-        self._profile_name = profile_name
         self._tokens = tokens_for(theme)
         self._show_errors = False
         self._errors = {field: self._error_label() for field in EditField}
@@ -129,6 +127,11 @@ class ProfileEditDialog(QDialog):
         outer.addWidget(self._buttons)
 
     def _build_fixed_fields(self) -> None:
+        self._name = QLineEdit(self)
+        self._name.setObjectName("profileName")
+        self._name.setAccessibleName(self.tr("Name"))
+        self._name.setMaxLength(NAME_MAX_CHARS)
+        self._name.textEdited.connect(self._on_name_edited)
         self._height = QLineEdit(self)
         self._height.setObjectName("fixedHeight")
         self._height.setAccessibleName(self.tr("Height (cm)"))
@@ -165,6 +168,7 @@ class ProfileEditDialog(QDialog):
         """Tab follows the visual order, top to bottom: first the fixed data to complete."""
         cancel = self._buttons.button(QDialogButtonBox.StandardButton.Cancel)
         order = [
+            self._name,
             self._height,
             self._birth,
             self._valid_from,
@@ -183,7 +187,9 @@ class ProfileEditDialog(QDialog):
         box = QGroupBox(self.tr("Profile data"), self)
         layout = QFormLayout(box)
         layout.setVerticalSpacing(SPACE_2)
-        layout.addRow(self.tr("Name"), self._read_only(self._profile_name, "fixedName"))
+        add_field_row(
+            layout, self.tr("Name"), self._name, self._with_error(self._name, EditField.NAME)
+        )
         sex_text = self.tr("Male") if self._form.sex is Sex.MALE else self.tr("Female")
         fixed = self._form.fixed
         if fixed is None:
@@ -301,6 +307,11 @@ class ProfileEditDialog(QDialog):
         return self._valid_from
 
     @property
+    def name_edit(self) -> QLineEdit:
+        """Campo del nome del profilo."""
+        return self._name
+
+    @property
     def weight_edit(self) -> QLineEdit:
         """Weight field."""
         return self._weight
@@ -365,6 +376,7 @@ class ProfileEditDialog(QDialog):
         self._valid_from.blockSignals(True)
         self._valid_from.setDate(to_qdate(self._form.valid_from))
         self._valid_from.blockSignals(False)
+        self._name.setText(self._form.current_name)
         self._refresh_values()
 
     def _refresh_values(self) -> None:
@@ -395,6 +407,8 @@ class ProfileEditDialog(QDialog):
             return body_problem_text(kind)
         if isinstance(kind, HeartRateProblem):
             return heart_rate_problem_text(kind)
+        if isinstance(kind, NameProblem):
+            return self._name_problem_text(kind)
         texts = {
             MeasurementProblem.NOTHING_TO_UPDATE: self.tr(
                 "Nothing has changed: change at least one value."
@@ -409,6 +423,11 @@ class ProfileEditDialog(QDialog):
             ),
         }
         return texts[kind]
+
+    def _name_problem_text(self, problem: NameProblem) -> str:
+        if problem is NameProblem.EMPTY:
+            return self.tr("Enter a name for the profile.")
+        return self.tr("The name contains characters that are not allowed.")
 
     def _update_save_button(self) -> None:
         """ "Save changes" stays disabled, with the reason in the tooltip, without changes."""
@@ -443,6 +462,10 @@ class ProfileEditDialog(QDialog):
     def _on_valid_from_changed(self, value: QDate) -> None:
         self._form.set_valid_from(date(value.year(), value.month(), value.day()))
         self._refresh_values()
+        self._after_edit()
+
+    def _on_name_edited(self, text: str) -> None:
+        self._form.edit_name(text)
         self._after_edit()
 
     def _on_weight_edited(self, text: str) -> None:
@@ -482,6 +505,7 @@ class ProfileEditDialog(QDialog):
 
     def _focus_first(self, field: EditField) -> None:
         targets: dict[EditField, QWidget] = {
+            EditField.NAME: self._name,
             EditField.VALID_FROM: self._valid_from,
             EditField.WEIGHT: self._weight,
             EditField.MIN_BPM: self._min,
@@ -500,6 +524,7 @@ class ProfileEditDialog(QDialog):
         """While saving is in progress the dialog accepts no other edits."""
         self._save.setEnabled(not busy and self._form.has_changes)
         for widget in (
+            self._name,
             self._valid_from,
             self._weight,
             self._min,

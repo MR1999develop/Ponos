@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -61,6 +61,8 @@ from ponos_coach.profiles.use_cases import (
     ProfilePorts,
     ProfileSession,
     RemoveProfileFromList,
+    RenamedProfile,
+    RenameProfile,
 )
 from ponos_coach.ui.data_thread import (
     DataThread,
@@ -117,6 +119,7 @@ class ProfileUseCases:
     remove: RemoveProfileFromList
     delete: DeleteProfileFolder
     peek: PeekProfile
+    rename: RenameProfile
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,6 +196,7 @@ class ProfileAccess:
     decode: Decoder
     today: Callable[[], date]
     context: JobContext
+    rename: Callable[[str], RenamedProfile]
 
 
 # --- State that lives only on the data thread ------------------------------------------------
@@ -529,6 +533,7 @@ class WorkspaceController(QObject):
                 services.decode,
                 lambda: services.today(current.zone),
                 context,
+                lambda text: services.profiles.rename(current.session, text),
             )
             return work(access)
 
@@ -536,6 +541,22 @@ class WorkspaceController(QObject):
             on_done(outcome)
 
         return self._submit(job, done) is not None
+
+    def profile_renamed(self, name: ProfileName) -> None:
+        """Il profilo aperto ha un nome nuovo, già scritto: titolo e menu si aggiornano."""
+        current = self._profile
+        if current is None or current.name == name:
+            return
+        self._profile = replace(current, name=name)
+        self._set_entries(
+            tuple(
+                replace(entry, cached_name=name)
+                if entry.profile_id == current.profile_id
+                else entry
+                for entry in self._entries
+            )
+        )
+        self.profile_changed.emit(self._profile)
 
     def describe_failure(self, error: BaseException) -> ErrorMessage:
         """The user message of an error, with the Composition Root's data."""

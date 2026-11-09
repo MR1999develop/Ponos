@@ -79,6 +79,7 @@ from ponos_coach.profiles.use_cases import (
     PeekProfile,
     ProfilePorts,
     RemoveProfileFromList,
+    RenameProfile,
 )
 from ponos_coach.selfcheck import run_self_check
 from ponos_coach.storage.file_archive import FileArchive
@@ -486,6 +487,7 @@ def compose_main_window(  # noqa: PLR0913 - every argument is an injectable vola
         remove=RemoveProfileFromList(ports),
         delete=DeleteProfileFolder(ports),
         peek=PeekProfile(ports),
+        rename=RenameProfile(ports.registry, utc_now),
     )
     services = WorkspaceServices(
         ports=ports,

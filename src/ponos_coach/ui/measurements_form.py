@@ -10,6 +10,7 @@ force is not a change: the field goes back to "untouched" and follows the day. O
 are saved; `changes` says what changes relative to the chosen day and `pending_periods` for how long
 the new values would apply (a measurement applies until the next already existing entry).
 For a profile created before they existed, height and birth date are completed once.
+The profile name is changed from here too: it is not a dated measurement and is saved together.
 
 The form gives problems as categories (`EditIssue`): the view chooses the messages. Weight, height
 and birth date are health data: never in a message or a log.
@@ -17,6 +18,7 @@ and birth date are health data: never in a message or a log.
 
 from __future__ import annotations
 
+import unicodedata
 from bisect import bisect_right
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -30,7 +32,13 @@ from ponos_coach.load.domain import (
     ThresholdHeartRate,
     physiology_for_day,
 )
-from ponos_coach.profiles.domain import MIN_MEASUREMENT_DATE, FixedProfileData, Weight
+from ponos_coach.profiles.domain import (
+    MIN_MEASUREMENT_DATE,
+    FixedProfileData,
+    InvalidProfileNameError,
+    ProfileName,
+    Weight,
+)
 from ponos_coach.profiles.measurements import (
     MeasurementHistory,
     MeasurementProblem,
@@ -46,6 +54,7 @@ class EditField(Enum):
     """Where the view shows a problem."""
 
     GENERAL = "general"
+    NAME = "name"
     VALID_FROM = "valid_from"
     WEIGHT = "weight"
     MIN_BPM = "min_bpm"
@@ -55,7 +64,14 @@ class EditField(Enum):
     BIRTH_DATE = "birth_date"
 
 
-type IssueKind = BodyProblem | HeartRateProblem | MeasurementProblem
+class NameProblem(Enum):
+    """What is wrong with the new profile name (the field enforces the length limit)."""
+
+    EMPTY = "empty"
+    INVALID = "invalid"
+
+
+type IssueKind = BodyProblem | HeartRateProblem | MeasurementProblem | NameProblem
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,10 +112,12 @@ class PendingPeriod:
 
 @dataclass(frozen=True, slots=True)
 class MeasurementsRequest:
-    """What saving must write: dated measurements and/or fixed data to complete."""
+    """What saving must write: dated measurements, fixed data to complete and/or the new
+    profile name."""
 
     update: MeasurementUpdate | None
     fixed: FixedProfileData | None
+    new_name: ProfileName | None = None
 
 
 _HEART_RATE_FIELD = {
@@ -141,9 +159,11 @@ def _default_physiology() -> Physiology:
 class MeasurementsForm:
     """Values of the "Edit profile" form and rules. It knows neither widgets nor texts."""
 
-    def __init__(self, history: MeasurementHistory, today: date) -> None:
+    def __init__(self, history: MeasurementHistory, today: date, name: str = "") -> None:
         self._history = history
         self._today = today
+        self._current_name = name
+        self._name_text: str | None = None  # None: untouched
         self._valid_from = today
         self._weight_text: str | None = None  # None: untouched
         self._min_bpm: int | None = None
@@ -151,6 +171,33 @@ class MeasurementsForm:
         self._threshold_bpm: int | None = None
         self.height_text = ""  # only to complete the fixed data
         self.birth_date: date | None = None
+
+    # --- Name -------------------------------------------------------------------------
+
+    @property
+    def current_name(self) -> str:
+        """The profile name right now."""
+        return self._current_name
+
+    @property
+    def name_text(self) -> str:
+        """The name shown: the one typed or, if the field is untouched, the profile's."""
+        return self._current_name if self._name_text is None else self._name_text
+
+    def edit_name(self, text: str) -> None:
+        """The user types the name. Equal to the current one (after NFC, no outer spaces): the
+        field goes back to untouched."""
+        same = unicodedata.normalize("NFC", text).strip() == self._current_name
+        self._name_text = None if same else text
+
+    def _name_reading(self) -> ProfileName | NameProblem | None:
+        """The typed name if valid; the problem if not; `None` if untouched."""
+        if self._name_text is None:
+            return None
+        try:
+            return ProfileName.parse(self._name_text)
+        except InvalidProfileNameError:
+            return NameProblem.EMPTY if not self._name_text.strip() else NameProblem.INVALID
 
     # --- Fixed data -------------------------------------------------------------------
 
@@ -267,7 +314,8 @@ class MeasurementsForm:
         """There is something to save (even a value to correct): enables "Save"."""
         heart_rate = any(value is not None for value in self._heart_rate_changes())
         return (
-            self._weight_differs()
+            self._name_text is not None
+            or self._weight_differs()
             or heart_rate
             or (self.needs_fixed_data and self._fixed_started())
         )
@@ -317,6 +365,9 @@ class MeasurementsForm:
     def issues(self) -> tuple[EditIssue, ...]:
         """Problems of the current values, in field order (empty if it can be saved)."""
         found: list[EditIssue] = []
+        name = self._name_reading()
+        if isinstance(name, NameProblem):
+            found.append(EditIssue(EditField.NAME, name))
         if self._weight_text is not None:
             reading = read_weight(self._weight_text)
             if isinstance(reading, BodyProblem):
@@ -351,9 +402,11 @@ class MeasurementsForm:
         if weight is not None or any(v is not None for v in (min_bpm, max_bpm, threshold_bpm)):
             update = MeasurementUpdate(self._valid_from, weight, min_bpm, max_bpm, threshold_bpm)
         fixed = self._built_fixed()
-        if update is None and fixed is None:
+        name = self._name_reading()
+        new_name = name if isinstance(name, ProfileName) else None
+        if update is None and fixed is None and new_name is None:
             return (EditIssue(EditField.GENERAL, MeasurementProblem.NOTHING_TO_UPDATE),)
-        return MeasurementsRequest(update, fixed)
+        return MeasurementsRequest(update, fixed, new_name)
 
     def _changed_weight(self) -> Weight | None:
         """The typed weight, if valid and different from the one in force on the chosen day."""

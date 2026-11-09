@@ -140,8 +140,8 @@ class ProfileDialogs(QObject):
         self._waiting_for_edit = False
         if not isinstance(history, MeasurementHistory) or self._edit_dialog is not None:
             return
-        form = MeasurementsForm(history, self._today())
-        dialog = ProfileEditDialog(form, history, self._profile_name(), self._theme(), self._window)
+        form = MeasurementsForm(history, self._today(), self._profile_name())
+        dialog = ProfileEditDialog(form, history, self._theme(), self._window)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         dialog.save_requested.connect(self._on_save_measurements)
         dialog.finished.connect(self._on_edit_closed)
@@ -160,19 +160,25 @@ class ProfileDialogs(QObject):
             periods = [
                 saved_period_text(series, period)
                 for series, period in (
-                    (MeasurementSeries.WEIGHT, edit.saved.weight),
-                    (MeasurementSeries.HEART_RATE, edit.saved.heart_rate),
+                    (MeasurementSeries.WEIGHT, None if edit.saved is None else edit.saved.weight),
+                    (
+                        MeasurementSeries.HEART_RATE,
+                        None if edit.saved is None else edit.saved.heart_rate,
+                    ),
                 )
                 if period is not None
             ]
+            recalculating = (
+                [QCoreApplication.translate("ProfileDialogs", "The load is being recalculated.")]
+                if edit.saved is not None
+                else []
+            )
             self._notify(
                 " ".join(
                     [
                         QCoreApplication.translate("ProfileDialogs", "Profile updated."),
                         *periods,
-                        QCoreApplication.translate(
-                            "ProfileDialogs", "The load is being recalculated."
-                        ),
+                        *recalculating,
                     ]
                 )
             )

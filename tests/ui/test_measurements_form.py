@@ -15,7 +15,14 @@ from ponos_coach.load.domain import (
     Sex,
     ThresholdHeartRate,
 )
-from ponos_coach.profiles.domain import BirthDate, FixedProfileData, Height, Weight, WeightEntry
+from ponos_coach.profiles.domain import (
+    BirthDate,
+    FixedProfileData,
+    Height,
+    ProfileName,
+    Weight,
+    WeightEntry,
+)
 from ponos_coach.profiles.measurements import (
     MeasurementHistory,
     MeasurementProblem,
@@ -30,6 +37,7 @@ from ponos_coach.ui.measurements_form import (
     MeasurementSeries,
     MeasurementsForm,
     MeasurementsRequest,
+    NameProblem,
     PendingPeriod,
     issue_for_rejection,
     weight_in_force,
@@ -352,3 +360,63 @@ def test_the_same_day_as_an_existing_entry_replaces_it_and_is_not_superseded_by_
 
 def test_an_untouched_form_has_no_pending_period() -> None:
     assert make_form().pending_periods() == ()
+
+
+# --- Nome del profilo ----------------------------------------------------------------------------
+
+
+def named_form(name: str = "Atleta di prova") -> MeasurementsForm:
+    return MeasurementsForm(make_history(), TODAY, name)
+
+
+def test_the_name_shown_is_the_current_one_until_it_is_edited() -> None:
+    form = named_form()
+
+    assert form.name_text == "Atleta di prova"
+    assert not changed(form)
+    form.edit_name("Altro")
+    assert form.name_text == "Altro"
+    assert changed(form)
+
+
+def test_a_name_equal_to_the_current_one_is_not_a_change() -> None:
+    form = named_form()
+
+    form.edit_name("  Atleta di prova ")
+
+    assert not changed(form)
+    assert form.build() == (EditIssue(EditField.GENERAL, MeasurementProblem.NOTHING_TO_UPDATE),)
+
+
+def test_a_new_name_is_saved_alone_normalised() -> None:
+    form = named_form()
+
+    form.edit_name("  Nuovo nome ")
+
+    assert request_of(form) == MeasurementsRequest(None, None, ProfileName("Nuovo nome"))
+
+
+def test_a_new_name_travels_with_the_measurements() -> None:
+    form = named_form()
+    form.edit_name("Nuovo nome")
+    form.edit_weight("70,0")
+
+    result = request_of(form)
+
+    assert result.new_name == ProfileName("Nuovo nome")
+    assert result.update is not None
+
+
+@pytest.mark.parametrize(
+    ("text", "problem"),
+    [("", NameProblem.EMPTY), ("   ", NameProblem.EMPTY), ("due\nrighe", NameProblem.INVALID)],
+)
+def test_an_invalid_name_is_an_issue_on_the_name_field_and_blocks_the_save(
+    text: str, problem: NameProblem
+) -> None:
+    form = named_form()
+
+    form.edit_name(text)
+
+    assert changed(form)  # "Salva" è attivo: l'errore si mostra al clic
+    assert form.build() == (EditIssue(EditField.NAME, problem),)

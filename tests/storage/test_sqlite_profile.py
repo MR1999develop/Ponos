@@ -45,7 +45,7 @@ from ponos_coach.profiles.ports import (
 )
 from ponos_coach.storage import sqlite_database, sqlite_schema
 from ponos_coach.storage.sqlite_database import create_database, open_database
-from ponos_coach.storage.sqlite_profile import SqliteProfileStorage
+from ponos_coach.storage.sqlite_profile import SqliteOpenProfile, SqliteProfileStorage
 from ponos_coach.storage.sqlite_schema import SCHEMA_VERSION
 from tests.builders import T0, fit_identity, gpx_identity, make_record
 from tests.contracts.contract_assessment import (
@@ -461,6 +461,39 @@ def test_name_with_quotes_and_unicode_round_trips(tmp_path: Path) -> None:
 
     with closing(SqliteProfileStorage().open(tmp_path)) as profile:
         assert profile.info.name == name
+
+
+def test_a_new_name_survives_closing_and_reopening_and_keeps_the_other_meta(
+    tmp_path: Path,
+) -> None:
+    _create(tmp_path)
+    new_name = ProfileName.parse("Nome nuovo' \"; DROP TABLE meta; -- è")
+
+    with closing(SqliteProfileStorage().open(tmp_path)) as profile:
+        profile.rename(new_name)
+        assert profile.info.name == new_name
+
+    with closing(SqliteProfileStorage().open(tmp_path)) as profile:
+        assert profile.info.name == new_name
+        assert profile.info.profile_id == PROFILE_ID
+        assert profile.info.timezone_name == "Europe/Rome"
+    assert SqliteProfileStorage().peek(tmp_path).info.name == new_name
+
+
+def test_a_failed_rename_leaves_the_name_as_it_was(tmp_path: Path) -> None:
+    _create(tmp_path)
+    other = SqliteProfileStorage().open(tmp_path)
+    assert isinstance(other, SqliteOpenProfile)
+    other._db.connection.execute("PRAGMA busy_timeout = 20")
+    holder = sqlite3.connect(_db_path(tmp_path), isolation_level=None)
+    holder.execute("BEGIN IMMEDIATE")  # un altro scrittore tiene il database
+    try:
+        with closing(other), pytest.raises(StorageBusyError):
+            other.rename(ProfileName.parse("Nome nuovo"))
+        assert other.info.name == NAME
+    finally:
+        holder.execute("ROLLBACK")
+        holder.close()
 
 
 # --- Connection and constraints -------------------------------------------------------------------

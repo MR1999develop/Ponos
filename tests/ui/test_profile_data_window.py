@@ -28,7 +28,7 @@ from ponos_coach.load.domain import (
     ThresholdHeartRate,
     default_weight,
 )
-from ponos_coach.profiles.domain import MIN_MEASUREMENT_DATE, ProfileName, Weight
+from ponos_coach.profiles.domain import MIN_MEASUREMENT_DATE, NAME_MAX_CHARS, ProfileName, Weight
 from ponos_coach.profiles.measurements import MeasurementUpdate
 from ponos_coach.profiles.use_cases import NewProfileRequest
 from ponos_coach.ui.birth_date_edit import NOT_SET_DATE
@@ -277,7 +277,7 @@ def test_the_stored_body_data_come_back_in_edit_profile_and_the_weight_in_the_hi
     edit = open_edit_dialog(qtbot, window)
 
     labels = {label.objectName(): label.text() for label in edit.findChildren(QLabel)}
-    assert labels["fixedName"] == PROFILE
+    assert edit.name_edit.text() == PROFILE
     assert labels["fixedHeightValue"] == "183 cm"
     assert labels["fixedSex"] == "Male"
     assert edit.height_edit.isHidden()  # nothing to complete
@@ -675,3 +675,66 @@ def test_profile_commands_are_disabled_as_soon_as_an_overview_recalculation_star
     wait_ready(qtbot, window, FILES_IN_FIXTURE_FOLDER)
     assert window.edit_profile_action.isEnabled()
     close_window(qtbot, window)
+
+
+# --- Nome del profilo ------------------------------------------------------------------
+
+
+def test_renaming_from_edit_profile_updates_the_title_the_menu_and_the_registry(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    dialog = open_edit_dialog(qtbot, window)
+    assert dialog.name_edit.text() == PROFILE
+    assert dialog.name_edit.maxLength() == NAME_MAX_CHARS
+    assert not dialog.save_button.isEnabled()
+
+    dialog.name_edit.selectAll()
+    QTest.keyClicks(dialog.name_edit, "  Atleta rinominato ")
+    assert dialog.save_button.isEnabled()
+    click(dialog.save_button)
+
+    qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
+    renamed = ProfileName.parse("Atleta rinominato")
+    profile = window.controller.profile
+    assert profile is not None
+    assert profile.name == renamed
+    assert window.windowTitle() == "Atleta rinominato - Ponos Coach"
+    assert [entry.cached_name for entry in window.controller.profiles] == [renamed]
+    assert [a.text() for a in window.switch_menu.actions()] == ["Atleta rinominato"]
+    assert "Profile updated." in window.statusBar().currentMessage()
+    reopened = open_edit_dialog(qtbot, window)  # il database ha il nome nuovo
+    assert reopened.name_edit.text() == "Atleta rinominato"
+
+
+def test_an_empty_name_is_reported_on_the_field_and_nothing_is_saved(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    dialog = open_edit_dialog(qtbot, window)
+
+    dialog.name_edit.clear()
+    QTest.keyClicks(dialog.name_edit, "   ")
+    click(dialog.save_button)
+
+    assert dialog.error_text(EditField.NAME) == "Enter a name for the profile."
+    assert window.profile_dialogs.edit_dialog is dialog  # resta aperto
+    profile = window.controller.profile
+    assert profile is not None
+    assert profile.name.value == PROFILE
+    assert window.windowTitle() == f"{PROFILE} - Ponos Coach"
+
+
+def test_the_name_alone_is_saved_without_recalculating_the_load(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    dialog = open_edit_dialog(qtbot, window)
+
+    dialog.name_edit.setText("Solo il nome")
+    dialog.name_edit.textEdited.emit("Solo il nome")
+    click(dialog.save_button)
+
+    qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is None, timeout=WAIT_MS)
+    assert window.windowTitle() == "Solo il nome - Ponos Coach"
+    assert "recalculated" not in window.statusBar().currentMessage()

@@ -432,6 +432,15 @@ class OpenProfile(Protocol):
         """The injuries and illnesses, with their check-ins."""
         ...
 
+    def rename(self, name: ProfileName) -> None:
+        """Scrive il nuovo nome nel database in una transazione e aggiorna `info`.
+
+        Raises:
+            ProfileStorageError: scrittura non riuscita; il nome resta quello di prima.
+            StorageBusyError: un altro processo tiene il database; il nome resta quello di prima.
+        """
+        ...
+
     def close(self) -> None:
         """Closes the connection (checkpoint included); calling it again has no effect."""
         ...

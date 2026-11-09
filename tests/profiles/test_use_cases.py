@@ -201,6 +201,9 @@ class _CountingProfile:
     def injuries(self) -> InjuryStore:
         return self._inner.injuries
 
+    def rename(self, name: ProfileName) -> None:
+        self._inner.rename(name)
+
     def close(self) -> None:
         self._owner.closed += 1
         self._inner.close()

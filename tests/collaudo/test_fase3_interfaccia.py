@@ -76,7 +76,7 @@ def settings(tmp_path: Path) -> QSettings:
 def edit_dialog(*, fixed_missing: bool = False) -> QDialog:
     history = make_history(fixed=None if fixed_missing else make_history().fixed)
     return ProfileEditDialog(
-        MeasurementsForm(history, TODAY), history, "Atleta di prova", Theme.LIGHT
+        MeasurementsForm(history, TODAY, "Atleta di prova"), history, Theme.LIGHT
     )
 
 

@@ -277,7 +277,12 @@ Sincronizza, Verifica completa, Interrompi sincronizzazione.
   The constraint minimum HR < threshold <= maximum HR is checked on the
   result. Decision: [ADR 007](adr/007-dati-del-profilo-e-zone.md).
 - **Edit profile** (Profile menu, Ctrl+E; in Italian "Modifica profilo"):
-  - at the top the fixed data, read only (name, height, date of birth, sex);
+  - at the top the name, editable (1 to 60 characters; an invalid name is
+    reported on the field), and the fixed data, read only (height, date of
+    birth, sex); the new name is written first to the profile database (source
+    of truth), then to the profile list; if the list cannot be updated the name
+    stays valid and the list realigns at the next opening; the window title
+    and the profile menus update at once;
     below, the measurements to update with the day from which they apply
     (today by default), the weight and the three HR values; at the bottom the
     history of the measurements, sortable by clicking the header, without

@@ -5329,6 +5329,14 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>I valori di frequenza cardiaca non sono coerenti: la frequenza a riposo deve essere inferiore alla soglia e la soglia non superiore alla massima.</translation>
     </message>
     <message>
+        <source>Enter a name for the profile.</source>
+        <translation>Inserisci un nome per il profilo.</translation>
+    </message>
+    <message>
+        <source>The name contains characters that are not allowed.</source>
+        <translation>Il nome contiene caratteri non consentiti.</translation>
+    </message>
+    <message>
         <source>Change at least one value first.</source>
         <translation>Prima cambia almeno un valore.</translation>
     </message>

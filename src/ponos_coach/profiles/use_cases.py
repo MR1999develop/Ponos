@@ -60,6 +60,7 @@ from ponos_coach.profiles.ports import (
     ProfileNotFoundError,
     ProfileNotRegisteredError,
     ProfileRegistry,
+    ProfileRegistryError,
     ProfileStorage,
     WeightStore,
 )
@@ -214,6 +215,10 @@ class ProfileSession:
     def injuries(self) -> InjuryStore:
         """The injuries and illnesses, with their check-ins."""
         return self._opened.injuries
+
+    def rename(self, name: ProfileName) -> None:
+        """Writes the new name to the profile database (see `OpenProfile.rename`)."""
+        self._opened.rename(name)
 
     def close(self) -> None:
         """Closes the database and releases the lock."""
@@ -483,6 +488,52 @@ def _register_opened(
     name read from the database, in a single write (a moved profile or a replaced
     folder are realigned together)."""
     registry.upsert(RegistryEntry(info.profile_id, folder, info.name, now))
+
+
+# --- Rename --------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class RenamedProfile:
+    """Outcome of `RenameProfile`: the name now in force and whether the profile list took it.
+
+    With `registry_updated` false the database already has the new name and the list realigns
+    at the next opening of the profile.
+    """
+
+    name: ProfileName
+    registry_updated: bool
+
+
+class RenameProfile:
+    """Renames the open profile: the database first (source of truth), then the list."""
+
+    def __init__(self, registry: ProfileRegistry, now_utc: Callable[[], datetime]) -> None:
+        self._registry = registry
+        self._now_utc = now_utc
+
+    def __call__(self, session: ProfileSession, text: str) -> RenamedProfile:
+        """Gives the profile the name `text` (NFC-normalised, no outer spaces).
+
+        A name equal to the current one writes nothing. A list failure after the database
+        write is not an error: `registry_updated` says so.
+
+        Raises:
+            InvalidProfileNameError: empty, too long or with control characters; nothing was
+                written.
+            ProfileStorageError: the database write failed; the name stays as it was.
+        """
+        name = ProfileName.parse(text)
+        if name == session.info.name:
+            return RenamedProfile(name, registry_updated=True)
+        session.rename(name)
+        try:
+            self._registry.upsert(
+                RegistryEntry(session.info.profile_id, session.folder, name, self._now_utc())
+            )
+        except ProfileRegistryError:
+            return RenamedProfile(name, registry_updated=False)
+        return RenamedProfile(name, registry_updated=True)
 
 
 # --- List, removal, deletion ---------------------------------------------------------------

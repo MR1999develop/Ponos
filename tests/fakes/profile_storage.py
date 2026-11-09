@@ -799,6 +799,10 @@ class _OpenProfile:
     def injuries(self) -> InjuryStore:
         return self._injuries
 
+    def rename(self, name: ProfileName) -> None:
+        """The new name goes to the fake disk, as in the real database."""
+        self._db.info = replace(self._db.info, name=name)
+
     def close(self) -> None:
         """No effect: the data stay in the fake disk."""
 

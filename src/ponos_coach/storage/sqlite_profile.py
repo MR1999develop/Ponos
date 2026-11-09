@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 
 from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxIndex
@@ -228,6 +229,24 @@ class SqliteOpenProfile:
     def injuries(self) -> InjuryStore:
         """Injuries and illnesses with their check-ins."""
         return self._injuries
+
+    def rename(self, name: ProfileName) -> None:
+        """Writes the name to `meta` in one transaction and updates `info` only once written.
+
+        Raises:
+            ProfileStorageError: the write failed; the name stays as it was.
+            StorageBusyError: another process holds the database; the name stays as it was.
+        """
+        try:
+            with self._db.atomic():
+                self._db.connection.execute(
+                    "INSERT INTO meta (key, value) VALUES (?, ?) "
+                    "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                    (_META_NAME, name.value),
+                )
+        except sqlite3.Error as exc:
+            raise ProfileStorageError("writing the profile name failed") from exc
+        self._info = replace(self._info, name=name)
 
     def close(self) -> None:
         """Closes the connection (checkpoint included); repeating it has no effect.
