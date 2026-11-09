@@ -24,7 +24,7 @@ from shiboken6 import isValid
 
 from ponos_coach.load.activity_detail import ActivityDetail, TrackOutline
 from ponos_coach.load.domain import ZoneSeconds
-from ponos_coach.maps.domain import TileKey
+from ponos_coach.maps.ports import TileProblem, TileResult, TileUnavailable
 from ponos_coach.maps.use_cases import TileProxy
 from ponos_coach.ui.activity_detail import DetailReady
 from ponos_coach.ui.activity_detail_dialog import ActivityDetailDialog
@@ -34,7 +34,7 @@ from ponos_coach.ui.tokens import Theme, tokens_for
 from ponos_coach.ui.track_view import TrackStrings, track_script
 from ponos_coach.ui.web_policy import TILE_URL_TEMPLATE, is_request_allowed
 from ponos_coach.ui.web_resources import resource_for_path
-from tests.fakes.tiles import FakeTileSource, InMemoryTileCache, InMemoryTileKeyStore
+from tests.fakes.tiles import FakeTileSource, InMemoryTileCache
 from tests.ui.test_activity_detail import detail_with
 from tests.ui.test_chart_view import evaluate, execute
 from tests.ui.workspace_support import WAIT_MS
@@ -58,12 +58,12 @@ def detail_with_track(track: TrackOutline | None) -> ActivityDetail:
 
 
 class Rig:
-    """An engine with the tile service on the fake provider, and the dialogs that use it."""
+    """An engine with the tile service on the fake server, and the dialogs that use it."""
 
-    def __init__(self, keys: InMemoryTileKeyStore) -> None:
-        self.source = FakeTileSource(keys)
+    def __init__(self, script: list[TileResult] | None = None) -> None:
+        self.source = FakeTileSource(script)
         proxy = TileProxy(self.source, InMemoryTileCache(), lambda: datetime.now(UTC), lambda: 0.0)
-        self.tiles = TileService(proxy, lambda: "en")
+        self.tiles = TileService(proxy)
         self.engine = ChartEngine(lambda _name: None, tiles=self.tiles)
 
     def dialog(self, qtbot: QtBot, track: TrackOutline | None) -> ActivityDetailDialog:
@@ -79,14 +79,14 @@ class Rig:
 
 @pytest.fixture
 def rig() -> Iterator[Rig]:
-    made = Rig(InMemoryTileKeyStore(TileKey(FakeTileSource.ACCEPTED_KEY)))
+    made = Rig()
     yield made
     made.engine.dispose()
 
 
 @pytest.fixture
-def keyless_rig() -> Iterator[Rig]:
-    made = Rig(InMemoryTileKeyStore())
+def refused_rig() -> Iterator[Rig]:
+    made = Rig([TileUnavailable(TileProblem.REFUSED)])
     yield made
     made.engine.dispose()
 
@@ -129,7 +129,6 @@ def test_the_script_carries_the_points_the_colours_of_the_theme_and_no_key() -> 
     assert payload["colors"]["background"] == light.map_background
     dark_payload = json.loads(track_script(outline(), dark, STRINGS)[len(_CALL) : -2])
     assert dark_payload["colors"]["background"] == dark.map_background
-    assert FakeTileSource.ACCEPTED_KEY not in script
 
 
 def test_the_page_is_in_the_closed_list_with_a_policy_that_allows_only_the_app_scheme() -> None:
@@ -233,9 +232,8 @@ def test_the_page_asks_for_tiles_only_through_the_proxy_and_never_holds_the_key(
     qtbot.waitUntil(lambda: len(rig.source.calls) > 0, timeout=WAIT_MS)
     html = evaluate(qtbot, dialog.track.view, "document.documentElement.outerHTML")
     assert isinstance(html, str)
-    assert FakeTileSource.ACCEPTED_KEY not in html
+    assert "key=" not in html  # the page never carries a credential
     assert not [r for r in caplog.records if "Blocked web request" in r.getMessage()]
-    assert not [r for r in caplog.records if FakeTileSource.ACCEPTED_KEY in r.getMessage()]
 
 
 def test_the_page_cannot_reach_the_network_or_other_hosts(
@@ -257,20 +255,20 @@ def test_the_page_cannot_reach_the_network_or_other_hosts(
     )
 
     assert [r for r in caplog.records if "Blocked web request" in r.getMessage()]
-    assert (99, 0, 0, "en") not in rig.source.calls
+    assert all(call[:3] != (99, 0, 0) for call in rig.source.calls)
     assert is_request_allowed(QUrl("ponos://app/track.js"))
     assert not is_request_allowed(QUrl("ponos://tiles/99/0/0"))
 
 
-def test_without_a_key_the_track_stays_on_a_plain_background_with_one_line_of_text(
-    qtbot: QtBot, keyless_rig: Rig
+def test_when_the_server_refuses_the_track_stays_on_a_plain_background_with_one_line_of_text(
+    qtbot: QtBot, refused_rig: Rig
 ) -> None:
-    dialog = keyless_rig.dialog(qtbot, outline())
+    dialog = refused_rig.dialog(qtbot, outline())
     wait_drawn(qtbot, dialog)
 
     qtbot.waitUntil(lambda: dialog.track.tile_problem_text != "", timeout=WAIT_MS)
 
-    assert dialog.track.tile_problem_text == "The map background needs a Tracestrack key."
+    assert dialog.track.tile_problem_text == "The map server refuses the requests."
     assert dialog.shows_track()  # the track is still there
 
 

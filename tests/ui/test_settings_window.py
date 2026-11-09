@@ -423,7 +423,7 @@ def test_discard_in_the_question_drops_the_edits_and_closes_the_window(
     qtbot.waitUntil(lambda: dialog.weight_edit.text() == before, timeout=WAIT_MS)
 
 
-def test_a_key_typed_and_not_saved_marks_the_map_page(
+def test_the_map_page_applies_at_once_and_is_never_marked(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = empty_window(qtbot, tmp_path, settings)
@@ -431,10 +431,8 @@ def test_a_key_typed_and_not_saved_marks_the_map_page(
     form = window.settings_window.page(SettingsCategory.MAP).form
     assert isinstance(form, MapSettingsDialog)
 
-    QTest.keyClicks(form.key_field, "not-a-saved-key")
+    QTest.keyClicks(form.cache_field, "2")
 
-    assert window.settings_window.category_label(SettingsCategory.MAP) == "Map *"
-    form.key_field.clear()
     assert window.settings_window.category_label(SettingsCategory.MAP) == "Map"
 
 

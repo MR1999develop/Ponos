@@ -20,14 +20,13 @@ from PySide6.QtCore import QSettings, QUrl
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.load.activity_profile import ActivityProfileData
-from ponos_coach.maps.domain import TileKey
 from ponos_coach.maps.ports import TileProblem, TileUnavailable
 from ponos_coach.ui.chart_view import ChartView
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.map_messages import page_call
 from ponos_coach.ui.map_web_view import MapWebView
 from ponos_coach.ui.web_policy import is_request_allowed
-from tests.fakes.tiles import FakeTileSource, InMemoryTileKeyStore
+from tests.fakes.tiles import FakeTileSource
 from tests.ui.map_support import NEAR, map_window, show_view
 from tests.ui.test_chart_view import evaluate, execute
 from tests.ui.workspace_support import WAIT_MS, TileFakes, make_settings
@@ -123,9 +122,7 @@ def wait_until_the_page_reported_its_view(qtbot: QtBot, view: MapWebView) -> Non
 
 
 def keyed_tiles() -> TileFakes:
-    keys = InMemoryTileKeyStore()
-    keys.save(TileKey(FakeTileSource.ACCEPTED_KEY))
-    return TileFakes(keys, FakeTileSource(keys))
+    return TileFakes(FakeTileSource())
 
 
 # --- The page and the network (T-SEC-15) ----------------------------------------------------
@@ -140,8 +137,7 @@ def test_the_page_asks_for_tiles_only_through_the_app_scheme_and_the_proxy(
     _window, view = window_with_page(qtbot, tmp_path, settings, tiles)
 
     qtbot.waitUntil(lambda: len(tiles.source.calls) > 0, timeout=WAIT_MS)
-    assert all(0 <= z <= 19 for z, _x, _y, _style in tiles.source.calls)
-    assert {style for *_rest, style in tiles.source.calls} == {"en"}  # the app's language
+    assert all(0 <= z <= 19 for z, _x, _y, _validators in tiles.source.calls)
     assert page_state(qtbot, view)["tileUrl"] == "ponos://tiles/{z}/{x}/{y}"
     assert not [r for r in caplog.records if "Blocked web request" in r.getMessage()]
 
@@ -166,7 +162,7 @@ def test_the_page_cannot_reach_the_network_or_other_hosts(
     # the network; the interceptor stops what looks like a tile but is not one).
     blocked = [r for r in caplog.records if "Blocked web request" in r.getMessage()]
     assert blocked
-    assert (99, 0, 0, "en") not in tiles.source.calls
+    assert all(call[:3] != (99, 0, 0) for call in tiles.source.calls)
     for url in (
         "ponos://tiles/3/4/5",
         "ponos://app/map.js",
@@ -190,8 +186,7 @@ def test_the_map_page_declares_a_policy_without_hosts_and_the_attribution_is_vis
     assert "ponos://tiles" in html
     state = page_state(qtbot, view)
     assert state["attributionVisible"] is True
-    assert "OpenStreetMap" in str(state["attribution"])
-    assert "Tracestrack" in str(state["attribution"])
+    assert "© OpenStreetMap contributors" in str(state["attribution"])
 
 
 # --- Groups (T-MAP-01) ----------------------------------------------------------------------
@@ -437,22 +432,19 @@ def test_the_page_functions_are_a_closed_set_and_the_payload_is_json() -> None:
 @pytest.mark.parametrize(
     ("problem", "expected"),
     [
-        (TileProblem.KEY_REJECTED, ("Tracestrack refused the key", "Check the key in Settings")),
-        (TileProblem.CREDIT_EXHAUSTED, ("credit is used up", "Check your Tracestrack account")),
+        (TileProblem.REFUSED, ("server refuses the requests", "Wait a few minutes")),
         (TileProblem.NETWORK_UNAVAILABLE, ("cannot be loaded", "Check the connection")),
         (TileProblem.INVALID_RESPONSE, ("cannot be shown", "Try again later")),
     ],
 )
-def test_when_the_provider_fails_the_tracks_stay_and_the_notice_says_what_to_do(
+def test_when_the_server_fails_the_tracks_stay_and_the_notice_says_what_to_do(
     qtbot: QtBot,
     tmp_path: Path,
     settings: QSettings,
     problem: TileProblem,
     expected: tuple[str, str],
 ) -> None:
-    keys = InMemoryTileKeyStore()
-    keys.save(TileKey(FakeTileSource.ACCEPTED_KEY))  # a key: the notice is the provider's problem
-    tiles = TileFakes(keys, FakeTileSource(keys, script=[TileUnavailable(problem)]))
+    tiles = TileFakes(FakeTileSource([TileUnavailable(problem)]))
     window, view = window_with_page(qtbot, tmp_path, settings, tiles)
     show_view(qtbot, window, NEAR)
     page = window.map_page
@@ -464,17 +456,6 @@ def test_when_the_provider_fails_the_tracks_stay_and_the_notice_says_what_to_do(
     qtbot.waitUntil(lambda: page_state(qtbot, view)["tracks"] == 8, timeout=WAIT_MS)  # tracks stay
     if problem is not TileProblem.INVALID_RESPONSE:  # that one is per tile, the others global
         assert len(tiles.source.calls) <= 3  # the proxy stops asking: no hammering
-
-
-def test_without_a_key_the_notice_appears_at_once_and_the_table_still_works(
-    qtbot: QtBot, tmp_path: Path, settings: QSettings
-) -> None:
-    window, _view = window_with_page(qtbot, tmp_path, settings)  # the fake key store is empty
-    show_view(qtbot, window, NEAR)
-
-    assert window.map_page.notice_visible
-    assert "needs a Tracestrack key" in window.map_page.notice_text
-    assert window.activities_page.proxy.rowCount() == 8  # the table lists them all the same
 
 
 def test_a_tile_that_arrives_clears_the_notice(

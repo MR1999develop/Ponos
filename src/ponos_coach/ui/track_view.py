@@ -6,9 +6,9 @@
 menu, no message channel) that shows the small page `track.html`. A page that only draws needs
 no `QWebChannel`, so it has none: Python sends the points once as JSON (`track_script`) and the
 page answers nothing. The tiles come from the same local proxy as the map (`ponos://tiles/...`),
-which holds the Tracestrack key: the key never enters the page. Without a key or without network
-the tiles fail, the page keeps its neutral background with the track, and `TrackPanel` says why
-in one line.
+which asks the OpenStreetMap server on the page's behalf (the page never contacts the network).
+Without network or if the server refuses, the tiles fail, the page keeps its neutral background
+with the track, and `TrackPanel` says why in one line.
 
 Positions are personal data: nothing here logs them.
 """

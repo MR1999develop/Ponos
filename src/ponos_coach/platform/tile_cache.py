@@ -24,15 +24,15 @@ from pathlib import Path
 from typing import Final
 
 from ponos_coach.maps.domain import TileAddress
-from ponos_coach.maps.ports import CachedTile, TileCacheError, TileImage
+from ponos_coach.maps.ports import CachedTile, TileCacheError, TileImage, TileValidators
 from ponos_coach.platform.private_folder import make_private_directory
 
 _LOG = logging.getLogger(__name__)
 
 CACHE_FILE_NAME: Final = "tiles.sqlite3"
-_SCHEMA_VERSION: Final = 1
+_SCHEMA_VERSION: Final = 2  # 1 had a label style column: the old file is rebuilt
 # PRAGMA takes no parameters: a literal that must match _SCHEMA_VERSION (test_tile_cache).
-_SET_SCHEMA_VERSION: Final = "PRAGMA user_version = 1"
+_SET_SCHEMA_VERSION: Final = "PRAGMA user_version = 2"
 _PAGE_BYTES: Final = 4096
 _ROW_OVERHEAD_BYTES: Final = 160  # key, index entry and row header, generous
 _EVICTION_BATCH: Final = 64
@@ -42,24 +42,30 @@ _CREATE: Final = (
     """
     CREATE TABLE tile (
         id         INTEGER PRIMARY KEY,
-        style      TEXT    NOT NULL CHECK (length(style) = 2),
         z          INTEGER NOT NULL CHECK (z BETWEEN 0 AND 19),
         x          INTEGER NOT NULL CHECK (x >= 0),
         y          INTEGER NOT NULL CHECK (y >= 0),
         expires_ms INTEGER NOT NULL,
+        etag       TEXT    CHECK (etag IS NULL OR length(etag) BETWEEN 1 AND 256),
+        modified   TEXT    CHECK (modified IS NULL OR length(modified) BETWEEN 1 AND 256),
         used_seq   INTEGER NOT NULL,
         cost       INTEGER NOT NULL CHECK (cost > 0),
         png        BLOB    NOT NULL,
-        UNIQUE (style, z, x, y)
+        UNIQUE (z, x, y)
     ) STRICT
     """,
     "CREATE INDEX tile_by_use ON tile (used_seq)",
 )
 
 
-def accounted_bytes(png_size: int) -> int:
-    """Bytes a tile counts against the cap: its size plus the row overhead, in whole pages."""
-    return -(-(png_size + _ROW_OVERHEAD_BYTES) // _PAGE_BYTES) * _PAGE_BYTES
+def accounted_bytes(png_size: int, validators_size: int = 0) -> int:
+    """Bytes a tile counts against the cap: its size, its validators and the row overhead, in
+    whole pages."""
+    return -(-(png_size + validators_size + _ROW_OVERHEAD_BYTES) // _PAGE_BYTES) * _PAGE_BYTES
+
+
+def _validators_size(validators: TileValidators) -> int:
+    return len(validators.etag or "") + len(validators.last_modified or "")
 
 
 def _ms(moment: datetime) -> int:
@@ -125,38 +131,51 @@ class DiskTileCache:
         with self._lock:
             return self._total
 
-    def get(self, style: str, address: TileAddress, now: datetime) -> CachedTile | None:
+    def get(self, address: TileAddress, now: datetime) -> CachedTile | None:
         """See `TileCache.get`."""
         del now  # freshness is the caller's decision; the cache only keeps the expiry
         with self._lock, self._failures():
             row = self._connection.execute(
-                "SELECT id, png, expires_ms FROM tile "
-                "WHERE style = ? AND z = ? AND x = ? AND y = ?",
-                (style, address.z, address.x, address.y),
+                "SELECT id, png, expires_ms, etag, modified FROM tile "
+                "WHERE z = ? AND x = ? AND y = ?",
+                (address.z, address.x, address.y),
             ).fetchone()
             if row is None:
                 return None
             self._connection.execute(
                 "UPDATE tile SET used_seq = ? WHERE id = ?", (self._take_use(), row[0])
             )
-        return CachedTile(bytes(row[1]), datetime.fromtimestamp(row[2] / 1000, UTC))
+        return CachedTile(
+            bytes(row[1]),
+            datetime.fromtimestamp(row[2] / 1000, UTC),
+            TileValidators(row[3], row[4]),
+        )
 
-    def put(self, style: str, address: TileAddress, image: TileImage, now: datetime) -> None:
+    def put(self, address: TileAddress, image: TileImage, now: datetime) -> None:
         """See `TileCache.put`."""
-        cost = accounted_bytes(len(image.png))
+        cost = accounted_bytes(len(image.png), _validators_size(image.validators))
         if image.ttl_s == 0 or cost > self._limit:
             return
         expires = _ms(now + timedelta(seconds=image.ttl_s))
         with self._lock, self._failures(), self._transaction():
-            self._forget(style, address)
+            self._forget(address)
             self._connection.execute(
-                "INSERT INTO tile (style, z, x, y, expires_ms, used_seq, cost, png) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (style, address.z, address.x, address.y, expires, self._take_use(), cost,
-                 image.png),
+                "INSERT INTO tile (z, x, y, expires_ms, etag, modified, used_seq, cost, png) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (address.z, address.x, address.y, expires, image.validators.etag,
+                 image.validators.last_modified, self._take_use(), cost, image.png),
             )  # fmt: skip
             self._total += cost
             self._evict()
+
+    def renew(self, address: TileAddress, ttl_s: int, now: datetime) -> None:
+        """See `TileCache.renew`."""
+        expires = _ms(now + timedelta(seconds=ttl_s))
+        with self._lock, self._failures():
+            self._connection.execute(
+                "UPDATE tile SET expires_ms = ?, used_seq = ? WHERE z = ? AND x = ? AND y = ?",
+                (expires, self._take_use(), address.z, address.x, address.y),
+            )
 
     def clear(self) -> None:
         """See `TileCache.clear`: the file is deleted and recreated, so the disk use is zero."""
@@ -187,10 +206,10 @@ class DiskTileCache:
         self._next_use += 1
         return self._next_use
 
-    def _forget(self, style: str, address: TileAddress) -> None:
+    def _forget(self, address: TileAddress) -> None:
         row = self._connection.execute(
-            "SELECT id, cost FROM tile WHERE style = ? AND z = ? AND x = ? AND y = ?",
-            (style, address.z, address.x, address.y),
+            "SELECT id, cost FROM tile WHERE z = ? AND x = ? AND y = ?",
+            (address.z, address.x, address.y),
         ).fetchone()
         if row is not None:
             self._connection.execute("DELETE FROM tile WHERE id = ?", (row[0],))

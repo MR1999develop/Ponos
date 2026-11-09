@@ -112,9 +112,8 @@ def test_the_zone_legend_gives_the_heart_rate_range_when_the_thresholds_are_know
     assert map_texts.zone_legend_text(2, None).startswith("Z3")  # without thresholds: the name only
 
 
-def test_the_attribution_credits_both_providers() -> None:
-    assert "OpenStreetMap contributors" in map_texts.ATTRIBUTION
-    assert "Tracestrack" in map_texts.ATTRIBUTION
+def test_the_attribution_credits_the_openstreetmap_contributors() -> None:
+    assert map_texts.ATTRIBUTION == "© OpenStreetMap contributors"
 
 
 # --- Elevation profile ----------------------------------------------------------------------

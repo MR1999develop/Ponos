@@ -18,8 +18,8 @@ from ponos_coach.ui.errors import ErrorMessage, exclusion_reason_text
 from ponos_coach.ui.load_figures import zone_label
 
 _ZONE_COUNT = 5
-ATTRIBUTION = "Map data © OpenStreetMap contributors | Maps © Tracestrack"
-"""Credit the providers ask for, always visible on the map: legal text, not translated."""
+ATTRIBUTION = "© OpenStreetMap contributors"
+"""Credit the data license asks for, always visible on the map: legal text, not translated."""
 
 
 def _number(value: float, decimals: int = 0) -> str:
@@ -84,38 +84,23 @@ def no_activities_text() -> str:
 
 def tile_notice(problem: TileProblem) -> ErrorMessage:
     """What is wrong with the map background and what to do; tracks and list work anyway."""
-    if problem is TileProblem.NO_KEY:
+    if problem is TileProblem.REFUSED:
         return ErrorMessage(
-            QCoreApplication.translate("Map", "The map background needs a Tracestrack key"),
-            QCoreApplication.translate("Map", "Without a key the map shows a plain background."),
-            QCoreApplication.translate(
-                "Map",
-                "Add your key in Settings > Map. Tracks, filters and the list work without it.",
-            ),
-        )
-    if problem is TileProblem.KEY_REJECTED:
-        return ErrorMessage(
-            QCoreApplication.translate("Map", "Tracestrack refused the key"),
-            QCoreApplication.translate("Map", "The map shows a plain background."),
-            QCoreApplication.translate(
-                "Map", "Check the key in Settings > Map, or enter a new one."
-            ),
-        )
-    if problem is TileProblem.CREDIT_EXHAUSTED:
-        return ErrorMessage(
-            QCoreApplication.translate("Map", "The Tracestrack credit is used up"),
+            QCoreApplication.translate("Map", "The map server refuses the requests"),
             QCoreApplication.translate(
                 "Map", "The map shows a plain background; tiles already seen still appear."
             ),
             QCoreApplication.translate(
-                "Map", "Check your Tracestrack account, or wait for the credit to renew."
+                "Map",
+                "Wait a few minutes and move the map again. Tracks, filters and the list work "
+                "without it.",
             ),
         )
     if problem is TileProblem.NETWORK_UNAVAILABLE:
         return ErrorMessage(
             QCoreApplication.translate("Map", "The map background cannot be loaded"),
             QCoreApplication.translate(
-                "Map", "There is no network, or Tracestrack does not answer."
+                "Map", "There is no network, or the map server does not answer."
             ),
             QCoreApplication.translate(
                 "Map", "Check the connection. The map tries again by itself when you move it."
@@ -123,7 +108,7 @@ def tile_notice(problem: TileProblem) -> ErrorMessage:
         )
     return ErrorMessage(
         QCoreApplication.translate("Map", "The map background cannot be shown"),
-        QCoreApplication.translate("Map", "Tracestrack sent something the map cannot use."),
+        QCoreApplication.translate("Map", "The map server sent something the map cannot use."),
         QCoreApplication.translate(
             "Map", "Try again later. Tracks, filters and the list are not affected."
         ),

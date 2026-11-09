@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""HTTPS tile source (`TileSource` port): Tracestrack Topo with a personal key.
+"""HTTPS tile source (`TileSource` port): the standard OpenStreetMap tile server.
 
-The only host the app contacts for the map is `tile.tracestrack.com`, over HTTPS with full
-certificate verification. Every request has a socket timeout and a total deadline; there is one
-attempt per call and no retry; redirects are never followed and no system proxy is used (the
-client is `http.client`, which does neither). The answer must be a PNG, within a byte cap, with
-a size in pixels that makes sense: anything else is `INVALID_RESPONSE`. The key travels in the
-query of the request, as the provider requires, and nowhere else: never in a log, an exception or
-a message; the URL is not logged either (it says which area is looked at).
+The only host the app contacts for the map is `tile.openstreetmap.org`, over HTTPS with full
+certificate verification, at `/{z}/{x}/{y}.png` (its usage policy: a distinct `User-Agent` that
+names the app, no `Cache-Control: no-cache`, conditional requests for tiles that expired, no bulk
+download). Every request has a socket timeout and a total deadline; there is one attempt per call
+and no retry; redirects are never followed and no system proxy is used (the client is
+`http.client`, which does neither). The answer must be a PNG, within a byte cap, with a size in
+pixels that makes sense: anything else is `INVALID_RESPONSE`. 403 and 429 are `REFUSED`. The URL
+is not logged (it says which area is looked at).
 
 A plain-HTTP endpoint is accepted only on a loopback address (a local tile server).
 """
@@ -27,33 +28,36 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Final
 
-from ponos_coach.maps.domain import TileAddress, TileKey, tile_style
+from ponos_coach.maps.domain import TileAddress
 from ponos_coach.maps.ports import (
     MAX_TILE_TTL_S,
+    NO_VALIDATORS,
     TileImage,
-    TileKeyStore,
-    TileKeyStoreError,
+    TileNotModified,
     TileProblem,
     TileResult,
     TileUnavailable,
+    TileValidators,
 )
 
 _LOG = logging.getLogger(__name__)
 
 MAX_TILE_BYTES: Final = 1024 * 1024  # a 512 px tile is a few hundred KiB at most
 MAX_TILE_PIXELS: Final = 1024  # side of the tile image; tiles are 256 or 512
-DEFAULT_TTL_S: Final = 24 * 3600  # when the provider says nothing about reuse
+DEFAULT_TTL_S: Final = 7 * 24 * 3600  # the server says nothing: its usage policy asks 7 days
 MAX_TTL_S: Final = 30 * 24 * 3600  # however long the provider allows, the app renews monthly
 _LOOPBACK_HOSTS: Final = frozenset({"127.0.0.1", "::1", "localhost"})
 _HOST: Final = re.compile(r"[A-Za-z0-9.-]{1,253}|::1")
-_USER_AGENT: Final = re.compile(r"[ -~]{1,64}")  # printable ASCII only: no line breaks
+MAX_USER_AGENT_CHARS: Final = 128
+_USER_AGENT: Final = re.compile(rf"[ -~]{{1,{MAX_USER_AGENT_CHARS}}}")  # printable ASCII
+_VALIDATOR: Final = re.compile(r"[ -~]{1,256}")  # ETag, Last-Modified: printable ASCII, short
 _MAX_AGE: Final = re.compile(r"max-age=(\d{1,10})")
 _CHUNK: Final = 16 * 1024
 _PNG_SIGNATURE: Final = b"\x89PNG\r\n\x1a\n"
 _PNG_END: Final = b"IEND\xaeB`\x82"
 _IHDR: Final = struct.Struct(">I4sII")  # chunk length, type, width, height
-_KEY_REJECTED: Final = frozenset({401, 403})
-_CREDIT_OVER: Final = frozenset({402, 429})
+_REFUSED: Final = frozenset({403, 429})
+_HTTP_NOT_MODIFIED: Final = 304
 _SERVER_ERROR_FIRST: Final = 500
 _HTTP_OK: Final = 200
 
@@ -75,7 +79,7 @@ class TileEndpoint:
             raise ValueError("plain HTTP is only allowed on a loopback address")
 
 
-TRACESTRACK: Final = TileEndpoint("https", "tile.tracestrack.com", 443)
+OPENSTREETMAP: Final = TileEndpoint("https", "tile.openstreetmap.org", 443)
 
 
 def _png_is_sane(data: bytes) -> bool:
@@ -125,12 +129,12 @@ def _ttl_from_expires(expires: str, date: str | None, now: datetime) -> int:
 
 
 class HttpTileSource:
-    """Tiles over HTTP(S) from one endpoint, with the key from the key store.
+    """Tiles over HTTP(S) from one endpoint.
 
     Args:
-        key_store: where the key is read at every request (so a new key applies at once).
-        endpoint: `TRACESTRACK` in the app; a loopback `http` endpoint for a local server.
-        user_agent: generic name of the app; no personal data.
+        endpoint: `OPENSTREETMAP` in the app; a loopback `http` endpoint for a local server.
+        user_agent: stable name of the app with version and contact URL (the server's usage
+            policy asks for it); printable ASCII, at most `MAX_USER_AGENT_CHARS`.
         timeout_s: limit for connecting and for each read.
         total_timeout_s: limit for the whole request, however slowly the bytes arrive.
         max_bytes: largest answer accepted.
@@ -140,10 +144,9 @@ class HttpTileSource:
 
     def __init__(  # noqa: PLR0913 - each one is a distinct limit or volatile dependency
         self,
-        key_store: TileKeyStore,
-        endpoint: TileEndpoint = TRACESTRACK,
+        endpoint: TileEndpoint,
         *,
-        user_agent: str = "PonosCoach",
+        user_agent: str,
         timeout_s: float = 8.0,
         total_timeout_s: float = 20.0,
         max_bytes: int = MAX_TILE_BYTES,
@@ -154,7 +157,6 @@ class HttpTileSource:
             raise ValueError("timeouts and byte cap must be positive")
         if _USER_AGENT.fullmatch(user_agent) is None:
             raise ValueError("invalid user agent")
-        self._keys = key_store
         self._endpoint = endpoint
         self._user_agent = user_agent
         self._timeout_s = timeout_s
@@ -163,35 +165,35 @@ class HttpTileSource:
         self._monotonic = monotonic
         self._now = now
 
-    def fetch(self, z: int, x: int, y: int, language: str) -> TileResult:
-        """See `TileSource.fetch`. One attempt; the key never leaves this method."""
+    def fetch(
+        self, z: int, x: int, y: int, validators: TileValidators = NO_VALIDATORS
+    ) -> TileResult:
+        """See `TileSource.fetch`. One attempt."""
         address = TileAddress(z, x, y)  # raises TileAddressError before anything else
-        try:
-            key = self._keys.load()
-        except TileKeyStoreError:
-            key = None
-        if key is None:
-            return TileUnavailable(TileProblem.NO_KEY)
-        result = self._request(address, tile_style(language), key)
+        result = self._request(address, validators)
         if isinstance(result, TileUnavailable):
             _LOG.info("map tile unavailable (%s)", result.problem.value)
         return result
 
-    def _request(self, address: TileAddress, style: str, key: TileKey) -> TileResult:
-        path = f"/topo_{style}/{address.z}/{address.x}/{address.y}.png?key={key.reveal()}"
+    def _request(self, address: TileAddress, validators: TileValidators) -> TileResult:
+        path = f"/{address.z}/{address.x}/{address.y}.png"
+        headers = {
+            "User-Agent": self._user_agent,
+            "Accept": "image/png",
+            "Connection": "close",
+        }
+        etag = _validator(validators.etag)
+        modified = _validator(validators.last_modified)
+        if etag is not None:
+            headers["If-None-Match"] = etag
+        if modified is not None:
+            headers["If-Modified-Since"] = modified
+        conditional = etag is not None or modified is not None
         deadline = self._monotonic() + self._total_timeout_s
         connection = self._connection()
         try:
-            connection.request(
-                "GET",
-                path,
-                headers={
-                    "User-Agent": self._user_agent,
-                    "Accept": "image/png",
-                    "Connection": "close",
-                },
-            )
-            return self._answer(connection.getresponse(), deadline)
+            connection.request("GET", path, headers=headers)
+            return self._answer(connection.getresponse(), deadline, conditional)
         except (OSError, http.client.HTTPException):
             # Timeouts, refused or reset connections, TLS failures, malformed answers. The
             # exception is dropped on purpose: its text can carry the host and the URL.
@@ -210,7 +212,13 @@ class HttpTileSource:
             )
         return http.client.HTTPConnection(endpoint.host, endpoint.port, timeout=self._timeout_s)
 
-    def _answer(self, response: http.client.HTTPResponse, deadline: float) -> TileResult:
+    def _answer(
+        self, response: http.client.HTTPResponse, deadline: float, conditional: bool
+    ) -> TileResult:
+        if response.status == _HTTP_NOT_MODIFIED:
+            if not conditional:  # nobody asked: a 304 means nothing
+                return TileUnavailable(TileProblem.INVALID_RESPONSE)
+            return TileNotModified(min(self._ttl(response), MAX_TILE_TTL_S))
         problem = self._problem_in_head(response)
         if problem is not None:
             return TileUnavailable(problem)
@@ -219,21 +227,24 @@ class HttpTileSource:
             return TileUnavailable(TileProblem.NETWORK_UNAVAILABLE)  # too slow: deadline passed
         if len(data) > self._max_bytes or not _png_is_sane(data):
             return TileUnavailable(TileProblem.INVALID_RESPONSE)
-        ttl = ttl_from_headers(
+        validators = TileValidators(
+            _validator(response.getheader("ETag")), _validator(response.getheader("Last-Modified"))
+        )
+        return TileImage(data, min(self._ttl(response), MAX_TILE_TTL_S), validators)
+
+    def _ttl(self, response: http.client.HTTPResponse) -> int:
+        return ttl_from_headers(
             response.getheader("Cache-Control"),
             response.getheader("Expires"),
             response.getheader("Date"),
             self._now(),
         )
-        return TileImage(data, min(ttl, MAX_TILE_TTL_S))
 
     def _problem_in_head(self, response: http.client.HTTPResponse) -> TileProblem | None:
         """What the status line and the headers already say is wrong; `None` if all is well."""
         status = response.status
-        if status in _KEY_REJECTED:
-            return TileProblem.KEY_REJECTED
-        if status in _CREDIT_OVER:
-            return TileProblem.CREDIT_EXHAUSTED
+        if status in _REFUSED:
+            return TileProblem.REFUSED
         if status >= _SERVER_ERROR_FIRST:
             return TileProblem.NETWORK_UNAVAILABLE
         declared = response.getheader("Content-Length")
@@ -260,8 +271,12 @@ class HttpTileSource:
         return b"".join(chunks)
 
 
-def create_tracestrack_source(
-    key_store: TileKeyStore, *, user_agent: str = "PonosCoach"
-) -> HttpTileSource:
-    """The tile source of the app: Tracestrack Topo, HTTPS, the app's limits (single place)."""
-    return HttpTileSource(key_store, TRACESTRACK, user_agent=user_agent)
+def _validator(value: str | None) -> str | None:
+    """An ETag or Last-Modified worth keeping, or `None` (absent, too long, odd characters)."""
+    return value if value is not None and _VALIDATOR.fullmatch(value) else None
+
+
+def create_osm_source(user_agent: str) -> HttpTileSource:
+    """The tile source of the app: tile.openstreetmap.org over HTTPS, the app's limits (single
+    place). `user_agent` is `PonosCoach/<version> (+<contact URL>)`."""
+    return HttpTileSource(OPENSTREETMAP, user_agent=user_agent)

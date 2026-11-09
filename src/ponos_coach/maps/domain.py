@@ -1,29 +1,21 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Pure types of the map background: tile address, style, key and settings.
+"""Pure types of the map background: tile address and cache limit.
 
-Everything that comes from the map page (the path of a tile) or from the user (the key, the cache
-size) becomes one of these types here or is rejected. The key is a secret: it is never shown,
-serialised or compared in variable time.
+Everything that comes from the map page (the path of a tile) or from the user (the cache size)
+becomes one of these types here or is rejected.
 """
 
 from __future__ import annotations
 
-import hmac
 import re
 from dataclasses import dataclass
-from typing import Final, NoReturn
+from typing import Final
 
 MIN_TILE_ZOOM: Final = 0
-MAX_TILE_ZOOM: Final = 19  # highest zoom the topographic style is asked for
+MAX_TILE_ZOOM: Final = 19  # highest zoom tile.openstreetmap.org serves
 _MAX_PATH_CHARS: Final = 32  # "19/524287/524287.png" is 20: checked before the pattern
 _PATH: Final = re.compile(r"/?([0-9]{1,2})/([0-9]{1,6})/([0-9]{1,6})(?:\.png)?")
-
-_LANGUAGE_CODE: Final = re.compile(r"([a-z]{2})(?:[-_][a-z0-9]{1,8})?")  # "it", "it_IT", "en-gb"
-_LANGUAGES: Final = frozenset({"it", "en"})  # labels the topographic style offers
-NEUTRAL_STYLE: Final = ""  # local names (map `topo_`), used when the language is not offered
-
-_KEY: Final = re.compile(r"[A-Za-z0-9_-]{8,128}")  # URL-safe: it needs no escaping in a query
 
 MIB: Final = 1024 * 1024
 GIB: Final = 1024 * MIB
@@ -75,61 +67,6 @@ def parse_tile_path(path: str) -> TileAddress:
     return TileAddress(z, x, y)
 
 
-def tile_style(language: str) -> str:
-    """Label style for a language code: `it` and `en` have their own, any other is `__`."""
-    match = _LANGUAGE_CODE.fullmatch(language.strip().lower())
-    return match.group(1) if match and match.group(1) in _LANGUAGES else NEUTRAL_STYLE
-
-
-class TileKey:
-    """The personal key of the tile provider, as an opaque secret.
-
-    Printing it, converting it to text or formatting it gives `TileKey(<hidden>)`; the content
-    comes out only from `reveal()`, called by the key store and by the HTTP adapter that builds the
-    request. Not hashable, not serialisable, constant-time comparison. It is made only of URL-safe
-    characters (letters, digits, `_` and `-`, 8 to 128), so it can be put in a query unchanged.
-    """
-
-    __slots__ = ("_value",)
-
-    def __init__(self, value: str) -> None:
-        """Raises:
-        ValueError: not a string, or not 8 to 128 URL-safe characters. The text is not repeated.
-        """
-        candidate: object = value
-        if not isinstance(candidate, str) or _KEY.fullmatch(candidate) is None:
-            raise ValueError("invalid tile key")
-        self._value = candidate
-
-    @classmethod
-    def from_user_text(cls, text: str) -> TileKey:
-        """Key from what the user pasted: surrounding spaces and line breaks are ignored.
-
-        Raises:
-            ValueError: see `__init__`.
-        """
-        return cls(text.strip())
-
-    def reveal(self) -> str:
-        """The content: never to be logged, shown or put in an error."""
-        return self._value
-
-    def __repr__(self) -> str:
-        return "TileKey(<hidden>)"
-
-    __str__ = __repr__
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, TileKey):
-            return NotImplemented
-        return hmac.compare_digest(self._value.encode(), other._value.encode())
-
-    __hash__ = None  # type: ignore[assignment]  # not hashable: a secret is not a dictionary key
-
-    def __reduce__(self) -> NoReturn:
-        raise TypeError("TileKey cannot be serialized")
-
-
 @dataclass(frozen=True, slots=True)
 class CacheLimit:
     """Exact cap of the tile cache, in bytes, between `MIN_CACHE_BYTES` and `MAX_CACHE_BYTES`."""
@@ -153,15 +90,3 @@ def parse_cache_limit_gib(text: str) -> CacheLimit:
         raise ValueError("not a size")
     gib = float(f"{match.group(1)}.{match.group(2) or '0'}")
     return CacheLimit(round(gib * GIB))
-
-
-@dataclass(frozen=True, slots=True)
-class MapSettings:
-    """What the settings page shows and the tile proxy uses.
-
-    `has_key` tells whether a key is in the key store (the key itself never travels here);
-    `cache_limit` is the cap of the tile cache.
-    """
-
-    has_key: bool
-    cache_limit: CacheLimit = CacheLimit(DEFAULT_CACHE_BYTES)

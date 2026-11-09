@@ -18,21 +18,29 @@ from datetime import UTC, datetime
 
 import pytest
 
-from ponos_coach.maps.domain import TileAddressError, TileKey
-from ponos_coach.maps.ports import TileImage, TileKeyStore, TileProblem, TileSource, TileUnavailable
+from ponos_coach.maps.domain import TileAddressError
+from ponos_coach.maps.ports import (
+    TileImage,
+    TileNotModified,
+    TileProblem,
+    TileSource,
+    TileUnavailable,
+    TileValidators,
+)
 from ponos_coach.platform.tile_http import (
     DEFAULT_TTL_S,
     MAX_TILE_BYTES,
     MAX_TTL_S,
-    TRACESTRACK,
+    MAX_USER_AGENT_CHARS,
+    OPENSTREETMAP,
     HttpTileSource,
     TileEndpoint,
-    create_tracestrack_source,
+    create_osm_source,
     ttl_from_headers,
 )
-from tests.fakes.tiles import FakeTileSource, InMemoryTileKeyStore, make_png
+from tests.fakes.tiles import FakeTileSource, make_png
 
-KEY = TileKey("chiave-segnaposto-0123456789")
+USER_AGENT = "PonosCoach/0.0.1 (+https://example.org/contact)"
 PNG = make_png()
 
 
@@ -102,11 +110,8 @@ def server() -> Iterator[TileServer]:
         running.close()
 
 
-def source_for(
-    server: TileServer, keys: TileKeyStore | None = None, **limits: float
-) -> HttpTileSource:
-    store = keys if keys is not None else InMemoryTileKeyStore(KEY)
-    return HttpTileSource(store, server.endpoint, user_agent="PonosCoach-test", **limits)  # type: ignore[arg-type]
+def source_for(server: TileServer, **limits: float) -> HttpTileSource:
+    return HttpTileSource(server.endpoint, user_agent=USER_AGENT, **limits)  # type: ignore[arg-type]
 
 
 # --- Contract: the real adapter and the fake answer the same way ------------------------------
@@ -118,8 +123,8 @@ class TileSourceContract:
     def make(self, outcome: str) -> TileSource:
         raise NotImplementedError
 
-    def test_a_good_key_gives_a_png_with_a_reuse_time(self) -> None:
-        result = self.make("ok").fetch(12, 2200, 1500, "en")
+    def test_a_good_answer_gives_a_png_with_a_reuse_time(self) -> None:
+        result = self.make("ok").fetch(12, 2200, 1500)
 
         assert isinstance(result, TileImage)
         assert result.png.startswith(b"\x89PNG")
@@ -128,9 +133,8 @@ class TileSourceContract:
     @pytest.mark.parametrize(
         ("outcome", "problem"),
         [
-            ("no_key", TileProblem.NO_KEY),
-            ("rejected", TileProblem.KEY_REJECTED),
-            ("credit", TileProblem.CREDIT_EXHAUSTED),
+            ("forbidden", TileProblem.REFUSED),
+            ("limited", TileProblem.REFUSED),
             ("offline", TileProblem.NETWORK_UNAVAILABLE),
             ("html", TileProblem.INVALID_RESPONSE),
         ],
@@ -138,7 +142,7 @@ class TileSourceContract:
     def test_each_failure_is_a_result_with_its_own_problem(
         self, outcome: str, problem: TileProblem
     ) -> None:
-        assert self.make(outcome).fetch(12, 2200, 1500, "en") == TileUnavailable(problem)
+        assert self.make(outcome).fetch(12, 2200, 1500) == TileUnavailable(problem)
 
     @pytest.mark.parametrize(
         ("z", "x", "y"), [(-1, 0, 0), (20, 0, 0), (3, 8, 0), (3, 0, -1), (0, 1, 0)]
@@ -147,21 +151,18 @@ class TileSourceContract:
         self, z: int, x: int, y: int
     ) -> None:
         with pytest.raises(TileAddressError):
-            self.make("ok").fetch(z, x, y, "en")
+            self.make("ok").fetch(z, x, y)
 
 
 class TestFakeTileSource(TileSourceContract):
     def make(self, outcome: str) -> TileSource:
-        keys = InMemoryTileKeyStore(
-            None if outcome == "no_key" else TileKey(FakeTileSource.ACCEPTED_KEY)
-        )
         script = {
-            "rejected": [TileUnavailable(TileProblem.KEY_REJECTED)],
-            "credit": [TileUnavailable(TileProblem.CREDIT_EXHAUSTED)],
+            "forbidden": [TileUnavailable(TileProblem.REFUSED)],
+            "limited": [TileUnavailable(TileProblem.REFUSED)],
             "offline": [TileUnavailable(TileProblem.NETWORK_UNAVAILABLE)],
             "html": [TileUnavailable(TileProblem.INVALID_RESPONSE)],
         }.get(outcome)
-        return FakeTileSource(keys, script)
+        return FakeTileSource(script)
 
 
 class TestHttpTileSource(TileSourceContract):
@@ -172,79 +173,183 @@ class TestHttpTileSource(TileSourceContract):
     def make(self, outcome: str) -> TileSource:
         scripts = {
             "ok": Answer(headers={"Content-Type": "image/png", "Cache-Control": "max-age=600"}),
-            "no_key": Answer(),
-            "rejected": Answer(status=403, body=b"nope", headers={}),
-            "credit": Answer(status=429, body=b"quota", headers={}),
+            "forbidden": Answer(status=403, body=b"nope", headers={}),
+            "limited": Answer(status=429, body=b"quota", headers={}),
             "html": Answer(headers={"Content-Type": "text/html"}, body=b"<html>login</html>"),
             "offline": Answer(),
         }
         self.server.answers = [scripts[outcome]]
-        keys = InMemoryTileKeyStore(None if outcome == "no_key" else KEY)
         if outcome == "offline":
             self.server.close()  # nothing listens any more: connection refused
-        return source_for(self.server, keys, timeout_s=2.0, total_timeout_s=4.0)
+        return source_for(self.server, timeout_s=2.0, total_timeout_s=4.0)
 
 
 # --- What goes on the wire ---------------------------------------------------------------------
 
 
-def test_the_request_has_the_style_path_key_and_a_generic_user_agent(server: TileServer) -> None:
-    source_for(server).fetch(12, 2200, 1500, "it")
+def test_the_request_has_the_plain_path_and_the_user_agent_of_the_app(server: TileServer) -> None:
+    source_for(server).fetch(12, 2200, 1500)
 
     ((path, headers),) = server.requests
-    assert path == f"/topo_it/12/2200/1500.png?key={KEY.reveal()}"
-    assert headers["user-agent"] == "PonosCoach-test"
+    assert path == "/12/2200/1500.png"  # no query: nothing but the tile
+    assert headers["user-agent"] == USER_AGENT
     assert headers["accept"] == "image/png"
     assert "cookie" not in headers
     assert "authorization" not in headers
 
 
-@pytest.mark.parametrize(("language", "style"), [("it", "it"), ("en", "en"), ("de", ""), ("", "")])
-def test_the_label_language_picks_the_style_or_the_neutral_one(
-    server: TileServer, language: str, style: str
+def test_a_first_request_is_not_conditional_and_never_asks_to_bypass_caches(
+    server: TileServer,
 ) -> None:
-    source_for(server).fetch(3, 1, 1, language)
+    source_for(server).fetch(3, 1, 1)
 
-    assert server.requests[0][0].startswith(f"/topo_{style}/3/1/1.png")
+    ((_, headers),) = server.requests
+    assert "if-none-match" not in headers
+    assert "if-modified-since" not in headers
+    assert "cache-control" not in headers  # the usage policy forbids no-cache
+    assert "pragma" not in headers
+
+
+def test_a_conditional_request_carries_both_validators(server: TileServer) -> None:
+    server.answers = [Answer(status=304, body=b"", headers={})]
+    validators = TileValidators('"abc123"', "Tue, 03 Nov 2026 10:00:00 GMT")
+
+    source_for(server).fetch(3, 1, 1, validators)
+
+    ((_, headers),) = server.requests
+    assert headers["if-none-match"] == '"abc123"'
+    assert headers["if-modified-since"] == "Tue, 03 Nov 2026 10:00:00 GMT"
+    assert "cache-control" not in headers
+    assert "pragma" not in headers
+
+
+@pytest.mark.parametrize(
+    ("validators", "sent"),
+    [
+        (TileValidators('"only"', None), {"if-none-match"}),
+        (TileValidators(None, "Tue, 03 Nov 2026 10:00:00 GMT"), {"if-modified-since"}),
+    ],
+)
+def test_a_single_validator_is_sent_alone(
+    server: TileServer, validators: TileValidators, sent: set[str]
+) -> None:
+    server.answers = [Answer(status=304, body=b"", headers={})]
+
+    source_for(server).fetch(3, 1, 1, validators)
+
+    ((_, headers),) = server.requests
+    assert {"if-none-match", "if-modified-since"} & set(headers) == sent
+
+
+def test_a_not_modified_answer_renews_with_the_ttl_of_its_own_headers(server: TileServer) -> None:
+    server.answers = [Answer(status=304, body=b"", headers={"Cache-Control": "max-age=1234"})]
+
+    result = source_for(server).fetch(3, 1, 1, TileValidators('"a"', None))
+
+    assert result == TileNotModified(1234)
+
+
+def test_a_not_modified_answer_without_headers_renews_for_the_default_seven_days(
+    server: TileServer,
+) -> None:
+    server.answers = [Answer(status=304, body=b"", headers={})]
+
+    result = source_for(server).fetch(3, 1, 1, TileValidators('"a"', None))
+
+    assert result == TileNotModified(7 * 24 * 3600)
+
+
+def test_a_not_modified_answer_to_a_request_that_was_not_conditional_is_invalid(
+    server: TileServer,
+) -> None:
+    server.answers = [Answer(status=304, body=b"", headers={})]
+
+    assert source_for(server).fetch(3, 1, 1) == TileUnavailable(TileProblem.INVALID_RESPONSE)
+
+
+def test_a_validator_that_is_hostile_is_not_sent(server: TileServer) -> None:
+    server.answers = [Answer(status=304, body=b"", headers={})]
+    hostile = TileValidators('"x"\r\nX-Evil: 1', "m" * 300)
+
+    result = source_for(server).fetch(3, 1, 1, hostile)
+
+    ((_, headers),) = server.requests
+    assert "x-evil" not in headers
+    assert "if-none-match" not in headers
+    assert "if-modified-since" not in headers
+    assert result == TileUnavailable(TileProblem.INVALID_RESPONSE)  # nothing conditional was asked
+
+
+def test_the_etag_and_last_modified_of_a_good_answer_come_with_the_image(
+    server: TileServer,
+) -> None:
+    server.answers = [
+        Answer(
+            headers={
+                "Content-Type": "image/png",
+                "ETag": '"deadbeef"',
+                "Last-Modified": "Tue, 03 Nov 2026 10:00:00 GMT",
+            }
+        )
+    ]
+
+    result = source_for(server).fetch(3, 1, 1)
+
+    assert isinstance(result, TileImage)
+    assert result.validators == TileValidators('"deadbeef"', "Tue, 03 Nov 2026 10:00:00 GMT")
+
+
+@pytest.mark.parametrize("etag", ['"' + "e" * 300 + '"', "a\x01b", "caf\xe9"])
+def test_t_sec_15_an_etag_that_is_too_long_or_has_odd_characters_is_dropped_not_kept(
+    server: TileServer, etag: str
+) -> None:
+    server.answers = [Answer(headers={"Content-Type": "image/png", "ETag": etag})]
+
+    result = source_for(server).fetch(3, 1, 1)
+
+    assert isinstance(result, TileImage)  # the tile itself is fine
+    assert result.validators.etag is None
+
+
+def test_a_good_answer_without_cache_headers_is_reusable_for_seven_days(
+    server: TileServer,
+) -> None:
+    server.answers = [Answer()]
+
+    result = source_for(server).fetch(3, 1, 1)
+
+    assert isinstance(result, TileImage)
+    assert result.ttl_s == 7 * 24 * 3600
 
 
 def test_one_attempt_per_call_even_when_the_answer_is_an_error(server: TileServer) -> None:
     server.answers = [Answer(status=500, body=b"boom", headers={})]
 
-    result = source_for(server).fetch(5, 1, 1, "en")
+    result = source_for(server).fetch(5, 1, 1)
 
     assert result == TileUnavailable(TileProblem.NETWORK_UNAVAILABLE)
     assert len(server.requests) == 1
 
 
-@pytest.mark.parametrize("status", [401, 403])
-def test_t_map_10_a_refused_key_is_key_rejected(server: TileServer, status: int) -> None:
-    server.answers = [Answer(status=status, body=b"", headers={})]
-
-    assert source_for(server).fetch(5, 1, 1, "en") == TileUnavailable(TileProblem.KEY_REJECTED)
-
-
-@pytest.mark.parametrize("status", [402, 429])
-def test_t_map_10_an_exhausted_credit_or_quota_is_credit_exhausted(
+@pytest.mark.parametrize("status", [403, 429])
+def test_t_map_10_a_server_that_refuses_or_limits_is_refused(
     server: TileServer, status: int
 ) -> None:
     server.answers = [Answer(status=status, body=b"", headers={})]
 
-    assert source_for(server).fetch(5, 1, 1, "en") == TileUnavailable(TileProblem.CREDIT_EXHAUSTED)
+    assert source_for(server).fetch(5, 1, 1) == TileUnavailable(TileProblem.REFUSED)
 
 
 @pytest.mark.parametrize("status", [500, 502, 503, 504])
-def test_t_map_10_a_provider_that_is_down_is_the_network_being_unavailable(
+def test_t_map_10_a_server_that_is_down_is_the_network_being_unavailable(
     server: TileServer, status: int
 ) -> None:
     server.answers = [Answer(status=status, body=b"", headers={})]
 
-    assert source_for(server).fetch(5, 1, 1, "en") == TileUnavailable(
-        TileProblem.NETWORK_UNAVAILABLE
-    )
+    assert source_for(server).fetch(5, 1, 1) == TileUnavailable(TileProblem.NETWORK_UNAVAILABLE)
 
 
-@pytest.mark.parametrize("status", [204, 301, 302, 307, 400, 404, 410])
+@pytest.mark.parametrize("status", [204, 301, 302, 307, 400, 401, 402, 404, 410])
 def test_t_sec_15_other_statuses_are_invalid_and_redirects_are_not_followed(
     server: TileServer, status: int
 ) -> None:
@@ -253,10 +358,10 @@ def test_t_sec_15_other_statuses_are_invalid_and_redirects_are_not_followed(
         location = f"http://127.0.0.1:{other.endpoint.port}/stolen"
         server.answers = [Answer(status=status, body=b"", headers={"Location": location})]
 
-        result = source_for(server).fetch(5, 1, 1, "en")
+        result = source_for(server).fetch(5, 1, 1)
 
         assert result == TileUnavailable(TileProblem.INVALID_RESPONSE)
-        assert other.requests == []  # the key never went to another place
+        assert other.requests == []  # nothing went to another place
     finally:
         other.close()
 
@@ -267,7 +372,7 @@ def test_t_map_10_a_server_that_does_not_answer_in_time_is_a_timeout_not_a_hang(
     server.answers = [Answer(delay_s=3.0)]
     started = time.monotonic()
 
-    result = source_for(server, timeout_s=0.3, total_timeout_s=1.0).fetch(5, 1, 1, "en")
+    result = source_for(server, timeout_s=0.3, total_timeout_s=1.0).fetch(5, 1, 1)
 
     assert result == TileUnavailable(TileProblem.NETWORK_UNAVAILABLE)
     assert time.monotonic() - started < 2.5
@@ -277,18 +382,16 @@ def test_t_map_10_a_connection_that_is_refused_is_the_network_being_unavailable(
     gone = TileServer()
     endpoint = gone.endpoint
     gone.close()
-    source = HttpTileSource(InMemoryTileKeyStore(KEY), endpoint, timeout_s=1.0)
+    source = HttpTileSource(endpoint, user_agent=USER_AGENT, timeout_s=1.0)
 
-    assert source.fetch(5, 1, 1, "en") == TileUnavailable(TileProblem.NETWORK_UNAVAILABLE)
+    assert source.fetch(5, 1, 1) == TileUnavailable(TileProblem.NETWORK_UNAVAILABLE)
 
 
 def test_a_body_that_trickles_in_is_cut_by_the_total_deadline(server: TileServer) -> None:
     clock = iter([0.0, 100.0])  # the deadline is set, then it has passed at the first read
-    source = HttpTileSource(
-        InMemoryTileKeyStore(KEY), server.endpoint, monotonic=lambda: next(clock)
-    )
+    source = HttpTileSource(server.endpoint, user_agent=USER_AGENT, monotonic=lambda: next(clock))
 
-    result = source.fetch(5, 1, 1, "en")
+    result = source.fetch(5, 1, 1)
 
     assert result == TileUnavailable(TileProblem.NETWORK_UNAVAILABLE)
 
@@ -299,25 +402,25 @@ def test_a_body_that_trickles_in_is_cut_by_the_total_deadline(server: TileServer
 def test_t_sec_15_html_instead_of_a_png_is_invalid(server: TileServer) -> None:
     server.answers = [Answer(headers={"Content-Type": "text/html"}, body=b"<html>captcha</html>")]
 
-    assert source_for(server).fetch(5, 1, 1, "en") == TileUnavailable(TileProblem.INVALID_RESPONSE)
+    assert source_for(server).fetch(5, 1, 1) == TileUnavailable(TileProblem.INVALID_RESPONSE)
 
 
 def test_t_sec_15_html_with_a_png_content_type_is_still_invalid(server: TileServer) -> None:
     server.answers = [Answer(body=b"<html>" + b"x" * 200 + b"</html>")]
 
-    assert source_for(server).fetch(5, 1, 1, "en") == TileUnavailable(TileProblem.INVALID_RESPONSE)
+    assert source_for(server).fetch(5, 1, 1) == TileUnavailable(TileProblem.INVALID_RESPONSE)
 
 
 def test_t_sec_15_a_truncated_png_is_invalid(server: TileServer) -> None:
     server.answers = [Answer(body=PNG[:-20])]
 
-    assert source_for(server).fetch(5, 1, 1, "en") == TileUnavailable(TileProblem.INVALID_RESPONSE)
+    assert source_for(server).fetch(5, 1, 1) == TileUnavailable(TileProblem.INVALID_RESPONSE)
 
 
 def test_t_sec_15_a_png_that_declares_a_huge_image_is_invalid(server: TileServer) -> None:
     server.answers = [Answer(body=make_png(4000, 4000))]
 
-    assert source_for(server).fetch(5, 1, 1, "en") == TileUnavailable(TileProblem.INVALID_RESPONSE)
+    assert source_for(server).fetch(5, 1, 1) == TileUnavailable(TileProblem.INVALID_RESPONSE)
 
 
 def test_t_sec_15_an_enormous_png_is_refused_by_its_declared_length_without_reading_it(
@@ -326,7 +429,7 @@ def test_t_sec_15_an_enormous_png_is_refused_by_its_declared_length_without_read
     big = make_png(extra_bytes=3 * MAX_TILE_BYTES)
     server.answers = [Answer(body=big)]
 
-    result = source_for(server).fetch(5, 1, 1, "en")
+    result = source_for(server).fetch(5, 1, 1)
 
     assert result == TileUnavailable(TileProblem.INVALID_RESPONSE)
 
@@ -337,7 +440,7 @@ def test_t_sec_15_a_body_that_does_not_match_its_declared_length_is_never_accept
     cap = 20_000
     server.answers = [Answer(body=make_png(extra_bytes=cap * 3), declared_length=len(PNG))]
 
-    result = source_for(server).fetch(5, 1, 1, "en")
+    result = source_for(server).fetch(5, 1, 1)
 
     assert isinstance(result, TileUnavailable)  # either way it is never accepted whole
 
@@ -346,9 +449,9 @@ def test_a_png_within_the_cap_but_above_a_lower_configured_cap_is_refused(
     server: TileServer,
 ) -> None:
     server.answers = [Answer(body=make_png(extra_bytes=5000))]
-    source = HttpTileSource(InMemoryTileKeyStore(KEY), server.endpoint, max_bytes=len(PNG) + 100)
+    source = HttpTileSource(server.endpoint, user_agent=USER_AGENT, max_bytes=len(PNG) + 100)
 
-    assert source.fetch(5, 1, 1, "en") == TileUnavailable(TileProblem.INVALID_RESPONSE)
+    assert source.fetch(5, 1, 1) == TileUnavailable(TileProblem.INVALID_RESPONSE)
 
 
 # --- Reuse time ----------------------------------------------------------------------------------
@@ -383,34 +486,35 @@ def test_the_reuse_time_comes_from_the_headers(
 def test_the_image_carries_the_reuse_time_of_the_response(server: TileServer) -> None:
     server.answers = [Answer(headers={"Content-Type": "image/png", "Cache-Control": "max-age=777"})]
 
-    result = source_for(server).fetch(5, 1, 1, "en")
+    result = source_for(server).fetch(5, 1, 1)
 
-    assert result == TileImage(PNG, 777)
-
-
-# --- T-SEC-15: only that host, only HTTPS, the key nowhere it should not be ----------------
+    assert result == TileImage(PNG, 777, TileValidators(None, None))
 
 
-def test_t_sec_15_the_app_source_talks_to_tracestrack_over_https_only() -> None:
-    assert TileEndpoint("https", "tile.tracestrack.com", 443) == TRACESTRACK
-    source = create_tracestrack_source(InMemoryTileKeyStore(KEY))
-    assert source._endpoint is TRACESTRACK  # the one place the host is decided
+# --- T-SEC-15: only that host, only HTTPS ------------------------------------------------------
+
+
+def test_t_sec_15_the_app_source_talks_to_openstreetmap_over_https_only() -> None:
+    assert TileEndpoint("https", "tile.openstreetmap.org", 443) == OPENSTREETMAP
+    source = create_osm_source(USER_AGENT)
+    assert source._endpoint is OPENSTREETMAP  # the one place the host is decided
+    assert source._user_agent == USER_AGENT
 
 
 @pytest.mark.parametrize(
     ("scheme", "host", "port"),
     [
-        ("http", "tile.tracestrack.com", 80),  # plain HTTP to a real host
+        ("http", "tile.openstreetmap.org", 80),  # plain HTTP to a real host
         ("http", "example.org", 80),
         ("http", "192.168.1.10", 8080),  # a LAN address is not loopback
         ("ftp", "127.0.0.1", 21),
         ("file", "127.0.0.1", 1),
         ("https", "bad host", 443),
-        ("https", "tile.tracestrack.com/../x", 443),
-        ("https", "user@tile.tracestrack.com", 443),
+        ("https", "tile.openstreetmap.org/../x", 443),
+        ("https", "user@tile.openstreetmap.org", 443),
         ("https", "", 443),
-        ("https", "tile.tracestrack.com", 0),
-        ("https", "tile.tracestrack.com", 70000),
+        ("https", "tile.openstreetmap.org", 0),
+        ("https", "tile.openstreetmap.org", 70000),
     ],
 )
 def test_t_sec_15_endpoints_that_are_not_https_or_loopback_are_refused(
@@ -420,7 +524,7 @@ def test_t_sec_15_endpoints_that_are_not_https_or_loopback_are_refused(
         TileEndpoint(scheme, host, port)
 
 
-def test_t_sec_15_the_key_is_never_in_a_log_an_exception_or_a_result(
+def test_t_sec_15_neither_the_address_nor_the_port_is_in_a_log(
     server: TileServer, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.DEBUG)
@@ -431,50 +535,16 @@ def test_t_sec_15_the_key_is_never_in_a_log_an_exception_or_a_result(
         Answer(headers={"Content-Type": "text/html"}, body=b"<html>"),
         Answer(),
     ]
-    results = []
     for answer in outcomes:
         server.answers = [answer]
-        results.append(source_for(server).fetch(7, 3, 4, "en"))
+        source_for(server).fetch(7, 3, 4)
     dead = TileServer()
     endpoint = dead.endpoint
     dead.close()
-    results.append(
-        HttpTileSource(InMemoryTileKeyStore(KEY), endpoint, timeout_s=1.0).fetch(7, 3, 4, "en")
-    )
+    HttpTileSource(endpoint, user_agent=USER_AGENT, timeout_s=1.0).fetch(7, 3, 4)
 
-    assert KEY.reveal() not in caplog.text
-    assert KEY.reveal() not in repr(results)
-    assert "/7/3/4" not in caplog.text  # nor the address: it says which area is being looked at
+    assert "/7/3/4" not in caplog.text  # it says which area is being looked at
     assert f"{endpoint.port}" not in caplog.text
-
-
-def test_t_sec_15_without_a_key_nothing_is_sent_at_all(server: TileServer) -> None:
-    source = source_for(server, InMemoryTileKeyStore(None))
-
-    assert source.fetch(5, 1, 1, "en") == TileUnavailable(TileProblem.NO_KEY)
-    assert server.requests == []
-
-
-def test_a_key_store_that_cannot_be_read_counts_as_no_key(server: TileServer) -> None:
-    keys = InMemoryTileKeyStore(KEY)
-    keys.unavailable = True
-
-    assert source_for(server, keys).fetch(5, 1, 1, "en") == TileUnavailable(TileProblem.NO_KEY)
-    assert server.requests == []
-
-
-def test_a_new_key_applies_to_the_next_request_without_rebuilding_the_source(
-    server: TileServer,
-) -> None:
-    keys = InMemoryTileKeyStore(KEY)
-    source = source_for(server, keys)
-    source.fetch(5, 1, 1, "en")
-    other = TileKey("altra-chiave-segnaposto-9876")
-    keys.save(other)
-
-    source.fetch(5, 1, 1, "en")
-
-    assert [p.split("key=")[1] for p, _ in server.requests] == [KEY.reveal(), other.reveal()]
 
 
 @pytest.mark.parametrize(
@@ -488,10 +558,17 @@ def test_a_new_key_applies_to_the_next_request_without_rebuilding_the_source(
 )
 def test_limits_that_make_no_sense_are_refused(kwargs: dict[str, float]) -> None:
     with pytest.raises(ValueError, match="positive"):
-        HttpTileSource(InMemoryTileKeyStore(KEY), TRACESTRACK, **kwargs)  # type: ignore[arg-type]
+        HttpTileSource(OPENSTREETMAP, user_agent=USER_AGENT, **kwargs)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("agent", ["", "x" * 65, "Ponos\r\nX-Evil: 1", "Pönos"])
+@pytest.mark.parametrize(
+    "agent", ["", "x" * (MAX_USER_AGENT_CHARS + 1), "Ponos\r\nX-Evil: 1", "Pönos"]
+)
 def test_a_user_agent_that_could_inject_a_header_is_refused(agent: str) -> None:
     with pytest.raises(ValueError, match="user agent"):
-        HttpTileSource(InMemoryTileKeyStore(KEY), TRACESTRACK, user_agent=agent)
+        HttpTileSource(OPENSTREETMAP, user_agent=agent)
+
+
+def test_a_user_agent_is_required_there_is_no_library_default() -> None:
+    with pytest.raises(TypeError):
+        HttpTileSource(OPENSTREETMAP)  # type: ignore[call-arg]

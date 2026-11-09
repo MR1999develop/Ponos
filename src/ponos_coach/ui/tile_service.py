@@ -3,9 +3,9 @@
 """Tiles for the map page, off the UI thread.
 
 The scheme handler asks `TileService.request(path, on_done)` for a tile; the work (`TileProxy`:
-cache, then the provider with its timeouts) runs in a small pool and the answer comes back on the
-UI thread. The service also keeps the last problem the provider had (no key, key refused, no
-network, credit over) so that the map view can show a notice with the remedy; a good tile clears
+cache, then the server with its timeouts) runs in a small pool and the answer comes back on the
+UI thread. The service also keeps the last problem the server had (refusal, no
+network, bad answer) so that the map view can show a notice with the remedy; a good tile clears
 it. The path of a tile says which area is looked at: it is never logged.
 """
 
@@ -23,7 +23,7 @@ from ponos_coach.maps.use_cases import TileAnswer, TileProxy
 from ponos_coach.ui.worker_handover import Handover
 
 _LOG = logging.getLogger(__name__)
-_WORKERS = 4  # the provider's connections are slow, not heavy
+_WORKERS = 4  # the server's connections are slow, not heavy
 MAX_PENDING = 256  # tile requests waiting; the page asks for the visible ones only
 
 type TileDone = Callable[[bytes | None], None]
@@ -33,7 +33,6 @@ class TileService(QObject):
     """Serves tile requests of the page with `TileProxy`, one pool, answers on the UI thread.
 
     `problem_changed` carries the provider problem in force, or `None` when tiles flow again.
-    The language is read at each request (it can change while the app runs).
     """
 
     problem_changed = Signal(object)  # TileProblem | None
@@ -42,12 +41,10 @@ class TileService(QObject):
     def __init__(
         self,
         proxy: TileProxy,
-        language: Callable[[], str],
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._proxy = proxy
-        self._language = language
         self._pool: ThreadPoolExecutor | None = ThreadPoolExecutor(
             max_workers=_WORKERS, thread_name_prefix="ponos-tiles"
         )
@@ -73,7 +70,7 @@ class TileService(QObject):
         request_id = self._next_id
         self._next_id += 1
         self._pending[request_id] = on_done
-        future = pool.submit(_serve, self._proxy, path, self._language())
+        future = pool.submit(_serve, self._proxy, path)
         handover = self._handover
         future.add_done_callback(lambda done: _hand_over(handover, request_id, done))
         return True
@@ -106,10 +103,10 @@ class TileService(QObject):
             self.problem_changed.emit(problem)
 
 
-def _serve(proxy: TileProxy, path: str, language: str) -> TileAnswer | None:
+def _serve(proxy: TileProxy, path: str) -> TileAnswer | None:
     """Runs on a worker thread: the tile, or `None` for a bad address or a failure."""
     try:
-        return proxy.serve(path, language)
+        return proxy.serve(path)
     except TileAddressError:
         return None
     except Exception as error:  # worker boundary: the page just gets "no tile"

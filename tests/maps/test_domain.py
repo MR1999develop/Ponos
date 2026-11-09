@@ -1,11 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Pure types of the map background: tile addresses and paths, styles, key, cache limit."""
+"""Pure types of the map background: tile addresses and paths, cache limit."""
 
 from __future__ import annotations
 
-import copy
-import pickle
 from typing import Any
 
 import pytest
@@ -18,18 +16,12 @@ from ponos_coach.maps.domain import (
     MAX_CACHE_BYTES,
     MAX_TILE_ZOOM,
     MIN_CACHE_BYTES,
-    NEUTRAL_STYLE,
     CacheLimit,
-    MapSettings,
     TileAddress,
     TileAddressError,
-    TileKey,
     parse_cache_limit_gib,
     parse_tile_path,
-    tile_style,
 )
-
-KEY_TEXT = "chiave-di-prova-0123456789"
 
 
 @pytest.mark.parametrize(
@@ -111,68 +103,6 @@ def test_a_tile_address_made_of_non_integers_is_rejected(value: Any) -> None:
 
 
 @pytest.mark.parametrize(
-    ("language", "style"),
-    [
-        ("it", "it"),
-        ("en", "en"),
-        ("it_IT", "it"),
-        ("EN-gb", "en"),
-        (" it ", "it"),
-        ("de", NEUTRAL_STYLE),
-        ("", NEUTRAL_STYLE),
-        ("../../x", NEUTRAL_STYLE),
-        ("italiano", NEUTRAL_STYLE),
-    ],
-)
-def test_the_style_follows_the_language_and_falls_back_to_the_neutral_one(
-    language: str, style: str
-) -> None:
-    assert tile_style(language) == style
-
-
-def test_the_key_is_a_secret_that_never_shows_itself() -> None:
-    key = TileKey(KEY_TEXT)
-
-    assert KEY_TEXT not in repr(key)
-    assert KEY_TEXT not in str(key)
-    assert KEY_TEXT not in f"{key}"
-    assert KEY_TEXT not in f"{[key]}"
-    assert key.reveal() == KEY_TEXT
-    with pytest.raises(TypeError):
-        hash(key)
-    with pytest.raises(TypeError):
-        pickle.dumps(key)
-    with pytest.raises(TypeError):
-        copy.deepcopy(key)
-    assert key == TileKey(KEY_TEXT)
-    assert key != TileKey(KEY_TEXT + "x")
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
-        "",
-        "short",
-        "con spazio dentro",
-        "chiave?key=altro",
-        "a&b=cdefghij",
-        "x" * 129,
-        "chiave\n12345",
-        "chiàve12345",
-    ],
-)
-def test_a_key_that_is_not_url_safe_is_rejected_without_repeating_it(text: str) -> None:
-    with pytest.raises(ValueError, match="invalid tile key") as raised:
-        TileKey(text)
-
-    assert text not in str(raised.value) or text == ""
-
-
-def test_the_key_the_user_pastes_loses_the_surrounding_whitespace() -> None:
-    assert TileKey.from_user_text(f"  {KEY_TEXT}\r\n").reveal() == KEY_TEXT
-
-
-@pytest.mark.parametrize(
     ("text", "expected"),
     [
         ("4", 4 * GIB),
@@ -202,5 +132,5 @@ def test_the_cache_limit_has_a_floor_and_a_ceiling() -> None:
             CacheLimit(bad)
 
 
-def test_the_map_settings_default_to_four_gibibytes() -> None:
-    assert MapSettings(has_key=False).cache_limit.bytes == DEFAULT_CACHE_BYTES == 4 * GIB
+def test_the_default_cache_limit_is_four_gibibytes() -> None:
+    assert CacheLimit(DEFAULT_CACHE_BYTES).bytes == 4 * GIB

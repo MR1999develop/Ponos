@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Ports of the map background: tile source, key store and tile cache.
+"""Ports of the map background: tile source and tile cache.
 
-The real implementations are in `platform` (HTTPS to the provider, system key store, SQLite cache
-in the app's cache folder); fakes and contract tests are in `tests/`. No port records positions:
-a tile address says which area is looked at, so it is never logged either.
+The real implementations are in `platform` (HTTPS to tile.openstreetmap.org, SQLite cache in the
+app's cache folder); fakes and contract tests are in `tests/`. No port records positions: a tile
+address says which area is looked at, so it is never logged either.
 """
 
 from __future__ import annotations
@@ -12,9 +12,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Protocol
+from typing import Final, Protocol
 
-from ponos_coach.maps.domain import TileAddress, TileKey
+from ponos_coach.maps.domain import TileAddress
 
 MAX_TILE_TTL_S = 366 * 86_400  # a year: no provider should ask for more
 
@@ -22,26 +22,57 @@ MAX_TILE_TTL_S = 366 * 86_400  # a year: no provider should ask for more
 class TileProblem(Enum):
     """Why a tile could not be had. The value is stable. The reaction differs for each."""
 
-    NO_KEY = "no_key"  # no key saved: ask for one
-    KEY_REJECTED = "key_rejected"  # the provider refuses it: ask for a new one
-    NETWORK_UNAVAILABLE = "network_unavailable"  # no network, timeout or provider down: later
-    CREDIT_EXHAUSTED = "credit_exhausted"  # quota or credit over: nothing to do now
+    REFUSED = "refused"  # 403 or 429: the server refuses or limits us; nothing to do for a while
+    NETWORK_UNAVAILABLE = "network_unavailable"  # no network, timeout or server down: later
     INVALID_RESPONSE = "invalid_response"  # not a PNG, too big, redirect, unknown status
 
 
 @dataclass(frozen=True, slots=True)
+class TileValidators:
+    """What the server said about a copy of a tile, to ask "has it changed?" later.
+
+    Both are optional opaque header values (printable ASCII, already checked by the adapter).
+    """
+
+    etag: str | None = None
+    last_modified: str | None = None
+
+    @property
+    def is_empty(self) -> bool:
+        """Whether there is nothing to make a request conditional on."""
+        return self.etag is None and self.last_modified is None
+
+
+NO_VALIDATORS: Final = TileValidators()
+
+
+@dataclass(frozen=True, slots=True)
 class TileImage:
-    """A PNG tile and for how long the provider lets it be reused (seconds, from the response).
+    """A PNG tile, for how long the server lets it be reused (seconds, from the response) and
+    the validators of that copy.
 
     Invariants: non-empty bytes, `ttl_s` between 0 and one year; 0 means "do not keep".
     """
 
     png: bytes
     ttl_s: int
+    validators: TileValidators = NO_VALIDATORS
 
     def __post_init__(self) -> None:
         if not self.png or not 0 <= self.ttl_s <= MAX_TILE_TTL_S:
             raise ValueError("invalid tile image")
+
+
+@dataclass(frozen=True, slots=True)
+class TileNotModified:
+    """The server confirmed the copy that was asked about (304): it can be used for `ttl_s`
+    more seconds (from the headers of the 304)."""
+
+    ttl_s: int
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.ttl_s <= MAX_TILE_TTL_S:
+            raise ValueError("invalid tile lifetime")
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,63 +82,24 @@ class TileUnavailable:
     problem: TileProblem
 
 
-type TileResult = TileImage | TileUnavailable
+type TileResult = TileImage | TileNotModified | TileUnavailable
 
 
 class TileSource(Protocol):
-    """Where tiles come from (the provider, over HTTPS).
+    """Where tiles come from (the server, over HTTPS).
 
     One attempt per call, no retry: the caller decides whether and when to ask again. Never
-    raises for network or provider failures, which are `TileUnavailable`.
+    raises for network or server failures, which are `TileUnavailable`.
     """
 
-    def fetch(self, z: int, x: int, y: int, language: str) -> TileResult:
-        """The tile at `z/x/y` with labels in `language` (a code like `it`, `en`; any other gives
-        the provider's default names).
+    def fetch(
+        self, z: int, x: int, y: int, validators: TileValidators = NO_VALIDATORS
+    ) -> TileResult:
+        """The tile at `z/x/y`. With non-empty `validators` the request is conditional and the
+        server may answer `TileNotModified`; without them that answer is `INVALID_RESPONSE`.
 
         Raises:
             TileAddressError: `z`, `x` or `y` is not a tile; no request is made.
-        """
-        ...
-
-
-class TileKeyStoreError(Exception):
-    """Root of the key store errors."""
-
-
-class TileKeyStoreUnavailableError(TileKeyStoreError):
-    """The system key store is absent, locked or not secure: the key is not read or saved."""
-
-
-class TileKeyStoreCorruptError(TileKeyStoreError):
-    """What is saved is not a valid key."""
-
-
-class TileKeyStore(Protocol):
-    """The tile key in the system key store, outside the profile folder and its backups."""
-
-    def load(self) -> TileKey | None:
-        """The key, or `None` if none is saved.
-
-        Raises:
-            TileKeyStoreUnavailableError: the store cannot be read.
-            TileKeyStoreCorruptError: what is saved is not a valid key.
-        """
-        ...
-
-    def save(self, key: TileKey) -> None:
-        """Saves the key, replacing any previous one.
-
-        Raises:
-            TileKeyStoreUnavailableError: the store cannot be written.
-        """
-        ...
-
-    def delete(self) -> None:
-        """Forgets the key (no effect if none is saved).
-
-        Raises:
-            TileKeyStoreUnavailableError: the store cannot be written.
         """
         ...
 
@@ -118,13 +110,14 @@ class TileCacheError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class CachedTile:
-    """A tile read from the cache and the instant after which it must be renewed."""
+    """A tile read from the cache, the instant after which it must be renewed and its validators."""
 
     png: bytes
     expires_at: datetime
+    validators: TileValidators = NO_VALIDATORS
 
     def is_fresh(self, now: datetime) -> bool:
-        """Whether it can still be served without asking the provider."""
+        """Whether it can still be served without asking the server."""
         return now < self.expires_at
 
 
@@ -132,10 +125,10 @@ class TileCache(Protocol):
     """Tiles already seen, with an exact byte cap and eviction of the least recently used.
 
     Only tiles that were asked for are stored; there is no prefetch. It is derived and
-    regenerable: deleting it loses nothing but time and credit.
+    regenerable: deleting it loses nothing but time and bandwidth.
     """
 
-    def get(self, style: str, address: TileAddress, now: datetime) -> CachedTile | None:
+    def get(self, address: TileAddress, now: datetime) -> CachedTile | None:
         """The tile (fresh or expired) or `None`; a hit counts as a use for the eviction.
 
         Raises:
@@ -143,10 +136,20 @@ class TileCache(Protocol):
         """
         ...
 
-    def put(self, style: str, address: TileAddress, image: TileImage, now: datetime) -> None:
-        """Stores or replaces the tile, then evicts the least recently used until the cap holds.
+    def put(self, address: TileAddress, image: TileImage, now: datetime) -> None:
+        """Stores or replaces the tile with its validators, then evicts the least recently used
+        until the cap holds.
 
         An image with `ttl_s == 0` is not stored. A tile larger than the whole cap is not stored.
+
+        Raises:
+            TileCacheError: the cache cannot be written.
+        """
+        ...
+
+    def renew(self, address: TileAddress, ttl_s: int, now: datetime) -> None:
+        """After a 304: the stored tile expires at `now + ttl_s` (0 means expired at once, so it
+        is asked about again). No effect if the tile is not stored.
 
         Raises:
             TileCacheError: the cache cannot be written.

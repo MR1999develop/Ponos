@@ -22,7 +22,6 @@ from PySide6.QtWidgets import QMenuBar, QWidget
 
 from ponos_coach.activities.domain import ActivityIdentity, identity_key
 from ponos_coach.activities.map_queries import AreaView, SearchResult
-from ponos_coach.maps.ports import TileProblem
 from ponos_coach.ui.activity_filters import SharedFilterState
 from ponos_coach.ui.activity_table import ActivitiesPage
 from ponos_coach.ui.chart_view import ChartEngine
@@ -43,7 +42,7 @@ _KEY_AREA_ONLY = "activities/visibleAreaOnly"
 
 @dataclass(frozen=True, slots=True)
 class MapServices:
-    """What the Composition Root gives the map: tiles, key and cache settings, the data-thread
+    """What the Composition Root gives the map: tiles, cache settings, the data-thread
     host of the map queries, and how to release the tile cache."""
 
     tiles: TileService
@@ -80,7 +79,6 @@ class MapUi(QObject):
         self._settings_page = settings_page
         self._show_settings = show_settings
         self._settings = settings
-        self._notice_checked = False
         self._on_activities = False
         self._filter_keys: frozenset[str] | None = None  # who passed the filter (None: all)
         self._area_keys: frozenset[str] | None = None  # who starts in the visible area
@@ -252,9 +250,6 @@ class MapUi(QObject):
         self._on_activities = on_activities
         self._bar.setVisible(on_activities)
         self.update_actions(on_activities=on_activities)
-        if on_activities and not self._notice_checked:
-            self._notice_checked = True
-            self._check_key_notice()
 
     def start_engines(self) -> None:
         """Start the map's web pages (after the window is shown)."""
@@ -269,11 +264,6 @@ class MapUi(QObject):
         self._bar.show()
         self._bar.focus_first_field()
 
-    def _check_key_notice(self) -> None:
-        """First time the map is shown: say at once if there is no key (before any tile fails)."""
-        if not self._services.settings.has_key():
-            self._page.show_tile_problem(TileProblem.NO_KEY)
-
     # --- Settings ----------------------------------------------------------------------------
 
     def show_settings(self) -> None:
@@ -286,7 +276,6 @@ class MapUi(QObject):
         form = self.settings_dialog
         if form is None:
             form = MapSettingsDialog(self._services.settings)
-            form.key_changed.connect(self._after_key_change)
             self._settings_page.show_form(form)
         else:
             form.refresh()
@@ -298,15 +287,8 @@ class MapUi(QObject):
         if form is not None:
             form.ask_clear_cache()
 
-    def _after_key_change(self) -> None:
-        self._notice_checked = True
-        has_key = self._services.settings.has_key()
-        self._page.show_tile_problem(None if has_key else TileProblem.NO_KEY)
-        self._page.refresh_tiles()
-
     def close_dialogs(self) -> None:
         """Stop what runs behind the settings page (the window is closing)."""
-        self._services.settings.close()
         self._services.tiles.shutdown()
 
     def release(self) -> None:

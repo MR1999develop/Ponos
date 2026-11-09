@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import functools
+import importlib.metadata
 import logging
 import os
 import random
@@ -37,16 +38,14 @@ from ponos_coach.activities.domain import (
 from ponos_coach.activities.ports import GarminAccount, GarminSession
 from ponos_coach.activities.sync import ExtractedOriginal, OriginalExtractionError
 from ponos_coach.load.use_cases import Decoder
-from ponos_coach.maps.domain import TileAddress, TileKey
+from ponos_coach.maps.domain import TileAddress
 from ponos_coach.maps.ports import (
     CachedTile,
     TileCache,
     TileImage,
-    TileKeyStore,
-    TileKeyStoreUnavailableError,
     TileSource,
 )
-from ponos_coach.maps.use_cases import TileKeySettings, TileProxy
+from ponos_coach.maps.use_cases import TileProxy
 from ponos_coach.nutrition.food_table import (
     FOOD_TABLE_RESOURCE,
     MAX_FOOD_TABLE_BYTES,
@@ -64,8 +63,7 @@ from ponos_coach.platform.profile_registry import (
     RegistryFormatTooNewError,
 )
 from ponos_coach.platform.tile_cache import DiskTileCache
-from ponos_coach.platform.tile_http import create_tracestrack_source
-from ponos_coach.platform.tile_key_store import create_tile_key_store
+from ponos_coach.platform.tile_http import create_osm_source
 from ponos_coach.platform.token_store import create_token_store
 from ponos_coach.profiles.backup import BackupProfile, RestoreProfile
 from ponos_coach.profiles.domain import ProfileId
@@ -312,28 +310,17 @@ def _default_import_sources() -> ImportSources:
     return ImportSources(files=FilesImportSource, folder=FolderImportSource)
 
 
-class _UnavailableTileKeyStore:
-    """Stands in for a key store the system does not offer: the map has no key, nothing is saved."""
-
-    def load(self) -> TileKey | None:
-        raise TileKeyStoreUnavailableError("no system key store")
-
-    def save(self, key: TileKey) -> None:
-        del key
-        raise TileKeyStoreUnavailableError("no system key store")
-
-    def delete(self) -> None:
-        raise TileKeyStoreUnavailableError("no system key store")
+_CONTACT_URL: Final = "https://github.com/MR1999develop/Ponos"
 
 
-def _default_tile_key_store(data_dir: Path) -> TileKeyStore:
-    """The system key store for the tile key, or one that says it is unavailable (Linux without
-    Secret Service): the map then has a plain background and the settings explain why."""
+def _tile_user_agent() -> str:
+    """`PonosCoach/<version> (+<url>)` as the tile server's usage policy asks; without installed
+    metadata (a source tree), just the name and the contact."""
     try:
-        return create_tile_key_store(data_dir)
-    except TileKeyStoreUnavailableError:
-        _LOG.warning("The system keychain is not available: the map key cannot be saved")
-        return _UnavailableTileKeyStore()
+        name = f"PonosCoach/{importlib.metadata.version('ponos-coach')}"
+    except importlib.metadata.PackageNotFoundError:
+        name = "PonosCoach"
+    return f"{name} (+{_CONTACT_URL})"
 
 
 class _LazyDiskTileCache:
@@ -352,13 +339,17 @@ class _LazyDiskTileCache:
                 self._cache = DiskTileCache(self._folder, self._limit)
             return self._cache
 
-    def get(self, style: str, address: TileAddress, now: datetime) -> CachedTile | None:
+    def get(self, address: TileAddress, now: datetime) -> CachedTile | None:
         """See `TileCache.get`."""
-        return self._real().get(style, address, now)
+        return self._real().get(address, now)
 
-    def put(self, style: str, address: TileAddress, image: TileImage, now: datetime) -> None:
+    def put(self, address: TileAddress, image: TileImage, now: datetime) -> None:
         """See `TileCache.put`."""
-        self._real().put(style, address, image, now)
+        self._real().put(address, image, now)
+
+    def renew(self, address: TileAddress, ttl_s: int, now: datetime) -> None:
+        """See `TileCache.renew`."""
+        self._real().renew(address, ttl_s, now)
 
     def clear(self) -> None:
         """See `TileCache.clear`."""
@@ -384,28 +375,24 @@ class _LazyDiskTileCache:
             cache.close()
 
 
-def compose_map(  # noqa: PLR0913 - every argument is an injectable volatile dependency
+def compose_map(
     settings: QSettings,
     *,
-    language: Language,
-    data_dir: Path,
     cache_dir: Path,
-    key_store: TileKeyStore | None = None,
     source: TileSource | None = None,
     cache: TileCache | None = None,
     now_utc: Callable[[], datetime] | None = None,
 ) -> MapServices:
-    """The map's collaborators: key store, provider, disk cache, proxy, settings and queries.
+    """The map's collaborators: tile server, disk cache, proxy, settings and queries.
 
     The cache lives in the app's cache folder (never in a profile), with the cap the user chose;
-    the provider is Tracestrack, asked only for tiles the page requests.
+    the server is tile.openstreetmap.org, asked only for tiles the page requests, with a
+    `User-Agent` that names the app and its version (read here, once).
     """
-    store = key_store or _default_tile_key_store(data_dir)
-    provider = source or create_tracestrack_source(store)
+    provider = source or create_osm_source(_tile_user_agent())
     disk_cache = _LazyDiskTileCache(cache_dir, saved_cache_limit(settings).bytes)  # opens on use
     tile_cache: TileCache = disk_cache if cache is None else cache
     proxy = TileProxy(provider, tile_cache, now_utc or (lambda: datetime.now(UTC)), time.monotonic)
-    key_settings = TileKeySettings(store, provider, proxy)
     released = threading.Event()
 
     def release() -> None:
@@ -414,8 +401,8 @@ def compose_map(  # noqa: PLR0913 - every argument is an injectable volatile dep
             disk_cache.close()
 
     return MapServices(
-        tiles=TileService(proxy, lambda: language.value),
-        settings=MapSettingsModel(key_settings, proxy, tile_cache, settings),
+        tiles=TileService(proxy),
+        settings=MapSettingsModel(proxy, tile_cache, settings),
         host=MapQueryHost(decode_stored_track),
         release=release,
     )
@@ -442,7 +429,6 @@ def compose_main_window(  # noqa: PLR0913 - every argument is an injectable vola
     mfa_wait_s: float = MFA_WAIT_S,
     language: Language = Language.ENGLISH,
     map_cache_dir: Path | None = None,
-    tile_key_store: TileKeyStore | None = None,
     tile_source: TileSource | None = None,
 ) -> MainWindow:
     """Builds the window with all its dependencies (requires a `QApplication`).
@@ -455,10 +441,9 @@ def compose_main_window(  # noqa: PLR0913 - every argument is an injectable vola
     replace Garmin, the keyring, the system notification and the synchronization pauses
     (fake in tests); `data_dir` is the app's local data folder, where the encrypted
     tokens live on Windows; `mfa_wait_s` is how long to wait for the MFA code; `language` is the
-    language already installed (the Language menu shows it checked). `map_cache_dir`,
-    `tile_key_store` and `tile_source` replace the tile cache folder, the system key store and
-    Tracestrack (fake in tests). It does not open any profile: that is done by
-    `MainWindow.start()`, after `show()`.
+    language already installed (the Language menu shows it checked). `map_cache_dir`
+    and `tile_source` replace the tile cache folder and the OpenStreetMap server (fake in
+    tests). It does not open any profile: that is done by `MainWindow.start()`, after `show()`.
     """
     del command_line  # for now no option changes the composition
     if config_dir is None:
@@ -525,11 +510,8 @@ def compose_main_window(  # noqa: PLR0913 - every argument is an injectable vola
     )
     map_services = compose_map(
         settings,
-        language=language,
-        data_dir=data_dir,
         cache_dir=map_cache_dir
         or Path(platformdirs.user_cache_dir("PonosCoach", appauthor=False)) / "map",
-        key_store=tile_key_store,
         source=tile_source,
         now_utc=utc_now,
     )

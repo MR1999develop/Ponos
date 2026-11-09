@@ -13,10 +13,10 @@ from pathlib import Path
 import pytest
 
 from ponos_coach.maps.domain import TileAddress
-from ponos_coach.maps.ports import TileCache, TileCacheError, TileImage
+from ponos_coach.maps.ports import TileCache, TileCacheError, TileImage, TileValidators
 from ponos_coach.platform import tile_cache
 from ponos_coach.platform.tile_cache import CACHE_FILE_NAME, DiskTileCache, accounted_bytes
-from tests.contracts.contract_tiles import STYLE, TileCacheContract, png_of
+from tests.contracts.contract_tiles import TileCacheContract, png_of
 from tests.fakes.tiles import InMemoryTileCache
 
 NOW = datetime(2026, 11, 8, 12, 0, tzinfo=UTC)
@@ -45,7 +45,7 @@ def test_t_map_11_the_files_on_disk_stay_within_the_cap(tmp_path: Path) -> None:
     cache = DiskTileCache(folder, cap)
     try:
         for number in range(200):
-            cache.put(STYLE, TileAddress(12, number, 7), TileImage(png_of(9000), 60), NOW)
+            cache.put(TileAddress(12, number, 7), TileImage(png_of(9000), 60), NOW)
             assert cache.used_bytes() <= cap
         cache.set_limit(cap)  # nothing to do, nothing breaks
     finally:
@@ -67,18 +67,18 @@ def test_tiles_survive_closing_and_reopening_with_their_order_of_use(tmp_path: P
     folder = tmp_path / "maps"
     cache = DiskTileCache(folder, 40_000)
     for n in range(3):
-        cache.put(STYLE, TileAddress(10, n, 1), TileImage(png_of(9000), 60), NOW)
-    assert cache.get(STYLE, TileAddress(10, 0, 1), NOW) is not None  # tile 0 is the newest use
+        cache.put(TileAddress(10, n, 1), TileImage(png_of(9000), 60), NOW)
+    assert cache.get(TileAddress(10, 0, 1), NOW) is not None  # tile 0 is the newest use
     used = cache.used_bytes()
     cache.close()
 
     reopened = DiskTileCache(folder, 40_000)
     try:
         assert reopened.used_bytes() == used
-        reopened.put(STYLE, TileAddress(10, 3, 1), TileImage(png_of(9000), 60), NOW)
-        reopened.put(STYLE, TileAddress(10, 4, 1), TileImage(png_of(9000), 60), NOW)
-        assert reopened.get(STYLE, TileAddress(10, 1, 1), NOW) is None  # least used went first
-        assert reopened.get(STYLE, TileAddress(10, 0, 1), NOW) is not None
+        reopened.put(TileAddress(10, 3, 1), TileImage(png_of(9000), 60), NOW)
+        reopened.put(TileAddress(10, 4, 1), TileImage(png_of(9000), 60), NOW)
+        assert reopened.get(TileAddress(10, 1, 1), NOW) is None  # least used went first
+        assert reopened.get(TileAddress(10, 0, 1), NOW) is not None
     finally:
         reopened.close()
 
@@ -87,13 +87,13 @@ def test_a_smaller_cap_at_opening_trims_the_old_file(tmp_path: Path) -> None:
     folder = tmp_path / "maps"
     cache = DiskTileCache(folder, 500_000)
     for n in range(20):
-        cache.put(STYLE, TileAddress(10, n, 1), TileImage(png_of(9000), 60), NOW)
+        cache.put(TileAddress(10, n, 1), TileImage(png_of(9000), 60), NOW)
     cache.close()
 
     smaller = DiskTileCache(folder, 50_000)
     try:
         assert 0 < smaller.used_bytes() <= 50_000
-        assert smaller.get(STYLE, TileAddress(10, 19, 1), NOW) is not None
+        assert smaller.get(TileAddress(10, 19, 1), NOW) is not None
     finally:
         smaller.close()
 
@@ -103,7 +103,7 @@ def test_clear_leaves_no_tile_bytes_on_disk(tmp_path: Path) -> None:
     cache = DiskTileCache(folder, 1_000_000)
     try:
         for n in range(30):
-            cache.put(STYLE, TileAddress(10, n, 1), TileImage(png_of(9000), 60), NOW)
+            cache.put(TileAddress(10, n, 1), TileImage(png_of(9000), 60), NOW)
         assert disk_usage(folder) > 100_000
 
         cache.clear()
@@ -127,8 +127,8 @@ def test_a_damaged_cache_file_is_rebuilt_empty_not_an_error(tmp_path: Path, dama
     cache = DiskTileCache(folder, 100_000)
     try:
         assert cache.used_bytes() == 0
-        cache.put(STYLE, TileAddress(10, 1, 1), TileImage(png_of(9000), 60), NOW)
-        assert cache.get(STYLE, TileAddress(10, 1, 1), NOW) is not None
+        cache.put(TileAddress(10, 1, 1), TileImage(png_of(9000), 60), NOW)
+        assert cache.get(TileAddress(10, 1, 1), NOW) is not None
     finally:
         cache.close()
 
@@ -136,7 +136,7 @@ def test_a_damaged_cache_file_is_rebuilt_empty_not_an_error(tmp_path: Path, dama
 def test_a_cache_of_another_version_is_rebuilt(tmp_path: Path) -> None:
     folder = tmp_path / "maps"
     cache = DiskTileCache(folder, 100_000)
-    cache.put(STYLE, TileAddress(10, 1, 1), TileImage(png_of(9000), 60), NOW)
+    cache.put(TileAddress(10, 1, 1), TileImage(png_of(9000), 60), NOW)
     cache.close()
     with sqlite3.connect(folder / CACHE_FILE_NAME) as raw:
         raw.execute("PRAGMA user_version = 99")
@@ -187,8 +187,8 @@ def test_many_threads_asking_and_storing_keep_the_books_right(tmp_path: Path) ->
         try:
             for n in range(60):
                 address = TileAddress(12, offset * 100 + n, 3)
-                cache.put(STYLE, address, TileImage(png_of(6000), 60), NOW)
-                cache.get(STYLE, address, NOW)
+                cache.put(address, TileImage(png_of(6000), 60), NOW)
+                cache.get(address, NOW)
                 assert cache.used_bytes() <= cap
         except BaseException as exc:
             errors.append(exc)
@@ -216,11 +216,76 @@ def test_a_closed_cache_reports_an_error_instead_of_crashing(tmp_path: Path) -> 
     cache.close()
 
     with pytest.raises(TileCacheError):
-        cache.get(STYLE, TileAddress(1, 0, 0), NOW)
+        cache.get(TileAddress(1, 0, 0), NOW)
     with pytest.raises(TileCacheError):
-        cache.put(STYLE, TileAddress(1, 0, 0), TileImage(png_of(3000), 60), NOW)
+        cache.put(TileAddress(1, 0, 0), TileImage(png_of(3000), 60), NOW)
 
 
 def test_the_schema_version_statement_matches_the_schema_version() -> None:
     expected = f"PRAGMA user_version = {tile_cache._SCHEMA_VERSION}"
     assert expected == tile_cache._SET_SCHEMA_VERSION
+
+
+def test_a_version_1_file_from_the_previous_provider_is_rebuilt_empty(tmp_path: Path) -> None:
+    folder = tmp_path / "maps"
+    folder.mkdir()
+    old = sqlite3.connect(str(folder / CACHE_FILE_NAME))
+    old.execute(
+        "CREATE TABLE tile (id INTEGER PRIMARY KEY, style TEXT NOT NULL, z INTEGER NOT NULL, "
+        "x INTEGER NOT NULL, y INTEGER NOT NULL, expires_ms INTEGER NOT NULL, "
+        "used_seq INTEGER NOT NULL, cost INTEGER NOT NULL, png BLOB NOT NULL)"
+    )
+    old.execute("INSERT INTO tile VALUES (1, 'en', 1, 0, 0, 0, 1, 4096, x'00')")
+    old.execute("PRAGMA user_version = 1")
+    old.commit()
+    old.close()
+
+    cache = DiskTileCache(folder, 1_000_000)
+    try:
+        assert cache.used_bytes() == 0
+        assert cache.get(TileAddress(1, 0, 0), NOW) is None
+        cache.put(TileAddress(1, 0, 0), TileImage(png_of(3000), 60), NOW)
+        assert cache.get(TileAddress(1, 0, 0), NOW) is not None
+    finally:
+        cache.close()
+
+
+def test_the_validators_are_part_of_the_accounted_size() -> None:
+    assert accounted_bytes(4096 - 160, 1) == 8192
+    assert accounted_bytes(100, 512) == 4096
+
+
+def test_validators_survive_closing_and_reopening(tmp_path: Path) -> None:
+    folder = tmp_path / "maps"
+    validators = TileValidators('"abc"', "Tue, 03 Nov 2026 10:00:00 GMT")
+    cache = DiskTileCache(folder, 1_000_000)
+    cache.put(TileAddress(3, 1, 1), TileImage(png_of(3000), 60, validators), NOW)
+    cache.close()
+
+    reopened = DiskTileCache(folder, 1_000_000)
+    try:
+        found = reopened.get(TileAddress(3, 1, 1), NOW)
+        assert found is not None
+        assert found.validators == validators
+    finally:
+        reopened.close()
+
+
+def test_the_cap_holds_with_long_validators(tmp_path: Path) -> None:
+    cap = 100_000
+    cache = DiskTileCache(tmp_path / "maps", cap)
+    try:
+        for number in range(100):
+            validators = TileValidators("e" * 256, "m" * 256)
+            cache.put(TileAddress(12, number, 7), TileImage(png_of(3800), 60, validators), NOW)
+            assert cache.used_bytes() <= cap
+    finally:
+        cache.close()
+
+
+def test_renewing_a_tile_in_a_closed_cache_reports_an_error(tmp_path: Path) -> None:
+    cache = DiskTileCache(tmp_path / "maps", 1_000_000)
+    cache.close()
+
+    with pytest.raises(TileCacheError):
+        cache.renew(TileAddress(1, 0, 0), 60, NOW)

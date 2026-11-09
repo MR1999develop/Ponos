@@ -12,21 +12,25 @@ from datetime import UTC, datetime
 
 from pytestqt.qtbot import QtBot
 
-from ponos_coach.maps.domain import TileKey
-from ponos_coach.maps.ports import TileImage, TileProblem, TileResult
+from ponos_coach.maps.ports import (
+    NO_VALIDATORS,
+    TileImage,
+    TileProblem,
+    TileResult,
+    TileUnavailable,
+)
 from ponos_coach.maps.use_cases import TileProxy
 from ponos_coach.ui.tile_service import MAX_PENDING, TileService
-from tests.fakes.tiles import FakeTileSource, InMemoryTileCache, InMemoryTileKeyStore, make_png
+from tests.fakes.tiles import FakeTileSource, InMemoryTileCache, make_png
 from tests.ui.workspace_support import WAIT_MS
 
 
 def service_with(
-    source_keys: InMemoryTileKeyStore | None = None, language: str = "en"
-) -> tuple[TileService, FakeTileSource, InMemoryTileKeyStore, TileProxy]:
-    keys = source_keys or InMemoryTileKeyStore()
-    source = FakeTileSource(keys)
+    script: list[TileResult] | None = None,
+) -> tuple[TileService, FakeTileSource, TileProxy]:
+    source = FakeTileSource(script)
     proxy = TileProxy(source, InMemoryTileCache(), lambda: datetime.now(UTC), time.monotonic)
-    return TileService(proxy, lambda: language), source, keys, proxy
+    return TileService(proxy), source, proxy
 
 
 def ask(qtbot: QtBot, service: TileService, path: str) -> list[bytes | None]:
@@ -36,9 +40,8 @@ def ask(qtbot: QtBot, service: TileService, path: str) -> list[bytes | None]:
     return answers
 
 
-def test_a_tile_comes_back_on_the_ui_thread_with_the_app_language(qtbot: QtBot) -> None:
-    keys = InMemoryTileKeyStore(TileKey(FakeTileSource.ACCEPTED_KEY))
-    service, source, _keys, _proxy = service_with(keys, language="it")
+def test_a_tile_comes_back_on_the_ui_thread(qtbot: QtBot) -> None:
+    service, source, _proxy = service_with()
     thread_of_answer: list[bool] = []
 
     def done(png: bytes | None) -> None:
@@ -49,14 +52,14 @@ def test_a_tile_comes_back_on_the_ui_thread_with_the_app_language(qtbot: QtBot) 
     qtbot.waitUntil(lambda: bool(thread_of_answer), timeout=WAIT_MS)
 
     assert thread_of_answer == [True]
-    assert source.calls == [(3, 4, 5, "it")]
+    assert source.calls == [(3, 4, 5, NO_VALIDATORS)]
     service.shutdown()
 
 
 def test_a_path_that_is_not_a_tile_is_refused_without_asking_the_provider(
     qtbot: QtBot,
 ) -> None:
-    service, source, _keys, _proxy = service_with()
+    service, source, _proxy = service_with()
 
     for path in (
         "/99/0/0",
@@ -74,28 +77,42 @@ def test_a_path_that_is_not_a_tile_is_refused_without_asking_the_provider(
     service.shutdown()
 
 
-def test_the_problem_of_the_provider_is_reported_once_and_cleared_by_a_good_tile(
+def test_the_problem_of_the_server_is_reported_once_and_cleared_by_a_good_tile(
     qtbot: QtBot,
 ) -> None:
-    service, _source, keys, proxy = service_with()  # no key yet
+    refused = TileUnavailable(TileProblem.REFUSED)
+    service, _source, _proxy = service_with([refused, refused, TileImage(make_png(), 3600)])
     problems: list[object] = []
     service.problem_changed.connect(problems.append)
 
     assert ask(qtbot, service, "/2/1/1") == [None]
     assert ask(qtbot, service, "/2/1/2") == [None]
-    assert problems == [TileProblem.NO_KEY]  # told once, not once per tile
+    assert problems == [TileProblem.REFUSED]  # told once, not once per tile
 
-    keys.save(TileKey(FakeTileSource.ACCEPTED_KEY))
-    proxy.key_changed()
+    service.shutdown()
+
+
+def test_a_good_tile_after_a_problem_clears_it(qtbot: QtBot) -> None:
+    source = FakeTileSource([TileUnavailable(TileProblem.NETWORK_UNAVAILABLE)])
+    now = [datetime(2026, 11, 8, tzinfo=UTC)]
+    clock = [0.0]
+    proxy = TileProxy(source, InMemoryTileCache(), lambda: now[0], lambda: clock[0])
+    service = TileService(proxy)
+    problems: list[object] = []
+    service.problem_changed.connect(problems.append)
+    assert ask(qtbot, service, "/2/1/1") == [None]
+    source._script = [TileImage(make_png(), 3600)]
+    clock[0] += 60.0  # the cool-down of the network problem is over
+
     assert ask(qtbot, service, "/2/1/3")[0] is not None
 
-    assert problems == [TileProblem.NO_KEY, None]
+    assert problems == [TileProblem.NETWORK_UNAVAILABLE, None]
     assert service.problem is None
     service.shutdown()
 
 
 def test_a_service_that_was_shut_down_takes_no_more_requests(qtbot: QtBot) -> None:
-    service, source, _keys, _proxy = service_with()
+    service, source, _proxy = service_with()
     service.shutdown()
     service.shutdown()  # idempotent
 
@@ -111,16 +128,15 @@ def test_a_worker_still_busy_after_shutdown_keeps_no_reference_to_the_service(
     # Ubuntu in CI). So once shut down and released, the service must be gone at once.
     gate = threading.Event()
     started = threading.Event()
-    keys = InMemoryTileKeyStore(TileKey(FakeTileSource.ACCEPTED_KEY))
 
     class Blocked(FakeTileSource):
-        def fetch(self, z: int, x: int, y: int, language: str) -> TileResult:  # noqa: ARG002
+        def fetch(self, *_args: object) -> TileResult:
             started.set()
             gate.wait(timeout=30)
             return TileImage(make_png(), 3600)
 
-    proxy = TileProxy(Blocked(keys), InMemoryTileCache(), lambda: datetime.now(UTC), time.monotonic)
-    service = TileService(proxy, lambda: "en")
+    proxy = TileProxy(Blocked(), InMemoryTileCache(), lambda: datetime.now(UTC), time.monotonic)
+    service = TileService(proxy)
     try:
         assert service.request("/5/1/1", lambda _png: None)
         assert started.wait(timeout=WAIT_MS / 1000)
@@ -136,15 +152,14 @@ def test_a_worker_still_busy_after_shutdown_keeps_no_reference_to_the_service(
 
 def test_the_requests_that_wait_are_limited(qtbot: QtBot) -> None:
     gate = threading.Event()
-    keys = InMemoryTileKeyStore(TileKey(FakeTileSource.ACCEPTED_KEY))
 
     class Blocked(FakeTileSource):
-        def fetch(self, z: int, x: int, y: int, language: str) -> TileResult:  # noqa: ARG002
+        def fetch(self, *_args: object) -> TileResult:
             gate.wait(timeout=30)
             return TileImage(make_png(), 3600)
 
-    proxy = TileProxy(Blocked(keys), InMemoryTileCache(), lambda: datetime.now(UTC), time.monotonic)
-    service = TileService(proxy, lambda: "en")
+    proxy = TileProxy(Blocked(), InMemoryTileCache(), lambda: datetime.now(UTC), time.monotonic)
+    service = TileService(proxy)
     try:
         accepted = [service.request("/5/1/1", lambda _png: None) for _ in range(MAX_PENDING + 20)]
     finally:

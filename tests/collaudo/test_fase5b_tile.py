@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-# ruff: noqa: E501, RUF001, S105, RUF028
+# ruff: noqa: E501, RUF001, RUF028
 """Phase 5b acceptance campaign, tiles: T-MAP-10, T-MAP-11, T-SEC-14 and T-SEC-15 on the real stack.
 
 The real `TileProxy`, `HttpTileSource` and `DiskTileCache` are wired together against a local HTTP
-server (loopback, never the real provider) that plays hostile answers: a refused key, 429, a
-timeout, a slow drip, a body that is not a PNG, a huge PNG, a redirect, a lying length. The tile
-key is a placeholder; it must never reach a log, a file, an exception or a redirect target.
+server (loopback, never the real tile server) that plays hostile answers: 403, 429, a timeout, a
+slow drip, a body that is not a PNG, a huge PNG, a redirect, a lying length, and the conditional
+renewal of the usage policy (ETag, Last-Modified, 304). The addresses of the tiles say where the
+user looks: they must never reach a log or a file.
 """
 
 from __future__ import annotations
@@ -27,17 +28,16 @@ import pytest
 from ponos_coach.maps.domain import (
     TileAddress,
     TileAddressError,
-    TileKey,
     parse_cache_limit_gib,
     parse_tile_path,
 )
-from ponos_coach.maps.ports import TileImage, TileProblem
-from ponos_coach.maps.use_cases import COOLDOWN_S, KeyCheck, TileKeySettings, TileProxy
+from ponos_coach.maps.ports import TileImage, TileProblem, TileValidators
+from ponos_coach.maps.use_cases import COOLDOWN_S, TileProxy
 from ponos_coach.platform.tile_cache import CACHE_FILE_NAME, DiskTileCache, accounted_bytes
 from ponos_coach.platform.tile_http import HttpTileSource, TileEndpoint
-from tests.fakes.tiles import InMemoryTileKeyStore, make_png
+from tests.fakes.tiles import make_png
 
-SECRET = "SENTINEL-key-0123456789abcdef"
+USER_AGENT = "PonosCoach/0.0.1 (+https://example.org/contact)"
 NOW = datetime(2026, 11, 8, 12, 0, tzinfo=UTC)
 PNG = make_png()
 HERE = TileAddress(12, 2200, 1500)
@@ -62,6 +62,7 @@ class Server:
 
     def __init__(self, script: Callable[[str], Behaviour] | None = None) -> None:
         self.paths: list[str] = []
+        self.request_headers: list[dict[str, str]] = []
         self.script = script or (lambda _path: Behaviour())
         self.stop = threading.Event()
         outer = self
@@ -71,6 +72,7 @@ class Server:
 
             def do_GET(self) -> None:
                 outer.paths.append(self.path)
+                outer.request_headers.append({k.lower(): v for k, v in self.headers.items()})
                 behaviour = outer.script(self.path)
                 if behaviour.hold_s:
                     outer.stop.wait(behaviour.hold_s)
@@ -138,16 +140,13 @@ class Clocks:
 
 
 class Stack:
-    """Proxy + HTTP source + disk cache + key store, on a local server."""
+    """Proxy + HTTP source + disk cache, on a local server."""
 
-    def __init__(
-        self, server: Server, folder: Path, *, limit: int = 8 * 1024 * 1024, key: str = SECRET
-    ) -> None:
+    def __init__(self, server: Server, folder: Path, *, limit: int = 8 * 1024 * 1024) -> None:
         self.clocks = Clocks()
-        self.keys = InMemoryTileKeyStore(TileKey(key))
         self.source = HttpTileSource(
-            self.keys,
             TileEndpoint("http", "127.0.0.1", server.port),
+            user_agent=USER_AGENT,
             timeout_s=0.4,
             total_timeout_s=0.8,
             now=lambda: self.clocks.utc,
@@ -156,7 +155,6 @@ class Stack:
         self.proxy = TileProxy(
             self.source, self.cache, lambda: self.clocks.utc, lambda: self.clocks.monotonic
         )
-        self.settings = TileKeySettings(self.keys, self.source, self.proxy)
 
 
 @pytest.fixture
@@ -166,35 +164,35 @@ def stack(server: Server, tmp_path: Path) -> Iterator[Stack]:
     built.cache.close()
 
 
-# --- T-MAP-10: the hostile answers of the provider ----------------------------------------------
+# --- T-MAP-10: the hostile answers of the server ----------------------------------------------
 
 
-def test_t_map_10_a_refused_key_gives_the_neutral_background_and_no_retry_storm(
+def test_t_map_10_a_refusal_gives_the_neutral_background_and_no_retry_storm(
     server: Server, stack: Stack
 ) -> None:
     server.script = lambda _path: Behaviour(status=403, content_type="text/plain", body=b"no")
 
-    answers = [stack.proxy.tile(TileAddress(12, 2200 + i, 1500), "it") for i in range(20)]
+    answers = [stack.proxy.tile(TileAddress(12, 2200 + i, 1500)) for i in range(20)]
 
-    assert all(a.png is None and a.problem is TileProblem.KEY_REJECTED for a in answers)
-    assert len(server.paths) == 1  # one attempt, then the cool-down protects the provider
-    stack.clocks.advance(COOLDOWN_S[TileProblem.KEY_REJECTED] + 1)
-    stack.proxy.tile(HERE, "it")
+    assert all(a.png is None and a.problem is TileProblem.REFUSED for a in answers)
+    assert len(server.paths) == 1  # one attempt, then the cool-down protects the server
+    stack.clocks.advance(COOLDOWN_S[TileProblem.REFUSED] + 1)
+    stack.proxy.tile(HERE)
     assert len(server.paths) == 2  # and it asks again after the cool-down, once
 
 
-def test_t_map_10_credit_over_serves_the_expired_tile_with_the_warning(
+def test_t_map_10_a_rate_limit_serves_the_expired_tile_with_the_warning(
     server: Server, stack: Stack
 ) -> None:
     server.script = lambda _path: Behaviour(headers={"Cache-Control": "max-age=60"})
-    assert stack.proxy.tile(HERE, "en").png == PNG
+    assert stack.proxy.tile(HERE).png == PNG
     stack.clocks.advance(120)
     server.script = lambda _path: Behaviour(status=429, content_type="text/plain", body=b"slow")
 
-    answer = stack.proxy.tile(HERE, "en")
+    answer = stack.proxy.tile(HERE)
 
     assert answer.png == PNG
-    assert answer.problem is TileProblem.CREDIT_EXHAUSTED
+    assert answer.problem is TileProblem.REFUSED
 
 
 def test_t_map_10_a_silent_server_times_out_and_the_call_returns(
@@ -203,7 +201,7 @@ def test_t_map_10_a_silent_server_times_out_and_the_call_returns(
     server.script = lambda _path: Behaviour(hold_s=5.0)
 
     started = perf_counter()
-    answer = stack.proxy.tile(HERE, "it")
+    answer = stack.proxy.tile(HERE)
 
     assert perf_counter() - started < 3.0
     assert answer.problem is TileProblem.NETWORK_UNAVAILABLE
@@ -214,7 +212,7 @@ def test_t_sec_15_a_slow_drip_hits_the_total_deadline(server: Server, stack: Sta
     server.script = lambda _path: Behaviour(body=body, drip_s=0.05)
 
     started = perf_counter()
-    answer = stack.proxy.tile(HERE, "it")
+    answer = stack.proxy.tile(HERE)
 
     assert perf_counter() - started < 3.0
     assert answer.problem is TileProblem.NETWORK_UNAVAILABLE
@@ -255,7 +253,7 @@ def test_t_sec_15_a_wrong_answer_is_not_stored_and_not_served(
 ) -> None:
     server.script = lambda _path: behaviour
 
-    answer = stack.proxy.tile(HERE, "it")
+    answer = stack.proxy.tile(HERE)
 
     assert answer.png is None
     assert answer.problem is not None
@@ -267,19 +265,19 @@ def test_t_sec_15_a_png_far_above_the_byte_cap_is_refused_in_both_framings(
 ) -> None:
     huge = make_png(extra_bytes=6 * 1024 * 1024)
     server.script = lambda _path: Behaviour(body=huge)  # honest Content-Length
-    assert stack.proxy.tile(HERE, "it").problem is TileProblem.INVALID_RESPONSE
+    assert stack.proxy.tile(HERE).problem is TileProblem.INVALID_RESPONSE
 
     stack.clocks.advance(COOLDOWN_S[TileProblem.INVALID_RESPONSE] + 1)
     server.script = lambda _path: Behaviour(body=huge, declared_length=-1)  # no length at all
-    assert stack.proxy.tile(HERE, "it").problem is TileProblem.INVALID_RESPONSE
+    assert stack.proxy.tile(HERE).problem is TileProblem.INVALID_RESPONSE
 
     stack.clocks.advance(COOLDOWN_S[TileProblem.INVALID_RESPONSE] + 1)
     server.script = lambda _path: Behaviour(body=huge, declared_length=len(PNG))  # a lying length
-    assert stack.proxy.tile(HERE, "it").png is None
+    assert stack.proxy.tile(HERE).png is None
     assert stack.cache.used_bytes() == 0
 
 
-def test_t_sec_15_a_redirect_is_never_followed_and_the_key_does_not_travel(
+def test_t_sec_15_a_redirect_is_never_followed_and_nothing_travels_to_its_target(
     server: Server, stack: Stack
 ) -> None:
     elsewhere = Server()
@@ -290,7 +288,7 @@ def test_t_sec_15_a_redirect_is_never_followed_and_the_key_does_not_travel(
             server.script = always(
                 Behaviour(status=code, content_type="text/plain", body=b"", location=target)
             )
-            answer = stack.proxy.tile(HERE, "it")
+            answer = stack.proxy.tile(HERE)
             assert answer.problem is TileProblem.INVALID_RESPONSE
         assert elsewhere.paths == []
     finally:
@@ -301,10 +299,11 @@ def test_t_map_10_a_dead_port_is_a_network_problem_not_a_crash(tmp_path: Path) -
     closed = Server()
     port = closed.port
     closed.close()
-    keys = InMemoryTileKeyStore(TileKey(SECRET))
-    source = HttpTileSource(keys, TileEndpoint("http", "127.0.0.1", port), timeout_s=0.3)
+    source = HttpTileSource(
+        TileEndpoint("http", "127.0.0.1", port), user_agent=USER_AGENT, timeout_s=0.3
+    )
 
-    result = source.fetch(0, 0, 0, "en")
+    result = source.fetch(0, 0, 0)
 
     assert getattr(result, "problem", None) is TileProblem.NETWORK_UNAVAILABLE
 
@@ -319,9 +318,9 @@ def test_t_map_10_a_single_missing_tile_does_not_black_out_the_others(
         if "/2200/" in path
         else Behaviour()
     )
-    stack.proxy.tile(TileAddress(12, 2200, 1500), "it")  # the missing one
+    stack.proxy.tile(TileAddress(12, 2200, 1500))  # the missing one
 
-    neighbour = stack.proxy.tile(TileAddress(12, 2201, 1500), "it")
+    neighbour = stack.proxy.tile(TileAddress(12, 2201, 1500))
 
     assert neighbour.png == PNG
 
@@ -333,43 +332,106 @@ def test_t_map_11_only_the_asked_tiles_are_fetched_and_a_fresh_tile_is_not_asked
     wanted = [TileAddress(10, 500 + i, 400) for i in range(5)]
 
     for address in wanted * 3:
-        stack.proxy.tile(address, "en")
+        stack.proxy.tile(address)
 
     assert len(server.paths) == 5  # no prefetch of neighbours, no repeat while fresh
     stack.clocks.advance(3601)
-    stack.proxy.tile(wanted[0], "en")
+    stack.proxy.tile(wanted[0])
     assert len(server.paths) == 6  # an expired tile is renewed
 
 
-def test_t_sec_14_a_new_key_applies_at_once_and_a_refused_one_is_rolled_back(
+# --- Usage policy: user agent, conditional renewal -------------------------------------------
+
+
+def test_t_sec_14_every_request_names_the_app_and_never_asks_to_bypass_caches(
     server: Server, stack: Stack
 ) -> None:
-    good = "second-key-0123456789"
-    server.script = lambda path: (
-        Behaviour() if f"key={SECRET}" in path else Behaviour(status=401, content_type="text/plain")
+    server.script = lambda _path: Behaviour(headers={"Cache-Control": "max-age=60"})
+    stack.proxy.tile(HERE)
+    stack.clocks.advance(120)
+    stack.proxy.tile(HERE)
+
+    for headers in server.request_headers:
+        assert headers["user-agent"] == USER_AGENT
+        assert "cache-control" not in headers
+        assert "pragma" not in headers
+        assert "cookie" not in headers
+        assert "authorization" not in headers
+
+
+def test_t_map_11_an_expired_tile_is_renewed_with_a_304_without_downloading_it_again(
+    server: Server, stack: Stack
+) -> None:
+    modified = "Tue, 03 Nov 2026 10:00:00 GMT"
+    first = Behaviour(
+        headers={"Cache-Control": "max-age=60", "ETag": '"v1"', "Last-Modified": modified}
+    )
+    server.script = lambda _path: first
+    assert stack.proxy.tile(HERE).png == PNG
+    stack.clocks.advance(61)
+    server.script = lambda _path: Behaviour(
+        status=304, content_type=None, body=b"", headers={"Cache-Control": "max-age=600"}
     )
 
-    assert stack.settings.set_key(good) is KeyCheck.REJECTED
-    assert stack.keys.key == TileKey(SECRET)  # the previous key is back
-    assert stack.settings.set_key("short") is KeyCheck.INVALID_FORMAT
-    assert stack.settings.set_key("bad key with spaces!!") is KeyCheck.INVALID_FORMAT
-    assert stack.keys.key == TileKey(SECRET)
-    assert stack.settings.set_key(SECRET) is KeyCheck.ACCEPTED
+    renewed = stack.proxy.tile(HERE)
+    stack.clocks.advance(599)
+    again = stack.proxy.tile(HERE)
+
+    assert renewed.png == PNG
+    assert again.png == PNG
+    assert len(server.paths) == 2  # the 304 renewed the copy for 600 seconds
+    assert server.request_headers[1]["if-none-match"] == '"v1"'
+    assert server.request_headers[1]["if-modified-since"] == modified
+    stack.clocks.advance(2)
+    server.script = lambda _path: Behaviour(
+        headers={"Cache-Control": "max-age=60", "ETag": '"v2"'}, body=make_png(extra_bytes=300)
+    )
+    changed = stack.proxy.tile(HERE)
+    assert changed.png != PNG  # a 200 replaces the copy
+    assert len(server.paths) == 3
 
 
-# --- T-SEC-14: the key never leaves the request ----------------------------------------------------
+def test_t_map_11_a_tile_with_no_cache_headers_is_kept_for_seven_days(
+    server: Server, stack: Stack
+) -> None:
+    stack.proxy.tile(HERE)
+    stack.clocks.advance(7 * 86_400 - 60)
+    stack.proxy.tile(HERE)
+    assert len(server.paths) == 1
+    stack.clocks.advance(120)
+
+    stack.proxy.tile(HERE)
+
+    assert len(server.paths) == 2
+
+
+def test_t_sec_14_an_etag_that_is_hostile_never_reaches_the_cache_or_the_next_request(
+    server: Server, stack: Stack
+) -> None:
+    server.script = lambda _path: Behaviour(
+        headers={"Cache-Control": "max-age=60", "ETag": '"' + "e" * 400 + '"'}
+    )
+    stack.proxy.tile(HERE)
+    stack.clocks.advance(61)
+    server.script = lambda _path: Behaviour(headers={"Cache-Control": "max-age=60"})
+
+    stack.proxy.tile(HERE)
+
+    assert "if-none-match" not in server.request_headers[1]
+    stored = stack.cache.get(HERE, stack.clocks.utc)
+    assert stored is not None
+    assert stored.validators == TileValidators(None, None)
 
 
 def all_bytes_under(folder: Path) -> bytes:
     return b"".join(p.read_bytes() for p in folder.rglob("*") if p.is_file())
 
 
-def test_t_sec_14_the_key_is_in_no_log_no_file_no_error_and_no_answer(
+def test_t_sec_14_the_addresses_asked_are_in_no_log_and_no_error(
     server: Server, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.DEBUG)
     stack = Stack(server, tmp_path)
-    outcomes: list[object] = []
     scripts = [
         Behaviour(),
         Behaviour(status=403, content_type="text/plain"),
@@ -378,35 +440,17 @@ def test_t_sec_14_the_key_is_in_no_log_no_file_no_error_and_no_answer(
         Behaviour(content_type="text/html", body=b"x"),
         Behaviour(status=500, content_type="text/plain"),
     ]
+    outcomes: list[object] = []
     for i, behaviour in enumerate(scripts):
         server.script = always(behaviour)
         stack.clocks.advance(400)
-        outcomes.append(stack.proxy.tile(TileAddress(12, 2200 + i, 1500), "it"))
-        outcomes.append(stack.source.fetch(12, 2200 + i, 1500, "it"))
+        outcomes.append(stack.proxy.tile(TileAddress(12, 2200 + i, 1500)))
     stack.cache.close()
 
-    assert SECRET not in caplog.text
     for record in caplog.records:
-        assert SECRET not in record.getMessage()
-        assert SECRET not in repr(record.args) + repr(record.exc_info)
-    assert all(SECRET not in repr(o) for o in outcomes)
-    assert SECRET.encode() not in all_bytes_under(tmp_path)
-    assert SECRET not in repr(TileKey(SECRET)) + str(TileKey(SECRET)) + f"{TileKey(SECRET)!s:>40}"
-    with pytest.raises(TypeError):
-        import pickle  # noqa: PLC0415
-
-        pickle.dumps(TileKey(SECRET))
-    assert server.paths  # the key did go to the (local) provider, in the query, and only there
-
-
-@pytest.mark.parametrize(
-    "bad", ["a b c d e f g h", "key\r\nHost: evil", "short", "é" * 10, "x" * 129]
-)
-def test_t_sec_14_a_key_that_is_not_url_safe_is_refused_without_repeating_it(bad: str) -> None:
-    with pytest.raises(ValueError, match="invalid tile key") as caught:
-        TileKey(bad)
-
-    assert bad not in str(caught.value)
+        assert "/12/22" not in record.getMessage()
+        assert "1500" not in record.getMessage()
+    assert all(USER_AGENT not in repr(o) for o in outcomes)
 
 
 # --- T-SEC-15: addresses and sizes from the page ---------------------------------------------------
@@ -424,7 +468,7 @@ def test_t_sec_15_hostile_tile_paths_are_rejected_before_any_request(
     server: Server, stack: Stack, path: str
 ) -> None:
     with pytest.raises(TileAddressError):
-        stack.proxy.serve(path, "it")
+        stack.proxy.serve(path)
 
     assert server.paths == []
 
@@ -450,16 +494,16 @@ def test_t_map_11_the_cap_is_exact_least_recently_used_goes_first(tmp_path: Path
     cost = accounted_bytes(len(png))
     cache = DiskTileCache(tmp_path / "c", cost * 5)
     for i in range(5):
-        cache.put("en", TileAddress(8, i, 0), TileImage(png, 3600), NOW)
+        cache.put(TileAddress(8, i, 0), TileImage(png, 3600), NOW)
     assert cache.used_bytes() == cost * 5  # exactly full, nothing evicted
-    cache.get("en", TileAddress(8, 0, 0), NOW)  # touch the oldest: it is now the youngest
+    cache.get(TileAddress(8, 0, 0), NOW)  # touch the oldest: it is now the youngest
 
-    cache.put("en", TileAddress(8, 99, 0), TileImage(png, 3600), NOW)
+    cache.put(TileAddress(8, 99, 0), TileImage(png, 3600), NOW)
 
     assert cache.used_bytes() == cost * 5
-    assert cache.get("en", TileAddress(8, 1, 0), NOW) is None  # the least recently used went
-    assert cache.get("en", TileAddress(8, 0, 0), NOW) is not None
-    assert cache.get("en", TileAddress(8, 99, 0), NOW) is not None
+    assert cache.get(TileAddress(8, 1, 0), NOW) is None  # the least recently used went
+    assert cache.get(TileAddress(8, 0, 0), NOW) is not None
+    assert cache.get(TileAddress(8, 99, 0), NOW) is not None
     cache.close()
 
 
@@ -469,20 +513,19 @@ def test_t_map_11_random_use_matches_a_naive_lru_model_and_never_exceeds_the_cap
     rng = random.Random(7)
     limit = 600_000
     cache = DiskTileCache(tmp_path / "c", limit)
-    model: OrderedDict[tuple[str, int, int, int], int] = OrderedDict()
+    model: OrderedDict[tuple[int, int, int], int] = OrderedDict()
     for _ in range(600):
         address = TileAddress(9, rng.randrange(40), rng.randrange(3))
-        style = rng.choice(["it", "en"])
-        key = (style, address.z, address.x, address.y)
+        key = (address.z, address.x, address.y)
         if rng.random() < 0.6:
             png = make_png(extra_bytes=rng.choice([100, 5_000, 30_000, 90_000]))
-            cache.put(style, address, TileImage(png, 3600), NOW)
+            cache.put(address, TileImage(png, 3600), NOW)
             model.pop(key, None)
             model[key] = accounted_bytes(len(png))
             while sum(model.values()) > limit:
                 model.popitem(last=False)
         else:
-            hit = cache.get(style, address, NOW)
+            hit = cache.get(address, NOW)
             assert (hit is not None) == (key in model)
             if key in model:
                 model.move_to_end(key)
@@ -495,7 +538,7 @@ def test_t_map_11_the_files_on_disk_stay_near_the_cap(tmp_path: Path) -> None:
     limit = 4 * 1024 * 1024
     cache = DiskTileCache(tmp_path / "c", limit)
     for i in range(300):
-        cache.put("en", TileAddress(10, i, 7), TileImage(make_png(extra_bytes=60_000), 3600), NOW)
+        cache.put(TileAddress(10, i, 7), TileImage(make_png(extra_bytes=60_000), 3600), NOW)
     cache.close()  # checkpoint included
 
     assert (tmp_path / "c" / CACHE_FILE_NAME).stat().st_size <= limit + 128 * 1024
@@ -508,7 +551,7 @@ def test_t_map_11_disk_use_while_open_stays_within_the_cap_plus_a_few_kib(tmp_pa
     cache = DiskTileCache(tmp_path / "c", limit)
     worst = 0
     for i in range(300):
-        cache.put("en", TileAddress(10, i, 7), TileImage(make_png(extra_bytes=60_000), 3600), NOW)
+        cache.put(TileAddress(10, i, 7), TileImage(make_png(extra_bytes=60_000), 3600), NOW)
         worst = max(worst, disk_use(tmp_path / "c"))
 
     cache.close()
@@ -520,14 +563,14 @@ def test_t_map_11_clear_returns_the_disk_to_almost_nothing_and_the_cache_keeps_w
 ) -> None:
     cache = DiskTileCache(tmp_path / "c", 2 * 1024 * 1024)
     for i in range(40):
-        cache.put("it", TileAddress(10, i, 0), TileImage(make_png(extra_bytes=30_000), 60), NOW)
+        cache.put(TileAddress(10, i, 0), TileImage(make_png(extra_bytes=30_000), 60), NOW)
 
     cache.clear()
 
     assert cache.used_bytes() == 0
     assert disk_use(tmp_path / "c") < 64 * 1024
-    cache.put("it", TileAddress(10, 1, 1), TileImage(PNG, 60), NOW)
-    assert cache.get("it", TileAddress(10, 1, 1), NOW) is not None
+    cache.put(TileAddress(10, 1, 1), TileImage(PNG, 60), NOW)
+    assert cache.get(TileAddress(10, 1, 1), NOW) is not None
     cache.close()
 
 
@@ -535,7 +578,7 @@ def test_t_map_11_a_lower_cap_evicts_at_once_and_on_reopen(tmp_path: Path) -> No
     folder = tmp_path / "c"
     cache = DiskTileCache(folder, 3 * 1024 * 1024)
     for i in range(50):
-        cache.put("it", TileAddress(10, i, 0), TileImage(make_png(extra_bytes=40_000), 3600), NOW)
+        cache.put(TileAddress(10, i, 0), TileImage(make_png(extra_bytes=40_000), 3600), NOW)
     cache.set_limit(1024 * 1024)
     assert cache.used_bytes() <= 1024 * 1024
     cache.close()
@@ -548,8 +591,8 @@ def test_t_map_11_a_lower_cap_evicts_at_once_and_on_reopen(tmp_path: Path) -> No
 
 def test_t_map_11_a_tile_bigger_than_the_cap_and_a_zero_ttl_are_not_stored(tmp_path: Path) -> None:
     cache = DiskTileCache(tmp_path / "c", 8192)
-    cache.put("it", TileAddress(5, 1, 1), TileImage(make_png(extra_bytes=50_000), 60), NOW)
-    cache.put("it", TileAddress(5, 1, 2), TileImage(PNG[:100] + PNG[100:], 0), NOW)
+    cache.put(TileAddress(5, 1, 1), TileImage(make_png(extra_bytes=50_000), 60), NOW)
+    cache.put(TileAddress(5, 1, 2), TileImage(PNG[:100] + PNG[100:], 0), NOW)
 
     assert cache.used_bytes() == 0
     cache.close()
@@ -565,8 +608,8 @@ def test_t_map_11_a_damaged_cache_file_is_rebuilt_empty_not_fatal(
     cache = DiskTileCache(folder, 1024 * 1024)
 
     assert cache.used_bytes() == 0
-    cache.put("it", TileAddress(1, 0, 0), TileImage(PNG, 60), NOW)
-    assert cache.get("it", TileAddress(1, 0, 0), NOW) is not None
+    cache.put(TileAddress(1, 0, 0), TileImage(PNG, 60), NOW)
+    assert cache.get(TileAddress(1, 0, 0), NOW) is not None
     cache.close()
 
 
@@ -581,9 +624,9 @@ def test_t_map_11_concurrent_use_never_breaks_the_cap(tmp_path: Path) -> None:
             for _ in range(150):
                 address = TileAddress(9, rng.randrange(30), seed)
                 if rng.random() < 0.5:
-                    cache.put("en", address, TileImage(make_png(extra_bytes=20_000), 600), NOW)
+                    cache.put(address, TileImage(make_png(extra_bytes=20_000), 600), NOW)
                 else:
-                    cache.get("en", address, NOW)
+                    cache.get(address, NOW)
                 assert cache.used_bytes() <= limit
         except BaseException as error:
             errors.append(error)
