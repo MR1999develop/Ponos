@@ -283,6 +283,26 @@ def test_a_past_measurement_changes_the_load_and_the_overview_is_recalculated(
     assert "recalculated" in window.statusBar().currentMessage()
 
 
+def test_a_chosen_day_survives_a_late_reread_of_the_saved_values(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    # Reopening Settings re-reads the saved values on the data thread; while the load is being
+    # recalculated the answer can arrive after the user has already picked the day: it must not
+    # put "today" back under the user's eyes, or the threshold would be saved from today.
+    window = window_with_activities(qtbot, tmp_path, settings)
+    dialog = open_edit_dialog(qtbot, window)
+    dialog.valid_from_edit.setDate(QDate(2026, 5, 1))
+
+    window.profile_dialogs.load_profile_page()  # what showing the page again asks
+    drained: list[object] = []  # the data thread runs jobs in order: after this, any re-read
+    assert window.controller.run_on_profile(lambda _access: None, drained.append)
+    qtbot.waitUntil(lambda: bool(drained), timeout=WAIT_MS)
+
+    current = window.profile_dialogs.edit_dialog
+    assert current is dialog
+    assert current.valid_from_edit.date() == QDate(2026, 5, 1)
+
+
 def test_only_the_changed_fields_are_stored_and_the_history_lists_the_new_row(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
