@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
 from shiboken6 import isValid
 
-from ponos_coach.ui.chart_payload import prepare_figure
+from ponos_coach.ui.chart_payload import XNavigation, prepare_figure
 from ponos_coach.ui.chart_view import (
     ChartEngine,
     ChartView,
@@ -48,7 +48,9 @@ def execute(qtbot: QtBot, view: ChartView, statements: str) -> None:
     qtbot.waitUntil(lambda: bool(done), timeout=WAIT_MS)
 
 
-def drawn_view(qtbot: QtBot, export_to: Path | None = None, *, linked_x: bool = False) -> ChartView:
+def drawn_view(
+    qtbot: QtBot, export_to: Path | None = None, *, navigation: XNavigation = XNavigation.FIXED
+) -> ChartView:
     engine = ChartEngine(lambda _name: export_to)
     view = ChartView(engine, "Test chart")
     engine.setParent(view)  # the engine's profile lives as long as the view
@@ -64,7 +66,7 @@ def drawn_view(qtbot: QtBot, export_to: Path | None = None, *, linked_x: bool = 
                 LABELS.chrome,
                 EXPORT_FILE_STEM,
                 tokens_for(Theme.LIGHT),
-                linked_x=linked_x,
+                navigation=navigation,
             )
         )
     return view
@@ -189,7 +191,7 @@ def test_a_view_closed_earlier_has_already_destroyed_its_page_and_the_engine_ski
 
 
 def test_a_zoom_by_the_user_is_reported_and_a_range_set_by_the_app_is_not(qtbot: QtBot) -> None:
-    view = drawn_view(qtbot, linked_x=True)
+    view = drawn_view(qtbot, navigation=XNavigation.LINKED)
     reports: list[object] = []
     view.x_range_changed.connect(reports.append)
 

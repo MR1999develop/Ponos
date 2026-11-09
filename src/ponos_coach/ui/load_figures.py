@@ -28,6 +28,7 @@ from ponos_coach.ui.chart_payload import (
     LEGEND_Y,
     ChartChrome,
     PreparedChart,
+    XNavigation,
     axis_style,
     base_layout,
     prepare_figure,
@@ -242,7 +243,9 @@ def prepare_weekly_load_chart(
 ) -> PreparedChart:
     """Figure and JSON of the weekly load (pure work, suited to a non-UI thread)."""
     figure = build_weekly_load_figure(weekly, labels, tokens)
-    return prepare_figure(figure, labels.chrome, LOAD_EXPORT_STEM, tokens, linked_x=True)
+    return prepare_figure(
+        figure, labels.chrome, LOAD_EXPORT_STEM, tokens, navigation=XNavigation.LINKED
+    )
 
 
 def prepare_weekly_zones_chart(
@@ -250,4 +253,6 @@ def prepare_weekly_zones_chart(
 ) -> PreparedChart:
     """Time-in-zones figure and JSON (pure work, suited to a non-UI thread)."""
     figure = build_weekly_zones_figure(weekly, labels, tokens)
-    return prepare_figure(figure, labels.chrome, ZONES_EXPORT_STEM, tokens, linked_x=True)
+    return prepare_figure(
+        figure, labels.chrome, ZONES_EXPORT_STEM, tokens, navigation=XNavigation.LINKED
+    )

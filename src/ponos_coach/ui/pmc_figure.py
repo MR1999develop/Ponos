@@ -28,6 +28,7 @@ from ponos_coach.ui.chart_payload import (
     LEGEND_Y,
     ChartChrome,
     PreparedChart,
+    XNavigation,
     axis_style,
     base_layout,
     prepare_figure,
@@ -343,4 +344,6 @@ def prepare_chart(
     """Build figure and JSON: pure, heavy work (about 100 ms for the first chart), suited
     to a thread other than the UI."""
     figure = build_pmc_figure(pmc, activities, labels, tokens, projection)
-    return prepare_figure(figure, labels.chrome, EXPORT_FILE_STEM, tokens, linked_x=True)
+    return prepare_figure(
+        figure, labels.chrome, EXPORT_FILE_STEM, tokens, navigation=XNavigation.LINKED
+    )
