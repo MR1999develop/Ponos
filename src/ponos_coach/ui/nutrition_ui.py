@@ -20,6 +20,7 @@ from functools import partial
 from PySide6.QtCore import QObject, QPoint, Qt
 from PySide6.QtWidgets import QWidget
 
+from ponos_coach.activities.domain import ActivityIdentity
 from ponos_coach.nutrition.domain import LeanMassEntry
 from ponos_coach.nutrition.use_cases import NutritionSettings
 from ponos_coach.ui.calendar_page import CalendarPage
@@ -59,6 +60,7 @@ class NutritionUi(QObject):
         *,
         today: Callable[[], date],
         edit_profile: Callable[[], None],
+        show_activity: Callable[[ActivityIdentity], None],
         show_error: Callable[[ErrorMessage], None],
         settings_page: SettingsPage,
         show_settings: Callable[[], None],
@@ -70,6 +72,7 @@ class NutritionUi(QObject):
         self._calendar = calendar
         self._today = today
         self._edit_profile = edit_profile
+        self._show_activity = show_activity
         self._show_error = show_error
         self._loader = NutritionLoader(controller, controller.foods, self)
         self._days: dict[date, DayWindow] = {}  # the open day windows, oldest first
@@ -136,6 +139,7 @@ class NutritionUi(QObject):
         window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         page = window.page
         page.edit_profile_requested.connect(self._edit_profile)
+        page.activity_requested.connect(self._on_activity_requested)
         window.finished.connect(partial(self._on_day_closed, day))
         self._cascade(window)
         self._days[day] = window
@@ -143,6 +147,11 @@ class NutritionUi(QObject):
         _bring_forward(window)
         if not self._loader.load_day(day):
             window.close()
+
+    def _on_activity_requested(self, identity: object) -> None:
+        """An activity of a day window: its own window opens, or comes forward if open."""
+        if isinstance(identity, ActivityIdentity):
+            self._show_activity(identity)
 
     def _cascade(self, window: DayWindow) -> None:
         """A new window sits a little below and to the right of the main window's corner, one

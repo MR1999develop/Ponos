@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QLocale, QSettings, Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QLabel, QTableView, QWidget
 from pytestqt.qtbot import QtBot
 
@@ -462,3 +463,28 @@ def test_closing_the_application_closes_the_day_windows(
     window.nutrition.close_dialogs()
 
     assert window.nutrition.day_windows == ()
+
+
+def test_clicking_an_activity_of_the_day_opens_its_window_and_a_second_click_brings_it_forward(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+    open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
+    page = last_day_page(window)
+    table = page.findChild(QTableView, "Day activities")
+    assert table is not None
+
+    def click_row(row: int) -> None:
+        rect = table.visualRect(table.model().index(row, 1))
+        QTest.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=rect.center())
+
+    click_row(0)
+    qtbot.waitUntil(lambda: len(window.profile_dialogs.detail_dialogs) == 1, timeout=WAIT_MS)
+    first = window.profile_dialogs.detail_dialogs[0]
+
+    click_row(1)
+    qtbot.waitUntil(lambda: len(window.profile_dialogs.detail_dialogs) == 2, timeout=WAIT_MS)
+
+    click_row(0)  # already open: no third window
+    assert window.profile_dialogs.detail_dialogs[0] is first
+    assert len(window.profile_dialogs.detail_dialogs) == 2

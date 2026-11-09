@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QModelIndex, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
@@ -126,6 +126,7 @@ class DayPage(QWidget):
     """The page of one day, in whichever state the day's calculation is."""
 
     edit_profile_requested = Signal()
+    activity_requested = Signal(object)  # ActivityIdentity: a row of the day's activities
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -443,11 +444,25 @@ class DayPage(QWidget):
             self._activities_model.set_rows(())
             return box
         self._activities_model.set_rows(view.activities)
+        self._activity_ids = view.activity_ids
         table = _plain_table(
             self._activities_model, self.tr("Day activities"), box, stretch_last=True
         )
+        if any(identity is not None for identity in self._activity_ids):
+            table.setToolTip(self.tr("Click an activity, or press Enter on it, to open it."))
+            table.setCursor(Qt.CursorShape.PointingHandCursor)
+            table.clicked.connect(self._on_activity_row)
+            table.activated.connect(self._on_activity_row)
         inner.addWidget(table)
         return box
+
+    def _on_activity_row(self, index: QModelIndex) -> None:
+        """A row was clicked or activated: its activity, if it is one (not a planned session)."""
+        row = index.row()
+        if 0 <= row < len(self._activity_ids):
+            identity = self._activity_ids[row]
+            if identity is not None:
+                self.activity_requested.emit(identity)
 
     def _build_meal(self, card: MealCardView, parent: QWidget) -> QGroupBox:
         # {meal}: the name of the eating moment; {time}: its time of day.

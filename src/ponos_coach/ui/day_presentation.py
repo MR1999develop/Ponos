@@ -15,6 +15,7 @@ from datetime import date
 
 from PySide6.QtCore import QCoreApplication, QDate, QLocale, QTime
 
+from ponos_coach.activities.domain import ActivityIdentity
 from ponos_coach.nutrition.domain import FoodExample, HourlyIntake, MealItem
 from ponos_coach.profiles.day_nutrition import (
     DayActivity,
@@ -79,6 +80,8 @@ class DayView:
     lean_mass_note: str  # which lean mass the energy availability limit uses; empty if unknown
     notice: str
     estimate_note: str = ""  # empty unless the day is ahead: its activities are the plan's
+    # One per row of `activities`: the activity to open, `None` for a session of the plan.
+    activity_ids: tuple[ActivityIdentity | None, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +238,7 @@ def _present_report(
         lean_mass_note_text(measured=report.lean_mass_measured),
         fixed_notice_text(),
         estimate_from_plan_text() if report.from_plan else "",
+        tuple(a.identity for a in report.activities),
     )
 
 

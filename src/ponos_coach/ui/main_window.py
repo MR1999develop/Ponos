@@ -517,6 +517,7 @@ class MainWindow(QMainWindow):
             self._calendar,
             today=self._today,
             edit_profile=self._edit_profile_from_day,
+            show_activity=self._dialogs.show_activity_detail,
             show_error=self._show_error,
             settings_page=self._nutrition_settings,
             show_settings=partial(self.show_settings_page, SettingsCategory.NUTRITION),
