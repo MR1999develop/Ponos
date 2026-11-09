@@ -129,6 +129,37 @@ def test_diff_pct_cases() -> None:
     assert math.isinf(vf.diff_pct(1, 0))
 
 
+@pytest.mark.parametrize(
+    ("current", "reference", "tolerance", "expected"),
+    [
+        (0.4, 0.2, 0.5, False),  # 100% relative but 0.2 g: tiny value
+        (1.0, 0.4, 0.5, True),  # over both
+        (0.9, 0.4, 0.5, False),  # on the absolute limit: not over it
+        (105, 100, 5.0, False),  # 5% relative
+        (130, 100, 5.0, True),
+        (104, 90, 5.0, True),  # 15.6% and 14 kcal
+        (0.6, 0.0, 0.5, True),  # reference zero: infinite relative difference
+        (0.3, 0.0, 0.5, False),
+    ],
+)
+def test_a_difference_counts_only_over_both_the_relative_and_the_absolute_tolerance(
+    current: float, reference: float, tolerance: float, expected: bool
+) -> None:
+    assert vf.is_significant_diff(current, reference, tolerance) is expected
+
+
+def test_small_fat_differences_are_not_flagged_but_a_wrong_food_is() -> None:
+    foods, rejected = vf.parse_fdc_response(
+        [
+            _entry(1, "Oats, rolled", _nutrients(fat=1.4)),
+            _entry(2, "Oats, rolled", _nutrients(kcal=200)),
+        ]
+    )
+    rows = vf.compare_foods([_food(1), _food(2)], foods, rejected)
+    assert not rows[0].over_threshold  # fat 1.0 vs 1.4: 28% but 0.4 g
+    assert rows[1].over_threshold
+
+
 def test_compare_flags_difference_missing_and_description() -> None:
     foods, rejected = vf.parse_fdc_response(
         [_entry(1, "Oats, rolled", _nutrients(kcal=200)), _entry(3, "Cheddar cheese")]

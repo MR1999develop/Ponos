@@ -5,8 +5,9 @@
 Usage: `uv run --locked python experiments/verify_foods.py [--api-key KEY] [--apply [--force]]`
 
 Prints, for each food, the difference from FDC in percent for each value; flags
-missing ids, suspicious descriptions and differences over 10%. With `--apply`
-rewrites `foods.json` with the FDC values, but only if no food has a problem
+missing ids, suspicious descriptions and differences over 10% and over an absolute tolerance.
+(0.5 g, 5 kcal). With `--apply` rewrites `foods.json` with the FDC values, but only if
+no food has a problem
 (missing id, entry discarded, difference over 10%, suspicious description):
 otherwise it refuses and touches nothing, unless `--force` says that the
 changes were looked at. The new document is always validated with the table's
@@ -47,6 +48,12 @@ MAX_NUTRIENTS = 300
 MAX_DESCRIPTION_CHARS = 200
 MAX_VALUE_PER_100G = 1000.0
 DIFF_THRESHOLD_PCT = 10.0
+# A difference counts only if it also exceeds an absolute tolerance, otherwise tenths of a gram
+# of fat would be flagged for being a large share of a tiny value. 0.5 g is the rounding the
+# table itself uses for macros plus the spread between SR Legacy samples; 5 kcal is about 1% of
+# a typical energy value per 100 g.
+KCAL_TOLERANCE = 5.0
+MACRO_TOLERANCE_G = 0.5
 
 # FDC nutrient numbers (SR Legacy / abridged format).
 _NUTRIENT_FIELDS = {"208": "kcal", "205": "carbs", "203": "protein", "204": "fat"}
@@ -56,6 +63,7 @@ _FOOD_FIELDS = (
     ("protein_100g", "protein"),
     ("fat_100g", "fat"),
 )
+_TOLERANCES = (KCAL_TOLERANCE, MACRO_TOLERANCE_G, MACRO_TOLERANCE_G, MACRO_TOLERANCE_G)
 
 
 class FdcFormatError(ValueError):
@@ -89,11 +97,12 @@ class Row:
     description: str | None
     diffs_pct: tuple[float, ...]
     suspicious_description: bool
+    significant: tuple[bool, ...] = ()
 
     @property
     def over_threshold(self) -> bool:
-        """True if any value differs by more than the threshold."""
-        return any(d > DIFF_THRESHOLD_PCT for d in self.diffs_pct)
+        """True if any value differs by more than both the relative and the absolute tolerance."""
+        return any(self.significant)
 
     @property
     def has_problem(self) -> bool:
@@ -205,6 +214,14 @@ def diff_pct(current: float, reference: float) -> float:
     return 0.0 if current == 0 else math.inf
 
 
+def is_significant_diff(current: float, reference: float, tolerance: float) -> bool:
+    """True if `current` differs from `reference` by more than the relative threshold (10%) and
+    by more than the absolute `tolerance` (same unit as the values)."""
+    return (
+        diff_pct(current, reference) > DIFF_THRESHOLD_PCT and abs(current - reference) > tolerance
+    )
+
+
 def compare_foods(
     foods: Sequence[Mapping[str, Any]],
     fdc: Mapping[int, FdcFood],
@@ -219,9 +236,14 @@ def compare_foods(
             problem = rejected.get(fdc_id, "id not returned by FDC")
             rows.append(Row(food["id"], fdc_id, problem, None, (), False))
             continue
-        diffs = tuple(diff_pct(float(food[k]), getattr(ref, a)) for k, a in _FOOD_FIELDS)
+        pairs = [(float(food[k]), getattr(ref, a)) for k, a in _FOOD_FIELDS]
+        diffs = tuple(diff_pct(cur, val) for cur, val in pairs)
+        significant = tuple(
+            is_significant_diff(cur, val, tol)
+            for (cur, val), tol in zip(pairs, _TOLERANCES, strict=True)
+        )
         suspicious = is_suspicious_description(food["name"], ref.description)
-        rows.append(Row(food["id"], fdc_id, None, ref.description, diffs, suspicious))
+        rows.append(Row(food["id"], fdc_id, None, ref.description, diffs, suspicious, significant))
     return rows
 
 
