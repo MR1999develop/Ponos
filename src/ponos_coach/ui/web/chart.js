@@ -31,7 +31,7 @@
   // Date range of the x axis after a zoom or a pan by the user: `xrange|START|END|N`, or
   // `xrange|auto|N` after a reset. A range set by `ponosSetXRange` is not reported back, so linked
   // charts do not echo each other.
-  var applyingRange = false;
+  var applyingRange = 0;  // relayouts started by the app and not yet completed
   var rangeCount = 0;
 
   function reportedRange(event) {
@@ -56,7 +56,7 @@
     if (gd.ponosRangeBound) { return; }
     gd.ponosRangeBound = true;
     gd.on("plotly_relayout", function (event) {
-      if (applyingRange) { return; }
+      if (applyingRange > 0) { return; }
       var range = reportedRange(event);
       if (range === null) { return; }
       rangeCount += 1;
@@ -77,10 +77,12 @@
     var update = wantedRange === null
       ? { "xaxis.autorange": true }
       : { "xaxis.range": wantedRange };
-    applyingRange = true;
+    // A counter, not a flag: two relayouts can overlap, and the first to finish must not
+    // re-enable the report while the other one is still being applied.
+    applyingRange += 1;
     Plotly.relayout(host, update).then(
-      function () { applyingRange = false; },
-      function () { applyingRange = false; }
+      function () { applyingRange -= 1; },
+      function () { applyingRange -= 1; }
     );
   }
 
