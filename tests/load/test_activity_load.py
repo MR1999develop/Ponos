@@ -380,3 +380,59 @@ def test_the_equivalent_intensity_is_clamped_to_one_at_the_boundary() -> None:
     assert at[185.0].trimp_eq < at[on_point].trimp_eq
     assert at[on_point].trimp_eq == pytest.approx(at[190.0].trimp_eq, rel=1e-12)
     assert at[186.0].trimp_eq == pytest.approx(at[190.0].trimp_eq, rel=1e-12)
+
+
+# --- average and maximum HR of the counted samples --------------------------
+
+
+def test_average_is_weighted_by_time_and_maximum_is_the_highest_counted_sample() -> None:
+    # 100 bpm for 30 s then 160 bpm for 10 s (the last sample takes the median interval, 10 s).
+    seconds = np.array([0.0, 10.0, 20.0, 30.0])
+    bpm = np.array([100.0, 100.0, 100.0, 160.0])
+    result = compute_activity_load(Sport.RUNNING, 40, HeartRateSeries(seconds, bpm), PHYSIOLOGY)
+
+    assert result.avg_bpm == 115  # (100 * 30 + 160 * 10) / 40
+    assert result.max_bpm == 160
+
+
+def test_a_sample_outside_the_limits_counts_neither_for_the_average_nor_the_maximum() -> None:
+    bpm = np.concatenate([np.full(60, 120.0), [250.0], np.full(60, 120.0)])  # 250 > max 190
+    series = HeartRateSeries(np.arange(bpm.size, dtype=float), bpm)
+
+    result = compute_activity_load(Sport.RUNNING, 121, series, PHYSIOLOGY)
+
+    assert result.discarded_samples == 1
+    assert (result.avg_bpm, result.max_bpm) == (120, 120)
+
+
+def test_an_activity_without_heart_rate_has_no_average_nor_maximum() -> None:
+    result = compute_activity_load(Sport.RUNNING, 3600, None, PHYSIOLOGY)
+
+    assert (result.avg_bpm, result.max_bpm) == (None, None)
+
+
+def test_with_every_sample_discarded_there_is_no_average_nor_maximum() -> None:
+    result = compute_activity_load(Sport.RUNNING, 60, constant(240, 60), PHYSIOLOGY)
+
+    assert result.source is LoadSource.ESTIMATE
+    assert (result.avg_bpm, result.max_bpm) == (None, None)
+
+
+def test_an_estimate_with_some_valid_samples_keeps_the_measured_average_and_maximum() -> None:
+    result = compute_activity_load(Sport.RUNNING, 3600, constant(140, 600), PHYSIOLOGY)
+
+    assert result.source is LoadSource.ESTIMATE  # 600 s counted of 3600 s moving
+    assert (result.avg_bpm, result.max_bpm) == (140, 140)
+
+
+@given(st.lists(st.integers(60, 180), min_size=2, max_size=200))
+def test_average_stays_between_the_lowest_and_the_highest_counted_sample(
+    values: list[int],
+) -> None:
+    series = HeartRateSeries(np.arange(len(values), dtype=float), np.array(values, dtype=float))
+
+    result = compute_activity_load(Sport.RUNNING, float(len(values)), series, PHYSIOLOGY)
+
+    assert result.avg_bpm is not None
+    assert min(values) <= result.avg_bpm <= max(values)
+    assert result.max_bpm == max(values)

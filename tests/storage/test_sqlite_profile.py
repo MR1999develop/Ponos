@@ -75,6 +75,7 @@ from tests.contracts.contract_storage import (
     ActivityIndexContract,
     FixedDataStoreContract,
     LoadCacheContract,
+    LoadCacheHeartRateContract,
     LoadCacheZonesContract,
     PhysiologyStoreContract,
     ProfileStorageContract,
@@ -136,6 +137,10 @@ class TestSqliteLoadCache(_DiskStorageFixture, LoadCacheContract):
 
 
 class TestSqliteLoadCacheZones(_DiskStorageFixture, LoadCacheZonesContract):
+    pass
+
+
+class TestSqliteLoadCacheHeartRate(_DiskStorageFixture, LoadCacheHeartRateContract):
     pass
 
 

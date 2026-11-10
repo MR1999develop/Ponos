@@ -18,8 +18,8 @@ from ponos_coach.load.domain.zones import ZONE_STARTS_PERCENT
 
 # Changes when the load formula or the zone definition changes: invalidates every saved
 # load. 2: saved loads also carry the seconds in zone. 3: the load is TRIMPeq (no
-# hrTSS, no sport weights).
-LOAD_MODEL_VERSION = 3
+# hrTSS, no sport weights). 4: saved loads also carry the average and maximum HR.
+LOAD_MODEL_VERSION = 4
 _SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 
 

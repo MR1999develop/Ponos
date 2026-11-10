@@ -389,7 +389,7 @@ class SqliteLoadCache:
             row = self._db.connection.execute(
                 "SELECT c.trimp, c.used_samples, c.discarded_samples, "
                 "c.excluded_seconds, c.source, c.zone1_s, c.zone2_s, c.zone3_s, c.zone4_s, "
-                "c.zone5_s FROM load_cache AS c "
+                "c.zone5_s, c.avg_bpm, c.max_bpm FROM load_cache AS c "
                 "JOIN activities AS a ON a.id = c.activity_id "
                 "WHERE a.identity_key = ? AND c.fingerprint = ?",
                 (identity_key(identity), fingerprint.hex),
@@ -400,7 +400,12 @@ class SqliteLoadCache:
             zones = ZoneSeconds((row[5], row[6], row[7], row[8], row[9]))
         except ValueError as exc:
             raise LoadStoreError("seconds in zone invalid") from exc
-        return ActivityLoad(row[0], row[1], row[2], row[3], LoadSource(row[4]), zones)
+        try:
+            return ActivityLoad(
+                row[0], row[1], row[2], row[3], LoadSource(row[4]), zones, row[10], row[11]
+            )
+        except ValueError as exc:
+            raise LoadStoreError("heart rate invalid") from exc
 
     def put(
         self, identity: ActivityIdentity, fingerprint: LoadFingerprint, load: ActivityLoad
@@ -410,8 +415,8 @@ class SqliteLoadCache:
             cursor = self._db.connection.execute(
                 "INSERT INTO load_cache (activity_id, fingerprint, trimp, hr_tss, load, "
                 "used_samples, discarded_samples, excluded_seconds, source, "
-                "zone1_s, zone2_s, zone3_s, zone4_s, zone5_s) "
-                "SELECT id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM activities "
+                "zone1_s, zone2_s, zone3_s, zone4_s, zone5_s, avg_bpm, max_bpm) "
+                "SELECT id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM activities "
                 "WHERE identity_key = ? "
                 "ON CONFLICT (activity_id) DO UPDATE SET fingerprint = excluded.fingerprint, "
                 "trimp = excluded.trimp, hr_tss = excluded.hr_tss, load = excluded.load, "
@@ -420,7 +425,8 @@ class SqliteLoadCache:
                 "excluded_seconds = excluded.excluded_seconds, source = excluded.source, "
                 "zone1_s = excluded.zone1_s, zone2_s = excluded.zone2_s, "
                 "zone3_s = excluded.zone3_s, zone4_s = excluded.zone4_s, "
-                "zone5_s = excluded.zone5_s",
+                "zone5_s = excluded.zone5_s, avg_bpm = excluded.avg_bpm, "
+                "max_bpm = excluded.max_bpm",
                 (
                     fingerprint.hex,
                     load.trimp_eq,
@@ -431,6 +437,8 @@ class SqliteLoadCache:
                     load.excluded_seconds,
                     load.source.value,
                     *load.zone_seconds.values,
+                    load.avg_bpm,
+                    load.max_bpm,
                     identity_key(identity),
                 ),
             )
