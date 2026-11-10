@@ -31,7 +31,17 @@ from ponos_coach.planning.domain.phases import Phase, RaceClass
 # 8: the elevation gain of a race (`RaceGoal.ascent_m`): the time and the pace of a race are
 # computed on the flat-equivalent distance, and a steep A race gets hill repeats and hilly long
 # runs in the build and the peak.
-METHOD_VERSION: Final = 8
+# 9: a `CtlTargetNotReached` says whether the weekly hours stop it (`LimitedByHours`, with the
+# minutes that would be enough) or the ramp and the time (`LimitedByRamp`); the plan itself is
+# the same, but the saved plans lack the cause, so they are rebuilt.
+METHOD_VERSION: Final = 9
+
+# --- Why a CTL target is missed ----------------------------------------------------------------
+# To tell hours from ramp the engine rebuilds the plan with a higher weekly cap, on a grid of
+# multiples of the step, up to the largest cap it tries (20 hours); beyond it the limit is not
+# the hours.
+HOURS_SEARCH_STEP_MIN: Final = 30
+HOURS_SEARCH_MAX_MIN: Final = 1200
 
 # --- Horizon -----------------------------------------------------------------------------------
 HORIZON_DAYS: Final = 364  # a plan covers 52 weeks from tomorrow at most
