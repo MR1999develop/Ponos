@@ -90,6 +90,10 @@
         <translation>Usa come test di soglia...</translation>
     </message>
     <message>
+        <source>Time below LT1, between LT1 and LT2 and above LT2</source>
+        <translation>Tempo sotto LT1, tra LT1 e LT2 e sopra LT2</translation>
+    </message>
+    <message>
         <source>Started</source>
         <translation>Inizio</translation>
     </message>
@@ -118,8 +122,8 @@
         <translation>Carico da</translation>
     </message>
     <message>
-        <source>Threshold heart rate (bpm)</source>
-        <translation>Frequenza cardiaca di soglia (bpm)</translation>
+        <source>LT1 / LT2 (bpm)</source>
+        <translation>LT1 / LT2 (bpm)</translation>
     </message>
     <message>
         <source>Heart-rate limits (bpm)</source>
@@ -148,6 +152,10 @@
     <message>
         <source>{sport}, {started}</source>
         <translation>{sport}, {started}</translation>
+    </message>
+    <message>
+        <source>{lt1} / {lt2}</source>
+        <translation>{lt1} / {lt2}</translation>
     </message>
     <message>
         <source>{low} to {high}</source>
@@ -813,6 +821,37 @@
             <numerusform>File di attività non leggibile: %n. L&apos;indicazione potrebbe essere meno precisa.</numerusform>
             <numerusform>File di attività non leggibili: %n. L&apos;indicazione potrebbe essere meno precisa.</numerusform>
         </translation>
+    </message>
+</context>
+<context>
+    <name>DomainTableModel</name>
+    <message>
+        <source>Intensity</source>
+        <translation>Intensità</translation>
+    </message>
+    <message>
+        <source>Heart rate (bpm)</source>
+        <translation>Frequenza cardiaca (bpm)</translation>
+    </message>
+    <message>
+        <source>Time (h:mm:ss)</source>
+        <translation>Tempo (h:mm:ss)</translation>
+    </message>
+    <message>
+        <source>Share of the time (%)</source>
+        <translation>Quota del tempo (%)</translation>
+    </message>
+    <message>
+        <source>Below LT1</source>
+        <translation>Sotto LT1</translation>
+    </message>
+    <message>
+        <source>Between LT1 and LT2</source>
+        <translation>Tra LT1 e LT2</translation>
+    </message>
+    <message>
+        <source>Above LT2</source>
+        <translation>Sopra LT2</translation>
     </message>
 </context>
 <context>
@@ -2295,24 +2334,40 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
 <context>
     <name>HeartRate</name>
     <message>
-        <source>default: running - 4 ({value} bpm)</source>
-        <translation>predefinita: corsa - 4 ({value} bpm)</translation>
+        <source>default: {percent}% of LT2 ({value} bpm)</source>
+        <translation>predefinita: {percent}% di LT2 ({value} bpm)</translation>
     </message>
     <message>
-        <source>default: running ({value} bpm)</source>
-        <translation>predefinita: corsa ({value} bpm)</translation>
+        <source>default: running LT2 ({value} bpm)</source>
+        <translation>predefinita: LT2 della corsa ({value} bpm)</translation>
     </message>
     <message>
         <source>The resting heart rate must be lower than the maximum.</source>
         <translation>La frequenza a riposo deve essere inferiore alla massima.</translation>
     </message>
     <message>
-        <source>The threshold must be higher than the resting heart rate.</source>
-        <translation>La soglia deve essere superiore alla frequenza a riposo.</translation>
+        <source>LT2 must be higher than the resting heart rate.</source>
+        <translation>LT2 deve essere più alta della frequenza cardiaca a riposo.</translation>
     </message>
     <message>
-        <source>The threshold cannot be higher than the maximum.</source>
-        <translation>La soglia non può essere superiore alla massima.</translation>
+        <source>LT2 cannot be higher than the maximum.</source>
+        <translation>LT2 non può superare la frequenza cardiaca massima.</translation>
+    </message>
+    <message>
+        <source>LT1 must be higher than the resting heart rate.</source>
+        <translation>LT1 deve essere più alta della frequenza cardiaca a riposo.</translation>
+    </message>
+    <message>
+        <source>LT1 must be lower than LT2.</source>
+        <translation>LT1 deve essere più bassa di LT2.</translation>
+    </message>
+    <message>
+        <source>LT1 (aerobic threshold): the heart rate above which an easy effort stops feeling easy. Estimate it as the highest heart rate at which you can still talk in full sentences, or where your heart rate stays steady over a long easy effort (little drift). Left empty, {percent}% of LT2 is used.</source>
+        <translation>LT1 (soglia aerobica): la frequenza cardiaca oltre la quale uno sforzo facile smette di esserlo. Stimala come la frequenza più alta alla quale riesci ancora a parlare a frasi intere, o quella che resta stabile in un lungo sforzo facile (poca deriva). Se la lasci vuota si usa il {percent}% di LT2.</translation>
+    </message>
+    <message>
+        <source>LT2 (lactate threshold): the highest heart rate you can hold for about an hour of hard, steady effort. Estimate it with a 30-minute threshold test.</source>
+        <translation>LT2 (soglia del lattato): la frequenza cardiaca più alta che riesci a tenere per circa un&apos;ora di sforzo duro e costante. Stimala con il test di soglia di 30 minuti.</translation>
     </message>
     <message>
         <source>Enter a whole number of beats per minute between {low} and {high}, or leave it empty.</source>
@@ -3766,16 +3821,20 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>FC massima (bpm)</translation>
     </message>
     <message>
-        <source>Running threshold HR (bpm)</source>
-        <translation>FC soglia corsa (bpm)</translation>
+        <source>Running LT1 (bpm)</source>
+        <translation>LT1 corsa (bpm)</translation>
     </message>
     <message>
-        <source>Cycling threshold HR (bpm)</source>
-        <translation>FC soglia ciclismo (bpm)</translation>
+        <source>Running LT2 (bpm)</source>
+        <translation>LT2 corsa (bpm)</translation>
     </message>
     <message>
-        <source>Other activities threshold HR (bpm)</source>
-        <translation>FC soglia altre attività (bpm)</translation>
+        <source>Other sports LT1 (bpm)</source>
+        <translation>LT1 altri sport (bpm)</translation>
+    </message>
+    <message>
+        <source>Other sports LT2 (bpm)</source>
+        <translation>LT2 altri sport (bpm)</translation>
     </message>
     <message>
         <source>Threshold pace (min/km)</source>
@@ -3951,8 +4010,40 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Soglie</translation>
     </message>
     <message>
-        <source>Threshold heart rate</source>
-        <translation>Frequenza cardiaca di soglia</translation>
+        <source>Running and trail</source>
+        <translation>Corsa e trail</translation>
+    </message>
+    <message>
+        <source>Running and trail: LT1 (aerobic threshold)</source>
+        <translation>Corsa e trail: LT1 (soglia aerobica)</translation>
+    </message>
+    <message>
+        <source>LT1 (aerobic threshold)</source>
+        <translation>LT1 (soglia aerobica)</translation>
+    </message>
+    <message>
+        <source>Running and trail: LT2 (lactate threshold)</source>
+        <translation>Corsa e trail: LT2 (soglia del lattato)</translation>
+    </message>
+    <message>
+        <source>LT2 (lactate threshold)</source>
+        <translation>LT2 (soglia del lattato)</translation>
+    </message>
+    <message>
+        <source>Other sports</source>
+        <translation>Altri sport</translation>
+    </message>
+    <message>
+        <source>Other sports: LT1 (aerobic threshold)</source>
+        <translation>Altri sport: LT1 (soglia aerobica)</translation>
+    </message>
+    <message>
+        <source>Other sports: LT2 (lactate threshold)</source>
+        <translation>Altri sport: LT2 (soglia del lattato)</translation>
+    </message>
+    <message>
+        <source>LT1, the other sports and pace are optional: leave them empty and change them later in Edit profile.</source>
+        <translation>LT1, gli altri sport e il passo sono facoltativi: lasciali vuoti e cambiali poi in Modifica profilo.</translation>
     </message>
     <message>
         <source>Sex (for the load formula)</source>
@@ -3965,18 +4056,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Create profile</source>
         <translation>Crea profilo</translation>
-    </message>
-    <message>
-        <source>Cycling threshold heart rate</source>
-        <translation>FC di soglia del ciclismo</translation>
-    </message>
-    <message>
-        <source>Other activities threshold heart rate</source>
-        <translation>FC di soglia delle altre attività</translation>
-    </message>
-    <message>
-        <source>Cycling, other activities and pace are optional: leave them empty and change them later in Edit profile.</source>
-        <translation>Ciclismo, altre attività e passo sono facoltativi: lasciali vuoti e cambiali poi in Modifica profilo.</translation>
     </message>
     <message>
         <source> bpm</source>
@@ -5176,16 +5255,20 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Frequenza cardiaca massima</translation>
     </message>
     <message>
-        <source>Running threshold heart rate</source>
-        <translation>Frequenza cardiaca di soglia della corsa</translation>
+        <source>Running and trail</source>
+        <translation>Corsa e trail</translation>
     </message>
     <message>
-        <source>Cycling threshold heart rate</source>
-        <translation>Frequenza cardiaca di soglia del ciclismo</translation>
+        <source>LT1 (aerobic threshold)</source>
+        <translation>LT1 (soglia aerobica)</translation>
     </message>
     <message>
-        <source>Other activities threshold heart rate</source>
-        <translation>Frequenza cardiaca di soglia delle altre attività</translation>
+        <source>LT2 (lactate threshold)</source>
+        <translation>LT2 (soglia del lattato)</translation>
+    </message>
+    <message>
+        <source>Other sports</source>
+        <translation>Altri sport</translation>
     </message>
     <message>
         <source> bpm</source>
