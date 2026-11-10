@@ -65,3 +65,17 @@ def test_the_window_is_lower_and_the_summary_sits_in_columns(qtbot: QtBot) -> No
     assert dialog.sizeHint().height() <= MAX_HEIGHT_PX
     tops = {dialog.summary_value_widget(key).y() for key in SUMMARY_KEYS}
     assert len(tops) <= 3  # nine values in at most three rows
+
+
+def test_warming_up_creates_the_chart_page_before_any_data_arrives(qtbot: QtBot) -> None:
+    engine = ChartEngine(lambda _name: None)
+    dialog = ActivityDetailDialog(engine, ZoneInfo("Europe/Rome"), theme=lambda: Theme.LIGHT)
+    qtbot.addWidget(dialog)
+    before = dialog.chart.engine_started
+
+    dialog.warm_up_chart()
+
+    assert (before, dialog.chart.engine_started) == (False, True)
+    assert not dialog.shows_chart()  # still the "loading" message
+    dialog.close()
+    engine.dispose()

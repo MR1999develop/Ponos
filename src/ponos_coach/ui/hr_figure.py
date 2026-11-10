@@ -4,8 +4,9 @@
 
 Pure function from `HeartRateTrace` and zone bounds (already computed by the domain) to `go.Figure`.
 The bands sit behind the curve and carry the zone name on the right edge; samples discarded
-by the load computation (outside minimum and maximum HR) are highlighted with a cross, not only with
-colour. Very long curves are thinned to `MAX_TRACE_POINTS` points, keeping all the discarded ones.
+by the load computation (outside minimum and maximum HR) are highlighted with a cross, not only
+with colour. Very long curves are thinned to about `MAX_TRACE_POINTS` points keeping the peaks
+and valleys and all the discarded samples.
 """
 
 from __future__ import annotations
@@ -53,16 +54,32 @@ class HeartRateLabels:
     chrome: ChartChrome
 
 
-def thinned_indices(count: int, keep: NDArray[np.bool_]) -> NDArray[np.intp]:
-    """Indices of the points to draw: at most `MAX_TRACE_POINTS` evenly spaced, plus the indices
-    of `keep` (discarded samples), also thinned if alone they exceed the cap."""
+def thinned_indices(bpm: NDArray[np.float64], keep: NDArray[np.bool_]) -> NDArray[np.intp]:
+    """Indices of the points to draw, in increasing order.
+
+    Up to `MAX_TRACE_POINTS` samples nothing changes. Above, the series is cut into
+    `MAX_TRACE_POINTS // 2` equal stretches and each keeps its lowest and its highest sample, so
+    no peak or valley disappears; the first and the last sample are always kept, and so are the
+    indices flagged in `keep` (discarded samples; thinned if alone they exceed the cap).
+    """
+    count = int(bpm.size)
     if count <= MAX_TRACE_POINTS:
         return np.arange(count, dtype=np.intp)
-    even = np.linspace(0, count - 1, MAX_TRACE_POINTS).astype(np.intp)
+    size = math.ceil(count / (MAX_TRACE_POINTS // 2))
+    stretches = math.ceil(count / size)  # none is empty
+    padding = stretches * size - count
+    lowest = np.pad(bpm, (0, padding), constant_values=np.inf).reshape(stretches, size)
+    highest = np.pad(bpm, (0, padding), constant_values=-np.inf).reshape(stretches, size)
+    starts = np.arange(stretches, dtype=np.intp) * size
     flagged = np.flatnonzero(keep).astype(np.intp)
     if flagged.size > MAX_TRACE_POINTS:
         flagged = flagged[:: math.ceil(flagged.size / MAX_TRACE_POINTS)]
-    return np.union1d(even, flagged).astype(np.intp)
+    edges = np.array([0, count - 1], dtype=np.intp)
+    return np.unique(
+        np.concatenate(
+            [starts + lowest.argmin(axis=1), starts + highest.argmax(axis=1), edges, flagged]
+        )
+    ).astype(np.intp)
 
 
 def _axis_range(trace: HeartRateTrace, limits: HeartRateLimits) -> tuple[float, float]:
@@ -98,7 +115,7 @@ def build_heart_rate_figure(
 ) -> go.Figure:
     """HR curve (series 0) and, if there are any, the discarded samples (series 1)."""
     keep = trace.discarded
-    chosen = thinned_indices(trace.bpm.size, keep)
+    chosen = thinned_indices(trace.bpm, keep)
     minutes = trace.seconds[chosen] / _SECONDS_PER_MINUTE
     figure = go.Figure()
     hover = (

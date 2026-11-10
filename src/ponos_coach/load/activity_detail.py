@@ -21,14 +21,10 @@ from ponos_coach.activities.domain import (
     MAX_ACTIVITY_FILE_BYTES,
     ActivityIdentity,
     ActivitySummary,
-    ActivityTrack,
-    FileFormat,
     HeartRateSeries,
     Sport,
 )
-from ponos_coach.activities.map_queries import TrackDecoder
 from ponos_coach.activities.ports import ActivityArchive, ActivityIndex, ActivityNotFoundError
-from ponos_coach.load.activity_profile import kept_indices
 from ponos_coach.load.domain import (
     ActivityLoad,
     HeartRateLimits,
@@ -79,43 +75,6 @@ class HeartRateTrace:
         return int(np.count_nonzero(self.discarded))
 
 
-@dataclass(frozen=True, slots=True, eq=False)
-class TrackOutline:
-    """Where the activity went: the positions of its GPS track, thinned for drawing.
-
-    At most `MAX_PROFILE_POINTS` points, evenly spaced, first and last included. `segment` numbers
-    the continuous stretches: where it changes there was a gap and no line joins the two points.
-    Read-only arrays of the same length (at least one point). Positions are personal data: no log.
-    """
-
-    lat_deg: NDArray[np.float64]
-    lon_deg: NDArray[np.float64]
-    segment: NDArray[np.intp]
-
-    def __post_init__(self) -> None:
-        if (
-            self.lat_deg.ndim != 1
-            or self.lat_deg.size == 0
-            or not self.lat_deg.shape == self.lon_deg.shape == self.segment.shape
-        ):
-            raise ValueError("the outline columns are empty or have different lengths")
-        for array in (self.lat_deg, self.lon_deg, self.segment):
-            array.setflags(write=False)
-
-    @classmethod
-    def of(cls, track: ActivityTrack) -> TrackOutline:
-        """The outline of a track."""
-        parts = track.segments
-        lat = np.concatenate([s.lat_deg for s in parts])
-        lon = np.concatenate([s.lon_deg for s in parts])
-        segment = np.concatenate([np.full(len(s), n, dtype=np.intp) for n, s in enumerate(parts)])
-        keep = kept_indices(lat.size)
-        return cls(lat[keep], lon[keep], segment[keep])
-
-    def __len__(self) -> int:
-        return int(self.lat_deg.size)
-
-
 @dataclass(frozen=True, slots=True)
 class ActivityDetail:
     """Everything needed to show an activity.
@@ -125,8 +84,8 @@ class ActivityDetail:
     below the first). `unordered_hr_samples` counts the HR samples discarded by the file reader
     because of repeated or backwards times; samples out of limits are in `trace` and in
     `load.discarded_samples`. `zone_load` is the load earned in each zone (it adds up to
-    `load.trimp_eq`); None when the load is an estimate. `outline` is the GPS track, None if the
-    activity has no usable position (indoor, or a file without GPS).
+    `load.trimp_eq`); None when the load is an estimate.
+    The GPS track is not read here: the detail window does not draw it.
     """
 
     identity: ActivityIdentity
@@ -143,23 +102,21 @@ class ActivityDetail:
     zone_starts_bpm: tuple[float, float, float, float]
     unordered_hr_samples: int
     zone_load: ZoneLoad | None = None
-    outline: TrackOutline | None = None
 
 
 class GetActivityDetail:
     """Detail of an activity of the open profile.
 
-    Dependencies: index, archive, physiological parameters, `decode` and
-    `decode_track` (from the Composition Root) and the profile's time zone.
+    Dependencies: index, archive, physiological parameters, `decode` (from the Composition
+    Root) and the profile's time zone. The file is decoded once.
     """
 
-    def __init__(  # noqa: PLR0913 - every port is a distinct volatile dependency
+    def __init__(
         self,
         index: ActivityIndex,
         archive: ActivityArchive,
         physiology: PhysiologyStore,
         decode: Decoder,
-        decode_track: TrackDecoder,
         *,
         timezone: ZoneInfo,
         max_file_bytes: int = MAX_ACTIVITY_FILE_BYTES,
@@ -170,7 +127,6 @@ class GetActivityDetail:
         self._archive = archive
         self._physiology = physiology
         self._decode = decode
-        self._decode_track = decode_track
         self._timezone = timezone
         self._max_file_bytes = max_file_bytes
 
@@ -213,13 +169,4 @@ class GetActivityDetail:
             zone_starts_bpm=zone_starts_bpm(threshold),
             unordered_hr_samples=activity.discarded_hr_samples,
             zone_load=load_per_zone(activity.sport, series, physiology, load),
-            outline=self._outline(data, record.file_format),
         )
-
-    def _outline(self, data: bytes, file_format: FileFormat) -> TrackOutline | None:
-        """The GPS track; a track that cannot be read only means no map, not an unusable file."""
-        try:
-            track = self._decode_track(data, file_format)
-        except ActivityFileError:
-            return None
-        return None if track is None else TrackOutline.of(track)

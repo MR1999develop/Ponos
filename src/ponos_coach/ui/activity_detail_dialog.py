@@ -296,6 +296,11 @@ class ActivityDetailDialog(QDialog):
             ("limits", self.tr("Heart-rate limits (bpm)")),
         )
 
+    def warm_up_chart(self) -> None:
+        """Create the chart's web page now, while the data thread is still working, so the page
+        is loaded when the figure arrives. Harmless if the window is already closed."""
+        self._chart.start_engine()
+
     # --- Test accessors ---------------------------------------------------------------
 
     @property

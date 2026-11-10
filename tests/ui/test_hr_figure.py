@@ -9,6 +9,8 @@ import json
 import numpy as np
 import plotly.graph_objects as go
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from ponos_coach.activities.domain import HeartRateSeries
 from ponos_coach.load.activity_detail import HeartRateTrace
@@ -124,19 +126,56 @@ def test_a_long_curve_is_thinned_but_every_discarded_sample_is_kept() -> None:
     figure = figure_of(trace)
 
     assert len(figure.data[0].x) <= MAX_TRACE_POINTS + 3
-    assert len(figure.data[0].x) >= MAX_TRACE_POINTS
+    assert len(figure.data[0].x) >= MAX_TRACE_POINTS // 4
     assert list(figure.data[1].y) == [255.0, 255.0, 255.0]
 
 
 def test_thinning_a_short_series_changes_nothing_and_caps_the_flags() -> None:
     keep = np.zeros(10, dtype=np.bool_)
-    assert list(thinned_indices(10, keep)) == list(range(10))
+    assert list(thinned_indices(np.arange(10.0), keep)) == list(range(10))
+    limit = np.zeros(MAX_TRACE_POINTS)
+    assert list(thinned_indices(limit, np.zeros(limit.size, dtype=np.bool_))) == list(
+        range(MAX_TRACE_POINTS)
+    )
 
     count = MAX_TRACE_POINTS * 4
     everything = np.ones(count, dtype=np.bool_)
-    chosen = thinned_indices(count, everything)
-    assert len(chosen) <= 2 * MAX_TRACE_POINTS  # even with all discards the cap holds
+    chosen = thinned_indices(np.zeros(count), everything)
+    assert len(chosen) <= 3 * MAX_TRACE_POINTS  # even with all discards the cap holds
     assert list(chosen) == sorted(set(chosen))
+
+
+def test_thinning_keeps_the_borders_the_minimum_and_the_maximum() -> None:
+    count = 50_001  # not a multiple of the stretches
+    seconds = np.arange(count, dtype=np.float64)
+    bpm = 140.0 + 20.0 * np.sin(seconds / 700.0) + (seconds % 7)
+    bpm[12_345] = 199.0  # a lone peak
+    bpm[40_001] = 61.0  # a lone valley
+    keep = np.zeros(count, dtype=np.bool_)
+
+    chosen = thinned_indices(bpm, keep)
+
+    assert len(chosen) <= MAX_TRACE_POINTS + 2
+    assert chosen[0] == 0
+    assert chosen[-1] == count - 1
+    assert bpm[chosen].max() == bpm.max() == 199.0
+    assert bpm[chosen].min() == bpm.min() == 61.0
+    assert list(chosen) == sorted(set(chosen))
+
+
+@given(
+    values=st.lists(st.floats(30, 230), min_size=1, max_size=9_000),
+)
+def test_thinning_never_loses_an_extreme_and_stays_sorted(values: list[float]) -> None:
+    bpm = np.array(values)
+
+    chosen = thinned_indices(bpm, np.zeros(bpm.size, dtype=np.bool_))
+
+    assert list(chosen) == sorted(set(chosen))
+    assert chosen[0] == 0
+    assert chosen[-1] == bpm.size - 1
+    assert bpm[chosen].max() == bpm.max()
+    assert bpm[chosen].min() == bpm.min()
 
 
 def test_the_dark_theme_changes_surface_and_band_opacity_not_the_data() -> None:
