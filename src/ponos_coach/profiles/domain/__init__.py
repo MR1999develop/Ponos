@@ -37,6 +37,14 @@ from ponos_coach.profiles.domain.profile import (
     ProfilePeek,
     RegistryEntry,
 )
+from ponos_coach.profiles.domain.threshold_pace import (
+    PaceInForce,
+    PaceSource,
+    ThresholdPace,
+    ThresholdPaceEntry,
+    entries_of_tests,
+    threshold_pace_in_force,
+)
 
 __all__ = [
     "HEIGHT_MAX_CM",
@@ -59,13 +67,19 @@ __all__ = [
     "FolderState",
     "Height",
     "InvalidProfileNameError",
+    "PaceInForce",
+    "PaceSource",
     "ProfileId",
     "ProfileInfo",
     "ProfileName",
     "ProfilePeek",
     "RegistryEntry",
+    "ThresholdPace",
+    "ThresholdPaceEntry",
     "Weight",
     "WeightEntry",
     "age_on",
+    "entries_of_tests",
+    "threshold_pace_in_force",
     "weight_on",
 ]

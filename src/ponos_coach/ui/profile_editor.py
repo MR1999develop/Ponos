@@ -46,7 +46,13 @@ class SavedEdit:
 
 def _read_history(access: ProfileAccess) -> MeasurementHistory:
     session = access.session
-    return ReadMeasurementHistory(session.fixed_data, session.weights, session.physiology)()
+    return ReadMeasurementHistory(
+        session.fixed_data,
+        session.weights,
+        session.physiology,
+        session.threshold_paces,
+        session.threshold_tests,
+    )()
 
 
 class ProfileEditor(QObject):
@@ -86,6 +92,7 @@ class ProfileEditor(QObject):
                     session.weights,
                     access.today,
                     session.fixed_data,
+                    session.threshold_paces,
                 )(request.update, request.fixed)
             renamed: ProfileName | None = None
             if request.new_name is not None:  # after the measurements: they can be rejected

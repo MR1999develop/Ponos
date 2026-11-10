@@ -43,6 +43,7 @@ class ThresholdWorld(World):
             self.profile.weights,
             lambda: TODAY,
             self.profile.fixed_data,
+            self.profile.threshold_paces,
         )
         self.apply = ApplyThresholdTest(
             self.profile.activities,

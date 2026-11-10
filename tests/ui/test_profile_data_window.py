@@ -29,18 +29,26 @@ from ponos_coach.load.domain import (
     ThresholdHeartRate,
     default_weight,
 )
-from ponos_coach.profiles.domain import MIN_MEASUREMENT_DATE, NAME_MAX_CHARS, ProfileName, Weight
-from ponos_coach.profiles.measurements import MeasurementUpdate
+from ponos_coach.profiles.domain import (
+    MIN_MEASUREMENT_DATE,
+    NAME_MAX_CHARS,
+    ProfileName,
+    ThresholdPace,
+    ThresholdPaceEntry,
+    Weight,
+)
+from ponos_coach.profiles.measurements import MeasurementHistory, MeasurementUpdate
 from ponos_coach.profiles.use_cases import NewProfileRequest
 from ponos_coach.ui.birth_date_edit import NOT_SET_DATE
 from ponos_coach.ui.body_input import latest_birth_date
 from ponos_coach.ui.main_window import MainWindow
-from ponos_coach.ui.measurements_form import EditField, MeasurementsRequest
+from ponos_coach.ui.measurements_form import EditField, MeasurementsForm, MeasurementsRequest
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
 from ponos_coach.ui.new_profile_form import Field
 from ponos_coach.ui.overview_state import Loading, Ready
 from ponos_coach.ui.profile_edit_dialog import ProfileEditDialog
 from ponos_coach.ui.sport_weights_dialog import SportWeightsDialog
+from ponos_coach.ui.tokens import Theme
 from tests.ui.workspace_support import (
     FILES_IN_FIXTURE_FOLDER,
     TODAY,
@@ -717,3 +725,86 @@ def test_a_failed_read_does_not_report_a_failed_save_but_a_failed_save_does(
 
         dialog.set_busy(False)  # unlocking again is not a second failed save
         assert reports == [True]
+
+
+# --- Threshold pace in the profile settings -----------------------------------------------------
+def test_a_threshold_pace_typed_in_the_settings_is_saved_and_listed_in_the_history(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    dialog = open_edit_dialog(qtbot, window)
+    assert dialog.pace_edit.text() == ""  # no pace yet, and no test either
+    assert not dialog.save_button.isEnabled()
+
+    QTest.keyClicks(dialog.pace_edit, "5.30")
+    assert dialog.save_button.isEnabled()
+    click(dialog.save_button)
+    wait_profile_saved(qtbot, window)
+
+    assert "Threshold pace valid from 6/30/26 onwards." in window.statusBar().currentMessage()
+    again = open_edit_dialog(qtbot, window)
+    assert again.pace_edit.text() == "5:30"  # shown in the one format
+    assert not again.save_button.isEnabled()  # nothing changed yet
+    model = again.history_table.model()
+    paces = {model.data(model.index(row, 5)) for row in range(model.rowCount())}
+    assert "5:30" in paces
+
+
+def test_an_unreadable_pace_is_reported_next_to_the_field_with_the_format_and_nothing_is_saved(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    dialog = open_edit_dialog(qtbot, window)
+    QTest.keyClicks(dialog.pace_edit, "5:75")
+
+    click(dialog.save_button)
+
+    message = dialog.error_text(EditField.THRESHOLD_PACE)
+    assert message == (
+        "Enter the pace as minutes and seconds per kilometre, like 5:30, from 1:30 to 60:00."
+    )
+    assert "75" not in message
+    assert window.profile_dialogs.edit_dialog is dialog
+    assert dialog.pace_edit.text() == "5:75"  # what was typed stays, to be corrected
+
+
+def test_the_pace_follows_the_day_and_a_pace_from_a_test_is_shown_with_its_origin(
+    qtbot: QtBot,
+) -> None:
+    history = MeasurementHistory(
+        None,
+        (),
+        (),
+        (ThresholdPaceEntry(date(2026, 2, 1), ThresholdPace(330)),),
+        (ThresholdPaceEntry(date(2026, 5, 1), ThresholdPace(300)),),
+    )
+    form = MeasurementsForm(history, date(2026, 6, 30), PROFILE)
+    dialog = ProfileEditDialog(form, history, Theme.LIGHT)
+    qtbot.addWidget(dialog)
+
+    assert dialog.pace_edit.text() == "5:00"  # the test of 1 May is the most recent
+    assert dialog.pace_edit.toolTip() == "From the threshold test of 5/1/26."
+    dialog.valid_from_edit.setDate(QDate(2026, 3, 1))
+    assert dialog.pace_edit.text() == "5:30"
+    assert dialog.pace_edit.toolTip() == "Set in the profile settings from 2/1/26."
+    dialog.valid_from_edit.setDate(QDate(2026, 1, 1))
+    assert dialog.pace_edit.text() == ""
+    assert not dialog.save_button.isEnabled()
+
+
+def test_a_changed_pace_says_what_applied_that_day(qtbot: QtBot) -> None:
+    history = MeasurementHistory(
+        None, (), (), (), (ThresholdPaceEntry(date(2026, 5, 1), ThresholdPace(300)),)
+    )
+    dialog = ProfileEditDialog(
+        MeasurementsForm(history, date(2026, 6, 30), PROFILE), history, Theme.LIGHT
+    )
+    qtbot.addWidget(dialog)
+
+    dialog.pace_edit.clear()
+    QTest.keyClicks(dialog.pace_edit, "5:10")
+
+    assert dialog.note_text(EditField.THRESHOLD_PACE) == (
+        "In force on this day: 5:00 per km (from the threshold test)"
+    )
+    assert dialog.save_button.isEnabled()

@@ -101,7 +101,12 @@ def main(folder: Path, mode: str) -> int:
         )
         physiology = DyingPhysiology(opened.physiology, mode == "remove-after-measurement")
         measurements = UpdateMeasurements(
-            opened.activities, opened.physiology, opened.weights, lambda: TODAY, opened.fixed_data
+            opened.activities,
+            opened.physiology,
+            opened.weights,
+            lambda: TODAY,
+            opened.fixed_data,
+            opened.threshold_paces,
         )
         if mode.startswith("apply"):
             result = ThresholdTestResult(

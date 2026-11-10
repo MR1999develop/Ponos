@@ -137,6 +137,7 @@ from __future__ import annotations
 
 from typing import Final
 
+from ponos_coach.storage.schema_threshold_pace import THRESHOLD_PACE_MIGRATION
 from ponos_coach.storage.schema_workout_backup import WORKOUT_BACKUP_MIGRATION
 
 # Closed sets of v1 (stable values of the saved data); frozen here on purpose.
@@ -926,6 +927,8 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
         _V13_RENAME_JOURNAL,
         _V2_SYNC_JOURNAL_TO_DO_INDEX,
     ),
+    # Threshold pace set by hand: a dated series of its own (does not touch the load cache).
+    THRESHOLD_PACE_MIGRATION,
 )
 
 SCHEMA_VERSION: Final = len(MIGRATIONS)

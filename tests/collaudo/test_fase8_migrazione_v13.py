@@ -85,7 +85,7 @@ def test_t_dati_01_a_v12_database_is_migrated_to_v13_with_every_journal_row_inta
 
     opened = SqliteProfileStorage().open(tmp_path)
     try:
-        assert opened.info.format_version == sqlite_schema.SCHEMA_VERSION == 13
+        assert opened.info.format_version == sqlite_schema.SCHEMA_VERSION >= 13
         entry = opened.sync_journal.get(GarminActivityId(1004))
         assert entry is not None
         assert (entry.status, entry.failed_attempts, entry.unanswered_rounds) == (

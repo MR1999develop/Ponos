@@ -36,6 +36,7 @@ from ponos_coach.profiles.domain import (
     ProfileName,
     ProfilePeek,
     RegistryEntry,
+    ThresholdPaceEntry,
     WeightEntry,
 )
 from ponos_coach.profiles.domain.backup import BackupSummary
@@ -323,12 +324,34 @@ class WeightStore(Protocol):
         ...
 
 
+class ThresholdPaceStore(Protocol):
+    """Threshold pace series set by hand, with validity date (its own series, apart from the
+    heart-rate parameters: a pace does not enter the load)."""
+
+    def put(self, entry: ThresholdPaceEntry) -> None:
+        """Saves the pace valid from `entry.valid_from`; the same date replaces the entry.
+
+        Raises:
+            ProfileDataError: write failed.
+        """
+        ...
+
+    def list_entries(self) -> Sequence[ThresholdPaceEntry]:
+        """All the entries by ascending validity date (only one per date).
+
+        Raises:
+            ProfileDataError: unreadable or invalid data.
+        """
+        ...
+
+
 class OpenProfile(Protocol):
     """An open profile: its information and the stores that share a connection.
 
     The transactions of `activities.transaction()` also cover `track_boxes`, `sync_journal`,
-    `physiology`, `weights`, `fixed_data`, `sport_weights`, `load_cache`, `activity_levels`,
-    `lean_masses`, `meal_times`, `goal_periods`, `threshold_tests`, `goals`, `availability`,
+    `physiology`, `weights`, `threshold_paces`, `fixed_data`, `sport_weights`, `load_cache`,
+    `activity_levels`, `lean_masses`, `meal_times`, `goal_periods`, `threshold_tests`, `goals`,
+    `availability`,
     `session_choices`, `plans`, `workout_backups` and `injuries`.
     It must be closed with `close()`; after closing the stores are no longer used.
     """
@@ -367,6 +390,11 @@ class OpenProfile(Protocol):
     @property
     def weights(self) -> WeightStore:
         """Weight series with validity date."""
+        ...
+
+    @property
+    def threshold_paces(self) -> ThresholdPaceStore:
+        """Threshold pace series with validity date."""
         ...
 
     @property

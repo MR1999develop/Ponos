@@ -255,6 +255,7 @@ def test_t_dati_01_a_frozen_v1_database_gets_exactly_the_latest_tables(tmp_path:
         "sync_state",
         "profile_body",
         "weight",
+        "threshold_pace",
         "sport_weights",
         "activity_level",
         "meal_times",

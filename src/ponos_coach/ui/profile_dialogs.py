@@ -184,6 +184,10 @@ class ProfileDialogs(QObject):
                     MeasurementSeries.HEART_RATE,
                     None if edit.saved is None else edit.saved.heart_rate,
                 ),
+                (
+                    MeasurementSeries.THRESHOLD_PACE,
+                    None if edit.saved is None else edit.saved.threshold_pace,
+                ),
             )
             if period is not None
         ]

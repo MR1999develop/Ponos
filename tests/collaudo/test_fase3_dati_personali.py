@@ -376,6 +376,7 @@ def test_t_qual_02_validity_day_partitions_and_limits_through_the_use_case_and_t
         session.weights,
         lambda: TODAY,
         session.fixed_data,
+        session.threshold_paces,
     )
     try:
         request = MeasurementUpdate(day, Weight(700), threshold_bpm=160)

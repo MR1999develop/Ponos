@@ -208,6 +208,7 @@ def test_new_database_has_the_latest_schema_and_the_expected_tables(tmp_path: Pa
         "sync_state",
         "profile_body",
         "weight",
+        "threshold_pace",
         "sport_weights",
         "activity_level",
         "meal_times",

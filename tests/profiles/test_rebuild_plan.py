@@ -35,6 +35,8 @@ from ponos_coach.planning.domain import Plan, PlanHalted, PlanRefusal, RefusalRe
 from ponos_coach.planning.domain.serialization import canonical_json
 from ponos_coach.planning.ports import FrozenDay, PlanStore, StoredPlan, UnreadablePlan
 from ponos_coach.planning.use_cases import CurrentPlan, PastPlan
+from ponos_coach.profiles.domain import ThresholdPace, ThresholdPaceEntry
+from ponos_coach.profiles.measurements import MeasurementUpdate, UpdateMeasurements
 from ponos_coach.profiles.rebuild_plan import (
     NotBuiltReason,
     PlanAdherence,
@@ -111,6 +113,7 @@ class PlanWorld(World):
             self.profile.threshold_tests,
             self.spy,
             self.profile.injuries,
+            self.profile.threshold_paces,
         )
         self.sources = sources
         self.rebuild = RebuildPlan(sources, self.overview_now)
@@ -219,6 +222,55 @@ def test_the_last_threshold_pace_and_the_retest_status_come_from_the_tests_histo
 
     assert plan.inputs.threshold_pace_s_per_km == 300  # the latest with a pace, none in the future
     assert isinstance(plan.inputs.retest, Overdue)
+
+
+def _paced_blocks(plan: Plan) -> list[object]:
+    return [
+        b
+        for d in plan.days
+        if d.session is not None
+        for b in d.session.blocks
+        if b.pace_slow_s_per_km is not None
+    ]
+
+
+def test_a_threshold_pace_set_in_the_settings_gives_the_runs_a_pace_target() -> None:
+    # Acceptance: a profile without a threshold test sets its pace in the profile settings and
+    # the plan's running sessions get pace ranges.
+    world = PlanWorld()
+    before = world.built().plan
+    assert not _paced_blocks(before)
+    UpdateMeasurements(
+        world.profile.activities,
+        world.profile.physiology,
+        world.profile.weights,
+        lambda: TODAY,
+        world.profile.fixed_data,
+        world.profile.threshold_paces,
+    )(MeasurementUpdate(TODAY, threshold_pace=ThresholdPace(300)))
+
+    plan = world.built().plan
+
+    assert plan.inputs.threshold_pace_s_per_km == 300
+    assert _paced_blocks(plan)  # running sessions now have pace targets
+
+
+def test_a_later_threshold_test_overrides_the_manual_pace_and_a_later_manual_one_the_test() -> None:
+    world = PlanWorld()
+    start = datetime(2026, 1, 1, 7, 0, tzinfo=UTC)
+    world.profile.threshold_paces.put(
+        ThresholdPaceEntry(TODAY - timedelta(days=20), ThresholdPace(330))
+    )
+    world.profile.threshold_tests.add(
+        ThresholdTest(fit_identity(101), TODAY - timedelta(days=10), start, 168, 300)
+    )
+    assert world.built().plan.inputs.threshold_pace_s_per_km == 300
+
+    world.profile.threshold_paces.put(
+        ThresholdPaceEntry(TODAY - timedelta(days=5), ThresholdPace(310))
+    )
+
+    assert world.built().plan.inputs.threshold_pace_s_per_km == 310
 
 
 # --- Saved only when different --------------------------------------------------------------------
@@ -394,6 +446,7 @@ def test_an_unreadable_saved_plan_is_replaced_by_the_next_rebuild() -> None:
             world.profile.threshold_tests,
             Unreadable(world.profile.plans),
             world.profile.injuries,
+            world.profile.threshold_paces,
         ),
         world.overview_now,
     )

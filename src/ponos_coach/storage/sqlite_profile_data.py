@@ -20,6 +20,8 @@ from ponos_coach.profiles.domain import (
     BirthDate,
     FixedProfileData,
     Height,
+    ThresholdPace,
+    ThresholdPaceEntry,
     Weight,
     WeightEntry,
 )
@@ -95,6 +97,37 @@ class SqliteWeightStore:
             return [WeightEntry(date.fromisoformat(r[0]), Weight(r[1])) for r in rows]
         except ValueError:  # the text read (a date) is not kept in the chain of causes
             raise ProfileDataError("saved weight invalid") from None
+
+
+class SqliteThresholdPaceStore:
+    """Threshold pace series (`ThresholdPaceStore` port) on SQLite, in whole seconds per km."""
+
+    def __init__(self, database: SqliteDatabase) -> None:
+        self._db = database
+
+    def put(self, entry: ThresholdPaceEntry) -> None:
+        """Saves the pace valid from `entry.valid_from`, replacing the same date."""
+        try:
+            self._db.connection.execute(
+                "INSERT INTO threshold_pace (valid_from, s_per_km) VALUES (?, ?) "
+                "ON CONFLICT (valid_from) DO UPDATE SET s_per_km = excluded.s_per_km",
+                (entry.valid_from.isoformat(), entry.pace.s_per_km),
+            )
+        except sqlite3.Error as exc:
+            raise ProfileDataError("writing the threshold pace failed") from exc
+
+    def list_entries(self) -> Sequence[ThresholdPaceEntry]:
+        """All the entries by ascending date."""
+        try:
+            rows = self._db.connection.execute(
+                "SELECT valid_from, s_per_km FROM threshold_pace ORDER BY valid_from"
+            ).fetchall()
+        except sqlite3.Error as exc:
+            raise ProfileDataError("reading the threshold pace failed") from exc
+        try:
+            return [ThresholdPaceEntry(date.fromisoformat(r[0]), ThresholdPace(r[1])) for r in rows]
+        except ValueError:  # the text read (a date) is not kept in the chain of causes
+            raise ProfileDataError("saved threshold pace invalid") from None
 
 
 class SqliteSportWeightStore:

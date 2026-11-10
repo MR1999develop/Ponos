@@ -119,6 +119,7 @@ def _run(opened: OpenProfile, folder: Path, scenario: str, today: date, argument
             store.threshold_tests,
             store.plans,
             store.injuries,
+            store.threshold_paces,
         )
         overview = ComputeProfileOverview(
             activities,

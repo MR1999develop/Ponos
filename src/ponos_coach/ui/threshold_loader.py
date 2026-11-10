@@ -82,6 +82,7 @@ def _apply(result: ThresholdTestResult, cell: AppliedCell, access: ProfileAccess
         session.weights,
         access.today,
         session.fixed_data,
+        session.threshold_paces,
     )
     cell.value = ApplyThresholdTest(
         session.activities, session.threshold_tests, session.physiology, measurements
