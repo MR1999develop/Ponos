@@ -250,9 +250,9 @@ Activities list and in the Overview chart. TCX files are not supported.
 
 ## Charts and activity detail
 
-The Overview shows three charts, one at a time, chosen from a list on their
-left: fitness and fatigue (CTL, ATL and TSB in one chart), weekly load by sport
-and time in heart-rate zones. Dragging with the right button stretches a chart
+The Overview shows, chosen from a list on its left, either fitness and fatigue
+(CTL, ATL and TSB in one chart) or the weekly load by sport above the time in
+heart-rate zones. Dragging with the right button stretches a chart
 vertically. A double click (or Enter) on an activity in the Activities list,
 or Profile, Activity detail... (Ctrl+D), opens the heart-rate curve with the
 zones and the time in each, and centres the map on the activity. All charts can be exported to SVG and PNG, in the light or dark theme,

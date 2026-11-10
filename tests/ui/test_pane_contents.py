@@ -2,8 +2,8 @@
 # Copyright (C) 2026 MR
 """What fits inside the four panes (user's requests of 2026-11-09).
 
-The Overview shows one chart at a time, chosen on its left; the map keeps a usable height; the
-calendar leaves no empty band under the month.
+The Overview shows the PMC, or the weekly load above the time in zones, chosen on its left; the
+map keeps a usable height; the calendar leaves no empty band under the month.
 Made-up profile (no real person).
 """
 
@@ -20,7 +20,7 @@ from tests.ui.workspace_support import WAIT_MS, make_settings
 MAP_MIN_HEIGHT_PX = 200
 
 
-def test_the_overview_shows_one_chart_at_a_time_chosen_from_a_list_on_its_left(
+def test_the_overview_shows_the_pmc_or_the_two_weekly_charts_one_above_the_other(
     qtbot: QtBot, tmp_path: Path
 ) -> None:
     window = window_with_days(qtbot, tmp_path, make_settings(tmp_path))
@@ -31,8 +31,7 @@ def test_the_overview_shows_one_chart_at_a_time_chosen_from_a_list_on_its_left(
     assert isinstance(charts, QListWidget)
     assert [charts.item(row).text() for row in range(charts.count())] == [
         "Fitness and fatigue",
-        "Weekly load",
-        "Time in zones",
+        "Weekly load and time in zones",
     ]
     assert (
         charts.mapTo(page, charts.rect().topLeft()).x()
@@ -42,10 +41,14 @@ def test_the_overview_shows_one_chart_at_a_time_chosen_from_a_list_on_its_left(
     assert page.chart.isVisible()
     assert not page.load_chart.isVisible() and not page.zones_chart.isVisible()
 
-    charts.setCurrentRow(2)
+    charts.setCurrentRow(1)
 
-    assert page.zones_chart.isVisible()
-    assert not page.chart.isVisible() and not page.load_chart.isVisible()
+    assert page.load_chart.isVisible() and page.zones_chart.isVisible()
+    assert not page.chart.isVisible()
+    load_top = page.load_chart.mapTo(page, page.load_chart.rect().topLeft())
+    zones_top = page.zones_chart.mapTo(page, page.zones_chart.rect().topLeft())
+    assert load_top.x() == zones_top.x()
+    assert load_top.y() + page.load_chart.height() <= zones_top.y()  # the load above the zones
 
 
 def test_the_map_keeps_a_usable_height_in_its_pane(qtbot: QtBot, tmp_path: Path) -> None:
@@ -66,7 +69,7 @@ def test_under_the_calendar_the_day_panel_takes_only_the_room_of_its_text(
     qtbot.wait(50)
     page = window.calendar_page
 
-    assert page.panel.height() <= 3 * page.table.height() // 10  # the month gets the room
+    assert page.panel.height() == page.panel.minimumHeight()  # the month gets the rest
 
 
 def test_the_map_has_no_activity_detail_button(qtbot: QtBot, tmp_path: Path) -> None:

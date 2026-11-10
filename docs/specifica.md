@@ -396,9 +396,10 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 - The Overview shows the PMC chart (CTL, ATL, TSB, daily load, plan
   projection, goal lines); today's session is in the calendar. The form (TSB) is in the same
   chart as the load (CTL, ATL), on one y axis.
-- The Overview shows one chart at a time, chosen in a short list on its left:
-  "Fitness and fatigue", "Weekly load" and "Time in zones". The dates stay in
-  step between the three.
+- The Overview shows one page at a time, chosen in a short list on its left:
+  "Fitness and fatigue" (the PMC) or "Weekly load and time in zones" (the
+  weekly load above the time in zones). The dates stay in step between the
+  three charts.
 - Other charts: weekly load by sport, time in zones (both in the Overview) and
   activity HR (in the activity detail).
 - Dragging with the right button stretches or squeezes a chart vertically.
@@ -982,7 +983,8 @@ Decision: [ADR 010](adr/010-mappa.md).
 ### Map
 
 - The main window has four panes, all visible and all resizable, and no
-  sidebar: the Overview at the top left, the Calendar at the bottom left, the
+  sidebar: the Overview at the top left (3/5 of the column in a new window),
+  the Calendar at the bottom left (2/5), the
   Activities list (under its filter bar) at the top right and the Map at the
   bottom right. One divider between the columns and one in each column; none
   can collapse a pane away, and where they were left is remembered. There is

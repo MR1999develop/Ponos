@@ -4563,14 +4563,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Condizione e fatica</translation>
     </message>
     <message>
-        <source>Weekly load</source>
-        <translation>Carico settimanale</translation>
-    </message>
-    <message>
-        <source>Time in zones</source>
-        <translation>Tempo nelle zone</translation>
-    </message>
-    <message>
         <source>Calculate again</source>
         <translation>Calcola di nuovo</translation>
     </message>
@@ -4645,6 +4637,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Fitness (CTL), plan</source>
         <translation>Condizione (CTL), piano</translation>
+    </message>
+    <message>
+        <source>Weekly load and time in zones</source>
+        <translation>Carico settimanale e tempo nelle zone</translation>
     </message>
     <message>
         <source>Fatigue (ATL), plan</source>

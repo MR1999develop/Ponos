@@ -161,18 +161,24 @@ class OverviewPage(QWidget):
         self._chart = ChartView(engine, self.tr("Fitness and fatigue chart"), self)
         self._load_chart = ChartView(engine, self.tr("Weekly load chart"), self)
         self._zones_chart = ChartView(engine, self.tr("Time in zones chart"), self)
-        # One chart at a time, chosen in a short list on its left (user's request of 2026-11-09):
-        # a quarter of the window cannot hold three charts. The dates stay in step anyway.
+        # One page at a time, chosen in a short list on its left (user's requests of 2026-11-09
+        # and 2026-11-10): the PMC alone, or the weekly load above the time in zones. The dates
+        # stay in step anyway.
         self._chart_list = QListWidget(self)
         self._chart_list.setObjectName("overviewCharts")
         self._chart_list.setAccessibleName(self.tr("Overview charts"))
         self._chart_stack = QStackedWidget(self)
-        names = (self.tr("Fitness and fatigue"), self.tr("Weekly load"), self.tr("Time in zones"))
-        for name, view in zip(
-            names, (self._chart, self._load_chart, self._zones_chart), strict=True
-        ):
+        weeks = QWidget(self)
+        column = QVBoxLayout(weeks)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(SPACE_2)
+        column.addWidget(self._load_chart, stretch=1)
+        column.addWidget(self._zones_chart, stretch=1)
+        names = (self.tr("Fitness and fatigue"), self.tr("Weekly load and time in zones"))
+        for name, page in zip(names, (self._chart, weeks), strict=True):
             QListWidgetItem(name, self._chart_list)
-            self._chart_stack.addWidget(view)
+            self._chart_stack.addWidget(page)
+        for view in self._views():
             view.x_range_changed.connect(partial(self._follow_dates, view))
         self._chart_list.setFixedWidth(
             max(self._chart_list.sizeHintForColumn(0), 0)

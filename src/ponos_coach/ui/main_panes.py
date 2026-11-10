@@ -13,12 +13,14 @@ from __future__ import annotations
 from enum import Enum
 
 from PySide6.QtCore import QByteArray, QSettings, Qt
+from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import QSplitter, QWidget
 
 KEY_COLUMNS = "panes/columns"
-KEY_LEFT = "panes/left"
+KEY_LEFT = "panes/left2"  # "2": the Overview taller than the Calendar from 2026-11-10
 KEY_RIGHT = "panes/right"
-_HALF = (1, 1)  # proportions of a new window: columns and panes about half each
+_HALF = (1, 1)  # columns, and Activities over Map: about half each
+OVERVIEW_SHARE = (3, 2)  # Overview over Calendar: the charts get the larger part
 
 
 class Pane(Enum):
@@ -55,15 +57,27 @@ class MainPanes(QSplitter):
             Pane.MAP: map_page,
         }
         self._prepare(self, (self._left, self._right))
+        self._proportions = {self: _HALF, self._left: OVERVIEW_SHARE, self._right: _HALF}
+        self._to_size: list[QSplitter] = []  # the splitters with nothing saved, sized at the show
         for splitter, key in (
             (self, KEY_COLUMNS),
             (self._left, KEY_LEFT),
             (self._right, KEY_RIGHT),
         ):
             saved = settings.value(key)
-            if isinstance(saved, QByteArray):
-                splitter.restoreState(saved)
+            if not (isinstance(saved, QByteArray) and splitter.restoreState(saved)):
+                self._to_size.append(splitter)
             splitter.splitterMoved.connect(self._remember)
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 (Qt name)
+        """At the first show, the splitters with nothing saved take their default proportions of
+        the room they really have (before the show the sizes are not known)."""
+        super().showEvent(event)
+        to_size, self._to_size = self._to_size, []
+        for splitter in to_size:
+            room = sum(splitter.sizes())
+            weights = self._proportions[splitter]
+            splitter.setSizes([room * w // sum(weights) for w in weights])
 
     @property
     def columns(self) -> QSplitter:

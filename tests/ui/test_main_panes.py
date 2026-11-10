@@ -54,6 +54,20 @@ def test_the_four_panes_are_in_their_place_from_the_start(
         assert panes.pane(pane).isVisible()
 
 
+def test_a_new_window_gives_the_overview_more_room_than_the_calendar(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = compose(tmp_path, settings)
+    qtbot.addWidget(window)
+    window.resize(1600, 1000)
+    window.show()
+    qtbot.waitExposed(window)
+
+    overview, calendar = window.panes.left_column.sizes()
+    assert overview > calendar  # about 3 to 2
+    assert abs(overview * 2 - calendar * 3) <= 10
+
+
 def test_no_pane_can_be_collapsed_and_the_dividers_can_be_grabbed(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
