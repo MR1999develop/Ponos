@@ -20,11 +20,11 @@ from PySide6.QtCore import QLocale, Qt, QTime, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
+    QTabBar,
     QVBoxLayout,
     QWidget,
 )
@@ -161,12 +161,27 @@ class OverviewPage(QWidget):
         self._chart = ChartView(engine, self.tr("Fitness and fatigue chart"), self)
         self._load_chart = ChartView(engine, self.tr("Weekly load chart"), self)
         self._zones_chart = ChartView(engine, self.tr("Time in zones chart"), self)
-        # One page at a time, chosen in a short list on its left (user's requests of 2026-11-09
-        # and 2026-11-10): the PMC alone, or the weekly load above the time in zones. The dates
-        # stay in step anyway.
-        self._chart_list = QListWidget(self)
-        self._chart_list.setObjectName("overviewCharts")
-        self._chart_list.setAccessibleName(self.tr("Overview charts"))
+        # One page at a time, chosen with two vertical tabs on the chart's left edge (user's
+        # requests of 2026-11-09 and 2026-11-10): the PMC alone, or the weekly load above the
+        # time in zones. The dates stay in step anyway.
+        self._chart_tabs = QTabBar(self)
+        self._chart_tabs.setObjectName("overviewCharts")
+        self._chart_tabs.setAccessibleName(self.tr("Overview charts"))
+        self._chart_tabs.setShape(QTabBar.Shape.RoundedWest)
+        self._chart_tabs.setExpanding(False)
+        self._chart_tabs.setDrawBase(False)
+        # The column must not set the pane's minimum height: in a short pane the tabs scroll.
+        self._chart_tabs.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Ignored)
+        self._chart_tabs.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        # The selected tab is the accent (the system's highlight) and also bold, with a bar on
+        # the side of the chart: never the colour alone.
+        self._chart_tabs.setStyleSheet(
+            f"QTabBar::tab {{ padding: {SPACE_4}px {SPACE_2}px; border-right: 3px solid"
+            " transparent; }"
+            f" QTabBar::tab:selected {{ font-weight: 600; color: palette(highlight);"
+            " border-right: 3px solid palette(highlight); }"
+            " QTabBar::tab:focus { border-right: 3px solid palette(text); }"
+        )
         self._chart_stack = QStackedWidget(self)
         weeks = QWidget(self)
         column = QVBoxLayout(weeks)
@@ -176,22 +191,18 @@ class OverviewPage(QWidget):
         column.addWidget(self._zones_chart, stretch=1)
         names = (self.tr("Fitness and fatigue"), self.tr("Weekly load and time in zones"))
         for name, page in zip(names, (self._chart, weeks), strict=True):
-            QListWidgetItem(name, self._chart_list)
+            self._chart_tabs.addTab(name)
+            self._chart_tabs.setTabToolTip(self._chart_tabs.count() - 1, name)
             self._chart_stack.addWidget(page)
         for view in self._views():
             view.x_range_changed.connect(partial(self._follow_dates, view))
-        self._chart_list.setFixedWidth(
-            max(self._chart_list.sizeHintForColumn(0), 0)
-            + 2 * self._chart_list.frameWidth()
-            + SPACE_4
-        )
-        self._chart_list.currentRowChanged.connect(self._chart_stack.setCurrentIndex)
-        self._chart_list.setCurrentRow(0)
+        self._chart_tabs.currentChanged.connect(self._chart_stack.setCurrentIndex)
+        self._chart_tabs.setCurrentIndex(0)
         self._charts = QWidget(self)
         row = QHBoxLayout(self._charts)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(SPACE_2)
-        row.addWidget(self._chart_list)
+        row.addWidget(self._chart_tabs, alignment=Qt.AlignmentFlag.AlignTop)
         row.addWidget(self._chart_stack, stretch=1)
         self._stack = QStackedWidget(self)
         for widget in (self._state_page, self._loading_page, self._charts):
@@ -216,9 +227,9 @@ class OverviewPage(QWidget):
         return self._zones_chart
 
     @property
-    def chart_list(self) -> QListWidget:
-        """The list on the left that chooses the chart shown."""
-        return self._chart_list
+    def chart_tabs(self) -> QTabBar:
+        """The vertical tabs on the chart's left that choose the page shown."""
+        return self._chart_tabs
 
     @property
     def charts_widget(self) -> QWidget:
