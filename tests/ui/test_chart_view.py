@@ -339,3 +339,52 @@ def test_a_right_drag_stretches_or_squeezes_the_chart_vertically(qtbot: QtBot) -
     stretched = span()
     right_drag(240)  # down
     qtbot.waitUntil(lambda: span() > stretched * 1.5, timeout=WAIT_MS)
+
+
+_VISIBLE_EXTENT = (
+    "(function () { var g = document.getElementById('chart');"
+    " var r = g._fullLayout.xaxis.range.map(function (v) {"
+    "   return Date.parse(String(v).replace(' ', 'T')); });"
+    " var lo = Infinity, hi = -Infinity;"
+    " g._fullData.forEach(function (t) { if (t.visible !== true || !t.x || !t.y) return;"
+    "   for (var i = 0; i < t.x.length; i++) {"
+    "     var w = Date.parse(String(t.x[i]).replace(' ', 'T')), v = Number(t.y[i]);"
+    "     if (w >= r[0] && w <= r[1] && isFinite(v)) {"
+    "       lo = Math.min(lo, v, t.type === 'bar' ? 0 : v);"
+    "       hi = Math.max(hi, v, t.type === 'bar' ? 0 : v); } } });"
+    " return [lo, hi, g._fullLayout.yaxis.range[0], g._fullLayout.yaxis.range[1]]; })()"
+)
+
+
+def test_the_y_axis_follows_the_values_of_the_dates_in_view(qtbot: QtBot) -> None:
+    # The user's request of 2026-11-10: the scale of the ordinates fits the data shown, also
+    # after a zoom on a few days.
+    view = drawn_view(qtbot, navigation=XNavigation.LINKED)
+
+    def fitted() -> bool:
+        values = evaluate(qtbot, view, _VISIBLE_EXTENT)
+        assert isinstance(values, list)
+        low, high, axis_low, axis_high = (float(v) for v in values)
+        span = high - low or 1.0
+        return (
+            axis_low <= low
+            and axis_high >= high
+            and axis_high - high <= span * 0.1
+            and low - axis_low <= span * 0.1
+        )
+
+    qtbot.waitUntil(fitted, timeout=WAIT_MS)  # the whole series at first
+    whole = evaluate(qtbot, view, "document.getElementById('chart')._fullLayout.yaxis.range[1]")
+    view.set_x_range(DateRange(datetime(2026, 3, 8), datetime(2026, 3, 11)))
+    qtbot.waitUntil(
+        lambda: (
+            evaluate(qtbot, view, "document.getElementById('chart').layout.xaxis.range[0]")
+            == "2026-03-08 00:00:00"
+        ),
+        timeout=WAIT_MS,
+    )
+
+    qtbot.waitUntil(fitted, timeout=WAIT_MS)  # only those days
+    shown = evaluate(qtbot, view, "document.getElementById('chart')._fullLayout.yaxis.range[1]")
+    assert isinstance(whole, float | int) and isinstance(shown, float | int)
+    assert shown < whole / 2  # those days have no 80-point session: a much lower top

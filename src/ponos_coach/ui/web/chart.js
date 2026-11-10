@@ -102,6 +102,76 @@
     Plotly.relayout(host, { shapes: shapes });
   };
 
+  // The y axis follows the data in view (the user's request of 2026-11-10): after every change
+  // of the dates shown, by the user or by the linked chart, the y range is the lowest and the
+  // highest value drawn between those dates, stacked bars summed per date, bars from zero, with
+  // a small margin. Without data in view the range stays as it is.
+  var Y_MARGIN = 0.06;
+
+  function timeOf(value) {
+    return typeof value === "number" ? value : Date.parse(String(value).replace(" ", "T"));
+  }
+
+  function visibleYExtent(gd) {
+    var range = gd._fullLayout.xaxis.range;
+    var first = timeOf(range[0]);
+    var last = timeOf(range[1]);
+    var stacked = gd._fullLayout.barmode === "stack" || gd._fullLayout.barmode === "relative";
+    var low = Infinity;
+    var high = -Infinity;
+    var sums = {};
+    // `_fullData`: the series as drawn, with the numbers decoded (in `data` they can still be
+    // Plotly's base64 typed arrays).
+    gd._fullData.forEach(function (trace) {
+      if (trace.visible !== true) { return; }
+      if (!trace.x || !trace.y || (trace.yaxis && trace.yaxis !== "y")) { return; }
+      var bar = trace.type === "bar";
+      for (var i = 0; i < trace.x.length; i += 1) {
+        var when = timeOf(trace.x[i]);
+        var value = Number(trace.y[i]);
+        if (!(when >= first && when <= last) || !isFinite(value)) { continue; }
+        if (bar && stacked) {
+          var sum = sums[when] || { up: 0, down: 0 };
+          if (value >= 0) { sum.up += value; } else { sum.down += value; }
+          sums[when] = sum;
+        } else {
+          low = Math.min(low, value);
+          high = Math.max(high, value);
+        }
+        if (bar) { low = Math.min(low, 0); high = Math.max(high, 0); }
+      }
+    });
+    Object.keys(sums).forEach(function (key) {
+      low = Math.min(low, sums[key].down);
+      high = Math.max(high, sums[key].up);
+    });
+    return isFinite(low) && isFinite(high) ? [low, high] : null;
+  }
+
+  var fitFrame = null;
+
+  function fitY(gd) {
+    fitFrame = null;
+    if (gd._fullData === undefined || gd._fullLayout.xaxis === undefined) { return; }
+    var extent = visibleYExtent(gd);
+    if (extent === null) { return; }
+    var span = extent[1] - extent[0] || Math.abs(extent[1]) || 1;
+    var low = extent[0] - (extent[0] < 0 ? span * Y_MARGIN : 0);
+    var high = extent[1] + span * Y_MARGIN;
+    Plotly.relayout(gd, { "yaxis.autorange": false, "yaxis.range": [low, high] });
+  }
+
+  function bindAutoY(gd) {
+    if (gd.ponosAutoY) { return; }
+    gd.ponosAutoY = true;
+    gd.on("plotly_relayout", function (event) {
+      var xChanged = Object.keys(event).some(function (key) { return /^xaxis\d*\./.test(key); });
+      if (xChanged && fitFrame === null) {
+        fitFrame = window.requestAnimationFrame(function () { fitY(gd); });
+      }
+    });
+  }
+
   // Right button held and dragged: up stretches the chart vertically, down squeezes it (the
   // user's request of 2026-11-09). Charts that start at zero keep their floor; the others scale
   // around their middle. The y axes stay closed to Plotly's own drags.
@@ -174,7 +244,11 @@
     Plotly.react(host, payload.figure.data, payload.figure.layout, config).then(function (gd) {
       if (payload.hover === true) { bindHover(gd); }
       if (payload.linkedX === true) { bindRange(gd); }
-      if (payload.zoom === true) { bindStretch(gd); }
+      if (payload.zoom === true) {
+        bindStretch(gd);
+        bindAutoY(gd);
+        fitY(gd);
+      }
       // Signal to Python without channels: the page title changes at every draw.
       drawCount += 1;
       document.title = "drawn-" + drawCount;
