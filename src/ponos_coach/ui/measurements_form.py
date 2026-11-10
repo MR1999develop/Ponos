@@ -5,9 +5,10 @@
 Measurements (weight, minimum HR, maximum HR, threshold HR, threshold pace) apply from a day
 chosen by the user (today by default, never in the future). A field the user has not touched
 shows, and has, the value in force that day; changing the day, untouched fields follow. A typed
-value equal to the one in force is not a change: the field goes back to "untouched" and follows the day. Only changed fields
-are saved; `changes` says what changes relative to the chosen day and `pending_periods` for how long
-the new values would apply (a measurement applies until the next already existing entry).
+value equal to the one in force is not a change: the field goes back to "untouched" and follows
+the day. Only changed fields are saved; `changes` says what changes relative to the chosen day and
+`pending_periods` for how long the new values would apply (a measurement applies until the next
+already existing entry).
 For a profile created before they existed, height and birth date are completed once.
 The profile name is changed from here too: it is not a dated measurement and is saved together.
 
