@@ -99,7 +99,7 @@ ADULT = Person(Sex.MALE, 30, 178, 72.0, ActivityLevel.LIGHT)
 LONG_RIDE = TrainingSession(8 * 60, 180.0, 1400.0, 210.0)
 
 
-def test_a_rest_day_has_three_meals_in_time_order_with_amounts_and_example_foods() -> None:
+def test_a_rest_day_has_three_meals_in_time_order_with_their_amounts() -> None:
     view = present_day(DAY, report_for(ADULT, MaintenanceGoal()))
 
     assert isinstance(view, DayView)
@@ -108,7 +108,7 @@ def test_a_rest_day_has_three_meals_in_time_order_with_amounts_and_example_foods
         ("Lunch", "1:00 PM"),
         ("Dinner", "8:00 PM"),
     ]
-    assert all(meal.examples for meal in view.meals)
+    assert all(meal.kcal and meal.protein for meal in view.meals)
     assert view.activities == ()
     assert view.level == "Rest day"
 
@@ -235,11 +235,6 @@ def test_in_italian_the_day_speaks_italian_with_translated_moments_foods_and_not
     assert during.hourly.startswith("Indicativo: circa ")
     assert view.notice.startswith("Indicazioni generali, non consigli medici")
     assert view.level == "Allenamento molto intenso"
-    assert any(
-        "Riso" in example or "Pasta" in example or "Pane" in example
-        for meal in view.meals
-        for example in meal.examples
-    )
     assert unavailable_text(UnavailableReason.MISSING_WEIGHT).title == "Nessun peso salvato"
 
 
@@ -265,18 +260,6 @@ def test_the_deficit_advisories_do_not_judge_and_the_low_bmi_one_is_neutral_abou
     limited = advisory_text(Advisory.DEFICIT_LIMITED)
     assert "reduced" in limited
     assert "cautious limits" in limited
-
-
-def test_unverified_food_values_get_a_note_and_verified_ones_do_not() -> None:
-    report = report_for(ADULT, MaintenanceGoal())
-
-    unverified = present_day(DAY, report, foods_verified=False)
-    verified = present_day(DAY, report, foods_verified=True)
-
-    assert isinstance(unverified, DayView)
-    assert isinstance(verified, DayView)
-    assert unverified.foods_note == "Food values not yet verified against the source."
-    assert verified.foods_note == ""
 
 
 def test_under_18_has_no_numbers_and_points_to_a_doctor_or_a_sports_dietitian() -> None:

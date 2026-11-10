@@ -38,8 +38,8 @@ use: use it at your own risk. Manual import of FIT files is always available.
 - 30-minute threshold test: from a run you choose, threshold heart rate and
   pace, heart-rate and pace zones, history of the tests and a retest every
   6-8 weeks; applying a test can be undone.
-- Nutrition of the day: energy needs, deficit within safe limits, macros and
-  meals, from a curated food table.
+- Nutrition of the day: energy needs, deficit within safe limits, and each
+  meal's calories and macronutrients.
 - Goals (A/B/C races, target time, fitness level) and an adaptive,
   deterministic training plan.
 - Search and map of the activities: filters, tracks coloured by sport,

@@ -188,7 +188,6 @@ class NutritionUi(QObject):
                     loaded.day,
                     loaded.result,
                     today=self._today(),
-                    foods_verified=loaded.foods_verified,
                     planned="" if loaded.planned is None else planned_section_text(loaded.planned),
                 )
             )

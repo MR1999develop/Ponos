@@ -139,7 +139,6 @@ class DayPage(QWidget):
         self._in_progress_note = ""
         self._estimate_note = ""
         self._planned_text = ""
-        self._foods_note = ""
         self._lean_mass_note = ""
         self._build()
 
@@ -285,11 +284,6 @@ class DayPage(QWidget):
         return self._lean_mass_note
 
     @property
-    def foods_note_text(self) -> str:
-        """The note that the food values are not verified (empty once they are)."""
-        return self._foods_note
-
-    @property
     def activities_model(self) -> TextTableModel:
         """The model of the activities table."""
         return self._activities_model
@@ -354,7 +348,6 @@ class DayPage(QWidget):
         self._in_progress_note = ""
         self._estimate_note = ""
         self._planned_text = ""
-        self._foods_note = ""
         self._lean_mass_note = ""
         self._scroll.takeWidget()
         self._set_state(DayState.EMPTY)
@@ -375,7 +368,6 @@ class DayPage(QWidget):
         self._in_progress_note = ""
         self._estimate_note = ""
         self._planned_text = ""
-        self._foods_note = ""
         self._lean_mass_note = ""
         self._add_day_notes(view, root, column)
         notes = [*view.advisories, *([view.unreadable_note] if view.unreadable_note else [])]
@@ -390,12 +382,6 @@ class DayPage(QWidget):
             column.addWidget(lean)
         column.addWidget(self._build_activities(view, root))
         column.addWidget(_label(self.tr("Meals and training intakes"), root, bold=True))
-        if view.foods_note:
-            self._foods_note = view.foods_note
-            foods = _label(view.foods_note, root)
-            foods.setObjectName("dayFoodsNote")
-            foods.setMaximumWidth(_MAX_TEXT_WIDTH)
-            column.addWidget(foods)
         for card in view.meals:
             column.addWidget(self._build_meal(card, root))
         column.addStretch(1)
@@ -517,13 +503,5 @@ class DayPage(QWidget):
         inner.addLayout(grid)
         if card.hourly:
             inner.addWidget(_label(card.hourly, box))
-        inner.addWidget(_label(self._examples_title(card), box, bold=True))
-        for example in card.examples:
-            inner.addWidget(_label(example, box))
         self._meal_boxes.append(box)
         return box
-
-    def _examples_title(self, card: MealCardView) -> str:
-        if card.examples:
-            return self.tr("Examples")
-        return self.tr("No food example matches these amounts.")

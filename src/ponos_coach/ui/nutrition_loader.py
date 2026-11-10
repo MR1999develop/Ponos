@@ -65,7 +65,6 @@ class DayLoaded:
 
     day: date
     result: DayNutritionResult
-    foods_verified: bool  # the food table's values were checked against their source
     planned: PlanDay | None = None  # what the plan has for the day (shown with its blocks)
 
 
@@ -161,9 +160,7 @@ def _plan_day(foods: FoodTableSource, day: date, access: ProfileAccess) -> DayLo
     table = foods()
     context = PlanContext(session.plans, access.today())
     plan = PlanDayNutrition(sources, access.decode, access.zone, table, plan_context=context)
-    return DayLoaded(
-        day, plan(day), table.source.verified_on is not None, PlannedDay(session.plans)(day)
-    )
+    return DayLoaded(day, plan(day), PlannedDay(session.plans)(day))
 
 
 class NutritionLoader(QObject):

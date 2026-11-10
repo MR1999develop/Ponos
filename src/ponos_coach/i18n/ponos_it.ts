@@ -764,14 +764,6 @@
         <translation>Grassi (g)</translation>
     </message>
     <message>
-        <source>Examples</source>
-        <translation>Esempi</translation>
-    </message>
-    <message>
-        <source>No food example matches these amounts.</source>
-        <translation>Nessun esempio di alimenti corrisponde a queste quantità.</translation>
-    </message>
-    <message>
         <source>Time</source>
         <translation>Ora</translation>
     </message>
@@ -4290,10 +4282,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Estimate from the plan: the activities are the planned sessions.</source>
         <translation>Stima dal piano: le attività sono le sedute pianificate.</translation>
-    </message>
-    <message>
-        <source>Food values not yet verified against the source.</source>
-        <translation>Valori degli alimenti non ancora verificati rispetto alla fonte.</translation>
     </message>
     <message>
         <source>Declared by the device</source>

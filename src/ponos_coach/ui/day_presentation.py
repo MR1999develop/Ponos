@@ -16,7 +16,7 @@ from datetime import date
 from PySide6.QtCore import QCoreApplication, QDate, QLocale, QTime
 
 from ponos_coach.activities.domain import ActivityIdentity
-from ponos_coach.nutrition.domain import FoodExample, HourlyIntake, MealItem
+from ponos_coach.nutrition.domain import HourlyIntake, MealItem
 from ponos_coach.profiles.day_nutrition import (
     DayActivity,
     DayNutritionReport,
@@ -31,8 +31,6 @@ from ponos_coach.ui.nutrition_texts import (
     energy_source_text,
     estimate_from_plan_text,
     fixed_notice_text,
-    food_name,
-    foods_unverified_text,
     goal_text,
     in_progress_text,
     lean_mass_note_text,
@@ -47,7 +45,7 @@ _MINUTES_PER_HOUR = 60
 
 @dataclass(frozen=True, slots=True)
 class MealCardView:
-    """One eating moment: title, time, amounts and example foods.
+    """One eating moment: title, time and amounts (no example foods: user's request of 2026-11-10).
 
     The amounts are numbers without units (the headers carry the units).
     """
@@ -60,7 +58,6 @@ class MealCardView:
     protein: str
     fat: str
     hourly: str  # empty unless it is the during-training moment
-    examples: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,7 +73,6 @@ class DayView:
     advisories: tuple[str, ...]
     unreadable_note: str  # empty if every activity file could be read
     in_progress_note: str  # empty unless the day is today
-    foods_note: str  # empty once the food values are verified against their source
     lean_mass_note: str  # which lean mass the energy availability limit uses; empty if unknown
     notice: str
     estimate_note: str = ""  # empty unless the day is ahead: its activities are the plan's
@@ -163,10 +159,6 @@ def _totals(report: DayNutritionReport) -> tuple[tuple[str, str], ...]:
     )
 
 
-def _example_text(example: FoodExample) -> str:
-    return " + ".join(f"{food_name(p.food)} {number_text(p.grams)} g" for p in example.portions)
-
-
 def _hourly_text(hourly: HourlyIntake) -> str:
     # {carbs}, {fluid} and {sodium}: amounts per hour, as numbers.
     return QCoreApplication.translate(
@@ -204,7 +196,6 @@ def _meal_card(suggestion: MealSuggestion) -> MealCardView:
         number_text(meal.macros.protein_g),
         number_text(meal.macros.fat_g),
         "" if meal.hourly is None else _hourly_text(meal.hourly),
-        tuple(_example_text(example) for example in suggestion.examples),
     )
 
 
@@ -223,7 +214,6 @@ def _present_report(
     report: DayNutritionReport,
     *,
     in_progress: bool,
-    verified: bool,
     planned: str,
 ) -> DayView:
     return DayView(
@@ -236,7 +226,6 @@ def _present_report(
         tuple(advisory_text(a) for a in report.nutrition.advisories),
         _unreadable_note(report.unreadable_activities),
         in_progress_text() if in_progress else "",
-        "" if verified else foods_unverified_text(),
         lean_mass_note_text(measured=report.lean_mass_measured),
         fixed_notice_text(),
         estimate_from_plan_text() if report.from_plan else "",
@@ -250,21 +239,18 @@ def present_day(
     result: DayNutritionResult,
     *,
     today: date | None = None,
-    foods_verified: bool = True,
     planned: str = "",
 ) -> DayContent:
     """The page content of a day from the use case's result.
 
-    `today` (the profile's today) marks the current day as in progress; `foods_verified` is False
-    while the food table's values have not been checked against their source. The note on
-    the lean mass comes from the report (`lean_mass_measured`). `planned` is the day's planned
-    session in full, as the calendar's panel shows it.
+    `today` (the profile's today) marks the current day as in progress. The note on the lean
+    mass comes from the report (`lean_mass_measured`). `planned` is the day's planned session in
+    full, as the calendar shows it.
     """
     if isinstance(result, NutritionUnavailable):
         return UnavailableView(day_title(day), unavailable_text(result.reason), fixed_notice_text())
     return _present_report(
         result,
         in_progress=day == today,
-        verified=foods_verified,
         planned=planned,
     )

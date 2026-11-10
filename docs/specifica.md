@@ -894,8 +894,8 @@ no diet or allergy restriction for now.
   from (device, heart rate estimate, estimate by sport).
 - Then the meals in time order: breakfast, lunch, dinner, and the intakes
   before, during and after each session of at least 30 minutes. Each card has
-  time, energy and grams, and 2-3 examples of foods with the portion in
-  grams. If no example fits the amounts, it says so.
+  time, energy and the grams of carbohydrate, protein and fat; no example
+  foods (user's request of 2026-11-10).
 - Meals near a session move or merge with the intakes around it. When the
   carbohydrate of the day is not enough for all of them, the page says that
   the intakes were scaled.

@@ -166,8 +166,8 @@ def test_the_meal_cards_come_in_time_order_with_amounts_and_a_moved_lunch(
         texts = page.meal_texts(index)
         assert "Energy (kcal)" in texts
         assert "Carbohydrates (g)" in texts
-        assert "Examples" in texts or "No food example matches these amounts." in texts
-    assert any(" g" in text for text in page.meal_texts(0)[-1:])  # an example with its grams
+        assert "Protein (g)" in texts and "Fat (g)" in texts
+        assert "Examples" not in texts  # energy and macronutrients only, no example foods
 
 
 def test_a_three_hour_session_has_a_during_training_card_with_the_hourly_amounts(
@@ -336,17 +336,18 @@ def test_an_empty_profile_has_a_calendar_and_no_day_window(
     assert window.nutrition.day_windows == ()
 
 
-def test_the_shipped_food_values_are_verified_so_the_page_has_no_note_about_it(
+def test_the_meals_show_energy_and_macronutrients_but_no_food_examples(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with_days(qtbot, tmp_path, settings)
 
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
 
-    assert last_day_page(window).foods_note_text == ""
-    assert "Food values not yet verified against the source." not in all_label_texts(
-        last_day_page(window)
-    )
+    texts = all_label_texts(last_day_page(window))
+    assert "Energy (kcal)" in texts and "Protein (g)" in texts
+    assert "Examples" not in texts
+    assert "No food example matches these amounts." not in texts
+    assert "Food values not yet verified against the source." not in texts
 
 
 def test_today_says_that_the_day_is_in_progress_and_a_past_day_does_not(

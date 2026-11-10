@@ -227,13 +227,6 @@ def estimate_from_plan_text() -> str:
     )
 
 
-def foods_unverified_text() -> str:
-    """The note shown while the food values have not been checked against their source."""
-    return QCoreApplication.translate(
-        "Nutrition", "Food values not yet verified against the source."
-    )
-
-
 def energy_source_text(source: EnergySource) -> str:
     """Where an activity's calories come from."""
     texts = {
