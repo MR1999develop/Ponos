@@ -60,6 +60,20 @@ def test_the_map_keeps_a_usable_height_in_its_pane(qtbot: QtBot, tmp_path: Path)
     assert window.map_page.map_view.height() >= MAP_MIN_HEIGHT_PX
 
 
+def test_the_elevation_profile_gets_two_fifths_of_the_map_pane(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    window = window_with_days(qtbot, tmp_path, make_settings(tmp_path))
+    window.resize(1600, 1000)
+    window.show()
+    qtbot.wait(50)
+
+    top, profile = window.map_page.map_and_profile.sizes()
+
+    assert abs(top * 2 - profile * 3) <= 10  # about 3 to 2
+    assert window.map_page.map_view.height() >= MAP_MIN_HEIGHT_PX
+
+
 def test_under_the_calendar_there_are_only_the_legends(qtbot: QtBot, tmp_path: Path) -> None:
     window = window_with_days(qtbot, tmp_path, make_settings(tmp_path))
     window.show()

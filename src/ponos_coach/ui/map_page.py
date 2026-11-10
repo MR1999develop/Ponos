@@ -16,6 +16,7 @@ from collections.abc import Callable
 from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QDate, QDateTime, QLocale, QSettings, Qt, QTime
+from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -65,6 +66,9 @@ MODE_ZONES = "zones"
 _INITIAL_VIEW = {"lat": 30.0, "lon": 10.0, "zoom": 2}  # the world, not a place of the user
 _DETAIL_MIN_HEIGHT = 110
 _MAP_MIN_HEIGHT = 220  # px: below this a map of tracks cannot be read
+# Map over elevation profile: the profile gets a real part of the pane (user's request of
+# 2026-11-10), the map keeps the larger one and its minimum.
+MAP_SHARE = (3, 2)
 _MS_TO_KMH = 3.6
 _STACK_CHART = 0
 _STACK_MESSAGE = 1
@@ -125,6 +129,8 @@ class MapPage(QWidget):
         outer.addWidget(self._build_notice())
         outer.addWidget(self._build_area_summary())
         vertical = QSplitter(Qt.Orientation.Vertical, self)
+        self._vertical = vertical
+        self._sized = False  # the proportions are applied at the first show, when the room is known
         top = QWidget(vertical)
         top_column = QVBoxLayout(top)
         top_column.setContentsMargins(0, 0, 0, 0)
@@ -139,8 +145,8 @@ class MapPage(QWidget):
         top_column.addWidget(self._zone_legend)
         vertical.addWidget(top)
         vertical.addWidget(self._build_detail())
-        vertical.setStretchFactor(0, 1)
-        vertical.setStretchFactor(1, 0)
+        for index, weight in enumerate(MAP_SHARE):
+            vertical.setStretchFactor(index, weight)
         vertical.setChildrenCollapsible(False)
         outer.addWidget(vertical, stretch=1)
 
@@ -265,6 +271,16 @@ class MapPage(QWidget):
         if tiles is not None:
             tiles.problem_changed.connect(self.show_tile_problem)
 
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 (Qt name)
+        """At the first show the map and the elevation profile take their proportions of the
+        room they really have."""
+        super().showEvent(event)
+        if self._sized:
+            return
+        self._sized = True
+        room = sum(self._vertical.sizes())
+        self._vertical.setSizes([room * w // sum(MAP_SHARE) for w in MAP_SHARE])
+
     # --- Access for the window and the tests ------------------------------------------------
 
     @property
@@ -276,6 +292,11 @@ class MapPage(QWidget):
     def chart(self) -> ChartView:
         """The elevation profile's web view."""
         return self._chart
+
+    @property
+    def map_and_profile(self) -> QSplitter:
+        """The splitter with the map (and its legends) above the elevation profile."""
+        return self._vertical
 
     @property
     def sport_legend(self) -> LegendBar:

@@ -1001,7 +1001,8 @@ Decision: [ADR 010](adr/010-mappa.md).
   can collapse a pane away, and where they were left is remembered. There is
   no View menu: Ctrl+1 to Ctrl+4 move the keyboard focus to the Overview, the
   Calendar, the Activities list and the Map, from the whole window. The map
-  has a minimum height. Selecting an activity in the list selects it on the map
+  has a minimum height and takes 3/5 of its pane, the elevation profile under
+  it 2/5 (the divider can be dragged). Selecting an activity in the list selects it on the map
   and the other way round.
 - Map menu: "Show activities and map" (Ctrl+M), "Show all activities" (Ctrl+0),
   Zoom in and out, "Filter activities", "Clear filters", "Clear map cache..."
