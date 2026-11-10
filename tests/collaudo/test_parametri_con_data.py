@@ -21,7 +21,7 @@ import pytest
 
 from ponos_coach.activities.decoding import decode_stored_activity
 from ponos_coach.activities.domain import Activity, FileFormat, Sport
-from ponos_coach.load.domain import compute_activity_load, default_weight
+from ponos_coach.load.domain import compute_activity_load
 from ponos_coach.load.use_cases import ProfileOverview
 from tests.builders import physiology_entry
 from tests.collaudo.support import RealProfile, create_profile, open_profile_from_folder
@@ -81,12 +81,11 @@ def expected_load(threshold: int, start: datetime) -> float:
         activity.timer_s,
         activity.heart_rate,
         physiology_entry(FIRST_DAY, threshold).physiology,
-        default_weight(Sport.RUNNING),
-    ).load
+    ).trimp_eq
 
 
 def by_start(overview: ProfileOverview) -> dict[datetime, float]:
-    return {a.start: a.load.load for a in overview.activities}
+    return {a.start: a.load.trimp_eq for a in overview.activities}
 
 
 def same(first: ProfileOverview, second: ProfileOverview) -> None:

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Phase 3: language, new profile with body data, edit profile and sport weights.
+"""Phase 3: language, new profile with body data, edit profile.
 
 We start from the window composed as `main()` does, with profiles and data in `tmp_path`. All the
 values are made up (no real person).
@@ -21,13 +21,11 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QLabel, QWidget
 from pytestqt.qtbot import QtBot
 
-from ponos_coach.activities.domain import Sport
 from ponos_coach.load.domain import (
     HeartRateLimits,
     Physiology,
     Sex,
     ThresholdHeartRate,
-    default_weight,
 )
 from ponos_coach.profiles.domain import (
     MIN_MEASUREMENT_DATE,
@@ -47,13 +45,11 @@ from ponos_coach.ui.new_profile_dialog import NewProfileDialog
 from ponos_coach.ui.new_profile_form import Field
 from ponos_coach.ui.overview_state import Loading, Ready
 from ponos_coach.ui.profile_edit_dialog import ProfileEditDialog
-from ponos_coach.ui.sport_weights_dialog import SportWeightsDialog
 from ponos_coach.ui.tokens import Theme
 from tests.ui.workspace_support import (
     FILES_IN_FIXTURE_FOLDER,
     TODAY,
     WAIT_MS,
-    answer_unsaved,
     close_window,
     compose,
     create_profile,
@@ -63,7 +59,6 @@ from tests.ui.workspace_support import (
     pick_profile_folder,
     wait_profile_saved,
     wait_ready,
-    wait_weights_saved,
 )
 
 PROFILE = "Atleta di prova"
@@ -98,7 +93,7 @@ def window_with_activities(qtbot: QtBot, tmp_path: Path, settings: QSettings) ->
 def first_load(window: MainWindow) -> float:
     state = window.controller.overview_state
     assert isinstance(state, Ready)
-    return state.overview.activities[0].load.load
+    return state.overview.activities[0].load.trimp_eq
 
 
 def open_edit_dialog(qtbot: QtBot, window: MainWindow) -> ProfileEditDialog:
@@ -106,15 +101,6 @@ def open_edit_dialog(qtbot: QtBot, window: MainWindow) -> ProfileEditDialog:
     window.edit_profile_action.trigger()
     qtbot.waitUntil(lambda: window.profile_dialogs.edit_dialog is not None, timeout=WAIT_MS)
     dialog = window.profile_dialogs.edit_dialog
-    assert dialog is not None
-    return dialog
-
-
-def open_weights_dialog(qtbot: QtBot, window: MainWindow) -> SportWeightsDialog:
-    qtbot.waitUntil(window.sport_weights_action.isEnabled, timeout=WAIT_MS)
-    window.sport_weights_action.trigger()
-    qtbot.waitUntil(lambda: window.profile_dialogs.weights_dialog is not None, timeout=WAIT_MS)
-    dialog = window.profile_dialogs.weights_dialog
     assert dialog is not None
     return dialog
 
@@ -451,7 +437,7 @@ def test_edit_commands_wait_for_a_profile_and_for_the_calculation_with_the_reaso
     gate = threading.Event()
     window = compose(tmp_path, settings, gate=gate)
     qtbot.addWidget(window)
-    for action in (window.edit_profile_action, window.sport_weights_action):
+    for action in (window.edit_profile_action,):
         assert not action.isEnabled()
         assert action.toolTip() == "Create or open a profile first."
     window.start()
@@ -461,98 +447,20 @@ def test_edit_commands_wait_for_a_profile_and_for_the_calculation_with_the_reaso
 
     qtbot.waitUntil(lambda: window.controller.overview_state == Loading(0, 8), timeout=WAIT_MS)
 
-    for action in (window.edit_profile_action, window.sport_weights_action):
+    for action in (window.edit_profile_action,):
         assert not action.isEnabled()
         assert action.toolTip() == "Wait for the current operation to finish, or stop it first."
     gate.set()
     wait_ready(qtbot, window, FILES_IN_FIXTURE_FOLDER)
     qtbot.waitUntil(window.edit_profile_action.isEnabled, timeout=WAIT_MS)
-    assert window.sport_weights_action.isEnabled()
     assert "Wait" not in window.edit_profile_action.toolTip()
-
-
-# --- Sport weights -------------------------------------------------------------------------
-
-
-def test_sport_weights_dialog_shows_the_defaults_and_explains_the_effect(
-    qtbot: QtBot, tmp_path: Path, settings: QSettings
-) -> None:
-    window = window_with_activities(qtbot, tmp_path, settings)
-
-    dialog = open_weights_dialog(qtbot, window)
-
-    for sport in Sport:
-        box = dialog.box(sport)
-        assert box.minimum() == 0.0
-        assert box.maximum() == 5.0
-        assert box.decimals() == 2
-        assert box.value() == default_weight(sport).value
-    explanation = next(
-        label.text() for label in dialog.findChildren(QLabel) if "multiplies" in label.text()
-    )
-    assert "recalculates every activity" in explanation
-    assert not dialog.save_button.isEnabled()
-    assert not dialog.restore_button.isEnabled()  # already the defaults
-    assert dialog.restore_button.toolTip() == "All weights already have their default value."
-
-
-def test_saving_a_sport_weight_rescales_the_load_and_restoring_defaults_brings_it_back(
-    qtbot: QtBot, tmp_path: Path, settings: QSettings
-) -> None:
-    window = window_with_activities(qtbot, tmp_path, settings)
-    before = first_load(window)
-    dialog = open_weights_dialog(qtbot, window)
-    dialog.box(Sport.RUNNING).setValue(2.0)
-    assert dialog.save_button.isEnabled()
-    assert dialog.restore_button.isEnabled()
-    click(dialog.save_button)
-    wait_weights_saved(qtbot, window)
-    qtbot.waitUntil(
-        lambda: (
-            isinstance(window.controller.overview_state, Ready) and first_load(window) != before
-        ),
-        timeout=WAIT_MS,
-    )
-    assert first_load(window) == pytest.approx(before * 2.0)
-
-    again = open_weights_dialog(qtbot, window)
-    assert again.box(Sport.RUNNING).value() == 2.0  # persisted
-    click(again.restore_button)
-    assert again.box(Sport.RUNNING).value() == default_weight(Sport.RUNNING).value
-    click(again.save_button)
-    wait_weights_saved(qtbot, window)
-    qtbot.waitUntil(
-        lambda: (
-            isinstance(window.controller.overview_state, Ready)
-            and first_load(window) == pytest.approx(before)
-        ),
-        timeout=WAIT_MS,
-    )
-
-
-def test_discarding_leaves_the_weights_unchanged(
-    qtbot: QtBot, tmp_path: Path, settings: QSettings
-) -> None:
-    window = window_with_activities(qtbot, tmp_path, settings)
-    before = first_load(window)
-    dialog = open_weights_dialog(qtbot, window)
-    dialog.box(Sport.RUNNING).setValue(3.0)
-
-    window.settings_window.close()
-    answer_unsaved(qtbot, window, "Discard")
-
-    assert not window.settings_window.isVisible()
-    assert first_load(window) == before
-    reopened = open_weights_dialog(qtbot, window)
-    qtbot.waitUntil(lambda: reopened.box(Sport.RUNNING).value() != 3.0, timeout=WAIT_MS)
-    assert reopened.box(Sport.RUNNING).value() == default_weight(Sport.RUNNING).value
 
 
 def test_closing_the_window_with_the_dialogs_open_finishes_the_closing(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with_activities(qtbot, tmp_path, settings)
-    open_weights_dialog(qtbot, window)
+    open_edit_dialog(qtbot, window)
 
     close_window(qtbot, window)
 
@@ -639,7 +547,6 @@ def test_profile_commands_are_disabled_as_soon_as_an_overview_recalculation_star
 
     assert not window.controller.can_edit_profile
     assert not window.edit_profile_action.isEnabled()
-    assert not window.sport_weights_action.isEnabled()
     wait_ready(qtbot, window, FILES_IN_FIXTURE_FOLDER)
     assert window.edit_profile_action.isEnabled()
     close_window(qtbot, window)
@@ -712,7 +619,7 @@ def test_a_failed_read_does_not_report_a_failed_save_but_a_failed_save_does(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = window_with_activities(qtbot, tmp_path, settings)
-    for dialog in (open_edit_dialog(qtbot, window), open_weights_dialog(qtbot, window)):
+    for dialog in (open_edit_dialog(qtbot, window),):
         reports: list[bool] = []
         dialog.save_failed.connect(partial(reports.append, True))
 

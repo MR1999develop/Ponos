@@ -354,6 +354,11 @@ class SqlitePhysiologyStore:
             raise LoadStoreError("physiological parameters invalid") from None
 
 
+# `load_cache.hr_tss` is no longer used but the column stays, NOT NULL, until a later migration
+# drops it; `load_cache.load` mirrors `trimp`, which holds the TRIMPeq, for the same reason.
+_UNUSED_LOAD_COLUMN = 0.0
+
+
 class SqliteLoadCache:
     """Load cache (`LoadCache` port) on SQLite: derived, regenerable."""
 
@@ -364,7 +369,7 @@ class SqliteLoadCache:
         """The saved load, only if produced with this fingerprint."""
         with translating(LoadStoreError):
             row = self._db.connection.execute(
-                "SELECT c.trimp, c.hr_tss, c.load, c.used_samples, c.discarded_samples, "
+                "SELECT c.trimp, c.used_samples, c.discarded_samples, "
                 "c.excluded_seconds, c.source, c.zone1_s, c.zone2_s, c.zone3_s, c.zone4_s, "
                 "c.zone5_s FROM load_cache AS c "
                 "JOIN activities AS a ON a.id = c.activity_id "
@@ -374,12 +379,10 @@ class SqliteLoadCache:
         if row is None:
             return None
         try:
-            zones = ZoneSeconds((row[7], row[8], row[9], row[10], row[11]))
+            zones = ZoneSeconds((row[5], row[6], row[7], row[8], row[9]))
         except ValueError as exc:
             raise LoadStoreError("seconds in zone invalid") from exc
-        return ActivityLoad(
-            row[0], row[1], row[2], row[3], row[4], row[5], LoadSource(row[6]), zones
-        )
+        return ActivityLoad(row[0], row[1], row[2], row[3], LoadSource(row[4]), zones)
 
     def put(
         self, identity: ActivityIdentity, fingerprint: LoadFingerprint, load: ActivityLoad
@@ -402,9 +405,9 @@ class SqliteLoadCache:
                 "zone5_s = excluded.zone5_s",
                 (
                     fingerprint.hex,
-                    load.trimp,
-                    load.hr_tss,
-                    load.load,
+                    load.trimp_eq,
+                    _UNUSED_LOAD_COLUMN,
+                    load.trimp_eq,
                     load.used_samples,
                     load.discarded_samples,
                     load.excluded_seconds,

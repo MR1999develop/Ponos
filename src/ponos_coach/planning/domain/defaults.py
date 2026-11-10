@@ -26,7 +26,9 @@ from ponos_coach.planning.domain.phases import Phase, RaceClass
 # 6: the user chooses the days and how many sessions a week, not the minutes of each day: the
 # sessions go on `sessions_per_week` of the available days (`WeeklyAvailability.session_days`)
 # and a day is as long as the types allow; the long session is the longest of its week.
-METHOD_VERSION: Final = 6
+# 7: the load is TRIMPeq (no hrTSS, no sport weights): the session rates of a sport carry no weight;
+# the scale is still 100 = one hour at the threshold, so the running plan is the same as before.
+METHOD_VERSION: Final = 7
 
 # --- Horizon -----------------------------------------------------------------------------------
 HORIZON_DAYS: Final = 364  # a plan covers 52 weeks from tomorrow at most

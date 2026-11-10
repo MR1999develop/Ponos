@@ -250,7 +250,7 @@ def test_the_real_italian_catalog_translates_the_new_menus_and_keeps_language_na
 
     assert report.language is Language.ITALIAN
     assert report.app_loaded
-    assert {"Profilo", "Impostazioni...", "Modifica profilo...", "Pesi degli sport..."} <= texts
+    assert {"Profilo", "Impostazioni...", "Modifica profilo..."} <= texts
     assert {"Piano di allenamento", "Alimentazione", "Mappa", "Lingua"} <= texts  # the pages
     assert "Language" not in texts
     assert {"Dettaglio attività...", "Aiuto"} <= texts

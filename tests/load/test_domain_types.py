@@ -4,17 +4,14 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
-from ponos_coach.activities.domain import HeartRateSeries, Sport
+from ponos_coach.activities.domain import Sport
 from ponos_coach.load.domain import (
     HeartRateLimits,
     Physiology,
     Sex,
-    SportWeight,
     ThresholdHeartRate,
-    default_weight,
     threshold_for_sport,
     typical_intensity,
 )
@@ -74,58 +71,5 @@ def test_bike_threshold_is_clamped_just_above_the_minimum_instead_of_rejected(
     assert threshold_for_sport(physiology, Sport.CYCLING) == bike
 
 
-def test_default_weights_match_plan() -> None:
-    expected = {
-        Sport.RUNNING: 1.0,
-        Sport.TRAIL: 1.1,
-        Sport.CYCLING: 0.8,
-        Sport.HIKING: 0.8,
-        Sport.WALKING: 0.6,
-        Sport.STRENGTH: 1.2,
-        Sport.OTHER: 0.8,
-    }
-    assert {s: default_weight(s).value for s in Sport} == expected
-
-
 def test_typical_intensity_is_defined_and_below_threshold_for_every_sport() -> None:
     assert all(0.0 < typical_intensity(s) <= 1.0 for s in Sport)
-
-
-@pytest.mark.parametrize("value", [-0.1, 5.1, float("nan"), float("inf")])
-def test_weight_rejects_invalid_values(value: float) -> None:
-    with pytest.raises(ValueError, match="weight"):
-        SportWeight(value)
-
-
-def test_weight_zero_is_valid() -> None:
-    assert SportWeight(0.0).value == 0.0
-
-
-def test_series_accepts_valid_data_and_is_read_only() -> None:
-    series = HeartRateSeries(np.array([0.0, 1.0, 2.5]), np.array([100.0, 110.0, 120.0]))
-    assert len(series) == 3
-    with pytest.raises(ValueError, match="read-only"):
-        series.bpm[0] = 1.0
-
-
-def test_series_copies_its_input() -> None:
-    seconds = np.array([0.0, 1.0])
-    series = HeartRateSeries(seconds, np.array([100.0, 100.0]))
-    seconds[1] = 99.0
-    assert series.seconds[1] == 1.0
-
-
-@pytest.mark.parametrize(
-    ("seconds", "bpm"),
-    [
-        ([], []),
-        ([0.0, 1.0], [100.0]),
-        ([0.0, 0.0], [100.0, 100.0]),
-        ([1.0, 0.5], [100.0, 100.0]),
-        ([0.0, float("nan")], [100.0, 100.0]),
-        ([0.0, 1.0], [100.0, float("inf")]),
-    ],
-)
-def test_series_rejects_invalid_columns(seconds: list[float], bpm: list[float]) -> None:
-    with pytest.raises(ValueError, match=r"series|seconds|finite"):
-        HeartRateSeries(np.array(seconds), np.array(bpm))

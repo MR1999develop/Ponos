@@ -548,7 +548,6 @@ def test_t_sync_the_profile_day_changes_with_the_timezone_but_activities_and_res
                 session.physiology,
                 session.load_cache,
                 decode_stored_activity,
-                sport_weights=session.sport_weights,
                 timezone=ZoneInfo(zone),
                 today=lambda: TODAY,
             ).execute()

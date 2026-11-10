@@ -45,18 +45,17 @@ from ponos_coach.activities.domain import (
 from ponos_coach.load.domain import (
     ActivityLoad,
     LoadSource,
-    SportWeight,
     ZoneSeconds,
     compute_pmc,
     load_fingerprint,
 )
-from ponos_coach.load.use_cases import ComputeProfileOverview, ProfileOverview, SetSportWeights
+from ponos_coach.load.use_cases import ComputeProfileOverview, ProfileOverview
 from ponos_coach.ui.chart_view import ChartEngine, ChartView
 from ponos_coach.ui.load_figures import prepare_weekly_load_chart, prepare_weekly_zones_chart
 from ponos_coach.ui.overview_state import Ready
 from ponos_coach.ui.pmc_figure import ChartActivity, prepare_chart
 from ponos_coach.ui.tokens import Theme, tokens_for
-from tests.builders import fit_identity, make_record, physiology
+from tests.builders import fit_identity, make_record, physiology, physiology_entry
 from tests.collaudo.fase3_support import TODAY
 from tests.collaudo.support import RealProfile, create_profile
 from tests.collaudo.test_fase3_grafici import LOAD_LABELS, ZONES_LABELS
@@ -157,12 +156,12 @@ def fill_index(profile: RealProfile, archive: InMemoryActivityArchive | None) ->
 
 def fill_cache(profile: RealProfile) -> None:
     """A cached load for every activity, with the fingerprint the overview expects."""
-    fingerprint = load_fingerprint(physiology(), {})
+    fingerprint = load_fingerprint(physiology())
     zones = ZoneSeconds((600.0, 900.0, 1200.0, 600.0, 300.0))
     with profile.session.activities.transaction():
         for record in profile.session.activities.list_by_start():
             load = ActivityLoad(
-                60.0, 60.0, 60.0 * (1 + record.start.day % 3), SAMPLES, 0, 0.0,
+                60.0 * (1 + record.start.day % 3), SAMPLES, 0, 0.0,
                 LoadSource.HEART_RATE, zones,
             )  # fmt: skip
             profile.session.load_cache.put(record.identity, fingerprint, load)
@@ -178,7 +177,6 @@ def overview_of(
         session.physiology,
         session.load_cache,
         synthetic_decode,
-        sport_weights=session.sport_weights,
         timezone=ZoneInfo("Europe/Rome"),
         today=lambda: TODAY,
     ).execute()
@@ -195,14 +193,15 @@ def test_t_perf_01_overview_from_the_cache_pmc_aggregations_and_figures_with_500
     overview = overview_of(profile)
     daily: dict[date, float] = {}
     for item in overview.activities:
-        daily[item.local_day] = daily.get(item.local_day, 0.0) + item.load.load
+        daily[item.local_day] = daily.get(item.local_day, 0.0) + item.load.trimp_eq
     first_day = min(daily)
     pmc_times = measure(lambda: compute_pmc(daily, first_day, TODAY), repeats=15)
     aggregation = measure(
         lambda: (overview.weekly_load(TODAY), overview.weekly_zones(TODAY)), repeats=15
     )
     entries = [
-        ChartActivity(a.local_day, a.load.load, f"a{n}") for n, a in enumerate(overview.activities)
+        ChartActivity(a.local_day, a.load.trimp_eq, f"a{n}")
+        for n, a in enumerate(overview.activities)
     ]
     pmc_figure = measure(lambda: prepare_chart(overview.pmc, entries, LABELS, tokens))
     load_figure = measure(
@@ -232,30 +231,25 @@ def test_t_perf_01_overview_from_the_cache_pmc_aggregations_and_figures_with_500
         assert percentile95(times) < LOOSE_FIGURE_S
 
 
-def test_t_perf_01_full_recalculation_after_a_change_of_every_weight_with_5000_activities(
+def test_t_perf_01_full_recalculation_after_a_change_of_the_threshold_with_5000_activities(
     profile: RealProfile, capsys: pytest.CaptureFixture[str]
 ) -> None:
     archive = InMemoryActivityArchive()
     fill_index(profile, archive)
     session = profile.session
-    save = SetSportWeights(session.activities, session.sport_weights)
     cold: list[float] = []
-    for run, factor in enumerate(
-        (1.5, 0.75, 1.25)
-    ):  # every round changes the fingerprint of every sport
-        save({sport: SportWeight(factor) for sport in Sport})
+    for run, threshold in enumerate((160, 165, 168)):  # every round changes the fingerprint
+        session.physiology.put(physiology_entry(TODAY, threshold))
         started = time.perf_counter()
         overview = overview_of(profile, archive)
         cold.append(time.perf_counter() - started)
         assert len(overview.activities) == ACTIVITIES, run
         assert overview.excluded == ()
-        assert all(
-            a.load.load == pytest.approx(a.load.hr_tss * factor) for a in overview.activities
-        )
+        assert all(a.load.trimp_eq > 0 for a in overview.activities)
     started = time.perf_counter()
     again = overview_of(
         profile, archive
-    )  # same weights as the last round: everything from the cache
+    )  # same parameters as the last round: everything from the cache
     cached_s = time.perf_counter() - started
 
     with capsys.disabled():

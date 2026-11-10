@@ -21,7 +21,7 @@ _SHARE = defaults.OTHER_SESSION_MAX_SHARE_OF_LONG_PERCENT
 
 
 def _sizer() -> Sizer:
-    rates = rates_by_sport(physiology(), {}, [Sport.RUNNING])[Sport.RUNNING]
+    rates = rates_by_sport(physiology(), [Sport.RUNNING])[Sport.RUNNING]
     return Sizer(dict.fromkeys(SessionType, rates))
 
 

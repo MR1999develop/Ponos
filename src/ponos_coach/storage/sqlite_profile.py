@@ -13,7 +13,7 @@ from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxInd
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.injury.ports import InjuryStore
-from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
+from ponos_coach.load.ports import LoadCache, PhysiologyStore
 from ponos_coach.nutrition.ports import (
     ActivityLevelStore,
     GoalPeriodStore,
@@ -62,7 +62,6 @@ from ponos_coach.storage.sqlite_nutrition import (
 from ponos_coach.storage.sqlite_planning import SqlitePlanStore
 from ponos_coach.storage.sqlite_profile_data import (
     SqliteFixedDataStore,
-    SqliteSportWeightStore,
     SqliteThresholdPaceStore,
     SqliteWeightStore,
 )
@@ -118,7 +117,6 @@ class SqliteOpenProfile:
         self._weights = SqliteWeightStore(database)
         self._threshold_paces = SqliteThresholdPaceStore(database)
         self._fixed_data = SqliteFixedDataStore(database)
-        self._sport_weights = SqliteSportWeightStore(database)
         self._load_cache = SqliteLoadCache(database)
         self._activity_levels = SqliteActivityLevelStore(database)
         self._lean_masses = SqliteLeanMassStore(database)
@@ -177,11 +175,6 @@ class SqliteOpenProfile:
     def fixed_data(self) -> FixedDataStore:
         """Height and date of birth."""
         return self._fixed_data
-
-    @property
-    def sport_weights(self) -> SportWeightStore:
-        """Weight chosen by the user per sport."""
-        return self._sport_weights
 
     @property
     def load_cache(self) -> LoadCache:

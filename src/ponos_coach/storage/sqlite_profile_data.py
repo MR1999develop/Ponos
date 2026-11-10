@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""SQLite store of the profile's personal data: fixed data, weight series, sport weights.
+"""SQLite store of the profile's personal data: fixed data and weight series.
 
 Same connection as the other stores: the index transaction covers these too. Only
 `?` parameters. Height, weight and date of birth are health data: never in error messages.
@@ -9,13 +9,9 @@ Same connection as the other stores: the index transaction covers these too. Onl
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from datetime import date
-from types import MappingProxyType
 
-from ponos_coach.activities.domain import Sport
-from ponos_coach.load.domain import SportWeight
-from ponos_coach.load.ports import LoadStoreError
 from ponos_coach.profiles.domain import (
     BirthDate,
     FixedProfileData,
@@ -128,35 +124,3 @@ class SqliteThresholdPaceStore:
             return [ThresholdPaceEntry(date.fromisoformat(r[0]), ThresholdPace(r[1])) for r in rows]
         except ValueError:  # the text read (a date) is not kept in the chain of causes
             raise ProfileDataError("saved threshold pace invalid") from None
-
-
-class SqliteSportWeightStore:
-    """Sport weights chosen by the user (`SportWeightStore` port), non-defaults only."""
-
-    def __init__(self, database: SqliteDatabase) -> None:
-        self._db = database
-
-    def load(self) -> Mapping[Sport, SportWeight]:
-        """The saved weights."""
-        try:
-            rows = self._db.connection.execute(
-                "SELECT sport, weight FROM sport_weights ORDER BY sport"
-            ).fetchall()
-        except sqlite3.Error as exc:
-            raise LoadStoreError("reading the sport weights failed") from exc
-        try:
-            return MappingProxyType({Sport(r[0]): SportWeight(r[1]) for r in rows})
-        except ValueError as exc:
-            raise LoadStoreError("sport weights invalid") from exc
-
-    def replace(self, weights: Mapping[Sport, SportWeight]) -> None:
-        """Replaces all the saved weights, all or nothing (even outside a transaction)."""
-        try:
-            with self._db.atomic():
-                self._db.connection.execute("DELETE FROM sport_weights")
-                self._db.connection.executemany(
-                    "INSERT INTO sport_weights (sport, weight) VALUES (?, ?)",
-                    sorted((sport.value, weight.value) for sport, weight in weights.items()),
-                )
-        except sqlite3.Error as exc:
-            raise LoadStoreError("writing the sport weights failed") from exc

@@ -148,7 +148,6 @@ def _plan_day(foods: FoodTableSource, day: date, access: ProfileAccess) -> DayLo
         access.archive,
         session.load_cache,
         session.physiology,
-        session.sport_weights,
         session.weights,
         session.fixed_data,
         session.activity_levels,

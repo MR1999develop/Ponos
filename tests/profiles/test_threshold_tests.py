@@ -110,14 +110,13 @@ def test_undoing_a_test_that_made_a_new_entry_removes_it() -> None:
 
 def test_the_loads_depend_on_the_threshold_through_the_fingerprint_so_they_are_recomputed() -> None:
     world = ThresholdWorld()
-    weights = world.profile.sport_weights.load()
     day = TEST_DAY
-    fingerprint_before = load_fingerprint(physiology_for_day(world.entries(), day), weights)
+    fingerprint_before = load_fingerprint(physiology_for_day(world.entries(), day))
 
     applied = world.apply(evaluated(world))
-    fingerprint_applied = load_fingerprint(physiology_for_day(world.entries(), day), weights)
+    fingerprint_applied = load_fingerprint(physiology_for_day(world.entries(), day))
     world.remove(applied)
-    fingerprint_removed = load_fingerprint(physiology_for_day(world.entries(), day), weights)
+    fingerprint_removed = load_fingerprint(physiology_for_day(world.entries(), day))
 
     assert fingerprint_applied != fingerprint_before
     assert fingerprint_removed == fingerprint_before

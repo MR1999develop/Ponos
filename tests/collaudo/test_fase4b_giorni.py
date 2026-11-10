@@ -106,7 +106,7 @@ class Lab(Rig):
     def plan_in(self, zone: str, day: date) -> DayNutritionResult:
         p = self.profile
         sources = NutritionSources(
-            p.activities, self.archive, p.load_cache, p.physiology, p.sport_weights,
+            p.activities, self.archive, p.load_cache, p.physiology,
             p.weights, p.fixed_data, p.activity_levels, p.meal_times, p.goal_periods,
         )  # fmt: skip
         return PlanDayNutrition(sources, decode_stored_activity, ZoneInfo(zone), FOODS)(day)

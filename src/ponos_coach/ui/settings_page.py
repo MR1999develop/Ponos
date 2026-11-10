@@ -24,7 +24,6 @@ class SettingsCategory(Enum):
 
     PROFILE = "profile"
     GARMIN = "garmin"
-    SPORT_WEIGHTS = "sport-weights"
     TRAINING_PLAN = "training-plan"
     NUTRITION = "nutrition"
     MAP = "map"

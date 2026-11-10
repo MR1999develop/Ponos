@@ -73,7 +73,7 @@ def pmc_by_hand(world: World) -> tuple[float, float]:
     """CTL and ATL at the end of today from the loads the overview shows, written out again."""
     loads: dict[date, float] = {}
     for activity in world.overview().activities:
-        loads[activity.local_day] = loads.get(activity.local_day, 0.0) + activity.load.load
+        loads[activity.local_day] = loads.get(activity.local_day, 0.0) + activity.load.trimp_eq
     day, ctl, atl = min(loads), 0.0, 0.0
     while day <= world.today:
         load = loads.get(day, 0.0)

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Editing the profile data: name, dated measurements and sport weights, on the data thread.
+"""Editing the profile data: name, dated measurements, on the data thread.
 
-Each job (reading the history, saving the measurements, reading and saving the weights)
+Each job (reading the history, saving the measurements)
 builds the use case inside the data thread with the open profile's connection and
 returns the result as a signal. After a save the overview is recomputed. Weight,
 HR and fixed data are health data: never in logs or error messages.
@@ -11,14 +11,10 @@ HR and fixed data are health data: never in logs or error messages.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
 from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, Signal
 
-from ponos_coach.activities.domain import Sport
-from ponos_coach.load.domain import SportWeight
-from ponos_coach.load.use_cases import GetSportWeights, SetSportWeights
 from ponos_coach.profiles.domain import ProfileName
 from ponos_coach.profiles.measurements import (
     InvalidMeasurementsError,
@@ -61,8 +57,6 @@ class ProfileEditor(QObject):
     measurements_loaded = Signal(object)  # MeasurementHistory
     measurements_saved = Signal(object)  # SavedEdit: re-read history and validity periods
     measurements_rejected = Signal(object)  # EditIssue
-    sport_weights_loaded = Signal(object)  # Mapping[Sport, SportWeight]
-    sport_weights_saved = Signal()
     failed = Signal(object)  # ErrorMessage
 
     def __init__(self, controller: WorkspaceController, parent: QObject | None = None) -> None:
@@ -130,40 +124,3 @@ class ProfileEditor(QObject):
                 self.measurements_rejected.emit(issue_for_rejection(error.problem))
             else:
                 self.failed.emit(self._controller.describe_failure(error))
-
-    # --- Sport weights -------------------------------------------------------------
-
-    def load_sport_weights(self) -> bool:
-        """Read the sport weights. False if the profile cannot be edited now."""
-        if not self._controller.can_edit_profile:
-            return False
-
-        def work(access: ProfileAccess) -> Mapping[Sport, SportWeight]:
-            return dict(GetSportWeights(access.session.sport_weights)())
-
-        return self._controller.run_on_profile(work, self._after_load_weights)
-
-    def save_sport_weights(self, weights: Mapping[Sport, SportWeight]) -> bool:
-        """Save the sport weights and recompute the overview."""
-        if not self._controller.can_edit_profile:
-            return False
-        chosen = dict(weights)
-
-        def work(access: ProfileAccess) -> None:
-            session = access.session
-            SetSportWeights(session.activities, session.sport_weights)(chosen)
-
-        return self._controller.run_on_profile(work, self._after_save_weights)
-
-    def _after_load_weights(self, outcome: JobOutcome) -> None:
-        if isinstance(outcome, JobSucceeded) and isinstance(outcome.value, dict):
-            self.sport_weights_loaded.emit(outcome.value)
-        elif isinstance(outcome, JobFailed):
-            self.failed.emit(self._controller.describe_failure(outcome.error))
-
-    def _after_save_weights(self, outcome: JobOutcome) -> None:
-        if isinstance(outcome, JobSucceeded):
-            self.sport_weights_saved.emit()
-            self._controller.request_overview_refresh()
-        elif isinstance(outcome, JobFailed):
-            self.failed.emit(self._controller.describe_failure(outcome.error))

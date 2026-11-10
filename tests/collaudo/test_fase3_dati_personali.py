@@ -2,7 +2,7 @@
 # Copyright (C) 2026 MR
 """T-QUAL-02 and T-DATI-01 of phase 3: partitions and boundaries of personal data, migration.
 
-Height, weight, date of birth, HR, threshold, sport weights and day of validity: every value is
+Height, weight, date of birth, HR, threshold and day of validity: every value is
 exercised in the specification partitions and at the boundaries (value at the limit and just
 beyond), from the
 user's text down to the row in the database. In addition the v1/v2 -> v3 migration killed at every
@@ -26,17 +26,12 @@ from hypothesis import strategies as st
 from PySide6.QtCore import QDate
 from pytestqt.qtbot import QtBot
 
-from ponos_coach.activities.domain import Sport
 from ponos_coach.load.domain import (
     HeartRateLimits,
     Physiology,
     Sex,
-    SportWeight,
     ThresholdHeartRate,
-    customised_weights,
-    default_weight,
 )
-from ponos_coach.load.use_cases import SetSportWeights
 from ponos_coach.platform.profile_folders import LocalProfileFolders
 from ponos_coach.platform.profile_registry import JsonProfileRegistry
 from ponos_coach.profiles.domain import (
@@ -68,7 +63,6 @@ from ponos_coach.ui.heart_rate_rules import (
     MIN_THRESHOLD_BPM,
     heart_rate_problems,
 )
-from ponos_coach.ui.sport_weights_form import SportWeightsForm
 from tests.collaudo.support import create_profile, fixed_now
 from tests.collaudo.test_database_del_profilo import rows, write_frozen_v1
 from tests.collaudo.test_fase3_migrazione import table_names, user_version, write_frozen_v2
@@ -271,82 +265,6 @@ def test_t_qual_02_the_ranges_of_the_controls_are_those_of_the_domain() -> None:
         ThresholdHeartRate(MIN_THRESHOLD_BPM - 1)
     with pytest.raises(ValueError, match="HR"):
         ThresholdHeartRate(MAX_ALLOWED_BPM + 1)
-
-
-# --- Sport weights -------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("value", "valid"),
-    [(0.0, True), (-0.0, True), (1e-300, True), (0.05, True), (4.999999999, True), (5.0, True),
-     (5.000000001, False), (5.1, False), (-1e-12, False), (-1.0, False), (float("inf"), False),
-     (float("-inf"), False), (float("nan"), False), (1e308, False)],
-)  # fmt: skip
-def test_t_qual_02_sport_weight_partitions_and_limits(value: float, valid: bool) -> None:
-    if valid:
-        assert SportWeight(value).value == value
-    else:
-        with pytest.raises(ValueError, match="weight"):
-            SportWeight(value)
-
-
-@pytest.mark.parametrize(
-    ("typed", "shown"),
-    [(-5.0, 0.0), (-0.004, 0.0), (0.0, 0.0), (0.004, 0.0), (0.005, 0.01), (4.994, 4.99),
-     (4.996, 5.0), (5.0, 5.0), (5.001, 5.0), (7.5, 5.0), (float("inf"), 5.0),
-     (float("-inf"), 0.0)],
-)  # fmt: skip
-def test_t_qual_02_the_weights_form_clamps_to_the_limits_with_two_decimals(
-    typed: float, shown: float
-) -> None:
-    form = SportWeightsForm({sport: default_weight(sport) for sport in Sport})
-
-    form.set_value(Sport.RUNNING, typed)
-
-    assert form.value(Sport.RUNNING) == pytest.approx(shown, abs=0.0051)
-    assert 0.0 <= form.value(Sport.RUNNING) <= SportWeight.MAX
-    assert form.build()[Sport.RUNNING].value == form.value(Sport.RUNNING)
-
-
-def test_t_qual_02_the_weights_form_brings_a_nan_to_a_limit_like_any_out_of_range_value() -> None:
-    form = SportWeightsForm({sport: default_weight(sport) for sport in Sport})
-
-    form.set_value(Sport.RUNNING, float("nan"))
-
-    assert 0.0 <= form.build()[Sport.RUNNING].value <= SportWeight.MAX
-
-
-def test_t_qual_02_saved_weights_keep_only_what_differs_from_the_default_and_survive_reopening(
-    tmp_path: Path,
-) -> None:
-    profile = create_profile(tmp_path)
-    session = profile.session
-    save = SetSportWeights(session.activities, session.sport_weights)
-    everything_default = {sport: default_weight(sport) for sport in Sport}
-    try:
-        save(everything_default)
-        assert dict(session.sport_weights.load()) == {}
-
-        mixed = {
-            **everything_default,
-            Sport.RUNNING: SportWeight(5.0),
-            Sport.OTHER: SportWeight(0.0),
-        }
-        save(mixed)
-        assert dict(session.sport_weights.load()) == customised_weights(mixed)
-
-        folder = profile.folder
-        profile.close()
-        reopened = SqliteProfileStorage().open(folder)
-        try:
-            assert dict(reopened.sport_weights.load()) == {
-                Sport.RUNNING: SportWeight(5.0),
-                Sport.OTHER: SportWeight(0.0),
-            }
-        finally:
-            reopened.close()
-    finally:
-        profile.close()
 
 
 # --- Day of validity --------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 threshold) on the real stack: the seconds per zone of imported runs, the load that did not move,
 and the planned blocks that follow the same boundaries.
 
-The load (Banister TRIMP and hrTSS) is written out by hand here and compared with what the
+The load (Banister TRIMP and TRIMPeq) is written out by hand here and compared with what the
 overview gives: changing the zones changed the seconds per zone and the planned load of a session,
 never the load of a run that was done.
 """
@@ -123,8 +123,8 @@ def test_a_bike_ride_uses_the_threshold_four_beats_lower(lab: RealProfile) -> No
 
 
 # --- The load that was done did not move ----------------------------------------------------------
-def banister(bpm: int, seconds: int, threshold: int) -> tuple[float, float]:
-    """TRIMP and hrTSS of a run at a constant `bpm` with `seconds` of 1 s samples, by hand."""
+def banister(bpm: int, seconds: int, threshold: int) -> float:
+    """TRIMPeq of a run at a constant `bpm` with `seconds` of 1 s samples, by hand."""
     k = 1.92
 
     def per_minute(value: float) -> float:
@@ -132,7 +132,7 @@ def banister(bpm: int, seconds: int, threshold: int) -> tuple[float, float]:
         return hrr * 0.64 * math.exp(k * hrr)
 
     trimp = seconds / 60.0 * per_minute(bpm)
-    return trimp, 100.0 * trimp / (60.0 * per_minute(threshold))
+    return 100.0 * trimp / (60.0 * per_minute(threshold))
 
 
 @pytest.mark.parametrize("bpm", [70, 132, 133, 147, 148, 159, 160, 169, 170, 171, 185])
@@ -144,11 +144,9 @@ def test_the_load_of_a_run_is_banister_by_hand_whatever_the_zone_it_sits_in(
     try:
         import_legs(profile, [Leg(1800, bpm, 3.0)])  # 1801 records, 1 s each
         activity = only_activity(profile)
-        trimp, hr_tss = banister(bpm, 1801, 170)
+        expected = banister(bpm, 1801, 170)
 
-        assert activity.load.trimp == pytest.approx(trimp, rel=1e-9)
-        assert activity.load.hr_tss == pytest.approx(hr_tss, rel=1e-9)
-        assert activity.load.load == pytest.approx(hr_tss, rel=1e-9)  # running weighs 1
+        assert activity.load.trimp_eq == pytest.approx(expected, rel=1e-9)
     finally:
         profile.close()
 
@@ -159,7 +157,7 @@ def test_the_load_has_no_step_where_a_zone_begins(tmp_path: Path) -> None:
     try:
         for day, bpm in enumerate((132, 133, 147, 148, 159, 160, 169, 170)):
             import_legs(profile, [Leg(600, bpm, 3.0)], day=day)
-        loads = [a.load.load for a in profile.overview().activities]
+        loads = [a.load.trimp_eq for a in profile.overview().activities]
         # the ratio of the loads of two runs is the ratio of the TRIMP of their beats, as ever
         for (low, high), (a, b) in zip(
             ((132, 133), (147, 148), (159, 160), (169, 170)),
@@ -171,7 +169,7 @@ def test_the_load_has_no_step_where_a_zone_begins(tmp_path: Path) -> None:
             ),
             strict=True,
         ):
-            assert b / a == pytest.approx(banister(high, 601, 170)[0] / banister(low, 601, 170)[0])
+            assert b / a == pytest.approx(banister(high, 601, 170) / banister(low, 601, 170))
     finally:
         profile.close()
 

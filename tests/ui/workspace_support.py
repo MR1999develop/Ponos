@@ -211,16 +211,6 @@ def wait_profile_saved(qtbot: QtBot, window: MainWindow) -> None:
     qtbot.waitUntil(saved, timeout=WAIT_MS)
 
 
-def wait_weights_saved(qtbot: QtBot, window: MainWindow) -> None:
-    """The Sport weights page shows a form again, built from what was saved."""
-
-    def saved() -> bool:
-        dialog = window.profile_dialogs.weights_dialog
-        return dialog is not None and not dialog.has_unsaved_changes()
-
-    qtbot.waitUntil(saved, timeout=WAIT_MS)
-
-
 def answer_unsaved(qtbot: QtBot, window: MainWindow, verb: str) -> None:
     """Click `verb` ("Save", "Discard" or "Keep editing") in the box that asks what to do with the
     settings edits that are not saved."""

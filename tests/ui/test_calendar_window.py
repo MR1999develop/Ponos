@@ -71,7 +71,7 @@ def test_each_past_day_shows_its_sports_and_load_and_a_day_without_activity_only
     assert busy.activity_count == 2
     assert lines[0] == "10"
     assert lines[1] == "Run"
-    assert lines[2].endswith(" hrTSS")
+    assert lines[2].endswith(" TRIMPeq")
     assert busy.load > 0
     assert str(model.data(empty_index)) == "11"
     assert "Activities: 2 (Running)" in str(model.data(index, Qt.ItemDataRole.ToolTipRole))

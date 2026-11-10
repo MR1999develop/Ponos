@@ -23,7 +23,7 @@ class Sex(Enum):
 
     @property
     def banister_k(self) -> float:
-        """Coefficient k of the TRIMP exponential: 1.92 (male), 1.67 (female)."""
+        """Coefficient k of Banister's exponential: 1.92 (male), 1.67 (female)."""
         return 1.92 if self is Sex.MALE else 1.67
 
 

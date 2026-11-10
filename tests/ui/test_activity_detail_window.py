@@ -116,7 +116,7 @@ def test_the_overview_shows_three_charts_pmc_weekly_load_and_zones(
     assert load is not None
     assert zones is not None
     assert [t.name for t in load.data] == ["Running"]
-    assert load.layout.yaxis.title.text == "Load (hrTSS per week)"
+    assert load.layout.yaxis.title.text == "Load (TRIMPeq per week)"
     assert load.layout.xaxis.title.text == "Week (starting Monday)"
     assert zones.data[0].name == "Z1 <78%"
     assert zones.layout.yaxis.title.text == "Time in zone (hours per week)"
@@ -180,7 +180,7 @@ def test_double_click_opens_the_detail_with_summary_chart_and_time_in_zones(
     zone_bpm = [dialog.zone_model.data(dialog.zone_model.index(r, 1)) for r in range(5)]
     # threshold 171, limits 50 to 190: Z2 starts at 133.4 -> 134, Z3 at 148.8 -> 149, ...
     assert zone_bpm == [f"{a}{DASH}{b}" for a, b in BPM_RANGES]
-    assert dialog.zone_model.headerData(4, Qt.Orientation.Horizontal) == "Load (hrTSS)"
+    assert dialog.zone_model.headerData(4, Qt.Orientation.Horizontal) == "Load (TRIMPeq)"
     zone_loads = [dialog.zone_model.data(dialog.zone_model.index(r, 4)) for r in range(5)]
     assert all(isinstance(text, str) and text for text in zone_loads)
     assert dialog.shows_track()  # the synthetic runs have positions: the map is beside the summary

@@ -2,14 +2,14 @@
 # Copyright (C) 2026 MR
 """Session models: shapes for a type and phase, their zones and their estimated load.
 
-The load uses the load model: hrTSS per minute at the heart rate that stands for each zone
-(`defaults.ZONE_REPRESENTATIVE_PERCENT` of the threshold), times the sport weight.
+The load uses the load model (TRIMPeq, 100 = one hour at the threshold of the sport) per minute at
+the heart rate that stands for each zone (`defaults.ZONE_REPRESENTATIVE_PERCENT` of the threshold).
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from ponos_coach.activities.domain import Sport
@@ -17,12 +17,13 @@ from ponos_coach.assessment.domain import ThresholdProtocol, pace_zone_starts_s_
 from ponos_coach.goals.domain import SessionType
 from ponos_coach.load.domain import (
     Physiology,
-    SportWeight,
-    effective_weight,
+    equivalence_factor,
+    reference_hour_weight,
     threshold_for_sport,
+    trimp_per_minute,
     zone_starts_bpm,
 )
-from ponos_coach.load.domain.activity_load import hour_at_threshold_trimp, trimp_per_minute
+from ponos_coach.load.domain.banister import POINTS_PER_THRESHOLD_HOUR
 from ponos_coach.planning.domain import defaults
 from ponos_coach.planning.domain.phases import Phase
 from ponos_coach.planning.domain.plan import Block, BlockRole, PlannedSession
@@ -145,28 +146,27 @@ def session_load(blocks: Sequence[RawBlock | Block], rates: ZoneRates) -> float:
     return math.fsum(m * r for m, r in zip(zone_minutes(blocks), rates, strict=True))
 
 
-def zone_rates(physiology: Physiology, sport: Sport, weight: SportWeight) -> ZoneRates:
-    """Load per minute in each zone for a sport: hrTSS at the zone's representative heart rate
-    (the same Banister model as the load of an activity), times the sport weight."""
+def zone_rates(physiology: Physiology, sport: Sport) -> ZoneRates:
+    """Load per minute in each zone for a sport: the TRIMPeq at the zone's representative heart
+    rate (the same model as the load of an activity)."""
     limits = physiology.limits
     threshold = threshold_for_sport(physiology, sport)
-    hour = hour_at_threshold_trimp(sport, physiology)
     k = physiology.sex.banister_k
+    factor = equivalence_factor(physiology, sport)
+    hour = reference_hour_weight(physiology)
 
     def rate(percent: int) -> float:
         bpm = min(threshold * percent / 100, float(limits.max_bpm))
         hrr = min(max((bpm - limits.min_bpm) / limits.reserve_bpm, 0.0), 1.0)
-        return 100.0 * trimp_per_minute(hrr, k) / hour * weight.value
+        return POINTS_PER_THRESHOLD_HOUR * trimp_per_minute(min(1.0, hrr * factor), k) / hour
 
     r1, r2, r3, r4, r5 = (rate(p) for p in defaults.ZONE_REPRESENTATIVE_PERCENT)
     return r1, r2, r3, r4, r5
 
 
-def rates_by_sport(
-    physiology: Physiology, weights: Mapping[Sport, SportWeight], sports: Sequence[Sport]
-) -> dict[Sport, ZoneRates]:
-    """`zone_rates` for each sport, with the effective weights (default weight if absent)."""
-    return {s: zone_rates(physiology, s, effective_weight(s, weights)) for s in sports}
+def rates_by_sport(physiology: Physiology, sports: Sequence[Sport]) -> dict[Sport, ZoneRates]:
+    """`zone_rates` for each sport."""
+    return {s: zone_rates(physiology, s) for s in sports}
 
 
 @dataclass(frozen=True, slots=True)

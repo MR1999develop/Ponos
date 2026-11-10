@@ -282,7 +282,7 @@ def session_lines(session: PlannedSession) -> tuple[str, ...]:
 def planned_load_text(load: float) -> str:
     """A load with its unit."""
     # {load}: the estimated training load.
-    return QCoreApplication.translate("Plan", "{load} hrTSS").format(
+    return QCoreApplication.translate("Plan", "{load} TRIMPeq").format(
         load=QLocale().toString(round(load))
     )
 

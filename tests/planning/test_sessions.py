@@ -13,7 +13,6 @@ from ponos_coach.assessment.domain import pace_zone_indices
 from ponos_coach.goals.domain import SessionType
 from ponos_coach.load.domain import (
     Physiology,
-    SportWeight,
     ThresholdHeartRate,
     compute_activity_load,
     zone_indices,
@@ -93,34 +92,27 @@ def test_the_easy_and_long_sessions_are_mostly_below_zone_three() -> None:
 
 # --- Load ----------------------------------------------------------------------------------------
 def test_load_per_minute_grows_with_the_zone() -> None:
-    rates = zone_rates(PHYSIOLOGY, Sport.RUNNING, SportWeight(1.0))
+    rates = zone_rates(PHYSIOLOGY, Sport.RUNNING)
     assert list(rates) == sorted(rates)
     assert rates[0] > 0
 
 
-def test_the_sport_weight_scales_the_rates() -> None:
-    plain = zone_rates(PHYSIOLOGY, Sport.RUNNING, SportWeight(1.0))
-    heavy = zone_rates(PHYSIOLOGY, Sport.RUNNING, SportWeight(1.2))
-    assert heavy == pytest.approx(tuple(1.2 * r for r in plain))
-    assert zone_rates(PHYSIOLOGY, Sport.RUNNING, SportWeight(0.0)) == (0.0,) * 5
-
-
 @pytest.mark.parametrize("zone", [1, 2, 3, 4, 5])
-def test_an_hour_in_a_zone_is_the_hrtss_of_an_hour_at_its_representative_heart_rate(
+def test_an_hour_in_a_zone_is_the_trimp_eq_of_an_hour_at_its_representative_heart_rate(
     zone: int,
 ) -> None:
     percent = defaults.ZONE_REPRESENTATIVE_PERCENT[zone - 1]
     bpm = min(170 * percent / 100, 190.0)
     seconds = np.arange(0.0, 3600.0, 1.0)
     series = HeartRateSeries(seconds, np.full_like(seconds, bpm))
-    measured = compute_activity_load(Sport.RUNNING, 3600.0, series, PHYSIOLOGY, SportWeight(1.0))
-    rate = zone_rates(PHYSIOLOGY, Sport.RUNNING, SportWeight(1.0))[zone - 1]
-    assert rate * 60 == pytest.approx(measured.hr_tss, rel=1e-6)
+    measured = compute_activity_load(Sport.RUNNING, 3600.0, series, PHYSIOLOGY)
+    rate = zone_rates(PHYSIOLOGY, Sport.RUNNING)[zone - 1]
+    assert rate * 60 == pytest.approx(measured.trimp_eq, rel=1e-6)
 
 
 def test_an_hour_at_the_threshold_is_about_a_hundred() -> None:
     # Z4 stands for 97% of the threshold, Z5 for 103%: the threshold itself lies between them
-    rates = zone_rates(PHYSIOLOGY, Sport.RUNNING, SportWeight(1.0))
+    rates = zone_rates(PHYSIOLOGY, Sport.RUNNING)
     assert rates[3] * 60 < 100 < rates[4] * 60
 
 

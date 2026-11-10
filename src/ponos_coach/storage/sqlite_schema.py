@@ -35,7 +35,8 @@ Columns of v3 (personal data, sport weights and HR zones):
   (`date(col) IS col`). Absent in profiles created before v3 (to be completed once).
 - `weight`: weight series with validity date (existing ISO date, not earlier than
   1900-01-01), in whole tenths of a kilogram.
-- `sport_weights`: only the sport weights different from the default.
+- `sport_weights`: the sport weights different from the default. No longer read or written (the
+  load is TRIMPeq, without weights); the table stays until a later migration drops it.
 - `load_cache`: five columns `zone1_s ... zone5_s` with the seconds in each zone. The cache is
   derived and regenerable: the migration empties it, so no load remains without zones.
 

@@ -48,7 +48,7 @@ def profile_activity(
     serial: int = 1,
 ) -> ProfileActivity:
     """A profile activity with the given values (local day = UTC day)."""
-    activity_load = ActivityLoad(load, load, load, 100, 0, 0.0, source)
+    activity_load = ActivityLoad(load, 100, 0, 0.0, source)
     return ProfileActivity(
         FitIdentity(FileId(1, serial, 1, start)),
         sport,

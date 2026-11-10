@@ -29,8 +29,7 @@ from ponos_coach.injury.domain import (
     defaults as injury_defaults,
 )
 from ponos_coach.injury.use_cases import CloseProblem, OpenInjury, ReportIllness
-from ponos_coach.load.domain import SportWeight
-from ponos_coach.load.use_cases import ComputeProfileOverview, ProfileOverview, SetSportWeights
+from ponos_coach.load.use_cases import ComputeProfileOverview, ProfileOverview
 from ponos_coach.planning.domain import Plan, PlanHalted, PlanRefusal, RefusalReason, defaults
 from ponos_coach.planning.domain.serialization import canonical_json
 from ponos_coach.planning.ports import FrozenDay, PlanStore, StoredPlan, UnreadablePlan
@@ -109,7 +108,6 @@ class PlanWorld(World):
             self.profile.availability,
             self.profile.session_choices,
             self.profile.physiology,
-            self.profile.sport_weights,
             self.profile.threshold_tests,
             self.spy,
             self.profile.injuries,
@@ -135,7 +133,6 @@ class PlanWorld(World):
             self.profile.physiology,
             self.profile.load_cache,
             decode_fit,
-            sport_weights=self.profile.sport_weights,
             timezone=ROME,
             today=lambda: self.today,
         ).execute()
@@ -176,16 +173,12 @@ def test_the_plan_is_built_from_the_pmc_of_the_overview_and_saved() -> None:
 
 def test_the_plan_is_made_of_the_profiles_data() -> None:
     world = PlanWorld()
-    SetSportWeights(world.profile.activities, world.profile.sport_weights)(
-        {Sport.CYCLING: SportWeight(0.5)}
-    )
 
     plan = world.built().plan
 
     assert plan.inputs.races == (PlanWorld.race(),)
     assert plan.inputs.availability == BIG_WEEK
     assert plan.inputs.choices == SessionChoices.of({Sport.RUNNING: ALL_TYPES})
-    assert plan.inputs.weights[Sport.CYCLING] == SportWeight(0.5)
     assert plan.inputs.physiology.threshold.bpm == 170
 
 
@@ -442,7 +435,6 @@ def test_an_unreadable_saved_plan_is_replaced_by_the_next_rebuild() -> None:
             world.profile.availability,
             world.profile.session_choices,
             world.profile.physiology,
-            world.profile.sport_weights,
             world.profile.threshold_tests,
             Unreadable(world.profile.plans),
             world.profile.injuries,

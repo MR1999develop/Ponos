@@ -18,7 +18,6 @@ from ponos_coach.load.domain import (
     Sex,
     ThresholdHeartRate,
     compute_activity_load,
-    default_weight,
 )
 from tests.fixtures.generators import fit_writer as fw
 from tests.load.helpers import FIXTURES, PHYSIOLOGY
@@ -26,21 +25,15 @@ from tests.load.helpers import FIXTURES, PHYSIOLOGY
 
 def load_of(name: str, physiology: Physiology = PHYSIOLOGY) -> ActivityLoad:
     activity = decode_activity((FIXTURES / "fit" / name).read_bytes())
-    return compute_activity_load(
-        activity.sport,
-        activity.timer_s,
-        activity.heart_rate,
-        physiology,
-        default_weight(activity.sport),
-    )
+    return compute_activity_load(activity.sport, activity.timer_s, activity.heart_rate, physiology)
 
 
-def test_t_calc_01_sixty_minutes_at_threshold_160_is_hrtss_100() -> None:
+def test_t_calc_01_sixty_minutes_at_threshold_160_is_trimp_eq_100() -> None:
     physiology = Physiology(HeartRateLimits(50, 190), ThresholdHeartRate(160), Sex.MALE)
 
     result = load_of("run_constant_160.fit", physiology)
 
-    assert result.hr_tss == pytest.approx(100.0, rel=1e-9)  # declared tolerance
+    assert result.trimp_eq == pytest.approx(100.0, rel=1e-9)  # declared tolerance
     assert result.source is LoadSource.HEART_RATE
     assert (result.used_samples, result.discarded_samples) == (3600, 0)
 
@@ -50,7 +43,7 @@ def test_t_calc_07_one_second_activity_has_a_tiny_positive_load() -> None:
 
     assert result.source is LoadSource.HEART_RATE
     assert result.used_samples == 1
-    assert 0 < result.hr_tss < 0.1
+    assert 0 < result.trimp_eq < 0.1
 
 
 def test_t_calc_07_twenty_four_hours_hike_is_measured_not_estimated() -> None:
@@ -59,7 +52,7 @@ def test_t_calc_07_twenty_four_hours_hike_is_measured_not_estimated() -> None:
     assert result.source is LoadSource.HEART_RATE
     assert result.used_samples == 17280
     assert result.excluded_seconds == 0.0
-    assert result.hr_tss > 0
+    assert result.trimp_eq > 0
 
 
 def test_t_calc_07_long_pauses_with_good_heart_rate_are_measured_not_estimated() -> None:
@@ -74,11 +67,7 @@ def test_t_calc_07_long_pauses_with_good_heart_rate_are_measured_not_estimated()
     activity = decode_activity(fw.build_activity(spec))
 
     result = compute_activity_load(
-        activity.sport,
-        activity.timer_s,
-        activity.heart_rate,
-        PHYSIOLOGY,
-        default_weight(activity.sport),
+        activity.sport, activity.timer_s, activity.heart_rate, PHYSIOLOGY
     )
 
     assert (activity.elapsed_s, activity.timer_s) == (7200.0, 1800.0)
@@ -106,12 +95,12 @@ def test_t_calc_06_activity_without_heart_rate_is_an_estimate() -> None:
     result = load_of("walk_no_hr.fit")
 
     assert result.source is LoadSource.ESTIMATE
-    assert result.load > 0
+    assert result.trimp_eq > 0
 
 
 def test_flat_heart_rate_and_other_sports_give_positive_loads() -> None:
     for name in ("bike_easy.fit", "strength_low_hr.fit", "run_intervals.fit"):
-        assert load_of(name).load > 0
+        assert load_of(name).trimp_eq > 0
 
 
 def test_sport_of_the_fixtures_follows_the_fit_session() -> None:

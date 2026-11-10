@@ -74,7 +74,7 @@ def goal_kind_text(kind: GoalKind) -> str:
 
 def load_text(load: float) -> str:
     """A load for a cell, with its unit."""
-    return f"{number_text(load)} hrTSS"
+    return f"{number_text(load)} TRIMPeq"
 
 
 def _plan_lines(cell: CalendarDay) -> list[str]:

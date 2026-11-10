@@ -1,20 +1,18 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Use cases of the form overview: activity load, PMC, sport weights.
+"""Use case of the form overview: activity load (TRIMPeq) and PMC.
 
 - `ComputeProfileOverview`: overview of a profile (index, archive, load cache):
   local day, load computation, PMC series.
-- `GetSportWeights` and `SetSportWeights`: read and set the profile's sport weights.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
-from types import MappingProxyType
 from zoneinfo import ZoneInfo
 
 from ponos_coach.activities.decoding import ActivityFileError
@@ -41,20 +39,16 @@ from ponos_coach.load.domain import (
     LoadFingerprint,
     Physiology,
     PmcSeries,
-    SportWeight,
     WeeklyLoad,
     WeeklyZones,
     compute_activity_load,
     compute_pmc,
-    customised_weights,
-    effective_weight,
-    effective_weights,
     load_fingerprint,
     physiology_for_day,
     weekly_load_by_sport,
     weekly_zone_seconds,
 )
-from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
+from ponos_coach.load.ports import LoadCache, PhysiologyStore
 
 
 def local_day_of(start: datetime, timezone: ZoneInfo) -> date:
@@ -62,18 +56,10 @@ def local_day_of(start: datetime, timezone: ZoneInfo) -> date:
     return start.astimezone(timezone).date()
 
 
-def load_of_activity(
-    activity: Activity, physiology: Physiology, saved_weights: Mapping[Sport, SportWeight]
-) -> ActivityLoad:
-    """Load of the activity over the moving time: the single computation point, used by the
-    overview and by the detail. The sport weight is the saved one or, without it, the default."""
-    return compute_activity_load(
-        activity.sport,
-        activity.timer_s,
-        activity.heart_rate,
-        physiology,
-        effective_weight(activity.sport, saved_weights),
-    )
+def load_of_activity(activity: Activity, physiology: Physiology) -> ActivityLoad:
+    """Load (TRIMPeq) of the activity over the moving time: the single computation point, used by
+    the overview and by the detail."""
+    return compute_activity_load(activity.sport, activity.timer_s, activity.heart_rate, physiology)
 
 
 def _pmc_of(day_loads: Iterable[tuple[date, float]], today: date) -> PmcSeries:
@@ -151,7 +137,8 @@ class ProfileOverview:
     def day_loads(self) -> tuple[DayLoad, ...]:
         """The activities in the shape of the aggregations (local day, sport, load, zones)."""
         return tuple(
-            DayLoad(a.local_day, a.sport, a.load.load, a.load.zone_seconds) for a in self.activities
+            DayLoad(a.local_day, a.sport, a.load.trimp_eq, a.load.zone_seconds)
+            for a in self.activities
         )
 
     def weekly_load(self, through: date) -> WeeklyLoad:
@@ -220,10 +207,6 @@ class ComputeProfileOverview:
     Computed loads are written to the cache in a single transaction at the end (even after a
     cancellation). Deterministic: same data and parameters, same result.
 
-    Sport weights are those saved in the profile (`sport_weights`), read at every computation;
-    a sport without a saved weight uses the default. An activity's fingerprint includes only the
-    weight of its sport: changing the bike's does not recompute the runs.
-
     Volatile dependencies injected: ports, `decode` (supplied by the Composition Root), `today`
     (today, in the profile's time zone), `is_cancelled` (cooperative cancellation, checked before
     every activity) and `report(done, total)` for progress.
@@ -237,7 +220,6 @@ class ComputeProfileOverview:
         cache: LoadCache,
         decode: Decoder,
         *,
-        sport_weights: SportWeightStore,
         timezone: ZoneInfo,
         today: Callable[[], date],
         max_file_bytes: int = MAX_ACTIVITY_FILE_BYTES,
@@ -253,7 +235,6 @@ class ComputeProfileOverview:
         self._decode = decode
         self._timezone = timezone
         self._today = today
-        self._sport_weights = sport_weights
         self._max_file_bytes = max_file_bytes
         self._is_cancelled = is_cancelled
         self._report = report
@@ -268,7 +249,6 @@ class ComputeProfileOverview:
         records = self._index.list_by_start()
         today = self._today()
         entries = self._physiology.list_entries() if records else ()
-        saved_weights = self._sport_weights.load() if records else {}
         activities: list[ProfileActivity] = []
         excluded: list[ExcludedActivity] = []
         computed: list[_Computed] = []
@@ -279,13 +259,10 @@ class ComputeProfileOverview:
                     raise OverviewCancelledError
                 local_day = local_day_of(record.start, self._timezone)
                 physiology = physiology_for_day(entries, local_day)
-                saved = saved_weights.get(record.sport)
-                fingerprint = load_fingerprint(
-                    physiology, {} if saved is None else {record.sport: saved}
-                )
+                fingerprint = load_fingerprint(physiology)
                 load = self._cache.get(record.identity, fingerprint)
                 if load is None:
-                    outcome = self._compute(record, physiology, saved_weights)
+                    outcome = self._compute(record, physiology)
                     if isinstance(outcome, ExclusionReason):
                         excluded.append(ExcludedActivity(record.identity, outcome))
                     else:
@@ -296,20 +273,17 @@ class ComputeProfileOverview:
                 self._report(done, len(records))
         finally:
             self._store(computed)
-        pmc = _pmc_of(((a.local_day, a.load.load) for a in activities), today)
+        pmc = _pmc_of(((a.local_day, a.load.trimp_eq) for a in activities), today)
         return ProfileOverview(pmc, tuple(activities), tuple(excluded))
 
     def _compute(
-        self,
-        record: ActivityRecord,
-        physiology: Physiology,
-        saved_weights: Mapping[Sport, SportWeight],
+        self, record: ActivityRecord, physiology: Physiology
     ) -> ActivityLoad | ExclusionReason:
         """Load from the original in the archive, or the reason why it cannot be computed."""
         activity = read_original_activity(self._archive, record, self._decode, self._max_file_bytes)
         if isinstance(activity, ExclusionReason):
             return activity
-        return load_of_activity(activity, physiology, saved_weights)
+        return load_of_activity(activity, physiology)
 
     def _store(self, computed: list[_Computed]) -> None:
         if not computed:
@@ -326,44 +300,3 @@ def _profile_activity(
         record.identity, record.sport, record.start, local_day,
         record.elapsed_s, record.timer_s, record.summary, load,
     )  # fmt: skip
-
-
-# --- Sport weights -----------------------------------------------------------------------
-
-
-class GetSportWeights:
-    """Reads the profile's sport weights: those chosen by the user, the default for the rest."""
-
-    def __init__(self, store: SportWeightStore) -> None:
-        self._store = store
-
-    def __call__(self) -> Mapping[Sport, SportWeight]:
-        """The weight of each sport, all present.
-
-        Raises:
-            LoadStoreError: saved weights unreadable.
-        """
-        return MappingProxyType(effective_weights(self._store.load()))
-
-
-class SetSportWeights:
-    """Sets the profile's sport weights.
-
-    Only the weights different from the default are saved (canonical form: no useless recomputation
-    of the
-    loads). Loads already computed with other weights are recomputed on their own at the next
-    overview, because the fingerprint changes.
-    """
-
-    def __init__(self, activities: ActivityIndex, store: SportWeightStore) -> None:
-        self._activities = activities
-        self._store = store
-
-    def __call__(self, weights: Mapping[Sport, SportWeight]) -> None:
-        """Replaces the saved weights with `weights` (sports not indicated go back to the default).
-
-        Raises:
-            LoadStoreError: write failed; the previous weights stay.
-        """
-        with self._activities.transaction():
-            self._store.replace(customised_weights(weights))

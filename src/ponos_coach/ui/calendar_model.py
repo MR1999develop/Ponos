@@ -225,7 +225,7 @@ def build_month(
                 day > today,
                 len(todays),
                 sports,
-                sum(a.load.load for a in todays),
+                sum(a.load.trimp_eq for a in todays),
                 _goal_of(day, periods) if in_month else None,
                 layer.planned.get(day) if in_month else None,
                 layer.adherence.get(day) if in_month else None,

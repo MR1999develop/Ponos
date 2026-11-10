@@ -699,7 +699,7 @@ def test_a_past_day_shows_what_was_planned_then_beside_what_was_done_and_how_it_
     assert cell.adherence.actual_load == pytest.approx(cell.load)
     detail = page.panel.detail_text
     assert detail.index("Threshold, 60 min") < detail.index("Done: Running")
-    assert "Planned 100 hrTSS, done" in detail
+    assert "Planned 100 TRIMPeq, done" in detail
     lines = str(page.model.data(page.model.index_of(DAWN_AND_LUNCH_DAY))).split("\n")
     assert "Plan: Threshold, 60 min" in lines
     assert "Build phase" in lines

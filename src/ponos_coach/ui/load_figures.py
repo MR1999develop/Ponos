@@ -38,7 +38,7 @@ from ponos_coach.ui.tokens import ThemeTokens
 
 CHART_WEEKS = 26  # weeks shown when the chart opens: about six months
 WEEKLY_LOAD_UNIT = (
-    "hrTSS per week"  # whole sentences: the view translates them (`unit` of the labels)
+    "TRIMPeq per week"  # whole sentences: the view translates them (`unit` of the labels)
 )
 ZONES_AXIS_UNIT = "hours per week"
 ZONE_TIME_UNIT = "h"  # in a bar's hint: the symbol is the same in every language
@@ -70,7 +70,7 @@ class WeeklyLoadLabels:
     y_axis: str
     sports: Mapping[Sport, str]
     chrome: ChartChrome
-    unit: str = WEEKLY_LOAD_UNIT  # "hrTSS per week", translated as a whole sentence
+    unit: str = WEEKLY_LOAD_UNIT  # "TRIMPeq per week", translated as a whole sentence
 
 
 @dataclass(frozen=True, slots=True)

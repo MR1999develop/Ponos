@@ -123,7 +123,7 @@ class ZoneTableModel(QAbstractTableModel):
                 self.tr("Heart rate (bpm)"),
                 self.tr("Time (h:mm:ss)"),
                 self.tr("Share of the time in zones (%)"),
-                self.tr("Load (hrTSS)"),
+                self.tr("Load (TRIMPeq)"),
             )[section]
         if role == Qt.ItemDataRole.TextAlignmentRole:
             return _ALIGN_LEFT if section == 0 else _ALIGN_RIGHT
@@ -289,7 +289,7 @@ class ActivityDetailDialog(QDialog):
             ("elapsed", self.tr("Elapsed time (h:mm:ss)")),
             ("distance", self.tr("Distance (km)")),
             ("ascent", self.tr("Ascent (m)")),
-            ("load", self.tr("Load (hrTSS)")),
+            ("load", self.tr("Load (TRIMPeq)")),
             ("source", self.tr("Load from")),
             ("threshold", self.tr("Threshold heart rate (bpm)")),
             ("limits", self.tr("Heart-rate limits (bpm)")),
@@ -437,7 +437,7 @@ class ActivityDetailDialog(QDialog):
             "elapsed": duration_text(detail.elapsed_s),
             "distance": distance_km_text(detail.summary.distance_m),
             "ascent": ascent_m_text(detail.summary.ascent_m),
-            "load": QLocale().toString(round(detail.load.load)),
+            "load": QLocale().toString(round(detail.load.trimp_eq)),
             "source": load_source_text(detail.load.source),
             "threshold": QLocale().toString(detail.threshold_bpm),
             "limits": self.tr("{low} to {high}").format(low=limits.min_bpm, high=limits.max_bpm),

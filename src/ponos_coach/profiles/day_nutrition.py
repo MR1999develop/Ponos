@@ -33,11 +33,10 @@ from ponos_coach.goals.domain import Priority
 from ponos_coach.load.domain import (
     MissingPhysiologyError,
     Physiology,
-    SportWeight,
     load_fingerprint,
     physiology_for_day,
 )
-from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
+from ponos_coach.load.ports import LoadCache, PhysiologyStore
 from ponos_coach.load.use_cases import (
     Decoder,
     ExclusionReason,
@@ -117,7 +116,7 @@ class DayActivity:
     """An activity of the day as the nutrition page lists it.
 
     `start` is in UTC, `local_start_minute` the minutes after local midnight, `duration_s` the
-    moving time, `load` the weighted load (0 if it could not be computed) and `energy` its
+    moving time, `load` the load in TRIMPeq (0 if it could not be computed) and `energy` its
     energy (declared by the device, or estimated: `energy.source` says which).
     `local_end_minute` is the wall-clock end in minutes after the local midnight of the start:
     start plus the elapsed time, worked out in UTC and then shown in local time.
@@ -175,7 +174,6 @@ class NutritionSources:
     archive: ActivityArchive
     load_cache: LoadCache
     physiology: PhysiologyStore
-    sport_weights: SportWeightStore
     weights: WeightStore
     fixed_data: FixedDataStore
     activity_levels: ActivityLevelStore
@@ -340,8 +338,7 @@ class PlanDayNutrition:
         todays = self._records_of(day)
         if not todays:
             return [], None
-        saved_weights = self._src.sport_weights.load()
-        measured = [self._measure(r, person, physiology, saved_weights) for r in todays]
+        measured = [self._measure(r, person, physiology) for r in todays]
         last_end = max(_end_of(r) for r in todays)
         later = self._src.index.first_start_at_or_after(last_end)
         gap = None if later is None else (later - last_end).total_seconds() / _SECONDS_PER_MINUTE
@@ -405,17 +402,10 @@ class PlanDayNutrition:
         found = self._src.index.list_started_between(first, last)
         return [r for r in found if local_day_of(r.start, zone) == day]
 
-    def _measure(
-        self,
-        record: ActivityRecord,
-        person: Person,
-        physiology: Physiology,
-        saved_weights: Mapping[Sport, SportWeight],
-    ) -> _Measured:
+    def _measure(self, record: ActivityRecord, person: Person, physiology: Physiology) -> _Measured:
         """Energy and load of one activity; the original file is read only if something that the
         index and the load cache do not hold is needed (the load, or the HR for an estimate)."""
-        saved = saved_weights.get(record.sport)
-        fingerprint = load_fingerprint(physiology, {} if saved is None else {record.sport: saved})
+        fingerprint = load_fingerprint(physiology)
         cached = self._src.load_cache.get(record.identity, fingerprint)
         declared = record.summary.calories_kcal
         original: Activity | ExclusionReason | None = None
@@ -433,13 +423,9 @@ class PlanDayNutrition:
             # indexed before schema v4 (or never declared): the file says what the device wrote
             declared = activity.summary.calories_kcal
         if cached is not None:
-            load = cached.load
+            load = cached.trimp_eq
         else:
-            load = (
-                0.0
-                if activity is None
-                else load_of_activity(activity, physiology, saved_weights).load
-            )
+            load = 0.0 if activity is None else load_of_activity(activity, physiology).trimp_eq
         average_bpm = _average_bpm(activity, physiology)
         energy = activity_energy(person, record.sport, record.timer_s, declared, average_bpm)
         local = record.start.astimezone(self._timezone)

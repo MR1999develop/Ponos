@@ -115,7 +115,6 @@ def _run(opened: OpenProfile, folder: Path, scenario: str, today: date, argument
             store.availability,
             store.session_choices,
             store.physiology,
-            store.sport_weights,
             store.threshold_tests,
             store.plans,
             store.injuries,
@@ -127,7 +126,6 @@ def _run(opened: OpenProfile, folder: Path, scenario: str, today: date, argument
             store.physiology,
             store.load_cache,
             decode_stored_activity,
-            sport_weights=store.sport_weights,
             timezone=ZoneInfo("Europe/Rome"),
             today=lambda: today,
         )

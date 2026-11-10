@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from ponos_coach.activities.decoding import decode_activity_file
-from ponos_coach.activities.domain import Activity, Sport
+from ponos_coach.activities.domain import Activity
 from ponos_coach.assessment.domain import (
     SegmentSelection,
     ThresholdRejection,
@@ -24,12 +24,10 @@ from ponos_coach.load.domain import (
     HeartRateLimits,
     Physiology,
     Sex,
-    SportWeight,
     ThresholdHeartRate,
     compute_activity_load,
     load_fingerprint,
 )
-from ponos_coach.load.domain.sport import default_weight
 from tests.collaudo.fase4_support import (
     DAY,
     LIMITS,
@@ -45,32 +43,28 @@ PHYSIOLOGY = Physiology(HeartRateLimits(*LIMITS), ThresholdHeartRate(170), Sex.M
 LEGS = [Leg(300, 110, 2.5), Leg(300, 150, 3.0), Leg(300, 160, 3.2), Leg(300, 172, 3.6),
         Leg(300, 185, 4.0), Leg(300, 125, 2.5)]  # fmt: skip
 
-# Frozen with the code of commit d5b7b3b (no distance series): (trimp, hrTSS, load, used samples,
-# excluded seconds, seconds per zone). The same files must give the same numbers: the load did not
+# Frozen with the code of commit d5b7b3b (no distance series): (TRIMPeq of a run, used samples,
+# excluded seconds, seconds per zone); the number is the hrTSS of that time, the same
+# formula. The same files must give the same numbers: the load did not
 # change when the zones of the 5th edition came (78/87/94/100%), only the seconds per zone and the
 # fingerprint of the saved loads, which therefore recompute.
-FROZEN_LOAD = (62.81951672843588, 36.81167026367779, 36.81167026367779, 1801, 0.0,
-               (601.0, 0.0, 300.0, 300.0, 600.0))  # fmt: skip
-FROZEN_FINGERPRINT = "78131d16434406fbb18452af3c02310d07980fc4e2d37838c316dbf6ec45a407"
-FROZEN_FINGERPRINT_RUNNING_1_5 = "354db832ad9f521720b96df2f6f099c802a25168455a1e0cbe103e876a9a0a89"
+FROZEN_LOAD = (36.81167026367779, 1801, 0.0, (601.0, 0.0, 300.0, 300.0, 600.0))
+FROZEN_FINGERPRINT = "0694055d6736eba2a37c2fd3524c03458b4f4cd6efed14d4292b8915edb79c73"
+
+
+BIKE_TRIMP_EQ = 40.193518072841776
 
 
 def decode(data: bytes, name: str = "x.fit") -> Activity:
     return decode_activity_file(data, name)
 
 
-def load_of(activity: Activity) -> tuple[float, float, float, int, float, tuple[float, ...]]:
+def load_of(activity: Activity) -> tuple[float, int, float, tuple[float, ...]]:
     result = compute_activity_load(
-        activity.sport,
-        activity.timer_s,
-        activity.heart_rate,
-        PHYSIOLOGY,
-        default_weight(activity.sport),
+        activity.sport, activity.timer_s, activity.heart_rate, PHYSIOLOGY
     )
     return (
-        result.trimp,
-        result.hr_tss,
-        result.load,
+        result.trimp_eq,
         result.used_samples,
         result.excluded_seconds,
         result.zone_seconds.values,
@@ -88,31 +82,29 @@ def test_the_load_is_the_one_computed_before_the_distance_series_whatever_the_fi
 ) -> None:
     activity = decode(run_fit(LEGS, with_distance=with_distance, with_speed=with_speed))
 
-    trimp, hr_tss, load, used, excluded, zones = load_of(activity)
+    trimp_eq, used, excluded, zones = load_of(activity)
 
     expected = FROZEN_LOAD
-    assert (trimp, hr_tss, load) == pytest.approx(expected[:3], rel=1e-12)
-    assert (used, excluded, zones) == expected[3:]
+    assert trimp_eq == pytest.approx(expected[0], rel=1e-12)
+    assert (used, excluded, zones) == expected[1:]
 
 
 def test_the_bike_load_is_the_one_computed_before() -> None:
     activity = decode(run_fit(LEGS, sport=fw.Sport.CYCLING, sub_sport=fw.SubSport.ROAD))
 
-    trimp, hr_tss, load, *_ = load_of(activity)
+    trimp_eq, *_ = load_of(activity)
 
-    assert (trimp, hr_tss, load) == pytest.approx(
-        (62.81951672843588, 40.22841618421735, 32.182732947373886), rel=1e-12
-    )
+    # TRIMPeq of the bike: Banister on the running-equivalent intensity (it was hrTSS 40.23 with
+    # the bike weight 0.8: 32.18)
+    assert trimp_eq == pytest.approx(BIKE_TRIMP_EQ, rel=1e-12)
 
 
 def test_the_load_with_gaps_is_the_one_computed_before() -> None:
     data = run_fit(LEGS, serial=5, dropped=set(range(400, 430)) | set(range(900, 905)))
 
-    trimp, hr_tss, load, used, excluded, zones = load_of(decode(data))
+    trimp_eq, used, excluded, zones = load_of(decode(data))
 
-    assert (trimp, hr_tss, load) == pytest.approx(
-        (61.83044987934624, 36.23208601003227, 36.23208601003227), rel=1e-12
-    )
+    assert trimp_eq == pytest.approx(36.23208601003227, rel=1e-12)
     assert (used, excluded, zones) == (1765, 31.0, (601.0, 0.0, 269.0, 305.0, 595.0))
 
 
@@ -129,12 +121,8 @@ def test_the_heart_rate_series_does_not_depend_on_the_distance() -> None:
     assert with_distance.discarded_hr_samples == without.discarded_hr_samples
 
 
-def test_the_load_cache_fingerprint_is_the_one_of_before() -> None:
-    assert load_fingerprint(PHYSIOLOGY, {}).hex == FROZEN_FINGERPRINT
-    assert (
-        load_fingerprint(PHYSIOLOGY, {Sport.RUNNING: SportWeight(1.5)}).hex
-        == FROZEN_FINGERPRINT_RUNNING_1_5
-    )
+def test_the_load_cache_fingerprint_is_the_one_of_the_trimp_eq_model() -> None:
+    assert load_fingerprint(PHYSIOLOGY).hex == FROZEN_FINGERPRINT
 
 
 # --- FIT: distance and speed -----------------------------------------------------------------

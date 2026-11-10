@@ -3,7 +3,7 @@
 """Use cases that tie the plan to the rest of the profile.
 
 - `RebuildPlan`: gathers what the plan engine needs (the PMC of what was really done, the goals, the
-  availability, the session types, the day's physiology, the sport weights, the last threshold
+  availability, the session types, the day's physiology, the last threshold
   pace, the retest status, the open injuries and illnesses), calls `build_plan` and saves the
   result if it differs from the last one.
 - `PlanAdherence`: planned against done for a range of days, using what was planned *at the time*.
@@ -41,10 +41,9 @@ from ponos_coach.injury.ports import InjuryStore
 from ponos_coach.load.domain import (
     MissingPhysiologyError,
     compute_pmc,
-    effective_weights,
     physiology_for_day,
 )
-from ponos_coach.load.ports import PhysiologyStore, SportWeightStore
+from ponos_coach.load.ports import PhysiologyStore
 from ponos_coach.load.use_cases import ProfileOverview
 from ponos_coach.planning.domain import (
     DayAdherence,
@@ -76,7 +75,6 @@ class PlanSources:
     availability: AvailabilityStore
     choices: SessionChoicesStore
     physiology: PhysiologyStore
-    sport_weights: SportWeightStore
     threshold_tests: ThresholdTestStore
     plans: PlanStore
     injuries: InjuryStore
@@ -91,7 +89,6 @@ def plan_sources_of(session: ProfileSession) -> PlanSources:
         session.availability,
         session.session_choices,
         session.physiology,
-        session.sport_weights,
         session.threshold_tests,
         session.plans,
         session.injuries,
@@ -137,7 +134,7 @@ def _daily_loads(overview: ProfileOverview) -> dict[date, float]:
     """The load actually done on each local day (sum over the activities)."""
     daily: dict[date, float] = defaultdict(float)
     for activity in overview.activities:
-        daily[activity.local_day] += activity.load.load
+        daily[activity.local_day] += activity.load.trimp_eq
     return dict(daily)
 
 
@@ -204,7 +201,6 @@ class RebuildPlan:
             choices=src.choices.get(),
             physiology=physiology,
             fitness=fitness,
-            weights=effective_weights(src.sport_weights.load()),
             threshold_pace_s_per_km=self._threshold_pace(tests, today),
             retest=retest_status((t.test_day for t in tests), today),
             injuries=plan_injuries(problems),

@@ -36,7 +36,6 @@ from ponos_coach.load.domain import (
     Physiology,
     PhysiologyEntry,
     Sex,
-    SportWeight,
     ThresholdHeartRate,
     compute_activity_load,
     zone_starts_bpm,
@@ -265,9 +264,7 @@ def test_t_map_09_the_seconds_in_each_zone_equal_the_load_computation() -> None:
     world = World()
     activity = decode_fit(data, FileFormat.FIT)
     physiology = Physiology(LIMITS, ThresholdHeartRate(170), Sex.MALE)
-    load = compute_activity_load(
-        Sport.RUNNING, activity.timer_s, activity.heart_rate, physiology, SportWeight(1.0)
-    )
+    load = compute_activity_load(Sport.RUNNING, activity.timer_s, activity.heart_rate, physiology)
 
     profile = world.profile_of(data)
 

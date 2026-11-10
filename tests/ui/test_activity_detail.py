@@ -36,7 +36,7 @@ START = datetime(2026, 5, 1, 7, 0, tzinfo=UTC)
 def detail_with(zones: ZoneSeconds) -> ActivityDetail:
     series = HeartRateSeries(np.array([0.0, 10.0]), np.array([120.0, 130.0]))
     limits = HeartRateLimits(50, 190)
-    load = ActivityLoad(10.0, 10.0, 10.0, 2, 0, 0.0, LoadSource.HEART_RATE, zones)
+    load = ActivityLoad(10.0, 2, 0, 0.0, LoadSource.HEART_RATE, zones)
     return ActivityDetail(
         identity=FitIdentity(FileId(1, 1, 1, START)),
         sport=Sport.RUNNING,
