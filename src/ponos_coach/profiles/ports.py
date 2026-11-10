@@ -19,7 +19,7 @@ from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxInd
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.injury.ports import InjuryStore
-from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
+from ponos_coach.load.ports import LoadCache, PhysiologyStore
 from ponos_coach.nutrition.ports import (
     ActivityLevelStore,
     GoalPeriodStore,
@@ -327,7 +327,7 @@ class OpenProfile(Protocol):
     """An open profile: its information and the stores that share a connection.
 
     The transactions of `activities.transaction()` also cover `track_boxes`, `sync_journal`,
-    `physiology`, `weights`, `fixed_data`, `sport_weights`, `load_cache`, `activity_levels`,
+    `physiology`, `weights`, `fixed_data`, `load_cache`, `activity_levels`,
     `lean_masses`, `meal_times`, `goal_periods`, `threshold_tests`, `goals`, `availability`,
     `session_choices`, `plans`, `workout_backups` and `injuries`.
     It must be closed with `close()`; after closing the stores are no longer used.
@@ -372,11 +372,6 @@ class OpenProfile(Protocol):
     @property
     def fixed_data(self) -> FixedDataStore:
         """Fixed height and date of birth."""
-        ...
-
-    @property
-    def sport_weights(self) -> SportWeightStore:
-        """Weight chosen by the user per sport."""
         ...
 
     @property

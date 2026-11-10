@@ -35,7 +35,6 @@ def _detail_of(
         session.activities,
         access.archive,
         session.physiology,
-        session.sport_weights,
         access.decode,
         access.decode_track,
         timezone=access.zone,

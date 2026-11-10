@@ -20,6 +20,13 @@ from ponos_coach.load.domain.aggregation import (
     weekly_load_by_sport,
     weekly_zone_seconds,
 )
+from ponos_coach.load.domain.banister import (
+    equivalence_factor,
+    equivalent_reserve_ratio,
+    reference_hour_weight,
+    threshold_reserve_ratio,
+    trimp_per_minute,
+)
 from ponos_coach.load.domain.heart_rate import (
     HeartRateLimits,
     Physiology,
@@ -41,14 +48,7 @@ from ponos_coach.load.domain.pmc import (
     compute_pmc,
     ctl_share_of_recent_peak,
 )
-from ponos_coach.load.domain.sport import (
-    SportWeight,
-    customised_weights,
-    default_weight,
-    effective_weight,
-    effective_weights,
-    typical_intensity,
-)
+from ponos_coach.load.domain.sport import typical_intensity
 from ponos_coach.load.domain.zones import (
     ZONE_COUNT,
     ZONE_STARTS_PERCENT,
@@ -75,7 +75,6 @@ __all__ = [
     "PhysiologyEntry",
     "PmcSeries",
     "Sex",
-    "SportWeight",
     "ThresholdHeartRate",
     "WeeklyLoad",
     "WeeklyZones",
@@ -84,18 +83,19 @@ __all__ = [
     "compute_activity_load",
     "compute_pmc",
     "ctl_share_of_recent_peak",
-    "customised_weights",
-    "default_weight",
-    "effective_weight",
-    "effective_weights",
+    "equivalence_factor",
+    "equivalent_reserve_ratio",
     "iso_week_start",
     "load_fingerprint",
     "load_per_zone",
     "out_of_limits",
     "physiology_for_day",
+    "reference_hour_weight",
     "sample_validity_s",
     "seconds_per_zone",
     "threshold_for_sport",
+    "threshold_reserve_ratio",
+    "trimp_per_minute",
     "typical_intensity",
     "weekly_load_by_sport",
     "weekly_zone_seconds",

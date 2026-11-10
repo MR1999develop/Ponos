@@ -28,10 +28,9 @@ from ponos_coach.load.activity_profile import MAX_PROFILE_POINTS
 from ponos_coach.load.domain import (
     LoadSource,
     MissingPhysiologyError,
-    SportWeight,
     zone_starts_bpm,
 )
-from ponos_coach.load.use_cases import ExcludedActivity, ExclusionReason, SetSportWeights
+from ponos_coach.load.use_cases import ExcludedActivity, ExclusionReason
 from tests.builders import IMPORTED_AT, fit_identity, physiology_entry
 from tests.fixtures.generators import fit_writer as fw
 from tests.load.test_profile_overview import (
@@ -87,7 +86,6 @@ def use_case(
         world.profile.activities,
         world.archive,
         world.profile.physiology,
-        world.profile.sport_weights,
         decode,  # type: ignore[arg-type]
         decode_track,  # type: ignore[arg-type]
         timezone=ROME,
@@ -173,19 +171,6 @@ def test_limits_and_zones_are_the_ones_valid_on_the_activity_day() -> None:
     assert detail_after.load.zone_seconds.values == (0.0, 0.0, 0.0, 60.0, 0.0)  # 152 = 95%
 
 
-def test_a_saved_sport_weight_changes_the_load_in_the_detail() -> None:
-    world = World()
-    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
-    record = add_activity(world, [150] * 600)
-    plain = detail_of(world, record).load.load
-
-    SetSportWeights(world.profile.activities, world.profile.sport_weights)(
-        {Sport.RUNNING: SportWeight(1.5)}
-    )
-
-    assert detail_of(world, record).load.load == pytest.approx(plain * 1.5)
-
-
 def test_an_activity_without_heart_rate_has_no_trace_and_an_estimated_load() -> None:
     world = World()
     world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
@@ -262,7 +247,7 @@ def test_the_load_of_each_zone_adds_up_to_the_load_and_harder_zones_earn_more() 
     assert detail.zone_load is not None
     z1, z2, z3, z4, z5 = detail.zone_load
     assert (z1, z3, z4) == (0.0, 0.0, 0.0)
-    assert z2 + z5 == pytest.approx(detail.load.load)
+    assert z2 + z5 == pytest.approx(detail.load.trimp_eq)
     assert z5 > 1.5 * z2  # same time, higher heart rate
 
 

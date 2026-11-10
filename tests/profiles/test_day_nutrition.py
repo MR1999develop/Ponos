@@ -144,15 +144,15 @@ class Rig:
         return record
 
     def cache_load(self, record: ActivityRecord, load: float) -> None:
-        fingerprint = load_fingerprint(PHYSIOLOGY, {})
-        value = ActivityLoad(load, load, load, 3000, 0, 0.0, LoadSource.HEART_RATE)
+        fingerprint = load_fingerprint(PHYSIOLOGY)
+        value = ActivityLoad(load, 3000, 0, 0.0, LoadSource.HEART_RATE)
         with self.profile.activities.transaction():
             self.profile.load_cache.put(record.identity, fingerprint, value)
 
     def plan(self, day: date = DAY, decode: object = decode_fit) -> DayNutritionResult:
         p = self.profile
         sources = NutritionSources(
-            p.activities, self.archive, p.load_cache, p.physiology, p.sport_weights,
+            p.activities, self.archive, p.load_cache, p.physiology,
             p.weights, p.fixed_data, p.activity_levels, p.meal_times, p.goal_periods,
             p.lean_masses,
         )  # fmt: skip

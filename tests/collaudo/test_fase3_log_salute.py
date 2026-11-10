@@ -4,7 +4,7 @@
 logs.
 
 The real interface is run through with invented, recognisable values (no real person):
-profile creation, measurement edit, sport weights, refused inputs, a database failure
+profile creation, measurement edit, refused inputs, a database failure
 and an unexpected exception whose text contains the values. Then every value is searched for in
 everything
 the app writes or shows: the log file, the captured records (message, arguments, traceback)
@@ -25,7 +25,6 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox, QSpinBox
 from pytestqt.qtbot import QtBot
 
-from ponos_coach.activities.domain import Sport
 from ponos_coach.profiles.ports import ProfileDataError
 from ponos_coach.storage import sqlite_profile_data
 from ponos_coach.ui.diagnostics import LOG_FILE_NAME, LOGGER_NAME, SafeFormatter, configure_logging
@@ -39,7 +38,6 @@ from tests.ui.test_profile_data_window import (
     PROFILE,
     click,
     open_edit_dialog,
-    open_weights_dialog,
 )
 from tests.ui.workspace_support import (
     WAIT_MS,
@@ -49,7 +47,6 @@ from tests.ui.workspace_support import (
     make_settings,
     pick_profile_folder,
     wait_profile_saved,
-    wait_weights_saved,
 )
 
 HEIGHT = "187"
@@ -132,7 +129,7 @@ def create_with_sentinels(qtbot: QtBot, window: MainWindow, tmp_path: Path) -> N
 def drive_the_interface(
     qtbot: QtBot, window: MainWindow, monkeypatch: pytest.MonkeyPatch
 ) -> list[str]:
-    """Valid edits, refused inputs, failures and weights; gives the texts the user saw."""
+    """Valid edits, refused inputs, and failures; gives the texts the user saw."""
     shown: list[str] = []
     # 1. valid edit of the measurements
     edit = open_edit_dialog(qtbot, window)
@@ -176,11 +173,6 @@ def drive_the_interface(
         monkeypatch.undo()
         window.settings_window.page(SettingsCategory.PROFILE).discard()
 
-    # 4. sport weights
-    weights = open_weights_dialog(qtbot, window)
-    weights.box(Sport.CYCLING).setValue(1.25)
-    click(weights.save_button)
-    wait_weights_saved(qtbot, window)
     return shown
 
 

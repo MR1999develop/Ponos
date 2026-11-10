@@ -105,7 +105,6 @@ class RealProfile:
             self.session.physiology,
             self.session.load_cache,
             decode,
-            sport_weights=self.session.sport_weights,
             timezone=ZoneInfo("Europe/Rome"),
             today=lambda: TODAY,
         ).execute()

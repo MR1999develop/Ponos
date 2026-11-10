@@ -27,9 +27,7 @@ from ponos_coach.load.domain import (
     LoadFingerprint,
     LoadSource,
     PhysiologyEntry,
-    SportWeight,
     ZoneSeconds,
-    default_weight,
     load_fingerprint,
 )
 from ponos_coach.load.ports import UnknownActivityError
@@ -62,7 +60,7 @@ PROFILE_ID = ProfileId.parse("11111111-1111-4111-8111-111111111111")
 NAME = ProfileName.parse("Atleta di prova")
 FINGERPRINT = LoadFingerprint("a" * 64)
 OTHER_FINGERPRINT = LoadFingerprint("b" * 64)
-LOAD = ActivityLoad(80.0, 75.0, 75.0, 3500, 4, 12.5, LoadSource.HEART_RATE)
+LOAD = ActivityLoad(80.0, 3500, 4, 12.5, LoadSource.HEART_RATE)
 
 
 def create(harness: StorageHarness) -> OpenProfile:
@@ -401,7 +399,7 @@ class LoadCacheContract:
             assert profile.load_cache.get(fit_identity(), OTHER_FINGERPRINT) is None
 
     def test_put_replaces_the_previous_load(self, harness: StorageHarness) -> None:
-        recomputed = ActivityLoad(10.0, 9.0, 9.0, 100, 0, 0.0, LoadSource.ESTIMATE)
+        recomputed = ActivityLoad(10.0, 100, 0, 0.0, LoadSource.ESTIMATE)
         with closing(create(harness)) as profile:
             profile.activities.add(make_record())
             profile.load_cache.put(fit_identity(), FINGERPRINT, LOAD)
@@ -438,7 +436,7 @@ class LoadCacheContract:
 
     def test_loads_survive_closing_and_reopening(self, harness: StorageHarness) -> None:
         folder = harness.new_folder()
-        fingerprint = load_fingerprint(physiology_entry(date(2026, 1, 1)).physiology, {})
+        fingerprint = load_fingerprint(physiology_entry(date(2026, 1, 1)).physiology)
         profile = harness.storage.create(folder, PROFILE_ID, NAME, "Europe/Rome")
         profile.activities.add(make_record())
         profile.load_cache.put(fit_identity(), fingerprint, LOAD)
@@ -453,7 +451,7 @@ class LoadCacheZonesContract:
 
     def test_zone_seconds_are_stored_with_the_load(self, harness: StorageHarness) -> None:
         zoned = ActivityLoad(
-            80.0, 75.0, 75.0, 3500, 4, 12.5, LoadSource.HEART_RATE,
+            80.0, 3500, 4, 12.5, LoadSource.HEART_RATE,
             ZoneSeconds((10.0, 20.5, 30.0, 40.25, 50.0)),
         )  # fmt: skip
         with closing(create(harness)) as profile:
@@ -480,10 +478,10 @@ class LoadCacheZonesContract:
 
     def test_replacing_a_load_replaces_its_zones_too(self, harness: StorageHarness) -> None:
         first = ActivityLoad(
-            1.0, 1.0, 1.0, 1, 0, 0.0, LoadSource.HEART_RATE, ZoneSeconds((1.0, 2.0, 3.0, 4.0, 5.0))
+            1.0, 1, 0, 0.0, LoadSource.HEART_RATE, ZoneSeconds((1.0, 2.0, 3.0, 4.0, 5.0))
         )
         second = ActivityLoad(
-            1.0, 1.0, 1.0, 1, 0, 0.0, LoadSource.HEART_RATE, ZoneSeconds((5.0, 0.0, 0.0, 0.0, 1.0))
+            1.0, 1, 0, 0.0, LoadSource.HEART_RATE, ZoneSeconds((5.0, 0.0, 0.0, 0.0, 1.0))
         )
         with closing(create(harness)) as profile:
             profile.activities.add(make_record())
@@ -593,59 +591,3 @@ class FixedDataStoreContract:
 
             assert profile.fixed_data.get() is None
             profile.fixed_data.set_once(self.DATA)  # and it can still be set
-
-
-class SportWeightStoreContract:
-    """Sport weights chosen by the user."""
-
-    def test_new_profile_has_no_saved_weights(self, harness: StorageHarness) -> None:
-        with closing(create(harness)) as profile:
-            assert profile.sport_weights.load() == {}
-
-    def test_replace_then_load(self, harness: StorageHarness) -> None:
-        weights = {Sport.RUNNING: SportWeight(1.25), Sport.CYCLING: SportWeight(0.0)}
-        with closing(create(harness)) as profile:
-            profile.sport_weights.replace(weights)
-
-            assert dict(profile.sport_weights.load()) == weights
-
-    def test_replace_drops_the_sports_not_given(self, harness: StorageHarness) -> None:
-        with closing(create(harness)) as profile:
-            profile.sport_weights.replace({Sport.RUNNING: SportWeight(1.25)})
-            profile.sport_weights.replace({Sport.HIKING: SportWeight(0.5)})
-
-            assert dict(profile.sport_weights.load()) == {Sport.HIKING: SportWeight(0.5)}
-
-    def test_replace_with_nothing_clears_the_saved_weights(self, harness: StorageHarness) -> None:
-        with closing(create(harness)) as profile:
-            profile.sport_weights.replace({Sport.RUNNING: SportWeight(1.25)})
-            profile.sport_weights.replace({})
-
-            assert profile.sport_weights.load() == {}
-
-    def test_weights_are_stored_exactly(self, harness: StorageHarness) -> None:
-        exact = {Sport.TRAIL: default_weight(Sport.TRAIL), Sport.OTHER: SportWeight(5.0)}
-        with closing(create(harness)) as profile:
-            profile.sport_weights.replace(exact)
-
-            assert dict(profile.sport_weights.load()) == exact
-
-    def test_weights_survive_closing_and_reopening(self, harness: StorageHarness) -> None:
-        folder = harness.new_folder()
-        profile = harness.storage.create(folder, PROFILE_ID, NAME, "Europe/Rome")
-        profile.sport_weights.replace({Sport.STRENGTH: SportWeight(1.3)})
-        profile.close()
-
-        with closing(harness.storage.open(folder)) as reopened:
-            assert dict(reopened.sport_weights.load()) == {Sport.STRENGTH: SportWeight(1.3)}
-
-    def test_a_cancelled_transaction_keeps_the_previous_weights(
-        self, harness: StorageHarness
-    ) -> None:
-        with closing(create(harness)) as profile:
-            profile.sport_weights.replace({Sport.RUNNING: SportWeight(1.25)})
-            with pytest.raises(RuntimeError, match="boom"), profile.activities.transaction():
-                profile.sport_weights.replace({Sport.CYCLING: SportWeight(2.0)})
-                raise RuntimeError("boom")
-
-            assert dict(profile.sport_weights.load()) == {Sport.RUNNING: SportWeight(1.25)}

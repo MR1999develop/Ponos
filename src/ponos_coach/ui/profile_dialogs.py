@@ -1,20 +1,20 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""The profile data in the window: the Settings > Profile and > Sport weights pages, and the
-activity detail windows.
+"""The profile data in the window: the Settings > Profile page and the activity detail
+windows.
 
 Every activity opened gets its own detail window with its own loader, so two activities can be
 compared side by side; opening an activity whose window is already open brings that window forward.
 
-Each settings page is filled when the data thread has read what it shows (measurement history,
-weights): the UI never reads the profile. After a save the page is built again from what was
-saved; if the use case rejects the measurements, the problem appears on the right field and the
-page keeps the typed data.
+Each settings page is filled when the data thread has read what it shows (measurement history):
+the UI never reads the profile. After a save the page is built again from what was saved; if the
+use case rejects the measurements, the problem appears on the right field and the page keeps the
+typed data.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from datetime import date
 from functools import partial
 from zoneinfo import ZoneInfo
@@ -22,8 +22,7 @@ from zoneinfo import ZoneInfo
 from PySide6.QtCore import QCoreApplication, QObject, QPoint, Qt, Signal
 from PySide6.QtWidgets import QWidget
 
-from ponos_coach.activities.domain import ActivityIdentity, Sport
-from ponos_coach.load.domain import SportWeight
+from ponos_coach.activities.domain import ActivityIdentity
 from ponos_coach.profiles.measurements import MeasurementHistory
 from ponos_coach.ui.activity_detail_dialog import ActivityDetailDialog
 from ponos_coach.ui.activity_detail_loader import ActivityDetailLoader
@@ -41,8 +40,6 @@ from ponos_coach.ui.measurements_form import (
 from ponos_coach.ui.profile_edit_dialog import ProfileEditDialog
 from ponos_coach.ui.profile_editor import ProfileEditor, SavedEdit
 from ponos_coach.ui.settings_page import SettingsCategory, SettingsPage
-from ponos_coach.ui.sport_weights_dialog import SportWeightsDialog
-from ponos_coach.ui.sport_weights_form import SportWeightsForm
 from ponos_coach.ui.tokens import Theme, tokens_for
 
 _CASCADE_PX = 32
@@ -73,7 +70,6 @@ class ProfileDialogs(QObject):
         show_error: Callable[[ErrorMessage], None],
         notify: Callable[[str], None],
         profile_page: SettingsPage,
-        weights_page: SettingsPage,
         show_settings: Callable[[SettingsCategory], None],
         unavailable_reason: Callable[[], str],
     ) -> None:
@@ -89,24 +85,18 @@ class ProfileDialogs(QObject):
         self._show_error = show_error
         self._notify = notify
         self._profile_page = profile_page
-        self._weights_page = weights_page
         self._show_settings = show_settings
         self._unavailable_reason = unavailable_reason
-        self._saving_weights: dict[Sport, SportWeight] = {}
         # open detail windows, oldest first, each with the loader that fills it
         self._details: dict[
             ActivityIdentity, tuple[ActivityDetailDialog, ActivityDetailLoader]
         ] = {}
         self._waiting_for_edit = False
-        self._waiting_for_weights = False
         editor.measurements_loaded.connect(self._on_measurements_loaded)
         editor.measurements_saved.connect(self._on_measurements_saved)
         editor.measurements_rejected.connect(self._on_measurements_rejected)
-        editor.sport_weights_loaded.connect(self._on_weights_loaded)
-        editor.sport_weights_saved.connect(self._on_weights_saved)
         editor.failed.connect(self._on_failed)
         profile_page.shown.connect(self.load_profile_page)
-        weights_page.shown.connect(self.load_weights_page)
 
     # --- Test accessors ------
 
@@ -115,12 +105,6 @@ class ProfileDialogs(QObject):
         """The content of the Profile page, once it has been read."""
         form = self._profile_page.form
         return form if isinstance(form, ProfileEditDialog) else None
-
-    @property
-    def weights_dialog(self) -> SportWeightsDialog | None:
-        """The content of the Sport weights page, once it has been read."""
-        form = self._weights_page.form
-        return form if isinstance(form, SportWeightsDialog) else None
 
     @property
     def detail_dialog(self) -> ActivityDetailDialog | None:
@@ -207,76 +191,23 @@ class ProfileDialogs(QObject):
         if dialog is not None and isinstance(issue, EditIssue):
             dialog.show_rejection(issue)
 
-    # --- Settings > Sport weights ------
-
-    def edit_sport_weights(self) -> None:
-        """Open Settings on the Sport weights page."""
-        self._show_settings(SettingsCategory.SPORT_WEIGHTS)
-
-    def load_weights_page(self) -> None:
-        """Read the weights and fill the Sport weights page. Edits not saved yet are never
-        replaced."""
-        page = self._weights_page
-        if page.is_dirty or self._waiting_for_weights:
-            return
-        reason = self._unavailable_reason()
-        if reason:
-            page.show_notice(reason)
-            return
-        self._waiting_for_weights = self._editor.load_sport_weights()
-
-    def _on_weights_loaded(self, weights: object) -> None:
-        self._waiting_for_weights = False
-        if not isinstance(weights, Mapping) or self._weights_page.is_dirty:
-            return
-        self._show_weights_form(_weights_of(weights))
-
-    def _show_weights_form(self, current: Mapping[Sport, SportWeight]) -> None:
-        dialog = SportWeightsDialog(SportWeightsForm(current))
-        dialog.save_requested.connect(self._on_save_weights)
-        self._weights_page.show_form(dialog)
-
-    def _on_save_weights(self, weights: object) -> None:
-        if not isinstance(weights, Mapping):
-            return
-        self._saving_weights = _weights_of(weights)
-        if not self._editor.save_sport_weights(self._saving_weights):
-            self._not_now()
-
-    def _on_weights_saved(self) -> None:
-        if self._saving_weights:
-            self._show_weights_form(self._saving_weights)
-            self._saving_weights = {}
-            self._notify(
-                QCoreApplication.translate(
-                    "ProfileDialogs", "Sport weights saved. The load is being recalculated."
-                )
-            )
-
     # --- The profile changes or becomes busy ------
 
     def profile_changed(self) -> None:
         """Another profile opened: what the pages show belongs to the old one."""
         self._waiting_for_edit = False
-        self._waiting_for_weights = False
         self.close_all()  # health data and a GPS track of the old profile must not stay open
-        for page, load in (
-            (self._profile_page, self.load_profile_page),
-            (self._weights_page, self.load_weights_page),
-        ):
-            page.show_notice("")
-            if page.isVisible():
-                load()
+        page = self._profile_page
+        page.show_notice("")
+        if page.isVisible():
+            self.load_profile_page()
 
     def availability_changed(self) -> None:
         """Whether the profile can be edited now changed: a page that could not be filled
         tries again."""
-        for page, load in (
-            (self._profile_page, self.load_profile_page),
-            (self._weights_page, self.load_weights_page),
-        ):
-            if page.form is None and page.isVisible():
-                load()
+        page = self._profile_page
+        if page.form is None and page.isVisible():
+            self.load_profile_page()
 
     # --- Activity detail ------
 
@@ -331,23 +262,13 @@ class ProfileDialogs(QObject):
         )
 
     def _unlock_all(self) -> None:
-        for page in (self.edit_dialog, self.weights_dialog):
-            if page is not None:
-                page.set_busy(False)
+        dialog = self.edit_dialog
+        if dialog is not None:
+            dialog.set_busy(False)
 
     def _on_failed(self, message: object) -> None:
         """A job failed: the pages become editable again and the error is shown."""
         self._waiting_for_edit = False
-        self._waiting_for_weights = False
         self._unlock_all()
         if isinstance(message, ErrorMessage):
             self._show_error(message)
-
-
-def _weights_of(weights: Mapping[object, object]) -> dict[Sport, SportWeight]:
-    """The sport weights in a mapping that came through a signal (typed `object`)."""
-    return {
-        sport: value
-        for sport, value in weights.items()
-        if isinstance(sport, Sport) and isinstance(value, SportWeight)
-    }

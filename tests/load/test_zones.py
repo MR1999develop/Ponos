@@ -24,7 +24,7 @@ from ponos_coach.load.domain import (
 )
 from ponos_coach.load.domain import parameters as parameters_module
 from ponos_coach.load.domain import zones as zones_module
-from tests.load.helpers import PHYSIOLOGY, WEIGHT_ONE
+from tests.load.helpers import PHYSIOLOGY
 
 # FCmin 50, FCmax 190, threshold 170: boundaries at 78, 87, 94, 100% = 132.6, 147.9, 159.8, 170.
 
@@ -85,7 +85,7 @@ def test_activity_load_zone_seconds_by_hand() -> None:
     """Ten samples at 1 Hz, one per zone plus the two extremes: each sample is worth 1 s."""
     series = series_at_1_hz(100, 132, 133, 147, 148, 159, 160, 169, 170, 190)
 
-    result = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY, WEIGHT_ONE)
+    result = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY)
 
     assert result.source is LoadSource.HEART_RATE
     assert result.zone_seconds.values == (2.0, 2.0, 2.0, 2.0, 2.0)
@@ -96,7 +96,7 @@ def test_zones_use_the_same_samples_as_the_load_discarded_ones_are_in_no_zone() 
     # 200 bpm is above the maximum (190) and 40 below the minimum (50): discarded, in no zone
     series = series_at_1_hz(150, 200, 150, 40, 150, 150, 150, 150, 150, 150)
 
-    result = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY, WEIGHT_ONE)
+    result = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY)
 
     assert result.discarded_samples == 2
     assert result.zone_seconds.values == (0.0, 0.0, 8.0, 0.0, 0.0)  # 150 bpm = 88% of 170: Z3
@@ -104,9 +104,7 @@ def test_zones_use_the_same_samples_as_the_load_discarded_ones_are_in_no_zone() 
 
 
 def test_150_bpm_with_threshold_170_is_zone_three() -> None:
-    result = compute_activity_load(
-        Sport.RUNNING, 3.0, series_at_1_hz(150, 150, 150), PHYSIOLOGY, WEIGHT_ONE
-    )
+    result = compute_activity_load(Sport.RUNNING, 3.0, series_at_1_hz(150, 150, 150), PHYSIOLOGY)
 
     assert result.zone_seconds.values == (0.0, 0.0, 3.0, 0.0, 0.0)
 
@@ -115,7 +113,7 @@ def test_gaps_over_ten_seconds_are_in_no_zone() -> None:
     seconds = np.array([0.0, 1.0, 2.0, 30.0, 31.0, 32.0, 33.0, 34.0, 35.0, 36.0])
     series = HeartRateSeries(seconds, np.full(10, 175.0))
 
-    result = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY, WEIGHT_ONE)
+    result = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY)
 
     # the sample at 2 s is worth up to 30 s (28 s): interval excluded from load and zones
     assert result.excluded_seconds == 28.0
@@ -126,15 +124,15 @@ def test_the_cycling_zones_use_the_bike_threshold_four_bpm_lower() -> None:
     """T-CALC-06: on the bike the threshold is the running one minus 4 bpm, for the zones too."""
     series = series_at_1_hz(*[166.0] * 10)  # 166 bpm = bike threshold
 
-    bike = compute_activity_load(Sport.CYCLING, 10.0, series, PHYSIOLOGY, WEIGHT_ONE)
-    run = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY, WEIGHT_ONE)
+    bike = compute_activity_load(Sport.CYCLING, 10.0, series, PHYSIOLOGY)
+    run = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY)
 
     assert bike.zone_seconds.values == (0.0, 0.0, 0.0, 0.0, 10.0)  # Z5 on the bike threshold
     assert run.zone_seconds.values == (0.0, 0.0, 0.0, 10.0, 0.0)  # 166/170 = 97.6%: Z4
 
 
 def test_an_activity_without_heart_rate_has_no_zone_seconds() -> None:
-    result = compute_activity_load(Sport.RUNNING, 3600.0, None, PHYSIOLOGY, WEIGHT_ONE)
+    result = compute_activity_load(Sport.RUNNING, 3600.0, None, PHYSIOLOGY)
 
     assert result.source is LoadSource.ESTIMATE
     assert result.zone_seconds == ZoneSeconds.ZERO
@@ -143,7 +141,7 @@ def test_an_activity_without_heart_rate_has_no_zone_seconds() -> None:
 def test_an_estimate_from_mostly_missing_samples_keeps_the_measured_zone_seconds() -> None:
     series = series_at_1_hz(150, 150, 150)  # 3 s measured out of 100 s moving
 
-    result = compute_activity_load(Sport.RUNNING, 100.0, series, PHYSIOLOGY, WEIGHT_ONE)
+    result = compute_activity_load(Sport.RUNNING, 100.0, series, PHYSIOLOGY)
 
     assert result.source is LoadSource.ESTIMATE
     assert result.zone_seconds.values == (0.0, 0.0, 3.0, 0.0, 0.0)
@@ -205,7 +203,7 @@ def test_seconds_per_zone_equal_the_naive_sum_and_add_up_to_the_total(
 def test_zone_seconds_of_a_load_always_add_up_to_the_counted_seconds(bpm: list[int]) -> None:
     series = series_at_1_hz(*[float(v) for v in bpm])
 
-    result = compute_activity_load(Sport.RUNNING, float(len(bpm)), series, PHYSIOLOGY, WEIGHT_ONE)
+    result = compute_activity_load(Sport.RUNNING, float(len(bpm)), series, PHYSIOLOGY)
 
     assert result.zone_seconds.total == pytest.approx(result.used_samples)
 
@@ -213,19 +211,19 @@ def test_zone_seconds_of_a_load_always_add_up_to_the_counted_seconds(bpm: list[i
 def test_new_zone_percentages_change_the_seconds_and_the_fingerprint_but_not_the_load(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The zones only classify the seconds: TRIMP and hrTSS stay as they were, while the
+    """The zones only classify the seconds: the TRIMPeq stays as it was, while the
     fingerprint of the saved loads changes, so the cache recomputes the seconds per zone."""
     series = series_at_1_hz(100, 132, 133, 147, 148, 159, 160, 169, 170, 190)
-    current = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY, WEIGHT_ONE)
-    current_print = load_fingerprint(PHYSIOLOGY, {})
+    current = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY)
+    current_print = load_fingerprint(PHYSIOLOGY)
 
     old_percent = (85, 90, 95, 100)
     monkeypatch.setattr(zones_module, "ZONE_STARTS_PERCENT", old_percent)
     monkeypatch.setattr(parameters_module, "ZONE_STARTS_PERCENT", old_percent)
-    previous = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY, WEIGHT_ONE)
-    previous_print = load_fingerprint(PHYSIOLOGY, {})
+    previous = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY)
+    previous_print = load_fingerprint(PHYSIOLOGY)
 
-    assert (current.trimp, current.hr_tss) == (previous.trimp, previous.hr_tss)
+    assert current.trimp_eq == previous.trimp_eq
     assert current.zone_seconds != previous.zone_seconds
     assert current_print != previous_print
 

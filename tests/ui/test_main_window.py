@@ -741,7 +741,6 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Restore profile from backup...": QKeySequence("Ctrl+Shift+O").toString(),
         "Open the log folder": QKeySequence("Ctrl+Shift+L").toString(),
         "Edit profile...": QKeySequence("Ctrl+E").toString(),
-        "Sport weights...": QKeySequence("Ctrl+Shift+W").toString(),
         "Activity detail...": QKeySequence("Ctrl+D").toString(),
         "Previous month": QKeySequence("Ctrl+Left").toString(),
         "Next month": QKeySequence("Ctrl+Right").toString(),

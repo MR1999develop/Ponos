@@ -15,7 +15,6 @@ from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from pathlib import Path
-from types import MappingProxyType
 
 from ponos_coach.activities.domain import (
     REARMABLE_REASONS,
@@ -28,7 +27,6 @@ from ponos_coach.activities.domain import (
     ListingCursor,
     ListingKind,
     RemoteActivity,
-    Sport,
     SyncStatus,
     can_transition,
     identity_key,
@@ -66,12 +64,11 @@ from ponos_coach.goals.ports import (
 )
 from ponos_coach.injury.domain import Injury, InjuryId, Problem, problem_id
 from ponos_coach.injury.ports import InjuryAlreadyExistsError, InjuryNotFoundError, InjuryStore
-from ponos_coach.load.domain import ActivityLoad, LoadFingerprint, PhysiologyEntry, SportWeight
+from ponos_coach.load.domain import ActivityLoad, LoadFingerprint, PhysiologyEntry
 from ponos_coach.load.ports import (
     LoadCache,
     PhysiologyEntryNotFoundError,
     PhysiologyStore,
-    SportWeightStore,
     UnknownActivityError,
 )
 from ponos_coach.nutrition.domain import ActivityLevelEntry, GoalPeriod, LeanMassEntry, MealTimes
@@ -123,7 +120,6 @@ class _Database:
     physiology: dict[date, PhysiologyEntry] = field(default_factory=dict)
     weights: dict[date, WeightEntry] = field(default_factory=dict)
     fixed: FixedProfileData | None = None
-    sport_weights: dict[Sport, SportWeight] = field(default_factory=dict)
     loads: dict[str, tuple[LoadFingerprint, ActivityLoad]] = field(default_factory=dict)
     levels: dict[date, ActivityLevelEntry] = field(default_factory=dict)
     lean_masses: dict[date, LeanMassEntry] = field(default_factory=dict)
@@ -153,7 +149,6 @@ class _Database:
                 self.physiology,
                 self.weights,
                 self.fixed,
-                self.sport_weights,
                 self.loads,
                 self.levels,
                 self.lean_masses,
@@ -181,7 +176,6 @@ class _Database:
             self.physiology,
             self.weights,
             self.fixed,
-            self.sport_weights,
             self.loads,
             self.levels,
             self.lean_masses,
@@ -408,17 +402,6 @@ class _FixedData:
         if self._db.fixed is not None:
             raise FixedDataAlreadySetError("already set")
         self._db.fixed = data
-
-
-class _SportWeights:
-    def __init__(self, database: _Database) -> None:
-        self._db = database
-
-    def load(self) -> Mapping[Sport, SportWeight]:
-        return MappingProxyType(dict(self._db.sport_weights))
-
-    def replace(self, weights: Mapping[Sport, SportWeight]) -> None:
-        self._db.sport_weights = dict(weights)
 
 
 class _Cache:
@@ -711,7 +694,6 @@ class _OpenProfile:
         self._physiology = _Physiology(database)
         self._weights = _Weights(database)
         self._fixed_data = _FixedData(database)
-        self._sport_weights = _SportWeights(database)
         self._cache = _Cache(database)
         self._levels = _ActivityLevels(database)
         self._lean_masses = _LeanMasses(database)
@@ -759,10 +741,6 @@ class _OpenProfile:
     @property
     def fixed_data(self) -> FixedDataStore:
         return self._fixed_data
-
-    @property
-    def sport_weights(self) -> SportWeightStore:
-        return self._sport_weights
 
     @property
     def load_cache(self) -> LoadCache:

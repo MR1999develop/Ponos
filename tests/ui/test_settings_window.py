@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""The Settings window: one window for the profile (with the Garmin account), the sport weights,
+"""The Settings window: one window for the profile (with the Garmin account),
 the training plan, the nutrition, the map and the language.
 
 We start from the window composed as `main()` does. Every page keeps its own way of saving: the
@@ -37,7 +37,6 @@ from tests.ui.test_main_window import open_message_box
 from tests.ui.test_profile_data_window import (
     click,
     open_edit_dialog,
-    open_weights_dialog,
     window_with_activities,
 )
 from tests.ui.workspace_support import (
@@ -122,7 +121,7 @@ def test_opening_again_brings_the_same_window_forward_and_never_makes_a_second(
 ) -> None:
     window = empty_window(qtbot, tmp_path, settings)
     settings_command(window).trigger()
-    window.settings_window.category_list.setCurrentRow(5)
+    window.settings_window.category_list.setCurrentRow(4)
 
     settings_command(window).trigger()
 
@@ -139,7 +138,6 @@ def test_the_categories_are_listed_in_order(
     assert window.settings_window.categories == (
         SettingsCategory.PROFILE,
         SettingsCategory.GARMIN,
-        SettingsCategory.SPORT_WEIGHTS,
         SettingsCategory.TRAINING_PLAN,
         SettingsCategory.NUTRITION,
         SettingsCategory.MAP,
@@ -148,7 +146,6 @@ def test_the_categories_are_listed_in_order(
     assert category_names(window) == [
         "Profile",
         "Garmin account",
-        "Sport weights",
         "Training plan",
         "Nutrition",
         "Map",
@@ -198,7 +195,6 @@ def test_the_pages_of_the_profile_say_why_they_are_empty_and_the_others_work(
 
     for category in (
         SettingsCategory.PROFILE,
-        SettingsCategory.SPORT_WEIGHTS,
         SettingsCategory.TRAINING_PLAN,
         SettingsCategory.NUTRITION,
     ):
@@ -337,7 +333,6 @@ def test_a_page_with_unsaved_edits_is_marked_and_the_mark_goes_when_it_is_saved(
     edit_weight(window, qtbot, "72.4")
 
     assert shown.category_label(SettingsCategory.PROFILE) == "Profile *"
-    assert shown.category_label(SettingsCategory.SPORT_WEIGHTS) == "Sport weights"
     click(dialog.save_button)
     wait_profile_saved(qtbot, window)
     assert shown.category_label(SettingsCategory.PROFILE) == "Profile"
@@ -469,8 +464,6 @@ def test_the_profile_commands_open_their_pages(
     window = window_with_activities(qtbot, tmp_path, settings)
     shown = window.settings_window
 
-    open_weights_dialog(qtbot, window)
-    assert current(window) is SettingsCategory.SPORT_WEIGHTS
     open_edit_dialog(qtbot, window)
     assert current(window) is SettingsCategory.PROFILE
     assert shown.isVisible()

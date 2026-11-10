@@ -370,10 +370,7 @@ class CountingDecode:
 
 
 def loads(overview: ProfileOverview) -> list[tuple[object, ...]]:
-    return [
-        (a.identity, a.load.trimp, a.load.hr_tss, a.load.load, a.load.zone_seconds.values)
-        for a in overview.activities
-    ]
+    return [(a.identity, a.load.trimp_eq, a.load.zone_seconds.values) for a in overview.activities]
 
 
 def test_the_load_is_recomputed_after_applying_and_after_undoing_and_is_consistent(

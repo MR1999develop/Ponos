@@ -115,7 +115,6 @@ class World:
             session.physiology,
             session.load_cache,
             decode_stored_activity,
-            sport_weights=session.sport_weights,
             timezone=ROME,
             today=lambda: self.today,
         ).execute()
@@ -162,7 +161,6 @@ class World:
             self.profile.archive,
             s.load_cache,
             s.physiology,
-            s.sport_weights,
             s.weights,
             s.fixed_data,
             s.activity_levels,

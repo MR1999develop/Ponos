@@ -129,7 +129,7 @@ def test_weekly_load_axes_have_names_and_units_and_bars_start_at_zero() -> None:
 
     assert layout.xaxis.title.text == "Week"
     assert layout.xaxis.type == "date"
-    assert layout.yaxis.title.text == "Load (hrTSS per week)"
+    assert layout.yaxis.title.text == "Load (TRIMPeq per week)"
     assert layout.yaxis.rangemode == "tozero"
 
 
@@ -309,7 +309,7 @@ def test_no_sport_color_is_red_or_orange(theme: Theme) -> None:
 
 def test_the_units_of_the_axes_and_tooltips_come_from_the_labels() -> None:
     weekly = weekly_load_by_sport(long_history(4), through_of(4))
-    load_labels = WeeklyLoadLabels("W", "L", SPORT_NAMES, CHROME, unit="hrTSS a settimana")
+    load_labels = WeeklyLoadLabels("W", "L", SPORT_NAMES, CHROME, unit="TRIMPeq a settimana")
     zones_labels = WeeklyZonesLabels("W", "T", "Z", CHROME, unit="ore a settimana")
 
     load = build_weekly_load_figure(weekly, load_labels, tokens_for(Theme.LIGHT))
@@ -317,8 +317,8 @@ def test_the_units_of_the_axes_and_tooltips_come_from_the_labels() -> None:
         weekly_zone_seconds(long_history(4), through_of(4)), zones_labels, tokens_for(Theme.LIGHT)
     )
 
-    assert load.layout.yaxis.title.text == "L (hrTSS a settimana)"
-    assert "hrTSS a settimana" in load.data[0].hovertemplate
+    assert load.layout.yaxis.title.text == "L (TRIMPeq a settimana)"
+    assert "TRIMPeq a settimana" in load.data[0].hovertemplate
     assert zones.layout.yaxis.title.text == "T (ore a settimana)"
 
 

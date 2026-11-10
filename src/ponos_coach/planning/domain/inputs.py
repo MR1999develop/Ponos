@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from enum import Enum
@@ -20,7 +19,7 @@ from ponos_coach.goals.domain import (
     WeeklyAvailability,
 )
 from ponos_coach.injury.domain import PlanInjury
-from ponos_coach.load.domain import Physiology, SportWeight
+from ponos_coach.load.domain import Physiology
 
 MAX_PACE_S_PER_KM = 3600
 MIN_PACE_S_PER_KM = 90
@@ -48,7 +47,7 @@ class PlanInputs:
     """Everything a plan is computed from, besides today's date.
 
     `threshold_pace_s_per_km` is the pace of the last threshold test, `None` without one.
-    `weights` are the effective sport weights. `injuries` are the open injuries and illnesses
+    `injuries` are the open injuries and illnesses
     (what the plan needs of them, no free text); `after_injury` says one was closed recently.
     Either lowers the maximum ramp (`ramp_reduced`). `retest` says where today stands against the
     threshold-test window.
@@ -62,7 +61,6 @@ class PlanInputs:
     choices: SessionChoices
     physiology: Physiology
     fitness: FitnessState
-    weights: Mapping[Sport, SportWeight] = field(default_factory=dict)
     threshold_pace_s_per_km: int | None = None
     after_injury: bool = False
     retest: RetestStatus = field(default_factory=NoTest)
@@ -98,7 +96,6 @@ class PlanInputs:
             self.choices,
             self.physiology,
             self.fitness,
-            dict(self.weights),
             self.threshold_pace_s_per_km,
             self.after_injury,
             self.retest,

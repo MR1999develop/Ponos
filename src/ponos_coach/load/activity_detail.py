@@ -4,7 +4,7 @@
 
 Read-only use case: reads the original from the archive, decodes it and computes the load
 with the same rules and parameters as the overview (parameters valid on the activity's
-local day, saved weights), without going through the cache and without writing to it.
+local day), without going through the cache and without writing to it.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ from ponos_coach.load.domain import (
     threshold_for_sport,
     zone_starts_bpm,
 )
-from ponos_coach.load.ports import PhysiologyStore, SportWeightStore
+from ponos_coach.load.ports import PhysiologyStore
 from ponos_coach.load.use_cases import (
     Decoder,
     ExcludedActivity,
@@ -125,7 +125,7 @@ class ActivityDetail:
     below the first). `unordered_hr_samples` counts the HR samples discarded by the file reader
     because of repeated or backwards times; samples out of limits are in `trace` and in
     `load.discarded_samples`. `zone_load` is the load earned in each zone (it adds up to
-    `load.load`); None when the load is an estimate. `outline` is the GPS track, None if the
+    `load.trimp_eq`); None when the load is an estimate. `outline` is the GPS track, None if the
     activity has no usable position (indoor, or a file without GPS).
     """
 
@@ -149,7 +149,7 @@ class ActivityDetail:
 class GetActivityDetail:
     """Detail of an activity of the open profile.
 
-    Dependencies: index, archive, physiological parameters, sport weights, `decode` and
+    Dependencies: index, archive, physiological parameters, `decode` and
     `decode_track` (from the Composition Root) and the profile's time zone.
     """
 
@@ -158,7 +158,6 @@ class GetActivityDetail:
         index: ActivityIndex,
         archive: ActivityArchive,
         physiology: PhysiologyStore,
-        sport_weights: SportWeightStore,
         decode: Decoder,
         decode_track: TrackDecoder,
         *,
@@ -170,7 +169,6 @@ class GetActivityDetail:
         self._index = index
         self._archive = archive
         self._physiology = physiology
-        self._sport_weights = sport_weights
         self._decode = decode
         self._decode_track = decode_track
         self._timezone = timezone
@@ -197,7 +195,7 @@ class GetActivityDetail:
             return ExcludedActivity(identity, ExclusionReason.FILE_ALTERED)
         local_day = local_day_of(record.start, self._timezone)
         physiology = physiology_for_day(self._physiology.list_entries(), local_day)
-        load = load_of_activity(activity, physiology, self._sport_weights.load())
+        load = load_of_activity(activity, physiology)
         threshold = threshold_for_sport(physiology, activity.sport)
         series = activity.heart_rate
         return ActivityDetail(

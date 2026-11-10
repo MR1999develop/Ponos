@@ -8,12 +8,12 @@ The implementations share the profile's connection (`ActivityIndex.transaction`)
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from datetime import date
 from typing import Protocol
 
-from ponos_coach.activities.domain import ActivityIdentity, Sport
-from ponos_coach.load.domain import ActivityLoad, LoadFingerprint, PhysiologyEntry, SportWeight
+from ponos_coach.activities.domain import ActivityIdentity
+from ponos_coach.load.domain import ActivityLoad, LoadFingerprint, PhysiologyEntry
 
 
 class LoadStoreError(Exception):
@@ -49,21 +49,6 @@ class PhysiologyStore(Protocol):
 
     def list_entries(self) -> Sequence[PhysiologyEntry]:
         """All the entries by ascending validity date (only one per date)."""
-        ...
-
-
-class SportWeightStore(Protocol):
-    """Sport weights chosen by the user (source of truth; derived loads are recomputed).
-
-    Contains only the weights different from the default: an absent sport is worth `default_weight`.
-    """
-
-    def load(self) -> Mapping[Sport, SportWeight]:
-        """The saved weights (empty if the user changed nothing)."""
-        ...
-
-    def replace(self, weights: Mapping[Sport, SportWeight]) -> None:
-        """Replaces all the saved weights with these, all or nothing."""
         ...
 
 

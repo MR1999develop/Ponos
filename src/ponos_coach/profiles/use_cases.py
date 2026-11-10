@@ -28,7 +28,7 @@ from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.injury.ports import InjuryStore
 from ponos_coach.load.domain import Physiology, PhysiologyEntry
-from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
+from ponos_coach.load.ports import LoadCache, PhysiologyStore
 from ponos_coach.nutrition.ports import (
     ActivityLevelStore,
     GoalPeriodStore,
@@ -155,11 +155,6 @@ class ProfileSession:
     def fixed_data(self) -> FixedDataStore:
         """Fixed height and date of birth."""
         return self._opened.fixed_data
-
-    @property
-    def sport_weights(self) -> SportWeightStore:
-        """Weight chosen by the user per sport."""
-        return self._opened.sport_weights
 
     @property
     def load_cache(self) -> LoadCache:

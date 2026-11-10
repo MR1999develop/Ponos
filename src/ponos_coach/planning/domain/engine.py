@@ -290,7 +290,7 @@ def _expected_time_s(race: RaceGoal, pace: int | None, days_to_race: int) -> int
 def _context(inputs: PlanInputs, macro: Macrocycle, today: date, max_ramp: float) -> _Context:
     sport = inputs.plan_sport()
     sports = sorted({sport, Sport.STRENGTH, Sport.OTHER, *(r.sport for r in inputs.races)}, key=str)
-    rates = rates_by_sport(inputs.physiology, inputs.weights, sports)
+    rates = rates_by_sport(inputs.physiology, sports)
     ranges = {s: zone_ranges(inputs.physiology, s, inputs.threshold_pace_s_per_km) for s in sports}
     rates_of = {t: rates[_session_sport(t, sport)] for t in SessionType}
     races = {}

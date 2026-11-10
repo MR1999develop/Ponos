@@ -10,7 +10,7 @@ profile (open, create, import, overview, switch, close) is a `Job` run by the
 consequences are decided (profile locked while downloading, overview recomputed at the end).
 
 The plan follows the overview: every time an overview is computed (after opening, an import, a
-synchronisation, a change of measurements or weights) a second job on the data thread rebuilds the
+synchronisation, a change of measurements) a second job on the data thread rebuilds the
 plan from the loads just computed (`profiles.RebuildPlan`) and saves it if it changed. It never
 blocks the interface and never fails the operation that caused it: if it fails, the data thread
 logs the error once (types only, no health data) and the plan stays as it was.
@@ -394,7 +394,7 @@ class WorkspaceController(QObject):
 
     @property
     def can_edit_profile(self) -> bool:
-        """Measurements and weights can be changed: profile open and no opening, import, closing
+        """Measurements can be changed: profile open and no opening, import, closing
         or overview computation in progress (the job would wait in the queue)."""
         return self._profile is not None and self.can_import_now and self._overview_handle is None
 
@@ -520,7 +520,7 @@ class WorkspaceController(QObject):
         return True
 
     def request_overview_refresh(self) -> None:
-        """Recompute the overview after a change of measurements or weights.
+        """Recompute the overview after a change of measurements.
 
         If it cannot be done now (synchronisation in progress) it is done at the end of the round.
         """
@@ -704,7 +704,6 @@ class WorkspaceController(QObject):
                 session.physiology,
                 session.load_cache,
                 services.decode,
-                sport_weights=session.sport_weights,
                 timezone=current.zone,
                 today=lambda: services.today(current.zone),
                 is_cancelled=context.is_cancelled,
@@ -813,7 +812,7 @@ class WorkspaceController(QObject):
             self._overview_job(), self._after_overview, self._on_overview_progress
         )
         # `_set_overview` has already notified, but before the job was registered: without this
-        # the commands that depend on the computation in progress (Edit profile, Weights) stay
+        # the commands that depend on the computation in progress (Edit profile) stay
         # active.
         self.busy_changed.emit()
 

@@ -59,7 +59,7 @@ def rig_with(plan: Plan | PlanRefusal | None, *, loss: bool = True) -> Rig:
 def result_of(rig: Rig, day: date) -> DayNutritionResult:
     p = rig.profile
     sources = NutritionSources(
-        p.activities, rig.archive, p.load_cache, p.physiology, p.sport_weights,
+        p.activities, rig.archive, p.load_cache, p.physiology,
         p.weights, p.fixed_data, p.activity_levels, p.meal_times, p.goal_periods,
         p.lean_masses,
     )  # fmt: skip

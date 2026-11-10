@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Load of a single activity: Banister TRIMP, hrTSS and weighted load.
+"""Load of a single activity: TRIMPeq, the only measure of load.
+
+TRIMPeq is Banister on the running-equivalent intensity, 100 = one hour at the threshold of the
+sport (see `banister`).
 
 Formulas in `PLAN.md` section 4.5. The computation is vectorized (NumPy), with no per-sample loops.
 """
@@ -15,14 +18,19 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ponos_coach.activities.domain import HeartRateSeries, Sport
+from ponos_coach.load.domain.banister import (
+    BANISTER_COEFFICIENT,
+    POINTS_PER_THRESHOLD_HOUR,
+    equivalent_reserve_ratio,
+    reference_hour_weight,
+)
 from ponos_coach.load.domain.heart_rate import HeartRateLimits, Physiology, threshold_for_sport
-from ponos_coach.load.domain.sport import SportWeight, typical_intensity
+from ponos_coach.load.domain.sport import typical_intensity
 from ponos_coach.load.domain.zones import ZONE_COUNT, ZoneSeconds, seconds_per_zone, zone_indices
 
 MAX_GAP_S = 10.0  # project default: beyond this interval between samples, it is not counted
 MAX_BAD_FRACTION = 0.30  # project default: beyond this, the load is an estimate
 _SINGLE_SAMPLE_S = 1.0  # validity of a single sample (no interval to infer it from)
-_BANISTER_COEFFICIENT = 0.64
 _MS_PER_S = 1000
 _PERCENT_DENOMINATOR = 100
 _GOOD_PERCENT = round((1.0 - MAX_BAD_FRACTION) * _PERCENT_DENOMINATOR)  # 70
@@ -39,6 +47,7 @@ class LoadSource(Enum):
 class ActivityLoad:
     """Outcome of the load computation of an activity.
 
+    `trimp_eq` is the load, in TRIMPeq (an estimate: see `LoadSource`).
     `used_samples` are the samples counted (0 for an estimate); `discarded_samples` those with
     HR outside `[min, max]`; `excluded_seconds` the seconds of intervals over 10 s not counted.
     `zone_seconds` are the seconds of the counted samples in each HR zone (on the sport's
@@ -48,27 +57,12 @@ class ActivityLoad:
     the measured ones).
     """
 
-    trimp: float
-    hr_tss: float
-    load: float
+    trimp_eq: float
     used_samples: int
     discarded_samples: int
     excluded_seconds: float
     source: LoadSource
     zone_seconds: ZoneSeconds = ZoneSeconds.ZERO
-
-
-def trimp_per_minute(hrr: float, k: float) -> float:
-    """One-minute TRIMP at relative heart-rate reserve `hrr` (between 0 and 1)."""
-    return hrr * _BANISTER_COEFFICIENT * math.exp(k * hrr)
-
-
-def hour_at_threshold_trimp(sport: Sport, physiology: Physiology) -> float:
-    """One-hour TRIMP at the sport's threshold HR (on the bike: see `threshold_for_sport`)."""
-    limits = physiology.limits
-    threshold = threshold_for_sport(physiology, sport)
-    hrr = (threshold - limits.min_bpm) / limits.reserve_bpm
-    return 60.0 * trimp_per_minute(hrr, physiology.sex.banister_k)
 
 
 def sample_validity_s(seconds: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -88,21 +82,18 @@ def _in_range(series: HeartRateSeries, limits: HeartRateLimits) -> NDArray[np.bo
     return (series.bpm >= limits.min_bpm) & (series.bpm <= limits.max_bpm)
 
 
-def _estimated(  # noqa: PLR0913 - the outcome's data, all necessary
+def _estimated(
     sport: Sport,
     moving_time_s: float,
-    physiology: Physiology,
-    weight: SportWeight,
     *,
     discarded: int,
     excluded_s: float,
     zones: ZoneSeconds,
 ) -> ActivityLoad:
-    hr_tss = moving_time_s / 3600.0 * 100.0 * typical_intensity(sport) ** 2
-    trimp = hr_tss / 100.0 * hour_at_threshold_trimp(sport, physiology)
-    return ActivityLoad(
-        trimp, hr_tss, hr_tss * weight.value, 0, discarded, excluded_s, LoadSource.ESTIMATE, zones
-    )
+    """Duration times the typical intensity of the sport: `duration_h * 100 * IF^2`, already in
+    the scale where 100 is one hour at the threshold."""
+    trimp_eq = moving_time_s / 3600.0 * POINTS_PER_THRESHOLD_HOUR * typical_intensity(sport) ** 2
+    return ActivityLoad(trimp_eq, 0, discarded, excluded_s, LoadSource.ESTIMATE, zones)
 
 
 def _is_mostly_missing(counted_s: float, moving_time_s: float) -> bool:
@@ -117,18 +108,17 @@ def compute_activity_load(
     moving_time_s: float,
     series: HeartRateSeries | None,
     physiology: Physiology,
-    weight: SportWeight,
 ) -> ActivityLoad:
-    """Computes TRIMP, hrTSS and weighted load of an activity.
+    """Computes the TRIMPeq of an activity (its load).
 
     Each sample is valid until the next (the last, the median of the intervals); samples
     with HR out of limits are discarded and counted; intervals over 10 s are not counted.
     `moving_time_s` is the moving time (activity timer), not the elapsed time, which
     includes pauses. If the counted seconds are less than 70% of the moving time (i.e. over
-    30% discarded or missing) or there is no HR, the load is the estimate `duration_h * 100 * IF^2`
-    with
-    the typical intensity of the sport, marked `LoadSource.ESTIMATE`. The comparison with 70% is in
-    whole milliseconds, with no floating point at the boundary. Pure and deterministic function.
+    30% discarded or missing) or there is no HR, the load is the estimate: duration times the
+    typical intensity of the sport (`duration_h * 100 * IF^2`), marked `LoadSource.ESTIMATE`.
+    The comparison with 70% is in whole milliseconds, with no floating point at the boundary.
+    Pure and deterministic function.
 
     Raises:
         ValueError: if `moving_time_s` is not finite and positive.
@@ -139,8 +129,6 @@ def compute_activity_load(
         return _estimated(
             sport,
             moving_time_s,
-            physiology,
-            weight,
             discarded=0,
             excluded_s=0.0,
             zones=ZoneSeconds.ZERO,
@@ -160,19 +148,14 @@ def compute_activity_load(
         return _estimated(
             sport,
             moving_time_s,
-            physiology,
-            weight,
             discarded=discarded,
             excluded_s=excluded_s,
             zones=zones,
         )
 
-    trimp = float(np.sum(_sample_trimp(series.bpm[counted], validity[counted], physiology)))
-    hr_tss = 100.0 * trimp / hour_at_threshold_trimp(sport, physiology)
+    samples = _sample_load(series.bpm[counted], validity[counted], physiology, sport)
     return ActivityLoad(
-        trimp,
-        hr_tss,
-        hr_tss * weight.value,
+        float(np.sum(samples)),
         int(np.count_nonzero(counted)),
         discarded,
         excluded_s,
@@ -181,18 +164,25 @@ def compute_activity_load(
     )
 
 
-def _sample_trimp(
-    bpm: NDArray[np.float64], validity_s: NDArray[np.float64], physiology: Physiology
+def _sample_load(
+    bpm: NDArray[np.float64],
+    validity_s: NDArray[np.float64],
+    physiology: Physiology,
+    sport: Sport,
 ) -> NDArray[np.float64]:
-    """Banister TRIMP of each counted sample, over its validity seconds."""
+    """TRIMPeq of each counted sample, over its validity seconds: Banister weight of the
+    running-equivalent intensity, 100 = one hour at the threshold of the sport."""
     limits = physiology.limits
     hrr = (bpm - limits.min_bpm) / limits.reserve_bpm
-    per_minute = hrr * _BANISTER_COEFFICIENT * np.exp(physiology.sex.banister_k * hrr)
-    return validity_s / 60.0 * per_minute
+    eq = equivalent_reserve_ratio(hrr, physiology, sport)
+    weight = eq * BANISTER_COEFFICIENT * np.exp(physiology.sex.banister_k * eq)
+    return (
+        POINTS_PER_THRESHOLD_HOUR * (validity_s / 60.0) * weight / reference_hour_weight(physiology)
+    )
 
 
 type ZoneLoad = tuple[float, float, float, float, float]
-"""Part of an activity's load earned in each HR zone (Z1 ... Z5), same unit as the load."""
+"""Part of an activity's load earned in each HR zone (Z1 ... Z5), in TRIMPeq."""
 
 
 def load_per_zone(
@@ -201,21 +191,21 @@ def load_per_zone(
     physiology: Physiology,
     load: ActivityLoad,
 ) -> ZoneLoad | None:
-    """How the (weighted) load of an activity splits among the HR zones.
+    """How the TRIMPeq of an activity splits among the HR zones.
 
-    Each counted sample (the same as `compute_activity_load`) brings its TRIMP to its zone, so the
-    five parts add up to `load.load`. None if the load is an estimate (it does not come from the
-    HR) or no TRIMP was counted. Pure and deterministic.
+    Each counted sample (the same as `compute_activity_load`) brings its TRIMPeq to its zone, so the
+    five parts add up to `load.trimp_eq`. None if the load is an estimate (it does not come from the
+    HR) or nothing was counted. Pure and deterministic.
     """
     if series is None or load.source is not LoadSource.HEART_RATE:
         return None
     validity = sample_validity_s(series.seconds)
     counted = _in_range(series, physiology.limits) & (validity <= MAX_GAP_S)
-    trimp = _sample_trimp(series.bpm[counted], validity[counted], physiology)
+    trimp = _sample_load(series.bpm[counted], validity[counted], physiology, sport)
     zones = zone_indices(series.bpm[counted], threshold_for_sport(physiology, sport))
     per_zone = np.bincount(zones, weights=trimp, minlength=ZONE_COUNT)
     total = float(per_zone.sum())
     if not total > 0:
         return None
-    z1, z2, z3, z4, z5 = (float(value) * load.load / total for value in per_zone)
+    z1, z2, z3, z4, z5 = (float(value) * load.trimp_eq / total for value in per_zone)
     return (z1, z2, z3, z4, z5)

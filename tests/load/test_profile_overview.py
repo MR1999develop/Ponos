@@ -17,14 +17,11 @@ from ponos_coach.activities.domain import (
     ActivityRecord,
     ArchivedFile,
     FileFormat,
-    Sport,
 )
 from ponos_coach.activities.fit_decoder import FitLimits, decode_activity
 from ponos_coach.load.domain import (
     MissingPhysiologyError,
-    SportWeight,
     compute_activity_load,
-    default_weight,
 )
 from ponos_coach.load.use_cases import (
     ComputeProfileOverview,
@@ -32,7 +29,6 @@ from ponos_coach.load.use_cases import (
     ExclusionReason,
     OverviewCancelledError,
     ProfileOverview,
-    SetSportWeights,
 )
 from ponos_coach.profiles.domain import ProfileId, ProfileName
 from ponos_coach.profiles.ports import OpenProfile
@@ -98,14 +94,11 @@ class World:
     def overview(
         self,
         *,
-        weights: dict[Sport, SportWeight] | None = None,
         cancel_after: int | None = None,
         progress: list[tuple[int, int]] | None = None,
         max_file_bytes: int = 50_000_000,
         decode: Decoder = decode_fit,
     ) -> ProfileOverview:
-        if weights is not None:
-            SetSportWeights(self.profile.activities, self.profile.sport_weights)(weights)
         checks = 0
 
         def is_cancelled() -> bool:
@@ -119,7 +112,6 @@ class World:
             self.profile.physiology,
             self.profile.load_cache,
             decode,
-            sport_weights=self.profile.sport_weights,
             timezone=ROME,
             today=lambda: TODAY,
             max_file_bytes=max_file_bytes,
@@ -194,18 +186,6 @@ def test_changed_parameters_invalidate_the_cache() -> None:
     assert world.archive.reads == 4
 
 
-def test_changed_sport_weights_invalidate_the_cache() -> None:
-    world = World()
-    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
-    two_runs(world)
-    plain = world.overview()
-
-    heavier = world.overview(weights={Sport.RUNNING: SportWeight(1.2)})
-
-    assert world.archive.reads == 4
-    assert heavier.activities[0].load.load == pytest.approx(plain.activities[0].load.load * 1.2)
-
-
 def test_parameter_change_on_a_date_applies_to_later_activities_only() -> None:
     """T-CALC-05: before the change the old parameters apply, after it the new ones."""
     world = World()
@@ -218,11 +198,7 @@ def test_parameter_change_on_a_date_applies_to_later_activities_only() -> None:
     for record, threshold in ((before, 170), (after, 160)):
         activity = decode_fit(world.archive.read(record.archived, 50_000_000), FileFormat.FIT)
         expected = compute_activity_load(
-            activity.sport,
-            activity.timer_s,
-            activity.heart_rate,
-            physiology(threshold),
-            default_weight(activity.sport),
+            activity.sport, activity.timer_s, activity.heart_rate, physiology(threshold)
         )
         (found,) = [a for a in result.activities if a.identity == record.identity]
         assert found.load == expected

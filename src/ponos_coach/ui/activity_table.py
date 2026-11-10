@@ -165,7 +165,7 @@ class ActivityTableModel(QAbstractTableModel):
             Column.MOVING_TIME: self.tr("Moving time (h:mm:ss)"),
             Column.DISTANCE: self.tr("Distance (km)"),
             Column.ASCENT: self.tr("Ascent (m)"),
-            Column.LOAD: self.tr("Load (hrTSS)"),
+            Column.LOAD: self.tr("Load (TRIMPeq)"),
             Column.LOAD_SOURCE: self.tr("Load from"),
             Column.FORMAT: self.tr("Format"),
         }
@@ -197,7 +197,7 @@ _TEXT_OF: dict[Column, Callable[[ProfileActivity, ZoneInfo], str]] = {
     Column.MOVING_TIME: lambda a, _z: duration_text(a.timer_s),
     Column.DISTANCE: lambda a, _z: distance_km_text(a.summary.distance_m),
     Column.ASCENT: lambda a, _z: ascent_m_text(a.summary.ascent_m),
-    Column.LOAD: lambda a, _z: QLocale().toString(round(a.load.load)),
+    Column.LOAD: lambda a, _z: QLocale().toString(round(a.load.trimp_eq)),
     Column.LOAD_SOURCE: lambda a, _z: load_source_text(a.load.source),
     Column.FORMAT: lambda a, _z: file_format_text(format_of(a.identity)),
 }
@@ -208,7 +208,7 @@ _SORT_KEY_OF: dict[Column, Callable[[ProfileActivity], _Key]] = {
     Column.MOVING_TIME: lambda a: a.timer_s,
     Column.DISTANCE: lambda a: _missing_as_key(a.summary.distance_m),
     Column.ASCENT: lambda a: _missing_as_key(a.summary.ascent_m),
-    Column.LOAD: lambda a: a.load.load,
+    Column.LOAD: lambda a: a.load.trimp_eq,
     Column.LOAD_SOURCE: lambda a: load_source_text(a.load.source).casefold(),
     Column.FORMAT: lambda a: file_format_text(format_of(a.identity)),
 }

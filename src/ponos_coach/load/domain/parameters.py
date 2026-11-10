@@ -8,18 +8,17 @@ import hashlib
 import json
 import re
 from bisect import bisect_right
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
-from ponos_coach.activities.domain import Sport
 from ponos_coach.load.domain.heart_rate import Physiology
-from ponos_coach.load.domain.sport import SportWeight
 from ponos_coach.load.domain.zones import ZONE_STARTS_PERCENT
 
 # Changes when the load formula or the zone definition changes: invalidates every saved
-# load. 2: saved loads also carry the seconds in zone.
-LOAD_MODEL_VERSION = 2
+# load. 2: saved loads also carry the seconds in zone. 3: the load is TRIMPeq (no
+# hrTSS, no sport weights).
+LOAD_MODEL_VERSION = 3
 _SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 
 
@@ -42,16 +41,12 @@ class LoadFingerprint:
             raise ValueError("the fingerprint must be 64 lowercase hexadecimal digits")
 
 
-def load_fingerprint(
-    physiology: Physiology, sport_weights: Mapping[Sport, SportWeight]
-) -> LoadFingerprint:
+def load_fingerprint(physiology: Physiology) -> LoadFingerprint:
     """Fingerprint of the parameters that determine the load of an activity.
 
-    It depends on the HR limits, the threshold, the sex, the sport weights set
-    (insertion order does not matter), the zone percentages and the version of the load
-    model. Whoever computes the load of a sport passes only the weight of that sport, so
-    changing the bike weight does not invalidate the runs. Deterministic:
-    the same parameters give the same fingerprint, in every process.
+    It depends on the HR limits, the threshold, the sex, the zone percentages and the version of
+    the load model. Deterministic: the same parameters give the same fingerprint, in every
+    process.
     """
     document = {
         "model": LOAD_MODEL_VERSION,
@@ -60,7 +55,6 @@ def load_fingerprint(
         "threshold_bpm": physiology.threshold.bpm,
         "sex": physiology.sex.value,
         "zones": list(ZONE_STARTS_PERCENT),
-        "weights": {sport.value: weight.value for sport, weight in sport_weights.items()},
     }
     text = json.dumps(document, sort_keys=True, separators=(",", ":"))
     return LoadFingerprint(hashlib.sha256(text.encode("utf-8")).hexdigest())

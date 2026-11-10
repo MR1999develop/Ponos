@@ -90,7 +90,7 @@ def chart_activity_of(activity: ProfileActivity, zone: ZoneInfo) -> ChartActivit
     local = activity.start.astimezone(zone)
     time_text = QLocale().toString(QTime(local.hour, local.minute), QLocale.FormatType.ShortFormat)
     return ChartActivity(
-        activity.local_day, activity.load.load, f"{sport_text(activity.sport)} {time_text}"
+        activity.local_day, activity.load.trimp_eq, f"{sport_text(activity.sport)} {time_text}"
     )
 
 
@@ -353,7 +353,7 @@ class OverviewPage(QWidget):
             tsb=self.tr("Form (TSB)"),
             daily_load=self.tr("Daily load"),
             chrome=chrome,
-            load_unit=self.tr("hrTSS per day"),
+            load_unit=self.tr("TRIMPeq per day"),
             ctl_plan=self.tr("Fitness (CTL), plan"),
             atl_plan=self.tr("Fatigue (ATL), plan"),
             tsb_plan=self.tr("Form (TSB), plan"),
@@ -372,7 +372,7 @@ class OverviewPage(QWidget):
             y_axis=self.tr("Load"),
             sports={sport: sport_text(sport) for sport in Sport},
             chrome=chrome,
-            unit=self.tr("hrTSS per week"),
+            unit=self.tr("TRIMPeq per week"),
         )
 
     def _zones_labels(self, chrome: ChartChrome) -> WeeklyZonesLabels:

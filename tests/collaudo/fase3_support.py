@@ -5,21 +5,20 @@ comparisons.
 
 The activities are synthetic FIT files (run, trail, bike, strength, hike without HR) with HR
 segments that touch all five zones. A "from scratch" profile receives the same files and the same
-final parameters and weights as a profile that changed them step by step: its overview, computed
+final parameters as a profile that changed them step by step: its overview, computed
 with an empty cache, is the oracle of the incremental recomputation.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 
 import numpy as np
 
-from ponos_coach.activities.domain import Sport
-from ponos_coach.load.domain import PhysiologyEntry, SportWeight
+from ponos_coach.load.domain import PhysiologyEntry
 from ponos_coach.load.use_cases import ProfileOverview
 from tests.collaudo.support import RealProfile, create_profile
 from tests.fixtures.generators import fit_writer as fw
@@ -121,9 +120,8 @@ def scratch_overview(
     base: Path,
     name: str,
     entries: Sequence[PhysiologyEntry],
-    sport_weights: Mapping[Sport, SportWeight],
 ) -> tuple[ProfileOverview, RealProfile]:
-    """Overview of a new profile with the same files and the given final parameters and weights.
+    """Overview of a new profile with the same files and the given final parameters.
 
     The cache is empty: every load is computed from the file. The profile stays open (the
     caller closes it) for further comparisons, for example on the overview of a second read.
@@ -131,7 +129,6 @@ def scratch_overview(
     scratch = profile_with_mixed(base, name)
     for entry in entries:
         scratch.session.physiology.put(entry)
-    scratch.session.sport_weights.replace(dict(sport_weights))
     return scratch.overview(), scratch
 
 

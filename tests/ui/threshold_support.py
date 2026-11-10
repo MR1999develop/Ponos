@@ -89,7 +89,7 @@ def select_run(window: MainWindow) -> ProfileActivity:
 
 def first_load(window: MainWindow) -> float:
     """The load of the first activity of the overview."""
-    return activities_of(window)[0].load.load
+    return activities_of(window)[0].load.trimp_eq
 
 
 def open_review(qtbot: QtBot, window: MainWindow) -> ThresholdResultDialog:

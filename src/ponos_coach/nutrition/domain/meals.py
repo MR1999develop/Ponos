@@ -54,8 +54,8 @@ class TrainingSession:
 
     `start_minute` is the local start in minutes after midnight, `duration_min` the moving time
     (it decides which intakes the session needs and how much to eat during it), `net_kcal` the
-    energy net of the basal metabolism (already in the day's expenditure) and `load` the weighted
-    training load.
+    energy net of the basal metabolism (already in the day's expenditure) and `load` the training
+    load (TRIMPeq).
 
     `local_end_minute` is where the session ends on the wall clock, in minutes after the local
     midnight of the start (it can pass 1440): start plus the elapsed time, worked out in UTC and

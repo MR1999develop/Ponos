@@ -129,7 +129,7 @@ LONG_WEIGHT_LOSS_WEEKS: Final = 12
 # --- Day load level -----------------------------------------------------------------------------
 # A day's level is the higher of the one given by the load and by the training time. Project
 # defaults that map the ISSN/ACSM bands (about 1 h, 1-3 h, over 4 h of training per day) onto the
-# app's load (100 = one hour at threshold).
+# load (TRIMPeq: 100 = one hour at the threshold of the sport).
 LOAD_LIGHT_FROM: Final = 0.0  # any training is at least light
 LOAD_MODERATE_FROM: Final = 60.0
 LOAD_HIGH_FROM: Final = 120.0

@@ -78,7 +78,6 @@ from tests.contracts.contract_storage import (
     LoadCacheZonesContract,
     PhysiologyStoreContract,
     ProfileStorageContract,
-    SportWeightStoreContract,
     WeightStoreContract,
 )
 from tests.contracts.contract_sync import ActivityIndexGarminIdContract, SyncJournalContract
@@ -145,10 +144,6 @@ class TestSqliteWeightStore(_DiskStorageFixture, WeightStoreContract):
 
 
 class TestSqliteFixedDataStore(_DiskStorageFixture, FixedDataStoreContract):
-    pass
-
-
-class TestSqliteSportWeightStore(_DiskStorageFixture, SportWeightStoreContract):
     pass
 
 

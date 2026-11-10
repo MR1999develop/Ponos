@@ -248,9 +248,6 @@ class MainWindow(QMainWindow):
         self._edit_profile_action = self._action(
             self.tr("Edit profile..."), "Ctrl+E", self.edit_profile
         )
-        self._sport_weights_action = self._action(
-            self.tr("Sport weights..."), "Ctrl+Shift+W", self.edit_sport_weights
-        )
         self._previous_month_action = self._action(
             self.tr("Previous month"), "Ctrl+Left", self._calendar_step_back
         )
@@ -305,7 +302,6 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self._quit_action)
         profile_menu = self.menuBar().addMenu(self.tr("Profile"))
         profile_menu.addAction(self._edit_profile_action)
-        profile_menu.addAction(self._sport_weights_action)
         profile_menu.addSeparator()
         profile_menu.addAction(self._detail_action)
         profile_menu.addAction(self._use_as_test_action)
@@ -384,9 +380,6 @@ class MainWindow(QMainWindow):
             self.tr("Garmin account"),
             self,
             footer=self._garmin.account_section,
-        )
-        self._weights_settings = SettingsPage(
-            SettingsCategory.SPORT_WEIGHTS, self.tr("Sport weights"), self
         )
         self._protocol_section = ThresholdProtocolSection(ProtocolPreference(self._settings))
         threshold_part = QWidget(self)
@@ -477,7 +470,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self._panes)
 
     def _build_dialogs(self) -> None:
-        """Edit profile, sport weights and detail: they work on the data thread."""
+        """Edit profile and detail: they work on the data thread."""
         self._editor = ProfileEditor(self._controller, self)
         self._dialogs = ProfileDialogs(
             self,
@@ -491,7 +484,6 @@ class MainWindow(QMainWindow):
             show_error=self._show_error,
             notify=lambda text: self.statusBar().showMessage(text, _STATUS_MESSAGE_MS),
             profile_page=self._profile_settings,
-            weights_page=self._weights_settings,
             show_settings=self.show_settings_page,
             unavailable_reason=lambda: self._unavailable_reason(self._controller.can_edit_profile),
         )
@@ -569,7 +561,6 @@ class MainWindow(QMainWindow):
             (
                 self._profile_settings,
                 self._garmin_settings,
-                self._weights_settings,
                 self._training_settings,
                 self._nutrition_settings,
                 self._map_settings,
@@ -762,7 +753,7 @@ class MainWindow(QMainWindow):
 
     @property
     def profile_dialogs(self) -> ProfileDialogs:
-        """The profile data in the window (Profile and Sport weights pages, activity detail)."""
+        """The profile data in the window (Profile page, activity detail)."""
         return self._dialogs
 
     @property
@@ -779,11 +770,6 @@ class MainWindow(QMainWindow):
     def edit_profile_action(self) -> QAction:
         """Action "Edit profile..."."""
         return self._edit_profile_action
-
-    @property
-    def sport_weights_action(self) -> QAction:
-        """Action "Sport weights..."."""
-        return self._sport_weights_action
 
     @property
     def detail_action(self) -> QAction:
@@ -930,10 +916,6 @@ class MainWindow(QMainWindow):
     def edit_profile(self) -> None:
         """Open Settings > Profile (the page says why it cannot be edited now, if so)."""
         self._dialogs.edit_profile()
-
-    def edit_sport_weights(self) -> None:
-        """Open Settings > Sport weights."""
-        self._dialogs.edit_sport_weights()
 
     def _on_test_protocol_chosen(self, protocol: object) -> None:
         """The plan schedules the test with the protocol the user chose: rebuild it."""
@@ -1376,14 +1358,13 @@ class MainWindow(QMainWindow):
         )
 
     def _update_profile_data_actions(self) -> None:
-        """Import, edit profile, weights and detail: each with its reason if it cannot be done.
+        """Import, edit profile and detail: each with its reason if it cannot be done.
         Settings itself is always available: its pages say why they cannot be filled."""
         controller = self._controller
         for action, allowed in (
             (self._import_files_action, controller.can_import),
             (self._import_folder_action, controller.can_import),
             (self._edit_profile_action, controller.can_edit_profile),
-            (self._sport_weights_action, controller.can_edit_profile),
         ):
             action.setEnabled(allowed)
             action.setToolTip(self._unavailable_reason(allowed))

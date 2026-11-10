@@ -185,7 +185,7 @@ def test_the_detail_of_a_future_day_lists_the_blocks_zones_heart_rate_and_load(p
         assert f"zone {block.zone}" in text
         assert f"{block.hr_low_bpm} to {block.hr_high_bpm} bpm" in text
     assert "min" in sections[1]
-    assert re.search(r"Estimated load: \d+ hrTSS", text)
+    assert re.search(r"Estimated load: \d+ TRIMPeq", text)
 
 
 def test_the_detail_of_a_race_day_gives_the_expected_time_and_the_verdict(plan: Plan) -> None:
@@ -214,9 +214,9 @@ def test_a_past_day_shows_what_was_planned_beside_what_was_done_and_what_was_mis
     assert cell.can_open
     assert cell.plan == planned
     assert cell.adherence == adherence
-    assert "Done: Running, 40 hrTSS" in text
-    assert "Planned 100 hrTSS, done 40 hrTSS" in text
-    assert "Not done: 60 hrTSS" in text
+    assert "Done: Running, 40 TRIMPeq" in text
+    assert "Planned 100 TRIMPeq, done 40 TRIMPeq" in text
+    assert "Not done: 60 TRIMPeq" in text
     assert text.index("Estimated load") < text.index("Done:")  # planned first, then done
 
 

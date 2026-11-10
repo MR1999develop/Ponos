@@ -50,7 +50,6 @@ from tests.contracts.contract_storage import (
     LoadCacheZonesContract,
     PhysiologyStoreContract,
     ProfileStorageContract,
-    SportWeightStoreContract,
     WeightStoreContract,
 )
 from tests.contracts.contract_sync import ActivityIndexGarminIdContract, SyncJournalContract
@@ -224,10 +223,6 @@ class TestFakeWeightStore(_FakeStorageFixture, WeightStoreContract):
 
 
 class TestFakeFixedDataStore(_FakeStorageFixture, FixedDataStoreContract):
-    pass
-
-
-class TestFakeSportWeightStore(_FakeStorageFixture, SportWeightStoreContract):
     pass
 
 

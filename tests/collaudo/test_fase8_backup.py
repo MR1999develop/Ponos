@@ -83,7 +83,9 @@ def test_t_dati_05_the_restored_profile_opens_and_gives_the_same_overview_and_pl
     restored = World(opened, base, rich.today, seed=False)
     try:
         before, after = rich.overview(), restored.overview()
-        assert [a.load.load for a in after.activities] == [a.load.load for a in before.activities]
+        assert [a.load.trimp_eq for a in after.activities] == [
+            a.load.trimp_eq for a in before.activities
+        ]
         assert restored.saved_plan().to_json() == rich.saved_plan().to_json()
         assert len(restored.profile.session.injuries.list_problems()) == 1
         assert len(restored.profile.session.workout_backups.pending()) == 1

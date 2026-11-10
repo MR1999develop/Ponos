@@ -17,7 +17,7 @@ from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.injury.ports import InjuryStore
 from ponos_coach.load.domain import PhysiologyEntry
-from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
+from ponos_coach.load.ports import LoadCache, PhysiologyStore
 from ponos_coach.nutrition.ports import (
     ActivityLevelStore,
     GoalPeriodStore,
@@ -152,10 +152,6 @@ class _CountingProfile:
     @property
     def fixed_data(self) -> FixedDataStore:
         return self._inner.fixed_data
-
-    @property
-    def sport_weights(self) -> SportWeightStore:
-        return self._inner.sport_weights
 
     @property
     def load_cache(self) -> LoadCache:

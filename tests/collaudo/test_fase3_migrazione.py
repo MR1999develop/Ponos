@@ -151,7 +151,6 @@ def test_t_dati_01_a_v2_profile_stays_valid_without_the_personal_data(tmp_path: 
     try:
         assert opened.fixed_data.get() is None
         assert opened.weights.list_entries() == []
-        assert opened.sport_weights.load() == {}
         (entry,) = opened.physiology.list_entries()  # the previous parameters are there
         assert entry.valid_from == date(2026, 1, 1)
     finally:
@@ -178,7 +177,7 @@ def test_t_dati_01_a_v2_profile_completes_height_and_birth_date_once(tmp_path: P
 def test_t_dati_01_a_migrated_profile_stores_loads_with_their_zones(tmp_path: Path) -> None:
     write_frozen_v2(tmp_path / PROFILE_DATABASE_NAME)
     load = ActivityLoad(
-        80.0, 70.0, 75.0, 3500, 3, 12.5, LoadSource.HEART_RATE,
+        75.0, 3500, 3, 12.5, LoadSource.HEART_RATE,
         ZoneSeconds((100.0, 200.0, 300.0, 400.0, 500.0)),
     )  # fmt: skip
     opened = SqliteProfileStorage().open(tmp_path)

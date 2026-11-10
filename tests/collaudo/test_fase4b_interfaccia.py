@@ -229,7 +229,7 @@ def test_t_ui_01_the_month_grid_holds_every_activity_once_and_every_rule(
     for cell in cells:
         mine = [a for a in in_this_month if a.local_day == cell.day]
         assert cell.activity_count == len(mine)
-        assert cell.load == pytest.approx(sum(a.load.load for a in mine))
+        assert cell.load == pytest.approx(sum(a.load.trimp_eq for a in mine))
         assert len(set(cell.sports)) == len(cell.sports)
         assert cell.is_today is (cell.day == today)
         assert cell.is_future is (cell.day > today)

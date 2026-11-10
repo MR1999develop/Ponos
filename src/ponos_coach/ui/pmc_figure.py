@@ -36,7 +36,7 @@ from ponos_coach.ui.chart_payload import (
 )
 from ponos_coach.ui.tokens import ThemeTokens
 
-LOAD_UNIT = "hrTSS per day"  # unit of the daily load and its averages (CTL, ATL, TSB)
+LOAD_UNIT = "TRIMPeq per day"  # unit of the daily load and its averages (CTL, ATL, TSB)
 MAX_NAMES_PER_DAY = 5  # activity names shown in a bar's hint
 _LINE_WIDTH = 2
 _ATL_DASH = "dash"  # ATL is dashed: CTL and ATL differ even without colour
@@ -70,7 +70,7 @@ class PmcChartLabels:
     tsb: str
     daily_load: str
     chrome: ChartChrome
-    load_unit: str = LOAD_UNIT  # "hrTSS per day", translated as a whole sentence
+    load_unit: str = LOAD_UNIT  # "TRIMPeq per day", translated as a whole sentence
     # Texts of the projection (used only with one): whole names, translated by the view.
     ctl_plan: str = "Fitness (CTL), plan"
     atl_plan: str = "Fatigue (ATL), plan"
@@ -107,7 +107,7 @@ def _with_opacity(color: str, opacity: float) -> str:
 
 
 def daily_load_of(activities: Sequence[ChartActivity], days: Sequence[date]) -> list[float]:
-    """(Weighted) load of each day of the series: sum of that local day's activities."""
+    """Load (TRIMPeq) of each day of the series: sum of that local day's activities."""
     totals: dict[date, float] = defaultdict(float)
     for entry in activities:
         totals[entry.local_day] += entry.load

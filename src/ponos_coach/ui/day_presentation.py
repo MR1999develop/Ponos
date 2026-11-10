@@ -119,7 +119,7 @@ def activity_headers() -> tuple[str, ...]:
         translate("DayPage", "Time"),
         translate("DayPage", "Sport"),
         translate("DayPage", "Duration (h:mm:ss)"),
-        translate("DayPage", "Load (hrTSS)"),
+        translate("DayPage", "Load (TRIMPeq)"),
         translate("DayPage", "Energy (kcal)"),
         translate("DayPage", "Energy from"),
     )

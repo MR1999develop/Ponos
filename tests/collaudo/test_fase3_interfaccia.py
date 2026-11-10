@@ -2,7 +2,7 @@
 # Copyright (C) 2026 MR
 """T-UI-05 (keyboard and accessible names), T-UI-06 (languages) and T-UI-07 (settings) of phase 3.
 
-The new dialogs (New profile, Edit profile, Sport weights, Activity detail) are
+The new dialogs (New profile, Edit profile, Activity detail) are
 exercised on their own, without the window: Tab path, accessible name read from Qt's
 accessibility interface, texts in Italian from the real catalogue and with a "pseudo" translator
 that lengthens
@@ -33,9 +33,7 @@ from PySide6.QtWidgets import (
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.__main__ import parse_command_line, setup_translations
-from ponos_coach.activities.domain import Sport
 from ponos_coach.i18n.catalog import Message, MessageStatus, parse_catalog
-from ponos_coach.load.domain import default_weight
 from ponos_coach.load.use_cases import ExclusionReason
 from ponos_coach.ui.activity_detail import DetailUnavailable
 from ponos_coach.ui.activity_detail_dialog import ActivityDetailDialog
@@ -44,8 +42,6 @@ from ponos_coach.ui.measurements_form import MeasurementsForm
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
 from ponos_coach.ui.new_profile_form import NewProfileForm
 from ponos_coach.ui.profile_edit_dialog import ProfileEditDialog
-from ponos_coach.ui.sport_weights_dialog import SportWeightsDialog
-from ponos_coach.ui.sport_weights_form import SportWeightsForm
 from ponos_coach.ui.state_page import StatePage
 from ponos_coach.ui.tokens import Theme
 from ponos_coach.ui.translations import (
@@ -78,10 +74,6 @@ def edit_dialog(*, fixed_missing: bool = False) -> QWidget:
     )
 
 
-def weights_dialog() -> QWidget:
-    return SportWeightsDialog(SportWeightsForm({s: default_weight(s) for s in Sport}))
-
-
 def new_profile_dialog() -> QWidget:
     return NewProfileDialog(
         NewProfileForm("Europe/Rome"), date(2026, 6, 30), lambda _p: None, lambda: "", Theme.LIGHT
@@ -97,7 +89,6 @@ def detail_dialog() -> QWidget:
 DIALOGS: dict[str, Callable[[], QWidget]] = {
     "edit": edit_dialog,
     "edit_fixed_missing": lambda: edit_dialog(fixed_missing=True),
-    "weights": weights_dialog,
     "new_profile": new_profile_dialog,
     "detail": detail_dialog,
 }
@@ -174,7 +165,7 @@ def test_t_ui_05_every_control_of_the_new_dialogs_has_an_accessible_name(
     assert unnamed == []
 
 
-@pytest.mark.parametrize("name", ["weights", "edit", "new_profile"])
+@pytest.mark.parametrize("name", ["edit", "new_profile"])
 def test_t_ui_05_the_accessible_names_of_a_dialog_are_distinct(qtbot: QtBot, name: str) -> None:
     dialog = shown(qtbot, name)
 
@@ -187,7 +178,7 @@ def y_of(widget: QWidget, dialog: QWidget) -> int:
     return widget.mapTo(dialog, QPoint(0, 0)).y()
 
 
-@pytest.mark.parametrize("name", ["edit_fixed_missing", "edit", "weights", "new_profile"])
+@pytest.mark.parametrize("name", ["edit_fixed_missing", "edit", "new_profile"])
 def test_t_ui_05_the_tab_order_follows_the_visual_order_from_top_to_bottom(
     qtbot: QtBot, name: str
 ) -> None:
@@ -388,7 +379,7 @@ def clipped(dialog: QWidget) -> list[str]:
     return problems
 
 
-@pytest.mark.parametrize("name", ["edit", "edit_fixed_missing", "weights", "new_profile", "detail"])
+@pytest.mark.parametrize("name", ["edit", "edit_fixed_missing", "new_profile", "detail"])
 def test_t_ui_06_the_layout_holds_texts_half_as_long_again(
     qtbot: QtBot, pseudo: PseudoTranslator, name: str
 ) -> None:
@@ -400,7 +391,7 @@ def test_t_ui_06_the_layout_holds_texts_half_as_long_again(
     assert hint.height() <= 1000
 
 
-@pytest.mark.parametrize("name", ["edit", "edit_fixed_missing", "weights", "new_profile", "detail"])
+@pytest.mark.parametrize("name", ["edit", "edit_fixed_missing", "new_profile", "detail"])
 def test_t_ui_06_the_layout_holds_the_italian_texts(
     qtbot: QtBot, italian: TranslationReport, name: str
 ) -> None:
