@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QToolButton
+from PySide6.QtWidgets import QPushButton, QToolButton, QWidget
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.activities.domain import ActivityFilter, NumericRange, Sport
@@ -273,3 +273,23 @@ def test_every_field_has_a_name_for_the_screen_reader(qtbot: QtBot, tmp_path: Pa
 
     assert all(names)
     assert len(set(names)) == len(names)  # no two fields sound the same
+
+
+def test_the_clear_button_lines_up_with_the_controls_not_with_their_titles(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    bar, _state = make_bar(qtbot, tmp_path)
+    bar.show()
+    qtbot.waitExposed(bar)
+    bar.resize(1400, 200)  # a wide Activities pane: every group and the button on one row
+    qtbot.wait(20)
+    clear = next(b for b in bar.findChildren(QPushButton) if b.text() == "Clear filters")
+    sports = bar.findChild(QToolButton, "filterSports")
+    assert isinstance(sports, QToolButton)
+
+    def bottom(widget: QWidget) -> int:
+        return widget.mapTo(bar, widget.rect().bottomLeft()).y()
+
+    # Beside the sports, below the room of a title: in line with the controls of its row.
+    assert abs(bottom(clear) - bottom(sports)) <= 3
+    assert all(edit.width() <= 160 for edit in bar.edits.values())  # as wide as a date

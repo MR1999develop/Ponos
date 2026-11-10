@@ -35,9 +35,10 @@ from ponos_coach.ui.activity_filters import (
 )
 from ponos_coach.ui.activity_text import sport_text
 from ponos_coach.ui.flow_layout import FlowLayout
-from ponos_coach.ui.tokens import SPACE_1, SPACE_2, SPACE_4, Theme, tokens_for
+from ponos_coach.ui.tokens import SPACE_1, SPACE_2, SPACE_4, SPACE_6, Theme, tokens_for
 
 _FIELD_MIN_WIDTH = 96
+_FIELD_SAMPLE = "00/00/0000"  # the widest text a field holds (a short date): it sets the width
 _NAME_OF = {field: field.value for field in FilterField}
 _GROUPS: tuple[tuple[str, FilterField, FilterField], ...] = (
     ("date", FilterField.DATE_FROM, FilterField.DATE_TO),
@@ -83,7 +84,7 @@ class FilterBar(QWidget):
         self._clear = QPushButton(self.tr("Clear filters"), self)
         self._clear.setToolTip(self.tr("Show every activity again"))
         self._clear.clicked.connect(self.clear_filters)
-        row.addWidget(self._clear)
+        row.addWidget(self._under_a_title_row(self._clear))
         outer.addWidget(fields)
         self._problems = QLabel(self)
         self._problems.setObjectName("filterProblems")
@@ -107,7 +108,11 @@ class FilterBar(QWidget):
         for column, field in enumerate((first, second)):
             edit = QLineEdit(box)
             edit.setObjectName(f"filter_{_NAME_OF[field]}")
-            edit.setMinimumWidth(_FIELD_MIN_WIDTH)
+            # As wide as a short date, not as the default line edit: the groups and the
+            # "Clear filters" button stay on one row in the pane (user's request of 2026-11-10).
+            edit.setFixedWidth(
+                max(_FIELD_MIN_WIDTH, edit.fontMetrics().horizontalAdvance(_FIELD_SAMPLE) + SPACE_6)
+            )
             edit.setAccessibleName(field_label(field))
             edit.setPlaceholderText(self._placeholder(field))
             edit.editingFinished.connect(self.apply_fields)
@@ -115,6 +120,17 @@ class FilterBar(QWidget):
                 title.setBuddy(edit)
             grid.addWidget(edit, 1, column)
             self._edits[field] = edit
+        return box
+
+    def _under_a_title_row(self, widget: QWidget) -> QWidget:
+        """The widget on the row of the fields, below the room of a group's title (it has no
+        title of its own): the button lines up with the fields (user's request of 2026-11-10)."""
+        box = QWidget(self)
+        column = QVBoxLayout(box)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(SPACE_1)
+        column.addSpacing(QLabel(box).sizeHint().height())
+        column.addWidget(widget)
         return box
 
     def _placeholder(self, field: FilterField) -> str:
