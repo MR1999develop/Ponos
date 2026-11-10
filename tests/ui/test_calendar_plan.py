@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from PySide6.QtCore import QLocale, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QPushButton
+from PySide6.QtWidgets import QPushButton, QWidget
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.assessment.domain import ThresholdProtocol
@@ -67,6 +67,13 @@ def cell_for(plan: Plan, day: date, today: date, goals: list[Goal] | None = None
     layer = plan_layer_of(plan, [], [], goals or [])
     month = build_month(first_of_month(day), today, [], [], layer)
     return next(c for c in month.days if c.day == day)
+
+
+def detail_of_selected(page: CalendarPage) -> str:
+    """The tooltip of the selected cell: the day in full."""
+    text = page.model.data(page.table.currentIndex(), Qt.ItemDataRole.ToolTipRole)
+    assert isinstance(text, str)
+    return text
 
 
 def test_a_day_after_today_can_be_selected_and_carries_its_planned_day(plan: Plan) -> None:
@@ -262,9 +269,10 @@ def test_a_future_planned_day_opens_in_the_panel_with_its_session(
     page.select_day(target.day)
 
     assert page.selected_day() == target.day
-    assert phase_text(target.phase) in page.panel.detail_text
-    assert "Estimated load" in page.panel.detail_text
-    assert "Warm-up" in page.panel.detail_text or "Steady" in page.panel.detail_text
+    detail = detail_of_selected(page)
+    assert phase_text(target.phase) in detail
+    assert "Estimated load" in detail
+    assert "Warm-up" in detail or "Steady" in detail
 
 
 def test_selecting_a_day_tells_who_follows_the_selection(page: CalendarPage) -> None:
@@ -347,35 +355,27 @@ def test_the_visible_range_is_the_whole_weeks_of_the_grid(page: CalendarPage) ->
     assert last.weekday() == 6
 
 
-# --- The panel's commands --------------------------------------------------------------------
+# --- Under the grid only the legends; the day in full in the tooltip of its cell ---------------
 
 
-def test_the_panel_has_no_buttons_to_add_a_goal_or_send_the_session(page: CalendarPage) -> None:
+def test_under_the_grid_there_is_no_day_panel(page: CalendarPage) -> None:
     page.select_day(PLAN_TODAY + timedelta(days=9))
 
-    assert [b.text() for b in page.panel.findChildren(QPushButton)] == []
+    assert page.findChild(QWidget, "calendarDayPanel") is None
+    assert [b.text() for b in page.findChildren(QPushButton)] == [
+        "Previous month",
+        "Next month",
+    ]
 
 
-def test_the_panel_lists_the_goals_of_the_day_with_change_and_remove(
-    page: CalendarPage,
-) -> None:
-    changed: list[str] = []
-    removed: list[str] = []
-    page.change_goal_requested.connect(changed.append)
-    page.remove_goal_requested.connect(removed.append)
+def test_the_tooltip_of_a_day_lists_its_goals(page: CalendarPage) -> None:
     page.go_today()
     while page.current_month < first_of_month(MARATHON_DAY):
         page.next_month()
 
     page.select_day(MARATHON_DAY)
-    ((change, remove),) = page.panel.goal_buttons()
-    change.click()
-    remove.click()
 
-    assert changed == ["marathon"]
-    assert removed == ["marathon"]
-    assert "Race A, Marathon" in page.panel.detail_text
-    assert change.accessibleDescription() == "Race A, Marathon, 6/8/26"
+    assert "Race A, Marathon" in detail_of_selected(page)
 
 
 def test_no_selection_says_how_to_start(page: CalendarPage) -> None:
@@ -383,8 +383,6 @@ def test_no_selection_says_how_to_start(page: CalendarPage) -> None:
     page.table.setCurrentIndex(page.model.index(0, 0))  # a cell outside the month: not selectable
 
     assert page.selected_day() is None
-    assert page.panel.detail_text.startswith("Select a day")
-    assert page.panel.goal_buttons() == []
 
 
 def test_another_goal_id_in_a_cell_does_not_leak_into_the_next_day(
@@ -393,12 +391,12 @@ def test_another_goal_id_in_a_cell_does_not_leak_into_the_next_day(
     other = marathon("second", PLAN_TODAY + timedelta(days=3))
     page.set_plan_layer(plan_layer_of(plan, [], [], [other]))
     page.select_day(other.day)
-    assert len(page.panel.goal_buttons()) == 1
+    assert "Race A" in detail_of_selected(page)
 
     page.select_day(other.day + timedelta(days=1))
 
-    assert page.panel.goal_buttons() == []
-    assert GoalId("second").value not in page.panel.detail_text
+    assert "Race A" not in detail_of_selected(page)
+    assert GoalId("second").value not in detail_of_selected(page)
 
 
 def _luminance(color: str) -> float:

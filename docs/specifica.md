@@ -871,9 +871,14 @@ no diet or allergy restriction for now.
   any period and is treated as maintenance.
 - "Previous month" (Ctrl+Left), "Next month" (Ctrl+Right), "Today" (Ctrl+T) and
   "Open day" (Ctrl+Return) are in the menu of a day and act while the calendar
-  has the focus. The buttons under the day panel are gone. A click or Enter on a day
-  opens its page. The calendar has no "Today" button (user's request of
+  has the focus. Under the month there are only the legends (user's request of
+  2026-11-10): the day in full (phase, planned session with its blocks,
+  estimated load, goals, what was done and how it went) is in the tooltip of
+  its cell. A click or Enter on a day opens its page. The calendar has no "Today" button (user's request of
   2026-11-09): Ctrl+T and the menu of the day still go to today.
+- The window of a day shows the planned session in full at the top: phase,
+  blocks with duration, zone, heart-rate range and pace range, and the
+  estimated load.
 - In the window of a day, a click (or Enter) on an activity of its list opens
   the window of that activity, or brings it forward if it is already open; the
   planned sessions of the plan open nothing.

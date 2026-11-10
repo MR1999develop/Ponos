@@ -257,8 +257,6 @@ class PlanUi(QObject):
         self._controller.plan_rebuilt.connect(self._on_plan_rebuilt)
         self._controller.overview_changed.connect(self._on_overview_changed)
         self._calendar.month_changed.connect(self._reload_past)
-        self._calendar.change_goal_requested.connect(self.change_goal)
-        self._calendar.remove_goal_requested.connect(self.remove_goal)
         self._calendar.selection_changed.connect(self._update_actions)
         self._goals_page.goal_activated.connect(self.change_goal)
         self._goals_page.notice_action_requested.connect(self._on_notice_action)

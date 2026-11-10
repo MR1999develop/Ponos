@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtWidgets import QLabel, QListWidget, QPushButton
+from PySide6.QtWidgets import QLabel, QListWidget, QPushButton, QWidget
 from pytestqt.qtbot import QtBot
 
 from tests.ui.nutrition_support import window_with_days
@@ -60,16 +60,17 @@ def test_the_map_keeps_a_usable_height_in_its_pane(qtbot: QtBot, tmp_path: Path)
     assert window.map_page.map_view.height() >= MAP_MIN_HEIGHT_PX
 
 
-def test_under_the_calendar_the_day_panel_takes_only_the_room_of_its_text(
-    qtbot: QtBot, tmp_path: Path
-) -> None:
+def test_under_the_calendar_there_are_only_the_legends(qtbot: QtBot, tmp_path: Path) -> None:
     window = window_with_days(qtbot, tmp_path, make_settings(tmp_path))
     window.show()
     window.resize(1600, 900)
     qtbot.wait(50)
     page = window.calendar_page
+    table_bottom = page.table.mapTo(page, page.table.rect().bottomLeft()).y()
+    legend_top = page.legend_widget.mapTo(page, page.legend_widget.rect().topLeft()).y()
 
-    assert page.panel.height() == page.panel.minimumHeight()  # the month gets the rest
+    assert page.findChild(QWidget, "calendarDayPanel") is None
+    assert table_bottom < legend_top  # the legends straight under the month
 
 
 def test_the_map_has_no_activity_detail_button(qtbot: QtBot, tmp_path: Path) -> None:

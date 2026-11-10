@@ -5,9 +5,10 @@
 Humble view on `calendar_model`: the grid is a read-only table model (one row per week, Monday
 first), navigation is by buttons and keys (Page Up and Page Down change month; arrows move between
 days; Enter or double click opens a day up to today). Every day of the month can be selected, also
-the days ahead, up to a year from today: the panel under the grid shows the plan of the selected
-day. The nutrition goal period of a day is a faint colour and the training phase a stripe on top of
-the cell; both always have their name in the cell and in the legend (never the colour alone).
+the days ahead, up to a year from today: the tooltip of a cell shows the day in full, and its
+window the planned session. Under the grid only the legends. The nutrition goal period of a day is
+a faint colour and the training phase a stripe on top of the cell; both always have their name in
+the cell and in the legend (never the colour alone).
 """
 
 from __future__ import annotations
@@ -32,7 +33,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QPushButton,
-    QSplitter,
     QStyledItemDelegate,
     QStyleOptionViewItem,
     QTableView,
@@ -43,7 +43,6 @@ from PySide6.QtWidgets import (
 from ponos_coach.load.use_cases import ProfileActivity
 from ponos_coach.nutrition.domain import GoalPeriod
 from ponos_coach.planning.domain import Phase
-from ponos_coach.ui.calendar_day_panel import DayDetailPanel
 from ponos_coach.ui.calendar_model import (
     DAYS_PER_WEEK,
     CalendarDay,
@@ -59,6 +58,7 @@ from ponos_coach.ui.calendar_model import (
 from ponos_coach.ui.calendar_texts import (
     cell_description,
     cell_text,
+    day_detail_text,
     goal_kind_text,
     month_title,
     weekday_names,
@@ -86,7 +86,6 @@ _PHASE_SLOT = {
     Phase.TAPER: 1,
     Phase.RACE: 5,
 }
-_GRID_START_PX = 10_000  # the month first: the splitter gives the panel only its minimum
 
 
 def phase_color(phase: Phase, theme: Theme) -> str:
@@ -175,7 +174,9 @@ class MonthModel(QAbstractTableModel):
             return None
         if role == Qt.ItemDataRole.DisplayRole:
             return cell_text(cell)
-        if role in (Qt.ItemDataRole.ToolTipRole, Qt.ItemDataRole.AccessibleDescriptionRole):
+        if role == Qt.ItemDataRole.ToolTipRole:
+            return day_detail_text(cell) or cell_description(cell)
+        if role == Qt.ItemDataRole.AccessibleDescriptionRole:
             return cell_description(cell)
         if role == STRIPE_ROLE:
             return None if cell.plan is None else phase_color(cell.plan.phase, self._theme)
@@ -242,8 +243,6 @@ class CalendarPage(QWidget):
     day_requested = Signal(object)  # date: Enter or double click on a day up to today
     month_changed = Signal(object)  # date: the first day of the month now shown
     selection_changed = Signal(object)  # date | None: the selected day
-    change_goal_requested = Signal(str)  # goal id
-    remove_goal_requested = Signal(str)  # goal id
     day_menu_requested = Signal(object, object)  # CalendarDay, QPoint (global): a day's menu
 
     def __init__(self, today: date, parent: QWidget | None = None) -> None:
@@ -266,23 +265,13 @@ class CalendarPage(QWidget):
         top = self._build_navigation()
         self._build_table()
         legends = self._build_legends()
-        self._panel = DayDetailPanel(self)
-        self._panel.setObjectName("calendarDayPanel")
-        self._panel.change_goal_requested.connect(self.change_goal_requested)
-        self._panel.remove_goal_requested.connect(self.remove_goal_requested)
-        splitter = QSplitter(Qt.Orientation.Vertical, self)
-        splitter.setChildrenCollapsible(False)
-        splitter.addWidget(self._table)
-        splitter.addWidget(self._panel)
-        # The month takes the room; the day's text stays a short band the user can drag taller.
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 0)
-        splitter.setSizes([_GRID_START_PX, self._panel.minimumHeight()])
+        # Under the month only the legends (user's request of 2026-11-10): the day in full is in
+        # the tooltip of its cell and in the day's window.
         layout = QVBoxLayout(self)
         layout.setContentsMargins(SPACE_4, SPACE_4, SPACE_4, SPACE_4)
         layout.setSpacing(SPACE_3)
         layout.addLayout(top)
-        layout.addWidget(splitter, stretch=1)
+        layout.addWidget(self._table, stretch=1)
         layout.addWidget(legends)
 
     def _build_navigation(self) -> QHBoxLayout:
@@ -381,11 +370,6 @@ class CalendarPage(QWidget):
     def model(self) -> MonthModel:
         """The grid's model."""
         return self._model
-
-    @property
-    def panel(self) -> DayDetailPanel:
-        """The panel of the selected day."""
-        return self._panel
 
     @property
     def current_month(self) -> date:
@@ -540,12 +524,11 @@ class CalendarPage(QWidget):
 
     def _on_current_changed(self, _current: QModelIndex, _previous: QModelIndex) -> None:
         if not self._refreshing:
-            self._sync_panel()
+            self._say_selection()
 
-    def _sync_panel(self) -> None:
-        """Show the selected day in the panel and tell whoever follows the selection."""
+    def _say_selection(self) -> None:
+        """Tell whoever follows the selection which day is selected."""
         cell = self.selected_cell()
-        self._panel.show_day(cell)
         self.selection_changed.emit(None if cell is None else cell.day)
 
     def _refresh(self) -> None:
@@ -573,7 +556,7 @@ class CalendarPage(QWidget):
         for kind, swatch in self._legend_swatches.items():
             swatch.setStyleSheet(f"background-color: {tints[list(GoalKind).index(kind)]};")
         self._refresh_phase_legend(month)
-        self._sync_panel()
+        self._say_selection()
 
     def _refresh_phase_legend(self, month: MonthView) -> None:
         present = {cell.plan.phase for cell in month.days if cell.plan is not None}

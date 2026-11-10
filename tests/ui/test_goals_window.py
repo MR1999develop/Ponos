@@ -16,7 +16,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QLocale, QSettings
+from PySide6.QtCore import QLocale, QSettings, Qt
 from PySide6.QtWidgets import QLabel, QMessageBox
 from pytestqt.qtbot import QtBot
 
@@ -598,7 +598,7 @@ def test_a_day_after_today_opens_on_the_planned_session_with_its_blocks(
     assert cell.is_future
     assert cell.plan == target
     assert target.session is not None
-    detail = page.panel.detail_text
+    detail = str(page.model.data(page.model.index_of(target.day), Qt.ItemDataRole.ToolTipRole))
     for block in target.session.blocks:
         assert f"zone {block.zone}" in detail
     assert "Estimated load:" in detail
@@ -621,11 +621,11 @@ def test_the_race_day_is_marked_with_its_priority_and_the_phases_are_in_the_lege
     lines = str(page.model.data(page.model.index_of(RACE_DAY))).split("\n")
     assert "Race A" in lines
     assert "Race day" in lines
-    assert "Race A, Marathon, 9/22/26" in page.panel.detail_text
+    tooltip = page.model.data(page.model.index_of(RACE_DAY), Qt.ItemDataRole.ToolTipRole)
+    assert "Race A, Marathon, 9/22/26" in str(tooltip)
     assert "Race day" in page.phase_legend_texts
-    ((change, remove),) = page.panel.goal_buttons()
-    assert change.isEnabled()
-    assert remove.isEnabled()
+    assert window.plan.actions["change_goal"].isEnabled()
+    assert window.plan.actions["remove_goal"].isEnabled()
 
 
 def test_a_goal_can_be_changed_and_removed_from_the_day_in_the_calendar_and_undone(
@@ -640,14 +640,13 @@ def test_a_goal_can_be_changed_and_removed_from_the_day_in_the_calendar_and_undo
     wait_for(qtbot, lambda: bool(cell_of(window, RACE_DAY).goals))
     page.select_day(RACE_DAY)
 
-    ((change, remove),) = page.panel.goal_buttons()
-    change.click()
+    window.plan.actions["change_goal"].trigger()  # what the day menu runs
     wait_for(qtbot, lambda: window.plan.goal_dialog is not None)
     dialog = window.plan.goal_dialog
     assert dialog is not None
     assert dialog.windowTitle() == "Change race"
     dialog.reject()
-    remove.click()
+    window.plan.actions["remove_goal"].trigger()
     wait_for(qtbot, lambda: window.plan.is_idle and goals_of(window) == ())
     wait_for(qtbot, lambda: not cell_of(window, RACE_DAY).goals)
     undo(window)
@@ -697,7 +696,9 @@ def test_a_past_day_shows_what_was_planned_then_beside_what_was_done_and_how_it_
     assert cell.adherence is not None
     assert cell.adherence.planned_load == 100.0
     assert cell.adherence.actual_load == pytest.approx(cell.load)
-    detail = page.panel.detail_text
+    detail = str(
+        page.model.data(page.model.index_of(DAWN_AND_LUNCH_DAY), Qt.ItemDataRole.ToolTipRole)
+    )
     assert detail.index("Threshold, 60 min") < detail.index("Done: Running")
     assert "Planned 100 TRIMPeq, done" in detail
     lines = str(page.model.data(page.model.index_of(DAWN_AND_LUNCH_DAY))).split("\n")

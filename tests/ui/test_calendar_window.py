@@ -74,8 +74,9 @@ def test_each_past_day_shows_its_sports_and_load_and_a_day_without_activity_only
     assert lines[2].endswith(" TRIMPeq")
     assert busy.load > 0
     assert str(model.data(empty_index)) == "11"
-    assert "Activities: 2 (Running)" in str(model.data(index, Qt.ItemDataRole.ToolTipRole))
-    assert "Running" in str(model.data(index, Qt.ItemDataRole.AccessibleDescriptionRole))
+    described = str(model.data(index, Qt.ItemDataRole.AccessibleDescriptionRole))
+    assert "Activities: 2 (Running)" in described
+    assert "Done: Running" in str(model.data(index, Qt.ItemDataRole.ToolTipRole))  # in full
     assert cell_of(window, LONG_DAY).activity_count == 1
 
 
@@ -197,7 +198,6 @@ def test_days_after_today_can_be_selected_but_have_no_day_page(qtbot: QtBot) -> 
     assert page.model.flags(future) & Qt.ItemFlag.ItemIsEnabled
     assert requested == []  # the nutrition day page is for the days up to today
     assert "No plan for this day" in str(page.model.data(future, Qt.ItemDataRole.ToolTipRole))
-    assert "No plan for this day." in page.panel.detail_text
 
 
 def test_the_arrow_keys_reach_the_days_after_today_and_enter_opens_nothing_there(

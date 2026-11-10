@@ -790,6 +790,11 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       Test: `tests/ui/test_new_profile_thresholds.py`,
       `tests/ui/test_new_profile_form_thresholds.py`,
       `tests/profiles/test_create_profile_thresholds.py`.
+- [x] Sotto il calendario solo la legenda (richiesta dell'utente del
+      2026-11-10): tolto il pannello del giorno; il dettaglio completo del
+      giorno è nel tooltip della cella, modifica e rimozione degli obiettivi
+      dal menu del giorno. Test: `tests/ui/test_calendar_plan.py`,
+      `tests/ui/test_pane_contents.py`.
 - [x] Finestra del giorno con la seduta programmata completa (fase, blocchi,
       carico stimato), come il pannello del calendario (richiesta dell'utente
       del 2026-11-10, `db698a1`; caso d'uso `PlannedDay`).
