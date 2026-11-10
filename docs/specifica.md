@@ -928,9 +928,12 @@ no diet or allergy restriction for now.
 - Below, the activities of the day with their calories and where they come
   from (device, heart rate estimate, estimate by sport).
 - Then the meals in time order: breakfast, lunch, dinner, and the intakes
-  before, during and after each session of at least 30 minutes. Each card has
-  time, energy and the grams of carbohydrate, protein and fat. There are no example
-  foods and no food table (user's request of 2026-11-10).
+  before, during and after each session of at least 30 minutes, in one table (a
+  row each: time, meal, energy and the grams of carbohydrate, protein and fat),
+  with the notes of a meal (moved because of training, hourly amounts during
+  training) under it. There are no example foods and no food table. The window
+  of a day opens as large as its content, within the screen, so it shows
+  everything without a scroll bar (user's requests of 2026-11-10).
 - Meals near a session move or merge with the intakes around it. When the
   carbohydrate of the day is not enough for all of them, the page says that
   the intakes were scaled.
