@@ -27,11 +27,11 @@ from PySide6.QtCore import (
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QFormLayout,
-    QHBoxLayout,
+    QGridLayout,
     QHeaderView,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
     QTableView,
     QVBoxLayout,
@@ -58,8 +58,7 @@ from ponos_coach.ui.chart_view import ChartEngine, ChartView
 from ponos_coach.ui.errors import ErrorMessage, unavailable_detail_message
 from ponos_coach.ui.state_page import StatePage
 from ponos_coach.ui.threshold_presentation import can_be_threshold_test, not_a_run_reason
-from ponos_coach.ui.tokens import SPACE_2, SPACE_4, Theme, tokens_for
-from ponos_coach.ui.track_view import TrackPanel, TrackStrings
+from ponos_coach.ui.tokens import SPACE_2, SPACE_4, Theme
 
 _ALIGN_RIGHT = int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 _ALIGN_LEFT = int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -67,8 +66,7 @@ _PERCENT = 100
 _ONE_DECIMAL_BELOW = 10.0
 _DEFAULT_SIZE = (940, 780)
 _CHART_MIN_HEIGHT = 190  # the plot area keeps about 90 px between the legend and the axis
-_ZONE_TABLE_HEIGHT = 170
-_MAP_MIN_SIZE = (320, 240)
+_SUMMARY_PAIRS_PER_ROW = 3  # caption and value, three times on a row
 
 
 _COLUMNS = 5  # zone, heart rate, time, share, load
@@ -197,12 +195,9 @@ class ActivityDetailDialog(QDialog):
         self.resize(*_DEFAULT_SIZE)
         self._chart = ChartView(engine, self.tr("Heart rate chart"), self)
         self._chart.setMinimumHeight(_CHART_MIN_HEIGHT)
-        self._track = TrackPanel(engine, self.tr("Map of the activity"), self)
-        self._track.setMinimumSize(*_MAP_MIN_SIZE)
         self._zone_model = ZoneTableModel(self)
         self._build()
         self.finished.connect(self._chart.dispose)
-        self.finished.connect(self._track.view.dispose)
         self.show_loading()
 
     # --- Costruzione ------------------------------------------------------------------
@@ -214,16 +209,7 @@ class ActivityDetailDialog(QDialog):
         font = self._title.font()
         font.setBold(True)
         self._title.setFont(font)
-        self._summary = QFormLayout()
-        self._summary.setVerticalSpacing(SPACE_2)
-        self._summary_values: dict[str, QLabel] = {}
-        for key, text in self._summary_rows():
-            label = QLabel(self)
-            label.setTextFormat(Qt.TextFormat.PlainText)
-            label.setObjectName(f"detail-{key}")
-            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            self._summary_values[key] = label
-            self._summary.addRow(text, label)
+        self._build_summary()
         self._notice = QLabel(self)
         self._notice.setObjectName("detailNotice")
         self._notice.setTextFormat(Qt.TextFormat.PlainText)
@@ -231,7 +217,6 @@ class ActivityDetailDialog(QDialog):
         self._notice.setVisible(False)
 
         self._build_table()
-        self._build_map_area()
 
         self._message = StatePage(self)
         self._message.button.setVisible(False)
@@ -249,11 +234,7 @@ class ActivityDetailDialog(QDialog):
         outer = QVBoxLayout(self)
         outer.setSpacing(SPACE_4)
         outer.addWidget(self._title)
-        top = QHBoxLayout()
-        top.setSpacing(SPACE_4)
-        top.addLayout(self._summary, stretch=1)
-        top.addWidget(self._map_area, stretch=1)
-        outer.addLayout(top)
+        outer.addLayout(self._summary)
         outer.addWidget(self._notice)
         outer.addWidget(self._body, stretch=1)
         outer.addWidget(self._table)
@@ -270,17 +251,37 @@ class ActivityDetailDialog(QDialog):
         self._table.setSelectionMode(QTableView.SelectionMode.NoSelection)
         self._table.verticalHeader().setVisible(False)
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._table.setMaximumHeight(_ZONE_TABLE_HEIGHT)
+        self._table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-    def _build_map_area(self) -> None:
-        self._no_gps = QLabel(self.tr("No GPS track in this activity."), self)
-        self._no_gps.setObjectName("detailNoGps")
-        self._no_gps.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._no_gps.setWordWrap(True)
-        self._map_area = QStackedWidget(self)
-        self._map_area.addWidget(self._no_gps)
-        self._map_area.addWidget(self._track)
-        self._map_area.setMinimumSize(*_MAP_MIN_SIZE)
+    def _fit_table_height(self) -> None:
+        """Height from the content (header, rows, frame): every zone is visible, no scroll bar."""
+        rows = sum(self._table.rowHeight(row) for row in range(self._zone_model.rowCount()))
+        self._table.setFixedHeight(
+            self._table.horizontalHeader().height() + rows + 2 * self._table.frameWidth()
+        )
+
+    def _build_summary(self) -> None:
+        """The summary values as a grid of caption and value pairs, three pairs per row."""
+        self._summary = QGridLayout()
+        self._summary.setVerticalSpacing(SPACE_2)
+        self._summary.setHorizontalSpacing(SPACE_4)
+        self._summary_values: dict[str, QLabel] = {}
+        self._summary_captions: list[QLabel] = []
+        for position, (key, text) in enumerate(self._summary_rows()):
+            row, pair = divmod(position, _SUMMARY_PAIRS_PER_ROW)
+            caption = QLabel(text, self)
+            caption.setTextFormat(Qt.TextFormat.PlainText)
+            value = QLabel(self)
+            value.setTextFormat(Qt.TextFormat.PlainText)
+            value.setObjectName(f"detail-{key}")
+            value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            self._summary_captions.append(caption)
+            self._summary_values[key] = value
+            self._summary.addWidget(caption, row, 2 * pair)
+            self._summary.addWidget(value, row, 2 * pair + 1)
+        for pair in range(_SUMMARY_PAIRS_PER_ROW):
+            self._summary.setColumnStretch(2 * pair + 1, 1)
 
     def _summary_rows(self) -> tuple[tuple[str, str], ...]:
         return (
@@ -303,23 +304,18 @@ class ActivityDetailDialog(QDialog):
         return self._chart
 
     @property
-    def track(self) -> TrackPanel:
-        """The map of the activity."""
-        return self._track
-
-    @property
-    def no_gps_text(self) -> str:
-        """The message shown instead of the map (empty while the map is the visible page)."""
-        return "" if self.shows_track() else self._no_gps.text()
-
-    def shows_track(self) -> bool:
-        """True if the map is the visible page of its area."""
-        return self._map_area.currentWidget() is self._track
-
-    @property
     def zone_model(self) -> ZoneTableModel:
         """The zones table model."""
         return self._zone_model
+
+    @property
+    def zone_table(self) -> QTableView:
+        """The zones table view."""
+        return self._table
+
+    def summary_value_widget(self, key: str) -> QLabel:
+        """The label that holds the value of one summary row."""
+        return self._summary_values[key]
 
     @property
     def title_text(self) -> str:
@@ -390,11 +386,9 @@ class ActivityDetailDialog(QDialog):
         )
         self._set_details_visible(True)
         self._fill_summary(detail)
-        self._show_map(detail)
         self._zone_model.set_rows(zone_rows(detail))
-        self._table.setVisible(
-            ready.chart is not None
-        )  # without HR the load is estimated: no zones
+        self._table.setVisible(ready.chart is not None)
+        self._fit_table_height()
         if ready.chart is None:
             self._show_message(
                 self.tr("No heart-rate data"),
@@ -403,21 +397,6 @@ class ActivityDetailDialog(QDialog):
         else:
             self._chart.show_prepared(ready.chart)
             self._body.setCurrentWidget(self._chart)
-
-    def _show_map(self, detail: ActivityDetail) -> None:
-        """The track on the map; without GPS (indoor) a short message takes its place."""
-        if detail.outline is None:
-            self._map_area.setCurrentWidget(self._no_gps)
-            return
-        strings = TrackStrings(
-            map=self.tr("Map of the activity"),
-            zoom_in=self.tr("Zoom in"),
-            zoom_out=self.tr("Zoom out"),
-            start=self.tr("Start"),
-            finish=self.tr("Finish"),
-        )
-        self._map_area.setCurrentWidget(self._track)
-        self._track.view.show_outline(detail.outline, tokens_for(self._theme()), strings)
 
     def _fill_summary(self, detail: ActivityDetail) -> None:
         local = detail.start.astimezone(self._zone)
@@ -481,10 +460,9 @@ class ActivityDetailDialog(QDialog):
             self.threshold_test_requested.emit(self._identity)
 
     def _set_details_visible(self, visible: bool) -> None:
-        for label in self._summary_values.values():
+        for label in (*self._summary_captions, *self._summary_values.values()):
             label.setVisible(visible)
         self._table.setVisible(visible)
-        self._map_area.setVisible(visible)
         if not visible:
             self._notice.setVisible(False)
             self._title.setText("")

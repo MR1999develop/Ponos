@@ -20,7 +20,6 @@ APP_HOST = "app"
 TILES_HOST = "tiles"
 APP_PAGE_URL = f"{APP_SCHEME}://{APP_HOST}/chart.html"
 APP_MAP_URL = f"{APP_SCHEME}://{APP_HOST}/map.html"
-APP_TRACK_URL = f"{APP_SCHEME}://{APP_HOST}/track.html"
 TILE_URL_TEMPLATE = f"{APP_SCHEME}://{TILES_HOST}/{{z}}/{{x}}/{{y}}"  # Leaflet fills the braces
 
 _registered = False
