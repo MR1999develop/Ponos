@@ -114,21 +114,21 @@ non valgono più ×0,8, la bici è valutata sulla propria soglia.
 
 ## 4b. Zone di FC
 
-Cinque zone sulla soglia dello sport (in bici la soglia della bici), secondo
-Friel, **5ª edizione** (FRI5, tab. 4.1; dalla fase 5; prima erano le zone di corsa delle
-edizioni precedenti, 85/90/95/100); percentuali in un solo posto
+Cinque zone sulla soglia dello sport (in bici la soglia della bici), **scelta
+dell'utente del 2026-11-10** (prima: Friel 5ª ed. 78/87/94/100, ancora prima
+85/90/95/100); percentuali in un solo posto
 (`ZONE_STARTS_PERCENT` in `load/domain/zones.py`):
 
 | Zona | FC in % della soglia |
 |---|---|
-| Z1 | sotto 78% |
-| Z2 | da 78% a 86% (sotto 87%) |
-| Z3 | da 87% a 93% (sotto 94%) |
-| Z4 | da 94% a 99% (sotto 100%) |
-| Z5 | 100% e oltre |
+| Z1 | 50-74% (sotto 75%: raccoglie anche ciò che sta sotto il 50%) |
+| Z2 | da 75% a 84% (sotto 85%) |
+| Z3 | da 85% a 94% (sotto 95%) |
+| Z4 | da 95% a 102% (sotto 103%) |
+| Z5 | 103% e oltre, fino alla FC massima |
 
-- Il confine inferiore appartiene alla zona più alta (132,6 bpm con soglia 170 è
-  il confine di Z2: 133 è Z2, 132 è Z1; 170 è esattamente il 100%: Z5). Il confronto è su interi (`bpm * 100`
+- Il confine inferiore appartiene alla zona più alta (127,5 bpm con soglia 170 è
+  il confine di Z2: 128 è Z2, 127 è Z1; con soglia 100 il 75 è esattamente Z2). Il confronto è su interi (`bpm * 100`
   contro `percentuale * soglia`), mai su percentuali in virgola mobile.
 - I **secondi in ogni zona** (`ActivityLoad.zone_seconds`, `ZoneSeconds`) sono
   quelli dei campioni contati dal carico: stessi scarti (FC fuori limiti) e
@@ -136,8 +136,8 @@ edizioni precedenti, 85/90/95/100); percentuali in un solo posto
   per una stima fatta con pochi campioni validi sono quelli misurati.
 - Si salvano nella cache dei carichi (colonne `zone1_s ... zone5_s`) legati alla
   stessa impronta del carico; l'impronta comprende le percentuali delle zone e
-  `LOAD_MODEL_VERSION` (3 dal TRIMPeq). Cambiando le percentuali (fase 5: dalle zone
-  85/90/95/100 a 78/87/94/100) l'impronta cambia, quindi i **secondi per zona si
+  `LOAD_MODEL_VERSION` (3 dal TRIMPeq). Cambiando le percentuali (2026-11-10: dalle zone
+  78/87/94/100 a 75/85/95/103) l'impronta cambia, quindi i **secondi per zona si
   ricalcolano** alla prossima panoramica, mentre il carico **resta identico**
   (le zone classificano soltanto i secondi); `LOAD_MODEL_VERSION` non cambia perché la
   formula del carico non cambia. Le zone di ritmo dell'`assessment` (78/88/94/100

@@ -110,7 +110,7 @@ def test_detail_gives_trace_load_summary_and_zone_bounds_of_the_day() -> None:
     assert (
         detail.zone_starts_bpm
         == zone_starts_bpm(170)
-        == pytest.approx((132.6, 147.9, 159.8, 170.0))
+        == pytest.approx((127.5, 144.5, 161.5, 175.1))
     )
     assert detail.load.source is LoadSource.HEART_RATE
     assert detail.load.zone_seconds.values == (0.0, 0.0, 600.0, 0.0, 0.0)  # 150 bpm: Z3
@@ -159,7 +159,7 @@ def test_limits_and_zones_are_the_ones_valid_on_the_activity_day() -> None:
     detail_before, detail_after = detail_of(world, before), detail_of(world, after)
 
     assert (detail_before.threshold_bpm, detail_after.threshold_bpm) == (170, 160)
-    assert detail_after.zone_starts_bpm == pytest.approx((124.8, 139.2, 150.4, 160.0))
+    assert detail_after.zone_starts_bpm == pytest.approx((120.0, 136.0, 152.0, 164.8))
     assert detail_before.load.zone_seconds.values == (0.0, 0.0, 60.0, 0.0, 0.0)  # 152 = 89.4%
     assert detail_after.load.zone_seconds.values == (0.0, 0.0, 0.0, 60.0, 0.0)  # 152 = 95%
 
@@ -196,7 +196,7 @@ def test_the_detail_decodes_the_file_once_and_never_reads_the_gps_track() -> Non
 def test_the_load_of_each_zone_adds_up_to_the_load_and_harder_zones_earn_more() -> None:
     world = World()
     world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
-    record = add_activity(world, [140] * 300 + [175] * 300)  # 5 minutes in Z2, 5 in Z5
+    record = add_activity(world, [140] * 300 + [180] * 300)  # 5 minutes in Z2, 5 in Z5
 
     detail = detail_of(world, record)
 

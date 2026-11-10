@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Heart-rate zones on the threshold (five zones, after Friel, 5th edition: FRI5, table 4.1).
+"""Heart-rate zones on the threshold (five zones, the user's choice of 2026-11-10).
 
-Z1 below 78% of the threshold, Z2 78-86%, Z3 87-93%, Z4 94-99%, Z5 from 100% up (the boundaries
-are whole percentages of the threshold: Z2 starts at 78, Z3 at 87, Z4 at 94, Z5 at 100). They
-live only here (the pace zones of `assessment` have their own, on the speed). The lower boundary
-belongs to the higher zone (`bpm >= 78% of the threshold` is Z2). Comparisons are on floating-point
-values but exact: `bpm * 100` against `percentage * threshold` (integer), never a
-floating-point percentage at the boundary.
+Z1 50-74% of the threshold, Z2 75-84%, Z3 85-94%, Z4 95-102%, Z5 from 103% up to the maximum HR
+(the boundaries are whole percentages of the threshold: Z2 starts at 75, Z3 at 85, Z4 at 95, Z5
+at 103). Z1 collects everything below Z2, also under 50%. They live only here (the pace zones of
+`assessment` have their own, on the speed). The lower boundary belongs to the higher zone
+(`bpm >= 75% of the threshold` is Z2). Comparisons are on floating-point values but exact:
+`bpm * 100` against `percentage * threshold` (integer), never a floating-point percentage at the
+boundary.
 
 Exactness: the decoders give integer bpm (FIT carries integers, from 0 to 255),
 so `bpm * 100` and `percentage * threshold` are small integers, represented exactly by
@@ -27,7 +28,7 @@ from numpy.typing import NDArray
 
 ZONE_COUNT = 5
 # Threshold percentages from which each zone beyond the first starts (Z2, Z3, Z4, Z5).
-ZONE_STARTS_PERCENT: tuple[int, ...] = (78, 87, 94, 100)
+ZONE_STARTS_PERCENT: tuple[int, ...] = (75, 85, 95, 103)
 _PERCENT = 100
 
 

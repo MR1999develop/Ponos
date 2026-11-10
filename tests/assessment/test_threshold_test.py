@@ -95,7 +95,9 @@ def test_the_pace_zones_start_where_the_speed_reaches_each_share_of_the_threshol
 def test_the_hr_zones_follow_the_threshold_just_found() -> None:
     result = accepted(evaluate(standard_test(hr=165)))
 
-    assert result.hr_zone_starts_bpm == pytest.approx((165 * 0.78, 165 * 0.87, 165 * 0.94, 165.0))
+    assert result.hr_zone_starts_bpm == pytest.approx(
+        (165 * 0.75, 165 * 0.85, 165 * 0.95, 165 * 1.03)
+    )
 
 
 def test_the_result_counts_the_hr_samples_it_used() -> None:

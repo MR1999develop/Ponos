@@ -227,7 +227,7 @@ def test_the_review_shows_day_segment_threshold_pace_current_threshold_and_the_z
         "Z4",
         "Z5",
     ]
-    assert model.index(4, 1).data() == "168 or more"
+    assert model.index(4, 1).data() == "174 or more"
     assert model.index(4, 2).data() == "4:38 or faster"
     for column in (1, 2):
         alignment = model.index(0, column).data(Qt.ItemDataRole.TextAlignmentRole)

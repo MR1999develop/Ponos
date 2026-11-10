@@ -493,7 +493,8 @@ POSIX compresi; campagna di collaudo verde su Windows (esiti in
 - [x] Grafici Plotly in `QWebEngineView` isolato: PMC, carico settimanale per
       sport, zone, FC dell'attività; esportazione SVG e PNG. Zone FC sulla
       soglia secondo Friel, cinque zone (Z1 < 85%, Z2 85–89%, Z3 90–94%,
-      Z4 95–99%, Z5 ≥ 100%: default del progetto, rivisto in fase 4).
+      Z4 95–99%, Z5 ≥ 100%: default del progetto, rivisto in fase 4; zone poi cambiate,
+      vedi fase 8, 2026-11-10).
 
 *Stato 2026-11-06: completata sul ramo `fase-3-carico-e-grafici`; controlli e
 collaudo verdi su Windows. I plurali inglesi usano frasi invarianti
@@ -880,6 +881,13 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       nulla; il test dei 30 minuti aggiorna solo la soglia di corsa. Test:
       `tests/{load,profiles,storage,planning}/test_sport_thresholds*.py`,
       `tests/ui/test_sport_thresholds_form.py`.
+- [x] Nuove zone FC (richiesta dell'utente del 2026-11-10): Z1 sotto 75%
+      (50-74%), Z2 75-84%, Z3 85-94%, Z4 95-102%, Z5 da 103% della soglia
+      (`ZONE_STARTS_PERCENT = (75, 85, 95, 103)`); FC rappresentative del piano
+      66/82/90/97/103; `METHOD_VERSION` 10; l'impronta dei carichi comprende le
+      percentuali, quindi i secondi per zona si ricalcolano e il TRIMPeq no. Le
+      zone di ritmo non cambiano. Test: `tests/load/test_zones.py`,
+      `tests/collaudo/test_fase5_zone_fri5.py`, `tests/planning/`, `tests/ui/`.
 - [x] Sincronizzazione: una voce che Garmin non scarica mai (errore 5xx o
       nessuna risposta a ogni giro, mentre l'elenco risponde) resta in attesa
       per sempre e ferma ogni giro dopo 3 voci; serve un contatore di giri

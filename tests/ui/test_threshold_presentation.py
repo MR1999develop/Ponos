@@ -104,20 +104,20 @@ def test_heart_rate_zones_are_whole_bpm_ranges_that_do_not_overlap() -> None:
     ranges = heart_rate_zone_ranges(zone_starts_bpm(THRESHOLD_BPM))
 
     assert ranges == (
-        "Up to 131",
-        "132 to 146",
-        "147 to 157",
-        "158 to 167",
-        "168 or more",
+        "Up to 125",
+        "126 to 142",
+        "143 to 159",
+        "160 to 173",
+        "174 or more",
     )
 
 
 def test_a_boundary_that_is_a_whole_bpm_belongs_to_the_faster_zone() -> None:
-    # 78% of 200 is 156 exactly: 156 is the first bpm of Z2, not the last of Z1
+    # 75% of 200 is 150 exactly: 150 is the first bpm of Z2, not the last of Z1
     ranges = heart_rate_zone_ranges(zone_starts_bpm(200))
 
-    assert ranges[0] == "Up to 155"
-    assert ranges[1].startswith("156 to")
+    assert ranges[0] == "Up to 149"
+    assert ranges[1].startswith("150 to")
 
 
 def test_pace_zones_agree_with_the_domain_on_every_whole_second() -> None:

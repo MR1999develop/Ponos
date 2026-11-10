@@ -46,10 +46,10 @@ LEGS = [Leg(300, 110, 2.5), Leg(300, 150, 3.0), Leg(300, 160, 3.2), Leg(300, 172
 # Frozen with the code of commit d5b7b3b (no distance series): (TRIMPeq of a run, used samples,
 # excluded seconds, seconds per zone); the number is the hrTSS of that time, the same
 # formula. The same files must give the same numbers: the load did not
-# change when the zones of the 5th edition came (78/87/94/100%), only the seconds per zone and the
-# fingerprint of the saved loads, which therefore recompute.
-FROZEN_LOAD = (36.81167026367779, 1801, 0.0, (601.0, 0.0, 300.0, 300.0, 600.0))
-FROZEN_FINGERPRINT = "740cd5b1c970ebd654e2157ce484e42b95c87235a9ea88db0db0e6345db4f6d4"
+# change when the zones of the user came (75/85/95/103%, 2026-11-10), only the seconds per zone
+# and the fingerprint of the saved loads, which therefore recompute.
+FROZEN_LOAD = (36.81167026367779, 1801, 0.0, (601.0, 0.0, 600.0, 300.0, 300.0))
+FROZEN_FINGERPRINT = "56a80220918a05f5329c5a621fbde3cc95f33086104024999c9072d78c569324"
 
 
 BIKE_TRIMP_EQ = 40.193518072841776
@@ -105,7 +105,7 @@ def test_the_load_with_gaps_is_the_one_computed_before() -> None:
     trimp_eq, used, excluded, zones = load_of(decode(data))
 
     assert trimp_eq == pytest.approx(36.23208601003227, rel=1e-12)
-    assert (used, excluded, zones) == (1765, 31.0, (601.0, 0.0, 269.0, 305.0, 595.0))
+    assert (used, excluded, zones) == (1765, 31.0, (601.0, 0.0, 574.0, 295.0, 300.0))
 
 
 def test_the_heart_rate_series_does_not_depend_on_the_distance() -> None:

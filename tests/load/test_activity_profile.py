@@ -232,7 +232,7 @@ def test_t_map_09_zones_come_from_the_threshold_of_the_day_and_match_the_legend(
     assert profile.threshold_bpm == 170
     assert profile.zone_starts_bpm == zone_starts_bpm(170)
     assert profile.zone is not None
-    assert set(profile.zone.tolist()) == {2}  # 150 / 170 = 88%: from 87% it is Z3
+    assert set(profile.zone.tolist()) == {2}  # 150 / 170 = 88%: from 85% it is Z3
 
 
 def test_t_map_09_the_parameters_valid_on_the_local_day_are_the_ones_used() -> None:

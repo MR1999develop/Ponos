@@ -90,7 +90,9 @@ def test_t_piano_06_the_20_minute_test_by_hand_hr_95_percent_pace_plus_5_percent
     assert result.threshold_bpm == 152  # 160 x 0.95
     assert result.pace_s_per_km == 300  # 285.714 s/km x 1.05; on the speed it would be 301
     assert result.valid_hr_samples == 1200
-    assert result.hr_zone_starts_bpm == pytest.approx((152 * 0.78, 152 * 0.87, 152 * 0.94, 152.0))
+    assert result.hr_zone_starts_bpm == pytest.approx(
+        (152 * 0.75, 152 * 0.85, 152 * 0.95, 152 * 1.03)
+    )
     assert result.pace_zone_starts_s_per_km == pytest.approx(
         (300 / 0.78, 300 / 0.88, 300 / 0.94, 300.0), abs=1e-9
     )

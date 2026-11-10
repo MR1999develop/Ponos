@@ -94,7 +94,9 @@ def test_the_pace_zones_follow_the_threshold_pace() -> None:
     assert result.pace_zone_starts_s_per_km == pytest.approx(
         (300 / 0.78, 300 / 0.88, 300 / 0.94, 300.0)
     )
-    assert result.hr_zone_starts_bpm == pytest.approx((162 * 0.78, 162 * 0.87, 162 * 0.94, 162.0))
+    assert result.hr_zone_starts_bpm == pytest.approx(
+        (162 * 0.75, 162 * 0.85, 162 * 0.95, 162 * 1.03)
+    )
 
 
 def test_without_distance_the_segment_is_chosen_by_hr_and_there_is_no_pace() -> None:

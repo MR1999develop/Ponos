@@ -126,8 +126,8 @@ tetti, esiti dell'import, lock, dati personali, schema da v3 a v7. Dettagli:
   decimi di chilo; una misura vale fino alla voce successiva della sua serie.
 - Il carico è solo il TRIMPeq: niente hrTSS né pesi per sport; le soglie per
   sport vengono da `threshold_for_sport`, unico punto da cambiare.
-- Le percentuali delle zone stanno solo in `ZONE_STARTS_PERCENT` (78/87/94/100,
-  FRI5); l'impronta dei carichi le contiene, quindi i secondi per zona si ricalcolano da
+- Le percentuali delle zone stanno solo in `ZONE_STARTS_PERCENT` (75/85/95/103,
+  scelta dell'utente del 2026-11-10); l'impronta dei carichi le contiene, quindi i secondi per zona si ricalcolano da
   soli; `LOAD_MODEL_VERSION` si alza solo se cambia la formula del carico. Se cambiano le
   zone si alza anche `METHOD_VERSION` del piano.
 - Un file originale (FIT) si scrive su temporaneo, flush, rinomina; il

@@ -443,9 +443,10 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 - Stacked bars in hours per week, with Z1 at the bottom and Z5 at the top, over
   the same 26 weeks.
 - The five zones are defined on the threshold of the sport (on the bike, the
-  bike threshold), as in the 5th edition of the reference text: Z1 below 78%,
-  Z2 from 78% to 86%, Z3 from 87% to 93%, Z4 from 94% to 99%, Z5 from 100%
-  (since phase 5; before, the percentages were 85, 90, 95 and 100). A sample
+  bike threshold), chosen by the user on 2026-11-10: Z1 below 75% (50-74%;
+  everything below also counts in Z1), Z2 from 75% to 84%, Z3 from 85% to 94%,
+  Z4 from 95% to 102%, Z5 from 103% up to the maximum HR (before: 78, 87, 94
+  and 100, from the 5th edition of the reference text). A sample
   on the boundary belongs to the higher zone. The change moves only the seconds
   in each zone and the planned load of a session, not the load of an activity
   already done ([ADR 007](adr/007-dati-del-profilo-e-zone.md)).

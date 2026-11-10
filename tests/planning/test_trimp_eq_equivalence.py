@@ -2,10 +2,15 @@
 # Copyright (C) 2026 MR
 """The move from hrTSS (with sport weights) to TRIMPeq changes no running plan.
 
-`golden/plans_hrtss.json` was recorded with the engine of method version 6 on the scenarios of
+`golden/plans_hrtss.json` was first recorded with the engine of method version 6 and re-recorded
+with version 10 (the heart-rate zones of the user, 2026-11-10: the heart-rate ranges of the blocks,
+the representative heart rate of Z1 and so the estimated loads and some durations moved; the
+session types, the days, the phases and the warnings did not) on the scenarios of
 `equivalence_scenarios`: for the same data and a running athlete the sessions (type, duration,
-days, zones, heart-rate ranges), the phases, the weeks and the warnings are the same, and every
-load is the recorded number (TRIMPeq on running is the old hrTSS: same formula, same scale).
+days, zones, heart-rate ranges), the phases, the weeks and the warnings are the recorded ones, and
+every load is the recorded number. To re-record after a change of the engine on purpose, build
+each scenario with `build_plan(inputs(**kwargs), TODAY)`, take `summary(plan)` and dump the
+dictionary by scenario name with sorted keys and compact separators.
 """
 
 from __future__ import annotations
