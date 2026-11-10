@@ -698,25 +698,6 @@
     </message>
 </context>
 <context>
-    <name>DayDetailPanel</name>
-    <message>
-        <source>Selected day</source>
-        <translation>Giorno selezionato</translation>
-    </message>
-    <message>
-        <source>Select a day to see what is planned, what was done and its goals.</source>
-        <translation>Seleziona un giorno per vedere cosa è previsto, cosa è stato fatto e i suoi obiettivi.</translation>
-    </message>
-    <message>
-        <source>Change...</source>
-        <translation>Modifica...</translation>
-    </message>
-    <message>
-        <source>Remove</source>
-        <translation>Rimuovi</translation>
-    </message>
-</context>
-<context>
     <name>DayPage</name>
     <message>
         <source>Calculating the day...</source>
