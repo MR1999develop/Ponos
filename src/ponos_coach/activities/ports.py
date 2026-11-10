@@ -465,7 +465,8 @@ class SyncJournal(Protocol):
         ...
 
     def next_exhausted(self, limit: int) -> Sequence[JournalEntry]:
-        """At most `limit` entries failed for `ATTEMPTS_EXHAUSTED`, same order as
+        """At most `limit` entries failed for a cause in `REARMABLE_REASONS`
+        (`ATTEMPTS_EXHAUSTED`, `REMOTE_NOT_PROVIDED`), same order as
         `next_to_process`. They serve the "Full check", which rearms them with
         `rearm_exhausted`.
 

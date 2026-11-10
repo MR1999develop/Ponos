@@ -45,8 +45,16 @@ class FailureReason(Enum):
     ARCHIVE_INVALID = "archive_invalid"  # the downloaded ZIP is invalid or hostile
     REMOTE_REJECTED = "remote_rejected"  # Garmin says the original does not exist or is not given
     ATTEMPTS_EXHAUSTED = "attempts_exhausted"  # too many failed synchronizations
+    # Garmin lists the activity but never serves its download (5xx or no response, round after
+    # round, while it answers other requests). Not ATTEMPTS_EXHAUSTED: that one counts failures
+    # of the entry, this one counts silence of Garmin, and the user is told so.
+    REMOTE_NOT_PROVIDED = "remote_not_provided"
 
 
+# The causes that the "Full check" rearms: they may pass (the activity may be served again).
+REARMABLE_REASONS: Final = frozenset(
+    {FailureReason.ATTEMPTS_EXHAUSTED, FailureReason.REMOTE_NOT_PROVIDED}
+)
 RETRYABLE_REASONS: Final = frozenset({FailureReason.TRANSIENT_ERROR, FailureReason.RATE_LIMITED})
 
 WORKABLE_STATUSES: Final = frozenset({SyncStatus.PENDING, SyncStatus.RETRYABLE})
@@ -54,7 +62,7 @@ _FAILURE_STATUSES: Final = frozenset({SyncStatus.RETRYABLE, SyncStatus.FAILED})
 
 # From -> to. Entries to process go to any of the other states (RETRYABLE included,
 # if it fails again); DOWNLOADED and MATCHED do not move; FAILED goes back only to PENDING and only
-# for `rearm_exhausted` (the "Full check" rearms exhausted attempts).
+# for `rearm_exhausted` (the "Full check" rearms the causes in `REARMABLE_REASONS`).
 ALLOWED_TRANSITIONS: Final[Mapping[SyncStatus, frozenset[SyncStatus]]] = {
     SyncStatus.PENDING: frozenset(
         {SyncStatus.DOWNLOADED, SyncStatus.MATCHED, SyncStatus.RETRYABLE, SyncStatus.FAILED}
@@ -82,10 +90,11 @@ class JournalEntry:
     """A journal entry: the remote activity and where it stands.
 
     Invariants: `RETRYABLE` has a retryable cause and `FAILED` a final one, every other
-    state none; `PENDING` has no failed attempts, `RETRYABLE` and `FAILED` have at least
-    one; `updated_at` is UTC to the millisecond. `failed_attempts` counts the synchronizations in
-    which
-    the entry failed.
+    state none; `PENDING` has no failed attempts and no unanswered rounds, `RETRYABLE` and
+    `FAILED` have at least one of the two; `updated_at` is UTC to the millisecond.
+    `failed_attempts` counts the synchronizations in which the entry failed; `unanswered_rounds`
+    the rounds in which its download had no useful answer while Garmin answered other requests
+    (it does not use up the failed attempts); a successful download resets it to zero.
     """
 
     remote: RemoteActivity
@@ -93,23 +102,27 @@ class JournalEntry:
     updated_at: datetime
     failed_attempts: int = 0
     failure: FailureReason | None = None
+    unanswered_rounds: int = 0
 
     def __post_init__(self) -> None:
         check_utc(self.updated_at)
         if self.updated_at.microsecond % 1000:
             raise ValueError("the instant must be at millisecond precision")
-        if self.failed_attempts < 0:
-            raise ValueError("failed attempts cannot be negative")
+        self._check_counters()
         if (self.status in _FAILURE_STATUSES) != (self.failure is not None):
             raise ValueError("only failure states have a cause")
         if self.failure is not None and (self.failure in RETRYABLE_REASONS) != (
             self.status is SyncStatus.RETRYABLE
         ):
             raise ValueError("cause and state inconsistent: retryable only if RETRYABLE")
-        if self.status is SyncStatus.PENDING and self.failed_attempts:
-            raise ValueError("an entry to download has no failed attempts")
-        if self.status in _FAILURE_STATUSES and self.failed_attempts < 1:
-            raise ValueError("a failed entry has at least one failed attempt")
+
+    def _check_counters(self) -> None:
+        if self.failed_attempts < 0 or self.unanswered_rounds < 0:
+            raise ValueError("attempts and unanswered rounds cannot be negative")
+        if self.status is SyncStatus.PENDING and (self.failed_attempts or self.unanswered_rounds):
+            raise ValueError("an entry to download has no failed attempts or unanswered rounds")
+        if self.status in _FAILURE_STATUSES and self.failed_attempts + self.unanswered_rounds < 1:
+            raise ValueError("a failed entry has at least one failed attempt or unanswered round")
 
     @property
     def garmin_id(self) -> GarminActivityId:
@@ -128,7 +141,8 @@ def _check_move(entry: JournalEntry, new: SyncStatus) -> None:
 
 
 def mark_downloaded(entry: JournalEntry, now: datetime) -> JournalEntry:
-    """The entry is downloaded, archived and indexed (keeps the failed attempts).
+    """The entry is downloaded, archived and indexed (keeps the failed attempts; the count of
+    unanswered rounds goes back to zero: Garmin did serve it).
 
     Raises:
         InvalidTransitionError: the entry is already in a final state.
@@ -170,23 +184,45 @@ def mark_failed(
     else:
         status, cause = SyncStatus.FAILED, FailureReason.ATTEMPTS_EXHAUSTED
     _check_move(entry, status)
-    return JournalEntry(entry.remote, status, now, attempts, cause)
+    return JournalEntry(entry.remote, status, now, attempts, cause, entry.unanswered_rounds)
+
+
+def mark_unanswered(entry: JournalEntry, now: datetime, max_rounds: int) -> JournalEntry:
+    """The download of the entry had no useful answer in a round in which Garmin answered
+    other requests (the list or other downloads).
+
+    The count of unanswered rounds goes up by one and the failed attempts are left alone. Below
+    `max_rounds` the entry is `RETRYABLE` with `TRANSIENT_ERROR`; at `max_rounds` it is `FAILED`
+    with `REMOTE_NOT_PROVIDED`, so it stops holding up the next rounds. A real failure of Garmin
+    (nothing answers, no network, 429) must not reach this function.
+
+    Raises:
+        InvalidTransitionError: the entry is already in a final state.
+        ValueError: `max_rounds` less than 1.
+    """
+    if max_rounds < 1:
+        raise ValueError("at least one unanswered round is required")
+    rounds = entry.unanswered_rounds + 1
+    if rounds < max_rounds:
+        status, cause = SyncStatus.RETRYABLE, FailureReason.TRANSIENT_ERROR
+    else:
+        status, cause = SyncStatus.FAILED, FailureReason.REMOTE_NOT_PROVIDED
+    _check_move(entry, status)
+    return JournalEntry(entry.remote, status, now, entry.failed_attempts, cause, rounds)
 
 
 def rearm_exhausted(entry: JournalEntry, now: datetime) -> JournalEntry:
-    """Rearms an entry that failed for exhausted attempts: back to download, with no attempts.
+    """Rearms an entry that failed for exhausted attempts or because Garmin does not provide it:
+    back to download, with no attempts and no unanswered rounds.
 
-    Used by the "Full check": attempts consumed earlier (even because of the network)
-    do not condemn a valid activity forever. The other final causes (format not
-    supported, corrupt file...) stay as they are.
+    Used by the "Full check": attempts consumed earlier (even because of the network), or a
+    Garmin that did not serve the file for a while, do not condemn a valid activity forever. The
+    other final causes (format not supported, corrupt file...) stay as they are.
 
     Raises:
-        InvalidTransitionError: the entry is not `FAILED` with `ATTEMPTS_EXHAUSTED`.
+        InvalidTransitionError: the entry is not `FAILED` with a cause in `REARMABLE_REASONS`.
     """
-    if (
-        entry.status is not SyncStatus.FAILED
-        or entry.failure is not FailureReason.ATTEMPTS_EXHAUSTED
-    ):
+    if entry.status is not SyncStatus.FAILED or entry.failure not in REARMABLE_REASONS:
         raise InvalidTransitionError(f"{entry.status.value} -> {SyncStatus.PENDING.value}")
     return JournalEntry(entry.remote, SyncStatus.PENDING, now)
 

@@ -124,6 +124,13 @@ Migration v12 (days and sessions per week instead of minutes per day): `weekly_a
 same transaction: the days are those with minutes, the sessions are as many as the days, the long
 day is added to the days if it was not one, the weekly maximum is kept. A row with no day with
 minutes (it meant "nothing available") becomes the empty one: no day, no session, no time.
+
+Migration v13 (entries that Garmin never serves): `sync_journal.unanswered_rounds` counts the
+rounds in which the entry's download had no useful answer while Garmin answered other requests
+(0 for every existing row). A new failure cause, `remote_not_provided`, is the end of that count.
+`retryable` and `failed` need at least one failed attempt or one unanswered round. The table is
+rebuilt in the same transaction (a CHECK cannot be changed in place); the rows are copied as they
+are.
 """
 
 from __future__ import annotations
@@ -812,6 +819,42 @@ FROM (
 _V12_DROP_AVAILABILITY = "DROP TABLE weekly_availability"
 _V12_RENAME_AVAILABILITY = "ALTER TABLE weekly_availability_v12 RENAME TO weekly_availability"
 
+# v13: a journal entry that Garmin never serves. A new column counts the rounds in which its
+# download had no useful answer while Garmin answered other requests; after a few the entry is
+# `failed` with the new cause `remote_not_provided`. SQLite cannot change a CHECK, so the table is
+# rebuilt (the checks of v2, plus the counter and the new cause, final). Nothing refers to it.
+_V13_FAILURES = _FAILURES + ",'remote_not_provided'"
+V13_FAILURES: Final = frozenset(_V13_FAILURES.replace("'", "").split(","))
+_V13_JOURNAL_COLUMNS = (
+    "garmin_id, start_ms, duration_s, sport_key, has_heart_rate, status, failed_attempts, "
+    "failure, updated_ms"
+)
+_V13_SYNC_JOURNAL = f"""
+CREATE TABLE sync_journal_v13 (
+    garmin_id         INTEGER NOT NULL PRIMARY KEY CHECK (garmin_id > 0),
+    start_ms          INTEGER NOT NULL,
+    duration_s        REAL    NOT NULL CHECK (duration_s > 0),
+    sport_key         TEXT    NOT NULL CHECK (length(sport_key) BETWEEN 1 AND 64),
+    has_heart_rate    INTEGER CHECK (has_heart_rate IS NULL OR has_heart_rate IN (0, 1)),
+    status            TEXT    NOT NULL CHECK (status IN ({_SYNC_STATUSES})),
+    failed_attempts   INTEGER NOT NULL CHECK (failed_attempts >= 0),
+    failure           TEXT    CHECK (failure IS NULL OR failure IN ({_V13_FAILURES})),
+    updated_ms        INTEGER NOT NULL,
+    unanswered_rounds INTEGER NOT NULL DEFAULT 0 CHECK (unanswered_rounds >= 0),
+    CHECK ((status IN ('retryable', 'failed')) = (failure IS NOT NULL)),
+    CHECK (status <> 'pending' OR (failed_attempts = 0 AND unanswered_rounds = 0)),
+    CHECK (status NOT IN ('retryable', 'failed') OR failed_attempts + unanswered_rounds >= 1),
+    CHECK (status <> 'retryable' OR failure IN ({_RETRYABLE_FAILURES})),
+    CHECK (status <> 'failed' OR failure NOT IN ({_RETRYABLE_FAILURES}))
+) STRICT
+"""
+_V13_COPY_JOURNAL = (
+    f"INSERT INTO sync_journal_v13 ({_V13_JOURNAL_COLUMNS}) "  # noqa: S608 - module constants only
+    f"SELECT {_V13_JOURNAL_COLUMNS} FROM sync_journal"
+)
+_V13_DROP_JOURNAL = "DROP TABLE sync_journal"
+_V13_RENAME_JOURNAL = "ALTER TABLE sync_journal_v13 RENAME TO sync_journal"
+
 # Migration i (index i-1): brings the schema from version i-1 to i.
 MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     (_V1_META, _V1_ACTIVITIES, _V1_ACTIVITIES_START_INDEX, _V1_PHYSIOLOGY, _V1_LOAD_CACHE),
@@ -875,6 +918,13 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
         _V12_COPY_AVAILABILITY,
         _V12_DROP_AVAILABILITY,
         _V12_RENAME_AVAILABILITY,
+    ),
+    (
+        _V13_SYNC_JOURNAL,
+        _V13_COPY_JOURNAL,
+        _V13_DROP_JOURNAL,
+        _V13_RENAME_JOURNAL,
+        _V2_SYNC_JOURNAL_TO_DO_INDEX,
     ),
 )
 

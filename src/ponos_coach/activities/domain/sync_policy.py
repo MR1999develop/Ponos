@@ -44,6 +44,9 @@ class SyncPolicy:
     - at most `max_attempts_per_request` attempts for the same request;
     - a journal entry becomes "definitively failed" after `max_syncs_per_activity`
       failed synchronizations;
+    - a journal entry whose download has no useful answer (5xx, no response) while Garmin answers
+      other requests becomes "not provided by Garmin" after `max_unanswered_rounds` such rounds
+      (three: one bad round is a hiccup, three in a row is the entry);
     - the list is requested in pages of `page_size` entries.
     """
 
@@ -54,6 +57,7 @@ class SyncPolicy:
     max_attempts_per_request: int = 5
     max_syncs_per_activity: int = 3
     page_size: int = DEFAULT_PAGE_SIZE
+    max_unanswered_rounds: int = 3
 
     def __post_init__(self) -> None:
         if not _positive_finite(self.min_pause_s, self.backoff_base_s, self.backoff_cap_s):
@@ -64,6 +68,8 @@ class SyncPolicy:
             raise ValueError("the backoff cap cannot be below the base")
         if self.max_attempts_per_request < 1 or self.max_syncs_per_activity < 1:
             raise ValueError("at least one attempt is required")
+        if self.max_unanswered_rounds < 1:
+            raise ValueError("at least one unanswered round is required")
         if not 1 <= self.page_size <= MAX_PAGE_SIZE:
             raise ValueError("page size out of range")
 

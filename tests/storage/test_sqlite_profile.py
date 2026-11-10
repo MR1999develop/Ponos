@@ -247,10 +247,11 @@ def test_closed_sets_of_the_schema_match_the_domain_enums() -> None:
     assert {s.value for s in LoadSource} == sqlite_schema.V1_LOAD_SOURCES
 
 
-def test_closed_sets_of_schema_v2_match_the_domain_enums() -> None:
+def test_closed_sets_of_schema_v2_and_v13_match_the_domain_enums() -> None:
     """A new value in a sync enum forces writing a migration."""
     assert {s.value for s in SyncStatus} == sqlite_schema.V2_SYNC_STATUSES
-    assert {f.value for f in FailureReason} == sqlite_schema.V2_FAILURES
+    assert {f.value for f in FailureReason} == sqlite_schema.V13_FAILURES
+    assert {"remote_not_provided"} == sqlite_schema.V13_FAILURES - sqlite_schema.V2_FAILURES
     assert {f.value for f in RETRYABLE_REASONS} == sqlite_schema.V2_RETRYABLE_FAILURES
     assert {k.value for k in ListingKind} == sqlite_schema.V2_LISTING_KINDS
 

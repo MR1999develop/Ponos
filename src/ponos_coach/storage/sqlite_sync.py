@@ -32,7 +32,7 @@ from ponos_coach.storage.sqlite_stores import from_ms, to_ms
 
 _JOURNAL_COLUMNS: Final = (
     "garmin_id, start_ms, duration_s, sport_key, has_heart_rate, status, failed_attempts, "
-    "failure, updated_ms"
+    "failure, updated_ms, unanswered_rounds"
 )
 # Only module constants in the composed queries: no external data (S608).
 _SELECT_ENTRIES: Final = "SELECT " + _JOURNAL_COLUMNS + " FROM sync_journal "  # noqa: S608
@@ -40,7 +40,7 @@ _TO_DO_ORDER: Final = (
     "WHERE status IN ('pending', 'retryable') ORDER BY start_ms DESC, garmin_id DESC LIMIT ?"
 )
 _EXHAUSTED_ORDER: Final = (
-    "WHERE status = 'failed' AND failure = 'attempts_exhausted' "
+    "WHERE status = 'failed' AND failure IN ('attempts_exhausted', 'remote_not_provided') "
     "ORDER BY start_ms DESC, garmin_id DESC LIMIT ?"
 )
 
@@ -69,7 +69,7 @@ def _entry_from_row(row: Sequence[Any]) -> JournalEntry:
         None if row[4] is None else bool(row[4]),
     )
     failure = None if row[7] is None else FailureReason(row[7])
-    return JournalEntry(remote, SyncStatus(row[5]), from_ms(row[8]), row[6], failure)
+    return JournalEntry(remote, SyncStatus(row[5]), from_ms(row[8]), row[6], failure, row[9])
 
 
 def _entries(rows: Sequence[Sequence[Any]]) -> list[JournalEntry]:
@@ -135,7 +135,7 @@ class SqliteSyncJournal:
             for item in items:
                 cursor = self._db.connection.execute(
                     "INSERT OR IGNORE INTO sync_journal (" + _JOURNAL_COLUMNS + ") "
-                    "VALUES (?, ?, ?, ?, ?, 'pending', 0, NULL, ?)",
+                    "VALUES (?, ?, ?, ?, ?, 'pending', 0, NULL, ?, 0)",
                     (
                         item.garmin_id.value,
                         to_ms(item.start),
@@ -188,12 +188,13 @@ class SqliteSyncJournal:
                 raise InvalidTransitionError(f"{current.value} -> {entry.status.value}")
             self._db.connection.execute(
                 "UPDATE sync_journal SET status = ?, failed_attempts = ?, failure = ?, "
-                "updated_ms = ? WHERE garmin_id = ?",
+                "updated_ms = ?, unanswered_rounds = ? WHERE garmin_id = ?",
                 (
                     entry.status.value,
                     entry.failed_attempts,
                     None if entry.failure is None else entry.failure.value,
                     updated,
+                    entry.unanswered_rounds,
                     entry.garmin_id.value,
                 ),
             )

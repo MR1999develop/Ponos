@@ -125,7 +125,7 @@ def test_t_sync_03_a_transient_error_on_one_entry_does_not_stop_the_others() -> 
     assert attempts_on(rig, 1) == 5
 
 
-def test_t_sync_03_a_retryable_entry_is_retried_on_the_next_sync_and_keeps_its_attempts() -> None:
+def test_t_sync_03_a_retryable_entry_is_retried_on_the_next_sync_and_its_rounds_reset() -> None:
     rig = in_memory_rig(2)
     rig.fake.fail_download_of(remote_id(1), TransientSourceError("timeout"), times=5)
     rig.run()
@@ -135,10 +135,15 @@ def test_t_sync_03_a_retryable_entry_is_retried_on_the_next_sync_and_keeps_its_a
     assert (outcome.completed, outcome.downloaded) == (True, 1)
     entry = rig.journal.get(remote_id(1))
     assert entry is not None
-    assert (entry.status, entry.failed_attempts) == (SyncStatus.DOWNLOADED, 1)
+    # the silent round did not use an attempt, and the download cleared the count
+    assert (entry.status, entry.failed_attempts, entry.unanswered_rounds) == (
+        SyncStatus.DOWNLOADED,
+        0,
+        0,
+    )
 
 
-def test_t_sync_03_an_entry_failing_in_three_syncs_fails_for_good() -> None:
+def test_t_sync_03_an_entry_garmin_does_not_serve_in_three_syncs_fails_for_good() -> None:
     rig = in_memory_rig(2)
     rig.fake.fail_download_of(remote_id(1), TransientSourceError("timeout"))
 
@@ -147,7 +152,12 @@ def test_t_sync_03_an_entry_failing_in_three_syncs_fails_for_good() -> None:
 
     entry = rig.journal.get(remote_id(1))
     assert entry is not None
-    assert (entry.status, entry.failure) == (SyncStatus.FAILED, FailureReason.ATTEMPTS_EXHAUSTED)
+    assert (entry.status, entry.failure, entry.unanswered_rounds) == (
+        SyncStatus.FAILED,
+        FailureReason.REMOTE_NOT_PROVIDED,
+        3,
+    )
+    assert entry.failed_attempts == 0  # the attempts of the entry are not used
     rig.run()
     assert attempts_on(rig, 1) == 15  # three syncs of five attempts, then stop
 
@@ -161,8 +171,11 @@ def test_t_sync_03_a_service_that_stays_down_stops_after_three_entries() -> None
 
     assert outcome.stop is StopReason.SERVICE_UNAVAILABLE
     assert len(rig.fake.downloads) == 15  # three entries for five attempts, not ten entries
-    assert outcome.failures_by_reason() == {}  # the network was down: no entry consumed anything
-    assert outcome.status_counts[SyncStatus.PENDING] == 10
+    # Garmin still answers the list (the probe): the three entries that stayed silent have one
+    # unanswered round each, the other seven were not touched.
+    assert outcome.failures_by_reason() == {FailureReason.TRANSIENT_ERROR: 3}
+    assert outcome.status_counts[SyncStatus.PENDING] == 7
+    assert outcome.status_counts[SyncStatus.RETRYABLE] == 3
     assert max(rig.wait.waits) <= CAP_S
     assert rig.journal.last_completed_at() is None
 
@@ -441,6 +454,8 @@ def test_r1_failures_held_back_by_an_unreachable_service_are_dropped_not_written
         rig.fake.fail_download_of(
             remote_id(number), ServiceUnavailableError("non risponde"), times=5
         )
+    for call in range(2, 7):  # and the probe after them (call 1 is the list) gets no answer
+        rig.fake.fail_call(Call.LIST_PAGE, call, ServiceUnavailableError("non risponde"))
 
     outcome = rig.run()
 
@@ -448,6 +463,42 @@ def test_r1_failures_held_back_by_an_unreachable_service_are_dropped_not_written
     assert outcome.failures == ()
     assert all(rig.status_of(n) is SyncStatus.PENDING for n in range(6))
     assert rig.run().completed and rig.status_of(5) is SyncStatus.DOWNLOADED
+
+
+def test_r1_silent_entries_count_a_round_when_the_probe_shows_garmin_answers() -> None:
+    rig = in_memory_rig(6)
+    for number in (5, 4, 3):
+        rig.fake.fail_download_of(remote_id(number), ServiceUnavailableError("no answer"), times=5)
+
+    outcome = rig.run()
+
+    assert outcome.stop is StopReason.SERVICE_UNAVAILABLE
+    assert [rig.fake.calls[-1].call, rig.fake.calls[-1].offset] == [Call.LIST_PAGE, 0]  # the probe
+    for number in (5, 4, 3):
+        entry = rig.journal.get(remote_id(number))
+        assert entry is not None
+        assert (entry.status, entry.failed_attempts, entry.unanswered_rounds) == (
+            SyncStatus.RETRYABLE,
+            0,
+            1,
+        )
+    assert all(rig.status_of(n) is SyncStatus.PENDING for n in range(3))
+
+
+def test_r1_a_429_does_not_count_a_round_nor_an_attempt() -> None:
+    rig = in_memory_rig(3)
+    rig.fake.fail_download_of(remote_id(2), RateLimitedError())
+
+    for _ in range(4):
+        assert rig.run().stop is StopReason.RATE_LIMITED
+
+    entry = rig.journal.get(remote_id(2))
+    assert entry is not None
+    assert (entry.status, entry.failed_attempts, entry.unanswered_rounds) == (
+        SyncStatus.PENDING,
+        0,
+        0,
+    )
 
 
 def test_r1_a_failure_is_written_once_garmin_answers_for_a_later_entry() -> None:
@@ -461,13 +512,13 @@ def test_r1_a_failure_is_written_once_garmin_answers_for_a_later_entry() -> None
     assert rig.status_of(2) is SyncStatus.RETRYABLE
 
 
-def test_r1_the_full_verification_rearms_entries_with_exhausted_attempts() -> None:
+def test_r1_the_full_verification_rearms_entries_that_garmin_did_not_provide() -> None:
     rig = in_memory_rig(2)
     rig.fake.fail_download_of(remote_id(1), TransientSourceError("timeout"), times=15)
     for _ in range(3):
         rig.run()
     entry = rig.journal.get(remote_id(1))
-    assert entry is not None and entry.failure is FailureReason.ATTEMPTS_EXHAUSTED
+    assert entry is not None and entry.failure is FailureReason.REMOTE_NOT_PROVIDED
     assert rig.run().downloaded == 0  # a normal sync does not retry it
 
     outcome = rig.run(SyncMode.VERIFY)
@@ -475,7 +526,11 @@ def test_r1_the_full_verification_rearms_entries_with_exhausted_attempts() -> No
     assert (outcome.completed, outcome.downloaded) == (True, 1)
     rearmed = rig.journal.get(remote_id(1))
     assert rearmed is not None
-    assert (rearmed.status, rearmed.failed_attempts) == (SyncStatus.DOWNLOADED, 0)
+    assert (rearmed.status, rearmed.failed_attempts, rearmed.unanswered_rounds) == (
+        SyncStatus.DOWNLOADED,
+        0,
+        0,
+    )
 
 
 def test_r1_the_verification_leaves_definitive_failures_alone() -> None:

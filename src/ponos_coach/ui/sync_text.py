@@ -102,6 +102,9 @@ _FAILURE_REASONS: dict[FailureReason, Callable[[], str]] = {
     FailureReason.ATTEMPTS_EXHAUSTED: lambda: QCoreApplication.translate(
         "Sync", "it failed too many times"
     ),
+    FailureReason.REMOTE_NOT_PROVIDED: lambda: QCoreApplication.translate(
+        "Sync", "Garmin lists this activity but does not provide its file; Full check tries again"
+    ),
 }
 
 
