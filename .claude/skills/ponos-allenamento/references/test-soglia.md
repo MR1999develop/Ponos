@@ -84,14 +84,14 @@ di 20 minuti e coincide con il segmento.
   valida): il ritmo non si ripara togliendo il salto.
 - **Giorno del test:** il giorno locale (fuso del profilo) dell'inizio
   dell'attività; i limiti FC sono quelli in vigore quel giorno.
-- **Zone FC:** quelle del carico (`load/domain/zones.py`, 5ª edizione: Z1 sotto 78%
-  della soglia, 78–87, 87–94, 94–100, Z5 da 100%), con `zone_starts_bpm(soglia)`.
+- **Zone FC:** quelle del carico (`load/domain/zones.py`, scelta dell'utente del
+  2026-11-10: Z1 sotto 75% della soglia, 75–85, 85–95, 95–103, Z5 da 103%), con `zone_starts_bpm(soglia)`.
 - **Zone di ritmo** (`assessment/domain/pace_zones.py`): cinque zone allineate
   alle zone FC, come percentuale della **velocità** di soglia: Z1 sotto 78%,
   Z2 78–88%, Z3 88–94%, Z4 94–100%, Z5 100% e oltre (nel ritmo, circa: più
   lento del 128% del ritmo di soglia, 114–128%, 106–114%, 100–106%, più veloce
-  del ritmo di soglia; default derivati da Friel; coincidono con FRI5, salvo il confine Z2/Z3 a 88% contro
-  87% delle zone FC). Il limite inferiore
+  del ritmo di soglia; default derivati da Friel; non seguono le zone FC dell'utente del 2026-11-10,
+  che sono un'altra scelta e non si applicano al ritmo). Il limite inferiore
   appartiene alla zona più veloce; confronti su interi (`ritmo_soglia × 100 >=
   percentuale × ritmo`), mai una percentuale in virgola mobile al confine.
 - Dopo il test si aggiornano soglia e zone con una data di validità (vedi

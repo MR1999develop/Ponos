@@ -71,7 +71,7 @@ def constant_series(bpm: float, seconds: int) -> HeartRateSeries:
 
 
 @pytest.mark.parametrize("sport", list(Sport))
-def test_t_calc_01_an_hour_at_the_threshold_of_each_sport_is_trimp_eq_100_all_in_zone_5(
+def test_t_calc_01_an_hour_at_the_threshold_of_each_sport_is_trimp_eq_100_all_in_zone_4(
     sport: Sport,
 ) -> None:
     threshold = threshold_for_sport(PHYSIOLOGY, sport)  # on the bike: running threshold - 4
@@ -81,7 +81,7 @@ def test_t_calc_01_an_hour_at_the_threshold_of_each_sport_is_trimp_eq_100_all_in
 
     assert result.source is LoadSource.HEART_RATE
     assert result.trimp_eq == pytest.approx(100.0, rel=1e-9)
-    assert result.zone_seconds.values == (0.0, 0.0, 0.0, 0.0, float(SECONDS_PER_ZONE_TEST))
+    assert result.zone_seconds.values == (0.0, 0.0, 0.0, float(SECONDS_PER_ZONE_TEST), 0.0)
 
 
 @pytest.mark.parametrize("sport", list(Sport))
@@ -138,7 +138,7 @@ def naive_zone_seconds(
             continue
         counted += valid_s
         scaled = bpm * 100
-        zone = sum(1 for percent in (78, 87, 94, 100) if scaled >= percent * threshold)
+        zone = sum(1 for percent in (75, 85, 95, 103) if scaled >= percent * threshold)
         zones[zone] += valid_s
     return zones, counted
 
@@ -228,7 +228,7 @@ def test_t_calc_05_the_detail_of_every_activity_gives_the_same_load_as_the_overv
         bike_offset = 4 if item.sport is Sport.CYCLING else 0
         assert result.threshold_bpm == run_threshold - bike_offset
         assert result.zone_starts_bpm == tuple(
-            result.threshold_bpm * percent / 100 for percent in (78, 87, 94, 100)
+            result.threshold_bpm * percent / 100 for percent in (75, 85, 95, 103)
         )
 
 
@@ -502,7 +502,7 @@ def test_t_calc_07_a_one_second_and_a_twenty_four_hour_activity_with_zones() -> 
     short = compute_activity_load(Sport.RUNNING, 1.0, one_second, PHYSIOLOGY)
     long = compute_activity_load(Sport.RUNNING, 24 * 3600.0, day, PHYSIOLOGY)
 
-    assert short.zone_seconds.values == (0.0, 0.0, 0.0, 0.0, 1.0)  # a sample is worth 1 s
-    assert long.zone_seconds.values == (0.0, 0.0, 0.0, 0.0, 24 * 3600.0)
+    assert short.zone_seconds.values == (0.0, 0.0, 0.0, 1.0, 0.0)  # a sample is worth 1 s
+    assert long.zone_seconds.values == (0.0, 0.0, 0.0, 24 * 3600.0, 0.0)
     assert long.trimp_eq > 24 * 100  # more than 24 hours at the threshold
     assert np.isfinite([short.trimp_eq, long.trimp_eq]).all()

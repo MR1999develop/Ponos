@@ -45,7 +45,7 @@ from tests.ui.workspace_support import (
 
 PROFILE = "Atleta di prova"
 DASH = chr(0x2013)  # the separator of a bpm range
-BPM_RANGES = ((50, 133), (134, 148), (149, 160), (161, 170), (171, 190))
+BPM_RANGES = ((50, 128), (129, 145), (146, 162), (163, 176), (177, 190))
 
 
 @pytest.fixture
@@ -118,7 +118,7 @@ def test_the_overview_shows_three_charts_pmc_weekly_load_and_zones(
     assert [t.name for t in load.data] == ["Running"]
     assert load.layout.yaxis.title.text == "Load (TRIMPeq per week)"
     assert load.layout.xaxis.title.text == "Week (starting Monday)"
-    assert zones.data[0].name == "Z1 <78%"
+    assert zones.data[0].name == "Z1 <75%"
     assert zones.layout.yaxis.title.text == "Time in zone (hours per week)"
     assert zones.layout.legend.title.text == "Heart-rate zone (% of threshold)"
     assert all(trace.type == "bar" for trace in (*load.data, *zones.data))
@@ -178,7 +178,7 @@ def test_double_click_opens_the_detail_with_summary_chart_and_time_in_zones(
     assert sum(_seconds(text) for text in zone_times) > 1500  # almost all of the 1800 s counted
     assert dialog.zone_model.headerData(1, Qt.Orientation.Horizontal) == "Heart rate (bpm)"
     zone_bpm = [dialog.zone_model.data(dialog.zone_model.index(r, 1)) for r in range(5)]
-    # threshold 171, limits 50 to 190: Z2 starts at 133.4 -> 134, Z3 at 148.8 -> 149, ...
+    # threshold 171, limits 50 to 190: Z2 starts at 128.25 -> 129, Z3 at 145.35 -> 146, ...
     assert zone_bpm == [f"{a}{DASH}{b}" for a, b in BPM_RANGES]
     assert dialog.zone_model.headerData(4, Qt.Orientation.Horizontal) == "Load (TRIMPeq)"
     zone_loads = [dialog.zone_model.data(dialog.zone_model.index(r, 4)) for r in range(5)]

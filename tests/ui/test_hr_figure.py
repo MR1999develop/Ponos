@@ -80,11 +80,11 @@ def test_one_band_per_zone_behind_the_curve_with_the_zone_name_on_the_edge() -> 
     tokens = tokens_for(Theme.LIGHT)
     assert [shape.fillcolor for shape in figure.layout.shapes] == list(tokens.zones)
     assert [a.text for a in figure.layout.annotations] == [
-        "Z1 <78%",
-        "Z2 78\u201386%",
-        "Z3 87\u201393%",
-        "Z4 94\u201399%",
-        "Z5 \u2265100%",
+        "Z1 <75%",
+        "Z2 75\u201384%",
+        "Z3 85\u201394%",
+        "Z4 95\u2013102%",
+        "Z5 \u2265103%",
     ]
 
 

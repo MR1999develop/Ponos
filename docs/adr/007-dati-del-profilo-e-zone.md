@@ -106,6 +106,14 @@ Constraints:
 
 ### HR zones
 
+> **Amendment of 2026-11-10.** The percentages are the user's choice: Z1 below
+> 75% (50-74%, and everything lower), Z2 75-84%, Z3 85-94%, Z4 95-102%, Z5 from
+> 103% to the maximum HR (the 5th edition's 78/87/94/100 are superseded). Same
+> design: the percentages live only in `load/domain/zones.py`, the load
+> fingerprint includes them (the seconds in zone are recomputed, the TRIMPeq does
+> not change) and the plan is rebuilt (`METHOD_VERSION` 10). The text of option 1
+> below keeps the original numbers as history.
+
 1. **Five zones on the threshold of the sport, after Friel: Z1 below 85%, Z2
    85-89%, Z3 90-94%, Z4 95-99%, Z5 from 100%. Project default, to be reviewed
    in phase 4 with the threshold test. The percentages are only in

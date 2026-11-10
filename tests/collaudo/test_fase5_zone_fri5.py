@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Heart-rate zones of the 5th edition (Z2 from 78%, Z3 from 87%, Z4 from 94%, Z5 from 100% of the
-threshold) on the real stack: the seconds per zone of imported runs, the load that did not move,
-and the planned blocks that follow the same boundaries.
+"""Heart-rate zones chosen by the user on 2026-11-10 (Z2 from 75%, Z3 from 85%, Z4 from 95%, Z5 from
+103% of the threshold) on the real stack: the seconds per zone of imported runs, the load that
+did not move, and the planned blocks that follow the same boundaries.
 
 The load (Banister TRIMP and TRIMPeq) is written out by hand here and compared with what the
 overview gives: changing the zones changed the seconds per zone and the planned load of a session,
@@ -72,17 +72,17 @@ def import_legs(
 
 
 # --- Seconds per zone, by hand --------------------------------------------------------------------
-def test_the_seconds_per_zone_follow_the_boundaries_of_the_5th_edition_on_both_sides(
+def test_the_seconds_per_zone_follow_the_boundaries_of_the_user_on_both_sides(
     lab: RealProfile,
 ) -> None:
-    # threshold 100: the boundaries are whole numbers (78, 87, 94, 100). One leg of 100 s on each
+    # threshold 100: the boundaries are whole numbers (75, 85, 95, 103). One leg of 100 s on each
     # side of each boundary; the last record of the file lasts one more second.
-    bpm_values = (77, 78, 86, 87, 93, 94, 99, 100)
+    bpm_values = (74, 75, 84, 85, 94, 95, 102, 103)
     import_legs(lab, [Leg(100, bpm, 3.0) for bpm in bpm_values])
 
     zones = only_activity(lab).load.zone_seconds.values
 
-    assert zones == (100.0, 200.0, 200.0, 200.0, 101.0)  # 77 | 78-86 | 87-93 | 94-99 | 100+
+    assert zones == (100.0, 200.0, 200.0, 200.0, 101.0)  # 74 | 75-84 | 85-94 | 95-102 | 103+
 
 
 def test_the_boundaries_for_the_default_threshold_of_170_are_the_next_whole_bpm(
@@ -91,8 +91,8 @@ def test_the_boundaries_for_the_default_threshold_of_170_are_the_next_whole_bpm(
     profile = create_profile(tmp_path)
     profile.session.physiology.put(PhysiologyEntry(FIRST_DAY, physiology_with(170)))
     try:
-        # 78% = 132.6 -> 133, 87% = 147.9 -> 148, 94% = 159.8 -> 160, 100% = 170
-        values = (132, 133, 147, 148, 159, 160, 169, 170)
+        # 75% = 127.5 -> 128, 85% = 144.5 -> 145, 95% = 161.5 -> 162, 103% = 175.1 -> 176
+        values = (127, 128, 144, 145, 161, 162, 175, 176)
         import_legs(profile, [Leg(50, bpm, 3.0) for bpm in values])
 
         zones = only_activity(profile).load.zone_seconds.values
@@ -102,8 +102,8 @@ def test_the_boundaries_for_the_default_threshold_of_170_are_the_next_whole_bpm(
         profile.close()
 
 
-def test_the_zone_edges_in_the_domain_are_the_percentages_of_the_5th_edition() -> None:
-    assert ZONE_STARTS_PERCENT == (78, 87, 94, 100)
+def test_the_zone_edges_in_the_domain_are_the_percentages_chosen_by_the_user() -> None:
+    assert ZONE_STARTS_PERCENT == (75, 85, 95, 103)
     for threshold in range(60, 221):
         bpm = np.arange(0, 251, dtype=np.float64)
         zone = zone_indices(bpm, threshold)
@@ -114,8 +114,8 @@ def test_the_zone_edges_in_the_domain_are_the_percentages_of_the_5th_edition() -
 
 
 def test_a_bike_ride_uses_the_threshold_four_beats_lower(lab: RealProfile) -> None:
-    # running threshold 100 -> on the bike 96: 96 is Z5, 95 is Z4 (94% of 96 is 90.2 -> Z4 from 91)
-    import_legs(lab, [Leg(100, 95, 8.0), Leg(100, 96, 8.0)], sport=fw.Sport.CYCLING)
+    # running threshold 100 -> on the bike 96: 99 is Z5, 98 is Z4 (103% of 96 = 98.88: Z5 from 99)
+    import_legs(lab, [Leg(100, 98, 8.0), Leg(100, 99, 8.0)], sport=fw.Sport.CYCLING)
     activity = only_activity(lab)
 
     assert activity.sport is Sport.CYCLING
@@ -135,7 +135,7 @@ def banister(bpm: int, seconds: int, threshold: int) -> float:
     return 100.0 * trimp / (60.0 * per_minute(threshold))
 
 
-@pytest.mark.parametrize("bpm", [70, 132, 133, 147, 148, 159, 160, 169, 170, 171, 185])
+@pytest.mark.parametrize("bpm", [70, 127, 128, 144, 145, 161, 162, 175, 176, 185])
 def test_the_load_of_a_run_is_banister_by_hand_whatever_the_zone_it_sits_in(
     tmp_path: Path, bpm: int
 ) -> None:
@@ -155,12 +155,12 @@ def test_the_load_has_no_step_where_a_zone_begins(tmp_path: Path) -> None:
     profile = create_profile(tmp_path)
     profile.session.physiology.put(PhysiologyEntry(FIRST_DAY, physiology_with(170)))
     try:
-        for day, bpm in enumerate((132, 133, 147, 148, 159, 160, 169, 170)):
+        for day, bpm in enumerate((127, 128, 144, 145, 161, 162, 175, 176)):
             import_legs(profile, [Leg(600, bpm, 3.0)], day=day)
         loads = [a.load.trimp_eq for a in profile.overview().activities]
         # the ratio of the loads of two runs is the ratio of the TRIMP of their beats, as ever
         for (low, high), (a, b) in zip(
-            ((132, 133), (147, 148), (159, 160), (169, 170)),
+            ((127, 128), (144, 145), (161, 162), (175, 176)),
             (
                 (loads[0], loads[1]),
                 (loads[2], loads[3]),

@@ -34,7 +34,9 @@ from ponos_coach.planning.domain.phases import Phase, RaceClass
 # 9: a `CtlTargetNotReached` says whether the weekly hours stop it (`LimitedByHours`, with the
 # minutes that would be enough) or the ramp and the time (`LimitedByRamp`); the plan itself is
 # the same, but the saved plans lack the cause, so they are rebuilt.
-METHOD_VERSION: Final = 9
+# 10: heart-rate zones chosen by the user on 2026-11-10 (Z2 from 75%, Z3 from 85%, Z4 from 95%,
+# Z5 from 103% of the threshold): the HR ranges of the blocks and the estimated loads change.
+METHOD_VERSION: Final = 10
 
 # --- Why a CTL target is missed ----------------------------------------------------------------
 # To tell hours from ramp the engine rebuilds the plan with a higher weekly cap, on a grid of
@@ -264,10 +266,14 @@ HILL_REPEAT_MODELS: Final[dict[Phase, IntervalModel]] = {
     Phase.PEAK: IntervalModel(15, 10, 3, 3, 4, 4, 8),
 }
 
-# Heart rate that stands for a zone when estimating a session's load, in percent of the threshold:
-# about the middle of the zone of `load.ZONE_STARTS_PERCENT` (Z1 <78, Z2 78-86, Z3 87-93,
-# Z4 94-99), 103 for Z5 (project default).
-ZONE_REPRESENTATIVE_PERCENT: Final = (70, 82, 90, 97, 103)
+# Heart rate that stands for a zone when estimating a session's load, in percent of the threshold,
+# inside the zone of `load.ZONE_STARTS_PERCENT` (Z1 50-74, Z2 75-84, Z3 85-94, Z4 95-102, Z5 from
+# 103): as before, a point in the part of the zone where the sessions of that zone are run: Z1 66
+# (upper part: recovery and warm-up jogging), Z2 82 (upper part: easy running), Z3 90 (middle),
+# Z4 97 (lower-middle), and the lower bound for Z5, which is open towards the maximum HR (its
+# middle is unknown; the bound keeps the estimate conservative). Only Z1 moves (was 70): the
+# others were already inside the new zones, so the estimated loads stay close to the old ones.
+ZONE_REPRESENTATIVE_PERCENT: Final = (66, 82, 90, 97, 103)
 
 # Race effort: zone shares by expected duration, (up to minutes, shares of Z1..Z5).
 RACE_ZONE_MIX: Final = (

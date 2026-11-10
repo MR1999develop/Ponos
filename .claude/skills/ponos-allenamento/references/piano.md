@@ -246,11 +246,11 @@ picco):
 
 ## 7. Modelli di seduta (`defaults.py`, `sessions.py`)
 
-Zone FC e di ritmo sono quelle esistenti (`load.zones`, della 5ª edizione di Friel:
-Z1 sotto 78% della soglia, Z2 78–86%, Z3 87–93%, Z4 94–99%, Z5 da 100%;
+Zone FC e di ritmo sono quelle esistenti (`load.zones`, scelta dell'utente del 2026-11-10:
+Z1 sotto 75% della soglia, Z2 75–84%, Z3 85–94%, Z4 95–102%, Z5 da 103%;
 `assessment.pace_zones`, invariate); gli intervalli di FC di ogni blocco seguono da sole le
 zone, e così quelli di ritmo; le strutture della tabella qui sotto non cambiano, ma una zona
-è più larga (la Z2 va da 78% a 87%). Ogni blocco ha il suo intervallo in bpm e in s/km (ritmo solo per corsa con
+è più larga (la Z2 va da 75% a 85%). Ogni blocco ha il suo intervallo in bpm e in s/km (ritmo solo per corsa con
 ritmo di soglia). Nell'allenamento Garmin, con un intervallo di ritmo il ritmo
 è l'obiettivo principale e la FC il secondario; senza, la FC resta la principale
 (sezione 10 di `dati-e-sincronizzazione.md`).
@@ -276,9 +276,11 @@ un modello proprio: 6–10 × 2' Z5 in costruzione, 4–8 × 3' Z4 in picco, rec
 soglia", senza conversione; il test `tests/planning/test_trimp_eq_equivalence.py`
 confronta 11 scenari di sola corsa con il golden
 `tests/planning/golden/plans_hrtss.json`): TRIMP al minuto alla FC
-che rappresenta la zona (70, 82, 90, 97, 103% della soglia, limitata alla FC
-massima: circa il mezzo di ogni zona delle zone nuove, 103 per la Z5, default del progetto;
-prima della versione 3 erano 75, 87, 92, 97, 103), con TRIMP di Banister e il peso di un'ora alla soglia di corsa, senza peso
+che rappresenta la zona (66, 82, 90, 97, 103% della soglia, limitata alla FC
+massima: un punto dentro ogni zona nella parte dove si corrono quelle sedute: Z1 e Z2 nella
+parte alta, Z3 al centro, Z4 97, il confine inferiore per la Z5, aperta verso la FC massima;
+default del progetto; dalla versione 10 cambia solo la Z1, era 70, perché gli altri
+valori stavano già nelle zone nuove; prima della 3 erano 75, 87, 92, 97, 103), con TRIMP di Banister e il peso di un'ora alla soglia di corsa, senza peso
 dello sport (nota: per gli sport con soglia propria la FC della zona sta sulla
 loro soglia); carico = Σ minuti per zona × tasso della zona. Gara: stessa
 formula con la miscela di zone per durata (fino a 60' Z3/Z4/Z5 al 20/60/20%;
@@ -396,7 +398,7 @@ non minuti per giorno; giorni di seduta spaziati dalla regola della sezione 6;
 lungo sempre il più lungo: ADR 016; la 5 aveva i minuti per giorno). La **5** (il test di soglia è una seduta del piano: campo
 `threshold_test` nella seduta, `test_protocol` e `missed_tests` tra gli ingressi; i piani
 e i giorni congelati salvati con la 4 non si rileggono, il formato ha un campo in più; la 4
-aveva infortuni e malattie aperti; la 3 aveva le zone FC della 5ª edizione e FC rappresentative delle zone
+aveva infortuni e malattie aperti; la 10 ha le zone FC dell'utente (75/85/95/103); la 3 aveva le zone FC della 5ª edizione e FC rappresentative delle zone
 per il carico stimato; la 2 aveva scarico a gradini, distribuzione 80/20 per sedute,
 giorni duri, ritmo gara, scarico del 3:1 al 70%). I piani salvati con la
 versione 1 non si rileggono (il formato ha campi in più), né quelli della 3 (il campo
