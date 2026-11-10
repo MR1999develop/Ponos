@@ -803,6 +803,17 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       Test: `tests/ui/test_new_profile_thresholds.py`,
       `tests/ui/test_new_profile_form_thresholds.py`,
       `tests/profiles/test_create_profile_thresholds.py`.
+- [x] Richieste dell'utente del 2026-11-10 sull'interfaccia: Panoramica con due
+      linguette verticali (`5bd05e1`); finestra attività senza anteprima della
+      mappa, riepilogo in griglia, zone FC senza barra di scorrimento (`4f98c22`);
+      finestra attività più veloce: una sola decodifica del FIT, pagina del grafico
+      preparata mentre il worker lavora, curva FC alleggerita sopra 3000 campioni
+      conservando picchi e valli (`2afe673`; 4 h a 1 Hz: da circa 1750 a 880 ms
+      mediani, misura `experiments/activity_detail_timing.py`); barra dei filtri
+      con campi larghi quanto una data e "Clear filters" in linea (`9beaa35`);
+      campi delle Impostazioni larghi secondo il tipo (`042125d`, `FieldKind` in
+      `ui/form_rows.py`); finestra del giorno con i pasti in tabella e grande
+      quanto il contenuto entro lo schermo (`2ca43ce`).
 - [x] Doppio clic su un'attività nella mappa (partenza o traccia selezionata)
       apre la sua finestra; altrove ingrandisce (richiesta dell'utente del
       2026-11-10). Test: `tests/ui/test_map_page_web.py`.

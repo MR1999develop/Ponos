@@ -363,6 +363,10 @@ restores to a profile that is migrated the same way when opened.
   threshold (minimum < threshold <= maximum, 40-250 bpm). The threshold of a
   sport sets its HR zones, the zones of its planned sessions and its TRIMPeq.
   The 30-minute test updates only the running threshold.
+- **Field widths.** In the settings every field is as wide as its kind of
+  content (short number, date, choice), from the font metrics of a sample
+  text, the same on every page and aligned left; the profile name and folder
+  stay wider.
 - **New profile.** Besides the running threshold, the dialog asks, optionally,
   for the cycling and other-activities thresholds (empty: the defaults above)
   and the threshold pace in `m:ss` (empty: no pace), with the same fields and
@@ -449,19 +453,24 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 
 - It opens with a double click or Enter on a row of the Activities list, or
   from the Profile menu, "Activity detail..." ("Dettaglio attività...",
-  Ctrl+D); there is no button for it. The window is not modal and can be kept open while using the app.
-- It shows the summary (start in the profile time zone, moving and elapsed
-  time, distance, ascent, load and its origin, threshold and HR limits valid
-  on that day), the HR curve with the zone bands and their names, and the table
-  of the time in each zone (time and percentage share).
+  Ctrl+D), or with a double click on the activity in the map; there is no
+  button for it. The window is not modal and can be kept open while using the
+  app. It has no map preview (user's request of 2026-11-10).
+- It shows the summary in a compact grid of label and value pairs (start in
+  the profile time zone, moving and elapsed time, distance, ascent, load and
+  its origin, threshold and HR limits valid on that day), the HR curve with the
+  zone bands and their names, and the table of the time in each zone (time and
+  percentage share), as tall as its rows, with no scroll bar.
 - The HR samples discarded from the load are marked on the chart with a cross;
   a warning says how many they are, and how many the file reader skipped
   because of a repeated or backward timestamp.
 - Without HR the window says so and the load is estimated. If the file in the
   archive is missing, altered or unreadable, the window gives the reason; an
   altered file is never used silently.
-- Very long curves are thinned to 3,000 points, keeping all the discarded
-  samples.
+- Very long curves are thinned to about 3,000 points, keeping the peaks, the
+  valleys, the first and last sample and all the discarded samples; zones and
+  load are always calculated on all the samples. The file is decoded once per
+  opening, and the chart page is prepared while the file is read.
 
 ### Overview
 
