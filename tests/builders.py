@@ -15,6 +15,7 @@ from ponos_coach.activities.domain import (
     ActivityRecord,
     ActivitySummary,
     ArchivedFile,
+    DeletedActivity,
     FileId,
     FitIdentity,
     GarminActivityId,
@@ -73,6 +74,16 @@ def make_record(
         imported_at=IMPORTED_AT,
         garmin_activity_id=garmin_activity_id,
     )
+
+
+DELETED_AT = datetime(2026, 4, 2, 9, 30, tzinfo=UTC)
+
+
+def make_deleted(
+    record: ActivityRecord | None = None, *, at: datetime = DELETED_AT
+) -> DeletedActivity:
+    """Tombstone of `record` (a default one if none is given) deleted at `at`."""
+    return DeletedActivity.of(record or make_record(), at)
 
 
 def physiology(threshold_bpm: int = 170) -> Physiology:

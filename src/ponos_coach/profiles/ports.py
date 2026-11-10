@@ -15,7 +15,12 @@ from pathlib import Path
 from typing import Protocol
 
 from ponos_coach.activities.domain import SessionTokens
-from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxIndex
+from ponos_coach.activities.ports import (
+    ActivityIndex,
+    DeletedActivities,
+    SyncJournal,
+    TrackBoxIndex,
+)
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.injury.ports import InjuryStore
@@ -348,7 +353,8 @@ class ThresholdPaceStore(Protocol):
 class OpenProfile(Protocol):
     """An open profile: its information and the stores that share a connection.
 
-    The transactions of `activities.transaction()` also cover `track_boxes`, `sync_journal`,
+    The transactions of `activities.transaction()` also cover `deleted_activities`, `track_boxes`,
+    `sync_journal`,
     `physiology`, `weights`, `threshold_paces`, `fixed_data`, `load_cache`,
     `activity_levels`, `lean_masses`, `meal_times`, `goal_periods`, `threshold_tests`, `goals`,
     `availability`,
@@ -370,6 +376,11 @@ class OpenProfile(Protocol):
     @property
     def activities(self) -> ActivityIndex:
         """Activity index."""
+        ...
+
+    @property
+    def deleted_activities(self) -> DeletedActivities:
+        """The activities the user deleted (same connection and transaction as the index)."""
         ...
 
     @property

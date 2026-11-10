@@ -757,6 +757,10 @@ def test_menus_carry_the_shortcuts(qtbot: QtBot, tmp_path: Path, settings: QSett
         "Test instructions...": QKeySequence("Ctrl+Shift+H").toString(),
         "Use as threshold test...": QKeySequence("Ctrl+Shift+U").toString(),
         "Threshold tests...": QKeySequence("Ctrl+Shift+R").toString(),
+        # Deleting activities: the list's own shortcuts (they act while the list has the focus)
+        "Delete activity": QKeySequence(QKeySequence.StandardKey.Delete).toString(),
+        "Undo": QKeySequence(QKeySequence.StandardKey.Undo).toString(),
+        "Redo": QKeySequence(QKeySequence.StandardKey.Redo).toString(),
         "Add race...": QKeySequence("Ctrl+R").toString(),
         "Add form goal...": QKeySequence("Ctrl+Shift+F").toString(),
         "Change goal...": QKeySequence("Ctrl+Shift+E").toString(),

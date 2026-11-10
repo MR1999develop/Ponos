@@ -61,6 +61,7 @@ def rig(tmp_path: Path) -> Iterator[SyncRig]:
             fake,
             fake,
             profile.activities,
+            profile.deleted_activities,
             profile.sync_journal,
             memory,
             memory,

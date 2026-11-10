@@ -24,6 +24,11 @@ Two phases, in this order, both resumable after an interruption (PLAN.md 4.4):
    which the resumption rewrites identically (the archive is idempotent): the database write
    lock lasts only as long as the record.
 
+A deleted activity (a tombstone, ADR 018) is never downloaded or recorded: the entry of an activity
+the user deleted, found by Garmin id or by start, duration and sport when it was imported from a
+file, becomes `SKIPPED` (final, neither failed nor to do), and so does an entry whose downloaded
+file turns out to be a deleted activity.
+
 Errors according to how the caller reacts: authentication required, rate limit beyond
 the caps, unreachable service, archive error or busy database **stop** the
 synchronization with a reason (`StopReason`); unsupported format, corrupt or too large
@@ -70,10 +75,12 @@ from ponos_coach.activities.domain import (
     SyncStatus,
     advance_cursor,
     estimate_remaining_s,
+    find_matching_deleted,
     find_matching_import,
     mark_downloaded,
     mark_failed,
     mark_matched,
+    mark_skipped,
     mark_unanswered,
     original_matches_listing,
     pause_between_requests_s,
@@ -90,6 +97,7 @@ from ponos_coach.activities.ports import (
     ArchiveTooLargeError,
     AuthenticationRequiredError,
     Clock,
+    DeletedActivities,
     DownloadTooLargeError,
     DuplicateActivityError,
     RateLimitedError,
@@ -173,12 +181,13 @@ class SyncClock(Clock, Protocol):
 class SyncPorts:
     """Everything the synchronization receives from the Composition Root.
 
-    `index`, `journal` and `archive` are those of the profile opened by the worker (same connection
-    and same transaction for index and journal). `rng` gives the jitter.
+    `index`, `deleted`, `journal` and `archive` are those of the profile opened by the worker (same
+    connection and same transaction for index, tombstones and journal). `rng` gives the jitter.
     """
 
     source: ActivitySource
     index: ActivityIndex
+    deleted: DeletedActivities
     journal: SyncJournal
     archive: ActivityArchive
     extract_original: OriginalExtractor
@@ -247,8 +256,10 @@ class SyncOutcome:
     only the **new** activities downloaded and archived in this run; `matched` those
     matched to an already imported activity (in another format); `already_present` those whose
     file was already in the profile (same identity, imported earlier or downloaded under another
-    id): linked, but not downloaded again. `failures` are the failed entries (even if
-    retryable) and written to the journal; `status_counts` the whole journal at the end of the run.
+    id): linked, but not downloaded again; `skipped_deleted` those the user had deleted, which
+    were left out (not downloaded if that could be known from the list). `failures` are the failed
+    entries (even if retryable) and written to the journal; `status_counts` the whole journal at
+    the end of the run.
     """
 
     kind: ListingKind
@@ -259,6 +270,7 @@ class SyncOutcome:
     failures: tuple[EntryFailure, ...]
     status_counts: Mapping[SyncStatus, int]
     already_present: int = 0
+    skipped_deleted: int = 0
 
     @property
     def completed(self) -> bool:
@@ -337,6 +349,7 @@ class _Saved(Enum):
 
     NEW = "new"  # new activity: archive and record
     ALREADY_PRESENT = "already_present"  # same file already in the profile: id linked
+    SKIPPED = "skipped"  # the activity was deleted by the user: nothing recorded
 
 
 class _RequestFailedError(Exception):
@@ -365,6 +378,7 @@ class _Run:
         self._downloaded = 0
         self._matched = 0
         self._already_present = 0
+        self._skipped_deleted = 0
         self._failures: list[EntryFailure] = []
         # Entries failed because of the network in this round, not yet written (see
         # `_network_answered`).
@@ -395,6 +409,7 @@ class _Run:
             tuple(self._failures),
             MappingProxyType(dict(self._p.journal.counts())),
             self._already_present,
+            self._skipped_deleted,
         )
 
     # --- Full check: exhausted attempts ----------------------------------------------------
@@ -468,7 +483,7 @@ class _Run:
         self._report(SyncProgress(SyncPhase.DOWNLOADING, total, total, 0.0))
 
     def _work_on(self, entry: JournalEntry) -> None:
-        if self._match_with_import(entry):
+        if self._skip_if_deleted(entry) or self._match_with_import(entry):
             return
         zipped = self._download(entry)
         if zipped is None:
@@ -480,6 +495,24 @@ class _Run:
         if activity is None:
             return
         self._save(entry, extracted, activity)
+
+    def _skip_if_deleted(self, entry: JournalEntry) -> bool:
+        """The activity of the entry is one the user deleted: it is not downloaded and the entry
+        is marked `SKIPPED`. True if done."""
+        remote = entry.remote
+        candidates = list(self._p.deleted.find_possible_duplicates(remote.start, remote.duration_s))
+        by_id = self._p.deleted.find_by_garmin_id(remote.garmin_id)
+        if by_id is not None:
+            candidates.append(by_id)
+        if find_matching_deleted(remote, candidates) is None:
+            return False
+        self._skip(entry)
+        return True
+
+    def _skip(self, entry: JournalEntry) -> None:
+        with self._p.index.transaction():
+            self._p.journal.update(mark_skipped(entry, self._now()))
+        self._skipped_deleted += 1
 
     def _match_with_import(self, entry: JournalEntry) -> bool:
         """Matches the entry to an activity already imported from file: no download. True if
@@ -619,6 +652,8 @@ class _Run:
             raise _StopError(StopReason.STORAGE_ERROR) from error
         if saved is _Saved.ALREADY_PRESENT:
             self._already_present += 1
+        elif saved is _Saved.SKIPPED:
+            self._skipped_deleted += 1
         else:
             self._downloaded += 1
 
@@ -629,7 +664,9 @@ class _Run:
         otherwise None. Reads without a transaction: the decision is repeated,
         identical, inside the transaction that writes."""
         index = self._p.index
-        if index.get(activity.identity) is not None:
+        if index.get(activity.identity) is not None or (
+            self._p.deleted.get(activity.identity) is not None
+        ):
             return None
         return self._p.archive.store(extracted.content, activity.file_format, activity.start)
 
@@ -643,6 +680,9 @@ class _Run:
         index = self._p.index
         garmin_id = entry.garmin_id
         now = self._now()
+        if self._p.deleted.get(activity.identity) is not None:  # deleted while we downloaded
+            self._p.journal.update(mark_skipped(entry, now))
+            return _Saved.SKIPPED
         existing = index.get(activity.identity)
         if existing is not None:  # same file already imported: the id is linked
             if existing.garmin_activity_id is None:

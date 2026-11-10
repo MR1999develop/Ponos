@@ -23,7 +23,12 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
-from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxIndex
+from ponos_coach.activities.ports import (
+    ActivityIndex,
+    DeletedActivities,
+    SyncJournal,
+    TrackBoxIndex,
+)
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.injury.ports import InjuryStore
@@ -133,6 +138,11 @@ class ProfileSession:
     def activities(self) -> ActivityIndex:
         """Activity index (valid while the profile is open)."""
         return self._opened.activities
+
+    @property
+    def deleted_activities(self) -> DeletedActivities:
+        """The activities the user deleted (same connection and transaction as the index)."""
+        return self._opened.deleted_activities
 
     @property
     def track_boxes(self) -> TrackBoxIndex:

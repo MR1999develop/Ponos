@@ -241,6 +241,15 @@ class SqliteActivityIndex:
         except sqlite3.Error as exc:
             raise ActivityIndexError("database operation failed") from exc
 
+    def remove(self, identity: ActivityIdentity) -> None:
+        """Removes the record; the load cache goes with it (`ON DELETE CASCADE`)."""
+        with translating(ActivityIndexError):
+            cursor = self._db.connection.execute(
+                "DELETE FROM activities WHERE identity_key = ?", (identity_key(identity),)
+            )
+        if cursor.rowcount == 0:
+            raise ActivityNotFoundError("activity not in the index")
+
     def list_by_start(self) -> Sequence[ActivityRecord]:
         """All the records by ascending start, ties by identity key."""
         with translating(ActivityIndexError):

@@ -22,6 +22,7 @@ from ponos_coach.activities.domain import (
     ActivityPage,
     ActivityRecord,
     ArchivedFile,
+    DeletedActivity,
     FileFormat,
     GarminActivityId,
     GeoBox,
@@ -174,8 +175,23 @@ class ActivityIndex(Protocol):
     def add(self, record: ActivityRecord) -> None:
         """Adds a record. The file in the archive must already be durable.
 
+        An identity that is in `DeletedActivities` cannot be added (the database forbids it): the
+        caller takes the tombstone out first, in the same transaction.
+
         Raises:
             DuplicateActivityError: identity or Garmin id already present; nothing changes.
+            ActivityIndexError: the identity is deleted (or the record breaks a constraint).
+        """
+        ...
+
+    def remove(self, identity: ActivityIdentity) -> None:
+        """Removes the record, and with it everything derived from it (load cache, track box).
+
+        The file in the archive is not touched. Used by the use case that deletes an activity, in
+        the same transaction that records the tombstone (`DeletedActivities.add`).
+
+        Raises:
+            ActivityNotFoundError: the identity is not in the index; nothing changes.
         """
         ...
 
@@ -211,6 +227,54 @@ class ActivityIndex(Protocol):
             already has
                 a different Garmin id; nothing changes.
         """
+        ...
+
+
+class DeletedActivities(Protocol):
+    """The activities the user deleted (tombstones), of a profile.
+
+    Unlike the index, this is not derived from the files: it records a decision of the user, so it
+    is saved and backed up with the profile. It shares the connection and the transaction of
+    `ActivityIndex`. An identity is either in the index or here, never in both (the database
+    enforces it). Operations outside a transaction are atomic on their own.
+    """
+
+    def add(self, deleted: DeletedActivity) -> None:
+        """Records a deletion.
+
+        Raises:
+            DuplicateActivityError: the identity is already deleted; nothing changes.
+            ActivityIndexError: the identity is still in the index (or the constraints refuse it).
+        """
+        ...
+
+    def remove(self, identity: ActivityIdentity) -> None:
+        """Forgets a deletion (the activity was restored).
+
+        Raises:
+            ActivityNotFoundError: the identity is not deleted; nothing changes.
+        """
+        ...
+
+    def get(self, identity: ActivityIdentity) -> DeletedActivity | None:
+        """The tombstone with this identity, or None."""
+        ...
+
+    def find_by_garmin_id(self, garmin_id: GarminActivityId) -> DeletedActivity | None:
+        """The tombstone of the activity that had this Garmin id, or None."""
+        ...
+
+    def find_possible_duplicates(
+        self, start: datetime, elapsed_s: float
+    ) -> Sequence[DeletedActivity]:
+        """Tombstones for which `is_possible_duplicate(start, elapsed_s, ...)` is true, by start.
+
+        Used to recognize a remote activity that was imported from a file and then deleted.
+        """
+        ...
+
+    def list_latest_first(self) -> Sequence[DeletedActivity]:
+        """All tombstones, the most recently deleted first (ties by identity key)."""
         ...
 
 

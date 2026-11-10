@@ -307,6 +307,7 @@ class SyncJournalContract:
                 SyncStatus.MATCHED: 1,
                 SyncStatus.RETRYABLE: 0,
                 SyncStatus.FAILED: 0,
+                SyncStatus.SKIPPED: 0,
             }
 
     def test_known_ids_include_every_status_and_ignore_the_unknown(

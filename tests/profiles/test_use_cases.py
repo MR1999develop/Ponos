@@ -12,7 +12,12 @@ from pathlib import Path
 
 import pytest
 
-from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxIndex
+from ponos_coach.activities.ports import (
+    ActivityIndex,
+    DeletedActivities,
+    SyncJournal,
+    TrackBoxIndex,
+)
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.injury.ports import InjuryStore
@@ -133,6 +138,10 @@ class _CountingProfile:
     @property
     def activities(self) -> ActivityIndex:
         return self._inner.activities
+
+    @property
+    def deleted_activities(self) -> DeletedActivities:
+        return self._inner.deleted_activities
 
     @property
     def track_boxes(self) -> TrackBoxIndex:

@@ -29,6 +29,7 @@ class SyncStatus(Enum):
     MATCHED = "matched"  # matched to an activity already imported from file: no download
     RETRYABLE = "retryable"  # failed for a transient cause: retried next time
     FAILED = "failed"  # failed definitively: not retried
+    SKIPPED = "skipped"  # the user deleted this activity: it is never downloaded
 
 
 class FailureReason(Enum):
@@ -61,17 +62,30 @@ WORKABLE_STATUSES: Final = frozenset({SyncStatus.PENDING, SyncStatus.RETRYABLE})
 _FAILURE_STATUSES: Final = frozenset({SyncStatus.RETRYABLE, SyncStatus.FAILED})
 
 # From -> to. Entries to process go to any of the other states (RETRYABLE included,
-# if it fails again); DOWNLOADED and MATCHED do not move; FAILED goes back only to PENDING and only
-# for `rearm_exhausted` (the "Full check" rearms the causes in `REARMABLE_REASONS`).
+# if it fails again); DOWNLOADED, MATCHED and SKIPPED do not move; FAILED goes back only to PENDING
+# and only for `rearm_exhausted` (the "Full check" rearms the causes in `REARMABLE_REASONS`).
 ALLOWED_TRANSITIONS: Final[Mapping[SyncStatus, frozenset[SyncStatus]]] = {
     SyncStatus.PENDING: frozenset(
-        {SyncStatus.DOWNLOADED, SyncStatus.MATCHED, SyncStatus.RETRYABLE, SyncStatus.FAILED}
+        {
+            SyncStatus.DOWNLOADED,
+            SyncStatus.MATCHED,
+            SyncStatus.SKIPPED,
+            SyncStatus.RETRYABLE,
+            SyncStatus.FAILED,
+        }
     ),
     SyncStatus.RETRYABLE: frozenset(
-        {SyncStatus.DOWNLOADED, SyncStatus.MATCHED, SyncStatus.RETRYABLE, SyncStatus.FAILED}
+        {
+            SyncStatus.DOWNLOADED,
+            SyncStatus.MATCHED,
+            SyncStatus.SKIPPED,
+            SyncStatus.RETRYABLE,
+            SyncStatus.FAILED,
+        }
     ),
     SyncStatus.DOWNLOADED: frozenset(),
     SyncStatus.MATCHED: frozenset(),
+    SyncStatus.SKIPPED: frozenset(),
     SyncStatus.FAILED: frozenset({SyncStatus.PENDING}),
 }
 
@@ -159,6 +173,17 @@ def mark_matched(entry: JournalEntry, now: datetime) -> JournalEntry:
     """
     _check_move(entry, SyncStatus.MATCHED)
     return JournalEntry(entry.remote, SyncStatus.MATCHED, now, entry.failed_attempts)
+
+
+def mark_skipped(entry: JournalEntry, now: datetime) -> JournalEntry:
+    """The user deleted the activity of this entry: it is not downloaded, and it neither fails nor
+    stays to do (it is a choice, not a problem).
+
+    Raises:
+        InvalidTransitionError: the entry is already in a final state.
+    """
+    _check_move(entry, SyncStatus.SKIPPED)
+    return JournalEntry(entry.remote, SyncStatus.SKIPPED, now, entry.failed_attempts)
 
 
 def mark_failed(

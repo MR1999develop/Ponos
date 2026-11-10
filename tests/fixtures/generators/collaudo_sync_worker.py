@@ -139,6 +139,9 @@ class _BlockingIndex:
     def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
         return self._inner.find_by_garmin_id(garmin_id)
 
+    def remove(self, identity: ActivityIdentity) -> None:
+        self._inner.remove(identity)
+
     def link_garmin_id(self, identity: ActivityIdentity, garmin_id: GarminActivityId) -> None:
         self._inner.link_garmin_id(identity, garmin_id)
 
@@ -206,6 +209,7 @@ def _sync(profile_folder: str, count: int, page_size: int, spec: str) -> None:
     ports = SyncPorts(
         source,
         _BlockingIndex(opened.activities, point),
+        opened.deleted_activities,
         _BlockingJournal(opened.sync_journal, point),
         FileArchive.in_profile_folder(folder),
         extract_original,

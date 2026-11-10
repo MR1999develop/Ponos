@@ -20,6 +20,7 @@ from ponos_coach.activities.domain import (
     REARMABLE_REASONS,
     ActivityIdentity,
     ActivityRecord,
+    DeletedActivity,
     GarminActivityId,
     GeoBox,
     InvalidTransitionError,
@@ -36,8 +37,10 @@ from ponos_coach.activities.domain import (
 )
 from ponos_coach.activities.ports import (
     ActivityIndex,
+    ActivityIndexError,
     ActivityNotFoundError,
     BoxCandidate,
+    DeletedActivities,
     DuplicateActivityError,
     IndexedActivity,
     IndexRevision,
@@ -119,6 +122,7 @@ class _Database:
     records: dict[str, ActivityRecord] = field(default_factory=dict)  # by identity key
     track_boxes: dict[str, GeoBox] = field(default_factory=dict)  # by identity key
     garmin_ids: set[int] = field(default_factory=set)
+    deleted: dict[str, DeletedActivity] = field(default_factory=dict)  # by identity key
     physiology: dict[date, PhysiologyEntry] = field(default_factory=dict)
     weights: dict[date, WeightEntry] = field(default_factory=dict)
     threshold_paces: dict[date, ThresholdPaceEntry] = field(default_factory=dict)
@@ -149,6 +153,7 @@ class _Database:
                 self.records,
                 self.track_boxes,
                 self.garmin_ids,
+                self.deleted,
                 self.physiology,
                 self.weights,
                 self.threshold_paces,
@@ -177,6 +182,7 @@ class _Database:
             self.records,
             self.track_boxes,
             self.garmin_ids,
+            self.deleted,
             self.physiology,
             self.weights,
             self.threshold_paces,
@@ -253,6 +259,8 @@ class _Index:
     def add(self, record: ActivityRecord) -> None:
         key = identity_key(record.identity)
         garmin_id = record.garmin_activity_id
+        if key in self._db.deleted:
+            raise ActivityIndexError("activity is deleted")
         if key in self._db.records or (garmin_id is not None and garmin_id in self._db.garmin_ids):
             raise DuplicateActivityError(key)
         self._db.records[key] = record
@@ -264,6 +272,16 @@ class _Index:
             self._db.track_boxes[key] = box
         if garmin_id is not None:
             self._db.garmin_ids.add(garmin_id)
+
+    def remove(self, identity: ActivityIdentity) -> None:
+        key = identity_key(identity)
+        record = self._db.records.pop(key, None)
+        if record is None:
+            raise ActivityNotFoundError(key)
+        self._db.track_boxes.pop(key, None)
+        self._db.loads.pop(key, None)
+        if record.garmin_activity_id is not None:
+            self._db.garmin_ids.discard(record.garmin_activity_id)
 
     def list_by_start(self) -> Sequence[ActivityRecord]:
         return sorted(self._db.records.values(), key=lambda r: (r.start, identity_key(r.identity)))
@@ -293,6 +311,52 @@ class _Index:
             raise DuplicateActivityError(key)
         self._db.records[key] = replace(record, garmin_activity_id=garmin_id.value)
         self._db.garmin_ids.add(garmin_id.value)
+
+
+class _Deleted:
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def add(self, deleted: DeletedActivity) -> None:
+        key = identity_key(deleted.identity)
+        if key in self._db.records:
+            raise ActivityIndexError("activity is still in the index")
+        garmin_id = deleted.garmin_activity_id
+        if key in self._db.deleted or (
+            garmin_id is not None
+            and any(d.garmin_activity_id == garmin_id for d in self._db.deleted.values())
+        ):
+            raise DuplicateActivityError(key)
+        self._db.deleted[key] = deleted
+
+    def remove(self, identity: ActivityIdentity) -> None:
+        if self._db.deleted.pop(identity_key(identity), None) is None:
+            raise ActivityNotFoundError(identity_key(identity))
+
+    def get(self, identity: ActivityIdentity) -> DeletedActivity | None:
+        return self._db.deleted.get(identity_key(identity))
+
+    def find_by_garmin_id(self, garmin_id: GarminActivityId) -> DeletedActivity | None:
+        for deleted in self._db.deleted.values():
+            if deleted.garmin_activity_id == garmin_id.value:
+                return deleted
+        return None
+
+    def find_possible_duplicates(
+        self, start: datetime, elapsed_s: float
+    ) -> Sequence[DeletedActivity]:
+        found = [
+            d
+            for d in self._db.deleted.values()
+            if is_possible_duplicate(start, elapsed_s, d.start, d.elapsed_s)
+        ]
+        return sorted(found, key=lambda d: (d.start, identity_key(d.identity)))
+
+    def list_latest_first(self) -> Sequence[DeletedActivity]:
+        return sorted(
+            self._db.deleted.values(),
+            key=lambda d: (-d.deleted_at.timestamp(), identity_key(d.identity)),
+        )
 
 
 class _Journal:
@@ -705,6 +769,7 @@ class _OpenProfile:
     def __init__(self, database: _Database) -> None:
         self._db = database
         self._index = _Index(database)
+        self._deleted = _Deleted(database)
         self._boxes = _TrackBoxes(database)
         self._journal = _Journal(database)
         self._physiology = _Physiology(database)
@@ -738,6 +803,10 @@ class _OpenProfile:
     @property
     def activities(self) -> ActivityIndex:
         return self._index
+
+    @property
+    def deleted_activities(self) -> DeletedActivities:
+        return self._deleted
 
     @property
     def track_boxes(self) -> TrackBoxIndex:

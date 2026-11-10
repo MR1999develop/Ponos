@@ -62,3 +62,27 @@ def test_a_repaired_archive_file_is_counted_apart_and_not_as_a_problem() -> None
     assert (report.imported, report.repaired, report.already_present) == (1, 1, 0)
     assert report.examined == 2
     assert report.not_imported == ()
+
+
+def test_activities_brought_back_or_left_out_are_counted_apart_and_are_not_problems() -> None:
+    identity = profile_activity(datetime(2026, 3, 2, 7, 0, tzinfo=UTC)).identity
+    summary = ImportSummary(
+        (
+            FileImportResult("a.fit", ImportStatus.BROUGHT_BACK),
+            FileImportResult("b.fit", ImportStatus.LEFT_OUT, matches=identity),
+            FileImportResult("c.fit", ImportStatus.LEFT_OUT, matches=identity),
+            FileImportResult("d.fit", ImportStatus.IMPORTED),
+        ),
+        cancelled=False,
+    )
+
+    report = ImportReport.from_summary(summary)
+
+    assert (report.brought_back, report.left_out, report.imported) == (1, 2, 1)
+    assert report.examined == 4
+    assert report.not_imported == ()
+
+
+def test_a_left_out_file_must_say_which_deleted_activity_it_is() -> None:
+    with pytest.raises(ValueError, match="matching activity"):
+        FileImportResult("a.fit", ImportStatus.LEFT_OUT)

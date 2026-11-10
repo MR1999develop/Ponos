@@ -70,6 +70,9 @@ def test_a_profile_from_before_the_migration_loses_its_cached_loads_and_gets_the
         raw.execute("ALTER TABLE load_cache DROP COLUMN max_bpm")
         for later in ("run_lt1_bpm", "other_lt1_bpm"):  # added by a migration after this one
             raw.execute(f"ALTER TABLE physiology DROP COLUMN {later}")
+        raw.execute("DROP TRIGGER activities_not_deleted")  # the deleted-activities migration
+        raw.execute("DROP TRIGGER deleted_activity_not_in_index")
+        raw.execute("DROP TABLE deleted_activity")
         raw.execute(
             "INSERT INTO load_cache (activity_id, fingerprint, trimp, hr_tss, load, used_samples, "
             "discarded_samples, excluded_seconds, source, zone1_s, zone2_s, zone3_s, zone4_s, "

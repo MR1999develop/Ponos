@@ -126,10 +126,31 @@ class ImportReportDialog(QDialog):
                     "Archived files repaired from the imported original: %n", "", report.repaired
                 )
             )
+        lines.extend(self._deleted_lines(report))
         if report.ignored:
             lines.append(self.tr("Files ignored (not an activity): %n", "", report.ignored))
         if report.failed:
             lines.append(self.tr("Files with an error: %n", "", report.failed))
         if report.cancelled:
             lines.append(self.tr("The import was stopped: run it again to continue."))
+        return lines
+
+    def _deleted_lines(self, report: ImportReport) -> list[str]:
+        """The rows about the activities the user had deleted."""
+        lines: list[str] = []
+        if report.brought_back:
+            lines.append(
+                self.tr(
+                    "Deleted activities brought back by their file: %n", "", report.brought_back
+                )
+            )
+        if report.left_out:
+            lines.append(
+                self.tr(
+                    "Left out because you deleted them: %n. To bring one back, choose its file "
+                    "with Import files.",
+                    "",
+                    report.left_out,
+                )
+            )
         return lines
