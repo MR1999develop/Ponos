@@ -82,6 +82,7 @@ class DayView:
     estimate_note: str = ""  # empty unless the day is ahead: its activities are the plan's
     # One per row of `activities`: the activity to open, `None` for a session of the plan.
     activity_ids: tuple[ActivityIdentity | None, ...] = ()
+    planned: str = ""  # the planned session in full (phase, blocks, load); empty without a plan
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +224,7 @@ def _present_report(
     *,
     in_progress: bool,
     verified: bool,
+    planned: str,
 ) -> DayView:
     return DayView(
         day_title(report.day),
@@ -239,6 +241,7 @@ def _present_report(
         fixed_notice_text(),
         estimate_from_plan_text() if report.from_plan else "",
         tuple(a.identity for a in report.activities),
+        planned,
     )
 
 
@@ -248,12 +251,14 @@ def present_day(
     *,
     today: date | None = None,
     foods_verified: bool = True,
+    planned: str = "",
 ) -> DayContent:
     """The page content of a day from the use case's result.
 
     `today` (the profile's today) marks the current day as in progress; `foods_verified` is False
     while the food table's values have not been checked against their source. The note on
-    the lean mass comes from the report (`lean_mass_measured`).
+    the lean mass comes from the report (`lean_mass_measured`). `planned` is the day's planned
+    session in full, as the calendar's panel shows it.
     """
     if isinstance(result, NutritionUnavailable):
         return UnavailableView(day_title(day), unavailable_text(result.reason), fixed_notice_text())
@@ -261,4 +266,5 @@ def present_day(
         result,
         in_progress=day == today,
         verified=foods_verified,
+        planned=planned,
     )

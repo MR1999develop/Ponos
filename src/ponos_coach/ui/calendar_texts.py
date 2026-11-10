@@ -199,7 +199,7 @@ def _goal_detail_lines(item: DayGoal, expected_time_s: int | None) -> list[str]:
     return lines
 
 
-def _planned_section(plan: PlanDay) -> str:
+def planned_section_text(plan: PlanDay) -> str:
     """The phase of the day and, if there is one, its session with the blocks and the load."""
     lines = [phase_text(plan.phase)]
     if plan.session is not None:
@@ -224,7 +224,7 @@ def day_detail_text(cell: CalendarDay) -> str:
     plan = cell.plan
     expected = None if plan is None or plan.race is None else plan.race.expected_time_s
     if plan is not None:
-        sections.append(_planned_section(plan))
+        sections.append(planned_section_text(plan))
     elif cell.is_future:
         sections.append(QCoreApplication.translate("Calendar", "No plan for this day."))
     sections.extend("\n".join(_goal_detail_lines(item, expected)) for item in cell.goals)

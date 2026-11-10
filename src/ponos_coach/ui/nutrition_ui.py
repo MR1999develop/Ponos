@@ -24,6 +24,7 @@ from ponos_coach.activities.domain import ActivityIdentity
 from ponos_coach.nutrition.domain import LeanMassEntry
 from ponos_coach.nutrition.use_cases import NutritionSettings
 from ponos_coach.ui.calendar_page import CalendarPage
+from ponos_coach.ui.calendar_texts import planned_section_text
 from ponos_coach.ui.day_page import DayState
 from ponos_coach.ui.day_presentation import day_title, present_day
 from ponos_coach.ui.day_window import DayWindow
@@ -188,6 +189,7 @@ class NutritionUi(QObject):
                     loaded.result,
                     today=self._today(),
                     foods_verified=loaded.foods_verified,
+                    planned="" if loaded.planned is None else planned_section_text(loaded.planned),
                 )
             )
 

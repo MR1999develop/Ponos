@@ -731,6 +731,10 @@
         <translation>Pasti e assunzioni per l&apos;allenamento</translation>
     </message>
     <message>
+        <source>Planned session</source>
+        <translation>Seduta programmata</translation>
+    </message>
+    <message>
         <source>Things to know</source>
         <translation>Da sapere</translation>
     </message>

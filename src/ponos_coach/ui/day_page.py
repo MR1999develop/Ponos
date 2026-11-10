@@ -138,6 +138,7 @@ class DayPage(QWidget):
         self._summary_line = ""
         self._in_progress_note = ""
         self._estimate_note = ""
+        self._planned_text = ""
         self._foods_note = ""
         self._lean_mass_note = ""
         self._build()
@@ -274,6 +275,11 @@ class DayPage(QWidget):
         return self._estimate_note
 
     @property
+    def planned_text(self) -> str:
+        """The planned session in full, as the calendar's panel shows it (empty without one)."""
+        return self._planned_text
+
+    @property
     def lean_mass_note_text(self) -> str:
         """Which lean mass the energy availability limit uses (empty if the page says nothing)."""
         return self._lean_mass_note
@@ -347,6 +353,7 @@ class DayPage(QWidget):
         self._advisory_labels = []
         self._in_progress_note = ""
         self._estimate_note = ""
+        self._planned_text = ""
         self._foods_note = ""
         self._lean_mass_note = ""
         self._scroll.takeWidget()
@@ -367,20 +374,10 @@ class DayPage(QWidget):
         self._advisory_labels = []
         self._in_progress_note = ""
         self._estimate_note = ""
+        self._planned_text = ""
         self._foods_note = ""
         self._lean_mass_note = ""
-        if view.in_progress_note:
-            self._in_progress_note = view.in_progress_note
-            progress = _label(view.in_progress_note, root, bold=True)
-            progress.setObjectName("dayInProgress")
-            progress.setMaximumWidth(_MAX_TEXT_WIDTH)
-            column.addWidget(progress)
-        if view.estimate_note:
-            self._estimate_note = view.estimate_note
-            estimate = _label(view.estimate_note, root, bold=True)
-            estimate.setObjectName("dayEstimate")
-            estimate.setMaximumWidth(_MAX_TEXT_WIDTH)
-            column.addWidget(estimate)
+        self._add_day_notes(view, root, column)
         notes = [*view.advisories, *([view.unreadable_note] if view.unreadable_note else [])]
         if notes:
             column.addWidget(self._build_advisories(notes, root))
@@ -403,6 +400,36 @@ class DayPage(QWidget):
             column.addWidget(self._build_meal(card, root))
         column.addStretch(1)
         return root
+
+    def _add_day_notes(self, view: DayView, root: QWidget, column: QVBoxLayout) -> None:
+        """What kind of day it is (in progress, estimate from the plan) and its planned session."""
+        if view.in_progress_note:
+            self._in_progress_note = view.in_progress_note
+            progress = _label(view.in_progress_note, root, bold=True)
+            progress.setObjectName("dayInProgress")
+            progress.setMaximumWidth(_MAX_TEXT_WIDTH)
+            column.addWidget(progress)
+        if view.estimate_note:
+            self._estimate_note = view.estimate_note
+            estimate = _label(view.estimate_note, root, bold=True)
+            estimate.setObjectName("dayEstimate")
+            estimate.setMaximumWidth(_MAX_TEXT_WIDTH)
+            column.addWidget(estimate)
+        if view.planned:
+            column.addWidget(self._build_planned(view.planned, root))
+
+    def _build_planned(self, text: str, parent: QWidget) -> QGroupBox:
+        """The planned session with its blocks and estimated load (user's request of 2026-11-10:
+        the panel under the calendar is too small to read it)."""
+        self._planned_text = text
+        box = QGroupBox(self.tr("Planned session"), parent)
+        box.setObjectName("dayPlanned")
+        inner = QVBoxLayout(box)
+        detail = _label(text, box)
+        detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        detail.setMaximumWidth(_MAX_TEXT_WIDTH)
+        inner.addWidget(detail)
+        return box
 
     def _build_advisories(self, notes: list[str], parent: QWidget) -> QGroupBox:
         box = QGroupBox(self.tr("Things to know"), parent)

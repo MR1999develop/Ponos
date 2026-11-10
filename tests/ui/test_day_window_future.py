@@ -19,6 +19,7 @@ from ponos_coach.nutrition.domain import Advisory, EnergySource, GoalPeriod, Wei
 from ponos_coach.nutrition.use_cases import AddGoalPeriod
 from ponos_coach.planning.domain import Phase, Plan, build_plan
 from ponos_coach.profiles.day_nutrition import UnavailableReason
+from ponos_coach.ui.calendar_texts import planned_section_text
 from ponos_coach.ui.data_thread import JobSucceeded
 from ponos_coach.ui.day_page import DayState
 from ponos_coach.ui.main_window import MainWindow
@@ -28,6 +29,7 @@ from ponos_coach.ui.nutrition_texts import (
     estimate_from_plan_text,
     unavailable_text,
 )
+from ponos_coach.ui.plan_texts import block_text
 from ponos_coach.ui.workspace import ProfileAccess
 from tests.planning.builders import BIG_WEEK, inputs, race
 from tests.ui.nutrition_support import (
@@ -133,3 +135,29 @@ def test_a_past_day_has_no_estimate_note_even_with_a_plan(
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
 
     assert last_day_page(window).estimate_text == ""
+
+
+def test_a_day_ahead_shows_the_planned_session_in_full_as_the_calendar_panel_does(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+    plan = save_plan_and_weight_loss(qtbot, window)
+    target = next(d for d in plan.days if d.session is not None and len(d.session.blocks) > 1)
+
+    show_day(qtbot, window, target.day)
+    page = last_day_page(window)
+
+    assert page.planned_text == planned_section_text(target)
+    for block in target.session.blocks if target.session is not None else ():
+        assert block_text(block) in page.planned_text  # every block, with its HR range
+    assert "Estimated load:" in page.planned_text
+
+
+def test_a_past_day_without_a_planned_session_shows_no_planned_section(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+
+    open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
+
+    assert last_day_page(window).planned_text == ""
