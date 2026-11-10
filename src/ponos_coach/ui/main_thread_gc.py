@@ -21,6 +21,17 @@ _CHECK_INTERVAL_MS = 500  # often enough that cycles do not pile up, cheap when 
 _GENERATIONS = 3
 
 
+def collect_due(thresholds: tuple[int, ...]) -> int:
+    """Collect the oldest generation whose count passed its threshold, on the calling thread; the
+    number of unreachable objects found (0 if nothing was due). Cheap when nothing is due."""
+    counts = gc.get_count()
+    for generation in reversed(range(_GENERATIONS)):
+        threshold = thresholds[generation] if generation < len(thresholds) else 0
+        if threshold > 0 and counts[generation] > threshold:
+            return gc.collect(generation)
+    return 0
+
+
 class MainThreadCollector(QObject):
     """Turns off the automatic collector and collects from a timer of the thread it lives on.
 
@@ -38,11 +49,5 @@ class MainThreadCollector(QObject):
         self._timer.start()
 
     def collect_if_due(self) -> int:
-        """Collect the oldest generation whose count passed its threshold; the number of
-        unreachable objects found (0 if nothing was due)."""
-        counts = gc.get_count()
-        for generation in reversed(range(_GENERATIONS)):
-            threshold = self._thresholds[generation] if generation < len(self._thresholds) else 0
-            if threshold > 0 and counts[generation] > threshold:
-                return gc.collect(generation)
-        return 0
+        """Collect what is due (`collect_due`) with the thresholds of the automatic collector."""
+        return collect_due(self._thresholds)

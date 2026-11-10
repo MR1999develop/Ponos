@@ -16,9 +16,11 @@ from hypothesis import HealthCheck, settings
 
 from ponos_coach.ui.bootstrap import prepare_qt
 from ponos_coach.ui.data_thread import DataThread
+from ponos_coach.ui.main_thread_gc import collect_due
 
 # App URL scheme and web engine attributes: before pytest-qt's QApplication.
 prepare_qt()
+_THRESHOLDS = gc.get_threshold()  # of the automatic collector, before any test changes them
 
 # No per-example deadline: tests must be deterministic in CI.
 settings.register_profile(
@@ -50,9 +52,10 @@ def collect_cycles_on_the_main_thread() -> Iterator[None]:
     on the main thread only (`ui/main_thread_gc.py`): a data thread that triggered a collection
     could destroy there a Qt object of a closed window of an earlier test, and Qt aborts.
 
-    The tests do not always run the event loop long enough for the collector's timer, so the
-    cycles of each test are collected here, on the main thread, after it.
+    The tests do not always run the event loop long enough for the collector's timer, so after
+    each test what is due is collected here, on the main thread, with the usual thresholds
+    (a full collection after every test would double the time of the suite).
     """
     gc.disable()
     yield
-    gc.collect()
+    collect_due(_THRESHOLDS)

@@ -71,7 +71,11 @@ def test_a_cycle_dropped_by_a_worker_is_freed_on_the_ui_thread(
     thread.join(WAIT_MS / 1000)
     assert freed_on == []  # the worker allocated far past the thresholds, nothing was collected
 
+    # The worker's containers went with it: the UI thread allocates in its turn, as the app does,
+    # so that a collection is due whatever the counts were before this test.
+    pending: list[list[object]] = [[] for _ in range(5000)]
     qtbot.waitUntil(lambda: alive[0]() is None, timeout=WAIT_MS)
+    del pending
 
     assert freed_on and set(freed_on) == {threading.main_thread().name}
     collector.deleteLater()
