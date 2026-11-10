@@ -11,6 +11,7 @@ from ponos_coach.activities.domain.area_query import (
     track_box_of,
     track_touches_area,
 )
+from ponos_coach.activities.domain.deleted import DeletedActivity, find_matching_deleted
 from ponos_coach.activities.domain.distance_series import DistanceSeries
 from ponos_coach.activities.domain.duplicates import (
     DUPLICATE_DURATION_TOLERANCE_PERCENT,
@@ -65,6 +66,7 @@ from ponos_coach.activities.domain.journal import (
     mark_downloaded,
     mark_failed,
     mark_matched,
+    mark_skipped,
     mark_unanswered,
     pending_entry,
     rearm_exhausted,
@@ -153,6 +155,7 @@ __all__ = [
     "ArchivedFile",
     "AreaResult",
     "AreaTotals",
+    "DeletedActivity",
     "DistanceSeries",
     "FailureReason",
     "FileFormat",
@@ -187,6 +190,7 @@ __all__ = [
     "encode_segments",
     "estimate_remaining_s",
     "filter_activities",
+    "find_matching_deleted",
     "find_matching_import",
     "format_of",
     "identity_from_key",
@@ -198,6 +202,7 @@ __all__ = [
     "mark_downloaded",
     "mark_failed",
     "mark_matched",
+    "mark_skipped",
     "mark_unanswered",
     "original_matches_listing",
     "parse_amount",

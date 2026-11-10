@@ -26,6 +26,10 @@ from tests.contracts.contract_assessment import (
     PhysiologyRemovalContract,
     ThresholdTestStoreContract,
 )
+from tests.contracts.contract_deleted import (
+    ActivityIndexRemovalContract,
+    DeletedActivitiesContract,
+)
 from tests.contracts.contract_injury import InjuryStoreContract
 from tests.contracts.contract_nutrition import (
     ActivityCaloriesContract,
@@ -175,6 +179,14 @@ class TestFakeActivityIndex(_FakeStorageFixture, ActivityIndexContract):
 
 
 class TestFakeActivityIndexGarminIds(_FakeStorageFixture, ActivityIndexGarminIdContract):
+    pass
+
+
+class TestFakeDeletedActivities(_FakeStorageFixture, DeletedActivitiesContract):
+    pass
+
+
+class TestFakeActivityIndexRemoval(_FakeStorageFixture, ActivityIndexRemovalContract):
     pass
 
 

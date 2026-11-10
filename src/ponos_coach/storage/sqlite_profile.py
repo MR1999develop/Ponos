@@ -9,7 +9,12 @@ from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 
-from ponos_coach.activities.ports import ActivityIndex, SyncJournal, TrackBoxIndex
+from ponos_coach.activities.ports import (
+    ActivityIndex,
+    DeletedActivities,
+    SyncJournal,
+    TrackBoxIndex,
+)
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
 from ponos_coach.injury.ports import InjuryStore
@@ -47,6 +52,7 @@ from ponos_coach.storage.sqlite_database import (
     peek_database,
     read_meta,
 )
+from ponos_coach.storage.sqlite_deleted import SqliteDeletedActivities
 from ponos_coach.storage.sqlite_goals import (
     SqliteAvailabilityStore,
     SqliteGoalStore,
@@ -111,6 +117,7 @@ class SqliteOpenProfile:
         self._db = database
         self._info = info
         self._activities = SqliteActivityIndex(database)
+        self._deleted_activities = SqliteDeletedActivities(database)
         self._track_boxes = SqliteTrackBoxIndex(database)
         self._sync_journal = SqliteSyncJournal(database)
         self._physiology = SqlitePhysiologyStore(database)
@@ -145,6 +152,11 @@ class SqliteOpenProfile:
     def activities(self) -> ActivityIndex:
         """Activity index."""
         return self._activities
+
+    @property
+    def deleted_activities(self) -> DeletedActivities:
+        """The activities the user deleted (tombstones)."""
+        return self._deleted_activities
 
     @property
     def track_boxes(self) -> TrackBoxIndex:

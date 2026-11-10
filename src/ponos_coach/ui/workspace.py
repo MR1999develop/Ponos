@@ -29,7 +29,12 @@ from PySide6.QtCore import QObject, Signal, Slot
 
 from ponos_coach.activities.map_queries import TrackDecoder
 from ponos_coach.activities.ports import ActivityArchive, ArchiveError, Clock, ImportSource
-from ponos_coach.activities.use_cases import ImportSummary, import_activities
+from ponos_coach.activities.use_cases import (
+    DeletedHandling,
+    DeletedPolicy,
+    ImportSummary,
+    import_activities,
+)
 from ponos_coach.assessment.domain import DEFAULT_PROTOCOL, ThresholdProtocol
 from ponos_coach.load.use_cases import (
     ComputeProfileOverview,
@@ -483,11 +488,16 @@ class WorkspaceController(QObject):
     def import_files(self, paths: Sequence[Path]) -> bool:
         """Import chosen FIT files into the open profile."""
         chosen = tuple(paths)
-        return self._begin_import(lambda: self._services.import_sources.files(chosen))
+        return self._begin_import(
+            lambda: self._services.import_sources.files(chosen), DeletedPolicy.BRING_BACK
+        )
 
     def import_folder(self, folder: Path) -> bool:
-        """Import a folder with its subfolders into the open profile."""
-        return self._begin_import(lambda: self._services.import_sources.folder(folder))
+        """Import a folder with its subfolders into the open profile (activities the user deleted
+        stay deleted: the user did not choose those files)."""
+        return self._begin_import(
+            lambda: self._services.import_sources.folder(folder), DeletedPolicy.LEAVE_OUT
+        )
 
     @property
     def test_protocol(self) -> ThresholdProtocol:
@@ -710,7 +720,7 @@ class WorkspaceController(QObject):
         return job
 
     def _import_job(
-        self, make_source: Callable[[], ImportSource]
+        self, make_source: Callable[[], ImportSource], on_deleted: DeletedPolicy
     ) -> Callable[[JobContext], object]:
         services = self._services
         data = self._data
@@ -724,6 +734,7 @@ class WorkspaceController(QObject):
                     current.archive,
                     current.session.activities,
                     services.clock,
+                    deleted=DeletedHandling(current.session.deleted_activities, on_deleted),
                     report=context.report,
                     is_cancelled=context.is_cancelled,
                 )
@@ -880,13 +891,15 @@ class WorkspaceController(QObject):
 
     # --- Import -----------------------------------------------------------------------
 
-    def _begin_import(self, make_source: Callable[[], ImportSource]) -> bool:
+    def _begin_import(
+        self, make_source: Callable[[], ImportSource], on_deleted: DeletedPolicy
+    ) -> bool:
         if not self.can_import:
             return False
         self._cancel_overview()  # recompute when the import is done
         self._set_import_progress(ImportProgress(0, 0))
         self._import_handle = self._submit(
-            self._import_job(make_source), self._after_import, self._on_import_progress
+            self._import_job(make_source, on_deleted), self._after_import, self._on_import_progress
         )
         return self._import_handle is not None
 

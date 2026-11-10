@@ -113,6 +113,7 @@ def opened_profile(profile_folder: Path) -> Iterator[SyncPorts]:
         yield SyncPorts(
             fake,
             opened.activities,
+            opened.deleted_activities,
             opened.sync_journal,
             FileArchive.in_profile_folder(profile_folder),
             extract_original,

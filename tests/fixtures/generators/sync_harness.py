@@ -37,6 +37,7 @@ from ponos_coach.activities.ports import (
     ActivityArchive,
     ActivityIndex,
     ActivitySource,
+    DeletedActivities,
     SyncJournal,
 )
 from ponos_coach.activities.sync import (
@@ -166,6 +167,7 @@ class SyncRig:
     fake: FakeActivitySource
     source: ActivitySource
     index: ActivityIndex
+    deleted: DeletedActivities
     journal: SyncJournal
     archive: ActivityArchive
     memory: InMemoryActivityArchive
@@ -182,6 +184,7 @@ class SyncRig:
         return SyncPorts(
             self.source,
             self.index,
+            self.deleted,
             self.journal,
             self.archive,
             self.extract,
@@ -248,6 +251,7 @@ def in_memory_rig(
         fake,
         fake,
         profile.activities,
+        profile.deleted_activities,
         profile.sync_journal,
         memory,
         memory,

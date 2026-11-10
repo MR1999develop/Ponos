@@ -138,6 +138,7 @@ from __future__ import annotations
 
 from typing import Final
 
+from ponos_coach.storage.schema_deleted_activity import DELETED_ACTIVITY_MIGRATION
 from ponos_coach.storage.schema_load_heart_rate import LOAD_HEART_RATE_MIGRATION
 from ponos_coach.storage.schema_lt1 import LT1_MIGRATION
 from ponos_coach.storage.schema_race_ascent import RACE_ASCENT_MIGRATION
@@ -942,6 +943,8 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     LOAD_HEART_RATE_MIGRATION,
     # LT1 of the two sport groups: optional columns of `physiology` (bike column unread).
     LT1_MIGRATION,
+    # Deleted activities (tombstones) and the journal state `skipped` (ADR 018).
+    DELETED_ACTIVITY_MIGRATION,
 )
 
 SCHEMA_VERSION: Final = len(MIGRATIONS)

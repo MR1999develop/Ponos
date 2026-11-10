@@ -44,6 +44,7 @@ from ponos_coach.profiles.ports import (
     ProfileStorageError,
 )
 from ponos_coach.storage import sqlite_database, sqlite_schema
+from ponos_coach.storage.schema_deleted_activity import SYNC_STATUSES_V19
 from ponos_coach.storage.sqlite_database import create_database, open_database
 from ponos_coach.storage.sqlite_profile import SqliteOpenProfile, SqliteProfileStorage
 from ponos_coach.storage.sqlite_schema import SCHEMA_VERSION
@@ -51,6 +52,10 @@ from tests.builders import T0, fit_identity, make_record
 from tests.contracts.contract_assessment import (
     PhysiologyRemovalContract,
     ThresholdTestStoreContract,
+)
+from tests.contracts.contract_deleted import (
+    ActivityIndexRemovalContract,
+    DeletedActivitiesContract,
 )
 from tests.contracts.contract_injury import InjuryStoreContract
 from tests.contracts.contract_nutrition import (
@@ -117,6 +122,14 @@ class TestSqliteActivityIndex(_DiskStorageFixture, ActivityIndexContract):
 
 
 class TestSqliteActivityIndexGarminIds(_DiskStorageFixture, ActivityIndexGarminIdContract):
+    pass
+
+
+class TestSqliteDeletedActivities(_DiskStorageFixture, DeletedActivitiesContract):
+    pass
+
+
+class TestSqliteActivityIndexRemoval(_DiskStorageFixture, ActivityIndexRemovalContract):
     pass
 
 
@@ -225,6 +238,7 @@ def test_new_database_has_the_latest_schema_and_the_expected_tables(tmp_path: Pa
         "injury_pain_free",
         "injury_checkin",
         "injury_sign",
+        "deleted_activity",
     }
     assert meta == {
         "profile_id": str(PROFILE_ID),
@@ -248,9 +262,10 @@ def test_closed_sets_of_the_schema_match_the_domain_enums() -> None:
     assert {s.value for s in LoadSource} == sqlite_schema.V1_LOAD_SOURCES
 
 
-def test_closed_sets_of_schema_v2_and_v13_match_the_domain_enums() -> None:
+def test_closed_sets_of_schema_v2_v13_and_v19_match_the_domain_enums() -> None:
     """A new value in a sync enum forces writing a migration."""
-    assert {s.value for s in SyncStatus} == sqlite_schema.V2_SYNC_STATUSES
+    assert {s.value for s in SyncStatus} == SYNC_STATUSES_V19
+    assert {"skipped"} == SYNC_STATUSES_V19 - sqlite_schema.V2_SYNC_STATUSES
     assert {f.value for f in FailureReason} == sqlite_schema.V13_FAILURES
     assert {"remote_not_provided"} == sqlite_schema.V13_FAILURES - sqlite_schema.V2_FAILURES
     assert {f.value for f in RETRYABLE_REASONS} == sqlite_schema.V2_RETRYABLE_FAILURES

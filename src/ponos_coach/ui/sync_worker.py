@@ -315,6 +315,7 @@ class SyncWorker:
             ports = SyncPorts(
                 source=session.source,
                 index=opened.activities,
+                deleted=opened.deleted_activities,
                 journal=opened.sync_journal,
                 archive=self._archive_for(folder),
                 extract_original=services.extract_original,

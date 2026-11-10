@@ -4,7 +4,8 @@
 
 The shell (interface, worker) creates the source and closes it; here, for each listed file, the
 file is
-read, decoded, checked that the activity is not already there, and saved: the original file
+read, decoded, checked that the activity is not already there or deleted by the user (ADR 018),
+and saved: the original file
 in the archive first, the record in the index after, in the same transaction. The import is
 idempotent (same files, same profile: all "already present") and cancellable between one file and
 the other. No log: names and positions are personal data.
@@ -36,6 +37,7 @@ from ponos_coach.activities.ports import (
     ArchiveIntegrityError,
     ArchiveTooLargeError,
     Clock,
+    DeletedActivities,
     DuplicateActivityError,
     ImportEntry,
     ImportEntryError,
@@ -55,15 +57,32 @@ class ImportStatus(Enum):
     REPAIRED = (
         "repaired"  # already in the index, but its file in the archive was missing or altered
     )
+    BROUGHT_BACK = "brought_back"  # the user had deleted it; chosen by hand, it is back
+    LEFT_OUT = "left_out"  # the user had deleted it; a folder import does not bring it back
     IGNORED = "ignored"  # the file is not an activity (e.g. a settings FIT)
     FAILED = "failed"  # unreadable, rejected or not saved: `issue` says why
+
+
+class DeletedPolicy(Enum):
+    """What an import does with a file whose activity the user deleted."""
+
+    LEAVE_OUT = "leave_out"  # skip it (a folder: the user did not choose that file)
+    BRING_BACK = "bring_back"  # the user chose this very file: the activity comes back
+
+
+@dataclass(frozen=True, slots=True)
+class DeletedHandling:
+    """The tombstones of the profile (same connection as the index) and what to do with them."""
+
+    store: DeletedActivities
+    policy: DeletedPolicy
 
 
 @dataclass(frozen=True, slots=True)
 class FileImportResult:
     """Per-file outcome. `issue` is present if and only if the outcome is IGNORED or FAILED;
-    `matches` is
-    the identity of the activity already present for ALREADY_PRESENT and REPAIRED."""
+    `matches` is the identity of the activity already present for ALREADY_PRESENT and REPAIRED,
+    and of the deleted one for LEFT_OUT."""
 
     name: str
     status: ImportStatus
@@ -72,7 +91,11 @@ class FileImportResult:
 
     def __post_init__(self) -> None:
         has_issue = self.status in (ImportStatus.IGNORED, ImportStatus.FAILED)
-        has_match = self.status in (ImportStatus.ALREADY_PRESENT, ImportStatus.REPAIRED)
+        has_match = self.status in (
+            ImportStatus.ALREADY_PRESENT,
+            ImportStatus.REPAIRED,
+            ImportStatus.LEFT_OUT,
+        )
         if has_issue != (self.issue is not None) or has_match != (self.matches is not None):
             raise ValueError("reason and matching activity inconsistent with the outcome")
 
@@ -127,40 +150,41 @@ def _check_archived_file(
     return FileImportResult(name, ImportStatus.ALREADY_PRESENT, matches=record.identity)
 
 
-def _add_if_new(
-    activity: Activity,
-    data: bytes,
-    name: str,
-    archive: ActivityArchive,
-    index: ActivityIndex,
-    clock: Clock,
-) -> FileImportResult:
-    existing = index.get(activity.identity)
+@dataclass(frozen=True, slots=True)
+class _Ports:
+    """The ports of one import (`deleted` is None only for callers without tombstones)."""
+
+    archive: ActivityArchive
+    index: ActivityIndex
+    deleted: DeletedHandling | None
+    clock: Clock
+
+
+def _add_if_new(activity: Activity, data: bytes, name: str, ports: _Ports) -> FileImportResult:
+    existing = ports.index.get(activity.identity)
     if existing is not None:
-        return _check_archived_file(existing, data, name, archive)
-    archived = archive.store(data, activity.file_format, activity.start)
-    record = ActivityRecord.from_activity(
-        activity,
-        archived,
-        ActivityOrigin.IMPORT,
-        truncate_to_millisecond(clock.now()),
-    )
-    index.add(record)
+        return _check_archived_file(existing, data, name, ports.archive)
+    handling = ports.deleted
+    tombstone = None if handling is None else handling.store.get(activity.identity)
+    if handling is not None and tombstone is not None:
+        if handling.policy is DeletedPolicy.LEAVE_OUT:
+            return FileImportResult(name, ImportStatus.LEFT_OUT, matches=activity.identity)
+        # The user chose this file: the activity is back as it was.
+        archived = ports.archive.store(data, activity.file_format, activity.start)
+        handling.store.remove(activity.identity)
+        ports.index.add(tombstone.to_record(activity, archived))
+        return FileImportResult(name, ImportStatus.BROUGHT_BACK)
+    archived = ports.archive.store(data, activity.file_format, activity.start)
+    now = truncate_to_millisecond(ports.clock.now())
+    ports.index.add(ActivityRecord.from_activity(activity, archived, ActivityOrigin.IMPORT, now))
     return FileImportResult(name, ImportStatus.IMPORTED)
 
 
-def _store(
-    activity: Activity,
-    data: bytes,
-    name: str,
-    archive: ActivityArchive,
-    index: ActivityIndex,
-    clock: Clock,
-) -> FileImportResult:
+def _store(activity: Activity, data: bytes, name: str, ports: _Ports) -> FileImportResult:
     """Checks duplicates, archives the file and writes the record in a single transaction."""
     try:
-        with index.transaction():
-            return _add_if_new(activity, data, name, archive, index, clock)
+        with ports.index.transaction():
+            return _add_if_new(activity, data, name, ports)
     except DuplicateActivityError:
         return FileImportResult(name, ImportStatus.ALREADY_PRESENT, matches=activity.identity)
     except ArchiveTooLargeError:
@@ -178,13 +202,7 @@ def _log_unexpected(error: Exception) -> None:
     _LOG.error("import: unexpected error on a file (%s)", type(error).__name__)
 
 
-def _import_entry(
-    entry: ImportEntry,
-    source: ImportSource,
-    archive: ActivityArchive,
-    index: ActivityIndex,
-    clock: Clock,
-) -> FileImportResult:
+def _import_entry(entry: ImportEntry, source: ImportSource, ports: _Ports) -> FileImportResult:
     try:
         data = source.read(entry, MAX_ACTIVITY_FILE_BYTES)
     except ImportEntryError as error:
@@ -203,15 +221,16 @@ def _import_entry(
     except Exception as error:  # a reader that should not raise anything else: the file is rejected
         _log_unexpected(error)
         return FileImportResult(entry.name, ImportStatus.FAILED, ImportIssue.CORRUPT)
-    return _store(activity, data, entry.name, archive, index, clock)
+    return _store(activity, data, entry.name, ports)
 
 
-def import_activities(
+def import_activities(  # noqa: PLR0913 - the ports of one import, then three options
     source: ImportSource,
     archive: ActivityArchive,
     index: ActivityIndex,
     clock: Clock,
     *,
+    deleted: DeletedHandling | None = None,
     report: Callable[[int, int], None] = _ignore_progress,
     is_cancelled: Callable[[], bool] = _never_cancelled,
 ) -> ImportSummary:
@@ -232,6 +251,13 @@ def import_activities(
     file has the
     recorded bytes.
 
+    `deleted` gives the tombstones of the profile (the same connection as `index`) and the policy: a
+    file whose activity the user deleted is left out (`LEFT_OUT`) with `LEAVE_OUT`, what a folder
+    import does; with `BRING_BACK` (files the user chose by hand) the tombstone is removed and the
+    activity comes back as it was (`BROUGHT_BACK`). Without `deleted` no activity is deleted; the
+    database refuses to record one that is, so a caller that forgets it gets a `STORAGE_FAILED` for
+    that file instead of bringing a deleted activity back.
+
     Raises:
         ImportLimitExceededError: the source exceeds a cap (activity files, examined entries
             or levels): nothing was imported.
@@ -241,6 +267,7 @@ def import_activities(
         scan = source.scan(is_cancelled)
     except ImportScanCancelledError:
         return ImportSummary((), cancelled=True)
+    ports = _Ports(archive, index, deleted, clock)
     results = [
         FileImportResult(item.name, ImportStatus.FAILED, item.issue) for item in scan.skipped
     ]
@@ -249,6 +276,6 @@ def import_activities(
     for done, entry in enumerate(scan.entries):
         if is_cancelled():
             return ImportSummary(tuple(results), cancelled=True)
-        results.append(_import_entry(entry, source, archive, index, clock))
+        results.append(_import_entry(entry, source, ports))
         report(done + 1, total)
     return ImportSummary(tuple(results), cancelled=False)

@@ -183,6 +183,9 @@ class ObservedIndex:
     def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
         return self._inner.find_by_garmin_id(garmin_id)
 
+    def remove(self, identity: ActivityIdentity) -> None:
+        self._inner.remove(identity)
+
     def link_garmin_id(self, identity: ActivityIdentity, garmin_id: GarminActivityId) -> None:
         self._inner.link_garmin_id(identity, garmin_id)
 
