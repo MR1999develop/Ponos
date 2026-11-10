@@ -90,14 +90,6 @@
         <translation>Usa come test di soglia...</translation>
     </message>
     <message>
-        <source>Map of the activity</source>
-        <translation>Mappa dell&apos;attività</translation>
-    </message>
-    <message>
-        <source>No GPS track in this activity.</source>
-        <translation>Nessuna traccia GPS in questa attività.</translation>
-    </message>
-    <message>
         <source>Started</source>
         <translation>Inizio</translation>
     </message>
@@ -152,22 +144,6 @@
     <message>
         <source>This activity has no heart-rate samples, so its load is estimated.</source>
         <translation>Questa attività non ha campioni di frequenza cardiaca, quindi il carico è stimato.</translation>
-    </message>
-    <message>
-        <source>Zoom in</source>
-        <translation>Ingrandisci</translation>
-    </message>
-    <message>
-        <source>Zoom out</source>
-        <translation>Riduci</translation>
-    </message>
-    <message>
-        <source>Start</source>
-        <translation>Partenza</translation>
-    </message>
-    <message>
-        <source>Finish</source>
-        <translation>Arrivo</translation>
     </message>
     <message>
         <source>{sport}, {started}</source>
