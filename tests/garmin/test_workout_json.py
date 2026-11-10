@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from hypothesis import given
@@ -27,13 +27,17 @@ from ponos_coach.garmin.workout_json import (
 )
 from ponos_coach.planning.domain import (
     WORKOUT_PREFIX,
+    Plan,
     ScheduledWorkout,
     StepKind,
     WorkoutSpec,
     WorkoutStep,
+    build_plan,
+    workout_from_session,
 )
 from ponos_coach.planning.workout_calendar import MAX_BACKUP_PAYLOAD_CHARS
 from tests.fixtures.garmin import load_json
+from tests.planning.builders import TODAY, inputs, race
 
 NAME = f"{WORKOUT_PREFIX}Threshold 55 min"
 
@@ -244,3 +248,18 @@ def test_a_definition_that_is_too_big_or_not_an_object_is_refused() -> None:
 def test_a_kept_text_that_is_not_a_definition_does_not_become_a_request(text: str) -> None:
     with pytest.raises(UnexpectedWorkoutResponseError):
         definition_payload(text)
+
+
+def test_a_hill_repeats_workout_has_the_heart_rate_as_its_only_target() -> None:
+    # No pace target on a slope: every step of a hill session follows the heart rate.
+    goal = race("a", TODAY + timedelta(weeks=20), distance_m=30_000, ascent_m=1_500)
+    plan = build_plan(inputs([goal], pace=300), TODAY)
+    assert isinstance(plan, Plan)
+    session = next(d.session for d in plan.days if d.session and d.session.is_hill_repeats)
+
+    steps = steps_of(workout_payload(workout_from_session(session)))
+
+    assert len(steps) >= 5
+    for built in steps:
+        assert built["targetType"]["workoutTargetTypeKey"] == "heart.rate.zone"  # type: ignore[index]
+        assert "secondaryTargetType" not in built

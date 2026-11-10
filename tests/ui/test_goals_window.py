@@ -164,14 +164,15 @@ def test_a_race_added_in_the_dialog_is_in_the_table_and_the_plan_is_built_for_it
     assert race.target_time_s == 12_000
     model = window.goals_page.proxy
     assert model.rowCount() == 1
-    assert [str(model.index(0, c).data()) for c in range(5)] == [
+    assert [str(model.index(0, c).data()) for c in range(6)] == [
         "9/22/26",
         "Race A",
         "Running",
         "42.195",
+        "",
         "3:20:00",
     ]
-    assert model.index(0, 5).data() in {
+    assert model.index(0, 6).data() in {
         "Realistic",
         "Ambitious",
         "Not reachable",

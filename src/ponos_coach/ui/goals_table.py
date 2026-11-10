@@ -3,10 +3,10 @@
 """The goals as a table: model and sorting proxy.
 
 One row per goal: the day, the kind (race with its priority, or form goal), the sport, the distance
-in kilometres, the target time and the verdict on it. The texts come ready from `plan_texts`; the
-model serves them with numbers aligned on the right and gives the proxy numeric keys, so a date or a
-distance sorts as a number and not as text. The verdict of a target time is words, with a tooltip
-that explains it, and the best time the plan thinks possible.
+in kilometres, the elevation gain in metres, the target time and the verdict on it. The texts come
+ready from `plan_texts`; the model serves them with numbers aligned on the right and gives the
+proxy numeric keys, so a date or a distance sorts as a number and not as text. The verdict of a
+target time is words, with a tooltip that explains it, and the best time the plan thinks possible.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from ponos_coach.planning.domain import TargetAssessment
 from ponos_coach.ui.activity_text import sport_text
 from ponos_coach.ui.goal_draft import target_time_text
 from ponos_coach.ui.plan_texts import (
+    ascent_text,
     distance_km_text,
     goal_kind_cell_text,
     short_date_text,
@@ -51,11 +52,12 @@ class GoalColumn(IntEnum):
     KIND = 1
     SPORT = 2
     DISTANCE = 3
-    TARGET_TIME = 4
-    VERDICT = 5
+    ASCENT = 4
+    TARGET_TIME = 5
+    VERDICT = 6
 
 
-_NUMERIC = frozenset({GoalColumn.DISTANCE, GoalColumn.TARGET_TIME})
+_NUMERIC = frozenset({GoalColumn.DISTANCE, GoalColumn.ASCENT, GoalColumn.TARGET_TIME})
 
 
 class GoalsTableModel(QAbstractTableModel):
@@ -139,6 +141,7 @@ def _header_text(column: GoalColumn) -> str:
         GoalColumn.KIND: QCoreApplication.translate("GoalsTable", "Goal"),
         GoalColumn.SPORT: QCoreApplication.translate("GoalsTable", "Sport"),
         GoalColumn.DISTANCE: QCoreApplication.translate("GoalsTable", "Distance (km)"),
+        GoalColumn.ASCENT: QCoreApplication.translate("GoalsTable", "Elevation gain (m)"),
         GoalColumn.TARGET_TIME: QCoreApplication.translate("GoalsTable", "Target time (h:mm:ss)"),
         GoalColumn.VERDICT: QCoreApplication.translate("GoalsTable", "Target time verdict"),
     }
@@ -147,6 +150,13 @@ def _header_text(column: GoalColumn) -> str:
 
 def _race_distance_text(goal: Goal) -> str:
     return "" if isinstance(goal, FitnessGoal) else distance_km_text(goal.distance_m)
+
+
+def _race_ascent_text(goal: Goal) -> str:
+    """The elevation gain of a race; empty for a flat race and for a form goal."""
+    if isinstance(goal, RaceGoal) and goal.ascent_m > 0:
+        return ascent_text(goal.ascent_m)
+    return ""
 
 
 def _race_time_text(goal: Goal) -> str:
@@ -161,6 +171,7 @@ def _cell_text(goal: Goal, column: GoalColumn, assessment: TargetAssessment | No
         GoalColumn.KIND: lambda: goal_kind_cell_text(goal),
         GoalColumn.SPORT: lambda: "" if isinstance(goal, FitnessGoal) else sport_text(goal.sport),
         GoalColumn.DISTANCE: lambda: _race_distance_text(goal),
+        GoalColumn.ASCENT: lambda: _race_ascent_text(goal),
         GoalColumn.TARGET_TIME: lambda: _race_time_text(goal),
         GoalColumn.VERDICT: lambda: (
             "" if assessment is None else target_class_text(assessment.classification)
@@ -176,6 +187,8 @@ def _sort_key(goal: Goal, column: GoalColumn, assessment: TargetAssessment | Non
             return float(goal.day.toordinal())
         case GoalColumn.DISTANCE:
             return -1.0 if isinstance(goal, FitnessGoal) else float(goal.distance_m)
+        case GoalColumn.ASCENT:
+            return float(goal.ascent_m) if isinstance(goal, RaceGoal) else -1.0
         case GoalColumn.TARGET_TIME:
             if isinstance(goal, RaceGoal) and goal.target_time_s is not None:
                 return float(goal.target_time_s)

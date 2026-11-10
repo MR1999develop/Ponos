@@ -242,3 +242,65 @@ def test_the_form_can_be_filled_with_the_keyboard_alone_in_reading_order(qtbot: 
         widget = widget.nextInFocusChain()
 
     assert chain == wanted
+
+
+# --- The elevation gain ------------------------------------------------------------------------
+def test_the_elevation_gain_is_a_field_of_the_race_under_the_distance(qtbot: QtBot) -> None:
+    dialog = new_race_dialog(qtbot)
+
+    labels = [label.text() for label in dialog.findChildren(QLabel)]
+    assert "Elevation gain (m)" in labels
+    assert dialog.ascent_edit.text() == ""
+    assert dialog.draft().ascent_text == ""
+    assert dialog.error_text(GoalField.ASCENT) == ""
+    assert dialog.save_button.isEnabled()  # empty means a flat race
+
+
+def test_a_typed_elevation_gain_is_read_tolerantly_and_goes_into_the_draft(qtbot: QtBot) -> None:
+    dialog = new_race_dialog(qtbot)
+
+    QTest.keyClicks(dialog.ascent_edit, "1 200 m")
+
+    assert dialog.error_text(GoalField.ASCENT) == ""
+    assert dialog.draft().ascent_text == "1 200 m"
+    assert dialog.save_button.isEnabled()
+
+
+def test_an_elevation_gain_that_is_not_whole_metres_is_written_under_its_field(
+    qtbot: QtBot,
+) -> None:
+    dialog = new_race_dialog(qtbot)
+
+    dialog.ascent_edit.setText("a lot")
+
+    assert dialog.error_text(GoalField.ASCENT) == (
+        "Write the elevation gain in whole metres, for example 1200."
+    )
+    assert not dialog.save_button.isEnabled()
+    dialog.ascent_edit.setText("")
+    assert dialog.error_text(GoalField.ASCENT) == ""
+    assert dialog.save_button.isEnabled()
+
+
+def test_an_elevation_gain_too_large_for_the_distance_is_a_problem_of_its_field(
+    qtbot: QtBot,
+) -> None:
+    dialog = new_race_dialog(qtbot)
+
+    dialog.ascent_edit.setText("30000")  # above half of a marathon
+
+    assert dialog.error_text(GoalField.ASCENT).startswith("The elevation gain is too large")
+    dialog.ascent_edit.setText("30001")
+    assert (
+        dialog.error_text(GoalField.ASCENT) == "The elevation gain must be between 0 and 30,000 m."
+    )
+    assert not dialog.save_button.isEnabled()
+
+
+def test_a_saved_race_opens_with_its_elevation_gain(qtbot: QtBot) -> None:
+    race = RaceGoal(GoalId("x"), RACE_DAY, Priority.A, Sport.TRAIL, 32_500, None, 1_800)
+    dialog = GoalDialog.for_goal(race, [race], TODAY)
+    qtbot.addWidget(dialog)
+
+    assert dialog.ascent_edit.text() == "1800"
+    assert dialog.draft().ascent_text == "1800"
