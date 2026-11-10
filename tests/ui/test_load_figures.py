@@ -20,6 +20,7 @@ from ponos_coach.load.domain import (
     weekly_load_by_sport,
     weekly_zone_seconds,
 )
+from ponos_coach.ui.chart_payload import HOVER_FONT_SIZE, HOVER_OPACITY
 from ponos_coach.ui.load_figures import (
     CHART_WEEKS,
     SPORT_COLOR_SLOT,
@@ -187,7 +188,9 @@ def test_zones_are_in_hours_per_week_and_the_axes_say_so() -> None:
 
     # the first week has two activities (run and ride), each with 600 s in Z1 and 1200 s in Z2
     first_week_hours = [float(trace.y[0]) for trace in figure.data]
-    assert first_week_hours == pytest.approx([1200 / 3600, 2400 / 3600, 0, 0, 0])
+    assert first_week_hours[:2] == pytest.approx([1200 / 3600, 2400 / 3600])
+    # A zone without time is a gap: it draws nothing and the box under the pointer omits it.
+    assert all(np.isnan(hours) for hours in first_week_hours[2:])
     assert figure.layout.yaxis.title.text == "Time in zone (hours per week)"
     assert figure.layout.yaxis.rangemode == "tozero"
     assert figure.layout.xaxis.title.text == "Week"
@@ -240,7 +243,8 @@ def test_no_value_is_negative() -> None:
 
     figure = build_weekly_zones_figure(weekly, ZONES_LABELS, tokens_for(Theme.LIGHT))
 
-    assert all(np.all(np.asarray(trace.y) >= 0) for trace in figure.data)
+    values = [np.asarray(trace.y, dtype=float) for trace in figure.data]
+    assert all(np.all(v[~np.isnan(v)] > 0) for v in values)  # a value, or a gap for zero
 
 
 # --- Sport series, colours, units and zone labels -----------------------------------
@@ -339,3 +343,18 @@ def test_zone_labels_with_non_integer_boundaries_say_less_than_the_next_boundary
 def test_zone_labels_with_whole_boundaries_end_one_point_before_the_next() -> None:
     assert zone_label(1, (78.0, 87.0, 94.0, 100.0)) == "Z2 78\u201386%"
     assert zone_label(1) == "Z2 78\u201386%"
+
+
+def test_the_box_under_the_pointer_is_small_and_see_through() -> None:
+    # The user's request of 2026-11-10: the information that opens under the pointer was too
+    # intrusive.
+    tokens = tokens_for(Theme.LIGHT)
+    weekly = weekly_zone_seconds(long_history(4), through_of(4))
+
+    label = build_weekly_zones_figure(weekly, ZONES_LABELS, tokens).layout.hoverlabel
+
+    assert label.font.size == HOVER_FONT_SIZE < 13
+    assert str(label.bgcolor).startswith("rgba(") and str(label.bgcolor).endswith(
+        f", {HOVER_OPACITY})"
+    )
+    assert label.bordercolor == tokens.grid

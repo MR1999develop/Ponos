@@ -74,12 +74,30 @@ def axis_style(tokens: ThemeTokens, title: str) -> dict[str, object]:
     }
 
 
+HOVER_FONT_SIZE = 11  # px: the box under the pointer stays small beside the chart's text
+HOVER_OPACITY = 0.82  # the chart shows through the box under the pointer
+
+
+def _translucent(hex_color: str, opacity: float) -> str:
+    """`#RRGGBB` as `rgba(r, g, b, opacity)`."""
+    red, green, blue = (int(hex_color[i : i + 2], 16) for i in (1, 3, 5))
+    return f"rgba({red}, {green}, {blue}, {opacity})"
+
+
 def base_layout(tokens: ThemeTokens) -> dict[str, object]:
-    """Background and font from the tokens, the same in every figure."""
+    """Background and font from the tokens, the same in every figure. The box shown under the
+    pointer is small, see-through and with a thin border (user's request of 2026-11-10: it was
+    too intrusive)."""
     return {
         "paper_bgcolor": tokens.background,
         "plot_bgcolor": tokens.background,
         "font": {"color": tokens.text},
+        "hoverlabel": {
+            "bgcolor": _translucent(tokens.background, HOVER_OPACITY),
+            "bordercolor": tokens.grid,
+            "font": {"size": HOVER_FONT_SIZE, "color": tokens.text},
+            "align": "left",
+        },
     }
 
 

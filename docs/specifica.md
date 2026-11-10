@@ -413,6 +413,9 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 - Other charts: weekly load by sport, time in zones (both in the Overview) and
   activity HR (in the activity detail).
 - Dragging with the right button stretches or squeezes a chart vertically.
+- The box under the pointer is small, see-through and thinly bordered, and in
+  the weekly charts it names only the sports or zones the week had (user's
+  request of 2026-11-10).
 - The y axis of the Overview charts follows the values of the dates in view:
   after a zoom or a pan (on that chart or on a linked one) it goes from the
   lowest to the highest value shown, stacked bars summed per date, with a small

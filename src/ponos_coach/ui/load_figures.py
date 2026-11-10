@@ -152,6 +152,12 @@ def _style_weekly_layout(
     )
 
 
+def _gaps_for_zero(values: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Zero as a gap: a week without that sport or zone draws nothing and is not listed in the
+    box under the pointer, which then names only what the week had."""
+    return np.where(values > 0, values, np.nan)
+
+
 def sport_series(
     sports: Sequence[Sport], load: NDArray[np.float64]
 ) -> list[tuple[Sport, NDArray[np.float64]]]:
@@ -176,7 +182,7 @@ def build_weekly_load_figure(
         figure.add_trace(
             go.Bar(
                 x=list(weeks),
-                y=values,
+                y=_gaps_for_zero(values),
                 name=labels.sports[sport],
                 marker={
                     "color": sport_color(sport, tokens),
@@ -201,7 +207,7 @@ def build_weekly_zones_figure(
         figure.add_trace(
             go.Bar(
                 x=list(weeks),
-                y=hours[:, zone],
+                y=_gaps_for_zero(hours[:, zone]),
                 name=zone_label(zone),
                 marker={
                     "color": tokens.zones[zone],

@@ -205,7 +205,8 @@ def test_t_ui_04_bar_charts_start_at_zero_stack_and_never_go_negative(theme: The
         for trace in figure.data:
             assert trace.type == "bar"
             assert trace.base is None  # no offset: the height is the value
-            assert (np.asarray(trace.y) >= 0).all()
+            values = np.asarray(trace.y, dtype=float)
+            assert (values[~np.isnan(values)] >= 0).all()  # zero weeks are gaps (NaN)
     pmc = CHARTS["pmc"](tokens).figure
     (daily,) = [t for t in pmc.data if t.name == "Daily load"]
     assert daily.fill == "tozeroy"  # an area from zero, one step a day
