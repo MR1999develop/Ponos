@@ -190,18 +190,16 @@ def test_t_ui_05_the_tab_order_follows_the_visual_order_from_top_to_bottom(
     assert all(b >= a - tolerance for a, b in pairwise(positions)), positions
 
 
-def test_t_ui_05_the_save_button_is_off_with_a_reason_until_something_changes_and_then_reachable(
+def test_t_ui_05_the_page_cannot_be_saved_until_something_changes_and_says_why(
     qtbot: QtBot,
 ) -> None:
     dialog = shown(qtbot, "edit")
     assert isinstance(dialog, ProfileEditDialog)
 
-    assert not dialog.save_button.isEnabled()
-    assert dialog.save_button.toolTip()  # the reason
-    assert dialog.save_button not in tab_order(dialog)  # a disabled button does not take focus
+    assert not dialog.can_save()
+    assert dialog.save_blocked_reason()  # the reason, for the tooltip of the window's button
     dialog.threshold_box.setValue(dialog.threshold_box.value() - 1)
-    assert dialog.save_button.isEnabled()
-    assert dialog.save_button in tab_order(dialog)
+    assert dialog.can_save()
 
 
 # --- Languages ------------------------------------------------------------------------------------

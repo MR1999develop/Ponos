@@ -282,7 +282,7 @@ def test_taking_back_the_training_time_restores_the_real_previous_one(
     wait_for(qtbot, lambda: window.plan.is_idle and _availability_of(window) == outside)
 
     dialog.week_hours_spin.setValue(9.0)
-    dialog.save_button.click()
+    window.settings_window.save_button.click()
     wait_for(qtbot, lambda: window.plan.is_idle and _availability_of(window) != outside)
     undo(window)
 
@@ -504,7 +504,7 @@ def test_saving_the_suggestions_unchanged_is_a_choice_that_is_stored(
     dialog = window.plan.training_dialog
     assert dialog is not None
     suggested = dialog.draft()
-    dialog.save_button.click()
+    window.settings_window.save_button.click()
     wait_for(qtbot, lambda: window.plan.is_idle and not _availability_is_none(window))
 
     assert window.plan.snapshot is not None

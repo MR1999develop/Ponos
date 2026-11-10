@@ -2,9 +2,10 @@
 # Copyright (C) 2026 MR
 """The content of a Settings page: a widget that tells whether it holds unsaved edits.
 
-Each category of the Settings window keeps its own way of saving (a "Save" button on the page, or
-changes that apply at once). The window only needs three things from the content: to be told when
-the user edits it, to ask whether something typed is still unsaved, and to ask it to save.
+The pages have no save button of their own: the window has the only "Save changes" button. The
+window needs four things from the content: to be told when the user edits it (`edited`), to ask
+whether something typed is still unsaved, whether it can be saved now (and, if not, why) and to ask
+it to save. Some categories apply their changes at once and have nothing to save.
 """
 
 from __future__ import annotations
@@ -23,5 +24,17 @@ class SettingsForm(QWidget):
         """True while something typed has not been saved (false for pages that apply at once)."""
         return False
 
+    def can_save(self) -> bool:
+        """True while the window's "Save changes" button should be enabled. By default it follows
+        the unsaved edits; a page overrides it when saving is a choice without edits (suggested
+        values) or is not possible now (a problem, a save in progress). Emit `edited` when it
+        changes."""
+        return self.has_unsaved_changes()
+
+    def save_blocked_reason(self) -> str:
+        """Why `can_save` is false, for the tooltip of the button (empty: the window says that
+        there is nothing to save)."""
+        return ""
+
     def request_save(self) -> None:
-        """Start saving what is typed, as the page's own "Save" button does."""
+        """Start saving what is typed, as the window's "Save changes" button does."""

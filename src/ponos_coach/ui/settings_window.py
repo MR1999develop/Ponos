@@ -3,9 +3,11 @@
 """The Settings window: the categories on the left, the page of the chosen one on the right.
 
 It is one window for the whole app (the main window owns a single instance): opening it again
-brings it forward. It is not modal. Every page keeps its own way of saving; the window only
-shows which pages hold unsaved edits (an asterisk on the category) and, when it is closed with
-edits still unsaved, asks what to do with them, with a button for each verb.
+brings it forward. It is not modal. The window has the only "Save changes" button (Ctrl+S, and
+Enter where a field leaves it unused): it saves the page in view, is enabled when the page says it
+can be saved and takes its tooltip from the page. The window also shows which pages hold unsaved
+edits (an asterisk on the category) and, when it is closed with edits still unsaved, asks what to
+do with them, with a button for each verb.
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ from ponos_coach.ui.tokens import SIDEBAR_WIDTH, SPACE_2, SPACE_4
 _DEFAULT_SIZE = (900, 640)
 _MIN_SIZE = (720, 480)
 _UNSAVED_MARK = " *"
+_ENTER_KEYS = (Qt.Key.Key_Return, Qt.Key.Key_Enter)
 
 
 class SettingsWindow(QWidget):
@@ -61,10 +64,11 @@ class SettingsWindow(QWidget):
             QListWidgetItem(page.title, self._list)
             self._stack.addWidget(page)
             page.dirty_changed.connect(self._on_dirty_changed)
+            page.save_state_changed.connect(self._update_save_button)
             page.save_failed.connect(self._cancel_pending_close)
         self._list.currentRowChanged.connect(self._on_row_changed)
-        # Always in view, whatever the height of the page: a page's own button can sit below the
-        # fold (the Profile page is taller than the window).
+        # Always in view, whatever the height of the page (the Profile page is taller than the
+        # window).
         self._save = QPushButton(self.tr("Save changes"), self)
         self._save.setObjectName("settingsSave")
         self._save.setShortcut(QKeySequence(QKeySequence.StandardKey.Save))
@@ -116,7 +120,7 @@ class SettingsWindow(QWidget):
 
     @property
     def save_button(self) -> QPushButton:
-        """The "Save changes" button of the page in view."""
+        """The "Save changes" button, the only one: it saves the page in view."""
         return self._save
 
     @property
@@ -172,12 +176,19 @@ class SettingsWindow(QWidget):
             after_save()
 
     def _update_save_button(self) -> None:
-        """Enabled while the page in view holds unsaved edits; otherwise it says why not."""
+        """Enabled while the page in view can be saved; otherwise the tooltip says why not (the
+        page's reason, or that there is nothing to save)."""
         if self._list.currentRow() < 0:
             return
-        dirty = self._pages[self.current_category].is_dirty
-        self._save.setEnabled(dirty)
-        self._save.setToolTip("" if dirty else self.tr("There is nothing to save on this page."))
+        page = self._pages[self.current_category]
+        can_save = page.can_save
+        self._save.setEnabled(can_save)
+        if can_save:
+            self._save.setToolTip("")
+            return
+        self._save.setToolTip(
+            page.save_blocked_reason or self.tr("There is nothing to save on this page.")
+        )
 
     def _save_page_in_view(self) -> None:
         self._pages[self.current_category].save()
@@ -245,8 +256,15 @@ class SettingsWindow(QWidget):
         self.close()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 - Qt
-        """Esc closes the window, like "Close"."""
+        """Esc closes the window, like "Close". Enter saves the page in view, like "Save changes",
+        when it reaches the window: a field that uses Enter (a table being edited) takes it first,
+        and in the list of categories it does nothing."""
         if event.key() == Qt.Key.Key_Escape:
             self.close()
+            return
+        if event.key() in _ENTER_KEYS and not self._list.hasFocus():
+            if self._save.isEnabled():
+                self._save.click()
+            event.accept()
             return
         super().keyPressEvent(event)

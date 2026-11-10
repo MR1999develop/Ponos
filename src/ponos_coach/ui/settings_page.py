@@ -5,7 +5,8 @@ cannot be shown, the reason why.
 
 The page does not know what its content is: whoever owns the data (the coordinator of the profile,
 of the plan, of the map...) builds the content and hands it over with `show_form`. The page only
-hosts it, says whether it holds unsaved edits and can be asked to save.
+hosts it, says whether it holds unsaved edits, whether it can be saved now and why not, and can
+be asked to save.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ class SettingsPage(QScrollArea):
     """Hosts the content of one category."""
 
     dirty_changed = Signal()  # `is_dirty` changed
+    save_state_changed = Signal()  # `can_save` or `save_blocked_reason` may have changed
     save_failed = Signal()  # a save the content started did not complete: the edits are still here
     shown = Signal()  # the page became the one in view: its content may need to be read again
 
@@ -107,22 +109,22 @@ class SettingsPage(QScrollArea):
         self._drop_form()
         self._form = form
         self._slot.addWidget(form)
-        form.edited.connect(self._refresh_dirty)
+        form.edited.connect(self._on_form_edited)
         form.save_failed.connect(self.save_failed)
         self._notice.hide()
-        self._refresh_dirty()
+        self._on_form_edited()
 
     def show_notice(self, text: str) -> None:
         """Drop the content and say why there is none (`text` empty: nothing to say yet)."""
         self._drop_form()
         self._notice.setText(text)
         self._notice.setVisible(bool(text))
-        self._refresh_dirty()
+        self._on_form_edited()
 
     def _drop_form(self) -> None:
         form, self._form = self._form, None
         if form is not None:
-            form.edited.disconnect(self._refresh_dirty)
+            form.edited.disconnect(self._on_form_edited)
             form.save_failed.disconnect(self.save_failed)
             self._slot.removeWidget(form)
             form.setParent(None)
@@ -135,6 +137,16 @@ class SettingsPage(QScrollArea):
         """True while the content holds edits that are not saved."""
         return self._dirty
 
+    @property
+    def can_save(self) -> bool:
+        """True if the content can be saved now (the window enables its button on it)."""
+        return self._form is not None and self._form.can_save()
+
+    @property
+    def save_blocked_reason(self) -> str:
+        """Why the content cannot be saved now (empty: no particular reason to tell)."""
+        return "" if self._form is None else self._form.save_blocked_reason()
+
     def save(self) -> None:
         """Ask the content to save what is typed."""
         if self._form is not None:
@@ -144,6 +156,10 @@ class SettingsPage(QScrollArea):
         """Drop what was typed: the content is built again from what is saved."""
         self.show_notice("")
         self.shown.emit()
+
+    def _on_form_edited(self) -> None:
+        self._refresh_dirty()
+        self.save_state_changed.emit()
 
     def _refresh_dirty(self) -> None:
         dirty = self._form is not None and self._form.has_unsaved_changes()

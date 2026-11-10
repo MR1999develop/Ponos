@@ -116,7 +116,7 @@ def set_training(
     dialog.week_hours_spin.setValue(hours)
     for (check_sport, session_type), check in dialog.type_checks.items():
         check.setChecked(check_sport is sport and session_type in types)
-    dialog.save_button.click()
+    window.settings_window.save_button.click()
     wait_for(qtbot, lambda: window.plan.is_idle and window.plan.snapshot is not None)
     wait_for(
         qtbot,

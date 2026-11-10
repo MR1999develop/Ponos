@@ -4,7 +4,8 @@
 
 At the top the editable name and the fixed data, read-only (or to complete, once only, for an
 old profile); below the updatable measurements, which apply from a chosen day (today by
-default); at the bottom the history. The page edits a copy: nothing changes until "Save changes".
+default); at the bottom the history. The page edits a copy: nothing changes until the window's
+"Save changes".
 Saving starts with `save_requested`; the outcome (ok or rejected measurements) is reported by the
 coordinator, which builds the page again from what was saved.
 """
@@ -17,7 +18,6 @@ from itertools import pairwise
 from PySide6.QtCore import QDate, QLocale, Qt, Signal
 from PySide6.QtWidgets import (
     QDateEdit,
-    QDialogButtonBox,
     QFormLayout,
     QGroupBox,
     QHeaderView,
@@ -153,7 +153,6 @@ class ProfileEditDialog(SettingsForm):
 
         self._build_fixed_fields()
         self._build_history_table()
-        self._build_buttons()
         self._set_tab_order()
         outer = QVBoxLayout(self)
         outer.setSpacing(SPACE_4)
@@ -162,7 +161,6 @@ class ProfileEditDialog(SettingsForm):
         outer.addWidget(QLabel(self.tr("History"), self))
         outer.addWidget(self._table, stretch=1)
         outer.addWidget(self._errors[EditField.GENERAL])
-        outer.addWidget(self._buttons)
 
     def _build_fixed_fields(self) -> None:
         self._name = QLineEdit(self)
@@ -194,14 +192,6 @@ class ProfileEditDialog(SettingsForm):
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._table.setMinimumHeight(_TABLE_MIN_HEIGHT)
 
-    def _build_buttons(self) -> None:
-        self._buttons = QDialogButtonBox(self)
-        self._save = self._buttons.addButton(
-            self.tr("Save changes"), QDialogButtonBox.ButtonRole.AcceptRole
-        )
-        self._save.setDefault(True)
-        self._buttons.accepted.connect(self._on_save)
-
     def _set_tab_order(self) -> None:
         """Tab follows the visual order, top to bottom: first the fixed data to complete."""
         order = [
@@ -218,7 +208,6 @@ class ProfileEditDialog(SettingsForm):
             self._other,
             self._pace,
             self._table,
-            self._save,
         ]
         for first, second in pairwise(order):
             QWidget.setTabOrder(first, second)
@@ -438,11 +427,6 @@ class ProfileEditDialog(SettingsForm):
         return self._birth
 
     @property
-    def save_button(self) -> QWidget:
-        """Button "Save changes"."""
-        return self._save
-
-    @property
     def history_table(self) -> QTableView:
         """The history table."""
         return self._table
@@ -468,8 +452,18 @@ class ProfileEditDialog(SettingsForm):
         eyes (the threshold would then be saved from today)."""
         return self._form.has_changes or self._form.valid_from != self._form.today
 
+    def can_save(self) -> bool:
+        """True with at least one changed value, and not while a save is in progress."""
+        return self._form.has_changes and not self._saving
+
+    def save_blocked_reason(self) -> str:
+        """Why nothing can be saved now."""
+        if self._saving:
+            return self.tr("The changes are being saved.")
+        return self.tr("Change at least one value first.")
+
     def request_save(self) -> None:
-        """Save what is typed (the "Save changes" button)."""
+        """Save what is typed (the window's "Save changes" button)."""
         self._on_save()
 
     # --- From the model to the view -------------------------------------------------------
@@ -560,10 +554,7 @@ class ProfileEditDialog(SettingsForm):
         return self.tr("The name contains characters that are not allowed.")
 
     def _update_save_button(self) -> None:
-        """ "Save changes" stays disabled, with the reason in the tooltip, without changes."""
-        has_changes = self._form.has_changes
-        self._save.setEnabled(has_changes)
-        self._save.setToolTip("" if has_changes else self.tr("Change at least one value first."))
+        """Tell the window that whether the page can be saved may have changed."""
         self.edited.emit()
 
     # --- From the view to the model -------------------------------------------------------
@@ -681,7 +672,6 @@ class ProfileEditDialog(SettingsForm):
         is not cancelled."""
         was_saving = self._saving
         self._saving = busy
-        self._save.setEnabled(not busy and self._form.has_changes)
         for widget in (
             self._name,
             self._valid_from,
@@ -697,6 +687,7 @@ class ProfileEditDialog(SettingsForm):
             self._birth,
         ):
             widget.setEnabled(not busy)
+        self.edited.emit()
         if was_saving and not busy:
             self.save_failed.emit()
 

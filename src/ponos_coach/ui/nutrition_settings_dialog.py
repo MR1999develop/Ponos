@@ -212,13 +212,9 @@ class NutritionSettingsDialog(SettingsForm):
             self._time_errors[field] = error
         self._times_note = QLabel(box)
         self._times_note.setWordWrap(True)
-        self._save_times = QPushButton(self.tr("Save meal times"), box)
-        self._save_times.setObjectName("settingsSaveTimes")
-        self._save_times.clicked.connect(self._on_save_times)
         layout = QVBoxLayout(box)
         layout.addLayout(form)
         layout.addWidget(self._times_note)
-        layout.addWidget(self._save_times, alignment=Qt.AlignmentFlag.AlignLeft)
         return box
 
     def _periods_group(self) -> QGroupBox:
@@ -329,11 +325,6 @@ class NutritionSettingsDialog(SettingsForm):
     def time_edits(self) -> dict[MealField, QTimeEdit]:
         """The meal time fields."""
         return self._time_edits
-
-    @property
-    def save_times_button(self) -> QPushButton:
-        """The button that saves the meal times."""
-        return self._save_times
 
     @property
     def add_period_button(self) -> QPushButton:
@@ -482,8 +473,8 @@ class NutritionSettingsDialog(SettingsForm):
             reason = self.tr("Solve the problem with the times first.")
         elif not changed and self._settings.meal_times_set:
             reason = self.tr("The times are already saved.")
-        self._save_times.setEnabled(not problems and (changed or not self._settings.meal_times_set))
-        self._save_times.setToolTip(reason)
+        self._times_can_save = not problems and (changed or not self._settings.meal_times_set)
+        self._times_reason = reason
         self.edited.emit()
 
     def has_unsaved_changes(self) -> bool:
@@ -491,8 +482,16 @@ class NutritionSettingsDialog(SettingsForm):
         applies as soon as it is set)."""
         return self._entered_minutes() != self._saved_times.minutes
 
+    def can_save(self) -> bool:
+        """True when the times are valid and differ from the saved ones, or were never saved."""
+        return self._times_can_save
+
+    def save_blocked_reason(self) -> str:
+        """Why the meal times cannot be saved now."""
+        return self._times_reason
+
     def request_save(self) -> None:
-        """Save the meal times (the "Save meal times" button)."""
+        """Save the meal times (the window's "Save changes" button)."""
         self._on_save_times()
 
     def _time_problem_text(self, field: MealField, has_problem: bool) -> str:

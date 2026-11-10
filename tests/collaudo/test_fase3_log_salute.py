@@ -135,7 +135,7 @@ def drive_the_interface(
     edit = open_edit_dialog(qtbot, window)
     edit.weight_edit.clear()
     QTest.keyClicks(edit.weight_edit, FIRST_WEIGHT_UPDATE)
-    click(edit.save_button)
+    click(window.settings_window.save_button)
     wait_profile_saved(qtbot, window)
 
     # 2. inputs refused on the spot: non-numeric text, weight out of range, inconsistent HR
@@ -143,12 +143,12 @@ def drive_the_interface(
     for text in ("abc", "19,9", "301", "93,77"):
         edit.weight_edit.clear()
         QTest.keyClicks(edit.weight_edit, text)
-        click(edit.save_button)
+        click(window.settings_window.save_button)
         shown.append(error_texts(edit))
     edit.weight_edit.clear()
     edit.min_box.setValue(MAX_BPM)  # minimum above the maximum
     edit.threshold_box.setValue(THRESHOLD_BPM)
-    click(edit.save_button)
+    click(window.settings_window.save_button)
     shown.append(error_texts(edit))
 
     # 3. database failure (known save error) and then an unexpected exception with data
@@ -164,7 +164,7 @@ def drive_the_interface(
         again = open_edit_dialog(qtbot, window)
         again.weight_edit.clear()
         QTest.keyClicks(again.weight_edit, "91,5")
-        click(again.save_button)
+        click(window.settings_window.save_button)
         qtbot.waitUntil(lambda: bool(visible_boxes()), timeout=WAIT_MS)
         shown.append(box_texts())
         shown.append(error_texts(again))
@@ -234,7 +234,7 @@ def test_t_sec_08_the_last_resort_handler_shows_a_generic_message_and_logs_only_
     edit = open_edit_dialog(qtbot, window)
     edit.weight_edit.clear()
     QTest.keyClicks(edit.weight_edit, FIRST_WEIGHT_UPDATE)
-    click(edit.save_button)
+    click(window.settings_window.save_button)
     qtbot.waitUntil(lambda: bool(visible_boxes()), timeout=WAIT_MS)
     texts = box_texts()
     monkeypatch.undo()
