@@ -138,3 +138,14 @@ plan is 7.
   `tests/planning/test_trimp_eq_equivalence.py` compares 11 scenarios with the
   golden file `tests/planning/golden/plans_hrtss.json`.
 - Frozen bike value: `tests/collaudo/test_fase4_distanza.py`.
+
+## Amendment 2026-11-10 (later the same day): threshold per sport
+
+The user can set a threshold heart rate for cycling and one for the other
+activities (walking, hiking, strength, other) beside the running one. `HRr_eq`
+uses the threshold of the sport's group from `threshold_for_sport`: the value
+entered, otherwise the default (cycling = running − 4 at least minimum + 1,
+other = running). The fingerprint of a cached load includes the threshold of the
+group only when it differs from the default, so profiles that never set one
+keep their saved loads. Verification: `tests/load/test_sport_thresholds*.py`
+and T-CALC-05 for cycling.

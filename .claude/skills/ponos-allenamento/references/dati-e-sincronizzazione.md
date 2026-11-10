@@ -253,6 +253,11 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   Il passo in vigore per il piano è `threshold_pace_in_force` (`profiles/domain`): il più
   recente per data fra l'ultima misura manuale e l'ultimo test con passo, a pari giorno
   la manuale.
+- **Schema v15** (soglie FC per sport): colonne nullable `bike_threshold_bpm` e
+  `other_threshold_bpm` in `physiology`, `CHECK (>= 40 AND > min_bpm AND <= max_bpm)`,
+  NULL = default; `ALTER TABLE ... ADD COLUMN`, `load_cache` non svuotata; migrazione
+  `SPORT_THRESHOLDS_MIGRATION` in `storage/schema_sport_thresholds.py`, copia
+  `backup/ponos-v14-v15.sqlite3`; test in `tests/storage/test_sport_thresholds*.py`.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.

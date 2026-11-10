@@ -30,8 +30,10 @@ Per ogni campione di FC al tempo t, per un'attività di sport `s`:
   `reference_hour_weight`: un'ora alla soglia del proprio sport vale 100 in
   ogni sport (COG per la scala).
 - Soglie per sport: solo da `threshold_for_sport` (`heart_rate.py`), unico punto
-  da cambiare. Corsa e sport senza soglia propria hanno rapporto 1; la bici usa
-  la soglia derivata (sezione 2) o quella del test in bici.
+  da cambiare, per gruppo (`SportGroup`, `sport_group`): corsa e trail, ciclismo,
+  altre attività (camminata, escursionismo, forza, altro). Il valore inserito nel
+  profilo vince; se manca, ciclismo = `max(corsa − 4, FCmin + 1)` e altre = corsa
+  (rapporto 1).
 
 HR = FCmin dà carico 0. Per la corsa e per gli sport senza soglia propria il
 carico coincide con l'hrTSS dei modelli precedenti. Perché questa scelta e le
@@ -47,10 +49,15 @@ soglia di corsa, quindi un errore di 4 bpm vale circa il 10%.
 - Quando un valore cambia, i carichi derivati si ricalcolano per
   tutte le attività dal giorno di validità in poi. Il risultato è uguale al
   calcolo da zero (T-CALC-05).
-- Soglia in bici = `max(soglia della corsa − 4, FCmin + 1)` bpm, finché non
-  c'è un test in bici (default del progetto). Il valore si porta al limite
-  invece di rifiutare i parametri: il costruttore di `Physiology` richiede
-  solo `FCmin < soglia ≤ FCmax` per la soglia della corsa.
+- Soglie del ciclismo e delle altre attività (schema v15): facoltative in
+  `Physiology` (`bike_threshold`, `other_threshold`, `None` = default), nella
+  stessa serie datata di FCmin, FCmax e soglia di corsa, con lo stesso limite
+  `FCmin < soglia ≤ FCmax` per tutte e tre. Default del ciclismo
+  `max(soglia della corsa − 4, FCmin + 1)` bpm (default del progetto, portato al
+  limite invece di rifiutare). Nel caso d'uso `ThresholdReset.DEFAULT` torna al
+  default, `None` lascia invariato. Entrano nell'impronta del carico solo se
+  diverse dal default (nessun ricalcolo per chi non le imposta). Il test dei 30
+  minuti aggiorna solo la soglia di corsa.
 - Intervalli ammessi (default del progetto, nei tipi di dominio): FC minima
   20-250, FC massima fino a 250 con minima < massima, soglia 40-250 con
   minima < soglia <= massima; il vincolo si verifica sul risultato di un

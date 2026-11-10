@@ -784,10 +784,18 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       `tests/planning/test_trimp_eq_equivalence.py` (11 scenari di sola corsa
       contro il golden `tests/planning/golden/plans_hrtss.json`),
       `tests/collaudo/test_fase4_distanza.py`, `tests/collaudo/test_fase3_carico.py`.
-- [ ] Soglie FC per corsa, ciclismo e altre attività nel profilo (richiesta
+- [x] Soglie FC per corsa, ciclismo e altre attività nel profilo (richiesta
       dell'utente del 2026-11-10): misure datate; bici di default corsa − 4,
       altre attività di default la corsa; `threshold_for_sport` unico punto da
-      cambiare; migrazione dello schema.
+      cambiare; migrazione dello schema. Fatto (`fc09bb6`, `a335b5b`): gruppi
+      `SportGroup` corsa/trail, ciclismo, altre (camminata, escursionismo,
+      forza, altro); soglie facoltative nella stessa serie datata della
+      fisiologia (`bike_threshold_bpm`, `other_threshold_bpm`, NULL = default,
+      migrazione 15 `SPORT_THRESHOLDS_MIGRATION`); entrano nell'impronta del
+      carico solo se diverse dal default, così chi non le imposta non ricalcola
+      nulla; il test dei 30 minuti aggiorna solo la soglia di corsa. Test:
+      `tests/{load,profiles,storage,planning}/test_sport_thresholds*.py`,
+      `tests/ui/test_sport_thresholds_form.py`.
 - [x] Sincronizzazione: una voce che Garmin non scarica mai (errore 5xx o
       nessuna risposta a ogni giro, mentre l'elenco risponde) resta in attesa
       per sempre e ferma ogni giro dopo 3 voci; serve un contatore di giri

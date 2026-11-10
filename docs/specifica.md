@@ -354,8 +354,15 @@ restores to a profile that is migrated the same way when opened.
 - **Profiles created before phase 3.** They have no height or date of birth and
   remain valid. "Edit profile" asks for them once, in the same save as the
   other measurements, and afterwards they cannot be changed.
-- On the bike the threshold is the running one minus 4 bpm, until there is a
-  bike test.
+- **Threshold per sport.** Besides running (and trail running), the profile
+  has an optional threshold heart rate for cycling and one for the other
+  activities (walking, hiking, strength, other), in the same dated series as
+  the minimum, maximum and running threshold. Left empty, the default applies
+  and is shown in grey in the field: cycling = running minus 4 bpm (at least
+  minimum + 1), other activities = running. Same limits as the running
+  threshold (minimum < threshold <= maximum, 40-250 bpm). The threshold of a
+  sport sets its HR zones, the zones of its planned sessions and its TRIMPeq.
+  The 30-minute test updates only the running threshold.
 - **Threshold pace.** A dated series of its own, like the weight. The plan uses
   the most recent by date between the last pace set by hand and the last test
   with a pace; on the same day the one set by hand wins. The field shows the

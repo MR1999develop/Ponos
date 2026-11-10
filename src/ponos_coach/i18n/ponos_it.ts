@@ -2468,6 +2468,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>The threshold cannot be higher than the maximum.</source>
         <translation>La soglia non può essere superiore alla massima.</translation>
     </message>
+    <message>
+        <source>Enter a whole number of beats per minute between {low} and {high}, or leave it empty.</source>
+        <translation>Inserisci un numero intero di battiti al minuto tra {low} e {high}, oppure lascia il campo vuoto.</translation>
+    </message>
 </context>
 <context>
     <name>IllnessDialog</name>
@@ -3904,8 +3908,16 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>FC massima (bpm)</translation>
     </message>
     <message>
-        <source>Threshold HR (bpm)</source>
-        <translation>FC di soglia (bpm)</translation>
+        <source>Running threshold HR (bpm)</source>
+        <translation>FC soglia corsa (bpm)</translation>
+    </message>
+    <message>
+        <source>Cycling threshold HR (bpm)</source>
+        <translation>FC soglia ciclismo (bpm)</translation>
+    </message>
+    <message>
+        <source>Other activities threshold HR (bpm)</source>
+        <translation>FC soglia altre attività (bpm)</translation>
     </message>
     <message>
         <source>Threshold pace (min/km)</source>
@@ -5233,12 +5245,28 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Frequenza cardiaca massima</translation>
     </message>
     <message>
-        <source>Threshold heart rate</source>
-        <translation>Frequenza cardiaca di soglia</translation>
+        <source>Running threshold heart rate</source>
+        <translation>Frequenza cardiaca di soglia della corsa</translation>
+    </message>
+    <message>
+        <source>Cycling threshold heart rate</source>
+        <translation>Frequenza cardiaca di soglia del ciclismo</translation>
+    </message>
+    <message>
+        <source>Other activities threshold heart rate</source>
+        <translation>Frequenza cardiaca di soglia delle altre attività</translation>
     </message>
     <message>
         <source> bpm</source>
         <translation> bpm</translation>
+    </message>
+    <message>
+        <source>default: running - 4 ({value} bpm)</source>
+        <translation>predefinita: corsa - 4 ({value} bpm)</translation>
+    </message>
+    <message>
+        <source>default: running ({value} bpm)</source>
+        <translation>predefinita: corsa ({value} bpm)</translation>
     </message>
     <message>
         <source>Nothing has changed: change at least one value.</source>

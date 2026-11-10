@@ -244,3 +244,12 @@ mean the TRIMPeq. The rest of the ADR stays valid.
   has no weights: it depends on the HR parameters and the zone percentages.
   Everything is recalculated from scratch (T-CALC-05).
 - The zones keep their definition on the threshold of the sport.
+
+## Amendment 2026-11-10: thresholds for cycling and other activities
+
+Migration 15 (`SPORT_THRESHOLDS_MIGRATION`, `storage/schema_sport_thresholds.py`)
+adds the nullable columns `bike_threshold_bpm` and `other_threshold_bpm` to
+`physiology`, with `CHECK (>= 40 AND > min_bpm AND <= max_bpm)`; NULL means the
+default. They share the dated series of the other HR parameters: one entry per
+day, one row in the history, one constraint. The HR zones of a sport are on its
+threshold.
