@@ -35,7 +35,13 @@ from ponos_coach.profiles.domain import FolderKind
 from ponos_coach.profiles.use_cases import NewProfileRequest
 from ponos_coach.ui.birth_date_edit import BirthDateEdit
 from ponos_coach.ui.body_input import body_problem_text
-from ponos_coach.ui.form_rows import add_field_row, optional_threshold_edit, threshold_pace_edit
+from ponos_coach.ui.form_rows import (
+    FieldKind,
+    add_field_row,
+    optional_threshold_edit,
+    size_field,
+    threshold_pace_edit,
+)
 from ponos_coach.ui.heart_rate_rules import (
     MAX_ALLOWED_BPM,
     MIN_ALLOWED_BPM,
@@ -113,6 +119,7 @@ class NewProfileDialog(QDialog):
         self._weight.textEdited.connect(self._on_weight_edited)
         self._birth = BirthDateEdit(self._today, self)
         self._birth.selection_changed.connect(self._on_birth_changed)
+        size_field(self._birth, FieldKind.DATE)
 
         self._min = self._bpm_box(MIN_ALLOWED_BPM, "minHeartRate")
         self._max = self._bpm_box(MIN_ALLOWED_BPM, "maxHeartRate")
@@ -249,6 +256,7 @@ class NewProfileDialog(QDialog):
         field = QLineEdit(self)
         field.setObjectName(name)
         field.setAccessibleName(accessible_name)
+        size_field(field, FieldKind.SHORT)
         return field
 
     def _bpm_box(self, low: int, name: str) -> QSpinBox:
@@ -256,6 +264,7 @@ class NewProfileDialog(QDialog):
         box.setObjectName(name)
         box.setRange(low, MAX_ALLOWED_BPM)
         box.setSuffix(self.tr(" bpm"))
+        size_field(box, FieldKind.SHORT)
         return box
 
     def _note_label(self) -> QLabel:

@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 from ponos_coach.nutrition.domain import LeanMass, LeanMassEntry
 from ponos_coach.nutrition.domain.settings import MIN_VALID_DATE
 from ponos_coach.ui.birth_date_edit import from_qdate, to_qdate
-from ponos_coach.ui.form_rows import add_field_row
+from ponos_coach.ui.form_rows import FieldKind, add_field_row, size_field
 from ponos_coach.ui.lean_mass_input import LeanMassProblem, lean_mass_problem_text, read_lean_mass
 from ponos_coach.ui.text_table_model import TextTableModel
 from ponos_coach.ui.tokens import SPACE_2
@@ -73,6 +73,8 @@ class LeanMassSection(QGroupBox):
         self._from.setDisplayFormat(QLocale().dateFormat(QLocale.FormatType.ShortFormat))
         self._from.setDateRange(to_qdate(MIN_VALID_DATE), to_qdate(today))
         self._from.setDate(to_qdate(today))
+        size_field(self._value, FieldKind.SHORT)
+        size_field(self._from, FieldKind.DATE)
         self._set = QPushButton(self.tr("Set lean mass"), self)
         self._set.setObjectName("settingsSetLeanMass")
         self._set.clicked.connect(self._on_set_clicked)

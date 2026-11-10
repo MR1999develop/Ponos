@@ -31,7 +31,7 @@ from ponos_coach.activities.domain import Sport
 from ponos_coach.goals.domain import SessionType
 from ponos_coach.goals.domain.availability import WEEKDAYS
 from ponos_coach.ui.activity_text import sport_text
-from ponos_coach.ui.form_rows import add_field_row
+from ponos_coach.ui.form_rows import FieldKind, add_field_row, size_field
 from ponos_coach.ui.plan_texts import session_type_text, weekday_name
 from ponos_coach.ui.settings_form import SettingsForm
 from ponos_coach.ui.tokens import SPACE_2, SPACE_4
@@ -147,6 +147,9 @@ class TrainingSettingsDialog(SettingsForm):
         self._week_hours.setSingleStep(_HOURS_STEP)
         self._week_hours.setSuffix(self.tr(" h"))
         self._week_hours.valueChanged.connect(self._on_week_changed)
+        size_field(self._sessions, FieldKind.SHORT)
+        size_field(self._long_day, FieldKind.CHOICE)
+        size_field(self._week_hours, FieldKind.SHORT)
         add_field_row(form, self.tr("Days available"), days)
         add_field_row(form, self.tr("Sessions per week"), self._sessions)
         add_field_row(form, self.tr("Long session day"), self._long_day)
