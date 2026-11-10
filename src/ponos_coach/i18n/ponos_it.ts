@@ -72,6 +72,122 @@
     </message>
 </context>
 <context>
+    <name>ActivityDeletionUi</name>
+    <message>
+        <source>Delete activity</source>
+        <translation>Elimina attività</translation>
+    </message>
+    <message>
+        <source>Undo</source>
+        <translation>Annulla</translation>
+    </message>
+    <message>
+        <source>Redo</source>
+        <translation>Ripeti</translation>
+    </message>
+    <message>
+        <source>Deleted activities...</source>
+        <translation>Attività eliminate...</translation>
+    </message>
+    <message>
+        <source>Deleted activities</source>
+        <translation>Attività eliminate</translation>
+    </message>
+    <message>
+        <source>Create or open a profile first.</source>
+        <translation>Prima crea o apri un profilo.</translation>
+    </message>
+    <message>
+        <source>Select an activity in the Activities list first.</source>
+        <translation>Prima seleziona un&apos;attività nell&apos;elenco Attività.</translation>
+    </message>
+    <message>
+        <source>Wait for the current operation to finish, or stop it first.</source>
+        <translation>Attendi la fine dell&apos;operazione in corso, oppure fermala.</translation>
+    </message>
+    <message numerus="yes">
+        <source>Delete %n activities</source>
+        <translation>
+            <numerusform>Elimina %n attività</numerusform>
+            <numerusform>Elimina %n attività</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>There is no deletion to take back.</source>
+        <translation>Non c&apos;è un&apos;eliminazione da annullare.</translation>
+    </message>
+    <message>
+        <source>There is no deletion to do again.</source>
+        <translation>Non c&apos;è un&apos;eliminazione da ripetere.</translation>
+    </message>
+    <message>
+        <source>Deleted {activity}. Press {undo} to bring it back.</source>
+        <translation>Eliminata: {activity}. Premi {undo} per riportarla.</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n activities deleted. Press {undo} to bring them back.</source>
+        <translation>
+            <numerusform>%n attività eliminata. Premi {undo} per riportarla.</numerusform>
+            <numerusform>%n attività eliminate. Premi {undo} per riportarle.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Activity restored.</source>
+        <translation>Attività ripristinata.</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n activities restored.</source>
+        <translation>
+            <numerusform>%n attività ripristinata.</numerusform>
+            <numerusform>%n attività ripristinate.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Could not restore</source>
+        <translation>Ripristino non riuscito</translation>
+    </message>
+    <message>
+        <source>The original file of the activity is missing or damaged.</source>
+        <translation>Il file originale dell&apos;attività manca o è danneggiato.</translation>
+    </message>
+    <message numerus="yes">
+        <source>The original files of %n activities are missing or damaged.</source>
+        <translation>
+            <numerusform>Il file originale di %n attività manca o è danneggiato.</numerusform>
+            <numerusform>I file originali di %n attività mancano o sono danneggiati.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>It stays in Deleted activities. Choose its file with Import files to bring it back.</source>
+        <translation>Resta tra le Attività eliminate. Per riportarla scegli il suo file con Importa file.</translation>
+    </message>
+</context>
+<context>
+    <name>ActivityDeletionUndo</name>
+    <message>
+        <source>Delete activity</source>
+        <translation>Elimina attività</translation>
+    </message>
+    <message numerus="yes">
+        <source>Delete %n activities</source>
+        <translation>
+            <numerusform>Elimina %n attività</numerusform>
+            <numerusform>Elimina %n attività</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Restore activity</source>
+        <translation>Ripristina attività</translation>
+    </message>
+    <message numerus="yes">
+        <source>Restore %n activities</source>
+        <translation>
+            <numerusform>Ripristina %n attività</numerusform>
+            <numerusform>Ripristina %n attività</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>ActivityDetailDialog</name>
     <message>
         <source>Activity detail</source>
@@ -825,6 +941,45 @@
             <numerusform>File di attività non leggibile: %n. L&apos;indicazione potrebbe essere meno precisa.</numerusform>
             <numerusform>File di attività non leggibili: %n. L&apos;indicazione potrebbe essere meno precisa.</numerusform>
         </translation>
+    </message>
+</context>
+<context>
+    <name>DeletedActivitiesPage</name>
+    <message>
+        <source>Date and time</source>
+        <translation>Data e ora</translation>
+    </message>
+    <message>
+        <source>Sport</source>
+        <translation>Sport</translation>
+    </message>
+    <message>
+        <source>Total time (h:mm:ss)</source>
+        <translation>Tempo totale (h:mm:ss)</translation>
+    </message>
+    <message>
+        <source>Distance (km)</source>
+        <translation>Distanza (km)</translation>
+    </message>
+    <message>
+        <source>Deleted activities stay out of the list, the charts and the synchronization. Their files are kept, so you can restore them.</source>
+        <translation>Le attività eliminate restano fuori dall&apos;elenco, dai grafici e dalla sincronizzazione. I loro file sono conservati, così puoi ripristinarle.</translation>
+    </message>
+    <message>
+        <source>Deleted activities</source>
+        <translation>Attività eliminate</translation>
+    </message>
+    <message>
+        <source>No deleted activities. An activity you delete from the Activities list appears here, and you can restore it.</source>
+        <translation>Nessuna attività eliminata. Un&apos;attività che elimini dall&apos;elenco Attività compare qui e puoi ripristinarla.</translation>
+    </message>
+    <message>
+        <source>Restore</source>
+        <translation>Ripristina</translation>
+    </message>
+    <message>
+        <source>Select a deleted activity in the list first.</source>
+        <translation>Prima seleziona un&apos;attività eliminata nell&apos;elenco.</translation>
     </message>
 </context>
 <context>
@@ -2496,6 +2651,20 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>The import was stopped: run it again to continue.</source>
         <translation>L&apos;importazione è stata interrotta: avviala di nuovo per continuare.</translation>
+    </message>
+    <message numerus="yes">
+        <source>Deleted activities brought back by their file: %n</source>
+        <translation>
+            <numerusform>Attività eliminata riportata dal suo file: %n</numerusform>
+            <numerusform>Attività eliminate riportate dal loro file: %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Left out because you deleted them: %n. To bring one back, choose its file with Import files.</source>
+        <translation>
+            <numerusform>Lasciata fuori perché l&apos;hai eliminata: %n. Per riportarla scegli il suo file con Importa file.</numerusform>
+            <numerusform>Lasciate fuori perché le hai eliminate: %n. Per riportarne una scegli il suo file con Importa file.</numerusform>
+        </translation>
     </message>
 </context>
 <context>

@@ -929,6 +929,29 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       `tests/collaudo/test_fase8_migrazione_v13.py`.
       Caso del 2026-11-09: 30 attività del 2012-2013, sistemate a mano nel
       profilo dell'utente.
+- [x] Meno test a ogni controllo (richiesta dell'utente del 2026-11-10):
+      `tests/collaudo` solo in `nox -s collaudo`, 30 esempi hypothesis, tolti
+      i casi doppi a basso rischio (liste ostili ridondanti, segnali d'allarme
+      su due segni, fixture FIT ripetute, hash in un solo test): da 8023 test
+      in 13 min a 5501 in 4 min 41 s.
+- [x] Passo medio in min/km nella finestra di un'attività, solo per corsa,
+      trail ed escursionismo (richiesta dell'utente del 2026-11-10): tempo in
+      movimento diviso per la distanza; per gli altri sport la voce non c'è e
+      le altre chiudono il buco. Test: `tests/ui/test_activity_detail.py`,
+      `tests/ui/test_activity_detail_layout.py`.
+- [x] Impostazioni con un solo «Save changes», in fondo alla finestra
+      (richiesta dell'utente del 2026-11-10): tolti i bottoni di Profilo,
+      Piano e Alimentazione; ogni pagina dice se si può salvare
+      (`SettingsForm.can_save`) e perché no (`save_blocked_reason`); Invio in
+      un campo salva. Test: `tests/ui/test_settings_window.py`.
+- [x] Eliminare attività dall'elenco (richiesta dell'utente del 2026-11-10):
+      tasto destro o Canc, annullabile; il file FIT resta in archivio e la
+      finestra «Deleted activities...» le ripristina; sincronizzazione e
+      import da cartella le saltano (`SyncStatus.SKIPPED`), un file scelto a
+      mano le riporta. Dati: schema 19 (`deleted_activity` e trigger che
+      tengono ogni identità in una sola tabella), ADR 018. Test:
+      `tests/activities/test_deletion.py`, `tests/ui/test_activity_deletion.py`,
+      `tests/ui/test_deleted_activities_page.py`, contract test.
 
 ## 6. Squadra di agenti e modelli
 
