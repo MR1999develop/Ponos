@@ -166,12 +166,28 @@ def distance_km_text(distance_m: int, *, with_unit: bool = False) -> str:
     )
 
 
+def ascent_text(ascent_m: int) -> str:
+    """An elevation gain in metres as a number in the locale's format ("1,200" or "1.200")."""
+    return QLocale().toString(ascent_m)
+
+
 def goal_label(goal: Goal) -> str:
     """A goal in one phrase: "Race A, Marathon, 9/20/26"."""
     if isinstance(goal, FitnessGoal):
         # {ctl}: the CTL to reach; {date}: the day.
         return QCoreApplication.translate("Plan", "Form goal, CTL {ctl}, {date}").format(
             ctl=QLocale().toString(goal.ctl, "f", 0), date=short_date_text(goal.day)
+        )
+    if goal.ascent_m > 0:
+        # {priority}: A, B or C; {distance}: "Marathon" or "12.5 km"; {ascent}: the elevation gain
+        # in metres, as a number; {date}: the day.
+        return QCoreApplication.translate(
+            "Plan", "Race {priority}, {distance}, +{ascent} m, {date}"
+        ).format(
+            priority=goal.priority.value,
+            distance=distance_name(goal.distance_m),
+            ascent=ascent_text(goal.ascent_m),
+            date=short_date_text(goal.day),
         )
     # {priority}: A, B or C; {distance}: "Marathon" or "12.5 km"; {date}: the day.
     return QCoreApplication.translate("Plan", "Race {priority}, {distance}, {date}").format(
@@ -258,9 +274,14 @@ def block_text(block: Block) -> str:
 
 
 def session_name(session: PlannedSession) -> str:
-    """The name of a session: its type, or "Threshold test" when it is the test itself."""
+    """The name of a session: its type, or "Threshold test", "Hill repeats" or "Hilly long run"
+    when it is the test or on hills."""
     if session.threshold_test is not None:
         return QCoreApplication.translate("Plan", "Threshold test")
+    if session.is_hill_repeats:
+        return QCoreApplication.translate("Plan", "Hill repeats")
+    if session.is_hilly_long:
+        return QCoreApplication.translate("Plan", "Hilly long run")
     return session_type_text(session.session_type)
 
 
@@ -275,6 +296,13 @@ def session_title(session: PlannedSession) -> str:
 def session_lines(session: PlannedSession) -> tuple[str, ...]:
     """The session in full: the title, the sport if it is not the plan's, and its blocks."""
     lines = [session_title(session)]
+    if session.ascent_m > 0:
+        # {ascent}: the indicative elevation gain of the session, in metres.
+        lines.append(
+            QCoreApplication.translate("Plan", "Elevation gain: about {ascent} m").format(
+                ascent=ascent_text(session.ascent_m)
+            )
+        )
     lines.extend(block_text(block) for block in session.blocks)
     return tuple(lines)
 

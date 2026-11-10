@@ -11,6 +11,7 @@ tomorrow. The target time is read from text, tolerantly (`1:45:00` or `45:00`).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -19,8 +20,10 @@ from enum import Enum
 from ponos_coach.activities.domain import Sport
 from ponos_coach.goals.domain import FitnessGoal, GoalId, Priority, RaceGoal
 from ponos_coach.goals.domain.goal import (
+    MAX_ASCENT_M,
     MAX_CTL,
     MAX_DISTANCE_M,
+    MAX_MEAN_GRADE_PERCENT,
     MAX_TARGET_TIME_S,
     MIN_DISTANCE_M,
     MIN_TARGET_TIME_S,
@@ -45,6 +48,9 @@ _SECONDS_PER_MINUTE = 60
 _MINUTES_PER_HOUR = 60
 _TIME_PARTS_WITH_HOURS = 3
 _TIME_PARTS_MINUTES_ONLY = 2
+# An elevation gain as people type it: "1200", "1 200", "1.200", "1,200", with or without a final
+# "m"; a group separator is always followed by exactly three digits.
+_GROUPED_ASCENT = re.compile(r"\d{1,3}(?:[., ]\d{3})+")
 
 
 class GoalFormKind(Enum):
@@ -60,6 +66,7 @@ class GoalField(Enum):
     DATE = "date"
     DISTANCE = "distance"
     TARGET_TIME = "target_time"
+    ASCENT = "ascent"
     CTL = "ctl"
 
 
@@ -71,6 +78,9 @@ class GoalProblem(Enum):
     DISTANCE_OUT_OF_RANGE = "distance_out_of_range"
     TIME_NOT_UNDERSTOOD = "time_not_understood"
     TIME_OUT_OF_RANGE = "time_out_of_range"
+    ASCENT_NOT_UNDERSTOOD = "ascent_not_understood"
+    ASCENT_OUT_OF_RANGE = "ascent_out_of_range"
+    ASCENT_TOO_STEEP = "ascent_too_steep"
     CTL_OUT_OF_RANGE = "ctl_out_of_range"
 
 
@@ -84,7 +94,8 @@ class GoalIssue:
 
 @dataclass(frozen=True, slots=True)
 class GoalDraft:
-    """What the form holds. `target_time_text` is what was typed ("" = no target time)."""
+    """What the form holds. `target_time_text` is what was typed ("" = no target time);
+    `ascent_text` the elevation gain in metres as typed ("" = 0, a flat race)."""
 
     kind: GoalFormKind
     day: date
@@ -93,6 +104,7 @@ class GoalDraft:
     distance_m: int = MARATHON_M
     target_time_text: str = ""
     ctl: float = DEFAULT_FORM_CTL
+    ascent_text: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +156,22 @@ def parse_target_time(text: str) -> ParsedTime:
     return TimeNotUnderstood() if seconds is None else TargetTime(seconds)
 
 
+def parse_ascent(text: str) -> int | None:
+    """Metres of elevation gain from what was typed: blank is 0; spaces, a group separator and a
+    final "m" are tolerated; `None` for anything else (decimals, signs, letters)."""
+    cleaned = text.strip().removesuffix("m").removesuffix("M").strip()
+    if not cleaned:
+        return 0
+    if _GROUPED_ASCENT.fullmatch(cleaned):
+        cleaned = re.sub(r"[., ]", "", cleaned)
+    return int(cleaned) if cleaned.isascii() and cleaned.isdecimal() else None
+
+
+def ascent_text(ascent_m: int) -> str:
+    """An elevation gain as the form shows it ("" for a flat race)."""
+    return str(ascent_m) if ascent_m else ""
+
+
 def target_time_text(seconds: int | None) -> str:
     """A target time as `h:mm:ss` ("" for none)."""
     if seconds is None:
@@ -187,7 +215,19 @@ def _race_issues(draft: GoalDraft) -> list[GoalIssue]:
             issues.append(GoalIssue(GoalField.TARGET_TIME, GoalProblem.TIME_OUT_OF_RANGE))
         case _:
             pass
+    issues.extend(_ascent_issues(draft))
     return issues
+
+
+def _ascent_issues(draft: GoalDraft) -> list[GoalIssue]:
+    ascent = parse_ascent(draft.ascent_text)
+    if ascent is None:
+        return [GoalIssue(GoalField.ASCENT, GoalProblem.ASCENT_NOT_UNDERSTOOD)]
+    if ascent > MAX_ASCENT_M:
+        return [GoalIssue(GoalField.ASCENT, GoalProblem.ASCENT_OUT_OF_RANGE)]
+    if ascent * 100 > draft.distance_m * MAX_MEAN_GRADE_PERCENT:
+        return [GoalIssue(GoalField.ASCENT, GoalProblem.ASCENT_TOO_STEEP)]
+    return []
 
 
 def goal_of(
@@ -203,7 +243,15 @@ def goal_of(
         return FitnessGoal(goal_id, draft.day, draft.ctl)
     parsed = parse_target_time(draft.target_time_text)
     seconds = parsed.seconds if isinstance(parsed, TargetTime) else None
-    return RaceGoal(goal_id, draft.day, draft.priority, draft.sport, draft.distance_m, seconds)
+    return RaceGoal(
+        goal_id,
+        draft.day,
+        draft.priority,
+        draft.sport,
+        draft.distance_m,
+        seconds,
+        parse_ascent(draft.ascent_text) or 0,
+    )
 
 
 def draft_of(goal: Goal) -> GoalDraft:
@@ -217,6 +265,7 @@ def draft_of(goal: Goal) -> GoalDraft:
         goal.sport,
         goal.distance_m,
         target_time_text(goal.target_time_s),
+        ascent_text=ascent_text(goal.ascent_m),
     )
 
 
@@ -228,6 +277,7 @@ def default_draft(kind: GoalFormKind, day: date) -> GoalDraft:
 __all__ = [
     "COMMON_DISTANCES_M",
     "DEFAULT_FORM_CTL",
+    "MAX_ASCENT_M",
     "MAX_DISTANCE_KM",
     "MAX_FORM_CTL",
     "MIN_DISTANCE_KM",
@@ -241,10 +291,12 @@ __all__ = [
     "ParsedTime",
     "TargetTime",
     "TimeNotUnderstood",
+    "ascent_text",
     "default_draft",
     "draft_of",
     "goal_of",
     "issues_of",
+    "parse_ascent",
     "parse_target_time",
     "target_time_text",
 ]

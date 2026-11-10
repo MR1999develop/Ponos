@@ -35,6 +35,9 @@ class DayInfo:
 
     `race_class` and `days_to_race` describe the next A race after the day (`None` if there is
     none); `taper_fraction` is the share of the reference load that a taper day takes.
+    `hill_slope_m_per_km` is the mean climb of that race when its preparation has hill work (a
+    steep A race and a plan that allows it), 0 otherwise; hill work still only goes on the days of
+    the build and the peak, never in an unload week.
     """
 
     day: date
@@ -44,6 +47,7 @@ class DayInfo:
     taper_fraction: float = 0.0
     race_class: RaceClass | None = None
     days_to_race: int | None = None
+    hill_slope_m_per_km: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +93,7 @@ class Slot:
     phase: Phase
     max_minutes: int
     race_pace: bool = False
+    slope_m_per_km: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,16 +115,16 @@ class Sizer:
     def __init__(self, rates_of: Mapping[SessionType, ZoneRates]) -> None:
         self._rates_of = rates_of
         self._cache: dict[
-            tuple[SessionType, Phase, int], tuple[tuple[Shape, ...], list[float]]
+            tuple[SessionType, Phase, int, int], tuple[tuple[Shape, ...], list[float]]
         ] = {}
 
     def options(
-        self, session_type: SessionType, phase: Phase, max_minutes: int
+        self, session_type: SessionType, phase: Phase, max_minutes: int, slope_m_per_km: int = 0
     ) -> tuple[tuple[Shape, ...], list[float]]:
         """The shapes (shortest first) and their loads, which grow with the duration."""
-        key = (session_type, phase, max_minutes)
+        key = (session_type, phase, max_minutes, slope_m_per_km)
         if key not in self._cache:
-            shapes = shape_options(session_type, phase, max_minutes)
+            shapes = shape_options(session_type, phase, max_minutes, slope_m_per_km)
             rates = self._rates_of[session_type]
             loads = [session_load(raw_blocks(shape, phase), rates) for shape in shapes]
             self._cache[key] = (shapes, loads)
@@ -131,7 +136,10 @@ class Sizer:
 
     def minimum_load(self, slots: Sequence[Slot]) -> float:
         """The load of the shortest sessions of all the slots (those that have one)."""
-        firsts = (self.options(s.session_type, s.phase, s.max_minutes)[1][:1] for s in slots)
+        firsts = (
+            self.options(s.session_type, s.phase, s.max_minutes, s.slope_m_per_km)[1][:1]
+            for s in slots
+        )
         # `sum` of the same floats in the same order as `size`, so that the two agree to the bit
         return sum(load for loads in firsts for load in loads)
 
@@ -145,7 +153,8 @@ class Sizer:
         never exceeded.
         """
         table = {
-            i: self.options(s.session_type, s.phase, s.max_minutes) for i, s in enumerate(slots)
+            i: self.options(s.session_type, s.phase, s.max_minutes, s.slope_m_per_km)
+            for i, s in enumerate(slots)
         }
         active = self._affordable_set([i for i in table if table[i][0]], slots, table, budget)
         fixed: dict[int, Shape] = {}
@@ -213,22 +222,32 @@ def _allowed_for(session_type: SessionType, setup: WeekSetup) -> Callable[[DayIn
     return allowed
 
 
+def _hill_slope(info: DayInfo, setup: WeekSetup) -> int:
+    """The mean climb that hill work on this day prepares for: that of the next A race when the day
+    is of the build or the peak and the week is not an unload; 0 when the day has no hill work."""
+    if setup.unload or info.phase not in defaults.HILL_PHASES:
+        return 0
+    return info.hill_slope_m_per_km
+
+
 def _place_hard(
     free: list[DayInfo],
     hard: set[date],
     taken: dict[date, SessionType],
     session_type: SessionType,
     allowed: Callable[[DayInfo], bool],
-) -> None:
-    """Puts a hard session on the allowed free day farthest from the hard days (not next to one)."""
+) -> DayInfo | None:
+    """Puts a hard session on the allowed free day farthest from the hard days (not next to one);
+    the day it went on, `None` if there was none."""
     options = [
         d for d in free if d.day not in taken and _distance_to(d.day, hard) >= 2 and allowed(d)
     ]
     if not options:
-        return
+        return None
     best = max(options, key=lambda d: (_distance_to(d.day, hard), -d.day.toordinal()))
     taken[best.day] = session_type
     hard.add(best.day)
+    return best
 
 
 def _rotated(types: list[SessionType], turn: int) -> list[SessionType]:
@@ -362,8 +381,7 @@ def choose_loaded_slots(setup: WeekSetup, quality: Sequence[SessionType]) -> Loa
     if SessionType.LONG in setup.chosen:
         _place_long(free, hard, taken, setup.long_weekday)
     test = _place_test(free, hard, taken, setup)
-    for session_type in quality:
-        _place_hard(free, hard, taken, session_type, _allowed_for(session_type, setup))
+    hill_days = _place_quality(free, hard, taken, quality, setup)
     if SessionType.STRENGTH in setup.chosen:
         _place_strength(free, hard, taken)
     filler = _filler(setup)
@@ -373,9 +391,34 @@ def choose_loaded_slots(setup: WeekSetup, quality: Sequence[SessionType]) -> Loa
             continue
         chosen_type = taken.get(d.day, filler)
         if chosen_type is not None:
-            race_pace = chosen_type in INTENSE_TYPES and _is_race_pace(chosen_type, d)
-            slots.append(Slot(d.day, chosen_type, d.phase, d.minutes, race_pace))
+            slots.append(_loaded_slot(d, chosen_type, setup, hill_days.get(d.day, 0)))
     return LoadedLayout(slots, hard, test)
+
+
+def _place_quality(
+    free: list[DayInfo],
+    hard: set[date],
+    taken: dict[date, SessionType],
+    quality: Sequence[SessionType],
+    setup: WeekSetup,
+) -> dict[date, int]:
+    """Spreads the quality sessions over the free days; the days of the hill-repeats session (one a
+    week: the first of them that is on a day with hill work) with the slope they train for."""
+    hill_days: dict[date, int] = {}
+    for session_type in quality:
+        spot = _place_hard(free, hard, taken, session_type, _allowed_for(session_type, setup))
+        if spot is not None and not hill_days and _hill_slope(spot, setup) > 0:
+            hill_days[spot.day] = _hill_slope(spot, setup)
+    return hill_days
+
+
+def _loaded_slot(info: DayInfo, session_type: SessionType, setup: WeekSetup, slope: int) -> Slot:
+    """The slot of a day of normal load. `slope` is the climb of a hill-repeats session; every long
+    run of a hilly week is hilly; hill work is never at race pace."""
+    if session_type is SessionType.LONG:
+        slope = _hill_slope(info, setup)
+    race_pace = session_type in INTENSE_TYPES and not slope and _is_race_pace(session_type, info)
+    return Slot(info.day, session_type, info.phase, info.minutes, race_pace, slope)
 
 
 def _taper_quality_minutes(info: DayInfo) -> int:
@@ -521,7 +564,7 @@ def _under_the_long(placed: dict[date, Placed], sizer: Sizer) -> dict[date, Plac
             else min(longest - 1, longest * defaults.OTHER_SESSION_MAX_SHARE_OF_LONG_PERCENT // 100)
         )
         if kind in _BELOW_LONG and item.shape.minutes > limit:
-            shapes = sizer.options(kind, item.phase, limit)[0]
+            shapes = sizer.options(kind, item.phase, limit, item.shape.slope_m_per_km)[0]
             if shapes:
                 out[day] = Placed(shapes[-1], item.phase, item.race_pace)
     return out

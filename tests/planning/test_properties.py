@@ -70,6 +70,7 @@ def _availability(draw: st.DrawFn) -> WeeklyAvailability:
 _types = st.sets(st.sampled_from(list(SessionType)), min_size=1)
 _priorities = st.sampled_from(list(Priority))
 _distances = st.sampled_from([1_500, 5_000, 10_000, 21_097, 42_195, 80_000])
+_ascents = st.sampled_from([0, 0, 0, 150, 600, 2_500])
 
 
 @st.composite
@@ -112,14 +113,16 @@ def _inputs(draw: st.DrawFn) -> PlanInputs:
     races = []
     for index, offset in enumerate(offsets):
         target = draw(st.one_of(st.none(), st.integers(600, 20_000)))
+        distance = draw(_distances)
         races.append(
             RaceGoal(
                 GoalId(f"r{index}"),
                 TODAY + timedelta(days=offset),
                 draw(_priorities),
                 Sport.RUNNING,
-                draw(_distances),
+                distance,
                 target,
+                min(draw(_ascents), distance // 2),
             )
         )
     fitness = [

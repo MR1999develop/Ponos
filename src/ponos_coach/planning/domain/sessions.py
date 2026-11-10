@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from ponos_coach.activities.domain import Sport
 from ponos_coach.assessment.domain import ThresholdProtocol, pace_zone_starts_s_per_km
-from ponos_coach.goals.domain import SessionType
+from ponos_coach.goals.domain import INTENSE_TYPES, SessionType
 from ponos_coach.load.domain import (
     Physiology,
     equivalence_factor,
@@ -40,12 +40,15 @@ _ROLES = {
 class Shape:
     """A session of a type and duration; `reps` is the number of repetitions of an interval
     session, 0 for a continuous one. `test` makes it the threshold test of that protocol (its
-    type is then `THRESHOLD`, its structure fixed: see `threshold_test_shape`)."""
+    type is then `THRESHOLD`, its structure fixed: see `threshold_test_shape`).
+    `slope_m_per_km` above 0 puts the session on hills, with that mean climb of the race it
+    prepares: an intense type becomes hill repeats, the long run a hilly long run."""
 
     session_type: SessionType
     minutes: int
     reps: int
     test: ThresholdProtocol | None = None
+    slope_m_per_km: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,23 +61,31 @@ class RawBlock:
     repeats: int
 
 
-def _interval_model(session_type: SessionType, phase: Phase) -> defaults.IntervalModel | None:
-    """The interval model of a type in a phase (a missing phase uses the build one)."""
+def _interval_model(
+    session_type: SessionType, phase: Phase, slope_m_per_km: int = 0
+) -> defaults.IntervalModel | None:
+    """The interval model of a type in a phase (a missing phase uses the build one); on hills an
+    intense type has the hill-repeats model of the phase."""
+    if slope_m_per_km > 0 and session_type in INTENSE_TYPES:
+        return defaults.HILL_REPEAT_MODELS.get(phase, defaults.HILL_REPEAT_MODELS[Phase.BUILD])
     return defaults.INTERVAL_MODELS.get(
         (session_type, phase), defaults.INTERVAL_MODELS.get((session_type, Phase.BUILD))
     )
 
 
-def shape_options(session_type: SessionType, phase: Phase, max_minutes: int) -> tuple[Shape, ...]:
+def shape_options(
+    session_type: SessionType, phase: Phase, max_minutes: int, slope_m_per_km: int = 0
+) -> tuple[Shape, ...]:
     """The possible shapes of a type, shortest first, none longer than `max_minutes`.
 
     Continuous sessions last a multiple of 5 minutes between the type's minimum and maximum;
-    interval sessions have 2 to 6 repetitions. Empty if not even the shortest fits.
+    interval sessions have the repetitions of their model. Empty if not even the shortest fits.
+    On hills (`slope_m_per_km` above 0) the shapes carry the slope.
     """
-    model = _interval_model(session_type, phase)
+    model = _interval_model(session_type, phase, slope_m_per_km)
     if model is not None:
         shapes = (
-            Shape(session_type, model.total_minutes(r), r)
+            Shape(session_type, model.total_minutes(r), r, None, slope_m_per_km)
             for r in range(model.min_reps, model.max_reps + 1)
         )
         return tuple(s for s in shapes if s.minutes <= max_minutes)
@@ -82,7 +93,7 @@ def shape_options(session_type: SessionType, phase: Phase, max_minutes: int) -> 
     top = min(defaults.MAX_MINUTES[session_type], max_minutes)
     top -= top % step
     return tuple(
-        Shape(session_type, minutes, 0)
+        Shape(session_type, minutes, 0, None, slope_m_per_km)
         for minutes in range(defaults.MIN_MINUTES[session_type], top + 1, step)
     )
 
@@ -111,7 +122,7 @@ def raw_blocks(shape: Shape, phase: Phase) -> tuple[RawBlock, ...]:
     test is a warm-up, one block of the test and a cool-down, whatever the phase."""
     if shape.test is not None:
         return _threshold_test_blocks(shape.test)
-    model = _interval_model(shape.session_type, phase)
+    model = _interval_model(shape.session_type, phase, shape.slope_m_per_km)
     if model is None:
         return _continuous_blocks(shape)
     blocks = [RawBlock(BlockRole.WARMUP, model.warmup, 2, 1)]
@@ -131,6 +142,21 @@ def _continuous_blocks(shape: Shape) -> tuple[RawBlock, ...]:
         blocks.append(RawBlock(_ROLES[role], minutes, zone, 1))
         left -= minutes
     return tuple(blocks)
+
+
+def indicative_ascent_m(shape: Shape, blocks: Sequence[RawBlock]) -> int:
+    """Elevation gain of a session on hills, in metres rounded to `HILL_ASCENT_ROUND_M`: for the
+    long run the hours at `HILLY_LONG_KM_PER_HOUR` on the mean climb of the race; for hill repeats
+    the minutes of work at `HILL_REPEAT_ASCENT_M_PER_MIN`. 0 on the flat."""
+    if shape.slope_m_per_km <= 0:
+        return 0
+    if shape.session_type is SessionType.LONG:
+        metres = shape.minutes * defaults.HILLY_LONG_KM_PER_HOUR * shape.slope_m_per_km / 60
+    else:
+        work = sum(b.minutes * b.repeats for b in blocks if b.role is BlockRole.WORK)
+        metres = work * defaults.HILL_REPEAT_ASCENT_M_PER_MIN
+    step = defaults.HILL_ASCENT_ROUND_M
+    return max(step, round(metres / step) * step)
 
 
 def zone_minutes(blocks: Sequence[RawBlock | Block]) -> tuple[int, int, int, int, int]:
@@ -230,8 +256,12 @@ def make_session(
     race_pace: RacePace | None = None,
 ) -> PlannedSession:
     """The planned session of a shape: structure with zone ranges, and estimated load. With
-    `race_pace` it is a race-pace session: its work blocks carry the race pace."""
+    `race_pace` it is a race-pace session: its work blocks carry the race pace. On hills there is
+    no pace target (on a slope the pace means nothing): the blocks have the heart rate only."""
     raw = raw_blocks(shape, phase)
+    if shape.slope_m_per_km > 0:
+        ranges = ZoneRanges(ranges.hr, ((None, None),) * 5)
+        race_pace = None
     return PlannedSession(
         sport,
         shape.session_type,
@@ -240,6 +270,7 @@ def make_session(
         session_load(raw, rates),
         race_pace is not None,
         shape.test,
+        indicative_ascent_m(shape, raw),
     )
 
 

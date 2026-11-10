@@ -265,7 +265,8 @@ def goal_row(
     ctl: str = "NULL",
 ) -> str:
     return (
-        "INSERT INTO goal VALUES "  # noqa: S608 - test data
+        "INSERT INTO goal (goal_id, kind, goal_date, priority, sport, distance_m, "  # noqa: S608
+        "target_time_s, ctl) VALUES "
         f"('{goal_id}', '{kind}', '{day}', {priority}, {sport}, {distance}, {target}, {ctl})"
     )
 

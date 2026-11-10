@@ -35,12 +35,12 @@ from ponos_coach.storage.sqlite_database import SqliteDatabase
 _KIND_RACE = "race"
 _KIND_FITNESS = "fitness"
 # Only module constants in the composed queries: no external data (S608).
-_COLUMNS = "goal_id, kind, goal_date, priority, sport, distance_m, target_time_s, ctl"
+_COLUMNS = "goal_id, kind, goal_date, priority, sport, distance_m, target_time_s, ctl, ascent_m"
 _SELECT = "SELECT " + _COLUMNS + " FROM goal "  # noqa: S608
-_INSERT = "INSERT INTO goal (" + _COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)"  # noqa: S608
+_INSERT = "INSERT INTO goal (" + _COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"  # noqa: S608
 _UPDATE = (
     "UPDATE goal SET kind = ?, goal_date = ?, priority = ?, sport = ?, distance_m = ?, "
-    "target_time_s = ?, ctl = ? WHERE goal_id = ?"
+    "target_time_s = ?, ctl = ?, ascent_m = ? WHERE goal_id = ?"
 )
 _AVAILABILITY_COLUMNS = ("days_mask", "sessions_per_week", "long_day", "max_week_min")
 _AVAILABILITY_SELECT = (
@@ -57,7 +57,8 @@ _AVAILABILITY_UPSERT = (
 
 
 def _columns_of(goal: Goal) -> tuple[object, ...]:
-    """The values of a goal after its id: kind, date, priority, sport, distance, time, CTL."""
+    """The values of a goal after its id: kind, date, priority, sport, distance, time, CTL and
+    ascent."""
     if isinstance(goal, RaceGoal):
         return (
             _KIND_RACE,
@@ -67,19 +68,21 @@ def _columns_of(goal: Goal) -> tuple[object, ...]:
             goal.distance_m,
             goal.target_time_s,
             None,
+            goal.ascent_m,
         )
-    return (_KIND_FITNESS, goal.day.isoformat(), None, None, None, None, goal.ctl)
+    return (_KIND_FITNESS, goal.day.isoformat(), None, None, None, None, goal.ctl, 0)
 
 
 def _goal_from(row: Sequence[object]) -> Goal:
     """A goal from a row; a column of the wrong type or an invalid value is a `ValueError`."""
-    goal_id, kind, day, priority, sport, distance, target, ctl = row
+    goal_id, kind, day, priority, sport, distance, target, ctl, ascent = row
     if not (isinstance(goal_id, str) and isinstance(day, str)):
         raise TypeError("unexpected column types")
     if kind == _KIND_RACE and (
         isinstance(priority, str)
         and isinstance(sport, str)
         and isinstance(distance, int)
+        and isinstance(ascent, int)
         and (target is None or isinstance(target, int))
         and ctl is None
     ):
@@ -90,6 +93,7 @@ def _goal_from(row: Sequence[object]) -> Goal:
             Sport(sport),
             distance,
             target,
+            ascent,
         )
     if kind == _KIND_FITNESS and isinstance(ctl, int | float):
         return FitnessGoal(GoalId(goal_id), date.fromisoformat(day), float(ctl))

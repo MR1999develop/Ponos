@@ -221,3 +221,52 @@ def test_every_session_of_a_real_plan_becomes_a_workout_of_the_same_length() -> 
         assert spec.total_seconds == session.minutes * 60
         assert spec.name.startswith(WORKOUT_PREFIX)
         assert all(s.hr_low_bpm <= s.hr_high_bpm for s in spec.steps)
+
+
+# --- Hills -----------------------------------------------------------------------------------
+def hill_plan() -> Plan:
+    goal = race("a", TODAY + timedelta(weeks=20), Priority.A, 30_000, ascent_m=1_500)
+    built = build_plan(inputs([goal], pace=300), TODAY)
+    assert isinstance(built, Plan)
+    return built
+
+
+def test_a_hill_session_has_its_own_name() -> None:
+    repeats = PlannedSession(
+        Sport.RUNNING, SessionType.VO2MAX, 52, (a_block(BlockRole.STEADY, 52),), 50.0, ascent_m=120
+    )
+    hilly_long = PlannedSession(
+        Sport.RUNNING, SessionType.LONG, 90, (a_block(BlockRole.STEADY, 90),), 80.0, ascent_m=520
+    )
+
+    assert workout_from_session(repeats).name == f"{WORKOUT_PREFIX}Hill repeats 52 min"
+    assert workout_from_session(hilly_long).name == f"{WORKOUT_PREFIX}Hilly long 90 min"
+
+
+def test_the_hill_sessions_of_a_real_plan_are_steps_of_heart_rate_only() -> None:
+    sessions = [d.session for d in hill_plan().days if d.session and d.session.ascent_m > 0]
+
+    assert any(s.is_hill_repeats for s in sessions)
+    assert any(s.is_hilly_long for s in sessions)
+    for session in sessions:
+        spec = workout_from_session(session)
+        assert spec.total_seconds == session.minutes * 60
+        assert all(
+            s.pace_slow_s_per_km is None and s.pace_fast_s_per_km is None for s in spec.steps
+        )
+        assert spec.name.startswith(f"{WORKOUT_PREFIX}Hill")
+
+
+def test_a_hill_repeats_workout_alternates_the_uphill_work_with_the_recovery() -> None:
+    repeats = next(
+        d.session for d in hill_plan().days if d.session is not None and d.session.is_hill_repeats
+    )
+
+    kinds = [s.kind for s in workout_from_session(repeats).steps]
+
+    assert kinds[0] is StepKind.WARMUP
+    assert kinds[-1] is StepKind.COOLDOWN
+    body = kinds[1:-1]
+    assert body[0] is StepKind.INTERVAL
+    assert body[-1] is StepKind.INTERVAL
+    assert body[1::2] == [StepKind.RECOVERY] * (len(body) // 2)

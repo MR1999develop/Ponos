@@ -170,8 +170,9 @@ def write_frozen_v1(path: Path) -> None:
         raw.commit()
 
 
-# Columns added by migrations after the ones these frozen tests describe (v8: the track box).
-# The tests of those migrations read them with their own queries.
+# Columns added by migrations after the ones these frozen tests describe (v8: the track box;
+# the race elevation gain of `goal`). The tests of those migrations read them with their own
+# queries.
 LATER_COLUMNS = frozenset(
     {
         "track_south",
@@ -181,6 +182,7 @@ LATER_COLUMNS = frozenset(
         "unanswered_rounds",
         "bike_threshold_bpm",
         "other_threshold_bpm",
+        "ascent_m",
     }
 )
 

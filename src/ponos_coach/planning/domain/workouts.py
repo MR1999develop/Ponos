@@ -152,15 +152,21 @@ def _expand(blocks: tuple[Block, ...]) -> tuple[WorkoutStep, ...]:
 
 
 def workout_from_session(session: PlannedSession) -> WorkoutSpec:
-    """The workout of a planned session: its name is the prefix, the type (or "Threshold
-    test") and the minutes.
+    """The workout of a planned session: its name is the prefix, the type (or "Threshold test",
+    "Hill repeats", "Hilly long") and the minutes. On hills the steps have the heart rate only.
 
     Total duration and heart-rate ranges are those of the blocks, repetition by repetition.
 
     Raises:
         ValueError: the session has more steps than a watch takes (`MAX_WORKOUT_STEPS`).
     """
-    kind = "threshold test" if session.threshold_test is not None else session.session_type.value
+    kind = session.session_type.value
+    if session.threshold_test is not None:
+        kind = "threshold test"
+    elif session.is_hill_repeats:
+        kind = "hill repeats"
+    elif session.is_hilly_long:
+        kind = "hilly long"
     label = kind.replace("_", " ").capitalize()
     name = f"{WORKOUT_PREFIX}{label} {session.minutes} min"
     return WorkoutSpec(name, session.sport, _expand(session.blocks))

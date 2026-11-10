@@ -10,7 +10,7 @@ from datetime import timedelta
 
 from ponos_coach.assessment.domain import NotYet
 from ponos_coach.goals.domain import HARD_TYPES, INTENSE_TYPES, Priority, SessionType
-from ponos_coach.planning.domain import Phase, Plan, PlanDay
+from ponos_coach.planning.domain import Phase, Plan, PlanDay, WeekKind
 
 MAX_RAMP = 5.0
 MAX_INTENSE_SHARE_PERCENT = 25
@@ -29,6 +29,7 @@ EASY_MAX_MINUTES = 90  # the longest easy session
 MAX_RAMP_AFTER_INJURY = 3.0
 CTL_DAYS = 42.0
 EPSILON = 1e-6
+HILL_MIN_SLOPE = 20  # metres of climb per kilometre from which an A race has hill work
 
 
 def _weeks(plan: Plan) -> dict[object, list[PlanDay]]:
@@ -287,6 +288,42 @@ def _check_threshold_test(plan: Plan) -> list[str]:
     return problems
 
 
+def _check_hills(plan: Plan) -> list[str]:
+    """Hill work (a session with an elevation gain) only for a steep A race still to come, only in
+    the build and the peak, never in an unload week, at most one hill-repeats session a week, a
+    long run or an intense session, and never with a pace target."""
+    problems: list[str] = []
+    unload = {w.week_start for w in plan.weeks if w.kind is WeekKind.UNLOAD}
+    steep = sorted(
+        r.day
+        for r in plan.inputs.races
+        if r.priority is Priority.A and r.ascent_m * 1000 >= HILL_MIN_SLOPE * r.distance_m
+    )
+    repeats: dict[object, int] = defaultdict(int)
+    for item in plan.days:
+        session = item.session
+        if session is None or session.ascent_m == 0:
+            continue
+        monday = item.day - timedelta(days=item.day.weekday())
+        if item.phase not in (Phase.BUILD, Phase.PEAK):
+            problems.append(f"{item.day}: hill work in the phase {item.phase}")
+        if monday in unload:
+            problems.append(f"{item.day}: hill work in an unload week")
+        if not any(day > item.day for day in steep):
+            problems.append(f"{item.day}: hill work with no steep A race ahead")
+        if session.session_type not in HARD_TYPES:
+            problems.append(f"{item.day}: hill work in a {session.session_type.value} session")
+        if any(
+            b.pace_slow_s_per_km or b.pace_fast_s_per_km or b.race_pace_s_per_km
+            for b in session.blocks
+        ):
+            problems.append(f"{item.day}: a pace target on a hill session")
+        if session.session_type in INTENSE_TYPES:
+            repeats[monday] += 1
+    problems.extend(f"week {w}: {n} hill-repeats sessions" for w, n in repeats.items() if n > 1)
+    return problems
+
+
 def violations(plan: Plan) -> list[str]:
     """Every broken constraint of the plan, in words (empty = the plan is valid)."""
     return [
@@ -301,4 +338,5 @@ def violations(plan: Plan) -> list[str]:
         *_check_unloads(plan),
         *_check_projection(plan),
         *_check_threshold_test(plan),
+        *_check_hills(plan),
     ]

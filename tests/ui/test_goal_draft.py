@@ -25,6 +25,7 @@ from ponos_coach.ui.goal_draft import (
     draft_of,
     goal_of,
     issues_of,
+    parse_ascent,
     parse_target_time,
     target_time_text,
 )
@@ -207,3 +208,81 @@ def test_a_new_goal_starts_as_an_a_race_of_the_common_marathon() -> None:
     draft = default_draft(GoalFormKind.RACE, RACE_DAY)
 
     assert (draft.priority, draft.distance_m, draft.target_time_text) == (Priority.A, 42_195, "")
+
+
+# --- The elevation gain -----------------------------------------------------------------------
+@pytest.mark.parametrize(
+    ("text", "metres"),
+    [
+        ("", 0),
+        ("  ", 0),
+        ("0", 0),
+        ("1200", 1200),
+        (" 1200 ", 1200),
+        ("1200 m", 1200),
+        ("1200m", 1200),
+        ("1 200", 1200),
+        ("1.200", 1200),
+        ("1,200", 1200),
+        ("30,000", 30_000),
+        ("800", 800),
+    ],
+)
+def test_an_elevation_gain_is_read_tolerantly_and_blank_means_a_flat_race(
+    text: str, metres: int
+) -> None:
+    assert parse_ascent(text) == metres
+
+
+@pytest.mark.parametrize("text", ["abc", "-5", "+5", "12.5", "1,5", "1.2000", "1 2", "٣٠٠", "1e3"])
+def test_an_elevation_gain_that_is_not_whole_metres_is_not_understood(text: str) -> None:
+    assert parse_ascent(text) is None
+
+
+def _with_ascent(text: str, distance_m: int = MARATHON_M) -> GoalDraft:
+    return GoalDraft(GoalFormKind.RACE, RACE_DAY, distance_m=distance_m, ascent_text=text)
+
+
+@pytest.mark.parametrize(
+    ("text", "problem"),
+    [
+        ("steep", GoalProblem.ASCENT_NOT_UNDERSTOOD),
+        ("30001", GoalProblem.ASCENT_OUT_OF_RANGE),
+        ("21098", GoalProblem.ASCENT_TOO_STEEP),  # more than 50% of a marathon
+    ],
+)
+def test_an_elevation_gain_with_a_problem_is_a_problem_of_that_field(
+    text: str, problem: GoalProblem
+) -> None:
+    assert issues_of(_with_ascent(text), [], TODAY) == (GoalIssue(GoalField.ASCENT, problem),)
+
+
+@pytest.mark.parametrize(
+    ("text", "distance_m", "problem"),
+    [
+        ("30000", 80_000, None),  # the largest
+        ("30001", 80_000, GoalProblem.ASCENT_OUT_OF_RANGE),  # one over
+        ("2500", 5_000, None),  # 50%: the steepest allowed
+        ("2501", 5_000, GoalProblem.ASCENT_TOO_STEEP),  # one over
+        ("0", 400, None),
+    ],
+)
+def test_the_limits_of_the_elevation_gain_have_their_on_and_off_points(
+    text: str, distance_m: int, problem: GoalProblem | None
+) -> None:
+    issues = issues_of(_with_ascent(text, distance_m), [], TODAY)
+
+    assert issues == (() if problem is None else (GoalIssue(GoalField.ASCENT, problem),))
+
+
+def test_the_elevation_gain_goes_into_the_goal_and_back_into_the_form() -> None:
+    draft = _with_ascent("1 200", 42_195)
+    goal = goal_of(draft, [], TODAY, GoalId("a"))
+
+    assert isinstance(goal, RaceGoal)
+    assert goal.ascent_m == 1_200
+    assert draft_of(goal).ascent_text == "1200"
+    assert draft_of(race()).ascent_text == ""
+    flat = goal_of(_with_ascent(""), [], TODAY, GoalId("a"))
+    assert isinstance(flat, RaceGoal)
+    assert flat.ascent_m == 0

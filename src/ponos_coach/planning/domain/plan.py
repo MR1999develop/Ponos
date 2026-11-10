@@ -11,7 +11,7 @@ from enum import Enum
 
 from ponos_coach.activities.domain import Sport
 from ponos_coach.assessment.domain import ThresholdProtocol
-from ponos_coach.goals.domain import Priority, SessionType
+from ponos_coach.goals.domain import INTENSE_TYPES, Priority, SessionType
 from ponos_coach.injury.domain import HaltReason
 from ponos_coach.planning.domain.inputs import PlanInputs
 from ponos_coach.planning.domain.phases import Phase
@@ -69,6 +69,9 @@ class PlannedSession:
     (medium for a marathon, threshold for a half marathon or a 10 km or shorter race).
     `threshold_test` marks the threshold test, of that protocol: a hard session (its type is
     `THRESHOLD`) that is not one of the types the user chose.
+    `ascent_m` is the indicative elevation gain in metres of a session on hills, 0 on the flat: an
+    intense session with it is a hill-repeats session (its work is uphill, no pace target), a long
+    one is a hilly long run.
     """
 
     sport: Sport
@@ -78,16 +81,31 @@ class PlannedSession:
     load: float
     race_pace: bool = False
     threshold_test: ThresholdProtocol | None = None
+    ascent_m: int = 0
 
     def __post_init__(self) -> None:
         if self.minutes < 1 or not _is_load(self.load):
             raise ValueError(
                 "a session lasts at least a minute and has a finite load, not negative"
             )
+        if self.ascent_m < 0:
+            raise ValueError("the elevation gain of a session is not negative")
+        if self.ascent_m > 0 and (self.threshold_test is not None or self.race_pace):
+            raise ValueError("a session on hills is neither the threshold test nor at race pace")
         if self.threshold_test is not None and (
             self.session_type is not SessionType.THRESHOLD or self.race_pace
         ):
             raise ValueError("the threshold test is a threshold session, never at race pace")
+
+    @property
+    def is_hill_repeats(self) -> bool:
+        """True for an intense session whose work is run uphill."""
+        return self.ascent_m > 0 and self.session_type in INTENSE_TYPES
+
+    @property
+    def is_hilly_long(self) -> bool:
+        """True for a long run on a hilly course."""
+        return self.ascent_m > 0 and self.session_type is SessionType.LONG
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,10 +118,13 @@ class PlannedRace:
     distance_m: int
     expected_time_s: int
     load: float
+    ascent_m: int = 0
 
     def __post_init__(self) -> None:
         if not self.goal_id or self.distance_m < 1 or self.expected_time_s < 1:
             raise ValueError("a race has an id, a distance and an expected time above zero")
+        if self.ascent_m < 0:
+            raise ValueError("the elevation gain of a race is not negative")
         if not _is_load(self.load):
             raise ValueError("the load of a race is finite and not negative")
 
