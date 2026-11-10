@@ -273,6 +273,11 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
     con default 0 alla lettura: un piano o un giorno congelato salvato prima si rilegge, con
     `ascent_m` 0. `Shape.slope_m_per_km` non si salva (serve solo al motore). Il piano salvato è
     derivato: lo sostituisce il ricalcolo.
+- **Schema v17** (FC dell'attività): `load_cache` svuotata (derivata) con le colonne
+  `avg_bpm` e `max_bpm` (INTEGER 20-250, NULL senza FC), dai campioni usati per il carico
+  (media pesata sul tempo, arrotondata); `LOAD_MODEL_VERSION` 4, quindi tutti i carichi si
+  ricalcolano una volta. Migrazione `LOAD_HEART_RATE_MIGRATION`
+  (`storage/schema_load_heart_rate.py`); test `tests/storage/test_load_heart_rate_store.py`.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.

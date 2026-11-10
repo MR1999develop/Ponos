@@ -499,8 +499,11 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 - One row per activity, sorted by date, most recent first. It is re-sorted by
   clicking a column header.
 - Columns: date and time (in the profile time zone), sport, moving time
-  (h:mm:ss), distance (km), positive ascent (m), load (TRIMPeq), origin of the
-  load (heart rate or estimate) and file format (always FIT).
+  (h:mm:ss), total (elapsed) time (h:mm:ss), distance (km), positive ascent (m),
+  load (TRIMPeq), average and maximum HR (bpm) and origin of the load (heart rate
+  or estimate). Average and maximum HR are those of the samples used for the
+  load: the average is weighted by time and rounded, samples out of the limits
+  do not count; empty without HR (user's request of 2026-11-10).
 - Numbers right-aligned, units in the header, no lines. The cell is empty where
   the data is missing (for example the distance of an indoor session).
 - Without activities, the page invites you to import files.

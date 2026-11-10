@@ -183,6 +183,10 @@
         <translation>Tempo in movimento (h:mm:ss)</translation>
     </message>
     <message>
+        <source>Total time (h:mm:ss)</source>
+        <translation>Tempo totale (h:mm:ss)</translation>
+    </message>
+    <message>
         <source>Distance (km)</source>
         <translation>Distanza (km)</translation>
     </message>
@@ -195,12 +199,16 @@
         <translation>Carico (TRIMPeq)</translation>
     </message>
     <message>
-        <source>Load from</source>
-        <translation>Carico da</translation>
+        <source>Avg HR (bpm)</source>
+        <translation>FC media (bpm)</translation>
     </message>
     <message>
-        <source>Format</source>
-        <translation>Formato</translation>
+        <source>Max HR (bpm)</source>
+        <translation>FC max (bpm)</translation>
+    </message>
+    <message>
+        <source>Load from</source>
+        <translation>Carico da</translation>
     </message>
 </context>
 <context>
