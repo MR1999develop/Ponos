@@ -183,8 +183,6 @@ def test_double_click_opens_the_detail_with_summary_chart_and_time_in_zones(
     assert dialog.zone_model.headerData(4, Qt.Orientation.Horizontal) == "Load (TRIMPeq)"
     zone_loads = [dialog.zone_model.data(dialog.zone_model.index(r, 4)) for r in range(5)]
     assert all(isinstance(text, str) and text for text in zone_loads)
-    assert dialog.shows_track()  # the synthetic runs have positions: the map is beside the summary
-    assert dialog.no_gps_text == ""
     figure = dialog.chart.current_figure
     assert figure is not None
     assert figure.data[0].name == "Heart rate"

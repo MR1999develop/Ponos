@@ -86,8 +86,6 @@ def test_the_licence_texts_travel_with_the_libraries() -> None:
         "/MarkerCluster.Default.css",
         "/map.html",
         "/map.js",
-        "/track.html",
-        "/track.js",
         "/qwebchannel.js",
     ],
 )
@@ -98,7 +96,7 @@ def test_the_page_resources_are_served_from_the_closed_list(path: str) -> None:
     assert resource.content
 
 
-@pytest.mark.parametrize("path", ["/map.html", "/track.html"])
+@pytest.mark.parametrize("path", ["/map.html"])
 def test_the_map_pages_load_only_local_scripts_and_styles(path: str) -> None:
     page = resource_for_path(path)
     assert page is not None
@@ -119,7 +117,7 @@ def test_the_map_pages_load_only_local_scripts_and_styles(path: str) -> None:
     assert "*" not in csp.group(1)
 
 
-@pytest.mark.parametrize("path", ["/map.js", "/track.js"])
+@pytest.mark.parametrize("path", ["/map.js"])
 def test_the_page_script_has_no_network_call_of_its_own(path: str) -> None:
     script = resource_for_path(path)
     assert script is not None

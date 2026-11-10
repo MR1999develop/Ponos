@@ -61,8 +61,6 @@ _LOADERS: dict[str, tuple[Callable[[], bytes], str]] = {
     "/plotly.min.js": (_read_plotly_js, _JS),
     "/map.html": (lambda: _read_page_file("map.html"), _HTML),
     "/map.js": (lambda: _read_page_file("map.js"), _JS),
-    "/track.html": (lambda: _read_page_file("track.html"), _HTML),
-    "/track.js": (lambda: _read_page_file("track.js"), _JS),
     "/qwebchannel.js": (_read_qwebchannel_js, _JS),
     "/leaflet.js": (_vendor_reader("leaflet.js"), _JS),
     "/leaflet.css": (_vendor_reader("leaflet.css"), _CSS),
