@@ -36,7 +36,6 @@ def _detail_of(
         access.archive,
         session.physiology,
         access.decode,
-        access.decode_track,
         timezone=access.zone,
     )(identity)
     if isinstance(result, ExcludedActivity):

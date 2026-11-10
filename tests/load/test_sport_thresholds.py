@@ -14,7 +14,6 @@ from datetime import UTC, date, datetime
 import numpy as np
 import pytest
 
-from ponos_coach.activities.decoding import decode_stored_track
 from ponos_coach.activities.domain import (
     ActivityOrigin,
     ActivityRecord,
@@ -300,7 +299,6 @@ def test_the_detail_of_a_ride_shows_the_zones_of_the_cycling_threshold() -> None
         world.archive,
         world.profile.physiology,
         decode_fit,
-        decode_stored_track,
         timezone=ROME,
         max_file_bytes=50_000_000,
     )(record.identity)

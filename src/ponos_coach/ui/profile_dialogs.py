@@ -19,7 +19,7 @@ from datetime import date
 from functools import partial
 from zoneinfo import ZoneInfo
 
-from PySide6.QtCore import QCoreApplication, QObject, QPoint, Qt, Signal
+from PySide6.QtCore import QCoreApplication, QObject, QPoint, Qt, QTimer, Signal
 from PySide6.QtWidgets import QWidget
 
 from ponos_coach.activities.domain import ActivityIdentity
@@ -241,6 +241,12 @@ class ProfileDialogs(QObject):
         )
         if not loader.load(identity, labels, tokens_for(self._theme())):
             dialog.close()
+            return
+        # the web page loads while the worker decodes: started after the window has painted
+        warm_up = QTimer(dialog)
+        warm_up.setSingleShot(True)
+        warm_up.timeout.connect(dialog.warm_up_chart)
+        warm_up.start(0)
 
     def _cascade(self, dialog: ActivityDetailDialog) -> None:
         """A new window sits a little below and to the right of the last one, so none hides
