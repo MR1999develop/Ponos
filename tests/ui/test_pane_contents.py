@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtWidgets import QLabel, QListWidget, QPushButton, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QLabel, QPushButton, QTabBar, QWidget
 from pytestqt.qtbot import QtBot
 
 from tests.ui.nutrition_support import window_with_days
@@ -27,21 +29,24 @@ def test_the_overview_shows_the_pmc_or_the_two_weekly_charts_one_above_the_other
     window.show()
     page = window.overview_page
     qtbot.waitUntil(lambda: page.current_widget() is page.charts_widget, timeout=WAIT_MS)
-    charts = page.chart_list
-    assert isinstance(charts, QListWidget)
-    assert [charts.item(row).text() for row in range(charts.count())] == [
+    tabs = page.chart_tabs
+    assert isinstance(tabs, QTabBar)
+    assert tabs.shape() in (QTabBar.Shape.RoundedWest, QTabBar.Shape.TriangularWest)
+    assert [tabs.tabText(i) for i in range(tabs.count())] == [
         "Fitness and fatigue",
         "Weekly load and time in zones",
     ]
     assert (
-        charts.mapTo(page, charts.rect().topLeft()).x()
+        tabs.mapTo(page, tabs.rect().topLeft()).x()
         < page.chart.mapTo(page, page.chart.rect().topLeft()).x()
-    )  # the list is on the left of the chart
-    assert charts.currentRow() == 0
+    )  # the tabs are on the left of the chart
+    assert tabs.width() < page.width() // 8  # the column is only as wide as the tabs
+    assert tabs.currentIndex() == 0
     assert page.chart.isVisible()
     assert not page.load_chart.isVisible() and not page.zones_chart.isVisible()
 
-    charts.setCurrentRow(1)
+    tab_rect = tabs.tabRect(1)
+    QTest.mouseClick(tabs, Qt.MouseButton.LeftButton, pos=tab_rect.center())
 
     assert page.load_chart.isVisible() and page.zones_chart.isVisible()
     assert not page.chart.isVisible()
@@ -49,6 +54,12 @@ def test_the_overview_shows_the_pmc_or_the_two_weekly_charts_one_above_the_other
     zones_top = page.zones_chart.mapTo(page, page.zones_chart.rect().topLeft())
     assert load_top.x() == zones_top.x()
     assert load_top.y() + page.load_chart.height() <= zones_top.y()  # the load above the zones
+
+    tabs.setFocus()
+    QTest.keyClick(tabs, Qt.Key.Key_Left)  # the arrows move between the tabs
+
+    assert tabs.currentIndex() == 0 and page.chart.isVisible()
+    assert not page.load_chart.isVisible()
 
 
 def test_the_map_keeps_a_usable_height_in_its_pane(qtbot: QtBot, tmp_path: Path) -> None:
