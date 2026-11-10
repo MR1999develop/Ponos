@@ -68,6 +68,8 @@ from ponos_coach.ui.plan_presentation import (
     PlanState,
     assessments_of,
     notices_of,
+    out_of_reach_of,
+    plan_alert_of,
     plan_of,
     plan_state_of,
     projection_of,
@@ -260,6 +262,7 @@ class PlanUi(QObject):
         self._calendar.selection_changed.connect(self._update_actions)
         self._goals_page.goal_activated.connect(self.change_goal)
         self._goals_page.notice_action_requested.connect(self._on_notice_action)
+        self._calendar.plan_alert_action_requested.connect(self._on_notice_action)
 
     # --- Test accessors --------------------------------------------------------------------
 
@@ -564,8 +567,14 @@ class PlanUi(QObject):
         goals = self._goals()
         by_id = {goal.goal_id.value: goal for goal in goals}
         self._goals_page.show_state(
-            notices_of(state), goals, assessments_of(state), label_lookup(by_id), self._theme()
+            notices_of(state),
+            goals,
+            assessments_of(state),
+            label_lookup(by_id),
+            self._theme(),
+            out_of_reach_of(state),
         )
+        self._calendar.set_plan_alert(plan_alert_of(state))
         self._refresh_layer()
         self._overview_page.set_projection(projection_of(state, goals, race_short_name))
         proposal = retest_proposal_of(state)

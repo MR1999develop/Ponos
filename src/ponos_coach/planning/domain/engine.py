@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
 from ponos_coach.activities.domain import Sport
@@ -34,6 +34,7 @@ from ponos_coach.planning.domain.plan import (
     CloseARaces,
     CtlTargetNotReached,
     GoalBeyondHorizon,
+    LimitedByHours,
     MissingIntenseSessions,
     MissingLongSession,
     NoSessionPossible,
@@ -165,7 +166,20 @@ def build_plan(inputs: PlanInputs, today: date) -> Plan | PlanRefusal:
     session type chosen for the sport of the plan. Otherwise the plan always exists; what is
     wrong with it (a target out of reach, a missing session type, two A races too close...)
     is in its warnings. Same inputs and same `today`, same plan, whatever the order of the goals.
+
+    A CTL target that is missed says why: if more weekly hours would reach it, the warning has
+    the minutes that are enough (found by rebuilding the plan with a higher cap; see
+    `_with_limits`), otherwise it is the ramp or the time.
     """
+    plan = _build_plan(inputs, today)
+    if isinstance(plan, PlanRefusal):
+        return plan
+    return _with_limits(plan, today)
+
+
+def _build_plan(inputs: PlanInputs, today: date) -> Plan | PlanRefusal:
+    """`build_plan` without the analysis of why a CTL target is missed (the warnings of the CTL
+    carry `LimitedByRamp`): what that analysis rebuilds the plan with."""
     refusal = _refusal(inputs, today)
     if refusal is not None:
         return refusal
@@ -189,6 +203,82 @@ def build_plan(inputs: PlanInputs, today: date) -> Plan | PlanRefusal:
     projection = tuple(point for result in results for point in result.points)
     weeks = tuple(_summary(result) for result in results)
     return _assemble(context, today, (days, weeks, projection), recover)
+
+
+# --- Why a CTL target is missed ------------------------------------------------------------------
+def _with_limits(plan: Plan, today: date) -> Plan:
+    """The plan with the cause of every missed CTL target: the weekly hours if a cap up to
+    `HOURS_SEARCH_MAX_MIN` reaches it, else the ramp and the time."""
+    missed = [w for w in plan.warnings if isinstance(w, CtlTargetNotReached)]
+    if not missed:
+        return plan
+    minutes = plan.inputs.availability.max_week_minutes
+    search = _HoursSearch(plan, today, frozenset(w.goal_id for w in missed))
+    warnings = tuple(
+        _with_limit(w, search.minutes_for(w.goal_id), minutes)
+        if isinstance(w, CtlTargetNotReached)
+        else w
+        for w in plan.warnings
+    )
+    return replace(plan, warnings=warnings)
+
+
+def _with_limit(
+    warning: CtlTargetNotReached, needed: int | None, current: int
+) -> CtlTargetNotReached:
+    if needed is None:
+        return warning
+    return replace(warning, limit=LimitedByHours(needed, current))
+
+
+class _HoursSearch:
+    """Which weekly cap reaches the CTL target of a goal: the plan rebuilt with higher caps, on
+    the grid of multiples of `HOURS_SEARCH_STEP_MIN` above the cap set now, up to
+    `HOURS_SEARCH_MAX_MIN`.
+
+    Binary search, assuming that more hours never hurt: the cap found was checked to reach the
+    target, and is the smallest one if the plan is monotone in the hours. The plans rebuilt are
+    memoised and shared by the goals; the largest cap is tried first, so a limit that is not the
+    hours costs one rebuild.
+    """
+
+    def __init__(self, plan: Plan, today: date, missed: frozenset[str]) -> None:
+        step = defaults.HOURS_SEARCH_STEP_MIN
+        self._inputs = plan.inputs
+        self._today = today
+        self._all = missed
+        first = (plan.inputs.availability.max_week_minutes // step + 1) * step
+        self._caps = list(range(first, defaults.HOURS_SEARCH_MAX_MIN + 1, step))
+        self._missed_at: dict[int, frozenset[str]] = {}
+
+    def _missed(self, cap: int) -> frozenset[str]:
+        """The goals still missed with the weekly cap `cap`."""
+        if cap not in self._missed_at:
+            availability = replace(self._inputs.availability, max_week_minutes=cap)
+            rebuilt = _build_plan(replace(self._inputs, availability=availability), self._today)
+            self._missed_at[cap] = (
+                self._all  # a refusal cannot come from more hours: fail closed
+                if isinstance(rebuilt, PlanRefusal)
+                else frozenset(
+                    w.goal_id for w in rebuilt.warnings if isinstance(w, CtlTargetNotReached)
+                )
+            )
+        return self._missed_at[cap]
+
+    def minutes_for(self, goal_id: str) -> int | None:
+        """The smallest cap on the grid that reaches the goal, `None` if even the largest does
+        not."""
+        caps = self._caps
+        if not caps or goal_id in self._missed(caps[-1]):
+            return None
+        low, high = 0, len(caps) - 1  # caps[high] reaches the goal
+        while low < high:
+            middle = (low + high) // 2
+            if goal_id in self._missed(caps[middle]):
+                low = middle + 1
+            else:
+                high = middle
+        return caps[high]
 
 
 # --- Refusals ----------------------------------------------------------------------------------

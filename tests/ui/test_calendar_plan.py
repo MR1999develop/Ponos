@@ -362,10 +362,10 @@ def test_under_the_grid_there_is_no_day_panel(page: CalendarPage) -> None:
     page.select_day(PLAN_TODAY + timedelta(days=9))
 
     assert page.findChild(QWidget, "calendarDayPanel") is None
-    assert [b.text() for b in page.findChildren(QPushButton)] == [
-        "Previous month",
-        "Next month",
-    ]
+    buttons = [
+        b for b in page.findChildren(QPushButton) if b is not page.plan_alert_strip.button
+    ]  # the strip over the grid is hidden until a goal is out of reach
+    assert [b.text() for b in buttons] == ["Previous month", "Next month"]
 
 
 def test_the_tooltip_of_a_day_lists_its_goals(page: CalendarPage) -> None:

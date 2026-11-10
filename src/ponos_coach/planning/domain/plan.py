@@ -220,12 +220,38 @@ class CloseARaces:
 
 
 @dataclass(frozen=True, slots=True)
+class LimitedByRamp:
+    """What stops the CTL is the safe weekly ramp or the time left: more weekly hours would not
+    reach it (not even up to the largest amount the engine tries)."""
+
+
+@dataclass(frozen=True, slots=True)
+class LimitedByHours:
+    """What stops the CTL is the weekly hours: with `minutes_needed` a week (a multiple of the
+    search step) the same plan reaches it; `current_minutes` are the hours the plan was made with,
+    so the warning says both numbers without looking at the inputs."""
+
+    minutes_needed: int
+    current_minutes: int
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.current_minutes < self.minutes_needed:
+            raise ValueError("the minutes needed are more than the ones set now")
+
+
+type CtlLimit = LimitedByRamp | LimitedByHours
+
+
+@dataclass(frozen=True, slots=True)
 class CtlTargetNotReached:
-    """The CTL to reach for a goal is out of reach at the maximum ramp (or the time given)."""
+    """The CTL to reach for a goal is out of reach with the hours given, at the maximum ramp (or
+    the time given); `limit` says which of the two stops it. Plans saved before the field read
+    as `LimitedByRamp`."""
 
     goal_id: str
     projected_ctl: float
     target_ctl: float
+    limit: CtlLimit = LimitedByRamp()
 
 
 @dataclass(frozen=True, slots=True)

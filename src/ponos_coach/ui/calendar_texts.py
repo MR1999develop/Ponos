@@ -22,6 +22,8 @@ from ponos_coach.ui.plan_texts import (
     duration_clock_text,
     goal_kind_cell_text,
     goal_label,
+    out_of_reach_mark_text,
+    out_of_reach_texts,
     phase_text,
     planned_load_text,
     priority_race_text,
@@ -79,7 +81,11 @@ def load_text(load: float) -> str:
 
 def _plan_lines(cell: CalendarDay) -> list[str]:
     """The goal of the day, the planned session and the phase, one short line each."""
-    lines = [goal_kind_cell_text(item.goal) for item in cell.goals]
+    lines = []
+    for item in cell.goals:
+        lines.append(goal_kind_cell_text(item.goal))
+        if item.out_of_reach is not None:
+            lines.append(out_of_reach_mark_text())
     plan = cell.plan
     if plan is None:
         return lines
@@ -128,7 +134,9 @@ def cell_description(cell: CalendarDay) -> str:
     parts = [_long_date(cell)]
     if cell.is_today:
         parts.append(QCoreApplication.translate("Calendar", "Today"))
-    parts.extend(goal_label(item.goal) for item in cell.goals)
+    for item in cell.goals:
+        parts.append(goal_label(item.goal))
+        parts.extend(_out_of_reach_lines(item))
     parts.extend(_planned_sentences(cell))
     parts.extend(span_cell_text(span) for span in cell.problems)
     if cell.activity_count:
@@ -179,8 +187,16 @@ def _planned_sentences(cell: CalendarDay) -> list[str]:
 # --- The day in full (the panel under the grid) ------------------------------------------------
 
 
+def _out_of_reach_lines(item: DayGoal) -> list[str]:
+    """Why the fitness asked for a goal is out of reach and what to do (nothing if it is not)."""
+    if item.out_of_reach is None:
+        return []
+    sentence, remedy = out_of_reach_texts(item.out_of_reach, lambda _goal_id: goal_label(item.goal))
+    return [sentence, remedy]
+
+
 def _goal_detail_lines(item: DayGoal, expected_time_s: int | None) -> list[str]:
-    lines = [goal_label(item.goal)]
+    lines = [goal_label(item.goal), *_out_of_reach_lines(item)]
     if expected_time_s is not None:
         # {time}: the time the plan expects, as h:mm:ss.
         lines.append(

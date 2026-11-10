@@ -21,6 +21,7 @@ from ponos_coach.planning.domain import (
     CloseARaces,
     CtlTargetNotReached,
     GoalBeyondHorizon,
+    LimitedByHours,
     LongDayUnavailable,
     MissingIntenseSessions,
     MissingLongSession,
@@ -136,6 +137,8 @@ def _warning_action(warning: PlanWarning) -> NoticeAction:
         return NoticeAction.OPEN_INJURIES
     if isinstance(warning, MissingLongSession | MissingIntenseSessions | LongDayUnavailable):
         return NoticeAction.TRAINING_SETTINGS
+    if isinstance(warning, CtlTargetNotReached) and isinstance(warning.limit, LimitedByHours):
+        return NoticeAction.TRAINING_SETTINGS  # the hours are what stops it
     if isinstance(
         warning, CloseARaces | CtlTargetNotReached | TargetTimeUnreachable | GoalBeyondHorizon
     ):
@@ -157,6 +160,39 @@ def notices_of(state: PlanState) -> tuple[Notice, ...]:
                 Notice(Severity.WARNING, warning, _warning_action(warning))
                 for warning in plan.warnings
             )
+
+
+@dataclass(frozen=True, slots=True)
+class PlanAlert:
+    """The strip over the calendar: `count` goals whose fitness target is out of reach, and the
+    command that helps. If the weekly hours are what stops every one of them (`all_by_hours`) the
+    command is the training settings; otherwise the goals, where each has its own remedy."""
+
+    count: int
+    all_by_hours: bool
+
+    @property
+    def action(self) -> NoticeAction:
+        """The command the strip offers."""
+        return NoticeAction.TRAINING_SETTINGS if self.all_by_hours else NoticeAction.OPEN_GOALS
+
+
+def out_of_reach_of(state: PlanState) -> Mapping[str, CtlTargetNotReached]:
+    """The goals whose fitness target the plan cannot reach, by goal id (empty without a plan)."""
+    plan = plan_of(state)
+    if plan is None:
+        return {}
+    return {w.goal_id: w for w in plan.warnings if isinstance(w, CtlTargetNotReached)}
+
+
+def plan_alert_of(state: PlanState) -> PlanAlert | None:
+    """The strip to show over the calendar, `None` when no goal is out of reach (so the strip
+    goes away by itself when the warnings do)."""
+    missed = out_of_reach_of(state)
+    if not missed:
+        return None
+    by_hours = all(isinstance(w.limit, LimitedByHours) for w in missed.values())
+    return PlanAlert(len(missed), by_hours)
 
 
 def assessments_of(state: PlanState) -> Mapping[str, TargetAssessment]:

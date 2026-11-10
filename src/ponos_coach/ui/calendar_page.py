@@ -65,6 +65,8 @@ from ponos_coach.ui.calendar_texts import (
 )
 from ponos_coach.ui.flow_layout import FlowLayout
 from ponos_coach.ui.injury_presentation import ProblemSpan
+from ponos_coach.ui.plan_alert_strip import PlanAlertStrip
+from ponos_coach.ui.plan_presentation import PlanAlert
 from ponos_coach.ui.plan_texts import phase_text
 from ponos_coach.ui.tokens import SPACE_2, SPACE_3, SPACE_4, Theme, goal_tints_for, tokens_for
 
@@ -244,6 +246,7 @@ class CalendarPage(QWidget):
     month_changed = Signal(object)  # date: the first day of the month now shown
     selection_changed = Signal(object)  # date | None: the selected day
     day_menu_requested = Signal(object, object)  # CalendarDay, QPoint (global): a day's menu
+    plan_alert_action_requested = Signal(object)  # NoticeAction: the button of the strip
 
     def __init__(self, today: date, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -252,6 +255,7 @@ class CalendarPage(QWidget):
         self._activities: tuple[ProfileActivity, ...] = ()
         self._periods: tuple[GoalPeriod, ...] = ()
         self._layer = PlanLayer()
+        self._plan_alert: PlanAlert | None = None
         self._problems: tuple[ProblemSpan, ...] = ()
         self._theme = Theme.LIGHT
         self._refreshing = False
@@ -262,6 +266,10 @@ class CalendarPage(QWidget):
     # --- Construction -------------------------------------------------------------------
 
     def _build(self) -> None:
+        # On top of the page: a goal out of reach is told before the month, and the strip is not
+        # in the way of the grid when there is nothing to say (it is hidden).
+        self._alert = PlanAlertStrip(self)
+        self._alert.action_requested.connect(self.plan_alert_action_requested)
         top = self._build_navigation()
         self._build_table()
         legends = self._build_legends()
@@ -270,6 +278,7 @@ class CalendarPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(SPACE_4, SPACE_4, SPACE_4, SPACE_4)
         layout.setSpacing(SPACE_3)
+        layout.addWidget(self._alert)
         layout.addLayout(top)
         layout.addWidget(self._table, stretch=1)
         layout.addWidget(legends)
@@ -429,6 +438,16 @@ class CalendarPage(QWidget):
         self._layer = layer
         self._refresh()
 
+    def set_plan_alert(self, alert: PlanAlert | None) -> None:
+        """Show the strip that says goals are out of reach, or hide it when none is."""
+        self._plan_alert = alert
+        self._alert.show_alert(alert, self._theme)
+
+    @property
+    def plan_alert_strip(self) -> PlanAlertStrip:
+        """The strip over the grid."""
+        return self._alert
+
     def set_problems(self, problems: Sequence[ProblemSpan]) -> None:
         """Show the days with an injury or an illness (in words, in the cell and the panel)."""
         self._problems = tuple(problems)
@@ -532,6 +551,7 @@ class CalendarPage(QWidget):
         self.selection_changed.emit(None if cell is None else cell.day)
 
     def _refresh(self) -> None:
+        self._alert.show_alert(self._plan_alert, self._theme)  # the amber follows the theme
         selected = self.selected_day()
         month = build_month(
             self._month_first,
