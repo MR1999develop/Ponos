@@ -22,7 +22,4 @@ Code tidying that was put off: one entry per line, with date and reason.
 - 2026-11-08: `garmin/connect.py` (`ConnectClient`) should check with `getattr` that each `garminconnect.Garmin` method exists before calling it, as `garmin/workouts.py` now does, so a library change is reported as unsupported rather than as a generic error.
 - 2026-11-09: with FIT only, `FileFormat` has a single value: `format_of`, the "Format" column of the table, `file_format` of `Activity` and `ActivityRecord` (and the SQL column) and the `file_format` parameter of `decode_stored_activity` / `decode_stored_track` carry no information any more. Remove them together, with an expand-contract migration for the column, if a second format is no longer expected.
 
-- Plan engine at a very low CTL (about 10) with a race three weeks away: `_fit_week` can fall
-  back to an empty unload week, and the invariant "the taper keeps its sessions" fails. Found
-  when the zone representatives were moved to the exact centres of the new zones (2026-11-10);
-  the values chosen (66, 82, 90, 97, 103) avoid it, but the engine should not depend on them.
+- 2026-11-10: plan engine at a very low CTL (about 10) with a race three weeks away: `_fit_week` can fall back to an empty unload week, and the invariant "the taper keeps its sessions" fails. Found when the zone representatives were moved to the exact centres of the new zones; the values chosen (66, 82, 90, 97, 103) avoid it, but the engine should not depend on them.
