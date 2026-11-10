@@ -118,8 +118,8 @@
         <translation>Dislivello (m)</translation>
     </message>
     <message>
-        <source>Load (hrTSS)</source>
-        <translation>Carico (hrTSS)</translation>
+        <source>Load (TRIMPeq)</source>
+        <translation>Carico (TRIMPeq)</translation>
     </message>
     <message>
         <source>Load from</source>
@@ -215,8 +215,8 @@
         <translation>Dislivello (m)</translation>
     </message>
     <message>
-        <source>Load (hrTSS)</source>
-        <translation>Carico (hrTSS)</translation>
+        <source>Load (TRIMPeq)</source>
+        <translation>Carico (TRIMPeq)</translation>
     </message>
     <message>
         <source>Load from</source>
@@ -799,8 +799,8 @@
         <translation>Durata (h:mm:ss)</translation>
     </message>
     <message>
-        <source>Load (hrTSS)</source>
-        <translation>Carico (hrTSS)</translation>
+        <source>Load (TRIMPeq)</source>
+        <translation>Carico (TRIMPeq)</translation>
     </message>
     <message>
         <source>Energy from</source>
@@ -3279,10 +3279,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Modifica profilo...</translation>
     </message>
     <message>
-        <source>Sport weights...</source>
-        <translation>Pesi degli sport...</translation>
-    </message>
-    <message>
         <source>Previous month</source>
         <translation>Mese precedente</translation>
     </message>
@@ -3369,10 +3365,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Go to Map</source>
         <translation>Vai alla Mappa</translation>
-    </message>
-    <message>
-        <source>Sport weights</source>
-        <translation>Pesi degli sport</translation>
     </message>
     <message>
         <source>Training plan</source>
@@ -4635,8 +4627,12 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Carico giornaliero</translation>
     </message>
     <message>
-        <source>hrTSS per day</source>
-        <translation>hrTSS al giorno</translation>
+        <source>TRIMPeq per day</source>
+        <translation>TRIMPeq al giorno</translation>
+    </message>
+    <message>
+        <source>TRIMPeq per week</source>
+        <translation>TRIMPeq a settimana</translation>
     </message>
     <message>
         <source>Fitness (CTL), plan</source>
@@ -4669,10 +4665,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Week (starting Monday)</source>
         <translation>Settimana (da lunedì)</translation>
-    </message>
-    <message>
-        <source>hrTSS per week</source>
-        <translation>hrTSS a settimana</translation>
     </message>
     <message>
         <source>Time in zone</source>
@@ -4891,8 +4883,8 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         </translation>
     </message>
     <message>
-        <source>{load} hrTSS</source>
-        <translation>{load} hrTSS</translation>
+        <source>{load} TRIMPeq</source>
+        <translation>{load} TRIMPeq</translation>
     </message>
     <message>
         <source>Your heart-rate limits are missing.</source>
@@ -5140,10 +5132,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>The load is being recalculated.</source>
         <translation>Il carico si sta ricalcolando.</translation>
-    </message>
-    <message>
-        <source>Sport weights saved. The load is being recalculated.</source>
-        <translation>Pesi degli sport salvati. Il carico si sta ricalcolando.</translation>
     </message>
     <message>
         <source>Time</source>
@@ -5397,29 +5385,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Do you have any of these?</source>
         <translation>Hai qualcuno di questi segnali?</translation>
-    </message>
-</context>
-<context>
-    <name>SportWeightsDialog</name>
-    <message>
-        <source>The weight of a sport multiplies the load of each of its activities: 1.00 leaves the load as calculated, 0 removes the sport from the load. Changing a weight recalculates every activity.</source>
-        <translation>Il peso di uno sport moltiplica il carico di ogni sua attività: 1,00 lascia il carico com&apos;è calcolato, 0 toglie lo sport dal carico. Cambiare un peso ricalcola ogni attività.</translation>
-    </message>
-    <message>
-        <source>Restore defaults</source>
-        <translation>Ripristina predefiniti</translation>
-    </message>
-    <message>
-        <source>Save weights</source>
-        <translation>Salva pesi</translation>
-    </message>
-    <message>
-        <source>Change at least one weight first.</source>
-        <translation>Prima cambia almeno un peso.</translation>
-    </message>
-    <message>
-        <source>All weights already have their default value.</source>
-        <translation>Tutti i pesi hanno già il valore predefinito.</translation>
     </message>
 </context>
 <context>
@@ -6143,8 +6108,8 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Quota del tempo in zona (%)</translation>
     </message>
     <message>
-        <source>Load (hrTSS)</source>
-        <translation>Carico (hrTSS)</translation>
+        <source>Load (TRIMPeq)</source>
+        <translation>Carico (TRIMPeq)</translation>
     </message>
 </context>
 <context>
