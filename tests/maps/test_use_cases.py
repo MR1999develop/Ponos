@@ -9,7 +9,14 @@ from typing import NoReturn
 
 import pytest
 
-from ponos_coach.maps.domain import TileAddress, TileAddressError
+from ponos_coach.maps.domain import (
+    BACKGROUNDS,
+    CYCLOSM,
+    OPENSTREETMAP,
+    OPENTOPOMAP,
+    TileAddress,
+    TileAddressError,
+)
 from ponos_coach.maps.ports import (
     NO_VALIDATORS,
     TileCacheError,
@@ -21,7 +28,7 @@ from ponos_coach.maps.ports import (
     TileValidators,
 )
 from ponos_coach.maps.use_cases import COOLDOWN_S, TileAnswer, TileProxy
-from tests.fakes.tiles import FakeTileSource, InMemoryTileCache, make_png
+from tests.fakes.tiles import FakeTileSource, InMemoryTileCache, make_png, serving
 
 NOW = datetime(2026, 11, 8, 12, 0, tzinfo=UTC)
 HERE = TileAddress(12, 2200, 1500)
@@ -48,7 +55,7 @@ class Rig:
         self.source = FakeTileSource(script)
         self.cache = InMemoryTileCache()
         self.proxy = TileProxy(
-            self.source, self.cache, lambda: self.clocks.utc, lambda: self.clocks.monotonic
+            serving(self.source), self.cache, lambda: self.clocks.utc, lambda: self.clocks.monotonic
         )
 
 
@@ -231,7 +238,14 @@ def test_a_tile_with_no_reuse_time_is_served_but_not_kept() -> None:
 def test_t_sec_15_a_path_that_is_not_a_tile_is_refused_before_cache_and_server() -> None:
     rig = Rig()
 
-    for bad in ("/12/2200", "/99/0/0", "/1/2/3?key=x", "/../../etc/passwd"):
+    for bad in (
+        "/12/2200",
+        "/openstreetmap/99/0/0",
+        "/1/2/3?key=x",
+        "/../../etc/passwd",
+        "/unknown/1/0/0",
+        "/opentopomap/18/0/0",
+    ):
         with pytest.raises(TileAddressError):
             rig.proxy.serve(bad)
 
@@ -241,7 +255,7 @@ def test_t_sec_15_a_path_that_is_not_a_tile_is_refused_before_cache_and_server()
 def test_serve_reads_the_path_the_page_writes() -> None:
     rig = Rig()
 
-    answer = rig.proxy.serve("/12/2200/1500.png")
+    answer = rig.proxy.serve("/openstreetmap/12/2200/1500.png")
 
     assert answer.png == rig.source.png
     assert rig.source.calls == [(12, 2200, 1500, NO_VALIDATORS)]
@@ -263,7 +277,7 @@ class BrokenCache(InMemoryTileCache):
 def test_a_cache_that_cannot_be_used_does_not_stop_the_map() -> None:
     rig = Rig()
     rig.proxy = TileProxy(
-        rig.source, BrokenCache(), lambda: rig.clocks.utc, lambda: rig.clocks.monotonic
+        serving(rig.source), BrokenCache(), lambda: rig.clocks.utc, lambda: rig.clocks.monotonic
     )
 
     answer = rig.proxy.tile(HERE)
@@ -283,9 +297,70 @@ def test_a_cache_that_cannot_renew_still_serves_the_confirmed_tile() -> None:
     rig = Rig([TileImage(png, 60, VALIDATORS), TileNotModified(60)])
     rig.cache = RenewFailsCache()
     rig.proxy = TileProxy(
-        rig.source, rig.cache, lambda: rig.clocks.utc, lambda: rig.clocks.monotonic
+        serving(rig.source), rig.cache, lambda: rig.clocks.utc, lambda: rig.clocks.monotonic
     )
     rig.proxy.tile(HERE)
     rig.clocks.advance(61)
 
     assert rig.proxy.tile(HERE) == TileAnswer(png, None)
+
+
+# --- One source and one cool-down per background ------------------------------------------------
+
+
+class Rig3:
+    """A proxy with a fake source for each background and one shared cache."""
+
+    def __init__(self) -> None:
+        self.clocks = Clocks()
+        self.sources = {b: FakeTileSource() for b in BACKGROUNDS}
+        self.cache = InMemoryTileCache()
+        self.proxy = TileProxy(
+            dict(self.sources), self.cache, lambda: self.clocks.utc, lambda: self.clocks.monotonic
+        )
+
+
+def test_each_background_is_asked_of_its_own_source_and_cached_apart() -> None:
+    rig = Rig3()
+    for background in BACKGROUNDS:
+        rig.sources[background].png = make_png(width=200 + len(background.key))
+
+    pngs = {b: rig.proxy.serve(f"/{b.key}/5/3/3").png for b in BACKGROUNDS}
+    again = {b: rig.proxy.serve(f"/{b.key}/5/3/3").png for b in BACKGROUNDS}
+
+    assert len({*pngs.values()}) == 3  # a tile of one background never serves for another
+    assert pngs == again
+    assert all(len(rig.sources[b].calls) == 1 for b in BACKGROUNDS)  # the second round: cache
+
+
+def test_a_refusal_of_one_server_does_not_stop_the_others() -> None:
+    rig = Rig3()
+    rig.sources[OPENTOPOMAP] = FakeTileSource([TileUnavailable(TileProblem.REFUSED)])
+    rig.proxy = TileProxy(
+        dict(rig.sources), rig.cache, lambda: rig.clocks.utc, lambda: rig.clocks.monotonic
+    )
+
+    refused = rig.proxy.serve("/opentopomap/5/1/1")
+    still_refused = rig.proxy.serve("/opentopomap/5/1/2")  # not asked: the cool-down holds
+    other = rig.proxy.serve("/cyclosm/5/1/1")
+    osm = rig.proxy.serve("/openstreetmap/5/1/1")
+
+    assert refused.problem is TileProblem.REFUSED and still_refused.problem is TileProblem.REFUSED
+    assert len(rig.sources[OPENTOPOMAP].calls) == 1
+    assert other.problem is None and other.png is not None
+    assert osm.problem is None and osm.png is not None
+
+
+def test_a_background_without_a_source_is_a_problem_not_a_crash() -> None:
+    rig = Rig3()
+    proxy = TileProxy(
+        {OPENSTREETMAP: rig.sources[OPENSTREETMAP]},
+        rig.cache,
+        lambda: rig.clocks.utc,
+        lambda: rig.clocks.monotonic,
+    )
+
+    answer = proxy.serve("/cyclosm/5/1/1")
+
+    assert answer == TileAnswer(None, TileProblem.INVALID_RESPONSE)
+    assert rig.sources[CYCLOSM].calls == []

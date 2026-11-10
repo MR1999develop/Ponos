@@ -26,6 +26,7 @@ from time import perf_counter
 import pytest
 
 from ponos_coach.maps.domain import (
+    OPENSTREETMAP,
     TileAddress,
     TileAddressError,
     parse_cache_limit_gib,
@@ -35,7 +36,7 @@ from ponos_coach.maps.ports import TileImage, TileProblem, TileValidators
 from ponos_coach.maps.use_cases import COOLDOWN_S, TileProxy
 from ponos_coach.platform.tile_cache import CACHE_FILE_NAME, DiskTileCache, accounted_bytes
 from ponos_coach.platform.tile_http import HttpTileSource, TileEndpoint
-from tests.fakes.tiles import make_png
+from tests.fakes.tiles import make_png, serving
 
 USER_AGENT = "PonosCoach/0.0.1 (+https://example.org/contact)"
 NOW = datetime(2026, 11, 8, 12, 0, tzinfo=UTC)
@@ -145,7 +146,8 @@ class Stack:
     def __init__(self, server: Server, folder: Path, *, limit: int = 8 * 1024 * 1024) -> None:
         self.clocks = Clocks()
         self.source = HttpTileSource(
-            TileEndpoint("http", "127.0.0.1", server.port),
+            OPENSTREETMAP,
+            endpoint=TileEndpoint("http", "127.0.0.1", server.port),
             user_agent=USER_AGENT,
             timeout_s=0.4,
             total_timeout_s=0.8,
@@ -153,7 +155,7 @@ class Stack:
         )
         self.cache = DiskTileCache(folder / "cache", limit)
         self.proxy = TileProxy(
-            self.source, self.cache, lambda: self.clocks.utc, lambda: self.clocks.monotonic
+            serving(self.source), self.cache, lambda: self.clocks.utc, lambda: self.clocks.monotonic
         )
 
 
@@ -300,7 +302,10 @@ def test_t_map_10_a_dead_port_is_a_network_problem_not_a_crash(tmp_path: Path) -
     port = closed.port
     closed.close()
     source = HttpTileSource(
-        TileEndpoint("http", "127.0.0.1", port), user_agent=USER_AGENT, timeout_s=0.3
+        OPENSTREETMAP,
+        endpoint=TileEndpoint("http", "127.0.0.1", port),
+        user_agent=USER_AGENT,
+        timeout_s=0.3,
     )
 
     result = source.fetch(0, 0, 0)
@@ -462,6 +467,9 @@ def test_t_sec_14_the_addresses_asked_are_in_no_log_and_no_error(
         "../0/0/0", "0/0/0/0", "0/0", "-1/0/0", "0/-1/0", "20/0/0", "3/8/0", "3/0/8", "a/b/c",
         "0/0/0.png/", "0/0/0.png?x=1", "0/0/0%2e", "0/0/0.PNG", " 0/0/0", "0/0/0 ", "0/0/0\n",
         "0//0", "//0/0/0", "0x1/0/0", "1e1/0/0", "0/0/0" + "9" * 40, "",
+        "openstreetmap/0/0", "openstreetmap/20/0/0", "opentopomap/18/0/0", "cyclosm/21/0/0",
+        "Openstreetmap/0/0/0", "tile.openstreetmap.org/0/0/0", "x/0/0/0", "../openstreetmap/0/0/0",
+        "openstreetmap/../0/0/0", "openstreetmap/0/0/0/0", "http:/0/0/0", "openstreetmap/0/0/0?a=1",
     ],
 )  # fmt: skip
 def test_t_sec_15_hostile_tile_paths_are_rejected_before_any_request(

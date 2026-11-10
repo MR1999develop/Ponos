@@ -49,7 +49,7 @@ def test_t_sec_14_a_hostile_view_is_dropped_and_counted(value: float) -> None:
         assert all(math.isfinite(v) for v in (box.south, box.west, box.north, box.east))
 
 
-@pytest.mark.parametrize("zoom", [-1, 20, 2**31, -(2**31), 2**70])
+@pytest.mark.parametrize("zoom", [-1, 21, 2**31, -(2**31), 2**70])
 def test_t_sec_14_a_zoom_outside_the_map_is_dropped(zoom: int) -> None:
     bridge = bridge_with_counts()
     seen: list[object] = []

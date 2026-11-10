@@ -24,6 +24,12 @@ from ponos_coach.activities.domain import (
 )
 from ponos_coach.activities.map_queries import MapTrack, SearchResult
 from ponos_coach.load.activity_profile import ActivityProfileData
+from ponos_coach.maps.domain import (
+    MAX_TILE_ZOOM,
+    MapBackground,
+    TileAddressError,
+    background_by_key,
+)
 from ponos_coach.ui.map_style import sport_index
 
 PAGE_FUNCTIONS: Final = frozenset(
@@ -42,9 +48,10 @@ PAGE_FUNCTIONS: Final = frozenset(
         "zoomBy",
         "clearProfile",
         "refreshTiles",
+        "setBackground",
     }
 )
-MAX_MAP_ZOOM: Final = 19  # highest zoom the page allows (the topographic tiles end there)
+MAX_MAP_ZOOM: Final = MAX_TILE_ZOOM  # highest zoom the page allows (each background has its own)
 _MAX_LONGITUDE_ABS: Final = 3600.0  # ten turns of the globe: a map never shows more
 _COORDINATE_DECIMALS: Final = 5  # about one metre
 _JSON_SEPARATORS: Final = (",", ":")
@@ -84,6 +91,26 @@ def parse_view(
         return MapView(GeoBox.from_view(s, w, n, e), zoom)
     except ValueError:
         return None
+
+
+def parse_background_key(value: object) -> MapBackground | None:
+    """The map background the page names by its key, or `None` if it is not one of the closed
+    set (the page can only choose among the backgrounds Python offers)."""
+    try:
+        return background_by_key(value)
+    except TileAddressError:
+        return None
+
+
+def background_message(background: MapBackground, tile_url: str) -> dict[str, object]:
+    """What the page needs to show a background: its key (for the control), the tile URL
+    template, the highest zoom and the credit that must always be visible."""
+    return {
+        "key": background.key,
+        "tileUrl": tile_url,
+        "maxZoom": background.max_zoom,
+        "attribution": background.attribution,
+    }
 
 
 def parse_activity_index(value: object, count: int) -> int | None:

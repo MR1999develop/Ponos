@@ -13,21 +13,26 @@ from __future__ import annotations
 from PySide6.QtCore import QUrl
 from PySide6.QtWebEngineCore import QWebEngineUrlScheme
 
-from ponos_coach.maps.domain import TileAddressError, parse_tile_path
+from ponos_coach.maps.domain import MapBackground, TileAddressError, parse_tile_path
 
 APP_SCHEME = "ponos"
 APP_HOST = "app"
 TILES_HOST = "tiles"
 APP_PAGE_URL = f"{APP_SCHEME}://{APP_HOST}/chart.html"
 APP_MAP_URL = f"{APP_SCHEME}://{APP_HOST}/map.html"
-TILE_URL_TEMPLATE = f"{APP_SCHEME}://{TILES_HOST}/{{z}}/{{x}}/{{y}}"  # Leaflet fills the braces
+
 
 _registered = False
 
 
+def tile_url_template(background: MapBackground) -> str:
+    """`ponos://tiles/{key}/{z}/{x}/{y}` of a background: Leaflet fills `{z}`, `{x}` and `{y}`."""
+    return f"{APP_SCHEME}://{TILES_HOST}/{background.key}/{{z}}/{{x}}/{{y}}"
+
+
 def is_tile_request(url: QUrl) -> bool:
-    """True for `ponos://tiles/z/x/y` with integers inside the tile pyramid (and nothing else:
-    no query, no fragment, no credentials, no port)."""
+    """True for `ponos://tiles/source/z/x/y` with a known source and integers inside the tile
+    pyramid of that source (and nothing else: no query, no fragment, no credentials, no port)."""
     if url.scheme() != APP_SCHEME or url.host() != TILES_HOST:
         return False
     if url.hasQuery() or url.hasFragment() or url.port() != -1 or url.userInfo():
@@ -40,8 +45,8 @@ def is_tile_request(url: QUrl) -> bool:
 
 
 def is_request_allowed(url: QUrl) -> bool:
-    """True for `ponos://app/...` and for tile addresses `ponos://tiles/z/x/y`: http, https, file,
-    data, blob and every other are forbidden."""
+    """True for `ponos://app/...` and for tile addresses `ponos://tiles/source/z/x/y`: http,
+    https, file, data, blob and every other are forbidden."""
     if url.scheme() != APP_SCHEME:
         return False
     return url.host() == APP_HOST or is_tile_request(url)

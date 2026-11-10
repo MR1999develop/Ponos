@@ -17,16 +17,18 @@ from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QObject, QSettings
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import QMenuBar, QWidget
 
 from ponos_coach.activities.domain import ActivityIdentity, identity_key
 from ponos_coach.activities.map_queries import AreaView, SearchResult
+from ponos_coach.maps.domain import BACKGROUNDS
 from ponos_coach.ui.activity_filters import SharedFilterState
 from ponos_coach.ui.activity_table import ActivitiesPage
 from ponos_coach.ui.chart_view import ChartEngine
 from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.filter_bar import FilterBar
+from ponos_coach.ui.map_background import BackgroundChoice
 from ponos_coach.ui.map_controller import MapController
 from ponos_coach.ui.map_page import MapPage
 from ponos_coach.ui.map_query_host import MapQueryHost
@@ -85,10 +87,12 @@ class MapUi(QObject):
         self._filters = SharedFilterState(settings, self)
         self._bar = FilterBar(self._filters, theme, window)
         self._controller = MapController(controller, services.host, self._filters, self)
+        self._background = BackgroundChoice(settings, self)
         self._page = MapPage(
             engine,
             self._controller,
             tiles=services.tiles,
+            background=self._background,
             settings=settings,
             theme=theme,
             zone=zone,
@@ -125,6 +129,11 @@ class MapUi(QObject):
         return self._page
 
     @property
+    def background(self) -> BackgroundChoice:
+        """The map background in use (the Map menu and the control on the map change it)."""
+        return self._background
+
+    @property
     def settings_dialog(self) -> MapSettingsDialog | None:
         """The content of the Map settings page."""
         form = self._settings_page.form
@@ -146,6 +155,7 @@ class MapUi(QObject):
         return action
 
     def _build_actions(self) -> None:
+        self._build_background_actions()
         self._actions = {
             "show": self._action(self.tr("Show activities and map"), "Ctrl+M", self._show_map),
             "fit": self._action(self.tr("Show all activities"), "Ctrl+0", self._page.request_fit),
@@ -166,11 +176,42 @@ class MapUi(QObject):
             ),
         }
 
+    def _build_background_actions(self) -> None:
+        """One exclusive, checkable command for each map background, kept in step with the
+        choice (which the control on the map also changes). Ctrl+Shift+1..3."""
+        group = QActionGroup(self._window)
+        group.setExclusive(True)
+        self._background_actions: dict[str, QAction] = {}
+        for number, background in enumerate(BACKGROUNDS, start=1):
+            action = QAction(background.label, self._window)  # proper names: not translated
+            action.setCheckable(True)
+            action.setChecked(background == self._background.current)
+            action.setShortcut(QKeySequence(f"Ctrl+Shift+{number}"))
+            action.triggered.connect(
+                lambda _checked=False, chosen=background: self._background.choose(chosen)
+            )
+            group.addAction(action)
+            self._background_actions[background.key] = action
+        self._background.changed.connect(self._show_background_choice)
+
+    def _show_background_choice(self, background: object) -> None:
+        for key, action in self._background_actions.items():
+            action.setChecked(key == getattr(background, "key", None))
+
+    @property
+    def background_actions(self) -> dict[str, QAction]:
+        """The commands of the Map > Background submenu, by background key."""
+        return self._background_actions
+
     def build_menu(self, menu_bar: QMenuBar) -> None:
         """Add the Map menu."""
         menu = menu_bar.addMenu(self.tr("Map"))
         for name in ("show", "fit", "zoom_in", "zoom_out"):
             menu.addAction(self._actions[name])
+        menu.addSeparator()
+        background_menu = menu.addMenu(self.tr("Background"))
+        for action in self._background_actions.values():
+            background_menu.addAction(action)
         menu.addSeparator()
         menu.addAction(self._actions["filter"])
         menu.addAction(self._actions["clear_filters"])

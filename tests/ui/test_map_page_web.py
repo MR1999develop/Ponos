@@ -139,8 +139,8 @@ def test_the_page_asks_for_tiles_only_through_the_app_scheme_and_the_proxy(
     _window, view = window_with_page(qtbot, tmp_path, settings, tiles)
 
     qtbot.waitUntil(lambda: len(tiles.source.calls) > 0, timeout=WAIT_MS)
-    assert all(0 <= z <= 19 for z, _x, _y, _validators in tiles.source.calls)
-    assert page_state(qtbot, view)["tileUrl"] == "ponos://tiles/{z}/{x}/{y}"
+    assert all(0 <= z <= 20 for z, _x, _y, _validators in tiles.source.calls)
+    assert page_state(qtbot, view)["tileUrl"] == "ponos://tiles/openstreetmap/{z}/{x}/{y}"
     assert not [r for r in caplog.records if "Blocked web request" in r.getMessage()]
 
 
@@ -154,7 +154,8 @@ def test_the_page_cannot_reach_the_network_or_other_hosts(
         qtbot,
         view,
         'window.__done = 0; for (const u of ["http://127.0.0.1:9/x.png", "https://example.com/y.png",'
-        ' "file:///C:/Windows/win.ini", "ponos://evil/z.png", "ponos://tiles/99/0/0"]) {'
+        ' "file:///C:/Windows/win.ini", "ponos://evil/z.png",'
+        ' "ponos://tiles/openstreetmap/99/0/0"]) {'
         " const i = new Image(); i.onerror = () => { window.__done += 1; }; i.src = u; }",
     )
 
@@ -166,11 +167,20 @@ def test_the_page_cannot_reach_the_network_or_other_hosts(
     assert blocked
     assert all(call[:3] != (99, 0, 0) for call in tiles.source.calls)
     for url in (
-        "ponos://tiles/3/4/5",
+        "ponos://tiles/openstreetmap/3/4/5",
+        "ponos://tiles/opentopomap/17/4/5",
+        "ponos://tiles/cyclosm/20/4/5",
         "ponos://app/map.js",
     ):
         assert is_request_allowed(QUrl(url))
-    for url in ("ponos://tiles/99/0/0", "ponos://tiles/3/4/5?x=1", "ponos://tiles/3/4/5/6"):
+    for url in (
+        "ponos://tiles/openstreetmap/99/0/0",
+        "ponos://tiles/openstreetmap/3/4/5?x=1",
+        "ponos://tiles/openstreetmap/3/4/5/6",
+        "ponos://tiles/3/4/5",  # no source
+        "ponos://tiles/opentopomap/18/0/0",  # beyond the highest zoom of that source
+        "ponos://tiles/google/3/4/5",  # a source that is not in the set
+    ):
         assert not is_request_allowed(QUrl(url))
 
 
@@ -469,7 +479,7 @@ def test_the_track_is_drawn_by_heart_rate_zone_with_the_stretches_without_hr_gre
 # --- Messages from the page (T-SEC-14) ------------------------------------------------------
 
 
-def test_the_page_can_reach_one_object_with_five_slots_and_nothing_else(
+def test_the_page_can_reach_one_object_with_six_slots_and_nothing_else(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     _window, view = window_with_page(qtbot, tmp_path, settings)
@@ -492,6 +502,7 @@ def test_the_page_can_reach_one_object_with_five_slots_and_nothing_else(
     slots = {
         "activityClicked",
         "activityOpened",
+        "backgroundChosen",
         "pageReady",
         "pointHovered",
         "pointLeft",
