@@ -25,6 +25,7 @@ from ponos_coach.ui.diagnostics import (
     SafeFormatter,
     configure_logging,
     exception_chain,
+    exception_place,
     install_exception_hooks,
     neutralize,
 )
@@ -186,8 +187,10 @@ def test_the_main_thread_hook_logs_and_notifies_but_lets_ctrl_c_through(tmp_path
 
     assert calls == ["notified"]
     text = log_file.read_text(encoding="utf-8")
-    assert "Unhandled exception in the main thread: OSError" in text
+    assert "Unhandled exception in the main thread: OSError at test_diagnostics.py:" in text
+    assert "in test_the_main_thread_hook_logs_and_notifies_but_lets_ctrl_c_through" in text
     assert USER_FOLDER not in text
+    assert str(tmp_path) not in text and "\\" not in text.split(" at ")[-1]  # no local path
 
 
 def test_a_failing_notification_is_logged_and_does_not_raise(tmp_path: Path) -> None:
@@ -249,3 +252,16 @@ def test_the_composition_root_logs_to_the_user_log_folder_and_installs_the_hooks
     text = (logs / LOG_FILE_NAME).read_text(encoding="utf-8")
     assert "Ponos Coach" in text
     assert "started (Python" in text
+
+
+def test_the_place_of_an_error_is_the_innermost_frame_of_the_application_with_no_local_path() -> (
+    None
+):
+    try:
+        exception_chain(object())  # type: ignore[arg-type]  # fails inside the application code
+    except AttributeError:
+        place = exception_place(sys.exc_info()[2])
+
+    assert place.startswith("ponos_coach/ui/diagnostics.py:")
+    assert place.endswith(" in exception_chain")
+    assert exception_place(None) == "an unknown place"

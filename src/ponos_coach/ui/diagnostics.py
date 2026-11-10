@@ -48,6 +48,9 @@ def _type_name(kind: type[BaseException]) -> str:
     return f"{kind.__module__}.{kind.__qualname__}"
 
 
+_PACKAGE = "ponos_coach"  # the frames of the application's code
+
+
 def exception_chain(error: BaseException) -> str:
     """The types of an exception and its causes, outermost first: `A <- B <- C`. Never the texts."""
     names: list[str] = []
@@ -59,6 +62,27 @@ def exception_chain(error: BaseException) -> str:
         implicit = None if current.__suppress_context__ else current.__context__
         current = current.__cause__ or implicit
     return " <- ".join(names)
+
+
+def exception_place(tb: TracebackType | None) -> str:
+    """Where an exception was raised, as `file:line in function`: the innermost frame of the
+    application's code (`ponos_coach/...`), or else the innermost frame with only its file name.
+    Never a value and never a local path: just the place in the code, so that the cause of an
+    unhandled error can be found from the log."""
+    frames: list[tuple[str, int, str]] = []
+    while tb is not None:
+        code = tb.tb_frame.f_code
+        frames.append((code.co_filename, tb.tb_lineno, code.co_name))
+        tb = tb.tb_next
+    if not frames:
+        return "an unknown place"
+    for filename, line, function in reversed(frames):
+        parts = Path(filename).parts
+        if _PACKAGE in parts:
+            inside = "/".join(parts[len(parts) - 1 - parts[::-1].index(_PACKAGE) :])
+            return f"{inside}:{line} in {function}"
+    filename, line, function = frames[-1]
+    return f"{Path(filename).name}:{line} in {function}"
 
 
 class SafeFormatter(logging.Formatter):
@@ -130,13 +154,19 @@ def install_exception_hooks(notify: Callable[[], None]) -> None:
     """Last-resort handler: log the unhandled error and notify the user.
 
     Applies to the main thread (`sys.excepthook`, used by Qt for exceptions in
-    slots) and to the other threads (`threading.excepthook`). Only the types are logged.
+    slots) and to the other threads (`threading.excepthook`). Only the types and the place in the
+    code are logged (`exception_place`), never the messages.
     """
     logger = logging.getLogger(LOGGER_NAME)
 
-    def report(where: str, exc_type: type[BaseException], exc_value: BaseException | None) -> None:
+    def report(
+        where: str,
+        exc_type: type[BaseException],
+        exc_value: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         chain = exception_chain(exc_value) if exc_value is not None else _type_name(exc_type)
-        logger.critical("Unhandled exception in %s: %s", where, chain)
+        logger.critical("Unhandled exception in %s: %s at %s", where, chain, exception_place(tb))
         try:
             notify()
         except Exception as error:  # the last-resort handler must not fail in turn
@@ -150,12 +180,12 @@ def install_exception_hooks(notify: Callable[[], None]) -> None:
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, _tb)
             return
-        report("the main thread", exc_type, exc_value)
+        report("the main thread", exc_type, exc_value, _tb)
 
     def on_thread(args: threading.ExceptHookArgs) -> None:
         if args.exc_type is SystemExit:
             return
-        report("a worker thread", args.exc_type, args.exc_value)
+        report("a worker thread", args.exc_type, args.exc_value, args.exc_traceback)
 
     sys.excepthook = on_main
     threading.excepthook = on_thread
