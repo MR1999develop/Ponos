@@ -519,3 +519,20 @@ def test_the_window_save_button_is_always_in_view_and_saves_the_page_in_view(
     wait_profile_saved(qtbot, window)
     assert not shown.page(SettingsCategory.PROFILE).is_dirty
     assert not save.isEnabled()
+
+
+def test_an_untouched_profile_page_has_nothing_to_save_and_recomputes_nothing(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    # The user's report of 2026-11-10: "Save changes" with nothing changed recalculated all the
+    # data. With nothing typed the page is clean, the buttons are off and a save request is a no-op.
+    window = window_with_activities(qtbot, tmp_path, settings)
+    shown = window.settings_window
+    window.edit_profile_action.trigger()
+    dialog = open_edit_dialog(qtbot, window)
+    qtbot.wait(200)  # the history and the values in force arrive from the data thread
+
+    assert not dialog.has_unsaved_changes()
+    assert shown.category_label(SettingsCategory.PROFILE) == "Profile"
+    assert not shown.save_button.isEnabled()
+    assert not dialog.save_button.isEnabled()
