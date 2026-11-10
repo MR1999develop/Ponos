@@ -3494,6 +3494,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Seleziona un&apos;attività per vederne la traccia. I cerchi con un numero raggruppano le partenze delle attività.</translation>
     </message>
     <message>
+        <source>{background}: {problem}</source>
+        <translation>{background}: {problem}</translation>
+    </message>
+    <message>
         <source>Wait a few minutes and move the map again. Tracks, filters and the list work without it.</source>
         <translation>Aspetta qualche minuto e sposta di nuovo la mappa. Tracce, filtri ed elenco funzionano anche senza.</translation>
     </message>
@@ -3632,6 +3636,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>Zoom out</source>
         <translation>Riduci</translation>
     </message>
+    <message>
+        <source>Map background</source>
+        <translation>Sfondo della mappa</translation>
+    </message>
 </context>
 <context>
     <name>MapSettingsDialog</name>
@@ -3705,6 +3713,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Clear filters</source>
         <translation>Azzera i filtri</translation>
+    </message>
+    <message>
+        <source>Background</source>
+        <translation>Sfondo</translation>
     </message>
     <message>
         <source>Open the Activities section first.</source>
