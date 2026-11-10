@@ -67,13 +67,11 @@ from tests.builders import IMPORTED_AT, absolute_path
 from tests.fakes.archive import InMemoryActivityArchive
 from tests.fakes.profile_storage import InMemoryProfileStorage
 from tests.fixtures.generators import fit_writer as fw
-from tests.food_support import load_food_table
 
 ROME = ZoneInfo("Europe/Rome")
 DAY = date(2026, 3, 2)
 BORN = date(1996, 3, 1)  # 30 years old on DAY
 PHYSIOLOGY = Physiology(HeartRateLimits(50, 190), ThresholdHeartRate(170), Sex.MALE)
-FOODS = load_food_table()
 
 
 class CountingArchive(InMemoryActivityArchive):
@@ -156,7 +154,7 @@ class Rig:
             p.weights, p.fixed_data, p.activity_levels, p.meal_times, p.goal_periods,
             p.lean_masses,
         )  # fmt: skip
-        return PlanDayNutrition(sources, decode, ROME, FOODS)(day)  # type: ignore[arg-type]
+        return PlanDayNutrition(sources, decode, ROME)(day)  # type: ignore[arg-type]
 
     def report(self, day: date = DAY) -> DayNutritionReport:
         result = self.plan(day)
@@ -212,18 +210,17 @@ def test_the_weight_is_the_latest_entry_and_the_first_one_covers_earlier_days() 
 # --- A day without activities -------------------------------------------------------------
 
 
-def test_a_rest_day_gets_the_three_meals_with_example_foods() -> None:
+def test_a_rest_day_gets_the_three_meals() -> None:
     report = Rig().report()
 
     assert report.activities == ()
     assert report.nutrition.level is DayLoadLevel.REST
     assert (report.nutrition.basal_kcal, report.nutrition.expenditure_kcal) == (1780, 2492)
-    assert [m.meal.slots for m in report.meals] == [
+    assert [m.slots for m in report.nutrition.meals] == [
         (MealSlot.BREAKFAST,),
         (MealSlot.LUNCH,),
         (MealSlot.DINNER,),
     ]
-    assert all(m.examples for m in report.meals)
     assert report.goal == MaintenanceGoal()
     assert report.unreadable_activities == 0
 
@@ -336,7 +333,7 @@ def test_the_local_start_time_of_the_activity_decides_the_meals() -> None:
 
     (activity,) = report.activities
     assert activity.local_start_minute == 12 * 60 + 30
-    lunch = next(m.meal for m in report.meals if MealSlot.LUNCH in m.meal.slots)
+    lunch = next(m for m in report.nutrition.meals if MealSlot.LUNCH in m.slots)
     assert lunch.moved
     assert MealSlot.POST_TRAINING in lunch.slots
 
@@ -349,7 +346,7 @@ def test_two_activities_in_one_day_are_both_listed_and_both_shape_the_day() -> N
     report = rig.report()
 
     assert [a.local_start_minute for a in report.activities] == [7 * 60, 18 * 60]
-    slots = [slot for m in report.meals for slot in m.meal.slots]
+    slots = [slot for m in report.nutrition.meals for slot in m.slots]
     assert slots.count(MealSlot.POST_TRAINING) == 2
 
 
@@ -371,9 +368,9 @@ def evening_recovery(next_start: datetime | None) -> list[tuple[int, int | None]
     if next_start is not None:
         rig.add_file(fit_bytes(next_start, 2, calories=500))
     return [
-        (m.meal.minute, m.meal.refuel_intake)
-        for m in rig.report().meals
-        if MealSlot.POST_TRAINING in m.meal.slots and m.meal.minute >= 19 * 60
+        (m.minute, m.refuel_intake)
+        for m in rig.report().nutrition.meals
+        if MealSlot.POST_TRAINING in m.slots and m.minute >= 19 * 60
     ]
 
 
@@ -519,7 +516,7 @@ def test_the_saved_meal_times_are_the_ones_used() -> None:
     report = rig.report()
 
     assert report.meal_times == times
-    assert [m.meal.minute for m in report.meals] == [6 * 60 + 30, 12 * 60, 19 * 60]
+    assert [m.minute for m in report.nutrition.meals] == [6 * 60 + 30, 12 * 60, 19 * 60]
 
 
 def test_a_minor_gets_no_numbers_at_all_only_the_under_18_outcome() -> None:

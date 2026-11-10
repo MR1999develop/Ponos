@@ -1,6 +1,6 @@
 # 008. Nutrition model of the day
 
-- Status: Accepted; the food source was amended on 2026-11-09 (see the end)
+- Status: Accepted; the food source was amended on 2026-11-09 and the food table removed on 2026-11-10 (see the end)
 - Date: 2026-11-07
 
 ## Context
@@ -248,3 +248,22 @@ Only the food table changes; the model above does not.
 - **How it is verified:** as above, plus `tests/experiments/test_verify_foods.py`
   (reading of the release, DTD and size refusal, rule for traces and bounds,
   round trip of the shipped file).
+
+## Amendment 2026-11-10: no food table, no examples
+
+- **Decision (the user's):** each meal shows only energy and the grams of
+  carbohydrate, protein and fat. The example foods, the food table and
+  everything that served only them are removed: `suggest_examples`, `Food`,
+  `FoodExample`, portions and tolerances, `MealSuggestion`,
+  `nutrition/foods.json`, `nutrition/food_table.py`, the names of the foods
+  in the translations, the self-check of the table, the file in the
+  PyInstaller package, `experiments/verify_foods.py` and the CREA mapping, the
+  ANSES-CIQUAL attribution in the README.
+- **What does not change:** the model above (targets of the day, deficit and
+  its limits, macros, the moments of the meals, the intake during training)
+  and the grams of every meal. The "Food values" decision (option 1 and its
+  amendment of 2026-11-09), test T-NUT-06 and boundary B11 of the threat model
+  no longer apply; the text above is kept as history.
+- **Why:** examples of foods are not part of what the user wanted from the
+  guidance, and a table of foods adds a data source, a licence, a trust
+  boundary and a hand review before every release.

@@ -25,7 +25,6 @@ from ponos_coach.nutrition.domain import (
     LeanMassEntry,
     MealTimes,
 )
-from ponos_coach.nutrition.food_table import FoodTable
 from ponos_coach.nutrition.use_cases import (
     AddGoalPeriod,
     NutritionSettings,
@@ -55,8 +54,6 @@ from ponos_coach.ui.data_thread import JobFailed, JobOutcome, JobSucceeded
 from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.nutrition_undo import LeanMassCell
 from ponos_coach.ui.workspace import ProfileAccess, WorkspaceController
-
-FoodTableSource = Callable[[], FoodTable]
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,7 +139,7 @@ def _read(cases: _Cases) -> SettingsRead:
     return SettingsRead(cases.read(), tuple(cases.list_lean_masses()))
 
 
-def _plan_day(foods: FoodTableSource, day: date, access: ProfileAccess) -> DayLoaded:
+def _plan_day(day: date, access: ProfileAccess) -> DayLoaded:
     """The data thread job of a day: gather the profile's data and plan the day."""
     session = access.session
     sources = NutritionSources(
@@ -157,9 +154,8 @@ def _plan_day(foods: FoodTableSource, day: date, access: ProfileAccess) -> DayLo
         session.goal_periods,
         session.lean_masses,
     )
-    table = foods()
     context = PlanContext(session.plans, access.today())
-    plan = PlanDayNutrition(sources, access.decode, access.zone, table, plan_context=context)
+    plan = PlanDayNutrition(sources, access.decode, access.zone, plan_context=context)
     return DayLoaded(day, plan(day), PlannedDay(session.plans)(day))
 
 
@@ -179,12 +175,10 @@ class NutritionLoader(QObject):
     def __init__(
         self,
         controller: WorkspaceController,
-        foods: FoodTableSource,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._controller = controller
-        self._foods = foods
         self._day_serial = 0
         self._day_requests: dict[date, int] = {}  # the request that counts, for each day
 
@@ -199,7 +193,7 @@ class NutritionLoader(QObject):
         self._day_requests[day] = request
 
         def work(access: ProfileAccess) -> DayLoaded:
-            return _plan_day(self._foods, day, access)
+            return _plan_day(day, access)
 
         def done(outcome: JobOutcome) -> None:
             if self._day_requests.get(day) != request:

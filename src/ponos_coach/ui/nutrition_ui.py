@@ -75,7 +75,7 @@ class NutritionUi(QObject):
         self._edit_profile = edit_profile
         self._show_activity = show_activity
         self._show_error = show_error
-        self._loader = NutritionLoader(controller, controller.foods, self)
+        self._loader = NutritionLoader(controller, self)
         self._days: dict[date, DayWindow] = {}  # the open day windows, oldest first
         self._opened = 0  # windows opened so far, for the cascade
         self._page = settings_page

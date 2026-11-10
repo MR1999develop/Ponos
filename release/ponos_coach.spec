@@ -5,7 +5,7 @@
 #
 # Everything the app reads at run time through `importlib.resources` or a path relative to its
 # own package must be listed under `datas` with the same package-relative destination:
-#   - the food table, the compiled Italian catalogue (`nox -s i18n` makes it);
+#   - the compiled Italian catalogue (`nox -s i18n` makes it);
 #   - the whole web resources folder of the interface (chart page, scripts and, later, the
 #     map libraries), so that new files in it need no change here;
 #   - plotly's package data (its script and templates) comes from PyInstaller's own plotly hook.
@@ -22,7 +22,6 @@ if not CATALOG.is_file():
     raise SystemExit("ponos_it.qm is missing: run `uv run --locked nox -s i18n` first")
 
 datas = [
-    (str(PACKAGE / "nutrition" / "foods.json"), "ponos_coach/nutrition"),
     (str(CATALOG), "ponos_coach/i18n"),
     (str(PACKAGE / "ui" / "web"), "ponos_coach/ui/web"),
     (str(PACKAGE / "ui" / "icons"), "ponos_coach/ui/icons"),  # window icon (app_icon.py)

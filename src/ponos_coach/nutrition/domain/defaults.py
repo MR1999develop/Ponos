@@ -199,11 +199,3 @@ MIN_MEAL_GAP_MIN: Final = 120  # typical meal times at least this far apart
 EATING_BUFFER_MIN: Final = 60  # no regular meal from this long before the start to after the end
 LATEST_MEAL_MIN: Final = 23 * 60  # a meal is not moved after 23:00
 FUSE_GAP_MIN: Final = 90  # intakes closer than this become one
-
-# --- Food examples ------------------------------------------------------------------------------
-FOOD_TOLERANCE_FRACTION: Final = 0.15  # of each macro of the meal...
-FOOD_TOLERANCE_MIN_G: Final = 5  # ...but at least this many grams
-FOOD_PORTION_STEP_G: Final = 5
-FOOD_MAX_EXAMPLES: Final = 3
-FOOD_VEGETABLE_SIDE_G: Final = 150
-FOOD_MIN_MACRO_G: Final = 5  # a macro below this is not worth a food

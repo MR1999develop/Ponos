@@ -79,7 +79,7 @@ def test_t_sec_12_the_archive_has_the_executable_and_the_files_the_app_reads_at_
     assert (
         f"{APP_FOLDER_NAME}/ponos-coach.exe" in names or f"{APP_FOLDER_NAME}/ponos-coach" in names
     )
-    for needed in ("foods.json", "ponos_it.qm", "plotly"):
+    for needed in ("ponos_it.qm", "plotly"):
         assert needed in joined, needed
 
 

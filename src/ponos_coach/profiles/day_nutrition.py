@@ -8,8 +8,8 @@ of an A or B race and in the taper before it a weight-loss goal gets no deficit 
 today, which is not in the plan, follows the same rule (race week, or the plan starts in a taper).
 
 It gathers what the nutrition model needs (body data valid that day, activity level, goal, typical
-meal times, the day's activities with their energy and load) and hands it to `nutrition.plan_day`;
-then it attaches example foods to each meal. It only reads: nothing is saved. General guidance,
+meal times, the day's activities with their energy and load) and hands it to `nutrition.plan_day`.
+It only reads: nothing is saved. General guidance,
 never medical advice. Health data: never in logs or error messages.
 """
 
@@ -48,9 +48,7 @@ from ponos_coach.nutrition.domain import (
     ActivityEnergy,
     DayInput,
     DayNutrition,
-    FoodExample,
     GoalPeriod,
-    MealItem,
     MealTimes,
     NutritionGoal,
     Person,
@@ -64,9 +62,7 @@ from ponos_coach.nutrition.domain import (
     lean_mass_on,
     level_for_day,
     plan_day,
-    suggest_examples,
 )
-from ponos_coach.nutrition.food_table import FoodTable
 from ponos_coach.nutrition.ports import (
     ActivityLevelStore,
     GoalPeriodStore,
@@ -133,14 +129,6 @@ class DayActivity:
 
 
 @dataclass(frozen=True, slots=True)
-class MealSuggestion:
-    """A meal of the day with example foods (possibly none if no combination fits its grams)."""
-
-    meal: MealItem
-    examples: tuple[FoodExample, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class DayNutritionReport:
     """Guidance for a day with everything it was computed from.
 
@@ -156,7 +144,6 @@ class DayNutritionReport:
     nutrition: DayNutrition
     goal: NutritionGoal
     meal_times: MealTimes
-    meals: tuple[MealSuggestion, ...]
     activities: tuple[DayActivity, ...]
     unreadable_activities: int
     from_plan: bool = False
@@ -211,7 +198,7 @@ class PlanDayNutrition:
     """Nutrition guidance for a day (a query: it saves nothing).
 
     Deterministic: same profile data, same guidance. Volatile dependencies injected: the stores,
-    `decode` (supplied by the Composition Root), the profile's time zone and the food table.
+    `decode` (supplied by the Composition Root) and the profile's time zone.
     """
 
     def __init__(
@@ -219,7 +206,6 @@ class PlanDayNutrition:
         sources: NutritionSources,
         decode: Decoder,
         timezone: ZoneInfo,
-        foods: FoodTable,
         max_file_bytes: int = MAX_ACTIVITY_FILE_BYTES,
         plan_context: PlanContext | None = None,
     ) -> None:
@@ -228,7 +214,6 @@ class PlanDayNutrition:
         self._src = sources
         self._decode = decode
         self._timezone = timezone
-        self._foods = foods
         self._max_file_bytes = max_file_bytes
         self._plan_context = plan_context
 
@@ -278,16 +263,11 @@ class PlanDayNutrition:
                 paused,
             )
         )
-        suggestions = tuple(
-            MealSuggestion(meal, suggest_examples(meal, self._foods.foods))
-            for meal in nutrition.meals
-        )
         return DayNutritionReport(
             day,
             nutrition,
             goal,
             meal_times,
-            suggestions,
             tuple(m.activity for m in measured),
             sum(m.unreadable for m in measured),
             planned_day is not None,

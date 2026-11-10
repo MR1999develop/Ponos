@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from pytestqt.qtbot import QtBot
 
-from ponos_coach.__main__ import _read_food_table, parse_command_line
+from ponos_coach.__main__ import parse_command_line
 from ponos_coach.selfcheck import (
     CheckResult,
     SelfCheckError,
@@ -64,12 +64,12 @@ class TestRunSelfCheck:
         del qtbot  # makes sure there is a QApplication
         report = tmp_path / "report.txt"
 
-        code = run_self_check(report, _read_food_table)
+        code = run_self_check(report)
 
         lines = report.read_text(encoding="utf-8").splitlines()
         assert code == 0, lines
         assert all(line.startswith("ok ") for line in lines)
-        assert len(lines) == 6
+        assert len(lines) == 5
 
     def test_an_existing_report_is_never_overwritten(self, qtbot: QtBot, tmp_path: Path) -> None:
         del qtbot
@@ -77,6 +77,6 @@ class TestRunSelfCheck:
         report.write_text("mine", encoding="utf-8")
 
         with pytest.raises(FileExistsError):
-            run_self_check(report, _read_food_table)
+            run_self_check(report)
 
         assert report.read_text(encoding="utf-8") == "mine"

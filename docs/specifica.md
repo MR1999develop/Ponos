@@ -894,8 +894,8 @@ no diet or allergy restriction for now.
   from (device, heart rate estimate, estimate by sport).
 - Then the meals in time order: breakfast, lunch, dinner, and the intakes
   before, during and after each session of at least 30 minutes. Each card has
-  time, energy and the grams of carbohydrate, protein and fat; no example
-  foods (user's request of 2026-11-10).
+  time, energy and the grams of carbohydrate, protein and fat. There are no example
+  foods and no food table (user's request of 2026-11-10).
 - Meals near a session move or merge with the intakes around it. When the
   carbohydrate of the day is not enough for all of them, the page says that
   the intakes were scaled.
@@ -965,17 +965,6 @@ no diet or allergy restriction for now.
   of at least 30 kcal per kg of fat-free mass, estimated from weight, height
   and sex (Boer 1984). When a limit reduces the goal, the page says so.
 - On heavy training days the deficit is smaller or absent.
-
-### Food values
-
-- The foods come from a small table of common foods. Its values come from the
-  French food composition table CIQUAL (ANSES, 2025 version, Licence Ouverte
-  2.0), one CIQUAL entry per food, checked by `experiments/verify_foods.py`
-  (`source.verified_on`), and compared with the Italian CREA tables, which are
-  not copied ([dependency register](dipendenze.md), ADR 008). While a table is
-  not verified a note above the meals says so. Sports drinks, gels and bars are
-  not in the table yet.
-- The names of the foods are in English until translated.
 
 ## 15. Map and filters (phase 5b)
 
@@ -1054,8 +1043,5 @@ Decision: [ADR 010](adr/010-mappa.md).
 
 ## Open points
 
-- Three foods use an approximate CIQUAL entry (Greek yoghurt 0%, part-skim
-  mozzarella, black beans) and three choices are to be reviewed by hand
-  (Medjool dates, roast chicken, white bread): `ciqual_note` in the table.
 - The Garmin workout and calendar responses are not verified live (section 11).
   The OpenStreetMap usage policy is read again before the release (section 15).

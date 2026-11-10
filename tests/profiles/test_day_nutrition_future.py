@@ -33,7 +33,7 @@ from ponos_coach.profiles.day_nutrition import (
 )
 from tests.builders import fit_identity, make_record
 from tests.planning.builders import BIG_WEEK, TODAY, availability, inputs, race
-from tests.profiles.test_day_nutrition import FOODS, ROME, Rig, decode_fit
+from tests.profiles.test_day_nutrition import ROME, Rig, decode_fit
 
 LOSS = WeightLossGoal(500)
 FAR = date(2026, 3, 3)  # day after today
@@ -64,7 +64,7 @@ def result_of(rig: Rig, day: date) -> DayNutritionResult:
         p.lean_masses,
     )  # fmt: skip
     context = PlanContext(p.plans, TODAY)
-    return PlanDayNutrition(sources, decode_fit, ROME, FOODS, plan_context=context)(day)
+    return PlanDayNutrition(sources, decode_fit, ROME, plan_context=context)(day)
 
 
 def report_of(rig: Rig, day: date) -> DayNutritionReport:
@@ -112,7 +112,7 @@ def test_a_day_ahead_has_the_planned_session_at_the_default_time_with_the_energy
     assert activity.energy.total_kcal == pytest.approx(expected)
     start = datetime.combine(target.day, datetime.min.time(), tzinfo=ROME) + timedelta(hours=18)
     assert activity.start == start.astimezone(UTC)
-    slots = [slot for m in report.meals for slot in m.meal.slots]
+    slots = [slot for m in report.nutrition.meals for slot in m.slots]
     assert MealSlot.PRE_TRAINING in slots
     assert MealSlot.POST_TRAINING in slots
 
