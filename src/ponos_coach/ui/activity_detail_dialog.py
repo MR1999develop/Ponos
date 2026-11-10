@@ -42,12 +42,14 @@ from PySide6.QtWidgets import (
 from ponos_coach.activities.domain import ActivityIdentity
 from ponos_coach.load.activity_detail import ActivityDetail
 from ponos_coach.ui.activity_detail import (
+    PACE_SPORTS,
     DetailOutcome,
     DetailReady,
     DetailUnavailable,
     DomainKind,
     DomainRow,
     ZoneRow,
+    average_pace_s_per_km,
     domain_rows,
     zone_rows,
 )
@@ -56,6 +58,7 @@ from ponos_coach.ui.activity_text import (
     distance_km_text,
     duration_text,
     load_source_text,
+    pace_text,
     sport_text,
 )
 from ponos_coach.ui.chart_view import ChartEngine, ChartView
@@ -381,21 +384,34 @@ class ActivityDetailDialog(QDialog):
         self._summary.setVerticalSpacing(SPACE_2)
         self._summary.setHorizontalSpacing(SPACE_4)
         self._summary_values: dict[str, QLabel] = {}
-        self._summary_captions: list[QLabel] = []
-        for position, (key, text) in enumerate(self._summary_rows()):
-            row, pair = divmod(position, _SUMMARY_PAIRS_PER_ROW)
+        self._summary_captions: dict[str, QLabel] = {}
+        for key, text in self._summary_rows():
             caption = QLabel(text, self)
             caption.setTextFormat(Qt.TextFormat.PlainText)
             value = QLabel(self)
             value.setTextFormat(Qt.TextFormat.PlainText)
             value.setObjectName(f"detail-{key}")
             value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            self._summary_captions.append(caption)
+            self._summary_captions[key] = caption
             self._summary_values[key] = value
-            self._summary.addWidget(caption, row, 2 * pair)
-            self._summary.addWidget(value, row, 2 * pair + 1)
         for pair in range(_SUMMARY_PAIRS_PER_ROW):
             self._summary.setColumnStretch(2 * pair + 1, 1)
+        self._summary_shown: tuple[str, ...] = ()
+        self._lay_out_summary(tuple(self._summary_values))
+
+    def _lay_out_summary(self, keys: tuple[str, ...]) -> None:
+        """Place the pairs of `keys` in order, with no gap where a pair is left out (the pace of
+        a sport not measured by pace)."""
+        if keys == self._summary_shown:
+            return
+        for key in self._summary_values:
+            self._summary.removeWidget(self._summary_captions[key])
+            self._summary.removeWidget(self._summary_values[key])
+        for position, key in enumerate(keys):
+            row, pair = divmod(position, _SUMMARY_PAIRS_PER_ROW)
+            self._summary.addWidget(self._summary_captions[key], row, 2 * pair)
+            self._summary.addWidget(self._summary_values[key], row, 2 * pair + 1)
+        self._summary_shown = keys
 
     def _summary_rows(self) -> tuple[tuple[str, str], ...]:
         return (
@@ -403,6 +419,7 @@ class ActivityDetailDialog(QDialog):
             ("moving", self.tr("Moving time (h:mm:ss)")),
             ("elapsed", self.tr("Elapsed time (h:mm:ss)")),
             ("distance", self.tr("Distance (km)")),
+            ("pace", self.tr("Average pace (min/km)")),
             ("ascent", self.tr("Ascent (m)")),
             ("load", self.tr("Load (TRIMPeq)")),
             ("source", self.tr("Load from")),
@@ -513,8 +530,8 @@ class ActivityDetailDialog(QDialog):
         self._set_test_command(
             detail.identity if can_be_threshold_test(detail.sport) else None, not_a_run_reason()
         )
-        self._set_details_visible(True)
         self._fill_summary(detail)
+        self._set_details_visible(True)
         self._zone_model.set_rows(zone_rows(detail))
         self._domain_model.set_rows(domain_rows(detail))
         self._table.setVisible(ready.chart is not None)
@@ -546,6 +563,7 @@ class ActivityDetailDialog(QDialog):
             "moving": duration_text(detail.timer_s),
             "elapsed": duration_text(detail.elapsed_s),
             "distance": distance_km_text(detail.summary.distance_m),
+            "pace": pace_text(average_pace_s_per_km(detail)),
             "ascent": ascent_m_text(detail.summary.ascent_m),
             "load": QLocale().toString(round(detail.load.trimp_eq)),
             "source": load_source_text(detail.load.source),
@@ -557,6 +575,10 @@ class ActivityDetailDialog(QDialog):
         }
         for key, text in values.items():
             self._summary_values[key].setText(text)
+        shown = tuple(
+            key for key in self._summary_values if key != "pace" or detail.sport in PACE_SPORTS
+        )
+        self._lay_out_summary(shown)
         self._notice.setText(self._notice_text(detail))
         self._notice.setVisible(bool(self._notice.text()))
 
@@ -594,8 +616,10 @@ class ActivityDetailDialog(QDialog):
             self.threshold_test_requested.emit(self._identity)
 
     def _set_details_visible(self, visible: bool) -> None:
-        for label in (*self._summary_captions, *self._summary_values.values()):
-            label.setVisible(visible)
+        for key, value in self._summary_values.items():
+            shown = visible and key in self._summary_shown
+            self._summary_captions[key].setVisible(shown)
+            value.setVisible(shown)
         self._table.setVisible(visible)
         self._domain_table.setVisible(visible)
         if not visible:

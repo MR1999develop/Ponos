@@ -27,8 +27,15 @@ from ponos_coach.load.domain import (
     zone_starts_bpm,
 )
 from ponos_coach.load.use_cases import ExclusionReason
-from ponos_coach.ui.activity_detail import DomainKind, domain_rows, zone_rows
+from ponos_coach.ui.activity_detail import (
+    PACE_SPORTS,
+    DomainKind,
+    average_pace_s_per_km,
+    domain_rows,
+    zone_rows,
+)
 from ponos_coach.ui.activity_detail_dialog import DomainTableModel, ZoneTableModel
+from ponos_coach.ui.activity_text import pace_text
 from ponos_coach.ui.errors import unavailable_detail_message
 
 DASH = "–"  # noqa: RUF001 - the separator itself
@@ -36,19 +43,25 @@ START = datetime(2026, 5, 1, 7, 0, tzinfo=UTC)
 
 
 def detail_with(
-    zones: ZoneSeconds, domains: DomainSeconds | None = None, lt1: int = 142
+    zones: ZoneSeconds,
+    domains: DomainSeconds | None = None,
+    lt1: int = 142,
+    *,
+    sport: Sport = Sport.RUNNING,
+    distance_m: float | None = None,
+    timer_s: float = 20.0,
 ) -> ActivityDetail:
     series = HeartRateSeries(np.array([0.0, 10.0]), np.array([120.0, 130.0]))
     limits = HeartRateLimits(50, 190)
     load = ActivityLoad(10.0, 2, 0, 0.0, LoadSource.HEART_RATE, zones)
     return ActivityDetail(
         identity=FitIdentity(FileId(1, 1, 1, START)),
-        sport=Sport.RUNNING,
+        sport=sport,
         start=START,
         local_day=START.date(),
-        elapsed_s=20.0,
-        timer_s=20.0,
-        summary=ActivitySummary(),
+        elapsed_s=timer_s,
+        timer_s=timer_s,
+        summary=ActivitySummary(distance_m=distance_m),
         load=load,
         trace=HeartRateTrace.of(series, limits),
         limits=limits,
@@ -173,3 +186,50 @@ def test_the_domain_model_shows_name_range_time_and_share() -> None:
         ["Between LT1 and LT2", f"142{DASH}170", "0:01:40", "20"],
         ["Above LT2", f"171{DASH}190", "0:01:40", "20"],
     ]
+
+
+NO_ZONES = ZoneSeconds((0.0, 0.0, 0.0, 0.0, 0.0))
+
+
+def test_running_trail_and_hiking_are_the_sports_measured_by_pace() -> None:
+    assert frozenset({Sport.RUNNING, Sport.TRAIL, Sport.HIKING}) == PACE_SPORTS
+
+
+@pytest.mark.parametrize("sport", [Sport.RUNNING, Sport.TRAIL, Sport.HIKING])
+def test_the_average_pace_is_the_moving_time_per_kilometre(sport: Sport) -> None:
+    detail = detail_with(NO_ZONES, sport=sport, distance_m=10_000.0, timer_s=3_000.0)
+
+    assert average_pace_s_per_km(detail) == pytest.approx(300.0)
+
+
+@pytest.mark.parametrize(
+    ("sport", "distance_m", "timer_s"),
+    [
+        (Sport.CYCLING, 10_000.0, 3_000.0),  # not measured by pace
+        (Sport.WALKING, 10_000.0, 3_000.0),
+        (Sport.RUNNING, None, 3_000.0),  # indoor: no distance
+        (Sport.RUNNING, 0.0, 3_000.0),
+        (Sport.RUNNING, 10_000.0, 0.0),
+    ],
+)
+def test_there_is_no_pace_for_other_sports_or_without_distance_and_time(
+    sport: Sport, distance_m: float | None, timer_s: float
+) -> None:
+    detail = detail_with(NO_ZONES, sport=sport, distance_m=distance_m, timer_s=timer_s)
+
+    assert average_pace_s_per_km(detail) is None
+
+
+@pytest.mark.parametrize(
+    ("s_per_km", "text"),
+    [
+        (300.0, "5:00"),
+        (332.4, "5:32"),
+        (359.6, "6:00"),
+        (59.0, "0:59"),
+        (4_000.0, "66:40"),
+        (None, ""),
+    ],
+)
+def test_the_pace_is_minutes_and_seconds_per_kilometre(s_per_km: float | None, text: str) -> None:
+    assert pace_text(s_per_km) == text

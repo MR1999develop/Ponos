@@ -11,6 +11,7 @@ from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
 
+from ponos_coach.activities.domain import Sport
 from ponos_coach.load.domain import DomainSeconds, ZoneSeconds
 from ponos_coach.ui.activity_detail import DetailReady
 from ponos_coach.ui.activity_detail_dialog import ActivityDetailDialog
@@ -25,14 +26,16 @@ SUMMARY_KEYS = (
 )  # fmt: skip
 
 
-def ready_dialog(qtbot: QtBot) -> ActivityDetailDialog:
+def ready_dialog(
+    qtbot: QtBot, sport: Sport = Sport.CYCLING, distance_m: float | None = None
+) -> ActivityDetailDialog:
     dialog = ActivityDetailDialog(
         ChartEngine(lambda _name: None), ZoneInfo("Europe/Rome"), theme=lambda: Theme.LIGHT
     )
     qtbot.addWidget(dialog)
     zones = ZoneSeconds((300.0, 100.0, 0.0, 0.0, 100.0))
     domains = DomainSeconds(300.0, 100.0, 100.0)
-    detail = detail_with(zones, domains)
+    detail = detail_with(zones, domains, sport=sport, distance_m=distance_m, timer_s=3_000.0)
     dialog.show_outcome(DetailReady(detail, PreparedChart(go.Figure(), "", "#fff")))
     dialog.show()
     qtbot.waitExposed(dialog)
@@ -84,6 +87,28 @@ def test_the_window_is_lower_and_the_summary_sits_in_columns(qtbot: QtBot) -> No
     assert dialog.sizeHint().height() <= MAX_HEIGHT_PX
     tops = {dialog.summary_value_widget(key).y() for key in SUMMARY_KEYS}
     assert len(tops) <= 3  # nine values in at most three rows
+
+
+def test_a_run_shows_its_average_pace_next_to_the_distance(qtbot: QtBot) -> None:
+    dialog = ready_dialog(qtbot, Sport.RUNNING, distance_m=10_000.0)
+    pace, distance = dialog.summary_value_widget("pace"), dialog.summary_value_widget("distance")
+
+    assert pace.isVisibleTo(dialog)
+    assert dialog.summary_text("pace") == "5:00"
+    assert pace.y() == distance.y()
+    assert dialog.sizeHint().height() <= MAX_HEIGHT_PX
+
+
+def test_a_ride_has_no_pace_and_leaves_no_gap_in_the_summary(qtbot: QtBot) -> None:
+    dialog = ready_dialog(qtbot, Sport.CYCLING, distance_m=10_000.0)
+    distance, ascent = (
+        dialog.summary_value_widget("distance"),
+        dialog.summary_value_widget("ascent"),
+    )
+
+    assert not dialog.summary_value_widget("pace").isVisibleTo(dialog)
+    assert ascent.y() == distance.y()
+    assert ascent.x() > distance.x()  # the next pair takes the place of the pace
 
 
 def test_warming_up_creates_the_chart_page_before_any_data_arrives(qtbot: QtBot) -> None:

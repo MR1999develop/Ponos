@@ -46,6 +46,14 @@ def distance_km_text(distance_m: float | None) -> str:
     return QLocale().toString(distance_m / _METERS_PER_KM, "f", _DISTANCE_DECIMALS)
 
 
+def pace_text(s_per_km: float | None) -> str:
+    """A pace as `m:ss` per kilometre, to the whole second; empty if there is none."""
+    if s_per_km is None:
+        return ""
+    minutes, seconds = divmod(round(s_per_km), _SECONDS_PER_MINUTE)
+    return f"{minutes}:{seconds:02d}"
+
+
 def ascent_m_text(ascent_m: float | None) -> str:
     """Positive elevation gain in whole metres; empty if the datum is missing."""
     return "" if ascent_m is None else QLocale().toString(round(ascent_m))

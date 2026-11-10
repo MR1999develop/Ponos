@@ -469,14 +469,18 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
   button for it. The window is not modal and can be kept open while using the
   app. It has no map preview (user's request of 2026-11-10).
 - It shows the summary in a compact grid of label and value pairs (start in
-  the profile time zone, moving and elapsed time, distance, ascent, load and
-  its origin, the LT1 and LT2 of its sport group and the HR limits valid on
-  that day), the HR curve with the zone bands and their names, and two small
+  the profile time zone, moving and elapsed time, distance, average pace,
+  ascent, load and its origin, the LT1 and LT2 of its sport group and the HR
+  limits valid on that day), the HR curve with the zone bands and their names, and two small
   tables side by side, as tall as their rows, with no scroll bar: the time in
   each zone (time and percentage share) and the time below LT1, between LT1 and
   LT2 and above LT2 (heart rate range, time and share). The three domains use
   the same samples as the zones: below LT1 is `bpm < LT1`, between is
   `LT1 <= bpm < LT2`, above is `bpm >= LT2`.
+- The average pace (min/km, `m:ss`) is the moving time divided by the
+  distance. It is shown only for running, trail running and hiking (user's
+  request of 2026-11-10); for the other sports the pair is left out and the
+  next ones close the gap. Without a distance (indoor) the value is empty.
 - The HR samples discarded from the load are marked on the chart with a cross;
   a warning says how many they are, and how many the file reader skipped
   because of a repeated or backward timestamp.

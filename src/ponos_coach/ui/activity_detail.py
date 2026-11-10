@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from ponos_coach.activities.domain import Sport
 from ponos_coach.load.activity_detail import ActivityDetail
 from ponos_coach.load.domain import ZONE_COUNT, zone_bpm_ranges
 from ponos_coach.load.use_cases import ExclusionReason
@@ -35,6 +36,20 @@ class DetailUnavailable:
 
 
 type DetailOutcome = DetailReady | DetailUnavailable
+
+PACE_SPORTS = frozenset({Sport.RUNNING, Sport.TRAIL, Sport.HIKING})  # measured in min/km
+_METERS_PER_KM = 1000.0
+
+
+def average_pace_s_per_km(detail: ActivityDetail) -> float | None:
+    """Moving time per kilometre, for the sports measured by pace; None for the other sports and
+    when the file has no distance or no moving time."""
+    distance_m = detail.summary.distance_m
+    if detail.sport not in PACE_SPORTS or distance_m is None:
+        return None
+    if distance_m <= 0 or detail.timer_s <= 0:
+        return None
+    return detail.timer_s * _METERS_PER_KM / distance_m
 
 
 @dataclass(frozen=True, slots=True)
