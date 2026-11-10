@@ -42,13 +42,16 @@ def arch(session: nox.Session) -> None:
 
 @nox.session(python=False)
 def tests(session: nox.Session) -> None:
-    """pytest (Qt in offscreen mode), excluding the acceptance campaign tests."""
+    """pytest (Qt in offscreen mode): unit and integration tests. The acceptance tests
+    (`tests/collaudo`) run in the `collaudo` session, once per phase and before a release
+    (user's request of 2026-11-10: fewer tests at every check)."""
     _compile_catalog(session)  # the app loads the `.qm`, which git does not keep
     session.run(
         "uv",
         "run",
         "--locked",
         "pytest",
+        "--ignore=tests/collaudo",
         *session.posargs,
         env={"QT_QPA_PLATFORM": "offscreen"},
         external=True,
@@ -84,8 +87,19 @@ def audit(session: nox.Session) -> None:
 
 @nox.session(python=False, default=False)
 def collaudo(session: nox.Session) -> None:
-    """Long campaign: tests marked `collaudo` with the long hypothesis profile."""
+    """Acceptance: every test of `tests/collaudo` with the usual profile, then the long campaign
+    (tests marked `collaudo`, long hypothesis profile)."""
     _compile_catalog(session)
+    session.run(
+        "uv",
+        "run",
+        "--locked",
+        "pytest",
+        "tests/collaudo",
+        *session.posargs,
+        env={"QT_QPA_PLATFORM": "offscreen"},
+        external=True,
+    )
     session.run(
         "uv",
         "run",

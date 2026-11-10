@@ -20,14 +20,18 @@ Solo ciò che è specifico di questo progetto. Le decisioni e le fasi stanno in
 ## Comandi
 
 - `uv run --locked nox`: tutti i controlli obbligatori (ruff format e lint,
-  `mypy --strict`, `lint-imports`, pytest con pytest-qt, test delle
-  traduzioni, `pip-audit`). La CI esegue esattamente questo.
+  `mypy --strict`, `lint-imports`, pytest con pytest-qt dei test unitari e
+  d'integrazione, test delle traduzioni, `pip-audit`). La CI esegue
+  esattamente questo. I test di proprietà usano 30 esempi; `tests/collaudo`
+  non è compreso (richiesta dell'utente del 2026-11-10: meno test a ogni
+  controllo).
 - `uv run --locked nox -s i18n`: controlla che `ponos_it.ts` sia completo e
   coerente con i sorgenti e genera i `.qm` (già nei controlli di default).
 - `uv run --locked nox -s i18n_update`: aggiorna `ponos_it.ts` dai sorgenti
   (lo usa il traduttore).
-- `uv run --locked nox -s collaudo`: campagna lunga della sezione 7 di `PLAN.md`
-  (fuzzing esteso, mutazione, prestazioni, test di durata).
+- `uv run --locked nox -s collaudo`: tutti i test di `tests/collaudo` e poi la
+  campagna lunga della sezione 7 di `PLAN.md` (fuzzing esteso, mutazione,
+  prestazioni, test di durata); una volta per fase e prima del rilascio.
 - `uv run --locked nox -s dist`: eseguibile PyInstaller, smoke test, `SHA256SUMS`.
 - `uv run ponos-coach`: avvia l'app.
 

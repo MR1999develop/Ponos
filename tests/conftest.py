@@ -25,7 +25,7 @@ _THRESHOLDS = gc.get_threshold()  # of the automatic collector, before any test 
 # No per-example deadline: tests must be deterministic in CI.
 settings.register_profile(
     "ci",
-    max_examples=100,
+    max_examples=30,  # every check; the long campaign (`collaudo`) has 5000
     deadline=None,
     derandomize=True,
     suppress_health_check=[HealthCheck.too_slow],
