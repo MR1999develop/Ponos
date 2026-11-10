@@ -1040,7 +1040,8 @@ Decision: [ADR 010](adr/010-mappa.md).
   has a minimum height and takes 3/5 of its pane, the elevation profile under
   it 2/5 (the divider can be dragged). Selecting an activity in the list selects it on the map
   and the other way round. A double click on an activity in the map (its start,
-  or the selected track) opens its window; elsewhere it zooms in.
+  or the selected track) opens its window and fits the map to its track;
+  elsewhere it zooms in.
 - Map menu: "Show activities and map" (Ctrl+M), "Show all activities" (Ctrl+0),
   Zoom in and out, "Background" (a submenu with OpenStreetMap, OpenTopoMap and
   CyclOSM, exclusive, Ctrl+Shift+1, 2 and 3), "Filter activities", "Clear

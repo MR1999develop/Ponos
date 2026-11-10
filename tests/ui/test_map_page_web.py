@@ -342,11 +342,11 @@ def test_starts_at_the_same_place_fan_out_and_a_click_selects_one(
     qtbot.waitUntil(lambda: page_state(qtbot, view)["selected"] == 3, timeout=WAIT_MS)
 
 
-def test_a_double_click_on_a_start_opens_the_window_of_that_activity(
+def test_a_double_click_on_a_start_opens_the_window_and_zooms_on_the_track(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
-    # The user's request of 2026-11-10: a real double click on an activity of the map (not a call
-    # of the bridge) opens its window, and the map does not zoom for it.
+    # The user's requests of 2026-11-10: a real double click on an activity of the map (not a call
+    # of the bridge) opens its window and fits the map to that activity's track.
     window, view = window_with_page(qtbot, tmp_path, settings)
     show_view(qtbot, window, NEAR)
     qtbot.waitUntil(lambda: page_state(qtbot, view)["starts"] == 8, timeout=WAIT_MS)
@@ -357,6 +357,7 @@ def test_a_double_click_on_a_start_opens_the_window_of_that_activity(
     spot = evaluate(qtbot, view, "window.ponosMap.pixelOf({start: 3})")
     assert isinstance(spot, dict)
     zoom = page_state(qtbot, view)["zoom"]
+    assert isinstance(zoom, int)
     opened: list[object] = []
     window.map_ui.controller.open_requested.connect(opened.append)
 
@@ -376,7 +377,8 @@ def test_a_double_click_on_a_start_opens_the_window_of_that_activity(
     assert window.map_ui.controller.selected == search.activities[3].identity
     dialogs = window.profile_dialogs.detail_dialogs
     assert len(dialogs) == 1
-    assert page_state(qtbot, view)["zoom"] == zoom  # the double click did not zoom the map
+    # From the closest zoom (19) out to the whole track: never zoomed in by the double click.
+    qtbot.waitUntil(lambda: _zoom_of(qtbot, view) < zoom, timeout=WAIT_MS)
 
 
 def test_a_double_click_on_an_empty_spot_still_zooms_in(
@@ -400,6 +402,12 @@ def test_a_double_click_on_an_empty_spot_still_zooms_in(
 
     qtbot.waitUntil(lambda: page_state(qtbot, view)["zoom"] == zoom + 1, timeout=WAIT_MS)
     assert opened == []
+
+
+def _zoom_of(qtbot: QtBot, view: MapWebView) -> int:
+    zoom = page_state(qtbot, view)["zoom"]
+    assert isinstance(zoom, int)
+    return zoom
 
 
 def cluster_icons(qtbot: QtBot, view: MapWebView) -> int:

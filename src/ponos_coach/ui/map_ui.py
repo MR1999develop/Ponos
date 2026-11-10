@@ -235,6 +235,8 @@ class MapUi(QObject):
     def _connect(self) -> None:
         self._controller.search_changed.connect(self._on_search)
         self._controller.selection_changed.connect(self._on_selection)
+        # A double click on an activity in the map also zooms on its track (user's request).
+        self._controller.open_requested.connect(self.focus_activity)
         self._controller.area_changed.connect(self._on_area)
         self._activities.area_only_toggled.connect(self._on_area_only_toggled)
         self._controller.failed.connect(self._show_error)
@@ -273,7 +275,8 @@ class MapUi(QObject):
         self._activities.set_visible_identities(keys)
 
     def focus_activity(self, identity: object) -> None:
-        """Select the activity and centre the map on its track (a double click in the list)."""
+        """Select the activity and fit the map to its track (a double click in the list or on
+        the activity in the map)."""
         if isinstance(identity, ActivityIdentity):
             self._controller.select_identity(identity, reveal=True)
             self._page.focus_selected()
