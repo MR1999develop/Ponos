@@ -16,7 +16,6 @@ from PySide6.QtCore import QModelIndex, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
-    QGridLayout,
     QGroupBox,
     QHeaderView,
     QLabel,
@@ -41,11 +40,11 @@ from ponos_coach.ui.day_presentation import (
 )
 from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.text_table_model import TextTableModel
-from ponos_coach.ui.tokens import SPACE_1, SPACE_2, SPACE_3, SPACE_4, SPACE_6, TITLE_SCALE
+from ponos_coach.ui.tokens import SPACE_2, SPACE_3, SPACE_4, TITLE_SCALE
 
 _FRAME_ROWS_EXTRA = 2  # frame of a table without scroll bars, in pixels
 _MAX_TEXT_WIDTH = 720
-_MEAL_COLUMNS = 4
+_MEAL_NUMERIC_COLUMNS = (2, 3, 4, 5)
 
 
 class DayState(Enum):
@@ -127,13 +126,15 @@ class DayPage(QWidget):
 
     edit_profile_requested = Signal()
     activity_requested = Signal(object)  # ActivityIdentity: a row of the day's activities
+    content_shown = Signal()  # the guidance is in the page: the window can fit it
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._state = DayState.EMPTY
         self._activities_model = TextTableModel(activity_headers(), ACTIVITY_NUMERIC_COLUMNS, self)
         self._totals_model = TextTableModel(summary_headers(), (1,), self)
-        self._meal_boxes: list[QGroupBox] = []
+        self._meals_model = TextTableModel(self._meal_headers(), _MEAL_NUMERIC_COLUMNS, self)
+        self._meals: tuple[MealCardView, ...] = ()
         self._advisory_labels: list[QLabel] = []
         self._summary_line = ""
         self._in_progress_note = ""
@@ -295,8 +296,8 @@ class DayPage(QWidget):
 
     @property
     def meal_titles(self) -> tuple[str, ...]:
-        """The titles of the meal cards, in display order."""
-        return tuple(box.title() for box in self._meal_boxes)
+        """The meals as "{meal} at {time}", in display order."""
+        return tuple(self._meal_title(card) for card in self._meals)
 
     @property
     def advisory_texts(self) -> tuple[str, ...]:
@@ -304,8 +305,12 @@ class DayPage(QWidget):
         return tuple(label.text() for label in self._advisory_labels)
 
     def meal_texts(self, index: int) -> tuple[str, ...]:
-        """All the texts inside a meal card."""
-        return tuple(label.text() for label in self._meal_boxes[index].findChildren(QLabel))
+        """The texts of one meal: the headers and values of its row, then its notes."""
+        card = self._meals[index]
+        values = (card.kcal, card.carbs, card.protein, card.fat)
+        headers = self._meal_headers()[2:]
+        notes = tuple(note for note in (card.moved_note, card.hourly) if note)
+        return (*(t for pair in zip(headers, values, strict=True) for t in pair), *notes)
 
     def advisories_visible(self) -> bool:
         """True if every advisory is on screen (not hidden by the page)."""
@@ -332,6 +337,23 @@ class DayPage(QWidget):
             return
         self._scroll.setWidget(self._build_content(content))
         self._set_state(DayState.CONTENT)
+        self.content_shown.emit()
+
+    def content_overflow(self) -> QSize:
+        """How much wider and taller the scroll area must grow to show the guidance without scroll
+        bars (zero when it already fits)."""
+        content = self._scroll.widget()
+        if content is None:
+            return QSize(0, 0)
+        room = self._scroll.viewport().size()
+        width = max(room.width(), content.minimumSizeHint().width())
+        layout = content.layout()
+        height = (
+            layout.totalHeightForWidth(width)
+            if layout is not None and layout.hasHeightForWidth()
+            else content.minimumSizeHint().height()
+        )  # wrapped notes: their height at the width they get, not at their narrowest
+        return QSize(width - room.width(), max(0, height - room.height()))
 
     def show_failure(self, message: ErrorMessage) -> None:
         """Show why the day could not be calculated, and what to try."""
@@ -343,7 +365,7 @@ class DayPage(QWidget):
         """Forget what the page shows (profile changed or closed)."""
         self._title.clear()
         self._notice.clear()
-        self._meal_boxes = []
+        self._meals = ()
         self._advisory_labels = []
         self._in_progress_note = ""
         self._estimate_note = ""
@@ -363,7 +385,7 @@ class DayPage(QWidget):
         column = QVBoxLayout(root)
         column.setContentsMargins(0, 0, SPACE_4, 0)
         column.setSpacing(SPACE_4)
-        self._meal_boxes = []
+        self._meals = ()
         self._advisory_labels = []
         self._in_progress_note = ""
         self._estimate_note = ""
@@ -381,9 +403,7 @@ class DayPage(QWidget):
             lean.setMaximumWidth(_MAX_TEXT_WIDTH)
             column.addWidget(lean)
         column.addWidget(self._build_activities(view, root))
-        column.addWidget(_label(self.tr("Meals and training intakes"), root, bold=True))
-        for card in view.meals:
-            column.addWidget(self._build_meal(card, root))
+        column.addWidget(self._build_meals(view.meals, root))
         column.addStretch(1)
         return root
 
@@ -477,31 +497,43 @@ class DayPage(QWidget):
             if identity is not None:
                 self.activity_requested.emit(identity)
 
-    def _build_meal(self, card: MealCardView, parent: QWidget) -> QGroupBox:
-        # {meal}: the name of the eating moment; {time}: its time of day.
-        box = QGroupBox(self.tr("{meal} at {time}").format(meal=card.title, time=card.time), parent)
-        inner = QVBoxLayout(box)
-        inner.setSpacing(SPACE_1 + SPACE_2)
-        if card.moved_note:
-            inner.addWidget(_label(card.moved_note, box))
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(SPACE_6)
-        headers = (
+    def _meal_headers(self) -> tuple[str, ...]:
+        return (
+            self.tr("Time"),
+            self.tr("Meal"),
             self.tr("Energy (kcal)"),
             self.tr("Carbohydrates (g)"),
             self.tr("Protein (g)"),
             self.tr("Fat (g)"),
         )
-        values = (card.kcal, card.carbs, card.protein, card.fat)
-        for column, (header, value) in enumerate(zip(headers, values, strict=True)):
-            for row, text in enumerate((header, value)):
-                label = QLabel(text, box)
-                label.setTextFormat(Qt.TextFormat.PlainText)
-                label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                grid.addWidget(label, row, column)
-        grid.setColumnStretch(_MEAL_COLUMNS, 1)
-        inner.addLayout(grid)
-        if card.hourly:
-            inner.addWidget(_label(card.hourly, box))
-        self._meal_boxes.append(box)
+
+    def _meal_title(self, card: MealCardView) -> str:
+        # {meal}: the name of the eating moment; {time}: its time of day.
+        return self.tr("{meal} at {time}").format(meal=card.title, time=card.time)
+
+    def _build_meals(self, cards: tuple[MealCardView, ...], parent: QWidget) -> QWidget:
+        """The meals of the day as one table, a row each, and their notes under it: far shorter
+        than a card per meal (user's request of 2026-11-10 to use the window's room better)."""
+        self._meals = cards
+        box = QWidget(parent)
+        inner = QVBoxLayout(box)
+        inner.setContentsMargins(0, 0, 0, 0)
+        inner.setSpacing(SPACE_2)
+        inner.addWidget(_label(self.tr("Meals and training intakes"), box, bold=True))
+        self._meals_model.set_rows(
+            [(c.time, c.title, c.kcal, c.carbs, c.protein, c.fat) for c in cards]
+        )
+        table = _plain_table(
+            self._meals_model, self.tr("Meals and training intakes"), box, stretch_last=False
+        )
+        table.setObjectName("dayMeals")
+        inner.addWidget(table)
+        for card in cards:
+            for note in (card.moved_note, card.hourly):
+                if note:
+                    # {meal}: the eating moment; {note}: what to know about it.
+                    text = self.tr("{meal}: {note}").format(meal=card.title, note=note)
+                    label = _label(text, box)
+                    label.setMaximumWidth(_MAX_TEXT_WIDTH)
+                    inner.addWidget(label)
         return box

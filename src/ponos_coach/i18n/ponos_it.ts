@@ -720,8 +720,16 @@
         <translation>Fai clic su un&apos;attività, o premi Invio, per aprirla.</translation>
     </message>
     <message>
+        <source>Meal</source>
+        <translation>Pasto</translation>
+    </message>
+    <message>
         <source>{meal} at {time}</source>
         <translation>{meal} alle {time}</translation>
+    </message>
+    <message>
+        <source>{meal}: {note}</source>
+        <translation>{meal}: {note}</translation>
     </message>
     <message>
         <source>Energy (kcal)</source>

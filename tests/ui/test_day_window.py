@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QLocale, QSettings, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QLabel, QTableView, QWidget
+from PySide6.QtWidgets import QLabel, QScrollArea, QTableView, QWidget
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.load.domain import HeartRateLimits, Physiology, Sex, ThresholdHeartRate
@@ -344,7 +344,8 @@ def test_the_meals_show_energy_and_macronutrients_but_no_food_examples(
     open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
 
     texts = all_label_texts(last_day_page(window))
-    assert "Energy (kcal)" in texts and "Protein (g)" in texts
+    meal = last_day_page(window).meal_texts(0)
+    assert "Energy (kcal)" in meal and "Protein (g)" in meal
     assert "Examples" not in texts
     assert "No food example matches these amounts." not in texts
     assert "Food values not yet verified against the source." not in texts
@@ -489,3 +490,23 @@ def test_clicking_an_activity_of_the_day_opens_its_window_and_a_second_click_bri
     click_row(0)  # already open: no third window
     assert window.profile_dialogs.detail_dialogs[0] is first
     assert len(window.profile_dialogs.detail_dialogs) == 2
+
+
+def test_the_day_window_opens_showing_everything_without_a_scroll_bar(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    # The user's request of 2026-11-10: the window of a day grows to its content (within the
+    # screen), so it opens with no scroll bar.
+    window = window_with_days(qtbot, tmp_path, settings)
+
+    page = open_day(qtbot, window, DAWN_AND_LUNCH_DAY)
+    day_window = window.nutrition.day_window(DAWN_AND_LUNCH_DAY)
+    assert day_window is not None
+    qtbot.waitExposed(day_window)
+    qtbot.wait(50)
+
+    scroll = page.findChild(QScrollArea, "dayScroll")
+    assert isinstance(scroll, QScrollArea)
+    assert not scroll.verticalScrollBar().isVisible()
+    assert not scroll.horizontalScrollBar().isVisible()
+    assert page.content_overflow().height() == 0

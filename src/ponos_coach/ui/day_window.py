@@ -33,6 +33,31 @@ class DayWindow(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._page)
+        self._page.content_shown.connect(self.fit_content)
+
+    def fit_content(self) -> None:
+        """Grow the window to show the whole day without scroll bars (user's request of
+        2026-11-10), but never past the screen it is on: there the page scrolls."""
+        layout = self._page.layout()
+        if layout is not None:
+            layout.activate()
+        extra = self._page.content_overflow()
+        if extra.width() == 0 and extra.height() == 0:
+            return
+        room = self.screen().availableGeometry()
+        frame = self.frameGeometry().size() - self.size()  # title bar and borders
+        width = min(self.width() + extra.width(), room.width() - frame.width())
+        height = min(self.height() + extra.height(), room.height() - frame.height())
+        self.resize(width, height)
+        top_left = self.frameGeometry().topLeft()
+        if (
+            self.frameGeometry().bottom() > room.bottom()
+            or self.frameGeometry().right() > room.right()
+        ):
+            self.move(
+                min(top_left.x(), room.right() - self.frameGeometry().width() + 1),
+                min(top_left.y(), room.bottom() - self.frameGeometry().height() + 1),
+            )
 
     @property
     def day(self) -> date:
