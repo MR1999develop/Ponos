@@ -45,7 +45,7 @@ from ponos_coach.nutrition.domain.settings import MIN_VALID_DATE
 from ponos_coach.nutrition.use_cases import NutritionSettings
 from ponos_coach.ui.birth_date_edit import from_qdate, to_qdate
 from ponos_coach.ui.errors import ErrorMessage
-from ponos_coach.ui.form_rows import add_field_row
+from ponos_coach.ui.form_rows import FieldKind, add_field_row, size_field
 from ponos_coach.ui.goal_period_dialog import GoalPeriodDialog
 from ponos_coach.ui.lean_mass_section import LeanMassSection
 from ponos_coach.ui.nutrition_loader import LeanMassApplied
@@ -153,6 +153,8 @@ class NutritionSettingsDialog(SettingsForm):
         self._level_from.setDisplayFormat(QLocale().dateFormat(QLocale.FormatType.ShortFormat))
         self._level_from.setDateRange(to_qdate(MIN_VALID_DATE), to_qdate(self._today))
         self._level_from.setDate(to_qdate(self._today))
+        size_field(self._level, FieldKind.CHOICE)
+        size_field(self._level_from, FieldKind.DATE)
         self._set_level = QPushButton(self.tr("Set level"), box)
         self._set_level.setObjectName("settingsSetLevel")
         self._set_level.clicked.connect(self._on_set_level)
@@ -193,6 +195,7 @@ class NutritionSettingsDialog(SettingsForm):
             edit.setObjectName(f"settings{field.value.capitalize()}Time")
             edit.setDisplayFormat(QLocale().timeFormat(QLocale.FormatType.ShortFormat))
             edit.timeChanged.connect(self._update_times)
+            size_field(edit, FieldKind.SHORT)
             error = QLabel(box)
             error.setObjectName(f"settings{field.value.capitalize()}Error")
             error.setTextFormat(Qt.TextFormat.PlainText)

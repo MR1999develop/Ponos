@@ -34,7 +34,13 @@ from ponos_coach.profiles.domain import MIN_MEASUREMENT_DATE, NAME_MAX_CHARS
 from ponos_coach.profiles.measurements import MeasurementHistory, MeasurementProblem
 from ponos_coach.ui.birth_date_edit import BirthDateEdit, to_qdate
 from ponos_coach.ui.body_input import BodyProblem, body_problem_text
-from ponos_coach.ui.form_rows import add_field_row, optional_threshold_edit, threshold_pace_edit
+from ponos_coach.ui.form_rows import (
+    FieldKind,
+    add_field_row,
+    optional_threshold_edit,
+    size_field,
+    threshold_pace_edit,
+)
 from ponos_coach.ui.heart_rate_rules import (
     MAX_ALLOWED_BPM,
     MIN_ALLOWED_BPM,
@@ -110,11 +116,13 @@ class ProfileEditDialog(SettingsForm):
         self._valid_from.setMinimumDate(to_qdate(MIN_MEASUREMENT_DATE))
         self._valid_from.setMaximumDate(to_qdate(self._form.today))
         self._valid_from.dateChanged.connect(self._on_valid_from_changed)
+        size_field(self._valid_from, FieldKind.DATE)
 
         self._weight = QLineEdit(self)
         self._weight.setObjectName("measurementsWeight")
         self._weight.setAccessibleName(self.tr("Weight (kg)"))
         self._weight.textEdited.connect(self._on_weight_edited)
+        size_field(self._weight, FieldKind.SHORT)
         self._min = self._bpm_box(MIN_ALLOWED_BPM, "measurementsMinHeartRate")
         self._max = self._bpm_box(MIN_ALLOWED_BPM, "measurementsMaxHeartRate")
         self._threshold = self._bpm_box(MIN_THRESHOLD_BPM, "measurementsThresholdHeartRate")
@@ -156,8 +164,10 @@ class ProfileEditDialog(SettingsForm):
         self._height.setObjectName("fixedHeight")
         self._height.setAccessibleName(self.tr("Height (cm)"))
         self._height.textEdited.connect(self._on_height_edited)
+        size_field(self._height, FieldKind.SHORT)
         self._birth = BirthDateEdit(self._form.today, self)
         self._birth.selection_changed.connect(self._on_birth_changed)
+        size_field(self._birth, FieldKind.DATE)
 
     def _build_history_table(self) -> None:
         self._table = QTableView(self)
@@ -289,6 +299,7 @@ class ProfileEditDialog(SettingsForm):
         box.setObjectName(name)
         box.setRange(low, MAX_ALLOWED_BPM)
         box.setSuffix(self.tr(" bpm"))
+        size_field(box, FieldKind.SHORT)
         return box
 
     def _error_label(self) -> QLabel:
