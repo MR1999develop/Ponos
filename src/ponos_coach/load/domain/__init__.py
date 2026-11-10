@@ -31,7 +31,9 @@ from ponos_coach.load.domain.heart_rate import (
     HeartRateLimits,
     Physiology,
     Sex,
+    SportGroup,
     ThresholdHeartRate,
+    sport_group,
     threshold_for_sport,
 )
 from ponos_coach.load.domain.parameters import (
@@ -75,6 +77,7 @@ __all__ = [
     "PhysiologyEntry",
     "PmcSeries",
     "Sex",
+    "SportGroup",
     "ThresholdHeartRate",
     "WeeklyLoad",
     "WeeklyZones",
@@ -93,6 +96,7 @@ __all__ = [
     "reference_hour_weight",
     "sample_validity_s",
     "seconds_per_zone",
+    "sport_group",
     "threshold_for_sport",
     "threshold_reserve_ratio",
     "trimp_per_minute",

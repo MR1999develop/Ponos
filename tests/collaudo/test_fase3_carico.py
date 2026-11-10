@@ -403,12 +403,15 @@ def test_t_calc_05_a_stored_database_refuses_incoherent_heart_rate_even_without_
     database = profile.folder / "ponos.sqlite3"
     profile.close()
     statements = (
-        "INSERT INTO physiology VALUES ('2026-04-01', 50, 190, 50, 'male')",  # threshold = minimum
-        "INSERT INTO physiology VALUES ('2026-04-01', 50, 190, 191, 'male')",  # threshold > maximum
-        "INSERT INTO physiology VALUES ('2026-04-01', 50, 50, 50, 'male')",  # minimum = maximum
-        "INSERT INTO physiology VALUES ('2026-04-01', 19, 190, 170, 'male')",
-        "INSERT INTO physiology VALUES ('2026-04-01', 50, 251, 170, 'male')",
-        "INSERT INTO physiology VALUES ('2026-04-01', 50, 190, 39, 'male')",
+        # threshold = minimum
+        "INSERT INTO physiology VALUES ('2026-04-01', 50, 190, 50, 'male', NULL, NULL)",
+        # threshold > maximum
+        "INSERT INTO physiology VALUES ('2026-04-01', 50, 190, 191, 'male', NULL, NULL)",
+        # minimum = maximum
+        "INSERT INTO physiology VALUES ('2026-04-01', 50, 50, 50, 'male', NULL, NULL)",
+        "INSERT INTO physiology VALUES ('2026-04-01', 19, 190, 170, 'male', NULL, NULL)",
+        "INSERT INTO physiology VALUES ('2026-04-01', 50, 251, 170, 'male', NULL, NULL)",
+        "INSERT INTO physiology VALUES ('2026-04-01', 50, 190, 39, 'male', NULL, NULL)",
     )
     with closing(sqlite3.connect(database)) as raw:
         for statement in statements:

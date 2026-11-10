@@ -46,7 +46,7 @@ class HeartRateLimits:
 
 @dataclass(frozen=True, slots=True)
 class ThresholdHeartRate:
-    """Running threshold HR, in bpm, between 40 and 250."""
+    """A threshold HR, in bpm, between 40 and 250."""
 
     bpm: int
 
@@ -55,31 +55,67 @@ class ThresholdHeartRate:
             raise ValueError("threshold HR outside [40, 250] bpm")
 
 
-def threshold_for_sport(physiology: Physiology, sport: Sport) -> int:
-    """Threshold used for the sport.
+class SportGroup(Enum):
+    """The sports that share one threshold heart rate.
 
-    On the bike it is `max(run_threshold - 4, min_HR + 1)`: the value is brought to the limit
-    instead of
-    rejecting the parameters (project default); in the other sports it is the running threshold.
+    Running and trail are one group (the threshold is the running one); cycling has its own
+    because the heart rate at the same effort is lower on the bike; everything else (walking,
+    hiking, swimming-like or indoor activity, strength, other) shares one more.
     """
-    threshold = physiology.threshold.bpm
-    if sport is Sport.CYCLING:
-        return max(threshold - BIKE_THRESHOLD_OFFSET_BPM, physiology.limits.min_bpm + 1)
-    return threshold
+
+    RUNNING = "running"
+    CYCLING = "cycling"
+    OTHER = "other"
+
+
+_SPORT_GROUPS = {
+    Sport.RUNNING: SportGroup.RUNNING,
+    Sport.TRAIL: SportGroup.RUNNING,
+    Sport.CYCLING: SportGroup.CYCLING,
+}
+
+
+def sport_group(sport: Sport) -> SportGroup:
+    """The threshold group of a sport: running (also trail), cycling, or other."""
+    return _SPORT_GROUPS.get(sport, SportGroup.OTHER)
+
+
+def threshold_for_sport(physiology: Physiology, sport: Sport) -> int:
+    """Threshold used for the sport: the one entered for its group, else the default.
+
+    Running (and trail): the running threshold. Cycling: the cycling threshold if entered, else
+    `max(run_threshold - 4, min_HR + 1)` (brought to the limit instead of rejecting the
+    parameters; project default). Other sports: the other-activities threshold if entered, else
+    the running one. The only place where a sport's threshold is decided.
+    """
+    group = sport_group(sport)
+    if group is SportGroup.CYCLING:
+        if physiology.bike_threshold is not None:
+            return physiology.bike_threshold.bpm
+        return max(
+            physiology.threshold.bpm - BIKE_THRESHOLD_OFFSET_BPM, physiology.limits.min_bpm + 1
+        )
+    if group is SportGroup.OTHER and physiology.other_threshold is not None:
+        return physiology.other_threshold.bpm
+    return physiology.threshold.bpm
 
 
 @dataclass(frozen=True, slots=True)
 class Physiology:
     """User's physiological parameters, consistent with one another by construction.
 
-    The running threshold lies between min HR (excluded) and max HR (included); the
-    bike one is derived with `threshold_for_sport` and does not constrain the constructor.
+    The running threshold lies between min HR (excluded) and max HR (included). The cycling and
+    other-activities thresholds are optional (`None`: the default of `threshold_for_sport`) and,
+    when entered, lie in the same range. Read thresholds only through `threshold_for_sport`.
     """
 
     limits: HeartRateLimits
     threshold: ThresholdHeartRate
     sex: Sex
+    bike_threshold: ThresholdHeartRate | None = None
+    other_threshold: ThresholdHeartRate | None = None
 
     def __post_init__(self) -> None:
-        if not self.limits.min_bpm < self.threshold.bpm <= self.limits.max_bpm:
-            raise ValueError("the threshold must lie between min HR and max HR")
+        for entered in (self.threshold, self.bike_threshold, self.other_threshold):
+            if entered is not None and not self.limits.min_bpm < entered.bpm <= self.limits.max_bpm:
+                raise ValueError("the threshold must lie between min HR and max HR")

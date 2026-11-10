@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Use cases for the profile measurements: weight, min HR, max HR, threshold HR and threshold pace,
-each with a validity date.
+"""Use cases for the profile measurements: weight, min HR, max HR, threshold HR (running, cycling,
+other activities) and threshold pace, each with a validity date.
 
 - `UpdateMeasurements`: the saving of "Edit profile", in a single transaction: fixed data
   to complete (height and date of birth of a profile that lacks them), weight and dated HR
@@ -43,6 +43,15 @@ from ponos_coach.profiles.domain import (
 from ponos_coach.profiles.ports import FixedDataStore, ThresholdPaceStore, WeightStore
 
 
+class ThresholdReset(Enum):
+    """Change of an optional threshold HR (cycling, other activities): back to the default."""
+
+    DEFAULT = "default"
+
+
+type OptionalThresholdChange = ThresholdHeartRate | ThresholdReset
+
+
 class MeasurementProblem(Enum):
     """Why a measurement update is rejected (decides the interface's message)."""
 
@@ -66,6 +75,8 @@ class MeasurementUpdate:
     threshold pace.
 
     A `None` measurement does not change: the one in force that day applies. Sex is not changed.
+    `bike_threshold` and `other_threshold` are optional values: a `ThresholdHeartRate` sets one,
+    `ThresholdReset.DEFAULT` clears it (the default of `threshold_for_sport` applies again).
 
     Raises:
         InvalidMeasurementsError: no measurement given (`NOTHING_TO_UPDATE`).
@@ -77,6 +88,8 @@ class MeasurementUpdate:
     max_bpm: int | None = None
     threshold_bpm: int | None = None
     threshold_pace: ThresholdPace | None = None
+    bike_threshold: OptionalThresholdChange | None = None
+    other_threshold: OptionalThresholdChange | None = None
 
     def __post_init__(self) -> None:
         if self.weight is None and self.threshold_pace is None and not self.changes_heart_rate:
@@ -84,8 +97,23 @@ class MeasurementUpdate:
 
     @property
     def changes_heart_rate(self) -> bool:
-        """True if the update touches min HR, max HR or threshold."""
-        return not (self.min_bpm is None and self.max_bpm is None and self.threshold_bpm is None)
+        """True if the update touches min HR, max HR or any of the thresholds."""
+        return not (
+            self.min_bpm is None
+            and self.max_bpm is None
+            and self.threshold_bpm is None
+            and self.bike_threshold is None
+            and self.other_threshold is None
+        )
+
+
+def _optional_after(
+    base: ThresholdHeartRate | None, change: OptionalThresholdChange | None
+) -> ThresholdHeartRate | None:
+    """An optional threshold after a change: unchanged, set, or back to the default (`None`)."""
+    if change is None:
+        return base
+    return None if isinstance(change, ThresholdReset) else change
 
 
 def _physiology_after(base: Physiology, update: MeasurementUpdate) -> Physiology:
@@ -100,6 +128,8 @@ def _physiology_after(base: Physiology, update: MeasurementUpdate) -> Physiology
                 base.threshold.bpm if update.threshold_bpm is None else update.threshold_bpm
             ),
             base.sex,
+            _optional_after(base.bike_threshold, update.bike_threshold),
+            _optional_after(base.other_threshold, update.other_threshold),
         )
     except ValueError as exc:
         raise InvalidMeasurementsError(MeasurementProblem.INVALID_HEART_RATE) from exc

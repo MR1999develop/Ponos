@@ -300,6 +300,14 @@ class SqliteActivityIndex:
             raise DuplicateActivityError("the activity already has another Garmin id")
 
 
+def _bpm_or_none(threshold: ThresholdHeartRate | None) -> int | None:
+    return None if threshold is None else threshold.bpm
+
+
+def _optional_threshold(bpm: int | None) -> ThresholdHeartRate | None:
+    return None if bpm is None else ThresholdHeartRate(bpm)
+
+
 class SqlitePhysiologyStore:
     """Physiological parameters (`PhysiologyStore` port) on SQLite."""
 
@@ -311,16 +319,21 @@ class SqlitePhysiologyStore:
         physiology = entry.physiology
         with translating(LoadStoreError):
             self._db.connection.execute(
-                "INSERT INTO physiology (valid_from, min_bpm, max_bpm, threshold_bpm, sex) "
-                "VALUES (?, ?, ?, ?, ?) ON CONFLICT (valid_from) DO UPDATE SET "
+                "INSERT INTO physiology (valid_from, min_bpm, max_bpm, threshold_bpm, sex, "
+                "bike_threshold_bpm, other_threshold_bpm) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (valid_from) DO UPDATE SET "
                 "min_bpm = excluded.min_bpm, max_bpm = excluded.max_bpm, "
-                "threshold_bpm = excluded.threshold_bpm, sex = excluded.sex",
+                "threshold_bpm = excluded.threshold_bpm, sex = excluded.sex, "
+                "bike_threshold_bpm = excluded.bike_threshold_bpm, "
+                "other_threshold_bpm = excluded.other_threshold_bpm",
                 (
                     entry.valid_from.isoformat(),
                     physiology.limits.min_bpm,
                     physiology.limits.max_bpm,
                     physiology.threshold.bpm,
                     physiology.sex.value,
+                    _bpm_or_none(physiology.bike_threshold),
+                    _bpm_or_none(physiology.other_threshold),
                 ),
             )
 
@@ -337,7 +350,8 @@ class SqlitePhysiologyStore:
         """All the entries by ascending date."""
         with translating(LoadStoreError):
             rows = self._db.connection.execute(
-                "SELECT valid_from, min_bpm, max_bpm, threshold_bpm, sex "
+                "SELECT valid_from, min_bpm, max_bpm, threshold_bpm, sex, "
+                "bike_threshold_bpm, other_threshold_bpm "
                 "FROM physiology ORDER BY valid_from"
             ).fetchall()
         try:
@@ -345,7 +359,11 @@ class SqlitePhysiologyStore:
                 PhysiologyEntry(
                     date.fromisoformat(row[0]),
                     Physiology(
-                        HeartRateLimits(row[1], row[2]), ThresholdHeartRate(row[3]), Sex(row[4])
+                        HeartRateLimits(row[1], row[2]),
+                        ThresholdHeartRate(row[3]),
+                        Sex(row[4]),
+                        _optional_threshold(row[5]),
+                        _optional_threshold(row[6]),
                     ),
                 )
                 for row in rows

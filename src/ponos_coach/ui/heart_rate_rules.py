@@ -24,6 +24,7 @@ class HeartRateProblem(Enum):
     MIN_NOT_BELOW_MAX = "min_not_below_max"
     THRESHOLD_NOT_ABOVE_MIN = "threshold_not_above_min"
     THRESHOLD_ABOVE_MAX = "threshold_above_max"
+    NOT_A_THRESHOLD = "not_a_threshold"  # an optional threshold typed as something else
 
 
 def heart_rate_problems(
@@ -53,5 +54,9 @@ def heart_rate_problem_text(problem: HeartRateProblem) -> str:
         HeartRateProblem.THRESHOLD_ABOVE_MAX: QCoreApplication.translate(
             "HeartRate", "The threshold cannot be higher than the maximum."
         ),
+        HeartRateProblem.NOT_A_THRESHOLD: QCoreApplication.translate(
+            "HeartRate",
+            "Enter a whole number of beats per minute between {low} and {high}, or leave it empty.",
+        ).format(low=MIN_THRESHOLD_BPM, high=MAX_ALLOWED_BPM),
     }
     return texts[problem]

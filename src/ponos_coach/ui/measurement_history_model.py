@@ -3,7 +3,9 @@
 """Measurement history table: one row per date, read-only.
 
 Weight, HR parameters and threshold pace have their own dates: a cell is empty if that
-measurement was not recorded that day. Numbers sit on the right, units are in the header;
+measurement was not recorded that day. The cycling and other-activities threshold HR are optional
+parts of the HR entry: their cell is empty when the entry leaves them at the default. Numbers sit
+on the right, units are in the header;
 per-column sorting uses numeric keys. Weight and HR are health data, local only.
 """
 
@@ -44,7 +46,9 @@ class Column(IntEnum):
     MIN_BPM = 2
     MAX_BPM = 3
     THRESHOLD = 4
-    THRESHOLD_PACE = 5
+    BIKE_THRESHOLD = 5
+    OTHER_THRESHOLD = 6
+    THRESHOLD_PACE = 7
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,7 +151,9 @@ class MeasurementHistoryModel(QAbstractTableModel):
             Column.WEIGHT: self.tr("Weight (kg)"),
             Column.MIN_BPM: self.tr("Resting HR (bpm)"),
             Column.MAX_BPM: self.tr("Maximum HR (bpm)"),
-            Column.THRESHOLD: self.tr("Threshold HR (bpm)"),
+            Column.THRESHOLD: self.tr("Running threshold HR (bpm)"),
+            Column.BIKE_THRESHOLD: self.tr("Cycling threshold HR (bpm)"),
+            Column.OTHER_THRESHOLD: self.tr("Other activities threshold HR (bpm)"),
             Column.THRESHOLD_PACE: self.tr("Threshold pace (min/km)"),
         }
         return headers[column]
@@ -160,6 +166,12 @@ def _bpm_of(row: HistoryRow, column: Column) -> int | None:
         return row.physiology.limits.min_bpm
     if column is Column.MAX_BPM:
         return row.physiology.limits.max_bpm
+    if column is Column.BIKE_THRESHOLD:
+        entered = row.physiology.bike_threshold
+        return None if entered is None else entered.bpm
+    if column is Column.OTHER_THRESHOLD:
+        entered = row.physiology.other_threshold
+        return None if entered is None else entered.bpm
     return row.physiology.threshold.bpm
 
 

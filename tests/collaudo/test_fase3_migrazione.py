@@ -321,7 +321,8 @@ class _UncheckedDatabase:
         self.connection.execute("CREATE TABLE profile_body (id, height_cm, birth_date)")
         self.connection.execute("CREATE TABLE weight (valid_from, tenths_kg)")
         self.connection.execute(
-            "CREATE TABLE physiology (valid_from, min_bpm, max_bpm, threshold_bpm, sex)"
+            "CREATE TABLE physiology (valid_from, min_bpm, max_bpm, threshold_bpm, sex, "
+            "bike_threshold_bpm, other_threshold_bpm)"
         )
         self.connection.execute(statement)
 
@@ -331,7 +332,11 @@ class _UncheckedDatabase:
     [
         ("INSERT INTO profile_body VALUES (1, 172, '1990-13-45-SEGRETO')", "fixed"),
         ("INSERT INTO weight VALUES ('2026-13-45-SEGRETO', 700)", "weight"),
-        ("INSERT INTO physiology VALUES ('2026-13-45-SEGRETO', 50, 190, 170, 'male')", "heart"),
+        (
+            "INSERT INTO physiology VALUES "
+            "('2026-13-45-SEGRETO', 50, 190, 170, 'male', NULL, NULL)",
+            "heart",
+        ),
     ],
 )
 def test_a_stored_date_that_cannot_be_read_is_reported_without_the_text_that_was_read(

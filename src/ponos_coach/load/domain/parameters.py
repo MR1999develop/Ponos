@@ -9,10 +9,11 @@ import json
 import re
 from bisect import bisect_right
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
-from ponos_coach.load.domain.heart_rate import Physiology
+from ponos_coach.activities.domain import Sport
+from ponos_coach.load.domain.heart_rate import Physiology, threshold_for_sport
 from ponos_coach.load.domain.zones import ZONE_STARTS_PERCENT
 
 # Changes when the load formula or the zone definition changes: invalidates every saved
@@ -44,11 +45,13 @@ class LoadFingerprint:
 def load_fingerprint(physiology: Physiology) -> LoadFingerprint:
     """Fingerprint of the parameters that determine the load of an activity.
 
-    It depends on the HR limits, the threshold, the sex, the zone percentages and the version of
-    the load model. Deterministic: the same parameters give the same fingerprint, in every
-    process.
+    It depends on the HR limits, the thresholds in effect for each sport group, the sex, the
+    zone percentages and the version of the load model. Deterministic: the same parameters give
+    the same fingerprint, in every process. A cycling or other-activities threshold enters it
+    only where it differs from the default: a profile that never set them keeps the fingerprint
+    (and the saved loads) it had, and entering the value the default would give changes nothing.
     """
-    document = {
+    document: dict[str, object] = {
         "model": LOAD_MODEL_VERSION,
         "min_bpm": physiology.limits.min_bpm,
         "max_bpm": physiology.limits.max_bpm,
@@ -56,6 +59,11 @@ def load_fingerprint(physiology: Physiology) -> LoadFingerprint:
         "sex": physiology.sex.value,
         "zones": list(ZONE_STARTS_PERCENT),
     }
+    defaults = replace(physiology, bike_threshold=None, other_threshold=None)
+    for key, sport in (("bike_threshold_bpm", Sport.CYCLING), ("other_threshold_bpm", Sport.OTHER)):
+        in_effect = threshold_for_sport(physiology, sport)
+        if in_effect != threshold_for_sport(defaults, sport):
+            document[key] = in_effect
     text = json.dumps(document, sort_keys=True, separators=(",", ":"))
     return LoadFingerprint(hashlib.sha256(text.encode("utf-8")).hexdigest())
 

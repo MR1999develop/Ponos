@@ -40,6 +40,7 @@ from ponos_coach.profiles.use_cases import NewProfileRequest
 from ponos_coach.ui.birth_date_edit import NOT_SET_DATE
 from ponos_coach.ui.body_input import latest_birth_date
 from ponos_coach.ui.main_window import MainWindow
+from ponos_coach.ui.measurement_history_model import Column
 from ponos_coach.ui.measurements_form import EditField, MeasurementsForm, MeasurementsRequest
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
 from ponos_coach.ui.new_profile_form import Field
@@ -653,7 +654,7 @@ def test_a_threshold_pace_typed_in_the_settings_is_saved_and_listed_in_the_histo
     assert again.pace_edit.text() == "5:30"  # shown in the one format
     assert not again.save_button.isEnabled()  # nothing changed yet
     model = again.history_table.model()
-    paces = {model.data(model.index(row, 5)) for row in range(model.rowCount())}
+    paces = {model.data(model.index(row, Column.THRESHOLD_PACE)) for row in range(model.rowCount())}
     assert "5:30" in paces
 
 
