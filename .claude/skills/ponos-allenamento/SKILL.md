@@ -99,7 +99,7 @@ valori in `nutrition/domain/defaults.py`.
 Cartella del profilo e elenco dei profili, SQLite, archivio dei file
 originali FIT, identità (`file_id`), giornale della
 sincronizzazione, abbinamento, backoff, import di file FIT e cartelle con i
-tetti, esiti dell'import, lock, dati personali, schema da v3 a v7. Dettagli:
+tetti, esiti dell'import, attività eliminate (tombe, `SKIPPED`, ADR 018), lock, dati personali, schema da v3 a v7. Dettagli:
 `references/dati-e-sincronizzazione.md`; schema e archivio:
 `docs/adr/005-schema-sqlite-e-archivio.md`; dati del profilo:
 `docs/adr/007-dati-del-profilo-e-zone.md`.

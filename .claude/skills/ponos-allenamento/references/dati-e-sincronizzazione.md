@@ -286,6 +286,16 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   legge né si scrive più**: resta nella tabella (expand-contract), la toglierà una migrazione
   futura; `other_threshold_bpm` è ora la LT2 di tutti gli sport che non sono corsa o trail.
   Migrazione `LT1_MIGRATION` (`storage/schema_lt1.py`); test `tests/storage/test_lt1_store.py`.
+- **Schema v19** (attività eliminate; ADR 018): tabella `deleted_activity` (la "tomba"), `STRICT`,
+  con `identity_key` PK, id Garmin `UNIQUE` facoltativo, sport, inizio, tempo trascorso,
+  distanza, riferimento al file in archivio (percorso, SHA-256, dimensione), origine e istante
+  d'import dell'attività; nessuna posizione né FC. Due trigger tengono un'identità o in
+  `activities` o in `deleted_activity`, mai in entrambe (un `INSERT` in `activities` di
+  un'identità eliminata si interrompe: chi dimentica di guardare le tombe fallisce, non
+  resuscita l'attività). `sync_journal` ricostruita con lo stato `skipped`, indice
+  `sync_journal_to_do` ricreato. Una migrazione che ricostruisse `activities` deve ricreare il
+  trigger. Migrazione `DELETED_ACTIVITY_MIGRATION` (`storage/schema_deleted_activity.py`);
+  test `tests/storage/test_deleted_activity_store.py`.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.
@@ -608,11 +618,13 @@ tolto). Nessun URL arriva da fuori: la sorgente si cerca per chiave nell'elenco.
   (`GarminActivityId.parse`, `RemoteActivity`, `ActivityPage`); una voce
   malformata si scarta e conta in `raw_count`.
 - Stati (`SyncStatus`): `PENDING` (da scaricare), `DOWNLOADED`, `MATCHED`,
-  `RETRYABLE` (fallita per una causa transitoria), `FAILED` (definitiva). Non
+  `RETRYABLE` (fallita per una causa transitoria), `FAILED` (definitiva), `SKIPPED` (schema
+  v19: l'utente ha eliminato l'attività; scelta, non errore: finale, senza causa, non si scarica
+  e non resta da fare; `mark_skipped`). Non
   c'è uno stato "in corso": download, archivio e conferma stanno in una sola
   transazione, quindi un'interruzione lascia la voce `PENDING`. Da `PENDING` e
   `RETRYABLE` si va in tutti gli altri (anche `RETRYABLE` → `RETRYABLE`);
-  `DOWNLOADED` e `MATCHED` non si muovono, `FAILED` solo verso `PENDING` e solo
+  `DOWNLOADED`, `MATCHED` e `SKIPPED` non si muovono, `FAILED` solo verso `PENDING` e solo
   per `rearm_exhausted` (`can_transition`, `InvalidTransitionError`),
   e il database rifiuta le combinazioni incoerenti con i CHECK.
 - Cause (`FailureReason`): ritentabili `TRANSIENT_ERROR` e `RATE_LIMITED`;
@@ -640,7 +652,14 @@ tolto). Nessun URL arriva da fuori: la sorgente si cerca per chiave nell'elenco.
   ne hanno almeno uno positivo. Il file scaricato deve coincidere con la voce (inizio e
   durata, regola dei duplicati); se no `REMOTE_REJECTED`, mai registrato.
   `SyncOutcome.downloaded` conta solo le attività nuove, `matched` i gemelli
-  in un altro formato, `already_present` i file già nel profilo.
+  in un altro formato, `already_present` i file già nel profilo, `skipped_deleted` le
+  attività che l'utente aveva eliminato.
+- Attività eliminate (`DeletedActivities`, porta sulla stessa connessione dell'indice): prima di
+  abbinare o scaricare, `_skip_if_deleted` cerca una tomba con lo stesso id Garmin o, se senza id
+  (importata da file), con stesso sport e `is_possible_duplicate` (`find_matching_deleted`): la
+  voce diventa `SKIPPED`, senza download. Dopo il download, un file la cui identità è eliminata
+  non si archivia né si registra (la verifica si ripete nella transazione che scrive) e la voce è
+  `SKIPPED`. `SyncPorts.deleted` è obbligatorio.
 - Lavoro: `next_to_process(limit)` dà `PENDING` e `RETRYABLE` dalla più
   recente (a parità, id decrescente); `add_pending` è idempotente per id e non
   tocca le voci esistenti.
@@ -697,7 +716,10 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
    che verifica firma, CRC e struttura. Un solo errore, `ActivityFileError`,
    con un motivo enumerato.
 6. **Esiti per file** (`ImportStatus`): importata; già presente (stessa
-   identità); ignorata (il file non è
+   identità); eliminata dall'utente (ADR 018: `LEFT_OUT` per una cartella, con la politica
+   `DeletedPolicy.LEAVE_OUT`, che non riporta l'attività; `BROUGHT_BACK` per i file scelti a mano,
+   `BRING_BACK`, che toglie la tomba e rimette l'attività com'era; il riepilogo li conta a
+   parte, non come problemi); ignorata (il file non è
    un'attività); fallita, con il motivo (`ImportIssue`); riparata (`REPAIRED`):
    l'attività c'è già ma il suo file in archivio manca o è alterato, e la
    reimportazione dello stesso originale lo rimette a posto (il riepilogo la
@@ -710,6 +732,14 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
    parziale (`cancelled`) si riprende rilanciando. Alla fine un riepilogo:
    conteggi per esito e, per ogni file non importato, nome e motivo.
 9. Nessun log: nomi e posizioni sono dati personali.
+10. Eliminare e ripristinare (`activities/deletion.py`, ADR 018): `DeleteActivities(index,
+    deleted, clock)(identità…)` toglie la riga dall'indice (con carico in cache, riquadro e
+    polilinea, derivati) e scrive la tomba in una sola transazione, tutto o niente; il file in
+    archivio non si tocca. `RestoreActivities(index, deleted, archive, decode)(identità…)`
+    rilegge il file archiviato con il decodificatore dell'import, fuori dalla transazione, e poi
+    in una transazione toglie la tomba e rimette l'attività com'era (origine, istante d'import e
+    id Garmin della tomba, `DeletedActivity.to_record`); file mancante o alterato → resta
+    eliminata (`RestoreStatus`). Entrambe idempotenti per identità.
 
 ## 7. Lock
 

@@ -180,6 +180,14 @@ and the check box "Synchronise when a profile opens".
   activity; if it is another activity, that entry fails and nothing is
   recorded.
 - Activities already present do not count as new.
+- An activity the user deleted (section 6, "Deleting activities") is never
+  downloaded or recorded again: the synchronisation recognises it by its Garmin
+  id, or, if it was imported from a file, by start time, sport and duration, and
+  also by the identity of the downloaded file. Its entry is marked "skipped"
+  (a choice, not an error): it is not a failure, it does not stay "to
+  download" and the summary does not count it as new. Restoring the activity
+  (or importing its file by hand) puts it back, and the next synchronisation
+  finds it already there.
 
 ### What happens when something goes wrong
 
@@ -252,6 +260,10 @@ the profile backup).
 - The files are copied into the profile archive. The source folder or file is
   never modified.
 - Duplicates are skipped. Running the import again changes nothing.
+- Activities the user deleted (section 6) are not brought back by a folder:
+  they are left out and the summary says so. Choosing the file itself
+  ("Import files...", or dropping it) is the user's decision and brings the
+  activity back as it was.
 - The import does not block the window. The status bar shows the progress and
   "Stop import" (Esc). An interrupted import is resumed by running it again.
 - Result per file:
@@ -261,6 +273,11 @@ the profile backup).
     missing or altered; by importing the same original file again, the app puts
     it right. The summary counts it separately ("Archived files repaired from
     the imported original: n"), not as a problem;
+  - brought back: the user had deleted the activity and chose its file by
+    hand; counted apart ("Deleted activities brought back by their file: n");
+  - left out: the user had deleted the activity and the file came from a
+    folder; counted apart ("Left out because you deleted them: n. To bring one
+    back, choose its file with Import files."), not as a problem;
   - ignored: the file is not an activity;
   - with an error, with the reason (damaged, too large, unreadable, not
     saved...).
@@ -524,6 +541,42 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
   are shared with the Map (section 15).
 - A double click or Enter on a row opens the activity detail (section 6); the
   double click also centres the map on that activity.
+
+### Deleting activities
+
+- From the Activities list, one or more rows (Ctrl or Shift to select several):
+  - right button (or the Menu key) on a row: its menu has "Activity detail..."
+    and, apart, "Delete activity" ("Delete n activities" with several rows
+    selected). A right click on a row that is not selected selects it first;
+  - `Del` while the list has the focus;
+  - Profile menu, "Delete activity" (`Del`): disabled, with the reason in the
+    tooltip, when no row is selected, no profile is open or an operation is
+    running.
+- Nothing is asked: the activities go at once. The status bar says what was
+  deleted ("Deleted Running, 3/2/26 7:00 AM. Press Ctrl+Z to bring it back.",
+  or "n activities deleted. ...") and the undo brings them back.
+- Undo and redo (Profile menu, "Undo Delete activity" / "Redo ...", Ctrl+Z and
+  Ctrl+Shift+Z or Ctrl+Y while the list has the focus; a global Ctrl+Z would
+  also act in a text field). One step per command, so deleting three rows is
+  one undo. The steps are lost when another profile is opened.
+- Deleting takes the activity out of the list, the charts, the calendar, the
+  map and the plan, as if it had never been imported (the load, the PMC and the
+  plan are recomputed, as after an import). The original FIT file stays in the
+  profile archive and the profile backup keeps it.
+- Threshold tests applied from a deleted activity stay in the history: the
+  test is a record of its own (the physiological parameters it set).
+- "Deleted activities..." (Profile menu) opens a window that does not block
+  the others: a table with date and time, sport, total time and distance, the
+  most recently deleted first, and the "Restore" button, enabled while rows are
+  selected (several can be restored at once). Without deleted activities the
+  window says so in a sentence. Restoring reads the archived file again and
+  puts the activity back as it was (same origin, import date and Garmin id);
+  it is a step of the same undo stack, so its undo deletes it again. If the
+  file is gone or damaged, the activity stays deleted and the message says
+  what to do (choose the file with "Import files...").
+- A deleted activity keeps only what the window shows, the identity (the FIT
+  `file_id`, and the Garmin id if it had one) and the reference to the file;
+  never positions or heart rate. ADR 018.
 
 ## 7. Threshold test
 

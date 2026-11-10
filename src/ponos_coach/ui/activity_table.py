@@ -23,16 +23,19 @@ from PySide6.QtCore import (
     QModelIndex,
     QObject,
     QPersistentModelIndex,
+    QPoint,
     QSortFilterProxyModel,
     Qt,
     QTime,
     Signal,
 )
+from PySide6.QtGui import QAction, QContextMenuEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QHeaderView,
     QLabel,
+    QMenu,
     QStackedWidget,
     QTableView,
     QVBoxLayout,
@@ -274,6 +277,21 @@ def sorted_table_model(
     return proxy
 
 
+class ActivityTableView(QTableView):
+    """The table of activities; the right button and the Menu key ask for the menu of the row."""
+
+    row_menu_requested = Signal(object, object)  # QPoint (in the viewport), QPoint (global)
+
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:  # noqa: N802 - Qt
+        """Ask for the menu of the row under the pointer (of the current row, from the keyboard)."""
+        if event.reason() == QContextMenuEvent.Reason.Keyboard and self.currentIndex().isValid():
+            centre = self.visualRect(self.currentIndex()).center()
+            self.row_menu_requested.emit(centre, self.viewport().mapToGlobal(centre))
+        else:
+            self.row_menu_requested.emit(event.pos(), event.globalPos())
+        event.accept()
+
+
 class ActivitiesPage(QWidget):
     """Page "Activities": the table, or the empty state with the first step."""
 
@@ -286,13 +304,16 @@ class ActivitiesPage(QWidget):
         super().__init__(parent)
         self._model = ActivityTableModel(self)
         self._proxy = sorted_table_model(self._model, self)
-        self._table = QTableView(self)
+        self._table = ActivityTableView(self)
         self._table.setObjectName("activitiesTable")
         self._table.setAccessibleName(self.tr("Activities"))
         self._table.setModel(self._proxy)
         self._table.setSortingEnabled(True)
         self._table.sortByColumn(Column.START, Qt.SortOrder.DescendingOrder)
         self._table.activated.connect(self._on_activated)
+        self._table.row_menu_requested.connect(self._on_row_menu_requested)
+        self._row_layout: tuple[QAction | None, ...] = ()
+        self._row_menu: QMenu | None = None
         self._table.selectionModel().selectionChanged.connect(
             lambda *_: self.selection_changed.emit()
         )
@@ -415,6 +436,49 @@ class ActivitiesPage(QWidget):
         if not index.isValid():
             return None
         return self._model.activity_at(self._proxy.mapToSource(index).row())
+
+    def selected_identities(self) -> tuple[ActivityIdentity, ...]:
+        """The identities of all the selected rows, in the order the table shows them."""
+        rows = sorted(index.row() for index in self._table.selectionModel().selectedRows())
+        activities = (
+            self._model.activity_at(self._proxy.mapToSource(self._proxy.index(row, 0)).row())
+            for row in rows
+        )
+        return tuple(a.identity for a in activities if a is not None)
+
+    def set_row_actions(self, actions: Sequence[QAction | None]) -> None:
+        """The commands of the menu of a row (`None` is a separator): the window's own actions, so
+        the menu never differs from the menu bar."""
+        self._row_layout = tuple(actions)
+
+    @property
+    def row_menu(self) -> QMenu | None:
+        """The menu of a row, while it is open."""
+        return self._row_menu
+
+    def _on_row_menu_requested(self, position: object, global_position: object) -> None:
+        if not isinstance(position, QPoint) or not isinstance(global_position, QPoint):
+            return
+        index = self._table.indexAt(position)
+        if not index.isValid() or not self._row_layout:
+            return
+        if not self._table.selectionModel().isRowSelected(index.row()):
+            self._table.selectRow(index.row())  # the right button acts on the row it is on
+        menu = QMenu(self)
+        menu.setObjectName("activityRowMenu")
+        menu.setToolTipsVisible(True)
+        menu.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        for action in self._row_layout:
+            if action is None:
+                menu.addSeparator()
+            else:
+                menu.addAction(action)
+        menu.aboutToHide.connect(self._on_row_menu_hidden)
+        self._row_menu = menu
+        menu.popup(global_position)
+
+    def _on_row_menu_hidden(self) -> None:
+        self._row_menu = None
 
     def request_detail(self) -> None:
         """Request the detail of the selected activity (no effect without a selection)."""

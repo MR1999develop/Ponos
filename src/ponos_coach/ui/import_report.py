@@ -28,7 +28,9 @@ class ImportReport:
     `already_present` also counts activities that already arrived in another format (same
     activity, not imported twice). `cancelled` says the import stopped before the
     end: unprocessed files do not appear. `repaired` counts already present activities whose
-    archived file was missing or altered and which the imported original repaired.
+    archived file was missing or altered and which the imported original repaired. `brought_back`
+    counts the activities the user had deleted and that came back because the user chose their
+    file; `left_out` those a folder import skipped because the user had deleted them.
     """
 
     imported: int
@@ -38,11 +40,21 @@ class ImportReport:
     cancelled: bool
     not_imported: tuple[NotImported, ...]
     repaired: int = 0
+    brought_back: int = 0
+    left_out: int = 0
 
     @property
     def examined(self) -> int:
         """Files processed in all."""
-        return self.imported + self.already_present + self.repaired + self.ignored + self.failed
+        return (
+            self.imported
+            + self.already_present
+            + self.repaired
+            + self.brought_back
+            + self.left_out
+            + self.ignored
+            + self.failed
+        )
 
     @classmethod
     def from_summary(cls, summary: ImportSummary) -> ImportReport:
@@ -60,4 +72,6 @@ class ImportReport:
             cancelled=summary.cancelled,
             not_imported=problems,
             repaired=summary.count(ImportStatus.REPAIRED),
+            brought_back=summary.count(ImportStatus.BROUGHT_BACK),
+            left_out=summary.count(ImportStatus.LEFT_OUT),
         )

@@ -48,6 +48,7 @@ from ponos_coach.assessment.domain import ThresholdProtocol
 from ponos_coach.load.use_cases import ProfileOverview
 from ponos_coach.profiles.domain import ProfileId, RegistryEntry
 from ponos_coach.profiles.use_cases import FolderWarning, NewProfileRequest
+from ponos_coach.ui.activity_deletion import ActivityDeletionUi
 from ponos_coach.ui.activity_detail_loader import ActivityDetailLoader
 from ponos_coach.ui.activity_table import ActivitiesPage
 from ponos_coach.ui.backup_runner import BackupRunner, BackupUseCases
@@ -306,6 +307,11 @@ class MainWindow(QMainWindow):
         profile_menu.addAction(self._detail_action)
         profile_menu.addAction(self._use_as_test_action)
         profile_menu.addAction(self._threshold_history_action)
+        profile_menu.addSeparator()
+        profile_menu.addAction(self._deletion.delete_action)
+        profile_menu.addAction(self._deletion.undo_action)
+        profile_menu.addAction(self._deletion.redo_action)
+        profile_menu.addAction(self._deletion.deleted_action)
         self._register_pane_shortcuts()
         self._register_calendar_shortcuts()
         self._map_ui.build_menu(self.menuBar())
@@ -487,6 +493,23 @@ class MainWindow(QMainWindow):
             show_settings=self.show_settings_page,
             unavailable_reason=lambda: self._unavailable_reason(self._controller.can_edit_profile),
         )
+        self._deletion = ActivityDeletionUi(
+            self,
+            self._controller,
+            selected=self._activities.selected_identities,
+            zone=lambda: self._zone,
+            show_error=self._show_error,
+            notify=lambda text: self.statusBar().showMessage(text, _STATUS_MESSAGE_MS),
+        )
+        # Delete, Undo and Redo act while the list has the focus (a global Ctrl+Z would also act
+        # in a text field); the same actions are in the Profile menu and in the menu of a row.
+        for action in (
+            self._deletion.delete_action,
+            self._deletion.undo_action,
+            self._deletion.redo_action,
+        ):
+            self._activities.addAction(action)
+        self._activities.set_row_actions([self._detail_action, None, self._deletion.delete_action])
         self._activities.detail_requested.connect(self._dialogs.show_activity_detail)
         self._activities.detail_requested.connect(self._map_ui.focus_activity)
         self._map_ui.controller.open_requested.connect(self._dialogs.show_activity_detail)
@@ -630,6 +653,7 @@ class MainWindow(QMainWindow):
         controller.overview_changed.connect(self._on_overview_changed)
         controller.import_progress_changed.connect(self._on_import_progress)
         controller.import_finished.connect(self._on_import_finished)
+        controller.import_finished.connect(lambda _report: self._deletion.data_changed())
         controller.operation_failed.connect(self._on_operation_failed)
         controller.deletion_requested.connect(self._on_deletion_requested)
         controller.folder_inspected.connect(self._on_folder_inspected)
@@ -741,6 +765,11 @@ class MainWindow(QMainWindow):
     def nutrition(self) -> NutritionUi:
         """The nutrition flow (day windows and the Settings > Nutrition page)."""
         return self._nutrition
+
+    @property
+    def activity_deletion(self) -> ActivityDeletionUi:
+        """Deleting and restoring activities (actions, undo stack, "Deleted activities")."""
+        return self._deletion
 
     @property
     def calendar_actions(self) -> dict[str, QAction]:
@@ -1063,6 +1092,7 @@ class MainWindow(QMainWindow):
         self._threshold.profile_changed()
         self._plan.profile_changed()
         self._injuries.profile_changed()
+        self._deletion.profile_changed()
         self.setWindowTitle(self.tr("{profile} - Ponos Coach").format(profile=view.name.value))
         self._warning_label.setText(self._warning_text(view.warnings))
         self._warning_label.setVisible(bool(view.warnings))
@@ -1325,6 +1355,7 @@ class MainWindow(QMainWindow):
             self._activities.show_activities((), self._zone)
             self._calendar.show_data(self._today(), (), system_theme())
         self._update_status_summary(state)
+        self._deletion.refresh_actions()
 
     def _on_color_scheme_changed(self) -> None:
         self._overview.apply_state(self._controller.overview_state, system_theme(), self._zone)
@@ -1373,6 +1404,7 @@ class MainWindow(QMainWindow):
         self._update_calendar_actions()
         self._update_threshold_actions()
         has_selection = self._activities.selected_activity() is not None
+        self._deletion.refresh_actions()
         self._detail_action.setEnabled(has_selection)
         self._detail_action.setToolTip(
             "" if has_selection else self.tr("Select an activity in the Activities list first.")

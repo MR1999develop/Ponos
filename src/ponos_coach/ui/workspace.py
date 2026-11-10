@@ -205,6 +205,7 @@ class ProfileAccess:
     today: Callable[[], date]
     context: JobContext
     rename: Callable[[str], RenamedProfile]
+    clock: Clock
 
 
 # --- State that lives only on the data thread ------------------------------------------------
@@ -560,6 +561,7 @@ class WorkspaceController(QObject):
                 lambda: services.today(current.zone),
                 context,
                 lambda text: services.profiles.rename(current.session, text),
+                services.clock,
             )
             return work(access)
 
