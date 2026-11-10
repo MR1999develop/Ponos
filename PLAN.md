@@ -784,6 +784,15 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       `tests/planning/test_trimp_eq_equivalence.py` (11 scenari di sola corsa
       contro il golden `tests/planning/golden/plans_hrtss.json`),
       `tests/collaudo/test_fase4_distanza.py`, `tests/collaudo/test_fase3_carico.py`.
+- [x] Nuovo profilo con soglie FC di ciclismo e altre attività e passo soglia,
+      facoltativi, con gli stessi componenti e controlli di Edit profile;
+      creazione atomica (richiesta dell'utente del 2026-11-10, `6046260`).
+      Test: `tests/ui/test_new_profile_thresholds.py`,
+      `tests/ui/test_new_profile_form_thresholds.py`,
+      `tests/profiles/test_create_profile_thresholds.py`.
+- [x] Finestra del giorno con la seduta programmata completa (fase, blocchi,
+      carico stimato), come il pannello del calendario (richiesta dell'utente
+      del 2026-11-10, `db698a1`; caso d'uso `PlannedDay`).
 - [x] Soglie FC per corsa, ciclismo e altre attività nel profilo (richiesta
       dell'utente del 2026-11-10): misure datate; bici di default corsa − 4,
       altre attività di default la corsa; `threshold_for_sport` unico punto da

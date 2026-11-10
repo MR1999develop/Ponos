@@ -2461,6 +2461,14 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
 <context>
     <name>HeartRate</name>
     <message>
+        <source>default: running - 4 ({value} bpm)</source>
+        <translation>predefinita: corsa - 4 ({value} bpm)</translation>
+    </message>
+    <message>
+        <source>default: running ({value} bpm)</source>
+        <translation>predefinita: corsa ({value} bpm)</translation>
+    </message>
+    <message>
         <source>The resting heart rate must be lower than the maximum.</source>
         <translation>La frequenza a riposo deve essere inferiore alla massima.</translation>
     </message>
@@ -4057,6 +4065,14 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Per esempio, 68,5</translation>
     </message>
     <message>
+        <source>Threshold pace (min/km)</source>
+        <translation>Passo soglia (min/km)</translation>
+    </message>
+    <message>
+        <source>m:ss</source>
+        <translation>m:ss</translation>
+    </message>
+    <message>
         <source>Male</source>
         <translation>Maschio</translation>
     </message>
@@ -4085,6 +4101,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Frequenza cardiaca massima</translation>
     </message>
     <message>
+        <source>Thresholds</source>
+        <translation>Soglie</translation>
+    </message>
+    <message>
         <source>Threshold heart rate</source>
         <translation>Frequenza cardiaca di soglia</translation>
     </message>
@@ -4099,6 +4119,18 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Create profile</source>
         <translation>Crea profilo</translation>
+    </message>
+    <message>
+        <source>Cycling threshold heart rate</source>
+        <translation>FC di soglia del ciclismo</translation>
+    </message>
+    <message>
+        <source>Other activities threshold heart rate</source>
+        <translation>FC di soglia delle altre attività</translation>
+    </message>
+    <message>
+        <source>Cycling, other activities and pace are optional: leave them empty and change them later in Edit profile.</source>
+        <translation>Ciclismo, altre attività e passo sono facoltativi: lasciali vuoti e cambiali poi in Modifica profilo.</translation>
     </message>
     <message>
         <source> bpm</source>
@@ -5259,14 +5291,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source> bpm</source>
         <translation> bpm</translation>
-    </message>
-    <message>
-        <source>default: running - 4 ({value} bpm)</source>
-        <translation>predefinita: corsa - 4 ({value} bpm)</translation>
-    </message>
-    <message>
-        <source>default: running ({value} bpm)</source>
-        <translation>predefinita: corsa ({value} bpm)</translation>
     </message>
     <message>
         <source>Nothing has changed: change at least one value.</source>

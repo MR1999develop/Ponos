@@ -363,6 +363,12 @@ restores to a profile that is migrated the same way when opened.
   threshold (minimum < threshold <= maximum, 40-250 bpm). The threshold of a
   sport sets its HR zones, the zones of its planned sessions and its TRIMPeq.
   The 30-minute test updates only the running threshold.
+- **New profile.** Besides the running threshold, the dialog asks, optionally,
+  for the cycling and other-activities thresholds (empty: the defaults above)
+  and the threshold pace in `m:ss` (empty: no pace), with the same fields and
+  checks as Edit profile. They go into the first physiology entry and the
+  `threshold_pace` series, dated as the heart-rate values, in the transaction
+  that creates the profile.
 - **Threshold pace.** A dated series of its own, like the weight. The plan uses
   the most recent by date between the last pace set by hand and the last test
   with a pace; on the same day the one set by hand wins. The field shows the
