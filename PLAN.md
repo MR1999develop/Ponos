@@ -831,6 +831,14 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       campi delle Impostazioni larghi secondo il tipo (`042125d`, `FieldKind` in
       `ui/form_rows.py`); finestra del giorno con i pasti in tabella e grande
       quanto il contenuto entro lo schermo (`2ca43ce`).
+- [x] Crash del processo (eccezione fatale di Windows 0x80000003) quando il
+      garbage collector di Python partiva nel thread dei dati e distruggeva lì un
+      oggetto Qt dell'interfaccia rimasto in un ciclo (visto nei test della mappa
+      eseguiti insieme e una volta dopo un'unione): raccolta automatica spenta e
+      raccolta dei cicli solo nel thread dell'interfaccia (`ui/main_thread_gc.py`,
+      `b325abb`), anche nei test (`tests/conftest.py`). Il log degli errori non
+      gestiti ora dice anche il punto del codice (`e0e93a6`), per trovare la causa
+      dei 145 `RuntimeError` del 2026-11-10 alle 10:12 se si ripresentano.
 - [x] Doppio clic su un'attività nella mappa (partenza o traccia selezionata)
       apre la sua finestra; altrove ingrandisce (richiesta dell'utente del
       2026-11-10). Test: `tests/ui/test_map_page_web.py`.

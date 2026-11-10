@@ -76,7 +76,7 @@ Boundaries:
 | B3 | App ↔ profile folder | database, archive, backup, lock, permissions |
 | B4 | App → charts web page | chart data as JSON, activity names |
 | B5 | App ↔ token store (Windows: file encrypted with DPAPI in `secrets/` in the app's local data folder; Ubuntu: Secret Service) | Garmin tokens, by profile id |
-| B6 | App → log file in the user's log folder (`ponos-coach.log`) | events, exception types |
+| B6 | App → log file in the user's log folder (`ponos-coach.log`) | events, exception types, places in the code |
 | B7 | Development → user | executable, dependencies, release workflows |
 | B8 | App ↔ configuration folder | list of profiles (id, folder, name, last use), lock of the list |
 | B9 | User → login dialog → `garminconnect` library | email, password, MFA code (in memory only, in the login thread) |
@@ -412,7 +412,9 @@ service, E elevation of privilege.
     characters with their written form, so a hostile name cannot fabricate
     false lines. Times in UTC.
   - Last-resort handler for the main thread and for the other threads: it
-    records only the types, warns the user with a generic message and never
+    records only the types and the place in the code (`ponos_coach/…/file.py:line
+    in function`, or only the file name for library code: no values, no local
+    path; from 2026-11-10), warns the user with a generic message and never
     stops the app, even if the warning fails. Ctrl+C passes through.
   - Tests: `tests/ui/test_diagnostics.py`, `tests/collaudo/test_interfaccia.py`
     (T-SEC-08, D-F1-05), `tests/ui/test_window_lifecycle.py`.
