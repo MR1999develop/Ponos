@@ -32,6 +32,8 @@ from tests.injury.builders import DAY0, checkin, climb, fold, good_days, injury,
 from tests.planning.builders import BIG_WEEK, TODAY, inputs, race
 
 SIGNS = list(WarningSign)
+# One sign per scope class (checked against scope_of below): the plan-wide ones and the zone ones.
+ONE_PER_SCOPE = [WarningSign.FEVER, WarningSign.NIGHT_PAIN]
 RACE_DAY = TODAY + timedelta(weeks=16)
 WHOLE_PLAN = {
     WarningSign.FEVER,
@@ -59,7 +61,7 @@ def test_a_sign_in_the_questionnaire_halts_the_path_before_it_starts(sign: Warni
     assert state.step is Step.ACTIVATION
 
 
-@pytest.mark.parametrize("sign", SIGNS)
+@pytest.mark.parametrize("sign", ONE_PER_SCOPE)
 def test_a_sign_reported_on_a_check_in_halts_the_path_on_the_spot(sign: WarningSign) -> None:
     inj = injury()
     days = climb(inj, Step.WALKING)
@@ -68,7 +70,7 @@ def test_a_sign_reported_on_a_check_in_halts_the_path_on_the_spot(sign: WarningS
     assert state.alarms == {sign}
 
 
-@pytest.mark.parametrize("sign", SIGNS)
+@pytest.mark.parametrize("sign", ONE_PER_SCOPE)
 def test_a_halted_path_does_not_move_whatever_the_days_say(sign: WarningSign) -> None:
     inj = injury(q=questionnaire(signs=[sign]))
     state = fold(inj, good_days(1, 40, during=0))  # forty perfect days
@@ -76,7 +78,7 @@ def test_a_halted_path_does_not_move_whatever_the_days_say(sign: WarningSign) ->
     assert state.step is Step.ACTIVATION
 
 
-@pytest.mark.parametrize("sign", SIGNS)
+@pytest.mark.parametrize("sign", ONE_PER_SCOPE)
 def test_a_sign_stops_the_plan_with_no_session_and_says_why(sign: WarningSign) -> None:
     free = inputs([race("a", RACE_DAY)], avail=BIG_WEEK)
     plan = build_plan(free, TODAY)

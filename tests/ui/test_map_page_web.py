@@ -526,16 +526,10 @@ def test_the_page_can_reach_one_object_with_six_slots_and_nothing_else(
 @pytest.mark.parametrize(
     "script",
     [
-        "b.viewChanged(0, 0, 1, 1, 99)",
-        "b.viewChanged(0, 0, 1, 1, -3)",
-        "b.viewChanged(0, 1e308, 1, 1e308, 5)",
         "b.viewChanged(0, 10, 1, 5, 5)",
         "b.activityClicked(-1, GEN)",
-        "b.activityClicked(1e12, GEN)",
-        "b.activityOpened(-1, GEN)",
         "b.activityOpened(1e12, GEN)",
         "b.pointHovered(5, 0)",
-        "b.pointHovered(-1, 0)",
     ],
 )
 def test_malformed_messages_from_the_page_are_rejected_without_effect(

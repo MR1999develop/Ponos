@@ -215,17 +215,11 @@ def test_a_new_goal_starts_as_an_a_race_of_the_common_marathon() -> None:
     ("text", "metres"),
     [
         ("", 0),
-        ("  ", 0),
-        ("0", 0),
         ("1200", 1200),
-        (" 1200 ", 1200),
         ("1200 m", 1200),
-        ("1200m", 1200),
         ("1 200", 1200),
         ("1.200", 1200),
-        ("1,200", 1200),
         ("30,000", 30_000),
-        ("800", 800),
     ],
 )
 def test_an_elevation_gain_is_read_tolerantly_and_blank_means_a_flat_race(

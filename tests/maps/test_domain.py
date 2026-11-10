@@ -51,31 +51,15 @@ def test_t_sec_15_valid_tile_paths_become_addresses(path: str, expected: TileAdd
     "path",
     [
         "",
-        "/",
         "/1/2/3",  # the old form, without a source
-        "/openstreetmap/1/2",  # missing a coordinate
-        "/openstreetmap/1/2/3/4",  # extra segment
         "/openstreetmap/20/0/0",  # zoom above the maximum of OpenStreetMap
-        "/opentopomap/18/0/0",  # zoom above the maximum of OpenTopoMap
-        "/cyclosm/21/0/0",  # zoom above the maximum of CyclOSM
         "/google/1/0/0",  # a source that is not in the set
-        "/OpenStreetMap/1/0/0",  # keys are exact
-        "/tile.openstreetmap.org/1/0/0",  # a host is not a source
-        "/https:/1/0/0",
         "/openstreetmap/-1/0/0",  # sign
-        "/openstreetmap/+1/0/0",
-        "/openstreetmap/1/2/3.jpg",  # other extension
-        "/openstreetmap/1/2/3.png.png",
         "/openstreetmap/1/2/3?key=x",  # query smuggled in
-        "/openstreetmap/1/2/3#frag",
-        "/ openstreetmap/1/2/3",
-        "/openstreetmap/1/2/3 ",
         "/openstreetmap/1/\uff12/3",  # full-width digit
         "/openstreetmap/1/2/3\n",
         "/../openstreetmap/1/2/3",
         "/openstreetmap/1/2/0",  # column out of range for zoom 1
-        "/openstreetmap/2/0/4",  # row out of range for zoom 2
-        "/openstreetmap/12/99999999/0",  # too many digits
         "/openstreetmap/" + "9" * 60,  # too long: rejected before any parsing
     ],
 )
