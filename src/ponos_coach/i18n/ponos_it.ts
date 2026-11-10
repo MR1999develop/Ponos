@@ -2202,6 +2202,18 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Scrivi il tempo come h:mm:ss, per esempio 1:45:00.</translation>
     </message>
     <message>
+        <source>Write the elevation gain in whole metres, for example 1200.</source>
+        <translation>Scrivi il dislivello positivo in metri interi, per esempio 1200.</translation>
+    </message>
+    <message>
+        <source>The elevation gain must be between 0 and {last} m.</source>
+        <translation>Il dislivello positivo deve essere tra 0 e {last} m.</translation>
+    </message>
+    <message>
+        <source>The elevation gain is too large for this distance. Check the distance and the elevation gain.</source>
+        <translation>Il dislivello positivo è troppo grande per questa distanza. Controlla la distanza e il dislivello.</translation>
+    </message>
+    <message>
         <source>The target time must be between 1 minute and 7 days.</source>
         <translation>Il tempo obiettivo deve essere tra 1 minuto e 7 giorni.</translation>
     </message>
@@ -2254,6 +2266,22 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Salva obiettivo</translation>
     </message>
     <message>
+        <source>0</source>
+        <translation>0</translation>
+    </message>
+    <message>
+        <source>Elevation gain in metres</source>
+        <translation>Dislivello positivo in metri</translation>
+    </message>
+    <message>
+        <source>Optional. Leave empty for a flat race. For example 1200.</source>
+        <translation>Facoltativo. Lascialo vuoto per una gara piatta. Per esempio 1200.</translation>
+    </message>
+    <message>
+        <source>Problem with the elevation gain</source>
+        <translation>Problema con il dislivello positivo</translation>
+    </message>
+    <message>
         <source>Other distance</source>
         <translation>Altra distanza</translation>
     </message>
@@ -2292,6 +2320,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Distance</source>
         <translation>Distanza</translation>
+    </message>
+    <message>
+        <source>Elevation gain (m)</source>
+        <translation>Dislivello positivo (m)</translation>
     </message>
     <message>
         <source>Target time (optional)</source>
@@ -2417,6 +2449,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Distance (km)</source>
         <translation>Distanza (km)</translation>
+    </message>
+    <message>
+        <source>Elevation gain (m)</source>
+        <translation>Dislivello positivo (m)</translation>
     </message>
     <message>
         <source>Target time (h:mm:ss)</source>
@@ -4815,6 +4851,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Obiettivo di forma, CTL {ctl}, {date}</translation>
     </message>
     <message>
+        <source>Race {priority}, {distance}, +{ascent} m, {date}</source>
+        <translation>Gara {priority}, {distance}, +{ascent} m, {date}</translation>
+    </message>
+    <message>
         <source>Race {priority}, {distance}, {date}</source>
         <translation>Gara {priority}, {distance}, {date}</translation>
     </message>
@@ -4884,12 +4924,24 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>Threshold test</source>
         <translation>Test di soglia</translation>
     </message>
+    <message>
+        <source>Hill repeats</source>
+        <translation>Ripetute in salita</translation>
+    </message>
+    <message>
+        <source>Hilly long run</source>
+        <translation>Lungo collinare</translation>
+    </message>
     <message numerus="yes">
         <source>{type}, %n min</source>
         <translation>
             <numerusform>{type}, %n min</numerusform>
             <numerusform>{type}, %n min</numerusform>
         </translation>
+    </message>
+    <message>
+        <source>Elevation gain: about {ascent} m</source>
+        <translation>Dislivello positivo: circa {ascent} m</translation>
     </message>
     <message>
         <source>{load} TRIMPeq</source>
