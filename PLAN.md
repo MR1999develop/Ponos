@@ -752,6 +752,14 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       grafico del carico con un solo asse y, trascinamento col tasto destro per
       allungare il grafico, legenda del calendario compatta (`58606f0`); cache
       su disco della mappa chiusa alla chiusura della finestra (`a2092ae`).
+- [x] Passo soglia nelle impostazioni del profilo (richiesta dell'utente del
+      2026-11-10, merge `1de5db0`): serie datata a sé (`threshold_pace`,
+      schema 14), campo `m:ss` tollerante accanto alla soglia FC, colonna nello
+      storico; per il piano vale il più recente per data fra misura manuale e
+      ultimo test con passo, a pari giorno la manuale. Test:
+      `tests/profiles/test_threshold_pace.py`, `test_measurements.py`,
+      `test_rebuild_plan.py`, `tests/storage/test_threshold_pace_store.py`,
+      `tests/ui/test_measurements_form.py`.
 - [x] Sincronizzazione: una voce che Garmin non scarica mai (errore 5xx o
       nessuna risposta a ogni giro, mentre l'elenco risponde) resta in attesa
       per sempre e ferma ogni giro dopo 3 voci; serve un contatore di giri

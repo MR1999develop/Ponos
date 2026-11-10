@@ -338,7 +338,9 @@ restores to a profile that is migrated the same way when opened.
     stays valid and the list realigns at the next opening; the window title
     and the profile menus update at once;
     below, the measurements to update with the day from which they apply
-    (today by default), the weight and the three HR values; at the bottom the
+    (today by default), the weight, the three HR values and the threshold
+    pace (min/km, written `m:ss`; `:`, `.`, `,` or `'` between minutes and
+    seconds, or whole minutes; from 1:30 to 60:00); at the bottom the
     history of the measurements, sortable by clicking the header, without
     lines;
   - after saving it shows the effective validity period of the saved
@@ -354,6 +356,12 @@ restores to a profile that is migrated the same way when opened.
   other measurements, and afterwards they cannot be changed.
 - On the bike the threshold is the running one minus 4 bpm, until there is a
   bike test.
+- **Threshold pace.** A dated series of its own, like the weight. The plan uses
+  the most recent by date between the last pace set by hand and the last test
+  with a pace; on the same day the one set by hand wins. The field shows the
+  pace in force on the chosen day and, in the tooltip, whether it comes from a
+  test or from the settings. Without any pace, running sessions have only the
+  heart-rate target.
 - An HR value outside minimum and maximum is an error: the sample is
   discarded. The activity detail says how many samples were discarded. If many
   exceed the maximum, the app suggests reviewing it.

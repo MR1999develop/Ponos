@@ -458,6 +458,14 @@
         <translation>Inserisci il peso in chilogrammi con al massimo un decimale, da {low} a {high}.</translation>
     </message>
     <message>
+        <source>Enter the threshold pace as minutes and seconds per kilometre.</source>
+        <translation>Inserisci il passo soglia in minuti e secondi al chilometro.</translation>
+    </message>
+    <message>
+        <source>Enter the pace as minutes and seconds per kilometre, like 5:30, from {fast} to {slow}.</source>
+        <translation>Inserisci il passo in minuti e secondi al chilometro, per esempio 5:30, da {fast} a {slow}.</translation>
+    </message>
+    <message>
         <source>Enter the date of birth.</source>
         <translation>Scegli la data di nascita.</translation>
     </message>
@@ -3911,9 +3919,21 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <source>Threshold HR (bpm)</source>
         <translation>FC di soglia (bpm)</translation>
     </message>
+    <message>
+        <source>Threshold pace (min/km)</source>
+        <translation>Passo soglia (min/km)</translation>
+    </message>
 </context>
 <context>
     <name>MeasurementTexts</name>
+    <message>
+        <source>Threshold pace valid from {first} onwards.</source>
+        <translation>Passo soglia valido dal {first} in poi.</translation>
+    </message>
+    <message>
+        <source>Threshold pace valid from {first} to {last}.</source>
+        <translation>Passo soglia valido dal {first} al {last}.</translation>
+    </message>
     <message>
         <source>Weight valid from {first} onwards.</source>
         <translation>Peso valido dal {first} in poi.</translation>
@@ -3929,6 +3949,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Heart rate valid from {first} to {last}.</source>
         <translation>Frequenza cardiaca valida dal {first} al {last}.</translation>
+    </message>
+    <message>
+        <source>The new threshold pace applies only until {last}: a later pace replaces it after that day.</source>
+        <translation>Il nuovo passo soglia vale solo fino al {last}: dopo quel giorno lo sostituisce un passo successivo.</translation>
     </message>
     <message>
         <source>The new weight applies only until {last}: a later weight replaces it after that day.</source>
@@ -3949,6 +3973,26 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>In force on this day: {value} bpm</source>
         <translation>In vigore quel giorno: {value} bpm</translation>
+    </message>
+    <message>
+        <source>From the threshold test of {day}.</source>
+        <translation>Dal test di soglia del {day}.</translation>
+    </message>
+    <message>
+        <source>Set in the profile settings from {day}.</source>
+        <translation>Impostato nelle impostazioni del profilo dal {day}.</translation>
+    </message>
+    <message>
+        <source>No threshold pace is recorded for this day.</source>
+        <translation>Nessun passo soglia registrato per questo giorno.</translation>
+    </message>
+    <message>
+        <source>In force on this day: {value} per km (from the threshold test)</source>
+        <translation>In vigore questo giorno: {value} al km (dal test di soglia)</translation>
+    </message>
+    <message>
+        <source>In force on this day: {value} per km</source>
+        <translation>In vigore questo giorno: {value} al km</translation>
     </message>
 </context>
 <context>
@@ -5151,6 +5195,14 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Name</source>
         <translation>Nome</translation>
+    </message>
+    <message>
+        <source>Threshold pace (min/km)</source>
+        <translation>Passo soglia (min/km)</translation>
+    </message>
+    <message>
+        <source>m:ss</source>
+        <translation>m:ss</translation>
     </message>
     <message>
         <source>Male</source>

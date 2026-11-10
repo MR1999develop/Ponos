@@ -240,7 +240,15 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
 - **Schema v13** (voci che Garmin non fornisce): `sync_journal` ricostruita (SQLite non
   cambia i CHECK sul posto) con la colonna `unanswered_rounds` e la causa
   `remote_not_provided`; indice `sync_journal_to_do` ricreato; copia in
-  `backup/ponos-v12-v13.sqlite3`. T-DATI-01: `tests/collaudo/test_fase8_migrazione_v13.py`.
+  `backup/ponos-v12-v13.sqlite3` (da un v12 il nome dice la versione d'arrivo, oggi
+  `ponos-v12-v14`). T-DATI-01: `tests/collaudo/test_fase8_migrazione_v13.py`.
+- **Schema v14** (passo soglia impostato a mano): tabella `threshold_pace(valid_from PK,
+  s_per_km 90-3600)`, `STRICT`, serie datata a sé come `weight`; non tocca `load_cache`.
+  Migrazione `THRESHOLD_PACE_MIGRATION` in `storage/schema_threshold_pace.py`; test in
+  `tests/storage/test_threshold_pace_store.py` (trovata per identità, non per numero).
+  Il passo in vigore per il piano è `threshold_pace_in_force` (`profiles/domain`): il più
+  recente per data fra l'ultima misura manuale e l'ultimo test con passo, a pari giorno
+  la manuale.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.
