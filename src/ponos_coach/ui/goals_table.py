@@ -26,13 +26,15 @@ from PySide6.QtCore import (
 
 from ponos_coach.goals.domain import FitnessGoal, RaceGoal
 from ponos_coach.goals.ports import Goal
-from ponos_coach.planning.domain import TargetAssessment
+from ponos_coach.planning.domain import CtlTargetNotReached, TargetAssessment
 from ponos_coach.ui.activity_text import sport_text
 from ponos_coach.ui.goal_draft import target_time_text
 from ponos_coach.ui.plan_texts import (
     ascent_text,
     distance_km_text,
     goal_kind_cell_text,
+    out_of_reach_row_text,
+    out_of_reach_texts,
     short_date_text,
     target_class_explanation,
     target_class_text,
@@ -55,6 +57,7 @@ class GoalColumn(IntEnum):
     ASCENT = 4
     TARGET_TIME = 5
     VERDICT = 6
+    FITNESS = 7
 
 
 _NUMERIC = frozenset({GoalColumn.DISTANCE, GoalColumn.ASCENT, GoalColumn.TARGET_TIME})
@@ -67,12 +70,20 @@ class GoalsTableModel(QAbstractTableModel):
         super().__init__(parent)
         self._goals: tuple[Goal, ...] = ()
         self._assessments: Mapping[str, TargetAssessment] = {}
+        self._out_of_reach: Mapping[str, CtlTargetNotReached] = {}
 
-    def set_goals(self, goals: Sequence[Goal], assessments: Mapping[str, TargetAssessment]) -> None:
-        """Replace the goals and the verdicts on their target times."""
+    def set_goals(
+        self,
+        goals: Sequence[Goal],
+        assessments: Mapping[str, TargetAssessment],
+        out_of_reach: Mapping[str, CtlTargetNotReached] | None = None,
+    ) -> None:
+        """Replace the goals, the verdicts on their target times and the goals whose fitness
+        target the plan cannot reach."""
         self.beginResetModel()
         self._goals = tuple(goals)
         self._assessments = dict(assessments)
+        self._out_of_reach = dict(out_of_reach or {})
         self.endResetModel()
 
     def goal_at(self, row: int) -> Goal | None:
@@ -122,11 +133,12 @@ class GoalsTableModel(QAbstractTableModel):
             return None
         column = GoalColumn(index.column())
         assessment = self._assessments.get(goal.goal_id.value)
+        missed = self._out_of_reach.get(goal.goal_id.value)
         readers: dict[int, Callable[[], object]] = {
-            Qt.ItemDataRole.DisplayRole: lambda: _cell_text(goal, column, assessment),
-            SORT_ROLE: lambda: _sort_key(goal, column, assessment),
+            Qt.ItemDataRole.DisplayRole: lambda: _cell_text(goal, column, assessment, missed),
+            SORT_ROLE: lambda: _sort_key(goal, column, assessment, missed),
             GOAL_ID_ROLE: lambda: goal.goal_id.value,
-            Qt.ItemDataRole.ToolTipRole: lambda: _tooltip(column, assessment),
+            Qt.ItemDataRole.ToolTipRole: lambda: _tooltip(column, assessment, missed),
             Qt.ItemDataRole.TextAlignmentRole: lambda: (
                 _ALIGN_RIGHT if column in _NUMERIC else _ALIGN_LEFT
             ),
@@ -144,6 +156,7 @@ def _header_text(column: GoalColumn) -> str:
         GoalColumn.ASCENT: QCoreApplication.translate("GoalsTable", "Elevation gain (m)"),
         GoalColumn.TARGET_TIME: QCoreApplication.translate("GoalsTable", "Target time (h:mm:ss)"),
         GoalColumn.VERDICT: QCoreApplication.translate("GoalsTable", "Target time verdict"),
+        GoalColumn.FITNESS: QCoreApplication.translate("GoalsTable", "Fitness asked"),
     }
     return texts[column]
 
@@ -165,7 +178,12 @@ def _race_time_text(goal: Goal) -> str:
     return ""
 
 
-def _cell_text(goal: Goal, column: GoalColumn, assessment: TargetAssessment | None) -> str:
+def _cell_text(
+    goal: Goal,
+    column: GoalColumn,
+    assessment: TargetAssessment | None,
+    missed: CtlTargetNotReached | None,
+) -> str:
     texts = {
         GoalColumn.DAY: lambda: short_date_text(goal.day),
         GoalColumn.KIND: lambda: goal_kind_cell_text(goal),
@@ -176,11 +194,17 @@ def _cell_text(goal: Goal, column: GoalColumn, assessment: TargetAssessment | No
         GoalColumn.VERDICT: lambda: (
             "" if assessment is None else target_class_text(assessment.classification)
         ),
+        GoalColumn.FITNESS: lambda: "" if missed is None else out_of_reach_row_text(missed),
     }
     return texts[column]()
 
 
-def _sort_key(goal: Goal, column: GoalColumn, assessment: TargetAssessment | None) -> float | str:
+def _sort_key(
+    goal: Goal,
+    column: GoalColumn,
+    assessment: TargetAssessment | None,
+    missed: CtlTargetNotReached | None,
+) -> float | str:
     """Numbers sort as numbers, texts case-insensitively; a missing value sorts first."""
     match column:
         case GoalColumn.DAY:
@@ -194,10 +218,15 @@ def _sort_key(goal: Goal, column: GoalColumn, assessment: TargetAssessment | Non
                 return float(goal.target_time_s)
             return -1.0
         case _:
-            return _cell_text(goal, column, assessment).casefold()
+            return _cell_text(goal, column, assessment, missed).casefold()
 
 
-def _tooltip(column: GoalColumn, assessment: TargetAssessment | None) -> str:
+def _tooltip(
+    column: GoalColumn, assessment: TargetAssessment | None, missed: CtlTargetNotReached | None
+) -> str:
+    if column is GoalColumn.FITNESS and missed is not None:
+        _sentence, remedy = out_of_reach_texts(missed, lambda _goal_id: "")
+        return remedy
     if column is not GoalColumn.VERDICT or assessment is None:
         return ""
     explanation = target_class_explanation(assessment.classification)

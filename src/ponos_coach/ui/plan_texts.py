@@ -21,8 +21,10 @@ from ponos_coach.planning.domain import (
     Block,
     BlockRole,
     CloseARaces,
+    CtlLimit,
     CtlTargetNotReached,
     GoalBeyondHorizon,
+    LimitedByHours,
     LongDayUnavailable,
     MissingIntenseSessions,
     MissingLongSession,
@@ -51,7 +53,7 @@ from ponos_coach.ui.goal_draft import (
     target_time_text,
 )
 from ponos_coach.ui.injury_texts import plan_warning_texts
-from ponos_coach.ui.plan_presentation import Notice
+from ponos_coach.ui.plan_presentation import Notice, PlanAlert
 
 _SECONDS_PER_MINUTE = 60
 _METERS_PER_KM = 1000.0
@@ -392,6 +394,7 @@ def _refusal_texts(refusal: PlanRefusal, label_of: Callable[[str], str]) -> tupl
 
 
 type _Label = Callable[[str], str]
+_MINUTES_PER_HOUR = 60
 
 
 def _missing_long(warning: MissingLongSession, label_of: _Label) -> tuple[str, str]:
@@ -443,6 +446,28 @@ def _close_a_races(warning: CloseARaces, _label_of: _Label) -> tuple[str, str]:
     )
 
 
+def _hours_text(minutes: int) -> str:
+    """Weekly minutes as hours, with a decimal only if they are not whole hours: "9" or "6.5"."""
+    hours = minutes / _MINUTES_PER_HOUR
+    return QLocale().toString(hours, "f", 0 if minutes % _MINUTES_PER_HOUR == 0 else 1)
+
+
+def _ctl_remedy(limit: CtlLimit) -> str:
+    if isinstance(limit, LimitedByHours):
+        # {needed}: the weekly hours that would be enough; {now}: the weekly hours set now (both in
+        # hours, with a decimal when not whole).
+        return QCoreApplication.translate(
+            "Plan",
+            "Allow about {needed} h a week in the training settings (now {now} h), or ask for "
+            "less fitness or move the goal later.",
+        ).format(needed=_hours_text(limit.minutes_needed), now=_hours_text(limit.current_minutes))
+    return QCoreApplication.translate(
+        "Plan",
+        "Move the goal later or ask for less fitness: the plan never ramps faster than the "
+        "safe limit.",
+    )
+
+
 def _ctl_not_reached(warning: CtlTargetNotReached, label_of: _Label) -> tuple[str, str]:
     # {goal}: the goal; {projected} and {target}: the CTL the plan reaches, and the one asked.
     return (
@@ -455,12 +480,41 @@ def _ctl_not_reached(warning: CtlTargetNotReached, label_of: _Label) -> tuple[st
             projected=QLocale().toString(warning.projected_ctl, "f", 0),
             target=QLocale().toString(warning.target_ctl, "f", 0),
         ),
-        QCoreApplication.translate(
-            "Plan",
-            "Move the goal later or ask for less fitness: the plan never ramps faster than the "
-            "safe limit.",
-        ),
+        _ctl_remedy(warning.limit),
     )
+
+
+def out_of_reach_texts(warning: CtlTargetNotReached, label_of: _Label) -> tuple[str, str]:
+    """The sentence and the remedy for a goal whose fitness target is out of reach: the same words
+    the notices use, for the calendar and the goals table."""
+    return _ctl_not_reached(warning, label_of)
+
+
+def out_of_reach_mark_text() -> str:
+    """The short mark of a day cell or a table row whose goal is out of reach; the word "reach" is
+    there so that the meaning never rests on a colour."""
+    return QCoreApplication.translate("Plan", "! Out of reach")
+
+
+def out_of_reach_row_text(warning: CtlTargetNotReached) -> str:
+    """What the goals table says of a goal out of reach: the mark and how far the plan gets."""
+    # {projected} and {target}: the CTL the plan reaches, and the one asked.
+    return QCoreApplication.translate("Plan", "Out of reach: {projected} of {target} CTL").format(
+        projected=QLocale().toString(warning.projected_ctl, "f", 0),
+        target=QLocale().toString(warning.target_ctl, "f", 0),
+    )
+
+
+def plan_alert_text(alert: PlanAlert) -> str:
+    """The sentence of the strip over the calendar: how many goals are out of reach, and, when
+    the weekly hours are what stops all of them, that it is the hours."""
+    if alert.all_by_hours:
+        # %n: the number of goals.
+        return QCoreApplication.translate(
+            "Plan", "Goals out of reach with the plan's hours: %n", "", alert.count
+        )
+    # %n: the number of goals.
+    return QCoreApplication.translate("Plan", "Goals out of reach: %n", "", alert.count)
 
 
 def _target_unreachable(warning: TargetTimeUnreachable, label_of: _Label) -> tuple[str, str]:

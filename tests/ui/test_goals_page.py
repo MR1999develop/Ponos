@@ -96,9 +96,9 @@ def test_goals_are_sorted_by_date_and_show_kind_sport_distance_and_target_time(
 
     show(page)
 
-    assert cells(page, 0) == ["8/30/26", "Race B", "Running", "10", "", "", ""]
-    assert cells(page, 1) == ["9/20/26", "Form goal", "", "", "", "", ""]
-    assert cells(page, 2) == ["10/18/26", "Race A", "Running", "42.195", "", "3:30:00", ""]
+    assert cells(page, 0) == ["8/30/26", "Race B", "Running", "10", "", "", "", ""]
+    assert cells(page, 1) == ["9/20/26", "Form goal", "", "", "", "", "", ""]
+    assert cells(page, 2) == ["10/18/26", "Race A", "Running", "42.195", "", "3:30:00", "", ""]
 
 
 def test_numbers_are_aligned_on_the_right_and_texts_on_the_left(qtbot: QtBot) -> None:

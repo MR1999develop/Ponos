@@ -28,7 +28,13 @@ from ponos_coach.nutrition.domain import (
     WeightLossGoal,
 )
 from ponos_coach.nutrition.domain.settings import MIN_VALID_DATE
-from ponos_coach.planning.domain import DayAdherence, Plan, PlanDay, TargetAssessment
+from ponos_coach.planning.domain import (
+    CtlTargetNotReached,
+    DayAdherence,
+    Plan,
+    PlanDay,
+    TargetAssessment,
+)
 from ponos_coach.planning.ports import FrozenDay
 from ponos_coach.ui.injury_presentation import ProblemSpan
 
@@ -57,10 +63,12 @@ def goal_kind_of(goal: NutritionGoal) -> GoalKind:
 
 @dataclass(frozen=True, slots=True)
 class DayGoal:
-    """A goal that falls on a day, with the verdict on its target time (races with a plan)."""
+    """A goal that falls on a day, with the verdict on its target time (races with a plan) and, if
+    the plan cannot reach the fitness asked for it, the warning that says why."""
 
     goal: Goal
     assessment: TargetAssessment | None = None
+    out_of_reach: CtlTargetNotReached | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,13 +91,16 @@ def plan_layer_of(
     the goals. A day frozen in the past wins over the current plan's day."""
     planned: dict[date, PlanDay] = {}
     assessments: dict[str, TargetAssessment] = {}
+    missed: dict[str, CtlTargetNotReached] = {}
     if plan is not None:
         planned.update({item.day: item for item in plan.days})
         assessments = {item.goal_id: item for item in plan.targets}
+        missed = {w.goal_id: w for w in plan.warnings if isinstance(w, CtlTargetNotReached)}
     planned.update({frozen.day.day: frozen.day for frozen in past})
     by_day: dict[date, list[DayGoal]] = defaultdict(list)
     for goal in goals:
-        by_day[goal.day].append(DayGoal(goal, assessments.get(goal.goal_id.value)))
+        goal_id = goal.goal_id.value
+        by_day[goal.day].append(DayGoal(goal, assessments.get(goal_id), missed.get(goal_id)))
     return PlanLayer(
         planned,
         {item.day: item for item in adherence},

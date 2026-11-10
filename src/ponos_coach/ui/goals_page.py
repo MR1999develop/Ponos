@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from ponos_coach.goals.ports import Goal
-from ponos_coach.planning.domain import TargetAssessment
+from ponos_coach.planning.domain import CtlTargetNotReached, TargetAssessment
 from ponos_coach.ui.goals_table import GoalsProxy, GoalsTableModel, sorted_goals_model
 from ponos_coach.ui.plan_presentation import Notice, NoticeAction, Severity
 from ponos_coach.ui.plan_texts import notice_prefix, notice_texts
@@ -165,10 +165,12 @@ class GoalsPage(QWidget):
         assessments: Mapping[str, TargetAssessment],
         label_of: Callable[[str], str],
         theme: Theme,
+        out_of_reach: Mapping[str, CtlTargetNotReached] | None = None,
     ) -> None:
-        """Show the notices of the plan and the goals with the verdicts on their target times."""
+        """Show the notices of the plan and the goals with the verdicts on their target times and
+        the goals whose fitness target is out of reach."""
         selected = self.selected_goal_id()
-        self._model.set_goals(goals, assessments)
+        self._model.set_goals(goals, assessments, out_of_reach)
         self._empty.setVisible(not goals)
         self._table.setVisible(bool(goals))
         for widget in self._notice_widgets:
