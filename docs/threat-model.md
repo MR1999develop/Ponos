@@ -86,7 +86,7 @@ Boundaries:
 | B13 | FIT `record.distance` and `record.speed` (inside B1 and B2) → distance series → threshold test | cumulative distance and its time axis: untrusted until they form a valid series (finite, increasing time, non-decreasing metres) |
 | B14 | Map page (`ponos://app/map.html`, a web engine process) ↔ app | five numeric calls from the page (view, click, hover), the list, the totals and the simplified tracks that Python sends to it. Not drawn in the diagram: it sits next to B4 |
 | B14b | Activity map page (`ponos://app/track.html`, the same web engine) ← app | one call from Python with the thinned positions of the one activity open in the detail window (at most 2,000 points) and the colours. The page sends nothing back: no `QWebChannel`. Not drawn in the diagram: it sits next to B14 |
-| B15 | Tile proxy → OpenStreetMap (`https://tile.openstreetmap.org`, no key; since 2026-11-09, ADR 010 amendment) | the tile address (z/x/y), which reveals the area looked at, the `User-Agent` with the app's name, version and contact URL, the validators (`ETag`, `Last-Modified`) sent back for expired tiles; the PNG and the headers that come back are untrusted |
+| B15 | Tile proxy → the tile server of the background in use: `tile.openstreetmap.org` (default), `{a,b,c}.tile.opentopomap.org` or `{a,b,c}.tile-cyclosm.openstreetmap.fr`; a closed set in the code, no key (ADR 010 amendments of 2026-11-09 and 2026-11-10) | the tile address (source, z/x/y), which reveals the area looked at, the `User-Agent` with the app's name, version and contact URL, the validators (`ETag`, `Last-Modified`) sent back for expired tiles; the PNG and the headers that come back are untrusted |
 | B16 | (removed on 2026-11-09) App ↔ tile key store | there is no tile key any more; the number is not reused |
 | B17 | App ↔ Garmin calendar (workouts and schedule, unofficial API) | structured workouts sent, the list of scheduled workouts that comes back (untrusted), the local copy of what is deleted |
 | B18 | App ↔ backup file (`.ponosbackup`, chosen by the user) | a whole profile in a ZIP: database, original files, manifest. On read it is untrusted input; on write it holds health and GPS data in the clear |
@@ -264,7 +264,9 @@ service, E elevation of privilege.
 | B15 | The `User-Agent` carries the contact URL: it is fixed in the code and checked (printable ASCII, at most 128 characters); it holds no profile data, no user name, no path | I | `tests/platform/` (the header of a request) |
 | B15 | One missing tile (404) silences all the tiles around it | D | T-MAP-10, D-F5B-02 |
 | B15 | The provider sees which areas are looked at | I | accepted risk (section 5), declared by the user |
-| B15 | Plain HTTP or another host used for tiles | T, I | T-SEC-15 (HTTPS and the one host only, fixed in the code; plain HTTP only on loopback, for tests) |
+| B15 | Plain HTTP or another host used for tiles | T, I | T-SEC-15 (HTTPS and the three hosts only, fixed in the code; plain HTTP only on loopback, for tests) |
+| B15 | A source or a host that the page or a setting makes up (`ponos://tiles/evil/...`, a saved value that is a URL) | T, I | T-SEC-15 (the source is looked up in the closed set `BACKGROUNDS`: unknown, wrong case, a host or a URL are refused before the cache and the network; an unknown saved value is the default; the page can only name a key, through a slot that validates it) |
+| B15 | A tile of one background served for another (a cache poisoned by mixing sources), or a refusal of one server silencing the others | T, D | T-MAP-10, T-MAP-11 (the cache key includes the source; the cool-down is per source) |
 | B15 | The server blocks the app (the URL is fixed, there is no second source) | D | accepted risk (section 5); the map is a convenience and keeps a neutral background |
 | B16 | Removed on 2026-11-09 with the tile key: no secret, no key store, no fallback to a file | - | the tests of the key and of its store were removed with the code |
 | Map | Tile cache over its cap, WAL that grows beyond it, stale tiles forever, a full disk | D | T-MAP-11, D-F5B-03 |
@@ -538,8 +540,14 @@ service, E elevation of privilege.
     characters) before they are stored or sent back.
   - Tile cache: own, on disk, in the user's cache folder, with an exact cap
     (default 4 GB), LRU eviction, the WAL truncated after every write, "Clear
-    map cache". Only tiles that were looked at are stored. Schema 2 keeps the
-    validators and no longer a style; a version 1 file is rebuilt empty.
+    map cache". Only tiles that were looked at are stored. Schema 3 keys a tile
+    by background, zoom, column and row (one cap for all); a file of version 1
+    or 2 is rebuilt empty.
+  - Three backgrounds (amendment of 2026-11-10): OpenStreetMap, OpenTopoMap
+    and CyclOSM, each a value of the domain with its host, subdomains, path,
+    highest zoom and credit; the same usage rules for all, a cool-down per
+    server. The user chooses one (menu or control on the map, remembered); the
+    page can only name a key of the set.
   - Without network or when the server refuses, the map shows a neutral
     background and a line that says why; the tracks, the list and the filters
     keep working.
@@ -832,12 +840,15 @@ send anything out. Scripts are never allowed inline.
   and `ponos://tiles`. Scripts: Leaflet and markercluster from `web/vendor/`
   (hash-checked by test), `qwebchannel.js` from Qt, `map.js` (no `fetch`, no
   `eval`, no `innerHTML`: tested).
-- **Tiles**: `ponos://tiles/z/x/y` only (interceptor: integers inside the
-  pyramid, no query, fragment or port); the scheme handler asks `TileProxy` in
+- **Tiles**: `ponos://tiles/{source}/z/x/y` only (interceptor: a source of
+  the closed set, integers inside the pyramid of that source, no query,
+  fragment or port); the scheme handler asks `TileProxy` in
   a worker pool (at most 256 waiting) and never the network from the page.
-- **Channel**: one `QWebChannel` object, five slots taking numbers
-  (`pageReady`, `viewChanged`, `activityClicked`, `pointHovered`,
-  `pointLeft`). The page names an activity only by its position in the list
+- **Channel**: one `QWebChannel` object, slots taking numbers and one text
+  (`pageReady`, `viewChanged`, `activityClicked`, `activityOpened`,
+  `pointHovered`, `pointLeft`, and since 2026-11-10 `backgroundChosen(key)`,
+  which accepts only a key of the closed set of backgrounds and counts the
+  rest as rejected). The page names an activity only by its position in the list
   Python sent; every value is validated (`map_messages`) and rejected ones
   are counted, with no effect. JSON cannot carry NaN or infinity: the channel
   turns them into 0, a valid and harmless value. Qt also publishes
@@ -915,8 +926,8 @@ only windows with valid HR on at least 90% of the last 20 minutes.
 | A threshold that is wrong but plausible (a field test, a hard day, a fast downhill window) | It cannot be told from a real effort within the limits of the refusals. Mitigations: the user chooses the activity, the refusals with reasons, the exact undo, the retest every 6–8 weeks; the zones are a training indication, not medical advice (ADR 009). |
 | Distance from a GPS or a treadmill sensor with a systematic error | The pace is only as good as the distance; the app cannot measure more. The HR threshold does not depend on it. |
 | Nutrition advice is general; no allergy or diet restriction | User decision of 2026-11-07. Since 2026-11-10 there are no example foods: the meals show energy and macronutrients only. |
-| The tile server (`tile.openstreetmap.org`) sees the areas the user looks at, and its address (and so the IP of the user) | Accepted by the user on 2026-11-07 (ADR 010); the host changed on 2026-11-09 and the risk is the same. A map with tiles needs a tile host; the alternative, an offline vector region, is deferred. Mitigations: the page has no network, one host over HTTPS only, the URL is never logged, only tiles that were looked at are asked (no prefetch), the cache follows the headers and is checked with conditional requests, a neutral background when the server cannot be reached. |
-| OpenStreetMap can block the app at any time, with no notice and no guarantee of service; the URL is fixed in the code | Accepted by the user on 2026-11-09 (ADR 010 amendment). The usage policy is followed (see the section on the map), a refusal pauses all requests for 300 s, and the map is a convenience: list, filters and tracks keep working. If the block lasts, a change of source is a code change in one module. |
+| The tile server in use (`tile.openstreetmap.org`, `*.tile.opentopomap.org` or `*.tile-cyclosm.openstreetmap.fr`) sees the areas the user looks at, and its address (and so the IP of the user); only the server of the background in use sees them | Accepted by the user on 2026-11-07 (ADR 010); the host changed on 2026-11-09 and the choice of three on 2026-11-10; the risk is the same, with more hosts but one at a time. A map with tiles needs a tile host; the alternative, an offline vector region, is deferred. Mitigations: the page has no network, one host over HTTPS only, the URL is never logged, only tiles that were looked at are asked (no prefetch), the cache follows the headers and is checked with conditional requests, a neutral background when the server cannot be reached. |
+| OpenStreetMap, OpenTopoMap (sometimes slow) or CyclOSM (OpenStreetMap France servers, paid for with donations) can block the app at any time, with no notice and no guarantee of service; the URLs are fixed in the code | Accepted by the user on 2026-11-09 (ADR 010 amendment). The usage policy is followed (see the section on the map), a refusal pauses all requests for 300 s, and the map is a convenience: list, filters and tracks keep working. If the block lasts, a change of source is a code change in one module. |
 | The areas looked at stay in the tile cache (a database in the user's cache folder) | Same readers as the profile (every process of the user). It is outside the profile folder and its backups, derived, and "Clear map cache" empties it. |
 | A compromised map page can delete its own bridge (`deleteLater`) | The only effect is that its own map goes quiet. No other call is open. |
 | Shape of the Garmin workout and calendar responses not verified on the live service | The adapter is written from the library's code; only `garmin/workout_json.py` changes if Garmin differs. Mitigations: hostile or odd entries are left out, deletion needs a copy and a still-matching entry, `T-MAN-01` is the check by the user. |

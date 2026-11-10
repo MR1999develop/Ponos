@@ -155,16 +155,27 @@ weights.
 
 ## The map
 
-The map background comes from OpenStreetMap (`tile.openstreetmap.org`). There
-is no key to get and nothing to set up. The app follows the usage policy of
-that server: it names itself and gives a contact address in each request,
+The map has three backgrounds, which you choose in Map > Background
+(Ctrl+Shift+1, 2, 3) or with the small control at the top right of the map; the
+choice is remembered. OpenStreetMap (the default) is the standard road map,
+OpenTopoMap shows contour lines and relief (up to zoom 17) and CyclOSM is made
+for cycling (up to zoom 20). The map is always shown with the credit the data
+asks for: "© OpenStreetMap contributors" for OpenStreetMap, "Map data: ©
+OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap (CC-BY-SA)" for
+OpenTopoMap and "CyclOSM | Map data: © OpenStreetMap contributors" for CyclOSM.
+There is no key to get and nothing to set up. The app follows the usage policy
+of those servers: it names itself and gives a contact address in each request,
 keeps tiles as long as the server says (7 days when it says nothing), asks
 again with a conditional request when a tile has expired, asks only for the
 tiles you look at (no pre-loading, no bulk download) and stops asking for five
-minutes if the server refuses. "© OpenStreetMap contributors" is shown on the
-map. The server sees which areas you look at, and it is a shared service with
-no guarantee: it can block the app, and then the map keeps a plain background
-while the list, the filters and the tracks keep working. If you had saved a
+minutes if a server refuses (the other backgrounds keep working). Privacy: the
+server of the background in use sees which areas you look at and your IP
+address (`tile.openstreetmap.org` for OpenStreetMap, `*.tile.opentopomap.org`
+for OpenTopoMap, `*.tile-cyclosm.openstreetmap.fr` for CyclOSM, run by
+OpenStreetMap France); the others see nothing while you do not use them. They
+are free, shared services with no guarantee: OpenTopoMap is sometimes slow, and
+any of them can block the app, and then the map keeps a plain background while
+the list, the filters and the tracks keep working. If you had saved a
 Tracestrack key in an older build, the app no longer uses it.
 
 More profiles: File, New profile... (Ctrl+N). A profile moved or copied to

@@ -738,6 +738,23 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       (threat model): il server può bloccare l'app senza preavviso, nessuna
       garanzia di servizio, URL fisso nel codice. Resta da fare prima del
       rilascio: rileggere le regole d'uso di OpenStreetMap.
+- [x] Tre sfondi della mappa a scelta (richiesta dell'utente del 2026-11-10:
+      "cambiare layer", poi "aggiungi OpenTopoMap e CyclOSM"; ADR 010 emendato
+      una seconda volta): OpenStreetMap (default), OpenTopoMap (zoom 17) e
+      CyclOSM (zoom 20), valori chiusi del dominio (`maps/domain.py`: chiave,
+      host e sottodomini, percorso, zoom massimo, attribuzione); schema interno
+      `ponos://tiles/{source}/{z}/{x}/{y}` con la sorgente validata contro
+      l'elenco; stesse regole d'uso per tutti, pausa di 300 s per sorgente;
+      cache delle tile schema 3 con la sorgente nella chiave (i file v1 e v2 si
+      ricostruiscono vuoti). Scelta in Mappa → Sfondo (Ctrl+Shift+1..3, voci
+      esclusive) e con un controllo in alto a destra della mappa, sincronizzati
+      e ricordati (`QSettings`, `map/background`); la pagina cambia layer senza
+      ricaricarsi (`setBackground`), aggiorna attribuzione e zoom massimo;
+      l'avviso di un problema porta il nome dello sfondo. Host verificati il
+      2026-11-10 sulle pagine dei progetti. Rischi accettati (threat model):
+      servizi gratuiti senza garanzia, OpenTopoMap a tratti lento, CyclOSM sui
+      server di OSM Francia finanziati da donazioni. Test in
+      `tests/ui/test_map_background.py`, `tests/maps`, `tests/platform`.
 - [x] Impostazioni di allenamento: giorni disponibili (caselle), sedute a
       settimana, giorno del lungo, ore massime a settimana; niente più minuti
       per giorno (richiesta dell'utente del 2026-11-09, commit `58409cc`,
@@ -1107,8 +1124,9 @@ model e gli esiti del collaudo possono citarlo.
   rifiutati senza effetti; la pagina non può chiamare altro.
 - **T-SEC-15** Rete della mappa (fase 5b): la pagina non fa nessuna richiesta
   di rete (tutto tranne `ponos://` bloccato); il proxy chiama solo
-  `https://tile.openstreetmap.org` (altri host, HTTP e z/x/y fuori limite
-  rifiutati, timeout rispettati, User-Agent presente, validatori anomali
+  `https://tile.openstreetmap.org` e, dal 2026-11-10, i due host di
+  OpenTopoMap e CyclOSM dell'elenco chiuso degli sfondi (altri host, sorgenti
+  sconosciute, HTTP e z/x/y fuori limite rifiutati, timeout rispettati, User-Agent presente, validatori anomali
   scartati); nessuna posizione GPS nei log né in file fuori dalle cartelle
   previste. (Fino al 2026-11-09 il test controllava anche che la chiave
   Tracestrack non finisse in pagina, log, profilo o cache: la chiave non c'è

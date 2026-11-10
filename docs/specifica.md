@@ -1030,8 +1030,9 @@ Decision: [ADR 010](adr/010-mappa.md).
   and the other way round. A double click on an activity in the map (its start,
   or the selected track) opens its window; elsewhere it zooms in.
 - Map menu: "Show activities and map" (Ctrl+M), "Show all activities" (Ctrl+0),
-  Zoom in and out, "Filter activities", "Clear filters", "Clear map cache..."
-  (Ctrl+Shift+Backspace). There is no "Map settings..." entry: the Map page of
+  Zoom in and out, "Background" (a submenu with OpenStreetMap, OpenTopoMap and
+  CyclOSM, exclusive, Ctrl+Shift+1, 2 and 3), "Filter activities", "Clear
+  filters", "Clear map cache..." (Ctrl+Shift+Backspace). There is no "Map settings..." entry: the Map page of
   Settings opens from the button of the map notice and from Clear map cache.
 - At low zoom the starts of the filtered activities are grouped in circles with
   the number, which split and merge at each level; a click on a group zooms to
@@ -1051,10 +1052,19 @@ Decision: [ADR 010](adr/010-mappa.md).
   track in both directions, and the track can be coloured by heart-rate zone
   with the legend of the zones of that day. Without elevation the profile says
   why it is missing.
-- Settings, Map page: the size of the tile cache (4 GB by default); "Clear map
-  cache" empties it. There is no key to enter: since 2026-11-09 the background
-  comes from OpenStreetMap (`tile.openstreetmap.org`), at the user's request
-  (ADR 010, amendment).
+- Background of the map: OpenStreetMap (`tile.openstreetmap.org`, the default),
+  OpenTopoMap (`{a,b,c}.tile.opentopomap.org`, up to zoom 17) or CyclOSM
+  (`{a,b,c}.tile-cyclosm.openstreetmap.fr`, up to zoom 20), at the user's request
+  (ADR 010, amendments of 2026-11-09 and 2026-11-10). The user chooses it in
+  Map > Background or with the small control at the top right of the map (three
+  buttons with the names of the backgrounds, usable from the keyboard); the two
+  always agree, the choice is remembered for the next start and the map changes
+  layer without reloading. If the zoom is above the highest of the new
+  background, the map comes down to it. The credit of the background in use is
+  always shown on the map; the notice of a problem names the background.
+- Settings, Map page: the size of the tile cache (4 GB by default, shared by the
+  three backgrounds); "Clear map cache" empties all of it. There is no key to
+  enter.
 - The page has no network: the tiles come through the app. The map's last view
   is not saved. The tile server sees which areas are looked at, and it is a
   shared service with no guarantee: it can block the app without notice. Without
@@ -1063,19 +1073,22 @@ Decision: [ADR 010](adr/010-mappa.md).
 - The app follows the server's usage policy:
   - each request has the `User-Agent` `PonosCoach/<version>` with the contact
     address of the project;
-  - "© OpenStreetMap contributors" is on the map and on the map of the activity
-    detail;
+  - the credit of the background in use is on the map (OpenStreetMap: "©
+    OpenStreetMap contributors"; OpenTopoMap: "Map data: © OpenStreetMap
+    contributors, SRTM | Map style: © OpenTopoMap (CC-BY-SA)"; CyclOSM: "CyclOSM
+    | Map data: © OpenStreetMap contributors");
   - a tile is kept as long as the response headers allow, 7 days when they say
     nothing and at most 30 days; an expired tile is asked again with a
     conditional request (`ETag`, `Last-Modified`) and, if the server says it has
     not changed, kept;
   - only the tiles that are looked at are asked: no pre-loading and no bulk
     download;
-  - when the server refuses (403 or 429) the app asks for nothing for 300
-    seconds.
+  - when a server refuses (403 or 429) the app asks that server for nothing
+    for 300 seconds (the other backgrounds keep working).
 - The tile cache (a file in the system cache folder, outside the profile) has
-  a format of its own, version 2, with the validators of each tile; an older file
-  is rebuilt empty, since it only holds copies.
+  a format of its own, version 3, with the validators of each tile and the
+  background each tile belongs to (a tile of one background never serves for
+  another); an older file is rebuilt empty, since it only holds copies.
 
 ## Open points
 

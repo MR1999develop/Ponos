@@ -284,3 +284,78 @@ Option 2.
   a conditional request and a 304 renews it.
 - T-MAP-11: the cache of schema 2 keeps its cap; a version 1 file is rebuilt empty.
 - A test that both maps show the attribution.
+
+## Amendment 2026-11-10: three map backgrounds
+
+Only the tile source changes again, from one fixed server to a closed set of three; everything
+else of the two earlier decisions stays (page without network, tile proxy, own cache with an exact
+cap, what the page receives).
+
+### Context
+
+The owner asked to change the layer inside the map and then to add OpenTopoMap and CyclOSM, so the
+map can be read as a road map, a topographic map or a cycling map.
+
+### Options
+
+1. **Only OpenStreetMap standard.** Con: not what was asked.
+2. **A closed set of three backgrounds, each fixed in the code, chosen by the user.**
+   - Pro: the choice is a value of the domain, so the page, the proxy, the cache and the tests share
+     one definition; no URL ever comes from outside.
+   - Con: three more hosts that see the areas looked at; three usage policies to follow.
+3. **A background defined by the user (any tile URL).** Rejected: it opens the page, the proxy and
+   the privacy of the user to any host (threat model, B15), and a URL is a secret when it carries a
+   key.
+
+### Decision
+
+Option 2. The set is `BACKGROUNDS` in `maps/domain.py` (one `MapBackground` value each: stable key,
+name, host with its subdomains, path, highest zoom, credit); nothing else defines a host.
+
+| Key | Server (HTTPS, port 443) | Highest zoom | Credit shown on the map |
+|---|---|---|---|
+| `openstreetmap` (default) | `tile.openstreetmap.org/{z}/{x}/{y}.png` | 19 | © OpenStreetMap contributors |
+| `opentopomap` | `{a,b,c}.tile.opentopomap.org/{z}/{x}/{y}.png` | 17 | Map data: © OpenStreetMap contributors, SRTM \| Map style: © OpenTopoMap (CC-BY-SA) |
+| `cyclosm` | `{a,b,c}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png` | 20 | CyclOSM \| Map data: © OpenStreetMap contributors |
+
+- The hosts were checked on 2026-11-10 on the pages of the projects (opentopomap.org/about and
+  cyclosm.org) and with one tile each. OpenTopoMap and CyclOSM have no bare host that answers, only
+  the subdomains; the subdomain of a tile is always the same one (`(x + y) mod 3`), so a tile is not
+  fetched from two hosts and the cache of connections of the server is used well.
+- The usage rules are the ones of the amendment of 2026-11-09, for all three, in the same code:
+  `User-Agent` with name, version and contact URL; the cache follows the response headers (7 days
+  when they say nothing, at most 30); a conditional request for an expired tile; no prefetch and no
+  bulk download; a pause of 300 s when a server answers 403 or 429, **for that server only** (the
+  other two keep working); the PNG, size and time limits of before.
+- The page asks `ponos://tiles/{source}/{z}/{x}/{y}`; the handler validates `source` against the
+  set and `z` against the highest zoom of that source, so a source that is not in the set, or a
+  zoom above its maximum, is refused before the cache or any server is asked.
+- Tile cache schema 3: the table is keyed by `(source, z, x, y)`, so a tile of one background never
+  serves for another; the cap is one, shared. A file of schema 1 or 2 is rebuilt empty (derived
+  data: only time and bandwidth are lost). "Clear map cache" empties all backgrounds.
+- The choice is made in Map > Background (Ctrl+Shift+1, 2, 3, exclusive entries) or with a control
+  at the top right of the map; both change the same value, which is remembered (`QSettings`,
+  `map/background`). The page switches layer without reloading, shows only the credit of the
+  background in use and, if its zoom is above the maximum of the new one, comes down to it. A
+  problem of a server is shown with the name of the background.
+
+### Consequences
+
+- Risks that remain and are accepted: all three are free services with no guarantee and can block
+  the app without notice; OpenTopoMap is sometimes slow (the app waits at most 20 s per tile and
+  then shows a plain background); CyclOSM runs on servers of OpenStreetMap France paid for with
+  donations, so it deserves the same care (no prefetch, the cache, the pause on refusal). Each
+  server sees the areas looked at and the IP address of the user, but only while that background is
+  in use. A change of source is still a code change in one module (`maps/domain.py`).
+- The choice of a background is a setting like the cache size: no secret, no account.
+
+### How compliance is verified
+
+- T-SEC-15: a source that is not in the set, a zoom above the maximum of the source, a path with a
+  query or other segments are refused before any request; each background builds its own URL (host
+  with subdomain, path); only the three hosts over HTTPS (plain HTTP only on loopback, in tests).
+- T-MAP-10: a refusal of one server does not stop the others; a background with no source is a
+  problem, not a crash.
+- T-MAP-11: the cache keeps its single cap, separates the sources and rebuilds a schema 2 file.
+- `tests/ui/test_map_background.py`: the menu, the control on the map, the page (key, URL, credit,
+  highest zoom, no reload), the remembered choice and the notice with the name of the background.
