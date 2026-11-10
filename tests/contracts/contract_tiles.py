@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from ponos_coach.maps.domain import TileAddress
+from ponos_coach.maps.domain import BACKGROUNDS, CYCLOSM, OPENSTREETMAP, OPENTOPOMAP, TileAddress
 from ponos_coach.maps.ports import TileCache, TileImage, TileValidators
 from tests.fakes.tiles import make_png
 
@@ -50,6 +50,29 @@ class TileCacheContract:
         assert cache.get(TileAddress(6, 1, 1), NOW) is None
         assert cache.get(TileAddress(5, 2, 1), NOW) is None
         assert cache.get(TileAddress(5, 1, 2), NOW) is None
+
+    def test_a_tile_of_one_background_never_serves_for_another(self, cache: TileCache) -> None:
+        at = (5, 1, 1)
+        cache.put(TileAddress(*at, OPENSTREETMAP), TileImage(png_of(3000), 60), NOW)
+
+        assert cache.get(TileAddress(*at, OPENTOPOMAP), NOW) is None
+        assert cache.get(TileAddress(*at, CYCLOSM), NOW) is None
+        assert cache.get(TileAddress(*at, OPENSTREETMAP), NOW) is not None
+
+    def test_the_same_place_of_every_background_is_stored_apart(self, cache: TileCache) -> None:
+        for number, background in enumerate(BACKGROUNDS):
+            png = png_of(3000 + number)
+            cache.put(TileAddress(5, 1, 1, background), TileImage(png, 60), NOW)
+
+        for number, background in enumerate(BACKGROUNDS):
+            found = cache.get(TileAddress(5, 1, 1, background), NOW)
+            assert found is not None and found.png == png_of(3000 + number)
+
+    def test_the_highest_zoom_of_any_background_can_be_stored(self, cache: TileCache) -> None:
+        address = TileAddress(20, 1_048_575, 3, CYCLOSM)
+        cache.put(address, TileImage(png_of(3000), 60), NOW)
+
+        assert cache.get(address, NOW) is not None
 
     def test_the_validators_of_a_stored_tile_come_back_with_it(self, cache: TileCache) -> None:
         validators = TileValidators('"abc123"', "Tue, 03 Nov 2026 10:00:00 GMT")

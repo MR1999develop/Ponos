@@ -10,8 +10,15 @@ from collections import OrderedDict
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 
-from ponos_coach.maps.domain import TileAddress
-from ponos_coach.maps.ports import NO_VALIDATORS, CachedTile, TileImage, TileResult, TileValidators
+from ponos_coach.maps.domain import BACKGROUNDS, MapBackground, TileAddress
+from ponos_coach.maps.ports import (
+    NO_VALIDATORS,
+    CachedTile,
+    TileImage,
+    TileResult,
+    TileSource,
+    TileValidators,
+)
 
 _SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
@@ -62,17 +69,22 @@ class FakeTileSource:
         return TileImage(self.png, self.ttl_s)
 
 
+def serving(source: TileSource) -> dict[MapBackground, TileSource]:
+    """The one fake source for every background (what `TileProxy` is given in most tests)."""
+    return dict.fromkeys(BACKGROUNDS, source)
+
+
 class InMemoryTileCache:
     """Tiles in an ordered dictionary: exact cap on the PNG bytes, least recently used out."""
 
     def __init__(self, limit_bytes: int = 1_000_000) -> None:
         self._limit = limit_bytes
-        self._tiles: OrderedDict[tuple[int, int, int], CachedTile] = OrderedDict()
+        self._tiles: OrderedDict[tuple[str, int, int, int], CachedTile] = OrderedDict()
 
     def get(self, address: TileAddress, now: datetime) -> CachedTile | None:
         """See `TileCache.get`."""
         del now
-        key = (address.z, address.x, address.y)
+        key = (address.background.key, address.z, address.x, address.y)
         tile = self._tiles.get(key)
         if tile is not None:
             self._tiles.move_to_end(key)
@@ -82,7 +94,7 @@ class InMemoryTileCache:
         """See `TileCache.put`."""
         if image.ttl_s == 0 or len(image.png) > self._limit:
             return
-        key = (address.z, address.x, address.y)
+        key = (address.background.key, address.z, address.x, address.y)
         self._tiles.pop(key, None)
         self._tiles[key] = CachedTile(
             image.png, now + timedelta(seconds=image.ttl_s), image.validators
@@ -91,7 +103,7 @@ class InMemoryTileCache:
 
     def renew(self, address: TileAddress, ttl_s: int, now: datetime) -> None:
         """See `TileCache.renew`."""
-        key = (address.z, address.x, address.y)
+        key = (address.background.key, address.z, address.x, address.y)
         tile = self._tiles.get(key)
         if tile is not None:
             self._tiles[key] = CachedTile(tile.png, now + timedelta(seconds=ttl_s), tile.validators)

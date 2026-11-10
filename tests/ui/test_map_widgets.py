@@ -12,6 +12,7 @@ from pytestqt.qtbot import QtBot
 
 from ponos_coach.activities.domain import ActivityIdentity, Sport
 from ponos_coach.load.activity_profile import NO_ZONE, ActivityProfileData, ZoneAbsence
+from ponos_coach.maps.domain import BACKGROUNDS, MapBackground
 from ponos_coach.maps.ports import TileProblem
 from ponos_coach.ui import map_texts
 from ponos_coach.ui.chart_texts import chart_chrome
@@ -92,9 +93,13 @@ def test_the_legend_shows_a_name_per_entry_and_hides_when_empty(qtbot: QtBot) ->
 
 
 @pytest.mark.parametrize("problem", list(TileProblem))
-def test_every_tile_problem_has_what_it_is_and_what_to_do(problem: TileProblem) -> None:
-    message = map_texts.tile_notice(problem)
+@pytest.mark.parametrize("background", BACKGROUNDS, ids=lambda b: b.key)
+def test_every_tile_problem_has_what_it_is_and_what_to_do(
+    problem: TileProblem, background: MapBackground
+) -> None:
+    message = map_texts.tile_notice(problem, background)
 
+    assert message.title.startswith(f"{background.label}: ")  # which server it is about
     assert message.title
     assert message.what
     assert message.remedy
@@ -112,8 +117,8 @@ def test_the_zone_legend_gives_the_heart_rate_range_when_the_thresholds_are_know
     assert map_texts.zone_legend_text(2, None).startswith("Z3")  # without thresholds: the name only
 
 
-def test_the_attribution_credits_the_openstreetmap_contributors() -> None:
-    assert map_texts.ATTRIBUTION == "© OpenStreetMap contributors"
+def test_every_background_credits_the_openstreetmap_contributors() -> None:
+    assert all("© OpenStreetMap contributors" in b.attribution for b in BACKGROUNDS)
 
 
 # --- Elevation profile ----------------------------------------------------------------------

@@ -19,7 +19,12 @@ from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWidgets import QWidget
 
 from ponos_coach.ui.chart_view import ChartEngine, ChartView
-from ponos_coach.ui.map_messages import page_call, parse_activity_index, parse_view
+from ponos_coach.ui.map_messages import (
+    page_call,
+    parse_activity_index,
+    parse_background_key,
+    parse_view,
+)
 from ponos_coach.ui.web_policy import APP_MAP_URL
 
 BRIDGE_NAME = "bridge"
@@ -27,7 +32,7 @@ BRIDGE_NAME = "bridge"
 
 class MapBridge(QObject):
     """What the page may tell Python: it is ready, the view moved, an activity was clicked, the
-    pointer is over (or left) a point of the selected track.
+    pointer is over (or left) a point of the selected track, a background was chosen.
 
     `activity_count` and `profile_points` are how many activities and profile points Python sent;
     `activity_generation` and `profile_generation` number those lists. A message outside them is
@@ -41,6 +46,7 @@ class MapBridge(QObject):
     activity_opened = Signal(int)
     point_hovered = Signal(int)
     point_left = Signal()
+    background_chosen = Signal(object)  # MapBackground
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -108,6 +114,15 @@ class MapBridge(QObject):
             self.rejected += 1
             return
         self.point_hovered.emit(point)
+
+    @Slot(str)
+    def backgroundChosen(self, key: str) -> None:  # noqa: N802 - called from JavaScript
+        """The user chose a background with the control on the map; only a known key counts."""
+        background = parse_background_key(key)
+        if background is None:
+            self.rejected += 1
+            return
+        self.background_chosen.emit(background)
 
     @Slot()
     def pointLeft(self) -> None:  # noqa: N802 - called from JavaScript

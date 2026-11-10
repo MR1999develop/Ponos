@@ -36,7 +36,7 @@ from ponos_coach.activities.domain import (
 from ponos_coach.activities.ports import GarminAccount, GarminSession
 from ponos_coach.activities.sync import ExtractedOriginal, OriginalExtractionError
 from ponos_coach.load.use_cases import Decoder
-from ponos_coach.maps.domain import TileAddress
+from ponos_coach.maps.domain import BACKGROUNDS, MapBackground, TileAddress
 from ponos_coach.maps.ports import (
     CachedTile,
     TileCache,
@@ -55,7 +55,7 @@ from ponos_coach.platform.profile_registry import (
     RegistryFormatTooNewError,
 )
 from ponos_coach.platform.tile_cache import DiskTileCache
-from ponos_coach.platform.tile_http import create_osm_source
+from ponos_coach.platform.tile_http import create_tile_sources
 from ponos_coach.platform.token_store import create_token_store
 from ponos_coach.profiles.backup import BackupProfile, RestoreProfile
 from ponos_coach.profiles.domain import ProfileId
@@ -372,13 +372,18 @@ def compose_map(
     """The map's collaborators: tile server, disk cache, proxy, settings and queries.
 
     The cache lives in the app's cache folder (never in a profile), with the cap the user chose;
-    the server is tile.openstreetmap.org, asked only for tiles the page requests, with a
-    `User-Agent` that names the app and its version (read here, once).
+    the servers are the ones of the three map backgrounds, asked only for tiles the page requests,
+    with a `User-Agent` that names the app and its version (read here, once). `source` replaces
+    all of them (fake in tests).
     """
-    provider = source or create_osm_source(_tile_user_agent())
+    providers: Mapping[MapBackground, TileSource] = (
+        create_tile_sources(_tile_user_agent())
+        if source is None
+        else dict.fromkeys(BACKGROUNDS, source)
+    )
     disk_cache = _LazyDiskTileCache(cache_dir, saved_cache_limit(settings).bytes)  # opens on use
     tile_cache: TileCache = disk_cache if cache is None else cache
-    proxy = TileProxy(provider, tile_cache, now_utc or (lambda: datetime.now(UTC)), time.monotonic)
+    proxy = TileProxy(providers, tile_cache, now_utc or (lambda: datetime.now(UTC)), time.monotonic)
     released = threading.Event()
 
     def release() -> None:

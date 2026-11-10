@@ -4,9 +4,10 @@
 
 The scheme handler asks `TileService.request(path, on_done)` for a tile; the work (`TileProxy`:
 cache, then the server with its timeouts) runs in a small pool and the answer comes back on the
-UI thread. The service also keeps the last problem the server had (refusal, no
-network, bad answer) so that the map view can show a notice with the remedy; a good tile clears
-it. The path of a tile says which area is looked at: it is never logged.
+UI thread. The service also keeps, for each map background, the last problem its server had
+(refusal, no network, bad answer) so that the map view can show a notice with the remedy and the
+name of the background; a good tile of that background clears it. The path of a tile says which
+area is looked at: it is never logged.
 """
 
 from __future__ import annotations
@@ -14,10 +15,11 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, Qt, Signal, Slot
 
-from ponos_coach.maps.domain import TileAddressError
+from ponos_coach.maps.domain import MapBackground, TileAddressError, parse_tile_path
 from ponos_coach.maps.ports import TileProblem
 from ponos_coach.maps.use_cases import TileAnswer, TileProxy
 from ponos_coach.ui.worker_handover import Handover
@@ -32,11 +34,12 @@ type TileDone = Callable[[bytes | None], None]
 class TileService(QObject):
     """Serves tile requests of the page with `TileProxy`, one pool, answers on the UI thread.
 
-    `problem_changed` carries the provider problem in force, or `None` when tiles flow again.
+    `problem_changed` carries a background and the problem its server has now, or `None` when
+    its tiles flow again.
     """
 
-    problem_changed = Signal(object)  # TileProblem | None
-    _completed = Signal(int, object)  # request id, TileAnswer | None
+    problem_changed = Signal(object, object)  # MapBackground, TileProblem | None
+    _completed = Signal(int, object)  # request id, _Served | None
 
     def __init__(
         self,
@@ -50,17 +53,17 @@ class TileService(QObject):
         )
         self._pending: dict[int, TileDone] = {}
         self._next_id = 1
-        self._problem: TileProblem | None = None
+        self._problems: dict[MapBackground, TileProblem] = {}
         self._handover = Handover(self)  # the workers never hold the service
         self._completed.connect(self._on_completed, Qt.ConnectionType.QueuedConnection)
 
-    @property
-    def problem(self) -> TileProblem | None:
-        """The provider problem in force, if any."""
-        return self._problem
+    def problem_of(self, background: MapBackground) -> TileProblem | None:
+        """The problem in force for the server of this background, if any."""
+        return self._problems.get(background)
 
     def request(self, path: str, on_done: TileDone) -> bool:
-        """Ask for the tile at `path` (`/z/x/y`); `on_done(png | None)` runs on the UI thread.
+        """Ask for the tile at `path` (`/source/z/x/y`); `on_done(png | None)` runs on the UI
+        thread.
 
         False (nothing starts) if the service was shut down or too many requests wait.
         """
@@ -92,21 +95,33 @@ class TileService(QObject):
         if on_done is None:
             return
         png: bytes | None = None
-        if isinstance(answer, TileAnswer):
-            png = answer.png
-            self._set_problem(answer.problem)
+        if isinstance(answer, _Served):
+            png = answer.answer.png
+            self._set_problem(answer.background, answer.answer.problem)
         on_done(png)
 
-    def _set_problem(self, problem: TileProblem | None) -> None:
-        if problem != self._problem:
-            self._problem = problem
-            self.problem_changed.emit(problem)
+    def _set_problem(self, background: MapBackground, problem: TileProblem | None) -> None:
+        if problem != self._problems.get(background):
+            if problem is None:
+                del self._problems[background]
+            else:
+                self._problems[background] = problem
+            self.problem_changed.emit(background, problem)
 
 
-def _serve(proxy: TileProxy, path: str) -> TileAnswer | None:
+@dataclass(frozen=True, slots=True)
+class _Served:
+    """An answer and the background it belongs to."""
+
+    background: MapBackground
+    answer: TileAnswer
+
+
+def _serve(proxy: TileProxy, path: str) -> _Served | None:
     """Runs on a worker thread: the tile, or `None` for a bad address or a failure."""
     try:
-        return proxy.serve(path)
+        address = parse_tile_path(path)
+        return _Served(address.background, proxy.tile(address))
     except TileAddressError:
         return None
     except Exception as error:  # worker boundary: the page just gets "no tile"
@@ -116,7 +131,7 @@ def _serve(proxy: TileProxy, path: str) -> TileAnswer | None:
 
 
 def _hand_over(
-    handover: Handover[TileService], request_id: int, future: Future[TileAnswer | None]
+    handover: Handover[TileService], request_id: int, future: Future[_Served | None]
 ) -> None:
     """Runs on a worker thread when a request ends: posts the answer to the UI thread."""
     if future.cancelled():

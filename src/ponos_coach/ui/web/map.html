@@ -16,6 +16,11 @@ html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; overflow: h
 .leaflet-container { background: var(--map-bg); }
 .leaflet-control-attribution { background: var(--map-panel); color: var(--map-fg); padding: 2px 6px; }
 .leaflet-bar a, .leaflet-bar a:hover { background-color: var(--map-panel); color: var(--map-fg); border-bottom-color: var(--map-fg); }
+.ponos-backgrounds { display: flex; flex-direction: column; }
+.ponos-backgrounds button { font: inherit; padding: 4px 10px; min-height: 24px; text-align: left; border: 0; border-bottom: 1px solid var(--map-fg); background: var(--map-panel); color: var(--map-fg); cursor: pointer; }
+.ponos-backgrounds button:last-child { border-bottom: 0; }
+.ponos-backgrounds button.ponos-on { font-weight: 700; background: var(--map-fg); color: var(--map-panel); }
+.ponos-backgrounds button:focus-visible { outline: 2px solid var(--map-fg); outline-offset: -4px; }
 .leaflet-container:focus-visible { outline: 2px solid var(--map-fg); outline-offset: -2px; }
 .ponos-cluster div { box-sizing: border-box; width: 100%; height: 100%; border-radius: 50%; border: 2px solid var(--cluster-fg); background: var(--cluster-bg); color: var(--cluster-fg); display: flex; align-items: center; justify-content: center; font: 600 13px system-ui, sans-serif; }
 .ponos-cluster span { line-height: 1; }

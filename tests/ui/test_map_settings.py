@@ -21,14 +21,14 @@ from ponos_coach.maps.ports import TileImage
 from ponos_coach.maps.use_cases import TileProxy
 from ponos_coach.ui.map_settings import KEY_CACHE_GIB, MapSettingsModel
 from ponos_coach.ui.map_settings_dialog import MapSettingsDialog
-from tests.fakes.tiles import FakeTileSource, InMemoryTileCache, make_png
+from tests.fakes.tiles import FakeTileSource, InMemoryTileCache, make_png, serving
 from tests.ui.workspace_support import WAIT_MS
 
 
 def model_with(tmp_path: Path) -> tuple[MapSettingsModel, InMemoryTileCache, QSettings]:
     source = FakeTileSource()
     cache = InMemoryTileCache(DEFAULT_CACHE_BYTES)
-    proxy = TileProxy(source, cache, lambda: datetime.now(UTC), time.monotonic)
+    proxy = TileProxy(serving(source), cache, lambda: datetime.now(UTC), time.monotonic)
     settings = QSettings(str(tmp_path / "map.ini"), QSettings.Format.IniFormat)
     return MapSettingsModel(proxy, cache, settings), cache, settings
 

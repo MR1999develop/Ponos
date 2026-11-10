@@ -437,27 +437,35 @@ Tutti sul thread dei dati (la connessione è di un solo thread), nessun log (pos
 
 ### Sfondo della mappa (`maps/`, `platform/tile_*.py`)
 
-Fonte: OpenStreetMap (`tile.openstreetmap.org`), senza chiave (dal 2026-11-09, ADR 010 emendato;
-prima Tracestrack con chiave nel portachiavi: tutto ciò che la riguardava è stato tolto).
+Fonti (dal 2026-11-10, ADR 010 emendato due volte): tre sfondi a scelta, elenco chiuso
+`BACKGROUNDS` in `maps/domain.py` (`MapBackground`: chiave stabile, nome, host con `{s}` e
+sottodomini, prefisso del percorso, zoom massimo, attribuzione): `openstreetmap` (default,
+`tile.openstreetmap.org`, zoom 19), `opentopomap` (`{a,b,c}.tile.opentopomap.org`, zoom 17) e
+`cyclosm` (`{a,b,c}.tile-cyclosm.openstreetmap.fr/cyclosm/`, zoom 20). Senza chiave (dal
+2026-11-09; prima Tracestrack con chiave nel portachiavi: tutto ciò che la riguardava è stato
+tolto). Nessun URL arriva da fuori: la sorgente si cerca per chiave nell'elenco.
 
-- `maps/domain.py`: `TileAddress(z, x, y)` (z 0-19, x e y in `[0, 2^z)`), `parse_tile_path`
-  (`/z/x/y` o `z/x/y.png`, lunghezza prima, solo cifre), `CacheLimit` (64 MiB - 64 GiB, default
+- `maps/domain.py`: `TileAddress(z, x, y, background=OPENSTREETMAP)` (z da 0 allo zoom massimo
+  della sorgente, x e y in `[0, 2^z)`), `parse_tile_path` (`/sorgente/z/x/y` o
+  `sorgente/z/x/y.png`, lunghezza prima, solo cifre, sorgente cercata con `background_by_key`), `CacheLimit` (64 MiB - 64 GiB, default
   4 GiB), `parse_cache_limit_gib` ("4", "0,5"). Niente stile, niente chiave.
 - `maps/ports.py`: `TileSource.fetch(z, x, y, validatori) -> TileImage | TileNotModified |
   TileUnavailable` (un solo tentativo, mai eccezioni per rete o fornitore; `TileAddressError` per
   coordinate non valide), `TileProblem` (`REFUSED` = 403/429, `NETWORK_UNAVAILABLE`,
   `INVALID_RESPONSE`), `TileValidators(etag, last_modified)` (valori opachi, ASCII stampabile,
   già controllati dall'adattatore), `TileCache` (`get`, `put`, `renew`).
-- `maps/use_cases.py`: `TileProxy(source, cache, now_utc, monotonic)`: `serve(percorso)` /
+- `maps/use_cases.py`: `TileProxy(sources: Mapping[MapBackground, TileSource], cache, now_utc,
+  monotonic)` (una sorgente e una pausa per sfondo): `serve(percorso)` /
   `tile(indirizzo) -> TileAnswer(png, problem)`; prima la cache (fresca), poi il server; una tile
   scaduta si richiede con i validatori salvati (richiesta condizionale) e un 304 la rinnova
   (`renew`). Dopo un problema non richiede per un po' (`COOLDOWN_S`: `REFUSED` 300 s, rete e
   risposta non valida 15 s; `INVALID_RESPONSE` solo per quella tile); una tile scaduta si serve
   comunque con il problema se il server non risponde. Mai prefetch né scaricamenti in blocco.
 - `platform/tile_http.py`: `HttpTileSource` su `http.client` (nessun reindirizzamento seguito,
-  nessun proxy di sistema, nessun ritentativo). Solo `OPENSTREETMAP`
-  (`https://tile.openstreetmap.org`) nell'app (`create_osm_source(user_agent)`); un endpoint
-  `http` solo su loopback. `User-Agent` `PonosCoach/<versione> (+<URL del repository>)`, composto
+  nessun proxy di sistema, nessun ritentativo). `HttpTileSource(background, user_agent=...)`:
+  host e percorso dallo sfondo, sempre HTTPS, sottodominio fisso per tile (`(x + y) % 3`); nell'app
+  `create_tile_sources(user_agent)` ne crea una per sfondo; un endpoint `http` solo su loopback
+  (`endpoint=`, nei test). `User-Agent` `PonosCoach/<versione> (+<URL del repository>)`, composto
   in `__main__.py`, ASCII stampabile, al massimo 128 caratteri. Timeout per operazione (8 s) e
   scadenza totale (20 s); risposta: stato, `Content-Length` ed `image/png`, al massimo 1 MiB, PNG
   completo con IHDR di lato 1-1024. Scadenza da `Cache-Control` (`max-age`; `no-store`/`no-cache`
@@ -467,14 +475,17 @@ prima Tracestrack con chiave nel portachiavi: tutto ciò che la riguardava è st
   log.
 - `platform/tile_cache.py`: `DiskTileCache(cartella, limite)` su un file SQLite
   (`tiles.sqlite3`, WAL) nella cartella cache dell'app (non nel profilo; cartella privata).
-  Schema 2 (`user_version`): una riga per `(z, x, y)` con `expires_ms`, `etag`, `modified`, senza
-  stile; il file v1 (aveva la colonna dello stile) si ricostruisce vuoto, come ogni file
-  illeggibile o di altra versione. Tetto sul **conteggio per pagine** (`accounted_bytes`: byte +
+  Schema 3 (`user_version`): una riga per `(source, z, x, y)` con `expires_ms`, `etag`,
+  `modified`; i file v1 (colonna dello stile) e v2 (senza sorgente) si ricostruiscono vuoti, come
+  ogni file illeggibile o di altra versione; un solo tetto per tutti gli sfondi. Tetto sul **conteggio per pagine** (`accounted_bytes`: byte +
   160 di riga, arrotondati a 4096): il file non supera il tetto più poche decine di KiB;
   rimozione LRU per contatore d'uso (non per orologio); `clear()` cancella e ricrea il file.
   Thread-safe (un lock).
-- Attribuzione "© OpenStreetMap contributors" su entrambe le mappe (`ui/map_texts.py`).
-- Pagina della mappa: chiede `ponos://tiles/{z}/{x}/{y}`; il gestore dello schema chiama
+- Attribuzione dello sfondo in uso (campo `attribution` dello sfondo), sempre visibile sulla
+  mappa; scelta in `ui/map_background.py` (`BackgroundChoice`, `QSettings` `map/background`),
+  menu Mappa → Sfondo e controllo nella pagina (`backgroundChosen(chiave)`, convalidata), la
+  pagina cambia layer con `setBackground`.
+- Pagina della mappa: chiede `ponos://tiles/{sorgente}/{z}/{x}/{y}`; il gestore dello schema chiama
   `TileProxy.serve(percorso, lingua)` (fuori dal thread GUI), risponde 200 con il PNG, 400 per
   `TileAddressError`, 204/404 senza PNG; `problem` va all'avviso della vista (non nell'URL).
 

@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""HTTPS tile source (`TileSource` port): the standard OpenStreetMap tile server.
+"""HTTPS tile source (`TileSource` port): one tile server for each map background.
 
-The only host the app contacts for the map is `tile.openstreetmap.org`, over HTTPS with full
-certificate verification, at `/{z}/{x}/{y}.png` (its usage policy: a distinct `User-Agent` that
-names the app, no `Cache-Control: no-cache`, conditional requests for tiles that expired, no bulk
-download). Every request has a socket timeout and a total deadline; there is one attempt per call
-and no retry; redirects are never followed and no system proxy is used (the client is
-`http.client`, which does neither). The answer must be a PNG, within a byte cap, with a size in
-pixels that makes sense: anything else is `INVALID_RESPONSE`. 403 and 429 are `REFUSED`. The URL
-is not logged (it says which area is looked at).
+The only hosts the app contacts for the map are the ones of the closed set `BACKGROUNDS`
+(`maps.domain`: OpenStreetMap, OpenTopoMap, CyclOSM), over HTTPS with full certificate
+verification, each at its own path (the usage policies of the three ask the same: a distinct
+`User-Agent` that names the app, no `Cache-Control: no-cache`, conditional requests for tiles that
+expired, no bulk download). Every request has a socket timeout and a total deadline; there is one
+attempt per call and no retry; redirects are never followed and no system proxy is used (the
+client is `http.client`, which does neither). The answer must be a PNG, within a byte cap, with a
+size in pixels that makes sense: anything else is `INVALID_RESPONSE`. 403 and 429 are `REFUSED`.
+The URL is not logged (it says which area is looked at).
 
 A plain-HTTP endpoint is accepted only on a loopback address (a local tile server).
 """
@@ -28,7 +29,7 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Final
 
-from ponos_coach.maps.domain import TileAddress
+from ponos_coach.maps.domain import BACKGROUNDS, MapBackground, TileAddress
 from ponos_coach.maps.ports import (
     MAX_TILE_TTL_S,
     NO_VALIDATORS,
@@ -79,9 +80,6 @@ class TileEndpoint:
             raise ValueError("plain HTTP is only allowed on a loopback address")
 
 
-OPENSTREETMAP: Final = TileEndpoint("https", "tile.openstreetmap.org", 443)
-
-
 def _png_is_sane(data: bytes) -> bool:
     """A complete PNG whose first chunk is a header with plausible dimensions."""
     header_end = len(_PNG_SIGNATURE) + _IHDR.size
@@ -129,10 +127,12 @@ def _ttl_from_expires(expires: str, date: str | None, now: datetime) -> int:
 
 
 class HttpTileSource:
-    """Tiles over HTTP(S) from one endpoint.
+    """Tiles of one map background over HTTP(S).
 
     Args:
-        endpoint: `OPENSTREETMAP` in the app; a loopback `http` endpoint for a local server.
+        background: which background (host, subdomains and path come from it).
+        endpoint: `None` in the app (the host of the background, HTTPS, port 443); a loopback
+            `http` endpoint for a local server in the tests (the path stays the background's).
         user_agent: stable name of the app with version and contact URL (the server's usage
             policy asks for it); printable ASCII, at most `MAX_USER_AGENT_CHARS`.
         timeout_s: limit for connecting and for each read.
@@ -144,9 +144,10 @@ class HttpTileSource:
 
     def __init__(  # noqa: PLR0913 - each one is a distinct limit or volatile dependency
         self,
-        endpoint: TileEndpoint,
+        background: MapBackground,
         *,
         user_agent: str,
+        endpoint: TileEndpoint | None = None,
         timeout_s: float = 8.0,
         total_timeout_s: float = 20.0,
         max_bytes: int = MAX_TILE_BYTES,
@@ -157,6 +158,7 @@ class HttpTileSource:
             raise ValueError("timeouts and byte cap must be positive")
         if _USER_AGENT.fullmatch(user_agent) is None:
             raise ValueError("invalid user agent")
+        self._background = background
         self._endpoint = endpoint
         self._user_agent = user_agent
         self._timeout_s = timeout_s
@@ -169,14 +171,14 @@ class HttpTileSource:
         self, z: int, x: int, y: int, validators: TileValidators = NO_VALIDATORS
     ) -> TileResult:
         """See `TileSource.fetch`. One attempt."""
-        address = TileAddress(z, x, y)  # raises TileAddressError before anything else
+        address = TileAddress(z, x, y, self._background)  # raises TileAddressError first
         result = self._request(address, validators)
         if isinstance(result, TileUnavailable):
-            _LOG.info("map tile unavailable (%s)", result.problem.value)
+            _LOG.info("map tile unavailable (%s: %s)", self._background.key, result.problem.value)
         return result
 
     def _request(self, address: TileAddress, validators: TileValidators) -> TileResult:
-        path = f"/{address.z}/{address.x}/{address.y}.png"
+        path = self._background.path_for(address)
         headers = {
             "User-Agent": self._user_agent,
             "Accept": "image/png",
@@ -190,7 +192,7 @@ class HttpTileSource:
             headers["If-Modified-Since"] = modified
         conditional = etag is not None or modified is not None
         deadline = self._monotonic() + self._total_timeout_s
-        connection = self._connection()
+        connection = self._connection(address)
         try:
             connection.request("GET", path, headers=headers)
             return self._answer(connection.getresponse(), deadline, conditional)
@@ -201,8 +203,8 @@ class HttpTileSource:
         finally:
             connection.close()
 
-    def _connection(self) -> http.client.HTTPConnection:
-        endpoint = self._endpoint
+    def _connection(self, address: TileAddress) -> http.client.HTTPConnection:
+        endpoint = self._endpoint or TileEndpoint("https", self._background.host_for(address), 443)
         if endpoint.scheme == "https":
             return http.client.HTTPSConnection(
                 endpoint.host,
@@ -276,7 +278,9 @@ def _validator(value: str | None) -> str | None:
     return value if value is not None and _VALIDATOR.fullmatch(value) else None
 
 
-def create_osm_source(user_agent: str) -> HttpTileSource:
-    """The tile source of the app: tile.openstreetmap.org over HTTPS, the app's limits (single
+def create_tile_sources(user_agent: str) -> dict[MapBackground, HttpTileSource]:
+    """The tile sources of the app, one for each of `BACKGROUNDS`, with the app's limits (single
     place). `user_agent` is `PonosCoach/<version> (+<contact URL>)`."""
-    return HttpTileSource(OPENSTREETMAP, user_agent=user_agent)
+    return {
+        background: HttpTileSource(background, user_agent=user_agent) for background in BACKGROUNDS
+    }

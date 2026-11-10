@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from ponos_coach.maps.domain import TileAddress
+from ponos_coach.maps.domain import OPENTOPOMAP, TileAddress
 from ponos_coach.maps.ports import TileCache, TileCacheError, TileImage, TileValidators
 from ponos_coach.platform import tile_cache
 from ponos_coach.platform.tile_cache import CACHE_FILE_NAME, DiskTileCache, accounted_bytes
@@ -246,6 +246,33 @@ def test_a_version_1_file_from_the_previous_provider_is_rebuilt_empty(tmp_path: 
         assert cache.get(TileAddress(1, 0, 0), NOW) is None
         cache.put(TileAddress(1, 0, 0), TileImage(png_of(3000), 60), NOW)
         assert cache.get(TileAddress(1, 0, 0), NOW) is not None
+    finally:
+        cache.close()
+
+
+def test_a_version_2_file_without_the_source_is_rebuilt_empty(tmp_path: Path) -> None:
+    """The cache of before the three backgrounds (OpenStreetMap only) is derived data: it is
+    not kept, so a tile of it can never be taken for one of another background."""
+    folder = tmp_path / "maps"
+    folder.mkdir()
+    old = sqlite3.connect(str(folder / CACHE_FILE_NAME))
+    old.execute(
+        "CREATE TABLE tile (id INTEGER PRIMARY KEY, z INTEGER NOT NULL, x INTEGER NOT NULL, "
+        "y INTEGER NOT NULL, expires_ms INTEGER NOT NULL, etag TEXT, modified TEXT, "
+        "used_seq INTEGER NOT NULL, cost INTEGER NOT NULL, png BLOB NOT NULL)"
+    )
+    old.execute("INSERT INTO tile VALUES (1, 1, 0, 0, 9999999999999, NULL, NULL, 1, 4096, x'00')")
+    old.execute("PRAGMA user_version = 2")
+    old.commit()
+    old.close()
+
+    cache = DiskTileCache(folder, 1_000_000)
+    try:
+        assert cache.used_bytes() == 0
+        assert cache.get(TileAddress(1, 0, 0), NOW) is None
+        cache.put(TileAddress(1, 0, 0, OPENTOPOMAP), TileImage(png_of(3000), 60), NOW)
+        assert cache.get(TileAddress(1, 0, 0, OPENTOPOMAP), NOW) is not None
+        assert cache.get(TileAddress(1, 0, 0), NOW) is None
     finally:
         cache.close()
 

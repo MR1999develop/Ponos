@@ -53,7 +53,7 @@ def test_a_view_beyond_the_globe_is_brought_back_into_it() -> None:
         (math.nan, 0, 1, 1, 5),
         (0, math.inf, 1, 1, 5),
         (0, 0, 1, -math.inf, 5),
-        (0, 0, 1, 1, 20),  # zoom above the map's range
+        (0, 0, 1, 1, 21),  # zoom above the map's range (20: CyclOSM)
         (0, 0, 1, 1, -1),
         (0, 0, 1, 1, 5.5),  # a zoom is an integer
         (0, 0, 1, 1, True),

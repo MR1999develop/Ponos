@@ -2,23 +2,24 @@
 # Copyright (C) 2026 MR
 """Use case of the map background: `TileProxy` (a tile for the page).
 
-`TileProxy` is what the `ponos://tiles/{z}/{x}/{y}` handler calls. It asks the cache first, then
-the server (conditionally, if it holds an expired copy), one attempt at a time, and after a failure
-it stops asking for a while (a cool-down per problem: global when the server refuses or limits us
-or the network is down; for one tile only after a bad answer about it) so that a page that wants
-dozens of tiles cannot hammer a server that said no. It never prefetches: only the tiles the page
-asks for. No log: a tile address says which area is being looked at.
+`TileProxy` is what the `ponos://tiles/{source}/{z}/{x}/{y}` handler calls. It asks the cache
+first, then the server of that background (conditionally, if it holds an expired copy), one
+attempt at a time, and after a failure it stops asking for a while (a cool-down per problem and
+per background: for the whole server when it refuses or limits us or the network is down; for one
+tile only after a bad answer about it) so that a page that wants dozens of tiles cannot hammer a
+server that said no, and a refusal of one server never stops the others. It never prefetches: only
+the tiles the page asks for. No log: a tile address says which area is being looked at.
 """
 
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
 
-from ponos_coach.maps.domain import TileAddress, parse_tile_path
+from ponos_coach.maps.domain import MapBackground, TileAddress, parse_tile_path
 from ponos_coach.maps.ports import (
     NO_VALIDATORS,
     CachedTile,
@@ -63,27 +64,28 @@ class TileAnswer:
 class TileProxy:
     """Use case "get a map tile": cache, then provider, with cool-downs. Thread-safe.
 
-    Dependencies: tile source, cache, the UTC clock and a monotonic clock (for the cool-downs),
-    both injected.
+    Dependencies: one tile source for each background it serves (a background without a source
+    is not served), the cache (its keys include the background), the UTC clock and a monotonic
+    clock (for the cool-downs), all injected.
     """
 
     def __init__(
         self,
-        source: TileSource,
+        sources: Mapping[MapBackground, TileSource],
         cache: TileCache,
         now: Callable[[], datetime],
         monotonic: Callable[[], float],
     ) -> None:
-        self._source = source
+        self._sources = dict(sources)
         self._cache = cache
         self._now = now
         self._monotonic = monotonic
         self._lock = threading.Lock()
-        self._blocked: tuple[TileProblem, float] | None = None  # problem, monotonic end
+        self._blocked: dict[MapBackground, tuple[TileProblem, float]] = {}  # problem, end
         self._tile_blocks: dict[TileAddress, float] = {}  # tile -> monotonic end
 
     def serve(self, path: str) -> TileAnswer:
-        """Tile for a path as the page writes it (`/z/x/y`, `z/x/y.png`).
+        """Tile for a path as the page writes it (`/source/z/x/y`, `source/z/x/y.png`).
 
         Raises:
             TileAddressError: the path is not a tile; nothing is asked of cache or server.
@@ -97,7 +99,7 @@ class TileProxy:
         cached = self._cached(address, now)
         if cached is not None and cached.is_fresh(now):
             return TileAnswer(cached.png, None)
-        problem = self._current_problem()
+        problem = self._current_problem(address.background)
         if problem is None and self._tile_is_blocked(address):
             problem = TileProblem.INVALID_RESPONSE
         elif problem is None:
@@ -114,7 +116,10 @@ class TileProxy:
 
     def _ask(self, address: TileAddress, cached: CachedTile | None, now: datetime) -> TileAnswer:
         validators = NO_VALIDATORS if cached is None else cached.validators
-        result = self._source.fetch(address.z, address.x, address.y, validators)
+        source = self._sources.get(address.background)
+        if source is None:  # a background nobody configured: nothing to ask
+            return TileAnswer(None, TileProblem.INVALID_RESPONSE)
+        result = source.fetch(address.z, address.x, address.y, validators)
         if isinstance(result, TileImage):
             self._store(address, result, now)
             return TileAnswer(result.png, None)
@@ -147,14 +152,15 @@ class TileProxy:
         except TileCacheError:  # the copy is served anyway; it will be asked about again
             return
 
-    def _current_problem(self) -> TileProblem | None:
+    def _current_problem(self, background: MapBackground) -> TileProblem | None:
         with self._lock:
-            if self._blocked is None:
+            blocked = self._blocked.get(background)
+            if blocked is None:
                 return None
-            problem, until = self._blocked
+            problem, until = blocked
             if self._monotonic() < until:
                 return problem
-            self._blocked = None
+            del self._blocked[background]
             return None
 
     def _tile_is_blocked(self, address: TileAddress) -> bool:
@@ -178,5 +184,5 @@ class TileProxy:
                     del self._tile_blocks[next(iter(self._tile_blocks))]
                 self._tile_blocks[address] = end
             else:
-                self._blocked = (failure.problem, end)
+                self._blocked[address.background] = (failure.problem, end)
         return failure.problem

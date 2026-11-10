@@ -32,6 +32,7 @@ from ponos_coach.activities.domain import ActivityIdentity, ActivityRecord, Spor
 from ponos_coach.activities.map_queries import TRACK_MIN_ZOOM, AreaView, SearchResult
 from ponos_coach.load.activity_profile import ActivityProfileData, NoTrack, ZoneAbsence
 from ponos_coach.load.use_cases import ExcludedActivity
+from ponos_coach.maps.domain import BACKGROUNDS, MapBackground
 from ponos_coach.maps.ports import TileProblem
 from ponos_coach.ui import map_texts as texts
 from ponos_coach.ui.activity_text import (
@@ -48,17 +49,19 @@ from ponos_coach.ui.elevation_figure import (
     ElevationLabels,
     build_elevation_figure,
 )
+from ponos_coach.ui.map_background import BackgroundChoice
 from ponos_coach.ui.map_controller import MapController
 from ponos_coach.ui.map_legend import LegendBar, LegendEntry
 from ponos_coach.ui.map_messages import (
     MapView,
+    background_message,
     profile_view_message,
 )
 from ponos_coach.ui.map_style import page_colors, page_sports, sport_color, sport_look
 from ponos_coach.ui.map_web_view import MapWebView
 from ponos_coach.ui.tile_service import TileService
 from ponos_coach.ui.tokens import SPACE_1, SPACE_2, SPACE_4, Theme, tokens_for
-from ponos_coach.ui.web_policy import TILE_URL_TEMPLATE
+from ponos_coach.ui.web_policy import tile_url_template
 
 KEY_COLOR_MODE = "map/colorMode"
 MODE_SPORT = "sport"
@@ -95,6 +98,7 @@ class MapPage(QWidget):
         controller: MapController,
         *,
         tiles: TileService | None,
+        background: BackgroundChoice,
         settings: QSettings,
         theme: Callable[[], Theme],
         zone: Callable[[], ZoneInfo],
@@ -105,6 +109,8 @@ class MapPage(QWidget):
         self._settings = settings
         self._theme = theme
         self._zone = zone
+        self._tiles = tiles
+        self._background = background
         self._started = False
         self._syncing = False
         self._fit_pending = False
@@ -269,8 +275,10 @@ class MapPage(QWidget):
         bridge.point_left.connect(self._on_map_point_left)
         self._chart.hovered.connect(self._on_chart_point)
         self._chart.hover_left.connect(self._on_chart_point_left)
+        bridge.background_chosen.connect(self._background.choose)
+        self._background.changed.connect(self._on_background_changed)
         if tiles is not None:
-            tiles.problem_changed.connect(self.show_tile_problem)
+            tiles.problem_changed.connect(self._on_tile_problem)
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 (Qt name)
         """At the first show the map and the elevation profile take their proportions of the
@@ -379,13 +387,27 @@ class MapPage(QWidget):
         self._show_profile()
 
     def show_tile_problem(self, problem: object) -> None:
-        """Show the notice for a tile problem, or hide it (`None`)."""
+        """Show the notice for a problem of the background in use, or hide it (`None`)."""
         self._tile_problem = problem if isinstance(problem, TileProblem) else None
         if self._tile_problem is None:
             self._notice.hide()
             return
-        self._notice_text.setText(texts.notice_line(texts.tile_notice(self._tile_problem)))
+        message = texts.tile_notice(self._tile_problem, self._background.current)
+        self._notice_text.setText(texts.notice_line(message))
         self._notice.show()
+
+    def _on_tile_problem(self, background: object, problem: object) -> None:
+        """A server's problem changed: it is shown only if it is the background in use."""
+        if background == self._background.current:
+            self.show_tile_problem(problem)
+
+    def _on_background_changed(self, background: object) -> None:
+        """The user chose another background (menu or control): the page switches without
+        reloading, and the notice is the one of the new background's server."""
+        if not isinstance(background, MapBackground):
+            return
+        self._call("setBackground", _background_payload(background))
+        self.show_tile_problem(None if self._tiles is None else self._tiles.problem_of(background))
 
     # --- Answers from the controller ---------------------------------------------------------
 
@@ -649,8 +671,8 @@ class MapPage(QWidget):
     def _page_config(self) -> dict[str, object]:
         tokens = tokens_for(self._theme())
         return {
-            "tileUrl": TILE_URL_TEMPLATE,
-            "attribution": texts.ATTRIBUTION,
+            "background": _background_payload(self._background.current),
+            "backgrounds": [{"key": b.key, "label": b.label} for b in BACKGROUNDS],
             "colors": page_colors(tokens),
             "sports": page_sports(tokens),
             "zoneColors": list(tokens.zones),
@@ -660,6 +682,7 @@ class MapPage(QWidget):
                 "map": self.tr("Map of activities"),
                 "zoomIn": self.tr("Zoom in"),
                 "zoomOut": self.tr("Zoom out"),
+                "background": self.tr("Map background"),
             },
             "view": _INITIAL_VIEW,
         }
@@ -688,6 +711,10 @@ class MapPage(QWidget):
             self._call("setTracks", {"gen": self._controller.list_generation, "tracks": []})
         elif self._started:
             self._map.run_script(script)
+
+
+def _background_payload(background: MapBackground) -> dict[str, object]:
+    return background_message(background, tile_url_template(background))
 
 
 def _start_text(record: ActivityRecord, zone: ZoneInfo) -> str:

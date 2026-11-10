@@ -13,13 +13,12 @@ from PySide6.QtCore import QCoreApplication, QLocale
 from ponos_coach.activities.domain import AreaTotals
 from ponos_coach.load.activity_profile import ZoneAbsence
 from ponos_coach.load.use_cases import ExclusionReason
+from ponos_coach.maps.domain import MapBackground
 from ponos_coach.maps.ports import TileProblem
 from ponos_coach.ui.errors import ErrorMessage, exclusion_reason_text
 from ponos_coach.ui.load_figures import zone_label
 
 _ZONE_COUNT = 5
-ATTRIBUTION = "© OpenStreetMap contributors"
-"""Credit the data license asks for, always visible on the map: legal text, not translated."""
 
 
 def _number(value: float, decimals: int = 0) -> str:
@@ -84,8 +83,21 @@ def no_activities_text() -> str:
 # --- Notice about the map background --------------------------------------------------------
 
 
-def tile_notice(problem: TileProblem) -> ErrorMessage:
-    """What is wrong with the map background and what to do; tracks and list work anyway."""
+def tile_notice(problem: TileProblem, background: MapBackground) -> ErrorMessage:
+    """What is wrong with the map background and what to do; tracks and list work anyway.
+
+    The title starts with the name of the background (OpenStreetMap, OpenTopoMap, CyclOSM), so
+    it is clear which server the notice is about.
+    """
+    message = _tile_notice(problem)
+    # {background}: name of the map background; {problem}: what is wrong with it.
+    title = QCoreApplication.translate("Map", "{background}: {problem}").format(
+        background=background.label, problem=message.title
+    )
+    return ErrorMessage(title, message.what, message.remedy)
+
+
+def _tile_notice(problem: TileProblem) -> ErrorMessage:
     if problem is TileProblem.REFUSED:
         return ErrorMessage(
             QCoreApplication.translate("Map", "The map server refuses the requests"),

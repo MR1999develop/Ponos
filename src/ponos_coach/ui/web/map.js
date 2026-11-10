@@ -8,7 +8,7 @@
 // Python sent). Tiles come from ponos://tiles/{z}/{x}/{y}, answered by the app: the page makes
 // no network request. Positions are never stored by the page.
 (function () {
-  var MAX_ZOOM = 19;
+  var MAX_ZOOM = 20;  // highest zoom of any background; each one sets its own with setBackground
   var MOVE_DEBOUNCE_MS = 120;
   var HOVER_PIXELS = 12;
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -112,10 +112,9 @@
       zoom: cfg.view.zoom,
     });
     L.control.zoom({ zoomInTitle: cfg.strings.zoomIn, zoomOutTitle: cfg.strings.zoomOut }).addTo(map);
-    L.control.attribution({ prefix: false }).addTo(map).addAttribution(cfg.attribution);
-    tileLayer = L.tileLayer(cfg.tileUrl, {
-      minZoom: 0, maxZoom: MAX_ZOOM, tileSize: 256, keepBuffer: 0, updateWhenZooming: false,
-    }).addTo(map);
+    attributionControl = L.control.attribution({ prefix: false }).addTo(map);
+    addBackgroundControl();
+    showBackground(cfg.background);
     trackLayer = L.layerGroup().addTo(map);
     selectionLayer = L.layerGroup().addTo(map);
     profileLayer = L.layerGroup().addTo(map);
@@ -127,6 +126,60 @@
     map.on("mouseout", leaveProfile);
     map.on("dblclick", onMapDoubleClick);
     scheduleView();
+  }
+
+  // --- Background (tile layer) ------------------------------------------------------------------
+
+  var attributionControl = null;
+  var backgroundButtons = [];
+  var currentBackground = null;
+
+  // Shows a background: its tiles, its highest zoom (the map comes down to it if it is higher)
+  // and its credit, which is always visible. The tile URL is the app's scheme with the key of
+  // the background; Python answers it, the page never reaches a server.
+  function showBackground(background) {
+    if (tileLayer !== null) { map.removeLayer(tileLayer); }
+    if (currentBackground !== null) { attributionControl.removeAttribution(currentBackground.attribution); }
+    currentBackground = background;
+    map.setMaxZoom(background.maxZoom);
+    tileLayer = L.tileLayer(background.tileUrl, {
+      minZoom: 0, maxZoom: background.maxZoom, tileSize: 256, keepBuffer: 0, updateWhenZooming: false,
+    }).addTo(map);
+    tileLayer.bringToBack();
+    attributionControl.addAttribution(background.attribution);
+    backgroundButtons.forEach(function (button) {
+      var on = button.getAttribute("data-key") === background.key;
+      button.setAttribute("aria-pressed", on ? "true" : "false");
+      button.classList.toggle("ponos-on", on);
+    });
+  }
+
+  // A compact control at the top right: one button for each background (names are proper nouns).
+  // A button asks Python, which remembers the choice and answers with setBackground, so the menu
+  // and the control always show the same one.
+  function addBackgroundControl() {
+    var Control = L.Control.extend({
+      options: { position: "topright" },
+      onAdd: function () {
+        var bar = L.DomUtil.create("div", "leaflet-bar ponos-backgrounds");
+        bar.setAttribute("role", "group");
+        bar.setAttribute("aria-label", cfg.strings.background);
+        cfg.backgrounds.forEach(function (item) {
+          var button = L.DomUtil.create("button", "", bar);
+          button.type = "button";
+          button.textContent = item.label;
+          button.title = cfg.strings.background + ": " + item.label;
+          button.setAttribute("data-key", item.key);
+          button.addEventListener("click", function () {
+            if (bridge !== null) { bridge.backgroundChosen(item.key); }
+          });
+          backgroundButtons.push(button);
+        });
+        L.DomEvent.disableClickPropagation(bar);
+        return bar;
+      },
+    });
+    new Control().addTo(map);
   }
 
   // --- Start points -------------------------------------------------------------------
@@ -478,7 +531,10 @@
       channelOpen: bridge !== null, viewPending: moveTimer !== null,
       attribution: document.querySelector(".leaflet-control-attribution").textContent,
       attributionVisible: document.querySelector(".leaflet-control-attribution").offsetWidth > 0,
-      tileUrl: tileLayer._url,
+      tileUrl: tileLayer._url, background: currentBackground.key, maxZoom: map.getMaxZoom(),
+      backgroundButtons: backgroundButtons.map(function (b) {
+        return { key: b.getAttribute("data-key"), pressed: b.getAttribute("aria-pressed") === "true" };
+      }),
       cursor: cursor === null ? null : [cursor.getLatLng().lat, cursor.getLatLng().lng],
       zoneColors: zoneLines.map(function (layer) { return layer.options.color; }),
       zoneDashes: zoneLines.map(function (layer) { return layer.options.dashArray || ""; }),
@@ -493,6 +549,7 @@
     setView: setView, zoomBy: zoomBy, visibleGroups: visibleGroups, state: state, pixelOf: pixelOf,
     clearProfile: function () { clearProfile(); drawSelection(false); },
     refreshTiles: function () { if (tileLayer !== null) { tileLayer.redraw(); } },
+    setBackground: showBackground,
   };
 
   if (typeof qt !== "undefined" && typeof QWebChannel !== "undefined") {

@@ -18,7 +18,15 @@ from datetime import UTC, datetime
 
 import pytest
 
-from ponos_coach.maps.domain import TileAddressError
+from ponos_coach.maps.domain import (
+    BACKGROUNDS,
+    CYCLOSM,
+    OPENSTREETMAP,
+    OPENTOPOMAP,
+    MapBackground,
+    TileAddress,
+    TileAddressError,
+)
 from ponos_coach.maps.ports import (
     TileImage,
     TileNotModified,
@@ -32,10 +40,9 @@ from ponos_coach.platform.tile_http import (
     MAX_TILE_BYTES,
     MAX_TTL_S,
     MAX_USER_AGENT_CHARS,
-    OPENSTREETMAP,
     HttpTileSource,
     TileEndpoint,
-    create_osm_source,
+    create_tile_sources,
     ttl_from_headers,
 )
 from tests.fakes.tiles import FakeTileSource, make_png
@@ -111,7 +118,7 @@ def server() -> Iterator[TileServer]:
 
 
 def source_for(server: TileServer, **limits: float) -> HttpTileSource:
-    return HttpTileSource(server.endpoint, user_agent=USER_AGENT, **limits)  # type: ignore[arg-type]
+    return HttpTileSource(OPENSTREETMAP, endpoint=server.endpoint, user_agent=USER_AGENT, **limits)  # type: ignore[arg-type]
 
 
 # --- Contract: the real adapter and the fake answer the same way ------------------------------
@@ -382,14 +389,19 @@ def test_t_map_10_a_connection_that_is_refused_is_the_network_being_unavailable(
     gone = TileServer()
     endpoint = gone.endpoint
     gone.close()
-    source = HttpTileSource(endpoint, user_agent=USER_AGENT, timeout_s=1.0)
+    source = HttpTileSource(OPENSTREETMAP, endpoint=endpoint, user_agent=USER_AGENT, timeout_s=1.0)
 
     assert source.fetch(5, 1, 1) == TileUnavailable(TileProblem.NETWORK_UNAVAILABLE)
 
 
 def test_a_body_that_trickles_in_is_cut_by_the_total_deadline(server: TileServer) -> None:
     clock = iter([0.0, 100.0])  # the deadline is set, then it has passed at the first read
-    source = HttpTileSource(server.endpoint, user_agent=USER_AGENT, monotonic=lambda: next(clock))
+    source = HttpTileSource(
+        OPENSTREETMAP,
+        endpoint=server.endpoint,
+        user_agent=USER_AGENT,
+        monotonic=lambda: next(clock),
+    )
 
     result = source.fetch(5, 1, 1)
 
@@ -449,7 +461,9 @@ def test_a_png_within_the_cap_but_above_a_lower_configured_cap_is_refused(
     server: TileServer,
 ) -> None:
     server.answers = [Answer(body=make_png(extra_bytes=5000))]
-    source = HttpTileSource(server.endpoint, user_agent=USER_AGENT, max_bytes=len(PNG) + 100)
+    source = HttpTileSource(
+        OPENSTREETMAP, endpoint=server.endpoint, user_agent=USER_AGENT, max_bytes=len(PNG) + 100
+    )
 
     assert source.fetch(5, 1, 1) == TileUnavailable(TileProblem.INVALID_RESPONSE)
 
@@ -494,11 +508,56 @@ def test_the_image_carries_the_reuse_time_of_the_response(server: TileServer) ->
 # --- T-SEC-15: only that host, only HTTPS ------------------------------------------------------
 
 
-def test_t_sec_15_the_app_source_talks_to_openstreetmap_over_https_only() -> None:
-    assert TileEndpoint("https", "tile.openstreetmap.org", 443) == OPENSTREETMAP
-    source = create_osm_source(USER_AGENT)
-    assert source._endpoint is OPENSTREETMAP  # the one place the host is decided
-    assert source._user_agent == USER_AGENT
+def test_t_sec_15_the_app_sources_talk_to_the_three_known_servers_over_https_only() -> None:
+    sources = create_tile_sources(USER_AGENT)
+
+    assert set(sources) == set(BACKGROUNDS)  # one source per background, no other
+    for background, source in sources.items():
+        assert source._background is background  # the one place the hosts are decided
+        assert source._endpoint is None  # HTTPS on the background's own host, port 443
+        assert source._user_agent == USER_AGENT
+
+
+@pytest.mark.parametrize(
+    ("background", "x", "y", "url"),
+    [
+        (OPENSTREETMAP, 2200, 1500, "https://tile.openstreetmap.org/12/2200/1500.png"),
+        (OPENTOPOMAP, 2200, 1500, "https://b.tile.opentopomap.org/12/2200/1500.png"),
+        (OPENTOPOMAP, 2201, 1500, "https://c.tile.opentopomap.org/12/2201/1500.png"),
+        (OPENTOPOMAP, 2202, 1500, "https://a.tile.opentopomap.org/12/2202/1500.png"),
+        (CYCLOSM, 2200, 1500, "https://b.tile-cyclosm.openstreetmap.fr/cyclosm/12/2200/1500.png"),
+        (CYCLOSM, 2201, 1500, "https://c.tile-cyclosm.openstreetmap.fr/cyclosm/12/2201/1500.png"),
+    ],
+    ids=["osm", "topo-1", "topo-2", "topo-3", "cyclosm-1", "cyclosm-2"],
+)
+def test_each_background_builds_its_own_url_with_a_fixed_subdomain(
+    background: MapBackground, x: int, y: int, url: str
+) -> None:
+    assert background.url_for(TileAddress(12, x, y, background)) == url
+
+
+@pytest.mark.parametrize(
+    ("background", "highest"), [(OPENSTREETMAP, 19), (OPENTOPOMAP, 17), (CYCLOSM, 20)]
+)
+def test_a_zoom_beyond_the_maximum_of_the_background_is_refused_before_any_request(
+    background: MapBackground, highest: int
+) -> None:
+    source = HttpTileSource(background, user_agent=USER_AGENT)  # no server: nothing is asked
+
+    assert TileAddress(highest, 0, 0, background).z == highest
+    with pytest.raises(TileAddressError):
+        source.fetch(highest + 1, 0, 0)
+
+
+def test_a_background_asks_the_server_at_its_own_path(server: TileServer) -> None:
+    server.answers = [Answer()]
+    source = HttpTileSource(
+        CYCLOSM, endpoint=server.endpoint, user_agent=USER_AGENT
+    )  # the host is the test server; the path is the one of CyclOSM
+
+    assert isinstance(source.fetch(5, 1, 1), TileImage)
+
+    assert server.requests[-1][0] == "/cyclosm/5/1/1.png"
 
 
 @pytest.mark.parametrize(
@@ -541,7 +600,9 @@ def test_t_sec_15_neither_the_address_nor_the_port_is_in_a_log(
     dead = TileServer()
     endpoint = dead.endpoint
     dead.close()
-    HttpTileSource(endpoint, user_agent=USER_AGENT, timeout_s=1.0).fetch(7, 3, 4)
+    HttpTileSource(OPENSTREETMAP, endpoint=endpoint, user_agent=USER_AGENT, timeout_s=1.0).fetch(
+        7, 3, 4
+    )
 
     assert "/7/3/4" not in caplog.text  # it says which area is being looked at
     assert f"{endpoint.port}" not in caplog.text
