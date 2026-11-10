@@ -491,6 +491,34 @@ class LoadCacheZonesContract:
             assert profile.load_cache.get(fit_identity(), FINGERPRINT) == second
 
 
+class LoadCacheHeartRateContract:
+    """Average and maximum HR travel with the load; absent HR stays absent."""
+
+    def test_average_and_maximum_are_stored_with_the_load(self, harness: StorageHarness) -> None:
+        with_hr = ActivityLoad(
+            80.0, 3500, 4, 12.5, LoadSource.HEART_RATE, ZoneSeconds.ZERO, 151, 183
+        )
+        with closing(create(harness)) as profile:
+            profile.activities.add(make_record())
+            profile.load_cache.put(fit_identity(), FINGERPRINT, with_hr)
+
+            found = profile.load_cache.get(fit_identity(), FINGERPRINT)
+
+            assert found == with_hr
+            assert found is not None
+            assert (found.avg_bpm, found.max_bpm) == (151, 183)
+
+    def test_a_load_without_heart_rate_comes_back_with_none(self, harness: StorageHarness) -> None:
+        with closing(create(harness)) as profile:
+            profile.activities.add(make_record())
+            profile.load_cache.put(fit_identity(), FINGERPRINT, LOAD)
+
+            found = profile.load_cache.get(fit_identity(), FINGERPRINT)
+
+            assert found is not None
+            assert (found.avg_bpm, found.max_bpm) == (None, None)
+
+
 class WeightStoreContract:
     """Weight series with validity date."""
 

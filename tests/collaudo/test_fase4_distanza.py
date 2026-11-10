@@ -49,7 +49,7 @@ LEGS = [Leg(300, 110, 2.5), Leg(300, 150, 3.0), Leg(300, 160, 3.2), Leg(300, 172
 # change when the zones of the 5th edition came (78/87/94/100%), only the seconds per zone and the
 # fingerprint of the saved loads, which therefore recompute.
 FROZEN_LOAD = (36.81167026367779, 1801, 0.0, (601.0, 0.0, 300.0, 300.0, 600.0))
-FROZEN_FINGERPRINT = "0694055d6736eba2a37c2fd3524c03458b4f4cd6efed14d4292b8915edb79c73"
+FROZEN_FINGERPRINT = "740cd5b1c970ebd654e2157ce484e42b95c87235a9ea88db0db0e6345db4f6d4"
 
 
 BIKE_TRIMP_EQ = 40.193518072841776

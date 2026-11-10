@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QCoreApplication, QLocale
 
-from ponos_coach.activities.domain import FileFormat, Sport
+from ponos_coach.activities.domain import Sport
 from ponos_coach.load.domain import LoadSource
 
 # Context "Activities" written as a literal: lupdate does not follow aliases.
@@ -36,11 +36,6 @@ def load_source_text(source: LoadSource) -> str:
     if source is LoadSource.HEART_RATE:
         return QCoreApplication.translate("Activities", "Heart rate")
     return QCoreApplication.translate("Activities", "Estimated")
-
-
-def file_format_text(file_format: FileFormat) -> str:
-    """Original file format (acronym, the same in every language)."""
-    return file_format.value.upper()
 
 
 def distance_km_text(distance_m: float | None) -> str:

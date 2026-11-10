@@ -55,6 +55,8 @@ class ActivityLoad:
     no
     HR series (even for an estimate made with few valid samples the seconds in zone are
     the measured ones).
+    `avg_bpm` (time-weighted mean, whole bpm) and `max_bpm` are over those same counted samples,
+    also for an estimate; `None` when no sample was counted (no HR series, or all discarded).
     """
 
     trimp_eq: float
@@ -63,6 +65,8 @@ class ActivityLoad:
     excluded_seconds: float
     source: LoadSource
     zone_seconds: ZoneSeconds = ZoneSeconds.ZERO
+    avg_bpm: int | None = None
+    max_bpm: int | None = None
 
 
 def sample_validity_s(seconds: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -89,11 +93,27 @@ def _estimated(
     discarded: int,
     excluded_s: float,
     zones: ZoneSeconds,
+    heart_rate: tuple[int, int] | None = None,
 ) -> ActivityLoad:
     """Duration times the typical intensity of the sport: `duration_h * 100 * IF^2`, already in
     the scale where 100 is one hour at the threshold."""
     trimp_eq = moving_time_s / 3600.0 * POINTS_PER_THRESHOLD_HOUR * typical_intensity(sport) ** 2
-    return ActivityLoad(trimp_eq, 0, discarded, excluded_s, LoadSource.ESTIMATE, zones)
+    avg_bpm, max_bpm = heart_rate if heart_rate is not None else (None, None)
+    return ActivityLoad(
+        trimp_eq, 0, discarded, excluded_s, LoadSource.ESTIMATE, zones, avg_bpm, max_bpm
+    )
+
+
+def _average_and_max_bpm(
+    bpm: NDArray[np.float64], validity_s: NDArray[np.float64]
+) -> tuple[int, int] | None:
+    """Time-weighted mean (rounded to whole bpm) and maximum of the counted samples; `None` if
+    there are none. Zero total weight (repeated timestamps) falls back to the plain mean."""
+    if bpm.size == 0:
+        return None
+    total = float(validity_s.sum())
+    mean = float(np.dot(bpm, validity_s)) / total if total > 0 else float(bpm.mean())
+    return round(mean), round(float(bpm.max()))
 
 
 def _is_mostly_missing(counted_s: float, moving_time_s: float) -> bool:
@@ -144,6 +164,7 @@ def compute_activity_load(
     zones = seconds_per_zone(
         series.bpm[counted], validity[counted], threshold_for_sport(physiology, sport)
     )
+    heart_rate = _average_and_max_bpm(series.bpm[counted], validity[counted])
     if _is_mostly_missing(counted_s, moving_time_s):
         return _estimated(
             sport,
@@ -151,6 +172,7 @@ def compute_activity_load(
             discarded=discarded,
             excluded_s=excluded_s,
             zones=zones,
+            heart_rate=heart_rate,
         )
 
     samples = _sample_load(series.bpm[counted], validity[counted], physiology, sport)
@@ -161,6 +183,7 @@ def compute_activity_load(
         excluded_s,
         LoadSource.HEART_RATE,
         zones,
+        *(heart_rate if heart_rate is not None else (None, None)),
     )
 
 

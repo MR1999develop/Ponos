@@ -39,13 +39,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ponos_coach.activities.domain import ActivityIdentity, format_of, identity_key
+from ponos_coach.activities.domain import ActivityIdentity, identity_key
 from ponos_coach.load.use_cases import ProfileActivity
 from ponos_coach.ui.activity_text import (
     ascent_m_text,
     distance_km_text,
     duration_text,
-    file_format_text,
     load_source_text,
     sport_text,
 )
@@ -70,14 +69,26 @@ class Column(IntEnum):
     START = 0
     SPORT = 1
     MOVING_TIME = 2
-    DISTANCE = 3
-    ASCENT = 4
-    LOAD = 5
-    LOAD_SOURCE = 6
-    FORMAT = 7
+    TOTAL_TIME = 3
+    DISTANCE = 4
+    ASCENT = 5
+    LOAD = 6
+    AVG_HR = 7
+    MAX_HR = 8
+    LOAD_SOURCE = 9
 
 
-_NUMERIC_COLUMNS = frozenset({Column.MOVING_TIME, Column.DISTANCE, Column.ASCENT, Column.LOAD})
+_NUMERIC_COLUMNS = frozenset(
+    {
+        Column.MOVING_TIME,
+        Column.TOTAL_TIME,
+        Column.DISTANCE,
+        Column.ASCENT,
+        Column.LOAD,
+        Column.AVG_HR,
+        Column.MAX_HR,
+    }
+)
 
 
 def _local_qdatetime(activity: ProfileActivity, zone: ZoneInfo) -> QDateTime:
@@ -163,11 +174,13 @@ class ActivityTableModel(QAbstractTableModel):
             Column.START: self.tr("Date and time"),
             Column.SPORT: self.tr("Sport"),
             Column.MOVING_TIME: self.tr("Moving time (h:mm:ss)"),
+            Column.TOTAL_TIME: self.tr("Total time (h:mm:ss)"),
             Column.DISTANCE: self.tr("Distance (km)"),
             Column.ASCENT: self.tr("Ascent (m)"),
             Column.LOAD: self.tr("Load (TRIMPeq)"),
+            Column.AVG_HR: self.tr("Avg HR (bpm)"),
+            Column.MAX_HR: self.tr("Max HR (bpm)"),
             Column.LOAD_SOURCE: self.tr("Load from"),
-            Column.FORMAT: self.tr("Format"),
         }
         return headers[column]
 
@@ -190,27 +203,36 @@ def _missing_as_key(value: float | None) -> float:
     return _MISSING_SORT_KEY if value is None else value
 
 
+def _bpm_text(bpm: int | None) -> str:
+    """Whole beats per minute in the locale's format; empty if the activity has no HR."""
+    return "" if bpm is None else QLocale().toString(bpm)
+
+
 # One function per column: displayed text and sort key.
 _TEXT_OF: dict[Column, Callable[[ProfileActivity, ZoneInfo], str]] = {
     Column.START: _start_text,
     Column.SPORT: lambda a, _z: sport_text(a.sport),
     Column.MOVING_TIME: lambda a, _z: duration_text(a.timer_s),
+    Column.TOTAL_TIME: lambda a, _z: duration_text(a.elapsed_s),
     Column.DISTANCE: lambda a, _z: distance_km_text(a.summary.distance_m),
     Column.ASCENT: lambda a, _z: ascent_m_text(a.summary.ascent_m),
     Column.LOAD: lambda a, _z: QLocale().toString(round(a.load.trimp_eq)),
+    Column.AVG_HR: lambda a, _z: _bpm_text(a.load.avg_bpm),
+    Column.MAX_HR: lambda a, _z: _bpm_text(a.load.max_bpm),
     Column.LOAD_SOURCE: lambda a, _z: load_source_text(a.load.source),
-    Column.FORMAT: lambda a, _z: file_format_text(format_of(a.identity)),
 }
 
 _SORT_KEY_OF: dict[Column, Callable[[ProfileActivity], _Key]] = {
     Column.START: lambda a: a.start.timestamp(),
     Column.SPORT: lambda a: sport_text(a.sport).casefold(),
     Column.MOVING_TIME: lambda a: a.timer_s,
+    Column.TOTAL_TIME: lambda a: a.elapsed_s,
     Column.DISTANCE: lambda a: _missing_as_key(a.summary.distance_m),
     Column.ASCENT: lambda a: _missing_as_key(a.summary.ascent_m),
     Column.LOAD: lambda a: a.load.trimp_eq,
+    Column.AVG_HR: lambda a: _missing_as_key(a.load.avg_bpm),
+    Column.MAX_HR: lambda a: _missing_as_key(a.load.max_bpm),
     Column.LOAD_SOURCE: lambda a: load_source_text(a.load.source).casefold(),
-    Column.FORMAT: lambda a: file_format_text(format_of(a.identity)),
 }
 
 

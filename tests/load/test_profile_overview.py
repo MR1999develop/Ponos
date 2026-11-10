@@ -225,6 +225,7 @@ def test_full_recalculation_equals_calculation_from_scratch_after_a_change() -> 
 
     assert after_change.activities == expected.activities
     assert full.activities == expected.activities
+    assert all(a.load.avg_bpm is not None for a in full.activities)  # HR values travel via cache
     assert np.array_equal(full.pmc.ctl, expected.pmc.ctl)
     assert np.array_equal(after_change.pmc.atl, expected.pmc.atl)
 

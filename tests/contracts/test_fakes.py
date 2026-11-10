@@ -47,6 +47,7 @@ from tests.contracts.contract_storage import (
     ActivityIndexContract,
     FixedDataStoreContract,
     LoadCacheContract,
+    LoadCacheHeartRateContract,
     LoadCacheZonesContract,
     PhysiologyStoreContract,
     ProfileStorageContract,
@@ -215,6 +216,10 @@ class TestFakeLoadCache(_FakeStorageFixture, LoadCacheContract):
 
 
 class TestFakeLoadCacheZones(_FakeStorageFixture, LoadCacheZonesContract):
+    pass
+
+
+class TestFakeLoadCacheHeartRate(_FakeStorageFixture, LoadCacheHeartRateContract):
     pass
 
 

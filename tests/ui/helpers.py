@@ -46,9 +46,11 @@ def profile_activity(
     load: float = 80.0,
     source: LoadSource = LoadSource.HEART_RATE,
     serial: int = 1,
+    avg_bpm: int | None = 148,
+    max_bpm: int | None = 176,
 ) -> ProfileActivity:
     """A profile activity with the given values (local day = UTC day)."""
-    activity_load = ActivityLoad(load, 100, 0, 0.0, source)
+    activity_load = ActivityLoad(load, 100, 0, 0.0, source, avg_bpm=avg_bpm, max_bpm=max_bpm)
     return ProfileActivity(
         FitIdentity(FileId(1, serial, 1, start)),
         sport,
