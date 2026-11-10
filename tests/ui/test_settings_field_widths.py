@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QLocale, QSettings
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QComboBox,
@@ -96,14 +97,17 @@ def _check(root: QWidget, expected_kinds: set[FieldKind]) -> None:
             assert widget.fontMetrics().horizontalAdvance(longest) + SPACE_6 <= width
 
 
-def test_the_kinds_are_narrow_and_a_choice_is_wider_than_a_number(qtbot: QtBot) -> None:
+def test_the_kinds_are_narrow_and_a_choice_is_never_narrower_than_a_number(qtbot: QtBot) -> None:
     probe = QWidget()
     qtbot.addWidget(probe)
 
     assert field_width(probe, FieldKind.SHORT) < _narrow_limit(probe)
     assert field_width(probe, FieldKind.DATE) < _narrow_limit(probe)
     assert field_width(probe, FieldKind.CHOICE) < _narrow_limit(probe)
-    assert field_width(probe, FieldKind.CHOICE) > field_width(probe, FieldKind.SHORT)
+    # With any font: on Ubuntu the sample word of a choice measures less than a number (CI).
+    assert field_width(probe, FieldKind.CHOICE) >= field_width(probe, FieldKind.SHORT)
+    probe.setFont(QFont("DejaVu Sans Condensed", 9))
+    assert field_width(probe, FieldKind.CHOICE) >= field_width(probe, FieldKind.SHORT)
 
 
 def test_the_training_page_fields(qtbot: QtBot, locale: str) -> None:

@@ -40,8 +40,12 @@ _CONTROL_ROOM = 2 * SPACE_6  # frame plus spin buttons, calendar button or arrow
 
 
 def field_width(widget: QWidget, kind: FieldKind) -> int:
-    """Width in pixels of a field of `kind`, measured with the font of `widget`."""
-    return widget.fontMetrics().horizontalAdvance(_SAMPLES[kind]) + _CONTROL_ROOM
+    """Width in pixels of a field of `kind`, measured with the font of `widget`. A choice is never
+    narrower than a number: with some fonts (Ubuntu's) its sample word measures less."""
+    width = widget.fontMetrics().horizontalAdvance(_SAMPLES[kind]) + _CONTROL_ROOM
+    if kind is FieldKind.CHOICE:
+        return max(width, field_width(widget, FieldKind.SHORT))
+    return width
 
 
 def size_field(widget: QWidget, kind: FieldKind) -> None:
