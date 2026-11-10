@@ -110,6 +110,10 @@
         <translation>Distanza (km)</translation>
     </message>
     <message>
+        <source>Average pace (min/km)</source>
+        <translation>Passo medio (min/km)</translation>
+    </message>
+    <message>
         <source>Ascent (m)</source>
         <translation>Dislivello (m)</translation>
     </message>
@@ -4410,10 +4414,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Problema con l&apos;orario di {meal}</translation>
     </message>
     <message>
-        <source>Save meal times</source>
-        <translation>Salva orari dei pasti</translation>
-    </message>
-    <message>
         <source>Goal periods</source>
         <translation>Periodi di obiettivo</translation>
     </message>
@@ -5191,10 +5191,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Storico delle misure</translation>
     </message>
     <message>
-        <source>Save changes</source>
-        <translation>Salva modifiche</translation>
-    </message>
-    <message>
         <source>Profile data</source>
         <translation>Dati del profilo</translation>
     </message>
@@ -5273,6 +5269,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source> bpm</source>
         <translation> bpm</translation>
+    </message>
+    <message>
+        <source>The changes are being saved.</source>
+        <translation>Le modifiche si stanno salvando.</translation>
     </message>
     <message>
         <source>Nothing has changed: change at least one value.</source>
@@ -6077,10 +6077,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Problem with the settings</source>
         <translation>Problema con le impostazioni</translation>
-    </message>
-    <message>
-        <source>Save settings</source>
-        <translation>Salva impostazioni</translation>
     </message>
     <message>
         <source>Time available</source>
