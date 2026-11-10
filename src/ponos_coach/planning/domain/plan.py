@@ -228,13 +228,15 @@ class LimitedByRamp:
 @dataclass(frozen=True, slots=True)
 class LimitedByHours:
     """What stops the CTL is the weekly hours: with `minutes_needed` a week (a multiple of the
-    search step, above the hours set now) the same plan reaches it."""
+    search step) the same plan reaches it; `current_minutes` are the hours the plan was made with,
+    so the warning says both numbers without looking at the inputs."""
 
     minutes_needed: int
+    current_minutes: int
 
     def __post_init__(self) -> None:
-        if self.minutes_needed <= 0:
-            raise ValueError("the minutes needed are positive")
+        if not 0 <= self.current_minutes < self.minutes_needed:
+            raise ValueError("the minutes needed are more than the ones set now")
 
 
 type CtlLimit = LimitedByRamp | LimitedByHours

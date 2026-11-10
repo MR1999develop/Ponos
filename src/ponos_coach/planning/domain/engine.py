@@ -212,18 +212,23 @@ def _with_limits(plan: Plan, today: date) -> Plan:
     missed = [w for w in plan.warnings if isinstance(w, CtlTargetNotReached)]
     if not missed:
         return plan
+    minutes = plan.inputs.availability.max_week_minutes
     search = _HoursSearch(plan, today, frozenset(w.goal_id for w in missed))
     warnings = tuple(
-        _with_limit(w, search.minutes_for(w.goal_id)) if isinstance(w, CtlTargetNotReached) else w
+        _with_limit(w, search.minutes_for(w.goal_id), minutes)
+        if isinstance(w, CtlTargetNotReached)
+        else w
         for w in plan.warnings
     )
     return replace(plan, warnings=warnings)
 
 
-def _with_limit(warning: CtlTargetNotReached, minutes: int | None) -> CtlTargetNotReached:
-    if minutes is None:
+def _with_limit(
+    warning: CtlTargetNotReached, needed: int | None, current: int
+) -> CtlTargetNotReached:
+    if needed is None:
         return warning
-    return replace(warning, limit=LimitedByHours(minutes))
+    return replace(warning, limit=LimitedByHours(needed, current))
 
 
 class _HoursSearch:

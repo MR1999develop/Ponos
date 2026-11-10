@@ -103,6 +103,6 @@ def test_a_plan_saved_before_the_cause_existed_reads_as_ramp() -> None:
     assert all(w.limit == LimitedByRamp() for w in _missed(read))
 
 
-def test_the_minutes_needed_are_positive() -> None:
-    with pytest.raises(ValueError, match="positive"):
-        LimitedByHours(0)
+def test_the_minutes_needed_are_more_than_the_ones_set() -> None:
+    with pytest.raises(ValueError, match="more than"):
+        LimitedByHours(300, 300)
