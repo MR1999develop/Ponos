@@ -632,8 +632,16 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
   act only while the calendar has the focus.
   A disabled entry gives the reason in the tooltip. Two races on the same day
   are refused.
-- A race has a date, a priority A, B or C, a distance and an optional target
-  time; a form goal has a date and a CTL.
+- A race has a date, a priority A, B or C, a distance, an optional elevation
+  gain and an optional target time; a form goal has a date and a CTL.
+- The elevation gain (user's request of 2026-11-10, [ADR 017](adr/017-dislivello-gara-e-salite.md)):
+  - the race dialog has the field "Elevation gain (m)", in whole metres from 0
+    to 30 000, optional (empty means 0, a flat race); a gain that makes the mean
+    grade over 50% is refused with the reason next to the field;
+  - the goals table has a column with it (empty for a flat race and for a form
+    goal) and the description of a race with climb reads "Race A, 12.5 km,
+    +800 m, date";
+  - races saved before have no gain.
 
 ## 9. Adaptive plan
 
@@ -684,6 +692,30 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
   - when the activity of that day is applied as a test the plan has no more
     tests; if the day goes by with no test applied, the test comes back once,
     in the week after, and then the plan stops asking.
+- The elevation gain of a race changes the plan (ADR 017):
+  - the flat-equivalent distance is the distance plus 10 m for every metre of
+    climb (100 m of climb count as 1 km, the "km-effort" rule of thumb, a
+    project default). The expected time of the race, the race pace of the
+    sessions and the verdict on the target time (realistic, ambitious, not
+    reachable) are computed on it; the load of the race follows from its
+    expected time. The race class (length of the taper and of the recovery), the
+    CTL target of the distance and the warning about a missing long session stay
+    on the real distance;
+  - hill sessions are added only for the A race, in a running plan (running or
+    trail), when the mean climb is at least 20 m per kilometre, in the build and
+    the peak, never in the base, the final taper or an unload week, and not while
+    an injury or illness limits the running or the intensity;
+  - one hill-repeats session a week replaces the first quality session of the
+    week (build: 15 min zone 2, 6 to 10 times 2 min zone 5 with 3 min zone 1
+    between, 10 min zone 1; peak: 4 to 8 times 3 min zone 4); every long run of
+    a loaded week is a hilly long run, with the same length and zones. A hill
+    session keeps the type of the session it replaces, so the weekly limits and
+    the 80/20 share do not change; it has the heart rate only, no pace;
+  - the session shows "Hill repeats" or "Hilly long run" and "Elevation gain:
+    about N m" (10 m per minute of work for the repeats; hours at 7 km/h times
+    the mean climb of the race for the long run). The two figures are estimates
+    and are not validated;
+  - the calendar tells a hill session from the others by that name and line only.
 - The CTL grows at most 5 points a week (3 with an injury or illness open, or
   closed within 28 days). Every goal A has a taper before it and every goal B
   a short one; three weeks of load are followed by one of recovery.
@@ -758,6 +790,9 @@ Rules: [injuries](../.claude/skills/ponos-allenamento/references/infortuni.md).
   pace range keeps the heart rate as main target (ADR 013). The app lists the
   pace before the heart rate. An interval session shows every repetition on
   the watch.
+- A hill session has no pace range (on a slope the pace means nothing): its
+  steps have the heart rate only. Its workouts are called "Hill repeats <minutes>
+  min" and "Hilly long <minutes> min" (ADR 017).
 - A send can be repeated: a workout with the same name on the same day is not
   created again, also after a lost answer. At most 60 workouts per send (the
   sessions not yet on the calendar, earliest first); the summary says how many

@@ -674,6 +674,19 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       (`test_the_plan_schedules_the_test_with_the_protocol_the_user_chose`,
       `test_a_planned_test_that_went_by_undone_is_told_to_the_engine`) e in
       `tests/ui/test_plan_presentation.py` (`RetestScheduled`); `mypy` passa.
+- [x] Dislivello della gara e sedute in salita (richiesta dell'utente del
+      2026-11-10, "quando aggiungi gara, aggiungi anche dislivello gara", ADR 017;
+      l'utente ha scelto che il D+ cambi la stima del carico e faccia inserire
+      sedute in salita): `RaceGoal.ascent_m` (0-30 000 m, pendenza media al
+      massimo 50%), schema v16 (`goal.ascent_m`), distanza equivalente piana
+      (distanza + 10 × D+) per tempo atteso, ritmo gara e verdetto, ripetute in
+      salita e lunghi collinari per la gara A ripida (≥ 20 m/km) in costruzione e
+      picco (versione 8 del metodo, nessun nuovo `SessionType`), workout Garmin
+      "Hill repeats" e "Hilly long", campo, colonna e testi nell'interfaccia
+      (italiano compreso). Test: `T-PIANO-11` in
+      `tests/planning/test_race_ascent.py`, `tests/storage/test_race_ascent_store.py`.
+      Aperti: i valori 7 km/h e 10 m al minuto di lavoro sono stime non
+      validate; il calendario distingue le sedute in salita solo dal nome.
 - [ ] Collaudo completo (sezione 7) superato sull'eseguibile, su Windows e
       Ubuntu, con esiti registrati in `docs/collaudo.md`.
 - [x] Ubuntu di nuovo nelle matrici di `ci.yml` e `release.yml` (tolto il
@@ -940,6 +953,15 @@ model e gli esiti del collaudo possono citarlo.
   una volta la settimana dopo, due volte saltato mai più; seduta dura (limiti
   settimanali, carico nella rampa e nella proiezione); determinismo; nome e
   passi del workout Garmin; piano salvato che si rilegge.
+- **T-PIANO-11** Dislivello della gara (ADR 017, `tests/planning/test_race_ascent.py`):
+  distanza equivalente (100 m di D+ = 1 km) e tempo atteso, carico, ritmo gara e ritmo
+  predefinito calcolati su di essa; soglia di pendenza ai confini (199 e 200 m in 10 km, cioè
+  19,9 e 20 m/km); salite solo in costruzione e picco, mai in una settimana di scarico, in base
+  o nello scarico finale; una ripetuta in salita a settimana, senza ritmo, in zona alta; ogni
+  lungo di una settimana di carico collinare; nessuna salita per una B accanto a una A piana,
+  per una gara che non è di corsa, con un infortunio che limita corsa o intensità (tornano
+  all'ultimo gradino); determinismo; property test: gli invarianti di `invariants.py` valgono
+  con D+ casuale.
 - **T-PIANO-06** Test di soglia: FC di soglia = media degli ultimi 20' su
   tracciati sintetici; test interrotto o troppo corto rifiutato; retest
   proposto tra 6 e 8 settimane dopo l'ultimo test (dalla fase 5 anche in una

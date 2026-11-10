@@ -160,6 +160,7 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
     `goal_id` (1-64 caratteri `A-Za-z0-9_-`, scelto da chi chiama), `goal_date`
     (data esistente non prima del 1900-01-01), per la gara `priority` (A, B, C),
     `sport`, `distance_m` (400-500000) e `target_time_s` facoltativo (60-604800),
+    dallo schema v16 `ascent_m` (0-30000, 0 = piana),
     per l'obiettivo di forma `ctl` (0-200); i CHECK tengono separate le due
     forme. Un indice univoco parziale (`WHERE kind = 'race'`) ammette una sola
     gara per giorno, anche con una scrittura diretta; gli obiettivi di forma
@@ -238,7 +239,7 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
     giorno del lungo si aggiunge ai giorni se non lo era, il massimo settimanale resta; una riga
     senza minuti diventa la disponibilità vuota (tutto a zero). I minuti di ogni giorno si
     perdono; restano nella copia in `backup/` fatta prima della migrazione.
-  - `METHOD_VERSION` del piano è 6. Il piano salvato è derivato: un piano con `method_version`
+  - `METHOD_VERSION` del piano era 6 (oggi 8, vedi schema v16). Il piano salvato è derivato: un piano con `method_version`
     più bassa resta finché il ricalcolo (dopo ogni panoramica) non lo sostituisce; il codice non
     confronta la versione.
 - **Schema v13** (voci che Garmin non fornisce): `sync_journal` ricostruita (SQLite non
@@ -258,6 +259,20 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   NULL = default; `ALTER TABLE ... ADD COLUMN`, `load_cache` non svuotata; migrazione
   `SPORT_THRESHOLDS_MIGRATION` in `storage/schema_sport_thresholds.py`, copia
   `backup/ponos-v14-v15.sqlite3`; test in `tests/storage/test_sport_thresholds*.py`.
+- **Schema v16** (dislivello della gara; ADR 017): colonna `goal.ascent_m INTEGER NOT NULL
+  DEFAULT 0 CHECK (ascent_m BETWEEN 0 AND 30000)`, aggiunta con `ALTER TABLE ... ADD COLUMN`;
+  le gare già salvate hanno 0 (piane), l'obiettivo di forma ha 0 (lo scrive il dominio). Limiti
+  congelati nella migrazione (`RACE_ASCENT_MIGRATION` in `storage/schema_race_ascent.py`, come
+  `MAX_ASCENT_M` di `goals/domain/goal.py`); copia in `backup/ponos-v15-v16.sqlite3`. Gli
+  `INSERT` e gli `UPDATE` di `sqlite_goals.py` nominano la colonna. Test in
+  `tests/storage/test_race_ascent_store.py` (migrazione trovata per identità, non per numero;
+  migrazione congelata, copia, limiti dei CHECK, lettura e sostituzione); i test congelati delle
+  migrazioni precedenti ignorano la colonna (`tidy:` 80c0dde).
+  - Piano serializzato (`METHOD_VERSION` 8): campi nuovi `PlannedSession.ascent_m` (D+ indicativo
+    in m, 0 = seduta piana o nessuna salita) e `PlannedRace.ascent_m` (D+ della gara), tutti e due
+    con default 0 alla lettura: un piano o un giorno congelato salvato prima si rilegge, con
+    `ascent_m` 0. `Shape.slope_m_per_km` non si salva (serve solo al motore). Il piano salvato è
+    derivato: lo sostituisce il ricalcolo.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.

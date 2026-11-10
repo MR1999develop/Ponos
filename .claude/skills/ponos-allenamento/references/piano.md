@@ -14,7 +14,9 @@ invia. Nessun I/O nel motore.
 ## 1. Ingressi e uscita
 
 - `goals/domain`: `RaceGoal` (id, data, priorità A/B/C, sport, distanza in
-  metri 400–500 000, tempo obiettivo facoltativo 60 s–7 giorni), `FitnessGoal`
+  metri 400–500 000, dislivello positivo `ascent_m` 0–30 000 m (0 = piana,
+  predefinito; pendenza media al massimo 50%), tempo obiettivo facoltativo
+  60 s–7 giorni), `FitnessGoal`
   (id, data, CTL 0–200), `WeeklyAvailability` (giorni disponibili, lunedì = 0; sedute a
   settimana, da 1 al numero dei giorni; giorno del lungo, sempre uno dei giorni;
   minuti massimi a settimana, ore × 60, al massimo 6000; senza giorni non ci
@@ -200,6 +202,35 @@ picco):
   obiettivo o, senza, dal tempo previsto (Riegel con il miglioramento) e vale
   solo per le gare di corsa con il ritmo di soglia o il tempo obiettivo; senza
   nessuno dei due la seduta va per zona e il ritmo è `None`.
+- **Dislivello della gara** (versione 8, ADR 017, richiesta dell'utente del 2026-11-10):
+  - **Distanza equivalente piana** = distanza + 10 × dislivello
+    (`ASCENT_EQUIVALENT_M_PER_M`: 100 m di D+ = 1 km, regola del km-effort, default del
+    progetto non validato; `target.equivalent_distance_m`). La usano il tempo atteso della gara
+    (tempo obiettivo, altrimenti Riegel, altrimenti il ritmo predefinito), il ritmo gara delle
+    sedute e il verdetto sul tempo obiettivo; il carico della gara ne segue (dura di più).
+    Classe di gara (scarico e recupero), tabella del CTL e avviso `MissingLongSession` restano
+    sulla distanza reale;
+  - **Sedute in salita** solo per la gara A, con piano di corsa (RUNNING o TRAIL), pendenza media
+    ≥ 20 m/km (`HILL_MIN_SLOPE_M_PER_KM`; 19,9 no, 20 sì), nelle fasi `HILL_PHASES` = costruzione
+    e picco; mai in base, mantenimento, scarico finale, recupero né nelle settimane di scarico
+    3:1; mai con un infortunio o una malattia che limitano la corsa o l'intensità (zona che
+    vieta la corsa vieta anche le salite; tornano all'ultimo gradino del percorso);
+  - **Ripetute in salita**: sostituiscono la prima seduta di qualità della settimana, una a
+    settimana. Costruzione 15' Z2, 6–10 × (2' Z5, rec 3' Z1), 10' Z1; picco 4–8 × (3' Z4,
+    rec 3' Z1) (`HILL_REPEAT_MODELS`). D+ indicativo 10 m per minuto di lavoro;
+  - **Lunghi collinari**: tutti i lunghi delle settimane di carico in costruzione e picco, stessa
+    durata e zone del lungo. D+ indicativo = ore × 7 km/h (`HILLY_LONG_KM_PER_HOUR`) × pendenza
+    media della gara, arrotondato a 10 m (`HILL_ASCENT_ROUND_M`). I valori 7 km/h e 10 m/min sono
+    stime non validate;
+  - **Nessun nuovo `SessionType`** (le tipologie sono scelte dell'utente e stanno nei CHECK del
+    database): una variante, `Shape.slope_m_per_km` (la pendenza della gara, in m/km interi) e
+    `PlannedSession.ascent_m` (D+ indicativo, 0 = piana). Il tipo resta quello della seduta
+    sostituita, quindi 80/20, giorni duri e limiti settimanali non cambiano.
+    `is_hill_repeats` = `ascent_m > 0` e tipo intenso; `is_hilly_long` = `ascent_m > 0` e lungo.
+    Una seduta in salita non è né test di soglia né a ritmo gara;
+  - **Solo FC, nessun ritmo** nei blocchi (su una pendenza il ritmo non dice nulla);
+  - nel motore: `_RaceTarget.hill_slope_m_per_km` (0 = nessuna salita), `DayInfo.hill_slope_m_per_km`,
+    `week._hill_slope` e `_place_quality`; `PlannedRace.ascent_m` nel piano.
 - Dimensionamento (`week.Sizer`): ogni seduta ha almeno la sua durata minima;
   se il budget di carico non le paga tutte si tolgono le meno importanti
   (forza e recupero, poi facile, medio, VO2max, soglia, lungo); il resto si
@@ -230,7 +261,8 @@ ritmo di soglia). Nell'allenamento Garmin, con un intervallo di ritmo il ritmo
 
 Le ripetute: soglia 8×2 in base e mantenimento, 10×3 in costruzione, 12×3 in
 picco; VO2max 3×3 in costruzione, 4×3 in picco. Il recupero segue ogni
-ripetizione tranne l'ultima.
+ripetizione tranne l'ultima. Le ripetute in salita (sezione 6, dislivello della gara) hanno
+un modello proprio: 6–10 × 2' Z5 in costruzione, 4–8 × 3' Z4 in picco, recupero 3' Z1.
 
 **Carico stimato** con lo stesso modello del carico (TRIMPeq dal 2026-11-10,
 `METHOD_VERSION` 7; le soglie del piano restano in scala "100 = un'ora alla
@@ -310,7 +342,8 @@ del piano: `PlannedSession.threshold_test` (il protocollo), tipo `THRESHOLD`, ch
   di scarico finale prima di una gara non valgono. Un retest dentro un piano già avviato
   (la finestra si apre alla settimana 7) resta una proposta.
 - **Garmin**: `workout_from_session` dà il nome "Threshold test 55 min" e tre passi
-  (riscaldamento, intervallo, defaticamento).
+  (riscaldamento, intervallo, defaticamento). Le sedute in salita si chiamano "Hill repeats
+  N min" e "Hilly long N min", con la sola FC nei passi.
 
 ## 11. Semplificazioni da ricordare
 
@@ -327,7 +360,8 @@ del piano: `PlannedSession.threshold_test` (il protocollo), tipo `THRESHOLD`, ch
 
 ## 12. Test
 
-`T-PIANO-01…05` e `T-PIANO-10` (test nel piano: `test_threshold_test_session.py`) in
+`T-PIANO-01…05`, `T-PIANO-10` (test nel piano: `test_threshold_test_session.py`) e
+`T-PIANO-11` (dislivello della gara: `test_race_ascent.py`) in
 `PLAN.md` sezione 7.4: `tests/planning/` (determinismo,
 proprietà con Hypothesis su ingressi casuali con `invariants.violations`,
 scenari, adattamento, classi del tempo obiettivo ai confini, modelli di
@@ -344,7 +378,13 @@ sotto 10 o senza tipologia facile: lì le ore o la rampa decidono quali sedute
 togliere); solo i giorni di seduta, mai oltre `DAY_MAX_MINUTES`; il lungo è la
 seduta più lunga della settimana e facile e recupero al massimo il 75% di lui.
 
-Versione del metodo: **6** (l'utente dà giorni disponibili e sedute a settimana,
+Invarianti con il dislivello: con D+ le regole sono le stesse, e la property test di
+`test_race_ascent.py` le verifica con pendenze da 0 a 120 m/km.
+
+Versione del metodo: **8** (dislivello della gara: tempo e ritmo sulla distanza equivalente,
+ripetute in salita e lunghi collinari per una gara A ripida; ADR 017; i campi `ascent_m` di
+`PlannedSession` e `PlannedRace` valgono 0 se mancano, quindi i piani vecchi si leggono; la 7
+aveva il carico TRIMPeq, sezione 7). La **6** (l'utente dà giorni disponibili e sedute a settimana,
 non minuti per giorno; giorni di seduta spaziati dalla regola della sezione 6;
 lungo sempre il più lungo: ADR 016; la 5 aveva i minuti per giorno). La **5** (il test di soglia è una seduta del piano: campo
 `threshold_test` nella seduta, `test_protocol` e `missed_tests` tra gli ingressi; i piani
