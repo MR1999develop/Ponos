@@ -21,8 +21,13 @@ from ponos_coach.activities.domain import (
 from ponos_coach.activities.ports import ActivityNotFoundError
 from ponos_coach.load.activity_detail import ActivityDetail, GetActivityDetail
 from ponos_coach.load.domain import (
+    HeartRateLimits,
     LoadSource,
     MissingPhysiologyError,
+    Physiology,
+    PhysiologyEntry,
+    Sex,
+    ThresholdHeartRate,
     zone_starts_bpm,
 )
 from ponos_coach.load.use_cases import ExcludedActivity, ExclusionReason
@@ -46,6 +51,7 @@ def add_activity(
     serial: int = 1,
     start: datetime = START,
     with_gps: bool = False,
+    sport: fw.Sport = fw.Sport.RUNNING,
 ) -> ActivityRecord:
     """A 1 Hz activity with these bpm (None = no valid HR) in the world's archive; with
     `with_gps` it runs north-east from a made-up point, one step of 0.0001 degrees per second."""
@@ -59,9 +65,7 @@ def add_activity(
         )
         for i, value in enumerate(bpm)
     ]
-    spec = fw.ActivitySpec(
-        start, fw.Sport.RUNNING, fw.SubSport.GENERIC, samples, serial_number=serial
-    )
+    spec = fw.ActivitySpec(start, sport, fw.SubSport.GENERIC, samples, serial_number=serial)
     data = fw.build_activity(spec)
     activity = decode_fit(data, FileFormat.FIT)
     archived = world.archive.store(data, FileFormat.FIT, activity.start)
@@ -301,3 +305,91 @@ def test_the_byte_cap_must_be_positive() -> None:
 
     with pytest.raises(ValueError, match="byte"):
         use_case(world, max_file_bytes=0)
+
+
+# --- Time below LT1, between LT1 and LT2 and above LT2 -----------------------------------------
+
+
+def test_the_detail_splits_the_time_at_lt1_and_lt2_on_the_boundaries() -> None:
+    """LT2 170, no LT1 entered: the default is 83% (141). 140 is below, 141 is on LT1, 169 is
+    below LT2 and 170 is on LT2."""
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
+    record = add_activity(world, [140] * 100 + [141] * 200 + [169] * 300 + [170] * 400)
+
+    detail = detail_of(world, record)
+
+    assert detail.lt1_bpm == 141
+    assert detail.threshold_bpm == 170
+    assert detail.domain_seconds is not None
+    assert detail.domain_seconds.as_tuple() == (100.0, 500.0, 400.0)
+
+
+def test_the_domains_use_the_same_samples_as_the_zones() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
+    bpm: list[int | None] = [150] * 300 + [None] * 50 + [250] * 20 + [175] * 100  # none, above max
+    record = add_activity(world, bpm)
+
+    detail = detail_of(world, record)
+
+    assert detail.domain_seconds is not None
+    assert detail.domain_seconds.total == pytest.approx(detail.load.zone_seconds.total)
+
+
+def test_an_entered_lt1_of_the_day_replaces_the_default() -> None:
+    world = World()
+    base = physiology_entry(FIRST_PARAMS_DAY, 170).physiology
+    world.profile.physiology.put(PhysiologyEntry(FIRST_PARAMS_DAY, base))
+    world.profile.physiology.put(
+        PhysiologyEntry(
+            CHANGE_DAY,
+            Physiology(base.limits, base.threshold, base.sex, run_lt1=ThresholdHeartRate(150)),
+        )
+    )
+    before = add_activity(
+        world, [145] * 600, serial=1, start=datetime(2026, 1, 12, 7, 0, tzinfo=UTC)
+    )
+    after = add_activity(
+        world, [145] * 600, serial=2, start=datetime(2026, 2, 10, 7, 0, tzinfo=UTC)
+    )
+
+    detail_before, detail_after = detail_of(world, before), detail_of(world, after)
+
+    assert (detail_before.lt1_bpm, detail_after.lt1_bpm) == (141, 150)
+    assert detail_before.domain_seconds is not None
+    assert detail_after.domain_seconds is not None
+    assert detail_before.domain_seconds.as_tuple() == (0.0, 600.0, 0.0)
+    assert detail_after.domain_seconds.as_tuple() == (600.0, 0.0, 0.0)
+
+
+def test_a_ride_uses_the_lt1_and_lt2_of_the_other_sports_group() -> None:
+    world = World()
+    base = physiology_entry(FIRST_PARAMS_DAY, 170).physiology
+    world.profile.physiology.put(
+        PhysiologyEntry(
+            FIRST_PARAMS_DAY,
+            Physiology(
+                HeartRateLimits(50, 190),
+                base.threshold,
+                Sex.MALE,
+                other_threshold=ThresholdHeartRate(150),
+                other_lt1=ThresholdHeartRate(120),
+            ),
+        )
+    )
+    record = add_activity(world, [125] * 100 + [155] * 50, sport=fw.Sport.CYCLING)
+
+    detail = detail_of(world, record)
+
+    assert (detail.lt1_bpm, detail.threshold_bpm) == (120, 150)
+    assert detail.domain_seconds is not None
+    assert detail.domain_seconds.as_tuple() == (0.0, 100.0, 50.0)
+
+
+def test_an_activity_without_heart_rate_has_no_domain_seconds() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
+    record = add_activity(world, [None] * 600)
+
+    assert detail_of(world, record).domain_seconds is None

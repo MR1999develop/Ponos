@@ -87,9 +87,10 @@ def test_headers_carry_the_units() -> None:
         "Weight (kg)",
         "Resting HR (bpm)",
         "Maximum HR (bpm)",
-        "Running threshold HR (bpm)",
-        "Cycling threshold HR (bpm)",
-        "Other activities threshold HR (bpm)",
+        "Running LT1 (bpm)",
+        "Running LT2 (bpm)",
+        "Other sports LT1 (bpm)",
+        "Other sports LT2 (bpm)",
         "Threshold pace (min/km)",
     ]
 

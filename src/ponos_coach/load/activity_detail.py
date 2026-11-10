@@ -27,9 +27,12 @@ from ponos_coach.activities.domain import (
 from ponos_coach.activities.ports import ActivityArchive, ActivityIndex, ActivityNotFoundError
 from ponos_coach.load.domain import (
     ActivityLoad,
+    DomainSeconds,
     HeartRateLimits,
     ZoneLoad,
+    domain_seconds,
     load_per_zone,
+    lt1_for_sport,
     out_of_limits,
     physiology_for_day,
     threshold_for_sport,
@@ -99,9 +102,11 @@ class ActivityDetail:
     trace: HeartRateTrace | None
     limits: HeartRateLimits
     threshold_bpm: int
+    lt1_bpm: int
     zone_starts_bpm: tuple[float, float, float, float]
     unordered_hr_samples: int
     zone_load: ZoneLoad | None = None
+    domain_seconds: DomainSeconds | None = None
 
 
 class GetActivityDetail:
@@ -166,7 +171,9 @@ class GetActivityDetail:
             trace=None if series is None else HeartRateTrace.of(series, physiology.limits),
             limits=physiology.limits,
             threshold_bpm=threshold,
+            lt1_bpm=lt1_for_sport(physiology, activity.sport),
             zone_starts_bpm=zone_starts_bpm(threshold),
             unordered_hr_samples=activity.discarded_hr_samples,
             zone_load=load_per_zone(activity.sport, series, physiology, load),
+            domain_seconds=domain_seconds(activity.sport, series, physiology),
         )

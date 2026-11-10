@@ -139,6 +139,7 @@ from __future__ import annotations
 from typing import Final
 
 from ponos_coach.storage.schema_load_heart_rate import LOAD_HEART_RATE_MIGRATION
+from ponos_coach.storage.schema_lt1 import LT1_MIGRATION
 from ponos_coach.storage.schema_race_ascent import RACE_ASCENT_MIGRATION
 from ponos_coach.storage.schema_sport_thresholds import SPORT_THRESHOLDS_MIGRATION
 from ponos_coach.storage.schema_threshold_pace import THRESHOLD_PACE_MIGRATION
@@ -939,6 +940,8 @@ MIGRATIONS: Final[tuple[tuple[str, ...], ...]] = (
     RACE_ASCENT_MIGRATION,
     # Average and maximum HR of an activity: columns of the (emptied) load cache.
     LOAD_HEART_RATE_MIGRATION,
+    # LT1 of the two sport groups: optional columns of `physiology` (bike column unread).
+    LT1_MIGRATION,
 )
 
 SCHEMA_VERSION: Final = len(MIGRATIONS)

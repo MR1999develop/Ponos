@@ -37,6 +37,7 @@ from ponos_coach.ui.body_input import BodyProblem, body_problem_text
 from ponos_coach.ui.form_rows import (
     FieldKind,
     add_field_row,
+    add_group_heading,
     optional_threshold_edit,
     size_field,
     threshold_pace_edit,
@@ -46,8 +47,10 @@ from ponos_coach.ui.heart_rate_rules import (
     MIN_ALLOWED_BPM,
     MIN_THRESHOLD_BPM,
     HeartRateProblem,
-    bike_default_placeholder,
     heart_rate_problem_text,
+    lt1_default_placeholder,
+    lt1_tooltip,
+    lt2_tooltip,
     other_default_placeholder,
 )
 from ponos_coach.ui.measurement_history_model import (
@@ -73,8 +76,9 @@ _NOTE_FIELDS = (
     EditField.MIN_BPM,
     EditField.MAX_BPM,
     EditField.THRESHOLD,
-    EditField.BIKE_THRESHOLD,
+    EditField.RUN_LT1,
     EditField.OTHER_THRESHOLD,
+    EditField.OTHER_LT1,
     EditField.THRESHOLD_PACE,
 )
 
@@ -129,10 +133,16 @@ class ProfileEditDialog(SettingsForm):
         self._min.valueChanged.connect(self._on_min_changed)
         self._max.valueChanged.connect(self._on_max_changed)
         self._threshold.valueChanged.connect(self._on_threshold_changed)
-        self._bike = optional_threshold_edit(self, "measurementsBikeThresholdHeartRate")
-        self._bike.textEdited.connect(self._on_bike_edited)
+        self._run_lt1 = optional_threshold_edit(self, "measurementsRunLt1HeartRate")
+        self._run_lt1.textEdited.connect(self._on_run_lt1_edited)
         self._other = optional_threshold_edit(self, "measurementsOtherThresholdHeartRate")
         self._other.textEdited.connect(self._on_other_edited)
+        self._other_lt1 = optional_threshold_edit(self, "measurementsOtherLt1HeartRate")
+        self._other_lt1.textEdited.connect(self._on_other_lt1_edited)
+        for lt1 in (self._run_lt1, self._other_lt1):
+            lt1.setToolTip(lt1_tooltip())
+        for lt2 in (self._threshold, self._other):
+            lt2.setToolTip(lt2_tooltip())
         self._pace = threshold_pace_edit(
             self,
             "measurementsThresholdPace",
@@ -202,8 +212,9 @@ class ProfileEditDialog(SettingsForm):
             self._weight,
             self._min,
             self._max,
+            self._run_lt1,
             self._threshold,
-            self._bike,
+            self._other_lt1,
             self._other,
             self._pace,
             self._table,
@@ -268,24 +279,52 @@ class ProfileEditDialog(SettingsForm):
         )
         hint.setWordWrap(True)
         layout.addRow(hint)
-        rows = (
-            (self.tr("Valid from"), self._valid_from, EditField.VALID_FROM),
-            (self.tr("Weight (kg)"), self._weight, EditField.WEIGHT),
-            (self.tr("Resting heart rate"), self._min, EditField.MIN_BPM),
-            (self.tr("Maximum heart rate"), self._max, EditField.MAX_BPM),
-            (self.tr("Running threshold heart rate"), self._threshold, EditField.THRESHOLD),
-            (self.tr("Cycling threshold heart rate"), self._bike, EditField.BIKE_THRESHOLD),
+        self._add_rows(
+            layout,
             (
-                self.tr("Other activities threshold heart rate"),
-                self._other,
-                EditField.OTHER_THRESHOLD,
+                (self.tr("Valid from"), self._valid_from, EditField.VALID_FROM),
+                (self.tr("Weight (kg)"), self._weight, EditField.WEIGHT),
+                (self.tr("Resting heart rate"), self._min, EditField.MIN_BPM),
+                (self.tr("Maximum heart rate"), self._max, EditField.MAX_BPM),
             ),
-            (self.tr("Threshold pace (min/km)"), self._pace, EditField.THRESHOLD_PACE),
         )
-        for text, widget, field in rows:
-            add_field_row(layout, text, widget, self._with_error(widget, field))
+        add_group_heading(layout, self.tr("Running and trail"), self)
+        self._add_rows(
+            layout,
+            (
+                (self.tr("LT1 (aerobic threshold)"), self._run_lt1, EditField.RUN_LT1),
+                (self.tr("LT2 (lactate threshold)"), self._threshold, EditField.THRESHOLD),
+            ),
+            accessible_prefix=self.tr("Running and trail"),
+        )
+        add_group_heading(layout, self.tr("Other sports"), self)
+        self._add_rows(
+            layout,
+            (
+                (self.tr("LT1 (aerobic threshold)"), self._other_lt1, EditField.OTHER_LT1),
+                (self.tr("LT2 (lactate threshold)"), self._other, EditField.OTHER_THRESHOLD),
+            ),
+            accessible_prefix=self.tr("Other sports"),
+        )
+        self._add_rows(
+            layout,
+            ((self.tr("Threshold pace (min/km)"), self._pace, EditField.THRESHOLD_PACE),),
+        )
         layout.addRow(self._validity_notice)
         return box
+
+    def _add_rows(
+        self,
+        layout: QFormLayout,
+        rows: tuple[tuple[str, QWidget, EditField], ...],
+        accessible_prefix: str = "",
+    ) -> None:
+        """Rows of label, field and error; fields of a group get the group in their accessible
+        name, so two fields with the same label are told apart."""
+        for text, widget, field in rows:
+            if accessible_prefix:
+                widget.setAccessibleName(f"{accessible_prefix}: {text}")
+            add_field_row(layout, text, widget, self._with_error(widget, field))
 
     def _read_only(self, text: str, name: str) -> QLabel:
         label = QLabel(text, self)
@@ -369,13 +408,18 @@ class ProfileEditDialog(SettingsForm):
         return self._threshold
 
     @property
-    def bike_edit(self) -> QLineEdit:
-        """Cycling threshold (empty: the default, shown as the placeholder)."""
-        return self._bike
+    def run_lt1_edit(self) -> QLineEdit:
+        """LT1 of running and trail (empty: the default, shown as the placeholder)."""
+        return self._run_lt1
+
+    @property
+    def other_lt1_edit(self) -> QLineEdit:
+        """LT1 of the other sports (empty: the default, shown as the placeholder)."""
+        return self._other_lt1
 
     @property
     def other_edit(self) -> QLineEdit:
-        """Threshold of the other activities (empty: the default, shown as the placeholder)."""
+        """LT2 of the other sports (empty: the default, shown as the placeholder)."""
         return self._other
 
     @property
@@ -453,8 +497,9 @@ class ProfileEditDialog(SettingsForm):
             box.setValue(value)
             box.blockSignals(False)
         for edit, field in (
-            (self._bike, EditField.BIKE_THRESHOLD),
+            (self._run_lt1, EditField.RUN_LT1),
             (self._other, EditField.OTHER_THRESHOLD),
+            (self._other_lt1, EditField.OTHER_LT1),
         ):
             edit.setText(form.threshold_text(field))
         self._refresh_placeholders()
@@ -469,11 +514,14 @@ class ProfileEditDialog(SettingsForm):
     def _refresh_placeholders(self) -> None:
         """The default of each optional threshold, for the heart rates now shown."""
         form = self._form
-        self._bike.setPlaceholderText(
-            bike_default_placeholder(form.threshold_default(EditField.BIKE_THRESHOLD))
+        self._run_lt1.setPlaceholderText(
+            lt1_default_placeholder(form.threshold_default(EditField.RUN_LT1))
         )
         self._other.setPlaceholderText(
             other_default_placeholder(form.threshold_default(EditField.OTHER_THRESHOLD))
+        )
+        self._other_lt1.setPlaceholderText(
+            lt1_default_placeholder(form.threshold_default(EditField.OTHER_LT1))
         )
 
     def _refresh_errors(self, extra: tuple[EditIssue, ...] = ()) -> None:
@@ -568,12 +616,17 @@ class ProfileEditDialog(SettingsForm):
         self._form.edit_threshold_bpm(value)
         self._after_edit()
 
-    def _on_bike_edited(self, text: str) -> None:
-        self._form.edit_bike_threshold(text)
+    def _on_run_lt1_edited(self, text: str) -> None:
+        self._form.edit_run_lt1(text)
         self._after_edit()
 
     def _on_other_edited(self, text: str) -> None:
         self._form.edit_other_threshold(text)
+        self._refresh_placeholders()  # the default LT1 of the other sports follows their LT2
+        self._after_edit()
+
+    def _on_other_lt1_edited(self, text: str) -> None:
+        self._form.edit_other_lt1(text)
         self._after_edit()
 
     def _on_pace_edited(self, text: str) -> None:
@@ -608,8 +661,9 @@ class ProfileEditDialog(SettingsForm):
             EditField.MIN_BPM: self._min,
             EditField.MAX_BPM: self._max,
             EditField.THRESHOLD: self._threshold,
-            EditField.BIKE_THRESHOLD: self._bike,
+            EditField.RUN_LT1: self._run_lt1,
             EditField.OTHER_THRESHOLD: self._other,
+            EditField.OTHER_LT1: self._other_lt1,
             EditField.THRESHOLD_PACE: self._pace,
             EditField.HEIGHT: self._height,
             EditField.BIRTH_DATE: self._birth,
@@ -635,8 +689,9 @@ class ProfileEditDialog(SettingsForm):
             self._min,
             self._max,
             self._threshold,
-            self._bike,
+            self._run_lt1,
             self._other,
+            self._other_lt1,
             self._pace,
             self._height,
             self._birth,

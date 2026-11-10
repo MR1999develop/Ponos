@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""The cycling and other-activities thresholds: the migration that adds them and the store.
+"""The other-sports LT2 and the unread bike column: migration 15 and the store.
 
 The migration is found by identity (`SPORT_THRESHOLDS_MIGRATION`), not by its number, so the tests
 stay valid when other migrations are added before or after it. The same store contract runs on the
@@ -93,7 +93,6 @@ def test_a_profile_from_before_the_migration_keeps_its_entry_with_no_sport_thres
     assert entry == PhysiologyEntry(
         date(2026, 1, 1), Physiology(HeartRateLimits(50, 190), ThresholdHeartRate(170), Sex.FEMALE)
     )
-    assert entry.physiology.bike_threshold is None
     assert entry.physiology.other_threshold is None
     [copy] = sorted((tmp_path / "backup").glob("*"))
     assert copy.name == f"ponos-v{_position()}-v{SCHEMA_VERSION}.sqlite3"
@@ -156,15 +155,15 @@ def store(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[Physiology
         opened.close()
 
 
-def _entry(day: date, bike: int | None, other: int | None) -> PhysiologyEntry:
+def _entry(day: date, other: int | None, run_lt1: int | None) -> PhysiologyEntry:
     return PhysiologyEntry(
         day,
         Physiology(
             HeartRateLimits(50, 190),
             ThresholdHeartRate(170),
             Sex.MALE,
-            None if bike is None else ThresholdHeartRate(bike),
-            None if other is None else ThresholdHeartRate(other),
+            other_threshold=None if other is None else ThresholdHeartRate(other),
+            run_lt1=None if run_lt1 is None else ThresholdHeartRate(run_lt1),
         ),
     )
 

@@ -135,8 +135,9 @@ test lo fa considerare fatto: regole in `references/piano.md`, sezione 10, e ADR
 
 ## 5. Soglia in bici
 
-Finché non c'è un test in bici: FC di soglia della corsa − 4 bpm (default del
-progetto, `threshold_for_sport`). Un test in bici è fuori dal piano attuale.
+Dal 2026-11-10 la bici non ha una soglia propria: è nel gruppo «altri sport», con la
+LT2 inserita per quel gruppo e, senza valore, la LT2 della corsa (prima corsa − 4 bpm).
+`threshold_for_sport` resta l'unico punto. Un test in bici è fuori dal piano attuale.
 
 ## 6. Casi d'uso
 

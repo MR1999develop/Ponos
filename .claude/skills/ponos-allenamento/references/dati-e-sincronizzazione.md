@@ -278,6 +278,14 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   (media pesata sul tempo, arrotondata); `LOAD_MODEL_VERSION` 4, quindi tutti i carichi si
   ricalcolano una volta. Migrazione `LOAD_HEART_RATE_MIGRATION`
   (`storage/schema_load_heart_rate.py`); test `tests/storage/test_load_heart_rate_store.py`.
+- **Schema v18** (LT1 per gruppo di sport): colonne nullable `run_lt1_bpm` e `other_lt1_bpm`
+  in `physiology`, `CHECK (NULL OR (> min_bpm AND < LT2))`, con LT2 = `threshold_bpm` (per
+  `other_lt1_bpm`: `COALESCE(other_threshold_bpm, threshold_bpm)`); `ALTER TABLE ... ADD
+  COLUMN`, `load_cache` non svuotata (l'impronta cambia da sola: `LOAD_MODEL_VERSION` 5,
+  perché la bici non è più corsa − 4). Dal 2026-11-10 `bike_threshold_bpm` (v15) **non si
+  legge né si scrive più**: resta nella tabella (expand-contract), la toglierà una migrazione
+  futura; `other_threshold_bpm` è ora la LT2 di tutti gli sport che non sono corsa o trail.
+  Migrazione `LT1_MIGRATION` (`storage/schema_lt1.py`); test `tests/storage/test_lt1_store.py`.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.

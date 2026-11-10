@@ -35,8 +35,9 @@ def full_physiology() -> Physiology:
         HeartRateLimits(50, 190),
         ThresholdHeartRate(170),
         Sex.FEMALE,
-        ThresholdHeartRate(160),
-        ThresholdHeartRate(165),
+        other_threshold=ThresholdHeartRate(160),
+        run_lt1=ThresholdHeartRate(140),
+        other_lt1=ThresholdHeartRate(130),
     )
 
 
@@ -71,7 +72,9 @@ def test_without_a_pace_the_series_stays_empty(world: World) -> None:  # noqa: F
     with world.create()(request) as session:
         assert list(session.threshold_paces.list_entries()) == []
         [entry] = session.physiology.list_entries()
-        assert entry.physiology.bike_threshold == ThresholdHeartRate(160)
+        assert entry.physiology.other_threshold == ThresholdHeartRate(160)
+        assert entry.physiology.run_lt1 == ThresholdHeartRate(140)
+        assert entry.physiology.other_lt1 == ThresholdHeartRate(130)
 
 
 class _PaceWriteFails(InMemoryProfileStorage):

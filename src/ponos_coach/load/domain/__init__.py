@@ -8,6 +8,7 @@ from ponos_coach.load.domain.activity_load import (
     LoadSource,
     ZoneLoad,
     compute_activity_load,
+    domain_seconds,
     load_per_zone,
     out_of_limits,
     sample_validity_s,
@@ -28,14 +29,18 @@ from ponos_coach.load.domain.banister import (
     trimp_per_minute,
 )
 from ponos_coach.load.domain.heart_rate import (
+    DEFAULT_LT1_PERCENT,
     HeartRateLimits,
     Physiology,
     Sex,
     SportGroup,
     ThresholdHeartRate,
+    default_lt1,
+    lt1_for_sport,
     sport_group,
     threshold_for_sport,
 )
+from ponos_coach.load.domain.lactate_domains import DomainSeconds, seconds_per_domain
 from ponos_coach.load.domain.parameters import (
     LOAD_MODEL_VERSION,
     LoadFingerprint,
@@ -62,6 +67,7 @@ from ponos_coach.load.domain.zones import (
 )
 
 __all__ = [
+    "DEFAULT_LT1_PERCENT",
     "LOAD_MODEL_VERSION",
     "MAX_GAP_S",
     "PEAK_WINDOW_DAYS",
@@ -69,6 +75,7 @@ __all__ = [
     "ZONE_STARTS_PERCENT",
     "ActivityLoad",
     "DayLoad",
+    "DomainSeconds",
     "HeartRateLimits",
     "LoadFingerprint",
     "LoadSource",
@@ -86,15 +93,19 @@ __all__ = [
     "compute_activity_load",
     "compute_pmc",
     "ctl_share_of_recent_peak",
+    "default_lt1",
+    "domain_seconds",
     "equivalence_factor",
     "equivalent_reserve_ratio",
     "iso_week_start",
     "load_fingerprint",
     "load_per_zone",
+    "lt1_for_sport",
     "out_of_limits",
     "physiology_for_day",
     "reference_hour_weight",
     "sample_validity_s",
+    "seconds_per_domain",
     "seconds_per_zone",
     "sport_group",
     "threshold_for_sport",

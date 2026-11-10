@@ -86,3 +86,13 @@ def add_field_row(
     if not field.accessibleName():
         field.setAccessibleName(text)
     layout.addRow(label, field if container is None else container)
+
+
+def add_group_heading(layout: QFormLayout, text: str, parent: QWidget) -> None:
+    """Add a bold heading row that names the group of fields below it."""
+    heading = QLabel(text, parent)
+    heading.setTextFormat(Qt.TextFormat.PlainText)
+    font = heading.font()
+    font.setBold(True)
+    heading.setFont(font)
+    layout.addRow(heading)

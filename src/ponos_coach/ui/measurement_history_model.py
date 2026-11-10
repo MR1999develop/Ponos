@@ -45,10 +45,11 @@ class Column(IntEnum):
     WEIGHT = 1
     MIN_BPM = 2
     MAX_BPM = 3
-    THRESHOLD = 4
-    BIKE_THRESHOLD = 5
-    OTHER_THRESHOLD = 6
-    THRESHOLD_PACE = 7
+    RUN_LT1 = 4
+    THRESHOLD = 5  # the running LT2
+    OTHER_LT1 = 6
+    OTHER_THRESHOLD = 7  # the other-sports LT2
+    THRESHOLD_PACE = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,9 +152,10 @@ class MeasurementHistoryModel(QAbstractTableModel):
             Column.WEIGHT: self.tr("Weight (kg)"),
             Column.MIN_BPM: self.tr("Resting HR (bpm)"),
             Column.MAX_BPM: self.tr("Maximum HR (bpm)"),
-            Column.THRESHOLD: self.tr("Running threshold HR (bpm)"),
-            Column.BIKE_THRESHOLD: self.tr("Cycling threshold HR (bpm)"),
-            Column.OTHER_THRESHOLD: self.tr("Other activities threshold HR (bpm)"),
+            Column.RUN_LT1: self.tr("Running LT1 (bpm)"),
+            Column.THRESHOLD: self.tr("Running LT2 (bpm)"),
+            Column.OTHER_LT1: self.tr("Other sports LT1 (bpm)"),
+            Column.OTHER_THRESHOLD: self.tr("Other sports LT2 (bpm)"),
             Column.THRESHOLD_PACE: self.tr("Threshold pace (min/km)"),
         }
         return headers[column]
@@ -166,13 +168,14 @@ def _bpm_of(row: HistoryRow, column: Column) -> int | None:
         return row.physiology.limits.min_bpm
     if column is Column.MAX_BPM:
         return row.physiology.limits.max_bpm
-    if column is Column.BIKE_THRESHOLD:
-        entered = row.physiology.bike_threshold
-        return None if entered is None else entered.bpm
-    if column is Column.OTHER_THRESHOLD:
-        entered = row.physiology.other_threshold
-        return None if entered is None else entered.bpm
-    return row.physiology.threshold.bpm
+    if column is Column.THRESHOLD:
+        return row.physiology.threshold.bpm
+    entered = {
+        Column.RUN_LT1: row.physiology.run_lt1,
+        Column.OTHER_LT1: row.physiology.other_lt1,
+        Column.OTHER_THRESHOLD: row.physiology.other_threshold,
+    }[column]
+    return None if entered is None else entered.bpm
 
 
 def _text(row: HistoryRow, column: Column) -> str:

@@ -24,7 +24,13 @@ from ponos_coach.load.domain.banister import (
     equivalent_reserve_ratio,
     reference_hour_weight,
 )
-from ponos_coach.load.domain.heart_rate import HeartRateLimits, Physiology, threshold_for_sport
+from ponos_coach.load.domain.heart_rate import (
+    HeartRateLimits,
+    Physiology,
+    lt1_for_sport,
+    threshold_for_sport,
+)
+from ponos_coach.load.domain.lactate_domains import DomainSeconds, seconds_per_domain
 from ponos_coach.load.domain.sport import typical_intensity
 from ponos_coach.load.domain.zones import ZONE_COUNT, ZoneSeconds, seconds_per_zone, zone_indices
 
@@ -232,3 +238,23 @@ def load_per_zone(
         return None
     z1, z2, z3, z4, z5 = (float(value) * load.trimp_eq / total for value in per_zone)
     return (z1, z2, z3, z4, z5)
+
+
+def domain_seconds(
+    sport: Sport, series: HeartRateSeries | None, physiology: Physiology
+) -> DomainSeconds | None:
+    """Seconds below LT1, between LT1 and LT2 and above LT2 on the counted samples.
+
+    The same samples as the load and the zones (in limits, interval up to `MAX_GAP_S`), with the
+    LT1 and LT2 of the sport's group. None if there is no HR series.
+    """
+    if series is None:
+        return None
+    validity = sample_validity_s(series.seconds)
+    counted = _in_range(series, physiology.limits) & (validity <= MAX_GAP_S)
+    return seconds_per_domain(
+        series.bpm[counted],
+        validity[counted],
+        lt1_for_sport(physiology, sport),
+        threshold_for_sport(physiology, sport),
+    )

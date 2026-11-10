@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Threshold heart rate per sport group: running, cycling and other activities.
+"""LT2 and LT1 per sport group: running and trail, and other sports (cycling included).
 
-Acceptance: entering a cycling threshold changes the load and the zones of a bike activity from
+Acceptance: entering an other-sports LT2 changes the load and the zones of a bike activity from
 the validity day on, and a recalculation from a partial cache equals one from scratch (T-CALC-05).
 Domain: defaults, limits (on and off points), the single decision point and the fingerprint.
 """
@@ -23,6 +23,7 @@ from ponos_coach.activities.domain import (
 from ponos_coach.activities.fit_decoder import FitLimits, decode_activity
 from ponos_coach.load.activity_detail import ActivityDetail, GetActivityDetail
 from ponos_coach.load.domain import (
+    LOAD_MODEL_VERSION,
     HeartRateLimits,
     Physiology,
     PhysiologyEntry,
@@ -48,15 +49,12 @@ from tests.load.test_profile_overview import (
 LIMITS = HeartRateLimits(50, 190)
 
 
-def with_thresholds(
-    run: int = 170, bike: int | None = None, other: int | None = None
-) -> Physiology:
+def with_thresholds(run: int = 170, other: int | None = None) -> Physiology:
     return Physiology(
         LIMITS,
         ThresholdHeartRate(run),
         Sex.MALE,
-        None if bike is None else ThresholdHeartRate(bike),
-        None if other is None else ThresholdHeartRate(other),
+        other_threshold=None if other is None else ThresholdHeartRate(other),
     )
 
 
@@ -68,7 +66,7 @@ def with_thresholds(
     [
         (Sport.RUNNING, SportGroup.RUNNING),
         (Sport.TRAIL, SportGroup.RUNNING),
-        (Sport.CYCLING, SportGroup.CYCLING),
+        (Sport.CYCLING, SportGroup.OTHER),
         (Sport.WALKING, SportGroup.OTHER),
         (Sport.HIKING, SportGroup.OTHER),
         (Sport.STRENGTH, SportGroup.OTHER),
@@ -83,40 +81,27 @@ def test_every_sport_has_a_group() -> None:
     assert {sport_group(s) for s in Sport} == set(SportGroup)
 
 
-def test_without_entered_values_the_defaults_of_before_apply() -> None:
+def test_without_an_other_sports_lt2_every_sport_uses_the_running_one() -> None:
     p = with_thresholds(170)
 
-    assert threshold_for_sport(p, Sport.CYCLING) == 166
-    assert [threshold_for_sport(p, s) for s in Sport if s is not Sport.CYCLING] == [170] * (
-        len(Sport) - 1
-    )
+    assert [threshold_for_sport(p, s) for s in Sport] == [170] * len(Sport)  # the bike too
 
 
-def test_an_entered_cycling_threshold_applies_to_cycling_only() -> None:
-    p = with_thresholds(170, bike=160)
-
-    assert threshold_for_sport(p, Sport.CYCLING) == 160
-    assert threshold_for_sport(p, Sport.RUNNING) == 170
-    assert threshold_for_sport(p, Sport.WALKING) == 170
-
-
-@pytest.mark.parametrize("sport", [Sport.WALKING, Sport.HIKING, Sport.STRENGTH, Sport.OTHER])
-def test_an_entered_other_threshold_applies_to_every_sport_that_is_neither_run_nor_bike(
+@pytest.mark.parametrize(
+    "sport", [Sport.CYCLING, Sport.WALKING, Sport.HIKING, Sport.STRENGTH, Sport.OTHER]
+)
+def test_an_entered_other_lt2_applies_to_every_sport_that_is_neither_run_nor_trail(
     sport: Sport,
 ) -> None:
     p = with_thresholds(170, other=140)
 
     assert threshold_for_sport(p, sport) == 140
+    assert threshold_for_sport(p, Sport.RUNNING) == 170
     assert threshold_for_sport(p, Sport.TRAIL) == 170
-    assert threshold_for_sport(p, Sport.CYCLING) == 166
-
-
-def test_the_other_threshold_does_not_change_the_cycling_default() -> None:
-    assert threshold_for_sport(with_thresholds(170, other=140), Sport.CYCLING) == 166
 
 
 def test_the_equivalence_factor_follows_the_entered_threshold() -> None:
-    p = with_thresholds(170, bike=150)
+    p = with_thresholds(170, other=150)
 
     assert equivalence_factor(p, Sport.CYCLING) == pytest.approx(120 / 100)
 
@@ -125,22 +110,14 @@ def test_the_equivalence_factor_follows_the_entered_threshold() -> None:
 
 
 @pytest.mark.parametrize("bpm", [51, 120, 190])
-@pytest.mark.parametrize("which", ["bike", "other"])
-def test_an_optional_threshold_just_above_the_minimum_up_to_the_maximum_is_accepted(
-    which: str, bpm: int
-) -> None:
-    p = with_thresholds(170, **{which: bpm})
-
-    assert threshold_for_sport(p, Sport.CYCLING if which == "bike" else Sport.OTHER) == bpm
+def test_an_other_lt2_just_above_the_minimum_up_to_the_maximum_is_accepted(bpm: int) -> None:
+    assert threshold_for_sport(with_thresholds(170, other=bpm), Sport.OTHER) == bpm
 
 
 @pytest.mark.parametrize("bpm", [50, 49, 191])
-@pytest.mark.parametrize("which", ["bike", "other"])
-def test_an_optional_threshold_at_the_minimum_or_outside_the_limits_is_rejected(
-    which: str, bpm: int
-) -> None:
+def test_an_other_lt2_at_the_minimum_or_outside_the_limits_is_rejected(bpm: int) -> None:
     with pytest.raises(ValueError, match="threshold"):
-        with_thresholds(170, **{which: bpm})
+        with_thresholds(170, other=bpm)
 
 
 @pytest.mark.parametrize("bpm", [39, 251])
@@ -155,9 +132,8 @@ def test_an_optional_threshold_outside_40_to_250_is_not_a_threshold(bpm: int) ->
 def test_the_fingerprint_changes_with_an_entered_threshold_that_differs_from_the_default() -> None:
     base = load_fingerprint(with_thresholds(170))
 
-    assert load_fingerprint(with_thresholds(170, bike=160)) != base
     assert load_fingerprint(with_thresholds(170, other=150)) != base
-    assert load_fingerprint(with_thresholds(170, bike=160)) != load_fingerprint(
+    assert load_fingerprint(with_thresholds(170, other=150)) != load_fingerprint(
         with_thresholds(170, other=160)
     )
 
@@ -171,8 +147,24 @@ def test_a_profile_that_never_set_them_keeps_the_fingerprint_it_had() -> None:
 def test_entering_the_value_the_default_would_give_keeps_the_loads_valid() -> None:
     base = load_fingerprint(with_thresholds(170))
 
-    assert load_fingerprint(with_thresholds(170, bike=166)) == base
     assert load_fingerprint(with_thresholds(170, other=170)) == base
+
+
+def test_an_lt1_does_not_change_the_fingerprint_it_never_changes_a_load() -> None:
+    with_lt1 = Physiology(
+        LIMITS,
+        ThresholdHeartRate(170),
+        Sex.MALE,
+        run_lt1=ThresholdHeartRate(140),
+        other_lt1=ThresholdHeartRate(130),
+    )
+
+    assert load_fingerprint(with_lt1) == load_fingerprint(with_thresholds(170))
+
+
+def test_the_model_version_changed_because_the_bike_threshold_changed() -> None:
+    """Saved loads of bike rides (computed with run - 4) must not be read as current."""
+    assert LOAD_MODEL_VERSION >= 5
 
 
 # --- Acceptance: a cycling threshold changes the load from its validity day ----------------------
@@ -204,6 +196,7 @@ def two_rides(world: World) -> tuple[ActivityRecord, ActivityRecord]:
 
 
 def put_cycling_threshold_from(world: World, day: date, bike: int | None) -> None:
+    """The other-sports LT2 (the bike's) from `day`; `None`: the running LT2 applies."""
     base = physiology()
     entry = PhysiologyEntry(
         day,
@@ -211,7 +204,7 @@ def put_cycling_threshold_from(world: World, day: date, bike: int | None) -> Non
             base.limits,
             base.threshold,
             base.sex,
-            None if bike is None else ThresholdHeartRate(bike),
+            other_threshold=None if bike is None else ThresholdHeartRate(bike),
         ),
     )
     world.profile.physiology.put(entry)

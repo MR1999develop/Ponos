@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Heart-rate types: limits, threshold, sex."""
+"""Heart-rate types: limits, lactate thresholds (LT1, LT2), sex."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
 from enum import Enum
 
 from ponos_coach.activities.domain import Sport
@@ -12,7 +12,7 @@ from ponos_coach.activities.domain import Sport
 # Allowed ranges (project default): they discard obviously wrong values.
 _MIN_BPM_LOW = 20
 _MAX_BPM_HIGH = 250
-BIKE_THRESHOLD_OFFSET_BPM = 4  # project default: bike threshold = run threshold - 4
+DEFAULT_LT1_PERCENT = 83  # project default: LT1 not entered = 83% of the LT2 of its group
 
 
 class Sex(Enum):
@@ -56,66 +56,87 @@ class ThresholdHeartRate:
 
 
 class SportGroup(Enum):
-    """The sports that share one threshold heart rate.
+    """The two groups of sports that share the lactate thresholds (LT1 and LT2).
 
-    Running and trail are one group (the threshold is the running one); cycling has its own
-    because the heart rate at the same effort is lower on the bike; everything else (walking,
-    hiking, swimming-like or indoor activity, strength, other) shares one more.
+    Running and trail are one group; everything else (cycling, walking, hiking, swimming-like or
+    indoor activity, strength, other) is the other group.
     """
 
     RUNNING = "running"
-    CYCLING = "cycling"
     OTHER = "other"
 
 
 _SPORT_GROUPS = {
     Sport.RUNNING: SportGroup.RUNNING,
     Sport.TRAIL: SportGroup.RUNNING,
-    Sport.CYCLING: SportGroup.CYCLING,
 }
 
 
 def sport_group(sport: Sport) -> SportGroup:
-    """The threshold group of a sport: running (also trail), cycling, or other."""
+    """The threshold group of a sport: running (also trail), or other (cycling included)."""
     return _SPORT_GROUPS.get(sport, SportGroup.OTHER)
 
 
 def threshold_for_sport(physiology: Physiology, sport: Sport) -> int:
-    """Threshold used for the sport: the one entered for its group, else the default.
+    """LT2 used for the sport: the one entered for its group, else the running one.
 
-    Running (and trail): the running threshold. Cycling: the cycling threshold if entered, else
-    `max(run_threshold - 4, min_HR + 1)` (brought to the limit instead of rejecting the
-    parameters; project default). Other sports: the other-activities threshold if entered, else
-    the running one. The only place where a sport's threshold is decided.
+    Running (and trail): the running LT2 (`Physiology.threshold`). Every other sport, cycling
+    included: the other-sports LT2 if entered, else the running one. The only place where the
+    LT2 of a sport is decided; the zones, the TRIMPeq and the plan all read it from here.
     """
-    group = sport_group(sport)
-    if group is SportGroup.CYCLING:
-        if physiology.bike_threshold is not None:
-            return physiology.bike_threshold.bpm
-        return max(
-            physiology.threshold.bpm - BIKE_THRESHOLD_OFFSET_BPM, physiology.limits.min_bpm + 1
-        )
-    if group is SportGroup.OTHER and physiology.other_threshold is not None:
+    if sport_group(sport) is SportGroup.OTHER and physiology.other_threshold is not None:
         return physiology.other_threshold.bpm
     return physiology.threshold.bpm
+
+
+def default_lt1(lt2_bpm: int, min_bpm: int) -> int:
+    """LT1 assumed when none is entered: `DEFAULT_LT1_PERCENT` of `lt2_bpm`, rounded half up.
+
+    Brought to the limits instead of rejecting the parameters: at least `min_bpm + 1` and never
+    above `lt2_bpm` (the two coincide only if the LT2 is one bpm above the minimum).
+    """
+    rounded = (lt2_bpm * DEFAULT_LT1_PERCENT + 50) // 100
+    return min(max(rounded, min_bpm + 1), lt2_bpm)
+
+
+def lt1_for_sport(physiology: Physiology, sport: Sport) -> int:
+    """LT1 used for the sport: the one entered for its group, else the default from its LT2.
+
+    The twin of `threshold_for_sport`, and the only place where the LT1 of a sport is decided.
+    """
+    group = sport_group(sport)
+    entered = physiology.run_lt1 if group is SportGroup.RUNNING else physiology.other_lt1
+    if entered is not None:
+        return entered.bpm
+    return default_lt1(threshold_for_sport(physiology, sport), physiology.limits.min_bpm)
 
 
 @dataclass(frozen=True, slots=True)
 class Physiology:
     """User's physiological parameters, consistent with one another by construction.
 
-    The running threshold lies between min HR (excluded) and max HR (included). The cycling and
-    other-activities thresholds are optional (`None`: the default of `threshold_for_sport`) and,
-    when entered, lie in the same range. Read thresholds only through `threshold_for_sport`.
+    `threshold` is the running LT2 (lactate threshold) and `other_threshold` the other-sports
+    LT2 (`None`: the running one applies); `run_lt1` and `other_lt1` are the aerobic thresholds
+    of the two groups (`None`: `default_lt1` applies). Every LT2 lies between min HR (excluded)
+    and max HR (included); an entered LT1 lies between min HR and the LT2 of its group, both
+    excluded: `min HR < LT1 < LT2 <= max HR`. Read them only through `threshold_for_sport` and
+    `lt1_for_sport`.
     """
 
     limits: HeartRateLimits
     threshold: ThresholdHeartRate
     sex: Sex
-    bike_threshold: ThresholdHeartRate | None = None
+    _: KW_ONLY
     other_threshold: ThresholdHeartRate | None = None
+    run_lt1: ThresholdHeartRate | None = None
+    other_lt1: ThresholdHeartRate | None = None
 
     def __post_init__(self) -> None:
-        for entered in (self.threshold, self.bike_threshold, self.other_threshold):
-            if entered is not None and not self.limits.min_bpm < entered.bpm <= self.limits.max_bpm:
+        low, high = self.limits.min_bpm, self.limits.max_bpm
+        for lt2 in (self.threshold, self.other_threshold):
+            if lt2 is not None and not low < lt2.bpm <= high:
                 raise ValueError("the threshold must lie between min HR and max HR")
+        other_lt2 = self.threshold if self.other_threshold is None else self.other_threshold
+        for lt1, lt2 in ((self.run_lt1, self.threshold), (self.other_lt1, other_lt2)):
+            if lt1 is not None and not low < lt1.bpm < lt2.bpm:
+                raise ValueError("LT1 must lie between min HR and LT2")

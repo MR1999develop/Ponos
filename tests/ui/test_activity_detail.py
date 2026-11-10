@@ -20,20 +20,24 @@ from ponos_coach.activities.domain import (
 from ponos_coach.load.activity_detail import ActivityDetail, HeartRateTrace
 from ponos_coach.load.domain import (
     ActivityLoad,
+    DomainSeconds,
     HeartRateLimits,
     LoadSource,
     ZoneSeconds,
     zone_starts_bpm,
 )
 from ponos_coach.load.use_cases import ExclusionReason
-from ponos_coach.ui.activity_detail import zone_rows
-from ponos_coach.ui.activity_detail_dialog import ZoneTableModel
+from ponos_coach.ui.activity_detail import DomainKind, domain_rows, zone_rows
+from ponos_coach.ui.activity_detail_dialog import DomainTableModel, ZoneTableModel
 from ponos_coach.ui.errors import unavailable_detail_message
 
+DASH = "–"  # noqa: RUF001 - the separator itself
 START = datetime(2026, 5, 1, 7, 0, tzinfo=UTC)
 
 
-def detail_with(zones: ZoneSeconds) -> ActivityDetail:
+def detail_with(
+    zones: ZoneSeconds, domains: DomainSeconds | None = None, lt1: int = 142
+) -> ActivityDetail:
     series = HeartRateSeries(np.array([0.0, 10.0]), np.array([120.0, 130.0]))
     limits = HeartRateLimits(50, 190)
     load = ActivityLoad(10.0, 2, 0, 0.0, LoadSource.HEART_RATE, zones)
@@ -49,8 +53,10 @@ def detail_with(zones: ZoneSeconds) -> ActivityDetail:
         trace=HeartRateTrace.of(series, limits),
         limits=limits,
         threshold_bpm=171,
+        lt1_bpm=lt1,
         zone_starts_bpm=zone_starts_bpm(171),
         unordered_hr_samples=0,
+        domain_seconds=domains,
     )
 
 
@@ -116,3 +122,54 @@ def test_the_messages_do_not_depend_on_a_path_or_a_file_name() -> None:
     }
 
     assert not any("\\" in text or "/" in text or ".fit" in text for text in texts)
+
+
+# --- The three domains ---------------------------------------------------------------------
+
+
+def test_one_row_per_domain_with_the_share_of_the_time() -> None:
+    rows = domain_rows(detail_with(ZoneSeconds.ZERO, DomainSeconds(300.0, 100.0, 100.0)))
+
+    assert [row.kind for row in rows] == [
+        DomainKind.BELOW_LT1,
+        DomainKind.BETWEEN,
+        DomainKind.ABOVE_LT2,
+    ]
+    assert [row.seconds for row in rows] == [300.0, 100.0, 100.0]
+    assert [row.share for row in rows] == pytest.approx([0.6, 0.2, 0.2])
+
+
+def test_each_domain_row_has_its_whole_bpm_range_of_the_day() -> None:
+    rows = domain_rows(detail_with(ZoneSeconds.ZERO, DomainSeconds(1.0, 1.0, 1.0)))
+
+    # limits 50 to 190, LT1 142, LT2 171: below up to 141, between 142 to 170, above 171 up
+    assert [row.bpm for row in rows] == [(50, 141), (142, 170), (171, 190)]
+
+
+def test_a_domain_with_no_whole_bpm_inside_the_limits_has_no_range() -> None:
+    rows = domain_rows(detail_with(ZoneSeconds.ZERO, DomainSeconds(1.0, 1.0, 1.0), lt1=50))
+
+    assert rows[0].bpm is None  # nothing below an LT1 equal to the resting rate
+
+
+def test_without_heart_rate_the_domains_are_empty() -> None:
+    rows = domain_rows(detail_with(ZoneSeconds.ZERO, None))
+
+    assert [row.seconds for row in rows] == [0.0, 0.0, 0.0]
+    assert [row.share for row in rows] == [0.0, 0.0, 0.0]
+
+
+def test_the_domain_model_shows_name_range_time_and_share() -> None:
+    model = DomainTableModel()
+    model.set_rows(domain_rows(detail_with(ZoneSeconds.ZERO, DomainSeconds(300.0, 100.0, 100.0))))
+
+    cells = [
+        [model.data(model.index(row, column)) for column in range(model.columnCount())]
+        for row in range(model.rowCount())
+    ]
+
+    assert cells == [
+        ["Below LT1", f"50{DASH}141", "0:05:00", "60"],
+        ["Between LT1 and LT2", f"142{DASH}170", "0:01:40", "20"],
+        ["Above LT2", f"171{DASH}190", "0:01:40", "20"],
+    ]

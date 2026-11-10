@@ -2,8 +2,8 @@
 # Copyright (C) 2026 MR
 """Form "Edit profile": state and rules, testable without a window.
 
-Measurements (weight, minimum HR, maximum HR, threshold HR for running, cycling and other
-activities, threshold pace) apply from a day
+Measurements (weight, minimum HR, maximum HR, LT1 and LT2 for running and for other sports,
+threshold pace) apply from a day
 chosen by the user (today by default, never in the future). A field the user has not touched
 shows, and has, the value in force that day; changing the day, untouched fields follow. A typed
 value equal to the one in force is not a change: the field goes back to "untouched" and follows
@@ -32,6 +32,8 @@ from ponos_coach.load.domain import (
     Physiology,
     Sex,
     ThresholdHeartRate,
+    default_lt1,
+    lt1_for_sport,
     physiology_for_day,
     threshold_for_sport,
 )
@@ -62,6 +64,7 @@ from ponos_coach.ui.body_input import (
 from ponos_coach.ui.heart_rate_rules import (
     HeartRateProblem,
     heart_rate_problems,
+    lt1_problems,
     optional_threshold_problems,
     read_optional_threshold,
 )
@@ -78,8 +81,9 @@ class EditField(Enum):
     MIN_BPM = "min_bpm"
     MAX_BPM = "max_bpm"
     THRESHOLD = "threshold"
-    BIKE_THRESHOLD = "bike_threshold"
     OTHER_THRESHOLD = "other_threshold"
+    RUN_LT1 = "run_lt1"
+    OTHER_LT1 = "other_lt1"
     THRESHOLD_PACE = "threshold_pace"
     HEIGHT = "height"
     BIRTH_DATE = "birth_date"
@@ -147,10 +151,8 @@ _HEART_RATE_FIELD = {
     HeartRateProblem.THRESHOLD_NOT_ABOVE_MIN: EditField.THRESHOLD,
     HeartRateProblem.THRESHOLD_ABOVE_MAX: EditField.THRESHOLD,
 }
-_OPTIONAL_THRESHOLD_SPORT = {
-    EditField.BIKE_THRESHOLD: Sport.CYCLING,
-    EditField.OTHER_THRESHOLD: Sport.OTHER,
-}
+# The optional values: the other-sports LT2 and the two LT1s (None in the profile: the default).
+_OPTIONAL_FIELDS = (EditField.OTHER_THRESHOLD, EditField.RUN_LT1, EditField.OTHER_LT1)
 _REJECTION_FIELD = {
     MeasurementProblem.NOTHING_TO_UPDATE: EditField.GENERAL,
     MeasurementProblem.DATE_IN_FUTURE: EditField.VALID_FROM,
@@ -195,10 +197,8 @@ class MeasurementsForm:
         self._min_bpm: int | None = None
         self._max_bpm: int | None = None
         self._threshold_bpm: int | None = None
-        self._optional_texts: dict[EditField, str | None] = {
-            EditField.BIKE_THRESHOLD: None,
-            EditField.OTHER_THRESHOLD: None,
-        }  # None: untouched
+        # None: untouched
+        self._optional_texts: dict[EditField, str | None] = dict.fromkeys(_OPTIONAL_FIELDS)
         self._pace_text: str | None = None  # None: untouched
         self.height_text = ""  # only to complete the fixed data
         self.birth_date: date | None = None
@@ -293,7 +293,7 @@ class MeasurementsForm:
         return self._baseline().threshold.bpm
 
     def threshold_text(self, field: EditField) -> str:
-        """The text of an optional threshold (cycling, other activities): the one typed or, if the
+        """The text of an optional value (other-sports LT2, an LT1): the one typed or, if the
         field is untouched, the one in force on the chosen day; empty if it is not set."""
         typed = self._optional_texts[field]
         if typed is not None:
@@ -302,15 +302,23 @@ class MeasurementsForm:
         return "" if baseline is None else str(baseline.bpm)
 
     def threshold_default(self, field: EditField) -> int:
-        """What an optional threshold is when left empty, for the heart rates now shown: for
-        cycling the running threshold minus 4 bpm (kept above the resting rate), for other
-        activities the running threshold."""
-        shown = self._shown_physiology()
-        return threshold_for_sport(shown, _OPTIONAL_THRESHOLD_SPORT[field])
+        """What an optional value is when left empty, for the heart rates now shown: the running
+        LT2 for the other-sports LT2, the default share of the LT2 of its group for an LT1."""
+        if field is EditField.OTHER_THRESHOLD:
+            return threshold_for_sport(self._shown_physiology(), Sport.OTHER)
+        return default_lt1(self._lt2_shown(field), self.min_bpm)
+
+    def _lt2_shown(self, lt1_field: EditField) -> int:
+        """The LT2 of the group of an LT1 field, as now shown (the other-sports one falls back to
+        the running one when empty or not a number)."""
+        if lt1_field is EditField.RUN_LT1:
+            return self.threshold_bpm
+        reading = read_optional_threshold(self.threshold_text(EditField.OTHER_THRESHOLD))
+        return self.threshold_bpm if not isinstance(reading, ThresholdHeartRate) else reading.bpm
 
     def _shown_physiology(self) -> Physiology:
-        """The heart rates shown with no optional threshold; the day's if the shown ones do not
-        fit together (the form reports that separately)."""
+        """The heart rates shown with no optional value; the day's if the shown ones do not fit
+        together (the form reports that separately)."""
         try:
             return Physiology(
                 HeartRateLimits(self.min_bpm, self.max_bpm),
@@ -318,11 +326,15 @@ class MeasurementsForm:
                 self._baseline().sex,
             )
         except ValueError:
-            return replace(self._baseline(), bike_threshold=None, other_threshold=None)
+            return replace(self._baseline(), other_threshold=None, run_lt1=None, other_lt1=None)
 
     def _optional_baseline(self, field: EditField) -> ThresholdHeartRate | None:
         base = self._baseline()
-        return base.bike_threshold if field is EditField.BIKE_THRESHOLD else base.other_threshold
+        return {
+            EditField.OTHER_THRESHOLD: base.other_threshold,
+            EditField.RUN_LT1: base.run_lt1,
+            EditField.OTHER_LT1: base.other_lt1,
+        }[field]
 
     @property
     def baseline_pace(self) -> PaceInForce | None:
@@ -381,14 +393,18 @@ class MeasurementsForm:
         """The user changes the threshold (equal to the one in force: goes back to untouched)."""
         self._threshold_bpm = _changed(value, self._baseline().threshold.bpm)
 
-    def edit_bike_threshold(self, text: str) -> None:
-        """The user types the cycling threshold; empty means the default. Equal to the one in
-        force: the field goes back to untouched and follows the chosen day."""
-        self._edit_optional(EditField.BIKE_THRESHOLD, text)
-
     def edit_other_threshold(self, text: str) -> None:
-        """The user types the threshold of the other activities; empty means the default."""
+        """The user types the LT2 of the other sports; empty means the default (the running one).
+        Equal to the one in force: the field goes back to untouched and follows the chosen day."""
         self._edit_optional(EditField.OTHER_THRESHOLD, text)
+
+    def edit_run_lt1(self, text: str) -> None:
+        """The user types the LT1 of running and trail; empty means the default."""
+        self._edit_optional(EditField.RUN_LT1, text)
+
+    def edit_other_lt1(self, text: str) -> None:
+        """The user types the LT1 of the other sports; empty means the default."""
+        self._edit_optional(EditField.OTHER_LT1, text)
 
     def _edit_optional(self, field: EditField, text: str) -> None:
         same = self._optional_change(field, text) is None
@@ -417,17 +433,10 @@ class MeasurementsForm:
 
     def _optional_changes(
         self,
-    ) -> tuple[
-        OptionalThresholdChange | HeartRateProblem | None,
-        OptionalThresholdChange | HeartRateProblem | None,
-    ]:
-        return (
-            self._optional_change(
-                EditField.BIKE_THRESHOLD, self._optional_texts[EditField.BIKE_THRESHOLD]
-            ),
-            self._optional_change(
-                EditField.OTHER_THRESHOLD, self._optional_texts[EditField.OTHER_THRESHOLD]
-            ),
+    ) -> tuple[OptionalThresholdChange | HeartRateProblem | None, ...]:
+        """The change of each optional value, in the order of `_OPTIONAL_FIELDS`."""
+        return tuple(
+            self._optional_change(field, self._optional_texts[field]) for field in _OPTIONAL_FIELDS
         )
 
     def _touches_heart_rate(self) -> bool:
@@ -486,14 +495,14 @@ class MeasurementsForm:
         ):
             if edited is not None and edited != before:
                 found.append(FieldChange(field, before))
-        for field, change in zip(
-            (EditField.BIKE_THRESHOLD, EditField.OTHER_THRESHOLD),
-            self._optional_changes(),
-            strict=True,
-        ):
+        in_force = {
+            EditField.OTHER_THRESHOLD: threshold_for_sport(base, Sport.OTHER),
+            EditField.RUN_LT1: lt1_for_sport(base, Sport.RUNNING),
+            EditField.OTHER_LT1: lt1_for_sport(base, Sport.OTHER),
+        }
+        for field, change in zip(_OPTIONAL_FIELDS, self._optional_changes(), strict=True):
             if isinstance(change, ThresholdHeartRate | ThresholdReset):
-                sport = _OPTIONAL_THRESHOLD_SPORT[field]
-                found.append(FieldChange(field, threshold_for_sport(base, sport)))
+                found.append(FieldChange(field, in_force[field]))
         if self._changed_pace() is not None:
             found.append(FieldChange(EditField.THRESHOLD_PACE, self.baseline_pace))
         return tuple(found)
@@ -543,25 +552,29 @@ class MeasurementsForm:
         return tuple(found)
 
     def _optional_threshold_issues(self) -> list[EditIssue]:
-        """Problems of the cycling and other-activities thresholds: a text that is not a
-        threshold, or a value (typed, or in force when the heart rates change) outside the
-        resting-to-maximum range."""
+        """Problems of the optional values: a text that is not a threshold, or a value (typed, or
+        in force when the heart rates or the LT2 change) outside its range: the other-sports LT2
+        between the resting and the maximum rate, an LT1 between the resting rate and its LT2."""
         found: list[EditIssue] = []
         heart_rate_changed = any(v is not None for v in self._heart_rate_changes())
-        for field in _OPTIONAL_THRESHOLD_SPORT:
+        anything_typed = any(text is not None for text in self._optional_texts.values())
+        for field in _OPTIONAL_FIELDS:
             typed = self._optional_texts[field]
             reading = None if typed is None else self._optional_reading(typed)
             if isinstance(reading, HeartRateProblem):
                 found.append(EditIssue(field, reading))
                 continue
-            if typed is None and not heart_rate_changed:
+            is_lt1 = field is not EditField.OTHER_THRESHOLD
+            if typed is None and not (heart_rate_changed or (is_lt1 and anything_typed)):
                 continue
             shown = self.threshold_text(field)
-            if shown:
-                found.extend(
-                    EditIssue(field, kind)
-                    for kind in optional_threshold_problems(self.min_bpm, self.max_bpm, int(shown))
-                )
+            if not shown:
+                continue
+            if is_lt1:
+                kinds = lt1_problems(self.min_bpm, int(shown), self._lt2_shown(field))
+            else:
+                kinds = optional_threshold_problems(self.min_bpm, self.max_bpm, int(shown))
+            found.extend(EditIssue(field, kind) for kind in kinds)
         return found
 
     def _pace_issues(self) -> list[EditIssue]:
@@ -588,17 +601,27 @@ class MeasurementsForm:
         weight = self._changed_weight()
         pace = self._changed_pace()
         min_bpm, max_bpm, threshold_bpm = self._heart_rate_changes()
-        bike, other = (
+        other, run_lt1, other_lt1 = (
             None if isinstance(c, HeartRateProblem) else c for c in self._optional_changes()
         )
         update = None
         if (
             weight is not None
             or pace is not None
-            or any(v is not None for v in (min_bpm, max_bpm, threshold_bpm, bike, other))
+            or any(
+                v is not None for v in (min_bpm, max_bpm, threshold_bpm, other, run_lt1, other_lt1)
+            )
         ):
             update = MeasurementUpdate(
-                self._valid_from, weight, min_bpm, max_bpm, threshold_bpm, pace, bike, other
+                self._valid_from,
+                weight,
+                min_bpm,
+                max_bpm,
+                threshold_bpm,
+                pace,
+                other_threshold=other,
+                run_lt1=run_lt1,
+                other_lt1=other_lt1,
             )
         fixed = self._built_fixed()
         name = self._name_reading()

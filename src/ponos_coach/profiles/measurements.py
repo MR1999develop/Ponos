@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Use cases for the profile measurements: weight, min HR, max HR, threshold HR (running, cycling,
-other activities) and threshold pace, each with a validity date.
+"""Use cases for the profile measurements: weight, min HR, max HR, LT1 and LT2 (of running and of
+other sports) and threshold pace, each with a validity date.
 
 - `UpdateMeasurements`: the saving of "Edit profile", in a single transaction: fixed data
   to complete (height and date of birth of a profile that lacks them), weight and dated HR
@@ -44,7 +44,7 @@ from ponos_coach.profiles.ports import FixedDataStore, ThresholdPaceStore, Weigh
 
 
 class ThresholdReset(Enum):
-    """Change of an optional threshold HR (cycling, other activities): back to the default."""
+    """Change of an optional threshold HR (LT1s, other-sports LT2): back to the default."""
 
     DEFAULT = "default"
 
@@ -75,8 +75,9 @@ class MeasurementUpdate:
     threshold pace.
 
     A `None` measurement does not change: the one in force that day applies. Sex is not changed.
-    `bike_threshold` and `other_threshold` are optional values: a `ThresholdHeartRate` sets one,
-    `ThresholdReset.DEFAULT` clears it (the default of `threshold_for_sport` applies again).
+    `threshold_bpm` is the running LT2. `other_threshold` (other-sports LT2), `run_lt1` and
+    `other_lt1` are optional values: a `ThresholdHeartRate` sets one, `ThresholdReset.DEFAULT`
+    clears it (the default of `threshold_for_sport` / `lt1_for_sport` applies again).
 
     Raises:
         InvalidMeasurementsError: no measurement given (`NOTHING_TO_UPDATE`).
@@ -88,8 +89,9 @@ class MeasurementUpdate:
     max_bpm: int | None = None
     threshold_bpm: int | None = None
     threshold_pace: ThresholdPace | None = None
-    bike_threshold: OptionalThresholdChange | None = None
     other_threshold: OptionalThresholdChange | None = None
+    run_lt1: OptionalThresholdChange | None = None
+    other_lt1: OptionalThresholdChange | None = None
 
     def __post_init__(self) -> None:
         if self.weight is None and self.threshold_pace is None and not self.changes_heart_rate:
@@ -102,8 +104,9 @@ class MeasurementUpdate:
             self.min_bpm is None
             and self.max_bpm is None
             and self.threshold_bpm is None
-            and self.bike_threshold is None
             and self.other_threshold is None
+            and self.run_lt1 is None
+            and self.other_lt1 is None
         )
 
 
@@ -128,8 +131,9 @@ def _physiology_after(base: Physiology, update: MeasurementUpdate) -> Physiology
                 base.threshold.bpm if update.threshold_bpm is None else update.threshold_bpm
             ),
             base.sex,
-            _optional_after(base.bike_threshold, update.bike_threshold),
-            _optional_after(base.other_threshold, update.other_threshold),
+            other_threshold=_optional_after(base.other_threshold, update.other_threshold),
+            run_lt1=_optional_after(base.run_lt1, update.run_lt1),
+            other_lt1=_optional_after(base.other_lt1, update.other_lt1),
         )
     except ValueError as exc:
         raise InvalidMeasurementsError(MeasurementProblem.INVALID_HEART_RATE) from exc

@@ -49,7 +49,10 @@ LEGS = [Leg(300, 110, 2.5), Leg(300, 150, 3.0), Leg(300, 160, 3.2), Leg(300, 172
 # change when the zones of the 5th edition came (78/87/94/100%), only the seconds per zone and the
 # fingerprint of the saved loads, which therefore recompute.
 FROZEN_LOAD = (36.81167026367779, 1801, 0.0, (601.0, 0.0, 300.0, 300.0, 600.0))
-FROZEN_FINGERPRINT = "740cd5b1c970ebd654e2157ce484e42b95c87235a9ea88db0db0e6345db4f6d4"
+# Model 5 (the bike has no threshold of its own any more): the hash of the document
+# {"max_bpm":190,"min_bpm":50,"model":5,"sex":"male","threshold_bpm":170,"zones":[78,87,94,100]}
+# worked out outside the code (model 4 gave 740cd5b1...); the zone percentages are part of it.
+FROZEN_FINGERPRINT = "2f6ee58e8c5e2385a69235d90141c31bebacdca94696da44f0517ba170bf0b15"
 
 
 BIKE_TRIMP_EQ = 40.193518072841776
@@ -89,14 +92,34 @@ def test_the_load_is_the_one_computed_before_the_distance_series_whatever_the_fi
     assert (used, excluded, zones) == expected[1:]
 
 
-def test_the_bike_load_is_the_one_computed_before() -> None:
+def test_the_bike_load_with_the_other_sports_lt2_four_beats_lower_is_the_one_computed_before() -> (
+    None
+):
     activity = decode(run_fit(LEGS, sport=fw.Sport.CYCLING, sub_sport=fw.SubSport.ROAD))
+    other_166 = Physiology(
+        PHYSIOLOGY.limits,
+        PHYSIOLOGY.threshold,
+        PHYSIOLOGY.sex,
+        other_threshold=ThresholdHeartRate(166),  # what the default bike threshold was: 170 - 4
+    )
 
-    trimp_eq, *_ = load_of(activity)
+    result = compute_activity_load(activity.sport, activity.timer_s, activity.heart_rate, other_166)
 
     # TRIMPeq of the bike: Banister on the running-equivalent intensity (it was hrTSS 40.23 with
-    # the bike weight 0.8: 32.18)
-    assert trimp_eq == pytest.approx(BIKE_TRIMP_EQ, rel=1e-12)
+    # the bike weight 0.8: 32.18); frozen before the two groups, when 166 was the default
+    assert result.trimp_eq == pytest.approx(BIKE_TRIMP_EQ, rel=1e-12)
+
+
+def test_the_bike_without_an_other_sports_lt2_is_valued_like_a_run_since_the_two_groups() -> None:
+    bike = decode(run_fit(LEGS, sport=fw.Sport.CYCLING, sub_sport=fw.SubSport.ROAD))
+    run = decode(run_fit(LEGS))
+
+    bike_trimp_eq, *_ = load_of(bike)
+    run_trimp_eq, *_ = load_of(run)
+
+    assert bike_trimp_eq == pytest.approx(FROZEN_LOAD[0], rel=1e-12)  # the run's frozen number
+    assert bike_trimp_eq == run_trimp_eq
+    assert bike_trimp_eq < BIKE_TRIMP_EQ  # before: threshold 166, so more load for the same ride
 
 
 def test_the_load_with_gaps_is_the_one_computed_before() -> None:

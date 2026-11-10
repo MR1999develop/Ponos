@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QGridLayout,
+    QHBoxLayout,
     QHeaderView,
     QLabel,
     QPushButton,
@@ -44,7 +45,10 @@ from ponos_coach.ui.activity_detail import (
     DetailOutcome,
     DetailReady,
     DetailUnavailable,
+    DomainKind,
+    DomainRow,
     ZoneRow,
+    domain_rows,
     zone_rows,
 )
 from ponos_coach.ui.activity_text import (
@@ -67,6 +71,9 @@ _ONE_DECIMAL_BELOW = 10.0
 _DEFAULT_SIZE = (940, 780)
 _CHART_MIN_HEIGHT = 190  # the plot area keeps about 90 px between the legend and the axis
 _SUMMARY_PAIRS_PER_ROW = 3  # caption and value, three times on a row
+_ZONES_STRETCH = 5  # the zones table has five columns, the domains table four
+_DOMAINS_STRETCH = 4
+_ALIGN_TOP = Qt.AlignmentFlag.AlignTop
 
 
 _COLUMNS = 5  # zone, heart rate, time, share, load
@@ -144,6 +151,92 @@ class ZoneTableModel(QAbstractTableModel):
         return _cell_text(row, column)
 
 
+_DOMAIN_COLUMNS = 4  # domain, heart rate, time, share
+
+
+class DomainTableModel(QAbstractTableModel):
+    """Heart rate and time below LT1, between LT1 and LT2 and above LT2: domain, heart rate,
+    time, share. Read-only, numbers on the right."""
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._rows: tuple[DomainRow, ...] = ()
+
+    def set_rows(self, rows: tuple[DomainRow, ...]) -> None:
+        """Replace the rows."""
+        self.beginResetModel()
+        self._rows = rows
+        self.endResetModel()
+
+    def rowCount(  # noqa: N802 - Qt
+        self, parent: QModelIndex | QPersistentModelIndex | None = None
+    ) -> int:
+        """One row per domain."""
+        if parent is not None and parent.isValid():
+            return 0
+        return len(self._rows)
+
+    def columnCount(  # noqa: N802 - Qt
+        self, parent: QModelIndex | QPersistentModelIndex | None = None
+    ) -> int:
+        """Domain, heart rate, time, share."""
+        if parent is not None and parent.isValid():
+            return 0
+        return _DOMAIN_COLUMNS
+
+    def headerData(  # noqa: N802 - Qt
+        self,
+        section: int,
+        orientation: Qt.Orientation,
+        role: int = Qt.ItemDataRole.DisplayRole,
+    ) -> object:
+        """Headers, with the unit."""
+        if orientation != Qt.Orientation.Horizontal or not 0 <= section < _DOMAIN_COLUMNS:
+            return None
+        if role == Qt.ItemDataRole.DisplayRole:
+            return (
+                self.tr("Intensity"),
+                self.tr("Heart rate (bpm)"),
+                self.tr("Time (h:mm:ss)"),
+                self.tr("Share of the time (%)"),
+            )[section]
+        if role == Qt.ItemDataRole.TextAlignmentRole:
+            return _ALIGN_LEFT if section == 0 else _ALIGN_RIGHT
+        return None
+
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role: int = Qt.ItemDataRole.DisplayRole,
+    ) -> object:
+        """Text and alignment of a cell."""
+        if not index.isValid() or not 0 <= index.row() < len(self._rows):
+            return None
+        row = self._rows[index.row()]
+        column = index.column()
+        if role == Qt.ItemDataRole.TextAlignmentRole:
+            return _ALIGN_LEFT if column == 0 else _ALIGN_RIGHT
+        if role != Qt.ItemDataRole.DisplayRole:
+            return None
+        return self._cell_text(row, column)
+
+    def _cell_text(self, row: DomainRow, column: int) -> str:
+        if column == 0:
+            return self._domain_name(row.kind)
+        if column == _BPM_COLUMN:
+            return _bpm_range_text(row.bpm)
+        if column == _TIME_COLUMN:
+            return duration_text(row.seconds)
+        return QLocale().toString(round(row.share * _PERCENT))
+
+    def _domain_name(self, kind: DomainKind) -> str:
+        return {
+            DomainKind.BELOW_LT1: self.tr("Below LT1"),
+            DomainKind.BETWEEN: self.tr("Between LT1 and LT2"),
+            DomainKind.ABOVE_LT2: self.tr("Above LT2"),
+        }[kind]
+
+
 def _cell_text(row: ZoneRow, column: int) -> str:
     if column == 0:
         return row.label
@@ -196,6 +289,7 @@ class ActivityDetailDialog(QDialog):
         self._chart = ChartView(engine, self.tr("Heart rate chart"), self)
         self._chart.setMinimumHeight(_CHART_MIN_HEIGHT)
         self._zone_model = ZoneTableModel(self)
+        self._domain_model = DomainTableModel(self)
         self._build()
         self.finished.connect(self._chart.dispose)
         self.show_loading()
@@ -237,29 +331,49 @@ class ActivityDetailDialog(QDialog):
         outer.addLayout(self._summary)
         outer.addWidget(self._notice)
         outer.addWidget(self._body, stretch=1)
-        outer.addWidget(self._table)
+        tables = QHBoxLayout()
+        tables.setSpacing(SPACE_4)
+        tables.addWidget(self._table, stretch=_ZONES_STRETCH, alignment=_ALIGN_TOP)
+        tables.addWidget(self._domain_table, stretch=_DOMAINS_STRETCH, alignment=_ALIGN_TOP)
+        outer.addLayout(tables)
         outer.addWidget(buttons)
 
     def _build_table(self) -> None:
-        self._table = QTableView(self)
-        self._table.setObjectName("detailZones")
-        self._table.setAccessibleName(self.tr("Time in each zone"))
-        self._table.setModel(self._zone_model)
-        self._table.setShowGrid(False)  # no vertical or horizontal lines
-        self._table.setAlternatingRowColors(True)
-        self._table.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
-        self._table.setSelectionMode(QTableView.SelectionMode.NoSelection)
-        self._table.verticalHeader().setVisible(False)
-        self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._table = self._plain_table(
+            self._zone_model, "detailZones", self.tr("Time in each zone")
+        )
+        self._domain_table = self._plain_table(
+            self._domain_model,
+            "detailDomains",
+            self.tr("Time below LT1, between LT1 and LT2 and above LT2"),
+        )
+
+    def _plain_table(self, model: QAbstractTableModel, name: str, accessible: str) -> QTableView:
+        """A small read-only table, as tall as its rows: no scroll bar, no grid lines."""
+        table = QTableView(self)
+        table.setObjectName(name)
+        table.setAccessibleName(accessible)
+        table.setModel(model)
+        table.setShowGrid(False)  # no vertical or horizontal lines
+        table.setAlternatingRowColors(True)
+        table.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
+        table.setSelectionMode(QTableView.SelectionMode.NoSelection)
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        return table
+
+    @staticmethod
+    def _fit_height(table: QTableView) -> None:
+        """Height from the content (header, rows, frame): every row is visible, no scroll bar."""
+        model = table.model()
+        rows = sum(table.rowHeight(row) for row in range(model.rowCount()))
+        table.setFixedHeight(table.horizontalHeader().height() + rows + 2 * table.frameWidth())
 
     def _fit_table_height(self) -> None:
-        """Height from the content (header, rows, frame): every zone is visible, no scroll bar."""
-        rows = sum(self._table.rowHeight(row) for row in range(self._zone_model.rowCount()))
-        self._table.setFixedHeight(
-            self._table.horizontalHeader().height() + rows + 2 * self._table.frameWidth()
-        )
+        self._fit_height(self._table)
+        self._fit_height(self._domain_table)
 
     def _build_summary(self) -> None:
         """The summary values as a grid of caption and value pairs, three pairs per row."""
@@ -292,7 +406,7 @@ class ActivityDetailDialog(QDialog):
             ("ascent", self.tr("Ascent (m)")),
             ("load", self.tr("Load (TRIMPeq)")),
             ("source", self.tr("Load from")),
-            ("threshold", self.tr("Threshold heart rate (bpm)")),
+            ("thresholds", self.tr("LT1 / LT2 (bpm)")),
             ("limits", self.tr("Heart-rate limits (bpm)")),
         )
 
@@ -312,6 +426,16 @@ class ActivityDetailDialog(QDialog):
     def zone_model(self) -> ZoneTableModel:
         """The zones table model."""
         return self._zone_model
+
+    @property
+    def domain_model(self) -> DomainTableModel:
+        """The model of the time below LT1, between LT1 and LT2 and above LT2."""
+        return self._domain_model
+
+    @property
+    def domain_table(self) -> QTableView:
+        """The view of the three domains."""
+        return self._domain_table
 
     @property
     def zone_table(self) -> QTableView:
@@ -392,7 +516,9 @@ class ActivityDetailDialog(QDialog):
         self._set_details_visible(True)
         self._fill_summary(detail)
         self._zone_model.set_rows(zone_rows(detail))
+        self._domain_model.set_rows(domain_rows(detail))
         self._table.setVisible(ready.chart is not None)
+        self._domain_table.setVisible(ready.chart is not None)
         self._fit_table_height()
         if ready.chart is None:
             self._show_message(
@@ -423,7 +549,10 @@ class ActivityDetailDialog(QDialog):
             "ascent": ascent_m_text(detail.summary.ascent_m),
             "load": QLocale().toString(round(detail.load.trimp_eq)),
             "source": load_source_text(detail.load.source),
-            "threshold": QLocale().toString(detail.threshold_bpm),
+            "thresholds": self.tr("{lt1} / {lt2}").format(
+                lt1=QLocale().toString(detail.lt1_bpm),
+                lt2=QLocale().toString(detail.threshold_bpm),
+            ),
             "limits": self.tr("{low} to {high}").format(low=limits.min_bpm, high=limits.max_bpm),
         }
         for key, text in values.items():
@@ -468,6 +597,7 @@ class ActivityDetailDialog(QDialog):
         for label in (*self._summary_captions, *self._summary_values.values()):
             label.setVisible(visible)
         self._table.setVisible(visible)
+        self._domain_table.setVisible(visible)
         if not visible:
             self._notice.setVisible(False)
             self._title.setText("")

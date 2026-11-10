@@ -38,6 +38,7 @@ from ponos_coach.ui.body_input import body_problem_text
 from ponos_coach.ui.form_rows import (
     FieldKind,
     add_field_row,
+    add_group_heading,
     optional_threshold_edit,
     size_field,
     threshold_pace_edit,
@@ -46,8 +47,10 @@ from ponos_coach.ui.heart_rate_rules import (
     MAX_ALLOWED_BPM,
     MIN_ALLOWED_BPM,
     MIN_THRESHOLD_BPM,
-    bike_default_placeholder,
     heart_rate_problem_text,
+    lt1_default_placeholder,
+    lt1_tooltip,
+    lt2_tooltip,
     other_default_placeholder,
 )
 from ponos_coach.ui.new_profile_form import (
@@ -128,10 +131,16 @@ class NewProfileDialog(QDialog):
         self._max.valueChanged.connect(self._on_max_changed)
         self._threshold.valueChanged.connect(self._on_threshold_changed)
         self._threshold_note = self._note_label()
-        self._bike = optional_threshold_edit(self, "bikeThresholdHeartRate")
-        self._bike.textEdited.connect(self._on_bike_edited)
+        self._run_lt1 = optional_threshold_edit(self, "runLt1HeartRate")
+        self._run_lt1.textEdited.connect(self._on_run_lt1_edited)
         self._other = optional_threshold_edit(self, "otherThresholdHeartRate")
         self._other.textEdited.connect(self._on_other_edited)
+        self._other_lt1 = optional_threshold_edit(self, "otherLt1HeartRate")
+        self._other_lt1.textEdited.connect(self._on_other_lt1_edited)
+        for lt1 in (self._run_lt1, self._other_lt1):
+            lt1.setToolTip(lt1_tooltip())
+        for lt2 in (self._threshold, self._other):
+            lt2.setToolTip(lt2_tooltip())
         self._pace = threshold_pace_edit(
             self, "thresholdPace", self.tr("Threshold pace (min/km)"), self.tr("m:ss")
         )
@@ -210,10 +219,22 @@ class NewProfileDialog(QDialog):
         threshold_column.addWidget(self._threshold)
         threshold_column.addWidget(self._threshold_note)
         threshold_column.addWidget(self._errors[Field.THRESHOLD])
-        add_field_row(form, self.tr("Threshold heart rate"), self._threshold, threshold_box)
+        add_group_heading(form, self.tr("Running and trail"), self)
+        self._run_lt1.setAccessibleName(self.tr("Running and trail: LT1 (aerobic threshold)"))
+        add_field_row(
+            form,
+            self.tr("LT1 (aerobic threshold)"),
+            self._run_lt1,
+            self._with_error(self._run_lt1, Field.RUN_LT1),
+        )
+        self._threshold.setAccessibleName(self.tr("Running and trail: LT2 (lactate threshold)"))
+        add_field_row(form, self.tr("LT2 (lactate threshold)"), self._threshold, threshold_box)
+        add_group_heading(form, self.tr("Other sports"), self)
+        self._other_lt1.setAccessibleName(self.tr("Other sports: LT1 (aerobic threshold)"))
+        self._other.setAccessibleName(self.tr("Other sports: LT2 (lactate threshold)"))
         rows = (
-            (self.tr("Cycling threshold heart rate"), self._bike, Field.BIKE_THRESHOLD),
-            (self.tr("Other activities threshold heart rate"), self._other, Field.OTHER_THRESHOLD),
+            (self.tr("LT1 (aerobic threshold)"), self._other_lt1, Field.OTHER_LT1),
+            (self.tr("LT2 (lactate threshold)"), self._other, Field.OTHER_THRESHOLD),
             (self.tr("Threshold pace (min/km)"), self._pace, Field.THRESHOLD_PACE),
         )
         for text, widget, field in rows:
@@ -221,7 +242,7 @@ class NewProfileDialog(QDialog):
         optional = self._note_label()
         optional.setText(
             self.tr(
-                "Cycling, other activities and pace are optional: leave them empty and change "
+                "LT1, the other sports and pace are optional: leave them empty and change "
                 "them later in Edit profile."
             )
         )
@@ -240,8 +261,9 @@ class NewProfileDialog(QDialog):
             self._birth,
             self._min,
             self._max,
+            self._run_lt1,
             self._threshold,
-            self._bike,
+            self._other_lt1,
             self._other,
             self._pace,
             self._male,
@@ -334,13 +356,18 @@ class NewProfileDialog(QDialog):
         return self._threshold
 
     @property
-    def bike_edit(self) -> QLineEdit:
-        """Cycling threshold (empty: the default, shown as the placeholder)."""
-        return self._bike
+    def run_lt1_edit(self) -> QLineEdit:
+        """LT1 of running and trail (empty: the default, shown as the placeholder)."""
+        return self._run_lt1
+
+    @property
+    def other_lt1_edit(self) -> QLineEdit:
+        """LT1 of the other sports (empty: the default, shown as the placeholder)."""
+        return self._other_lt1
 
     @property
     def other_edit(self) -> QLineEdit:
-        """Threshold of the other activities (empty: the default, shown as the placeholder)."""
+        """LT2 of the other sports (empty: the default, shown as the placeholder)."""
         return self._other
 
     @property
@@ -380,8 +407,9 @@ class NewProfileDialog(QDialog):
         self._min.setValue(form.min_bpm)
         self._max.setValue(form.max_bpm)
         self._sync_threshold()
-        self._bike.setText(form.bike_text)
+        self._run_lt1.setText(form.run_lt1_text)
         self._other.setText(form.other_text)
+        self._other_lt1.setText(form.other_lt1_text)
         self._pace.setText(form.pace_text)
         (self._male if form.sex is Sex.MALE else self._female).setChecked(True)
 
@@ -404,11 +432,14 @@ class NewProfileDialog(QDialog):
     def _refresh_placeholders(self) -> None:
         """The default of each optional threshold, for the heart rates now entered."""
         form = self._form
-        self._bike.setPlaceholderText(
-            bike_default_placeholder(form.threshold_default(Field.BIKE_THRESHOLD))
+        self._run_lt1.setPlaceholderText(
+            lt1_default_placeholder(form.threshold_default(Field.RUN_LT1))
         )
         self._other.setPlaceholderText(
             other_default_placeholder(form.threshold_default(Field.OTHER_THRESHOLD))
+        )
+        self._other_lt1.setPlaceholderText(
+            lt1_default_placeholder(form.threshold_default(Field.OTHER_LT1))
         )
 
     def _refresh_errors(self) -> None:
@@ -501,12 +532,17 @@ class NewProfileDialog(QDialog):
         self._sync_threshold()
         self._refresh_errors()
 
-    def _on_bike_edited(self, text: str) -> None:
-        self._form.bike_text = text
+    def _on_run_lt1_edited(self, text: str) -> None:
+        self._form.run_lt1_text = text
+        self._refresh_errors()
+
+    def _on_other_lt1_edited(self, text: str) -> None:
+        self._form.other_lt1_text = text
         self._refresh_errors()
 
     def _on_other_edited(self, text: str) -> None:
         self._form.other_text = text
+        self._refresh_placeholders()  # the default LT1 of the other sports follows their LT2
         self._refresh_errors()
 
     def _on_pace_edited(self, text: str) -> None:
@@ -568,8 +604,9 @@ class NewProfileDialog(QDialog):
             Field.MIN_BPM: self._min,
             Field.MAX_BPM: self._max,
             Field.THRESHOLD: self._threshold,
-            Field.BIKE_THRESHOLD: self._bike,
+            Field.RUN_LT1: self._run_lt1,
             Field.OTHER_THRESHOLD: self._other,
+            Field.OTHER_LT1: self._other_lt1,
             Field.THRESHOLD_PACE: self._pace,
         }[field]
         target.setFocus()
