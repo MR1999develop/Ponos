@@ -12,6 +12,15 @@ from enum import Enum
 
 from PySide6.QtCore import QCoreApplication
 
+from ponos_coach.activities.domain import Sport
+from ponos_coach.load.domain import (
+    HeartRateLimits,
+    Physiology,
+    Sex,
+    ThresholdHeartRate,
+    threshold_for_sport,
+)
+
 # Control ranges; the domain enforces them (a test checks that they match).
 MIN_ALLOWED_BPM = 20
 MAX_ALLOWED_BPM = 250
@@ -40,6 +49,61 @@ def heart_rate_problems(
     if threshold_bpm > max_bpm:
         found.append(HeartRateProblem.THRESHOLD_ABOVE_MAX)
     return tuple(found)
+
+
+def read_optional_threshold(text: str) -> ThresholdHeartRate | HeartRateProblem | None:
+    """An optional threshold typed as text: `None` if empty (the default applies), the threshold
+    if it is a whole number of bpm in the threshold range, `NOT_A_THRESHOLD` otherwise."""
+    stripped = text.strip()
+    if not stripped:
+        return None
+    try:
+        return ThresholdHeartRate(int(stripped))
+    except ValueError:
+        return HeartRateProblem.NOT_A_THRESHOLD
+
+
+def optional_threshold_problems(
+    min_bpm: int, max_bpm: int, threshold_bpm: int
+) -> tuple[HeartRateProblem, ...]:
+    """Rules an optional threshold breaks against the resting and maximum rates (the order of
+    resting and maximum is reported on their own fields)."""
+    return tuple(
+        kind
+        for kind in heart_rate_problems(min_bpm, max_bpm, threshold_bpm)
+        if kind is not HeartRateProblem.MIN_NOT_BELOW_MAX
+    )
+
+
+def optional_threshold_default(min_bpm: int, max_bpm: int, threshold_bpm: int, sport: Sport) -> int:
+    """What an optional threshold is when left empty, for the rates shown (the domain decides:
+    cycling is running minus 4 kept above the resting rate, other activities the running one).
+    Rates that do not fit together still give a number to show; the form reports them apart."""
+    try:
+        shown = Physiology(
+            HeartRateLimits(min_bpm, max_bpm), ThresholdHeartRate(threshold_bpm), Sex.MALE
+        )
+    except ValueError:
+        shown = Physiology(
+            HeartRateLimits(MIN_ALLOWED_BPM, MAX_ALLOWED_BPM),
+            ThresholdHeartRate(threshold_bpm),
+            Sex.MALE,
+        )
+    return threshold_for_sport(shown, sport)
+
+
+def bike_default_placeholder(bpm: int) -> str:
+    """Placeholder of the empty cycling threshold: what the default is for the rates shown."""
+    return QCoreApplication.translate("HeartRate", "default: running - 4 ({value} bpm)").format(
+        value=bpm
+    )
+
+
+def other_default_placeholder(bpm: int) -> str:
+    """Placeholder of the empty other-activities threshold."""
+    return QCoreApplication.translate("HeartRate", "default: running ({value} bpm)").format(
+        value=bpm
+    )
 
 
 def heart_rate_problem_text(problem: HeartRateProblem) -> str:

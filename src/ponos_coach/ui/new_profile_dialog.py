@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import date
+from itertools import pairwise
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -33,12 +35,14 @@ from ponos_coach.profiles.domain import FolderKind
 from ponos_coach.profiles.use_cases import NewProfileRequest
 from ponos_coach.ui.birth_date_edit import BirthDateEdit
 from ponos_coach.ui.body_input import body_problem_text
-from ponos_coach.ui.form_rows import add_field_row
+from ponos_coach.ui.form_rows import add_field_row, optional_threshold_edit, threshold_pace_edit
 from ponos_coach.ui.heart_rate_rules import (
     MAX_ALLOWED_BPM,
     MIN_ALLOWED_BPM,
     MIN_THRESHOLD_BPM,
+    bike_default_placeholder,
     heart_rate_problem_text,
+    other_default_placeholder,
 )
 from ponos_coach.ui.new_profile_form import (
     Field,
@@ -117,6 +121,14 @@ class NewProfileDialog(QDialog):
         self._max.valueChanged.connect(self._on_max_changed)
         self._threshold.valueChanged.connect(self._on_threshold_changed)
         self._threshold_note = self._note_label()
+        self._bike = optional_threshold_edit(self, "bikeThresholdHeartRate")
+        self._bike.textEdited.connect(self._on_bike_edited)
+        self._other = optional_threshold_edit(self, "otherThresholdHeartRate")
+        self._other.textEdited.connect(self._on_other_edited)
+        self._pace = threshold_pace_edit(
+            self, "thresholdPace", self.tr("Threshold pace (min/km)"), self.tr("m:ss")
+        )
+        self._pace.textEdited.connect(self._on_pace_edited)
 
         self._male = QRadioButton(self.tr("Male"), self)
         self._female = QRadioButton(self.tr("Female"), self)
@@ -151,14 +163,7 @@ class NewProfileDialog(QDialog):
         )
         for text, widget, field in rows:
             add_field_row(layout, text, widget, self._with_error(widget, field))
-        threshold_box = QWidget(self)
-        threshold_column = QVBoxLayout(threshold_box)
-        threshold_column.setContentsMargins(0, 0, 0, 0)
-        threshold_column.setSpacing(SPACE_1)
-        threshold_column.addWidget(self._threshold)
-        threshold_column.addWidget(self._threshold_note)
-        threshold_column.addWidget(self._errors[Field.THRESHOLD])
-        add_field_row(layout, self.tr("Threshold heart rate"), self._threshold, threshold_box)
+        layout.addRow(self._thresholds_group())
         sex_box = QWidget(self)
         sex_row = QHBoxLayout(sex_box)
         sex_row.setContentsMargins(0, 0, 0, 0)
@@ -176,7 +181,7 @@ class NewProfileDialog(QDialog):
         )
         self._create.setDefault(True)
         self._update_create_button()
-        self._buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        self._cancel = self._buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         self._buttons.accepted.connect(self._on_create)
         self._buttons.rejected.connect(self.reject)
 
@@ -184,6 +189,61 @@ class NewProfileDialog(QDialog):
         outer.setSpacing(SPACE_4)
         outer.addLayout(layout)
         outer.addWidget(self._buttons)
+        self._set_tab_order()
+
+    def _thresholds_group(self) -> QGroupBox:
+        """Running threshold plus the optional ones, together: the note says they can wait."""
+        group = QGroupBox(self.tr("Thresholds"), self)
+        form = QFormLayout(group)
+        form.setVerticalSpacing(SPACE_2)
+        threshold_box = QWidget(group)
+        threshold_column = QVBoxLayout(threshold_box)
+        threshold_column.setContentsMargins(0, 0, 0, 0)
+        threshold_column.setSpacing(SPACE_1)
+        threshold_column.addWidget(self._threshold)
+        threshold_column.addWidget(self._threshold_note)
+        threshold_column.addWidget(self._errors[Field.THRESHOLD])
+        add_field_row(form, self.tr("Threshold heart rate"), self._threshold, threshold_box)
+        rows = (
+            (self.tr("Cycling threshold heart rate"), self._bike, Field.BIKE_THRESHOLD),
+            (self.tr("Other activities threshold heart rate"), self._other, Field.OTHER_THRESHOLD),
+            (self.tr("Threshold pace (min/km)"), self._pace, Field.THRESHOLD_PACE),
+        )
+        for text, widget, field in rows:
+            add_field_row(form, text, widget, self._with_error(widget, field))
+        optional = self._note_label()
+        optional.setText(
+            self.tr(
+                "Cycling, other activities and pace are optional: leave them empty and change "
+                "them later in Edit profile."
+            )
+        )
+        optional.setVisible(True)
+        form.addRow(optional)
+        return group
+
+    def _set_tab_order(self) -> None:
+        """Tab follows the visual order, top to bottom."""
+        order: list[QWidget] = [
+            self._name,
+            self._folder,
+            self._browse,
+            self._height,
+            self._weight,
+            self._birth,
+            self._min,
+            self._max,
+            self._threshold,
+            self._bike,
+            self._other,
+            self._pace,
+            self._male,
+            self._female,
+            self._create,
+            self._cancel,
+        ]
+        for first, second in pairwise(order):
+            QWidget.setTabOrder(first, second)
 
     def _text_field(self, name: str, accessible_name: str) -> QLineEdit:
         field = QLineEdit(self)
@@ -260,6 +320,26 @@ class NewProfileDialog(QDialog):
         return self._birth
 
     @property
+    def threshold_spin(self) -> QSpinBox:
+        """Running threshold heart rate."""
+        return self._threshold
+
+    @property
+    def bike_edit(self) -> QLineEdit:
+        """Cycling threshold (empty: the default, shown as the placeholder)."""
+        return self._bike
+
+    @property
+    def other_edit(self) -> QLineEdit:
+        """Threshold of the other activities (empty: the default, shown as the placeholder)."""
+        return self._other
+
+    @property
+    def pace_edit(self) -> QLineEdit:
+        """Threshold pace field (`m:ss`; empty: no pace)."""
+        return self._pace
+
+    @property
     def destination_text(self) -> str:
         """Row "Data will go in: ..." (empty if not shown)."""
         return self._destination_note.text() if self._destination_note.isVisible() else ""
@@ -291,6 +371,9 @@ class NewProfileDialog(QDialog):
         self._min.setValue(form.min_bpm)
         self._max.setValue(form.max_bpm)
         self._sync_threshold()
+        self._bike.setText(form.bike_text)
+        self._other.setText(form.other_text)
+        self._pace.setText(form.pace_text)
         (self._male if form.sex is Sex.MALE else self._female).setChecked(True)
 
     def _sync_threshold(self) -> None:
@@ -307,6 +390,17 @@ class NewProfileDialog(QDialog):
         else:
             self._threshold_note.setText("")
         self._threshold_note.setVisible(self._form.threshold_is_estimate)
+        self._refresh_placeholders()
+
+    def _refresh_placeholders(self) -> None:
+        """The default of each optional threshold, for the heart rates now entered."""
+        form = self._form
+        self._bike.setPlaceholderText(
+            bike_default_placeholder(form.threshold_default(Field.BIKE_THRESHOLD))
+        )
+        self._other.setPlaceholderText(
+            other_default_placeholder(form.threshold_default(Field.OTHER_THRESHOLD))
+        )
 
     def _refresh_errors(self) -> None:
         problems = self._form.problems(self._today) if self._show_errors else ()
@@ -385,6 +479,7 @@ class NewProfileDialog(QDialog):
 
     def _on_min_changed(self, value: int) -> None:
         self._form.min_bpm = value
+        self._refresh_placeholders()
         self._refresh_errors()
 
     def _on_max_changed(self, value: int) -> None:
@@ -395,6 +490,18 @@ class NewProfileDialog(QDialog):
     def _on_threshold_changed(self, value: int) -> None:
         self._form.set_threshold(value)
         self._sync_threshold()
+        self._refresh_errors()
+
+    def _on_bike_edited(self, text: str) -> None:
+        self._form.bike_text = text
+        self._refresh_errors()
+
+    def _on_other_edited(self, text: str) -> None:
+        self._form.other_text = text
+        self._refresh_errors()
+
+    def _on_pace_edited(self, text: str) -> None:
+        self._form.pace_text = text
         self._refresh_errors()
 
     def _on_sex_changed(self, male: bool) -> None:
@@ -452,5 +559,8 @@ class NewProfileDialog(QDialog):
             Field.MIN_BPM: self._min,
             Field.MAX_BPM: self._max,
             Field.THRESHOLD: self._threshold,
+            Field.BIKE_THRESHOLD: self._bike,
+            Field.OTHER_THRESHOLD: self._other,
+            Field.THRESHOLD_PACE: self._pace,
         }[field]
         target.setFocus()

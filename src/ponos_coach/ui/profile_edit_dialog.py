@@ -14,8 +14,7 @@ from __future__ import annotations
 from datetime import date
 from itertools import pairwise
 
-from PySide6.QtCore import QDate, QLocale, QRegularExpression, Qt, Signal
-from PySide6.QtGui import QRegularExpressionValidator
+from PySide6.QtCore import QDate, QLocale, Qt, Signal
 from PySide6.QtWidgets import (
     QDateEdit,
     QDialogButtonBox,
@@ -35,13 +34,15 @@ from ponos_coach.profiles.domain import MIN_MEASUREMENT_DATE, NAME_MAX_CHARS
 from ponos_coach.profiles.measurements import MeasurementHistory, MeasurementProblem
 from ponos_coach.ui.birth_date_edit import BirthDateEdit, to_qdate
 from ponos_coach.ui.body_input import BodyProblem, body_problem_text
-from ponos_coach.ui.form_rows import add_field_row
+from ponos_coach.ui.form_rows import add_field_row, optional_threshold_edit, threshold_pace_edit
 from ponos_coach.ui.heart_rate_rules import (
     MAX_ALLOWED_BPM,
     MIN_ALLOWED_BPM,
     MIN_THRESHOLD_BPM,
     HeartRateProblem,
+    bike_default_placeholder,
     heart_rate_problem_text,
+    other_default_placeholder,
 )
 from ponos_coach.ui.measurement_history_model import (
     MeasurementHistoryModel,
@@ -70,8 +71,6 @@ _NOTE_FIELDS = (
     EditField.OTHER_THRESHOLD,
     EditField.THRESHOLD_PACE,
 )
-_THRESHOLD_MAX_CHARS = 3  # 40 to 250
-_PACE_MAX_CHARS = 16  # the same limit the domain checks before reading the text
 
 
 class ProfileEditDialog(SettingsForm):
@@ -122,15 +121,16 @@ class ProfileEditDialog(SettingsForm):
         self._min.valueChanged.connect(self._on_min_changed)
         self._max.valueChanged.connect(self._on_max_changed)
         self._threshold.valueChanged.connect(self._on_threshold_changed)
-        self._bike = self._optional_threshold_edit("measurementsBikeThresholdHeartRate")
+        self._bike = optional_threshold_edit(self, "measurementsBikeThresholdHeartRate")
         self._bike.textEdited.connect(self._on_bike_edited)
-        self._other = self._optional_threshold_edit("measurementsOtherThresholdHeartRate")
+        self._other = optional_threshold_edit(self, "measurementsOtherThresholdHeartRate")
         self._other.textEdited.connect(self._on_other_edited)
-        self._pace = QLineEdit(self)
-        self._pace.setObjectName("measurementsThresholdPace")
-        self._pace.setAccessibleName(self.tr("Threshold pace (min/km)"))
-        self._pace.setPlaceholderText(self.tr("m:ss"))
-        self._pace.setMaxLength(_PACE_MAX_CHARS)
+        self._pace = threshold_pace_edit(
+            self,
+            "measurementsThresholdPace",
+            self.tr("Threshold pace (min/km)"),
+            self.tr("m:ss"),
+        )
         self._pace.textEdited.connect(self._on_pace_edited)
 
         self._build_fixed_fields()
@@ -290,15 +290,6 @@ class ProfileEditDialog(SettingsForm):
         box.setRange(low, MAX_ALLOWED_BPM)
         box.setSuffix(self.tr(" bpm"))
         return box
-
-    def _optional_threshold_edit(self, name: str) -> QLineEdit:
-        """Optional threshold: whole bpm, or empty for the default (shown as the placeholder)."""
-        edit = QLineEdit(self)
-        edit.setObjectName(name)
-        edit.setMaxLength(_THRESHOLD_MAX_CHARS)
-        edit.setValidator(QRegularExpressionValidator(QRegularExpression(r"[0-9]{0,3}"), edit))
-        edit.setAlignment(Qt.AlignmentFlag.AlignRight)
-        return edit
 
     def _error_label(self) -> QLabel:
         label = QLabel(self)
@@ -468,14 +459,10 @@ class ProfileEditDialog(SettingsForm):
         """The default of each optional threshold, for the heart rates now shown."""
         form = self._form
         self._bike.setPlaceholderText(
-            self.tr("default: running - 4 ({value} bpm)").format(
-                value=form.threshold_default(EditField.BIKE_THRESHOLD)
-            )
+            bike_default_placeholder(form.threshold_default(EditField.BIKE_THRESHOLD))
         )
         self._other.setPlaceholderText(
-            self.tr("default: running ({value} bpm)").format(
-                value=form.threshold_default(EditField.OTHER_THRESHOLD)
-            )
+            other_default_placeholder(form.threshold_default(EditField.OTHER_THRESHOLD))
         )
 
     def _refresh_errors(self, extra: tuple[EditIssue, ...] = ()) -> None:

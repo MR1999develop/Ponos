@@ -46,6 +46,8 @@ from ponos_coach.profiles.domain import (
     ProfileName,
     ProfilePeek,
     RegistryEntry,
+    ThresholdPace,
+    ThresholdPaceEntry,
     Weight,
     WeightEntry,
 )
@@ -279,6 +281,8 @@ class NewProfileRequest:
 
     `folder` absolute, missing or empty; `timezone_name` an IANA name; `physiology` and `weight`
     hold from the day `today` (today's date in the profile's time zone, decided by the caller).
+    `threshold_pace` (optional) enters the pace series with the same date; without it running
+    sessions stay heart-rate only until a pace or a test exists.
     `fixed` (height and date of birth) and `weight` are personal data that the interface always
     asks for at creation; `None` leaves the profile without them, to be completed later (used by
     whoever
@@ -292,6 +296,7 @@ class NewProfileRequest:
     today: date
     fixed: FixedProfileData | None = None
     weight: Weight | None = None
+    threshold_pace: ThresholdPace | None = None
 
     def __post_init__(self) -> None:
         if not self.folder.is_absolute():
@@ -360,10 +365,16 @@ class CreateProfile:
         opened = ports.storage.create(folder, profile_id, request.name, request.timezone_name)
         trace.opened = opened
         trace.database_created = True
-        with opened.activities.transaction():  # parameters, weight and fixed data: all or none
+        with (
+            opened.activities.transaction()
+        ):  # parameters, weight, pace and fixed data: all or none
             opened.physiology.put(PhysiologyEntry(request.today, request.physiology))
             if request.weight is not None:
                 opened.weights.put(WeightEntry(request.today, request.weight))
+            if request.threshold_pace is not None:
+                opened.threshold_paces.put(
+                    ThresholdPaceEntry(request.today, request.threshold_pace)
+                )
             if request.fixed is not None:
                 opened.fixed_data.set_once(request.fixed)
         ports.registry.add(RegistryEntry(profile_id, folder, request.name, self._now_utc()))
