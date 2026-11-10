@@ -3,8 +3,8 @@
 """The Settings window: one window for the profile (with the Garmin account),
 the training plan, the nutrition, the map and the language.
 
-We start from the window composed as `main()` does. Every page keeps its own way of saving: the
-tests of what each page saves are in the files of the data they change (profile, weights, plan,
+We start from the window composed as `main()` does. The window has the only "Save changes" button;
+the tests of what each page saves are in the files of the data they change (profile, weights, plan,
 nutrition, map); here are the window, the navigation, the unsaved edits and the old commands that
 now open it. All values are made up (no real person).
 """
@@ -15,16 +15,17 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QLocale, QSettings, Qt
+from PySide6.QtCore import QLocale, QSettings, Qt, QTime
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QMenu
+from PySide6.QtWidgets import QDialogButtonBox, QMenu, QPushButton
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.assessment.domain import ThresholdProtocol
 from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.map_settings_dialog import MapSettingsDialog
 from ponos_coach.ui.measurements_form import EditField
+from ponos_coach.ui.nutrition_settings_model import MealField
 from ponos_coach.ui.settings_page import SettingsCategory
 from ponos_coach.ui.settings_window import SettingsWindow
 from ponos_coach.ui.sync_model import AccountStatus
@@ -327,13 +328,13 @@ def test_a_page_with_unsaved_edits_is_marked_and_the_mark_goes_when_it_is_saved(
     window = window_with_activities(qtbot, tmp_path, settings)
     shown = window.settings_window
     window.edit_profile_action.trigger()
-    dialog = open_edit_dialog(qtbot, window)
+    open_edit_dialog(qtbot, window)
     assert shown.category_label(SettingsCategory.PROFILE) == "Profile"
 
     edit_weight(window, qtbot, "72.4")
 
     assert shown.category_label(SettingsCategory.PROFILE) == "Profile *"
-    click(dialog.save_button)
+    click(window.settings_window.save_button)
     wait_profile_saved(qtbot, window)
     assert shown.category_label(SettingsCategory.PROFILE) == "Profile"
 
@@ -396,7 +397,7 @@ def test_a_save_that_the_page_refuses_keeps_the_window_open_and_does_not_close_i
     assert window.settings_window.isVisible()
     dialog.weight_edit.clear()
     QTest.keyClicks(dialog.weight_edit, "72.4")
-    click(dialog.save_button)
+    click(window.settings_window.save_button)
     wait_profile_saved(qtbot, window)
     assert window.settings_window.isVisible()  # the user asked for Save once, not for closing
 
@@ -507,7 +508,7 @@ def test_the_window_save_button_is_always_in_view_and_saves_the_page_in_view(
     dialog = open_edit_dialog(qtbot, window)
     save = shown.save_button
     assert not save.isEnabled()  # nothing typed yet
-    assert save.toolTip() == "There is nothing to save on this page."
+    assert save.toolTip() == "Change at least one value first."
     assert save.shortcut() == QKeySequence(QKeySequence.StandardKey.Save)
 
     dialog.valid_from_edit.setDate(dialog.valid_from_edit.date().addDays(-30))
@@ -535,4 +536,80 @@ def test_an_untouched_profile_page_has_nothing_to_save_and_recomputes_nothing(
     assert not dialog.has_unsaved_changes()
     assert shown.category_label(SettingsCategory.PROFILE) == "Profile"
     assert not shown.save_button.isEnabled()
-    assert not dialog.save_button.isEnabled()
+
+
+# --- One "Save changes" for the whole window ---------------------------------------------------
+
+
+def test_no_page_has_a_save_button_of_its_own(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    qtbot.waitUntil(window.plan.actions["training"].isEnabled, timeout=WAIT_MS)
+    window.plan.actions["training"].trigger()
+    qtbot.waitUntil(lambda: window.plan.training_dialog is not None, timeout=WAIT_MS)
+    open_edit_dialog(qtbot, window)
+    window.show_settings_page(SettingsCategory.NUTRITION)
+    qtbot.waitUntil(lambda: window.nutrition.settings_dialog is not None, timeout=WAIT_MS)
+
+    shown = window.settings_window
+    for category in (
+        SettingsCategory.PROFILE,
+        SettingsCategory.TRAINING_PLAN,
+        SettingsCategory.NUTRITION,
+    ):
+        form = shown.page(category).form
+        assert form is not None
+        labels = [button.text() for button in form.findChildren(QPushButton)]
+        assert not [text for text in labels if text.startswith("Save")], (category, labels)
+        assert not form.findChildren(QDialogButtonBox), category
+
+
+def test_the_window_button_saves_the_suggested_training_values_without_an_edit(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    qtbot.waitUntil(window.plan.actions["training"].isEnabled, timeout=WAIT_MS)
+    window.plan.actions["training"].trigger()
+    qtbot.waitUntil(lambda: window.plan.training_dialog is not None, timeout=WAIT_MS)
+    dialog = window.plan.training_dialog
+    assert dialog is not None
+
+    assert dialog.note_is_shown  # nothing saved yet: these are suggestions
+    assert not dialog.has_unsaved_changes()
+    assert window.settings_window.save_button.isEnabled()  # saving them is a choice too
+
+
+def test_the_window_button_tooltip_gives_the_reason_of_the_page_in_view(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_days(qtbot, tmp_path, settings)
+    window.show_settings_page(SettingsCategory.NUTRITION)
+    qtbot.waitUntil(lambda: window.nutrition.settings_dialog is not None, timeout=WAIT_MS)
+    dialog = window.nutrition.settings_dialog
+    assert dialog is not None
+    save = window.settings_window.save_button
+
+    dialog.time_edits[MealField.LUNCH].setTime(QTime(8, 30))  # lunch right after breakfast
+
+    assert not save.isEnabled()
+    assert save.toolTip() == "Solve the problem with the times first."
+    window.settings_window.show_page(SettingsCategory.LANGUAGE)
+    assert save.toolTip() == "There is nothing to save on this page."
+
+
+def test_enter_in_a_field_saves_the_page_like_the_window_button(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    window.edit_profile_action.trigger()
+    dialog = open_edit_dialog(qtbot, window)
+    dialog.weight_edit.clear()
+    QTest.keyClicks(dialog.weight_edit, "72.4")
+    assert window.settings_window.save_button.isEnabled()
+
+    dialog.weight_edit.setFocus()
+    QTest.keyClick(dialog.weight_edit, Qt.Key.Key_Return)
+
+    wait_profile_saved(qtbot, window)
+    assert not window.settings_window.page(SettingsCategory.PROFILE).is_dirty

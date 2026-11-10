@@ -336,7 +336,7 @@ def test_t_ui_07_level_meal_times_and_goal_survive_a_restart_and_drive_the_next_
         dialog.set_level_button.click()
     dialog.time_edits[MealField.BREAKFAST].setTime(QTime(6, 15))
     with qtbot.waitSignal(window.nutrition.loader.settings_changed, timeout=WAIT_MS):
-        dialog.save_times_button.click()
+        window.settings_window.save_button.click()
     dialog.add_period()
     sub = dialog.period_dialog
     assert sub is not None

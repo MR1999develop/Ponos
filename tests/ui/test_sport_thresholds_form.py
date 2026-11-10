@@ -363,7 +363,7 @@ def test_the_empty_fields_show_the_defaults_as_placeholders(qtbot: QtBot) -> Non
     assert dialog.run_lt1_edit.placeholderText() == "default: 83% of LT2 (141 bpm)"
     assert dialog.other_lt1_edit.placeholderText() == "default: 83% of LT2 (141 bpm)"
     assert dialog.other_edit.placeholderText() == "default: running LT2 (170 bpm)"
-    assert not dialog.save_button.isEnabled()
+    assert not dialog.can_save()
 
 
 def test_the_placeholders_follow_the_running_lt2(qtbot: QtBot) -> None:
@@ -425,7 +425,7 @@ def test_typing_a_value_enables_save_and_says_what_applied_before(qtbot: QtBot) 
 
     QTest.keyClicks(dialog.run_lt1_edit, "140")
 
-    assert dialog.save_button.isEnabled()
+    assert dialog.can_save()
     assert dialog.note_text(EditField.RUN_LT1) == "In force on this day: 141 bpm"
 
 
@@ -490,7 +490,7 @@ def test_an_lt1_typed_in_the_settings_is_saved_listed_and_leaves_the_loads(
     dialog = open_edit_dialog(qtbot, window)
     dialog.valid_from_edit.setDate(QDate(2020, 1, 1))
     QTest.keyClicks(dialog.run_lt1_edit, "140")
-    click(dialog.save_button)
+    click(window.settings_window.save_button)
     wait_profile_saved(qtbot, window)
     qtbot.waitUntil(lambda: isinstance(window.controller.overview_state, Ready), timeout=WAIT_MS)
 

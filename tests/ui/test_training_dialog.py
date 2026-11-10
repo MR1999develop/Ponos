@@ -106,7 +106,7 @@ def test_with_no_day_ticked_the_fields_that_depend_on_days_are_off_and_the_form_
     assert not dialog.sessions_spin.isEnabled()
     assert not dialog.long_day_combo.isEnabled()
     assert dialog.hint_texts.startswith("No training time is set, so the plan cannot be made.")
-    assert dialog.save_button.isEnabled()
+    assert dialog.can_save()
     dialog.day_checks[2].setChecked(True)
     assert dialog.sessions_spin.isEnabled()
     assert dialog.long_day_combo.currentText() == "Wednesday"
@@ -115,12 +115,12 @@ def test_with_no_day_ticked_the_fields_that_depend_on_days_are_off_and_the_form_
 def test_nothing_changed_means_nothing_to_save_and_the_button_says_why(qtbot: QtBot) -> None:
     dialog = saved_dialog(qtbot)
 
-    assert not dialog.save_button.isEnabled()
-    assert dialog.save_button.toolTip() == "Nothing has changed."
+    assert not dialog.can_save()
+    assert dialog.save_blocked_reason() == "Nothing has changed."
     dialog.day_checks[1].setChecked(True)
-    assert dialog.save_button.isEnabled()
+    assert dialog.can_save()
     dialog.day_checks[1].setChecked(False)
-    assert not dialog.save_button.isEnabled()  # back to what is saved
+    assert not dialog.can_save()  # back to what is saved
 
 
 def test_changes_of_every_kind_reach_the_draft(qtbot: QtBot) -> None:
@@ -148,7 +148,7 @@ def test_a_profile_with_nothing_saved_starts_from_suggestions_and_says_so(qtbot:
     qtbot.addWidget(dialog)
 
     assert dialog.note_is_shown
-    assert dialog.save_button.isEnabled()  # saving the suggestions is a choice too
+    assert dialog.can_save()  # saving the suggestions is a choice too
     assert any(check.isChecked() for check in dialog.day_checks)
     assert dialog.type_checks[(Sport.RUNNING, SessionType.EASY)].isChecked()
 
@@ -159,7 +159,7 @@ def test_no_time_at_all_is_written_in_the_form_and_does_not_stop_saving(qtbot: Q
     dialog.week_hours_spin.setValue(0.0)
 
     assert dialog.hint_texts.startswith("No training time is set, so the plan cannot be made.")
-    assert dialog.save_button.isEnabled()
+    assert dialog.can_save()
 
 
 def test_every_type_box_has_a_name_with_its_sport_and_its_type(qtbot: QtBot) -> None:
@@ -184,7 +184,7 @@ def test_nothing_is_saved_until_save_is_clicked_and_the_form_knows_what_is_unsav
 
     assert dialog.has_unsaved_changes()
     assert requested == []
-    dialog.save_button.click()
+    dialog.request_save()
     assert requested == [True]
 
 
@@ -197,4 +197,4 @@ def test_showing_what_is_saved_leaves_nothing_to_save(qtbot: QtBot) -> None:
 
     assert not dialog.has_unsaved_changes()
     assert dialog.draft() == edited
-    assert not dialog.save_button.isEnabled()
+    assert not dialog.can_save()

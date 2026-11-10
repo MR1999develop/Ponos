@@ -241,7 +241,7 @@ def test_body_data_never_reach_the_logs(
         edit = open_edit_dialog(qtbot, window)
         edit.weight_edit.clear()
         QTest.keyClicks(edit.weight_edit, "72,4")
-        click(edit.save_button)
+        click(window.settings_window.save_button)
         wait_profile_saved(qtbot, window)
 
     text = "\n".join(record.getMessage() for record in caplog.records)
@@ -260,13 +260,13 @@ def test_a_past_measurement_changes_the_load_and_the_overview_is_recalculated(
     dialog = open_edit_dialog(qtbot, window)
     assert dialog.valid_from_edit.date() == QDate(2026, 6, 30)  # today by default
     assert dialog.valid_from_edit.maximumDate() == QDate(2026, 6, 30)  # never in the future
-    assert not dialog.save_button.isEnabled()
-    assert dialog.save_button.toolTip() == "Change at least one value first."
+    assert not window.settings_window.save_button.isEnabled()
+    assert window.settings_window.save_button.toolTip() == "Change at least one value first."
 
     dialog.valid_from_edit.setDate(QDate(2026, 5, 1))
     dialog.threshold_box.setValue(150)
-    assert dialog.save_button.isEnabled()
-    click(dialog.save_button)
+    assert window.settings_window.save_button.isEnabled()
+    click(window.settings_window.save_button)
 
     wait_profile_saved(qtbot, window)
     qtbot.waitUntil(
@@ -306,7 +306,7 @@ def test_only_the_changed_fields_are_stored_and_the_history_lists_the_new_row(
     dialog = open_edit_dialog(qtbot, window)
     dialog.valid_from_edit.setDate(QDate(2026, 5, 1))
     dialog.threshold_box.setValue(150)
-    click(dialog.save_button)
+    click(window.settings_window.save_button)
     wait_profile_saved(qtbot, window)
     qtbot.waitUntil(lambda: isinstance(window.controller.overview_state, Ready), timeout=WAIT_MS)
 
@@ -333,7 +333,7 @@ def test_a_weight_with_a_past_date_is_added_to_the_history(
     dialog.valid_from_edit.setDate(QDate(2026, 5, 10))
     dialog.weight_edit.clear()
     QTest.keyClicks(dialog.weight_edit, "64,0")
-    click(dialog.save_button)
+    click(window.settings_window.save_button)
     wait_profile_saved(qtbot, window)
 
     again = open_edit_dialog(qtbot, window)
@@ -352,7 +352,7 @@ def test_an_invalid_weight_is_reported_on_the_field_and_nothing_is_saved(
     dialog.weight_edit.clear()
     QTest.keyClicks(dialog.weight_edit, "70,55")
 
-    click(dialog.save_button)
+    click(window.settings_window.save_button)
 
     assert "at most one decimal" in dialog.error_text(EditField.WEIGHT)
     assert "70" not in dialog.error_text(EditField.WEIGHT).replace("300", "")
@@ -367,7 +367,7 @@ def test_heart_rate_that_does_not_fit_together_is_reported_before_saving(
     dialog = open_edit_dialog(qtbot, window)
     dialog.min_box.setValue(200)  # above the threshold and the maximum
 
-    click(dialog.save_button)
+    click(window.settings_window.save_button)
 
     assert dialog.error_text(EditField.MIN_BPM) == (
         "The resting heart rate must be lower than the maximum."
@@ -415,12 +415,12 @@ def test_a_profile_created_without_height_and_birth_date_completes_them_once(
     assert first.form.needs_fixed_data
     assert not first.height_edit.isHidden()
     assert first.history_table.model().rowCount() == 1  # HR only: no weight
-    assert not first.save_button.isEnabled()
+    assert not window.settings_window.save_button.isEnabled()
     QTest.keyClicks(first.height_edit, "168")
-    click(first.save_button)  # the date of birth is missing
+    click(window.settings_window.save_button)  # the date of birth is missing
     assert first.error_text(EditField.BIRTH_DATE) == "Enter the date of birth."
     first.birth_edit.select(date(1991, 11, 5))
-    click(first.save_button)
+    click(window.settings_window.save_button)
     wait_profile_saved(qtbot, window)
 
     second = open_edit_dialog(qtbot, window)
@@ -495,7 +495,7 @@ def test_a_day_before_a_later_measurement_warns_before_saving_and_the_status_giv
     assert "6/29/26" in dialog.validity_notice_text
     assert dialog.note_text(EditField.WEIGHT) == "No weight is recorded for this day."
     assert window.profile_dialogs.edit_dialog is dialog  # the warning is not a blocking dialog
-    click(dialog.save_button)
+    click(window.settings_window.save_button)
     wait_profile_saved(qtbot, window)
 
     message = window.statusBar().currentMessage()
@@ -512,7 +512,7 @@ def test_the_status_says_from_when_an_open_period_holds_onwards(
     dialog.threshold_box.setValue(150)
 
     assert dialog.validity_notice_text == ""  # today: no later entry
-    click(dialog.save_button)
+    click(window.settings_window.save_button)
     wait_profile_saved(qtbot, window)
 
     assert "Heart rate valid from 6/30/26 onwards." in window.statusBar().currentMessage()
@@ -534,7 +534,7 @@ def test_changing_the_day_after_an_edit_shows_the_value_in_force_the_new_day(
     dialog.threshold_box.setValue(171)  # again the value in force: no longer a change
     assert dialog.note_text(EditField.THRESHOLD) == ""
     assert dialog.validity_notice_text == ""
-    assert not dialog.save_button.isEnabled()
+    assert not window.settings_window.save_button.isEnabled()
 
 
 def test_profile_commands_are_disabled_as_soon_as_an_overview_recalculation_starts(
@@ -563,12 +563,12 @@ def test_renaming_from_edit_profile_updates_the_title_the_menu_and_the_registry(
     dialog = open_edit_dialog(qtbot, window)
     assert dialog.name_edit.text() == PROFILE
     assert dialog.name_edit.maxLength() == NAME_MAX_CHARS
-    assert not dialog.save_button.isEnabled()
+    assert not window.settings_window.save_button.isEnabled()
 
     dialog.name_edit.selectAll()
     QTest.keyClicks(dialog.name_edit, "  Atleta rinominato ")
-    assert dialog.save_button.isEnabled()
-    click(dialog.save_button)
+    assert window.settings_window.save_button.isEnabled()
+    click(window.settings_window.save_button)
 
     wait_profile_saved(qtbot, window)
     renamed = ProfileName.parse("Atleta rinominato")
@@ -591,7 +591,7 @@ def test_an_empty_name_is_reported_on_the_field_and_nothing_is_saved(
 
     dialog.name_edit.clear()
     QTest.keyClicks(dialog.name_edit, "   ")
-    click(dialog.save_button)
+    click(window.settings_window.save_button)
 
     assert dialog.error_text(EditField.NAME) == "Enter a name for the profile."
     assert window.profile_dialogs.edit_dialog is dialog  # resta aperto
@@ -609,7 +609,7 @@ def test_the_name_alone_is_saved_without_recalculating_the_load(
 
     dialog.name_edit.setText("Solo il nome")
     dialog.name_edit.textEdited.emit("Solo il nome")
-    click(dialog.save_button)
+    click(window.settings_window.save_button)
 
     wait_profile_saved(qtbot, window)
     assert window.windowTitle() == "Solo il nome - Ponos Coach"
@@ -642,17 +642,17 @@ def test_a_threshold_pace_typed_in_the_settings_is_saved_and_listed_in_the_histo
     window = window_with_activities(qtbot, tmp_path, settings)
     dialog = open_edit_dialog(qtbot, window)
     assert dialog.pace_edit.text() == ""  # no pace yet, and no test either
-    assert not dialog.save_button.isEnabled()
+    assert not window.settings_window.save_button.isEnabled()
 
     QTest.keyClicks(dialog.pace_edit, "5.30")
-    assert dialog.save_button.isEnabled()
-    click(dialog.save_button)
+    assert window.settings_window.save_button.isEnabled()
+    click(window.settings_window.save_button)
     wait_profile_saved(qtbot, window)
 
     assert "Threshold pace valid from 6/30/26 onwards." in window.statusBar().currentMessage()
     again = open_edit_dialog(qtbot, window)
     assert again.pace_edit.text() == "5:30"  # shown in the one format
-    assert not again.save_button.isEnabled()  # nothing changed yet
+    assert not window.settings_window.save_button.isEnabled()  # nothing changed yet
     model = again.history_table.model()
     paces = {model.data(model.index(row, Column.THRESHOLD_PACE)) for row in range(model.rowCount())}
     assert "5:30" in paces
@@ -665,7 +665,7 @@ def test_an_unreadable_pace_is_reported_next_to_the_field_with_the_format_and_no
     dialog = open_edit_dialog(qtbot, window)
     QTest.keyClicks(dialog.pace_edit, "5:75")
 
-    click(dialog.save_button)
+    click(window.settings_window.save_button)
 
     message = dialog.error_text(EditField.THRESHOLD_PACE)
     assert message == (
@@ -697,7 +697,7 @@ def test_the_pace_follows_the_day_and_a_pace_from_a_test_is_shown_with_its_origi
     assert dialog.pace_edit.toolTip() == "Set in the profile settings from 2/1/26."
     dialog.valid_from_edit.setDate(QDate(2026, 1, 1))
     assert dialog.pace_edit.text() == ""
-    assert not dialog.save_button.isEnabled()
+    assert not dialog.can_save()
 
 
 def test_a_changed_pace_says_what_applied_that_day(qtbot: QtBot) -> None:
@@ -715,4 +715,4 @@ def test_a_changed_pace_says_what_applied_that_day(qtbot: QtBot) -> None:
     assert dialog.note_text(EditField.THRESHOLD_PACE) == (
         "In force on this day: 5:00 per km (from the threshold test)"
     )
-    assert dialog.save_button.isEnabled()
+    assert dialog.can_save()

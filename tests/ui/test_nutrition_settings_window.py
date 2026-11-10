@@ -155,8 +155,9 @@ def test_meal_times_less_than_two_hours_apart_are_refused_with_a_message_on_the_
 
     assert dialog.time_error(MealField.LUNCH) == "Lunch must be at least 2 hours after breakfast."
     assert dialog.time_error(MealField.DINNER) == ""
-    assert not dialog.save_times_button.isEnabled()
-    assert dialog.save_times_button.toolTip() == "Solve the problem with the times first."
+    save = window.settings_window.save_button
+    assert not save.isEnabled()
+    assert save.toolTip() == "Solve the problem with the times first."
     dialog.time_edits[MealField.LUNCH].setTime(QTime(13, 0))
     dialog.time_edits[MealField.DINNER].setTime(QTime(14, 30))
     assert dialog.time_error(MealField.DINNER) == "Dinner must be at least 2 hours after lunch."
@@ -170,9 +171,9 @@ def test_saved_meal_times_move_the_meals_of_the_day_and_undo_brings_them_back(
     dialog = open_settings(qtbot, window)
 
     dialog.time_edits[MealField.DINNER].setTime(QTime(21, 0))
-    assert dialog.save_times_button.isEnabled()
+    assert window.settings_window.save_button.isEnabled()
     with changed(qtbot, window):
-        dialog.save_times_button.click()
+        window.settings_window.save_button.click()
     open_day(qtbot, window, EMPTY_DAY)
     assert [plain(t.split(" at ")[1]) for t in last_day_page(window).meal_titles][-1] == "9:00 PM"
 

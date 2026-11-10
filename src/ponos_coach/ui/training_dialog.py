@@ -3,10 +3,10 @@
 """Content of the Settings > Training plan page: the days available, how many sessions a week, the
 long day, the most time a week and the session types the plan may use for each sport.
 
-The page edits a copy: nothing changes until "Save settings". What the plan cannot do with the
-settings (no day or no time at all) is written under the fields as soon as it appears; it does not
-stop saving, because the plan says the same in its own notices. A profile that saved nothing yet
-starts from suggested values, and the page says so.
+The page edits a copy: nothing changes until the window's "Save changes". What the plan cannot do
+with the settings (no day or no time at all) is written under the fields as soon as it appears;
+it does not stop saving, because the plan says the same in its own notices. A profile that saved
+nothing yet starts from suggested values, and the page says so.
 """
 
 from __future__ import annotations
@@ -15,13 +15,11 @@ from PySide6.QtCore import QCoreApplication, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
     QGridLayout,
     QGroupBox,
     QLabel,
-    QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -97,20 +95,12 @@ class TrainingSettingsDialog(SettingsForm):
         self._hints.setTextFormat(Qt.TextFormat.PlainText)
         self._hints.setWordWrap(True)
         self._hints.setAccessibleName(self.tr("Problem with the settings"))
-        self._buttons = QDialogButtonBox(self)
-        self._save = self._buttons.addButton(
-            self.tr("Save settings"), QDialogButtonBox.ButtonRole.AcceptRole
-        )
-        self._save.setObjectName("trainingSave")
-        self._save.setDefault(True)
-        self._buttons.accepted.connect(self.request_save)
         layout = QVBoxLayout(self)
         layout.setSpacing(SPACE_4)
         layout.addWidget(self._note)
         layout.addWidget(self._time_group())
         layout.addWidget(self._hints)
         layout.addWidget(self._types_group())
-        layout.addWidget(self._buttons)
 
     def _time_group(self) -> QGroupBox:
         box = QGroupBox(self.tr("Time available"), self)
@@ -262,18 +252,24 @@ class TrainingSettingsDialog(SettingsForm):
         texts = [hint_text(hint) for hint in hints_of(self._draft)]
         self._hints.setText("\n".join(texts))
         self._hints.setVisible(bool(texts))
-        changed = self._draft != self._initial
-        self._save.setEnabled(changed or self._suggested)
-        self._save.setToolTip("" if changed or self._suggested else self.tr("Nothing has changed."))
         self.edited.emit()
 
     def has_unsaved_changes(self) -> bool:
         """True while a field differs from what was saved."""
         return self._draft != self._initial
 
+    def can_save(self) -> bool:
+        """True with a change, and also with suggested values left as they are: saving them is a
+        valid choice."""
+        return self._draft != self._initial or self._suggested
+
+    def save_blocked_reason(self) -> str:
+        """Why there is nothing to save."""
+        return self.tr("Nothing has changed.")
+
     def request_save(self) -> None:
-        """Ask the coordinator to save the fields (the "Save settings" button)."""
-        if self._save.isEnabled():
+        """Ask the coordinator to save the fields (the window's "Save changes" button)."""
+        if self.can_save():
             self.save_requested.emit()
 
     def show_saved(self, draft: TrainingDraft, *, suggested: bool) -> None:
@@ -314,11 +310,6 @@ class TrainingSettingsDialog(SettingsForm):
     def type_checks(self) -> dict[tuple[Sport, SessionType], QCheckBox]:
         """The session type check boxes."""
         return self._checks
-
-    @property
-    def save_button(self) -> QPushButton:
-        """The button that saves the settings."""
-        return self._save
 
     @property
     def hint_texts(self) -> str:

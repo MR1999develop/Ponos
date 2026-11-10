@@ -106,7 +106,7 @@ def enter_the_values(qtbot: QtBot, window: MainWindow) -> None:
     for field, minute in zip(MealField, MEAL_MINUTES, strict=True):
         dialog.time_edits[field].setTime(QTime(minute // 60, minute % 60))
     with changed(qtbot, window):
-        dialog.save_times_button.click()
+        window.settings_window.save_button.click()
     dialog.add_period()
     sub = dialog.period_dialog
     assert sub is not None
@@ -137,7 +137,7 @@ def drive_the_failures(
     monkeypatch.setattr(SqliteMealTimesStore, "set", leaky_store)
     dialog.time_edits[MealField.DINNER].setTime(QTime(21, 5))
     with qtbot.waitSignal(window.nutrition.loader.command_failed, timeout=WAIT_MS):
-        dialog.save_times_button.click()
+        window.settings_window.save_button.click()
     qtbot.waitUntil(lambda: dialog.failure_text != "", timeout=WAIT_MS)
     shown += [dialog.failure_text, box_texts()]
     monkeypatch.undo()

@@ -348,8 +348,9 @@ restores to a profile that is migrated the same way when opened.
   - if the chosen date is in the past and the measurement is valid only until
     the next measurement, it says so with a warning, because it is not valid
     "from then on";
-  - "Save changes" ("Salva modifiche") is disabled until at least one value
-    changes, with the reason in the tooltip; "Cancel" changes nothing;
+  - the window's "Save changes" ("Salva modifiche") is disabled until at least
+    one value changes (and while a save is in progress), with the reason in the
+    tooltip; the page has no button of its own;
   - an error appears under the field that causes it.
 - **Profiles created before phase 3.** They have no height or date of birth and
   remain valid. "Edit profile" asks for them once, in the same save as the
@@ -678,7 +679,7 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
   sessions a week, the day of the long session, the most hours of training in a
   week and the session types the plan may use (decision: [ADR 016](adr/016-disponibilita-giorni-e-sedute.md);
   before, the page asked for minutes on each day, which are gone). The page
-  starts with suggestions, nothing is saved until "Save changes". Below, the
+  starts with suggestions, nothing is saved until the window's "Save changes". Below, the
   "Threshold test" section chooses the protocol that the test dialog starts with
   (30 or 20 minutes), remembered between sessions and applied at once. The plan never exceeds the availability and schedules only those
   types.
@@ -897,13 +898,21 @@ Rules: [injuries](../.claude/skills/ponos-allenamento/references/infortuni.md).
   categories, on the right the page: Profile (name, measurements and history),
   Garmin account (status, connect and disconnect, synchronise when a profile
   opens), Training plan (and the threshold test protocol and
-  the history of the tests), Nutrition, Map, Language. Each page keeps the way
-  of saving that its content always had (changes that apply at once, with their
-  own undo, or edits that wait to be saved). The window has a "Save changes"
-  button (Ctrl+S) always in view at the bottom, next to "Close": it saves the
-  page in view and is enabled only when that page has unsaved edits. It exists
-  because a page's own button could sit below the fold (the Profile page is
-  taller than the window, and a threshold with a past date was never saved).
+  the history of the tests), Nutrition, Map, Language. Some pages apply their
+  changes at once, with their own undo (the level and the periods of the
+  Nutrition page); the others hold edits that wait to be saved (Profile,
+  Training plan, the meal times of Nutrition). No page has a save button of its
+  own: the window has the only "Save changes" button (Ctrl+S, and Enter in a
+  field that does not use it, such as a text field), always in view at the
+  bottom, next to "Close". It saves the page in view and is enabled when that
+  page says it can be saved: the Profile with at least one changed value, the
+  Training plan with a change or with suggested values (saving them as they are
+  is a choice), the Nutrition page with valid meal times that changed or were
+  never saved. When it is disabled, the tooltip gives the reason of the page
+  ("Solve the problem with the times first.") or says that there is nothing to
+  save. It exists because a page's own button could sit below the fold (the
+  Profile page is taller than the window, and a threshold with a past date was
+  never saved).
   The pages that read the profile read
   it when they open; without a profile open they say "Create or open a profile
   first." instead of showing fields. A category with unsaved edits has an
