@@ -12,6 +12,7 @@ CRC and dimensions, theme background colour in the pixels).
 from __future__ import annotations
 
 import json
+import math
 import re
 import struct
 import zlib
@@ -291,6 +292,12 @@ def activities(draw: st.DrawFn) -> list[DayLoad]:
     return items
 
 
+def bar_value(value: object) -> float:
+    """The value a bar stands for: a week without that series is a gap (NaN), which is zero."""
+    number = float(value)  # type: ignore[arg-type]
+    return 0.0 if math.isnan(number) else number
+
+
 @settings(max_examples=60, deadline=None)
 @given(activities())
 def test_t_ui_04_the_bars_hold_the_weekly_sums_of_every_week_and_open_on_the_last_26(
@@ -340,13 +347,14 @@ def test_t_ui_04_the_bars_hold_the_weekly_sums_of_every_week_and_open_on_the_las
         )
         for week, value in zip(xs, trace.y, strict=True):
             expected = sum(load_by_week.get((week, member), 0.0) for member in members[sport])
-            assert value == pytest.approx(expected)
+            assert bar_value(value) == pytest.approx(expected)
     assert drawn == set(members)
     assert len(load_figure.data) <= len(Sport)
     for zone, trace in enumerate(zones_figure.data):
         for week, value in zip(trace.x, trace.y, strict=True):
             monday = week if isinstance(week, date) else date.fromisoformat(str(week))
-            assert value == pytest.approx(zones_by_week.get((monday, zone), 0.0) / 3600.0)
+            expected_hours = zones_by_week.get((monday, zone), 0.0) / 3600.0
+            assert bar_value(value) == pytest.approx(expected_hours)
 
 
 def test_t_ui_04_the_heart_rate_curve_keeps_every_discarded_sample_marked_with_a_cross() -> None:
