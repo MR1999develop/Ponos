@@ -53,7 +53,6 @@ from tests.collaudo.support import (
     open_profile_from_folder,
     real_ports,
 )
-from tests.food_support import load_food_table
 from tests.planning.builders import BIG_WEEK
 
 ROME = ZoneInfo("Europe/Rome")
@@ -62,7 +61,6 @@ FIRST_DAY = date(2026, 1, 1)
 BORN = date(1990, 5, 5)
 THRESHOLD_BPM = 170
 ALL_TYPES = frozenset(SessionType)
-FOODS = load_food_table()
 _SERIALS = itertools.count(7_000_001)
 
 
@@ -172,7 +170,6 @@ class World:
             sources,
             decode_stored_activity,
             ROME,
-            FOODS,
             plan_context=PlanContext(s.plans, self.today),
         )(day)
 

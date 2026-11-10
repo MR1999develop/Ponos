@@ -3,9 +3,8 @@
 """Nutrition texts: the domain gives categories, here we choose how to word them.
 
 Plain words for everything the user reads about a day: advisories, energy sources, meal
-moments, load levels, goals, activity levels, what is missing, and the names of the foods (by their
-`food_id`, the key that the translations use). Context "Nutrition" and "Foods" written as literals:
-lupdate does not follow aliases.
+moments, load levels, goals, activity levels and what is missing. Context "Nutrition" written as a
+literal: lupdate does not follow aliases.
 """
 
 from __future__ import annotations
@@ -13,14 +12,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, QLocale
+from PySide6.QtCore import QCoreApplication, QLocale
 
 from ponos_coach.nutrition.domain import (
     ActivityLevel,
     Advisory,
     DayLoadLevel,
     EnergySource,
-    Food,
     MaintenanceGoal,
     MealSlot,
     NutritionGoal,
@@ -31,60 +29,6 @@ from ponos_coach.profiles.day_nutrition import UnavailableReason
 
 _GRAMS_PER_KG = 1000.0
 _PACE_DECIMALS = 2
-
-# Source names of the foods, by id. An id that is not here shows the name written in the table.
-FOOD_NAMES: dict[str, object] = {
-    "oats_rolled_dry": QT_TRANSLATE_NOOP("Foods", "Rolled oats, dry"),
-    "bread_whole_wheat": QT_TRANSLATE_NOOP("Foods", "Whole-wheat bread"),
-    "bread_white": QT_TRANSLATE_NOOP("Foods", "White bread"),
-    "rice_white_cooked": QT_TRANSLATE_NOOP("Foods", "White rice, cooked"),
-    "rice_brown_cooked": QT_TRANSLATE_NOOP("Foods", "Brown rice, cooked"),
-    "pasta_cooked": QT_TRANSLATE_NOOP("Foods", "Pasta, cooked"),
-    "pasta_whole_wheat_cooked": QT_TRANSLATE_NOOP("Foods", "Whole-wheat pasta, cooked"),
-    "potato_boiled": QT_TRANSLATE_NOOP("Foods", "Potato, boiled"),
-    "sweet_potato_baked": QT_TRANSLATE_NOOP("Foods", "Sweet potato, baked"),
-    "quinoa_cooked": QT_TRANSLATE_NOOP("Foods", "Quinoa, cooked"),
-    "banana": QT_TRANSLATE_NOOP("Foods", "Banana"),
-    "apple": QT_TRANSLATE_NOOP("Foods", "Apple"),
-    "orange": QT_TRANSLATE_NOOP("Foods", "Orange"),
-    "dates_medjool": QT_TRANSLATE_NOOP("Foods", "Dates, Medjool"),
-    "honey": QT_TRANSLATE_NOOP("Foods", "Honey"),
-    "raisins": QT_TRANSLATE_NOOP("Foods", "Raisins"),
-    "orange_juice": QT_TRANSLATE_NOOP("Foods", "Orange juice"),
-    "egg_hard_boiled": QT_TRANSLATE_NOOP("Foods", "Egg, hard-boiled"),
-    "chicken_breast_roasted": QT_TRANSLATE_NOOP("Foods", "Chicken breast, roasted"),
-    "tuna_light_canned_water": QT_TRANSLATE_NOOP("Foods", "Tuna, light, canned in water"),
-    "salmon_farmed_cooked": QT_TRANSLATE_NOOP("Foods", "Salmon, farmed, cooked"),
-    "greek_yogurt_nonfat": QT_TRANSLATE_NOOP("Foods", "Greek yogurt, plain, nonfat"),
-    "yogurt_plain_lowfat": QT_TRANSLATE_NOOP("Foods", "Yogurt, plain, low-fat"),
-    "milk_whole": QT_TRANSLATE_NOOP("Foods", "Milk, whole"),
-    "mozzarella_part_skim": QT_TRANSLATE_NOOP("Foods", "Mozzarella, part-skim"),
-    "lentils_cooked": QT_TRANSLATE_NOOP("Foods", "Lentils, cooked"),
-    "chickpeas_cooked": QT_TRANSLATE_NOOP("Foods", "Chickpeas, cooked"),
-    "black_beans_cooked": QT_TRANSLATE_NOOP("Foods", "Black beans, cooked"),
-    "tofu_firm": QT_TRANSLATE_NOOP("Foods", "Tofu, firm"),
-    "olive_oil": QT_TRANSLATE_NOOP("Foods", "Olive oil"),
-    "almonds": QT_TRANSLATE_NOOP("Foods", "Almonds"),
-    "walnuts": QT_TRANSLATE_NOOP("Foods", "Walnuts"),
-    "peanut_butter": QT_TRANSLATE_NOOP("Foods", "Peanut butter"),
-    "avocado": QT_TRANSLATE_NOOP("Foods", "Avocado"),
-    "butter": QT_TRANSLATE_NOOP("Foods", "Butter"),
-    "tomato": QT_TRANSLATE_NOOP("Foods", "Tomato"),
-    "broccoli": QT_TRANSLATE_NOOP("Foods", "Broccoli"),
-    "spinach": QT_TRANSLATE_NOOP("Foods", "Spinach"),
-    "zucchini": QT_TRANSLATE_NOOP("Foods", "Zucchini"),
-    "carrot": QT_TRANSLATE_NOOP("Foods", "Carrot"),
-    "romaine_lettuce": QT_TRANSLATE_NOOP("Foods", "Romaine lettuce"),
-    "green_beans": QT_TRANSLATE_NOOP("Foods", "Green beans"),
-}
-
-
-def food_name(food: Food) -> str:
-    """The translated name of a food (the table's English name if it has no translation entry)."""
-    source = FOOD_NAMES.get(food.food_id)
-    if source is None:
-        return food.name
-    return QCoreApplication.translate("Foods", str(source))
 
 
 @dataclass(frozen=True, slots=True)

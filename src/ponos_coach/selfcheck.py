@@ -4,7 +4,7 @@
 
 The smoke test of the packaged executable (`nox -s dist`) runs it with the offscreen Qt platform:
 it proves that what the app needs at run time is in the package, not just in the source tree
-(the food table, the translations, the web resources, the time zone data, the web engine
+(the translations, the web resources, the time zone data, the web engine
 process and the modules loaded on demand). Each check is independent; the report has one line
 per check, `ok <name>` or `FAIL <name>: <cause>`, and the exit code is 0 only if all pass.
 Nothing is read from the profiles and nothing is written except the report.
@@ -23,7 +23,6 @@ from PySide6.QtCore import QEventLoop, QTimer, QTranslator
 from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWidgets import QApplication
 
-from ponos_coach.nutrition.food_table import FoodTable
 from ponos_coach.ui.translations import (
     APP_CATALOG,
     QT_CATALOG,
@@ -43,7 +42,6 @@ _LOADED_ON_DEMAND: Final = (
     "keyring",
     "desktop_notifier",
 )
-_MIN_FOODS: Final = 40
 
 
 class SelfCheckError(Exception):
@@ -56,11 +54,6 @@ class CheckResult:
 
     name: str
     problem: str | None
-
-
-def _check_food_table(read_food_table: Callable[[], FoodTable]) -> None:
-    if len(read_food_table().foods) < _MIN_FOODS:
-        raise SelfCheckError("the food table has too few foods")
 
 
 def _check_translations() -> None:
@@ -133,7 +126,7 @@ def format_report(results: Sequence[CheckResult]) -> str:
     )
 
 
-def run_self_check(report: Path, read_food_table: Callable[[], FoodTable]) -> int:
+def run_self_check(report: Path) -> int:
     """Runs the checks and writes the report to the new file `report`.
 
     Needs a `QApplication`. Returns 0 if every check passed, 1 otherwise.
@@ -144,7 +137,6 @@ def run_self_check(report: Path, read_food_table: Callable[[], FoodTable]) -> in
     """
     results = run_checks(
         [
-            ("food table", lambda: _check_food_table(read_food_table)),
             ("translations", _check_translations),
             ("web resources", _check_web_resources),
             ("time zones", _check_time_zones),

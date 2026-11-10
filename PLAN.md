@@ -37,7 +37,7 @@ completata e verificata.
 | Calendario Garmin | In una fase successiva: invio degli allenamenti a scelta dell'utente ed eliminazione degli allenamenti futuri programmati |
 | Lingue | Inglese come lingua predefinita, italiano scelto dal menu Lingua e ricordato (decisione del 2026-11-06; prima seguiva la lingua del sistema) |
 | Dati del profilo | Alla creazione: nome, cartella, altezza, peso, data di nascita, sesso, FC minima e massima, soglia. Poi si aggiornano con una data di validità peso, FC minima, FC massima e soglia; nome, altezza, data di nascita e sesso restano fissi (decisione del 2026-11-06) |
-| Alimentazione (fase 4b) | Cliccando un giorno passato del calendario: kcal e grammi di carboidrati, proteine e grassi per colazione, pranzo, cena, pre, durante (sedute lunghe) e post allenamento, con 2-3 esempi di alimenti; nessun diario dei pasti; obiettivo alimentare per periodi (dimagrimento, mantenimento, performance); calorie fuori dallo sport da un livello di attività nel profilo; nessuna restrizione alimentare per ora; i giorni futuri arriveranno con il piano (fase 5) (decisioni del 2026-11-07) |
+| Alimentazione (fase 4b) | Cliccando un giorno passato del calendario: kcal e grammi di carboidrati, proteine e grassi per colazione, pranzo, cena, pre, durante (sedute lunghe) e post allenamento, (dal 2026-11-10 senza esempi di alimenti); nessun diario dei pasti; obiettivo alimentare per periodi (dimagrimento, mantenimento, performance); calorie fuori dallo sport da un livello di attività nel profilo; nessuna restrizione alimentare per ora; i giorni futuri arriveranno con il piano (fase 5) (decisioni del 2026-11-07) |
 | Piattaforme e repository | Windows e Ubuntu, GitHub con CI (repository pubblico); il push lo fa l'utente a mano (regola del 2026-11-07; dal 2026-11-06 al 2026-11-07 era automatico); su `main` solo con PR |
 
 ## 2. Decisioni di default (le ho fissate io: da confermare o correggere)
@@ -551,7 +551,7 @@ posto e documentati nella skill del progetto; non sono consigli medici.
         un'altra entro 8 h); il resto distribuito su colazione, pranzo e cena
         secondo gli orari tipici, con pasti spostati o fusi quando cadono
         vicino all'allenamento; due sedute nello stesso giorno gestite.
-- [x] **Alimenti**: tabella curata di alimenti comuni con kcal e macro per
+- [x] ~~**Alimenti**~~ (SUPERATO il 2026-11-10: tabella ed esempi tolti, i pasti mostrano solo calorie e macro): tabella curata di alimenti comuni con kcal e macro per
       100 g da una fonte con licenza compatibile (USDA FoodData Central, di
       pubblico dominio; dal 2026-11-09 ANSES-CIQUAL 2025, Etalab 2.0, per
       richiesta dell'utente: riferimenti europei, vedi ADR 008 e
@@ -695,7 +695,7 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       `test_tile_service` su Ubuntu (oggetto Qt distrutto da un worker,
       `ui/worker_handover.py`); CI verde su Windows e Ubuntu sul commit
       `a2092ae` (2026-11-09).
-- [x] Valori della tabella degli alimenti verificati contro ANSES-CIQUAL 2025
+- [x] ~~Valori della tabella degli alimenti verificati~~ (SUPERATO il 2026-11-10: tabella tolta; la revisione a mano delle voci CIQUAL prima del rilascio non serve più) Valori della tabella degli alimenti verificati contro ANSES-CIQUAL 2025
       (file del 2025-11-03, Etalab 2.0) con `experiments/verify_foods.py
       --ciqual-dir <cartella> --apply` (`source.verified_on` = 2026-11-09, 42
       alimenti su 42 trovati); confronto con CREA solo come rapporto (licenza
@@ -706,7 +706,7 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       mano prima del rilascio (vedi `ciqual_note`). Il codice USDA sbagliato
       di circa dieci alimenti è superato dal cambio di fonte. Test:
       `tests/experiments/test_verify_foods.py`, `tests/nutrition/test_foods.py`.
-- [x] `nutrition/foods.json` incluso nel pacchetto PyInstaller.
+- [x] ~~`nutrition/foods.json` incluso nel pacchetto PyInstaller.~~ (SUPERATO il 2026-11-10: file tolto dal pacchetto e dal controllo di avvio)
 - [x] Backup e ripristino di un profilo in un file versionato, con test di
       ripristino.
 - [x] PyInstaller con `.spec` versionato per Windows e Ubuntu, smoke test
@@ -805,9 +805,14 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       `tests/profiles/test_create_profile_thresholds.py`.
 - [x] Pasti senza esempi di alimenti, solo calorie e macronutrienti (richiesta
       dell'utente del 2026-11-10): tolti dalla finestra del giorno gli esempi e
-      la nota sui valori non verificati. Il dominio calcola ancora gli esempi
-      (`suggest_examples`, tabella `foods.json`): da togliere con la tabella se
-      l'utente conferma.
+      la nota sui valori non verificati.
+- [x] Tolto tutto ciò che serviva solo agli esempi (2026-11-10, conferma
+      dell'utente): `suggest_examples`, `Food`/`FoodExample`/porzioni,
+      `MealSuggestion` (il rapporto del giorno ha solo `nutrition.meals`),
+      `foods.json`, `food_table.py`, `experiments/verify_foods.py`, nomi degli
+      alimenti da tradurre, controllo di avvio della tabella, voce del pacchetto
+      PyInstaller, attribuzione ANSES del README; ADR 008 emendato. Le quantità
+      per pasto non cambiano.
 - [x] Mappa 3/5 e profilo altimetrico 2/5 del riquadro (richiesta dell'utente
       del 2026-11-10, `ab94cb2`).
 - [x] Sotto il calendario solo la legenda (richiesta dell'utente del
@@ -1205,7 +1210,7 @@ riportano p50, p95 e massimo, mai la sola media, con l'ambiente di misura.
   dei pasti.
 - **T-NUT-05** Determinismo: stessi dati, stessa indicazione; cambio del
   peso o dell'obiettivo a una data che vale solo dal suo giorno.
-- **T-NUT-06** Alimenti: porzioni coerenti con i grammi del pasto entro una
+- **T-NUT-06** (SUPERATO il 2026-11-10: tabella ed esempi tolti) Alimenti: porzioni coerenti con i grammi del pasto entro una
   tolleranza dichiarata; tabella con licenza registrata.
 - **T-NUT-07** Giorni futuri (fase 5, ADR 011): le sedute e la gara del
   piano diventano le attività del giorno (ora tipica o 18:00, energia dai

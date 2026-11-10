@@ -23,16 +23,6 @@ from ponos_coach.nutrition.domain.energy import (
     keytel_kcal_per_minute,
     met_kcal,
 )
-from ponos_coach.nutrition.domain.foods import (
-    Food,
-    FoodExample,
-    FoodGroup,
-    FoodPortion,
-    MealRole,
-    role_of,
-    suggest_examples,
-    tolerance_g,
-)
 from ponos_coach.nutrition.domain.lean_mass import (
     LeanMass,
     LeanMassEntry,
@@ -84,10 +74,6 @@ __all__ = [
     "DayNutrition",
     "EnergySource",
     "EnergyTarget",
-    "Food",
-    "FoodExample",
-    "FoodGroup",
-    "FoodPortion",
     "GoalPeriod",
     "HourlyIntake",
     "LeanMass",
@@ -95,7 +81,6 @@ __all__ = [
     "Macros",
     "MaintenanceGoal",
     "MealItem",
-    "MealRole",
     "MealSlot",
     "MealTimes",
     "NutritionGoal",
@@ -123,9 +108,6 @@ __all__ = [
     "permitted_weekly_loss_g",
     "plan_day",
     "requested_deficit_kcal",
-    "role_of",
     "schedule_meals",
     "split_integer",
-    "suggest_examples",
-    "tolerance_g",
 ]

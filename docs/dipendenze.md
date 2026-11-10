@@ -424,71 +424,15 @@ group and the build backend. Last validation: **2026-11-09**.
   than needed here).
 - Validated: 2026-11-08 (licence approved on that date).
 
-### ANSES-CIQUAL French food composition table (data, not a package)
+### ANSES-CIQUAL and CREA food tables (removed)
 
-- Not a dependency of `pyproject.toml`: it is the source of the food values in
-  `src/ponos_coach/nutrition/foods.json` (phase 4b, ADR 008).
-- Version: **Ciqual 2025**, files dated 2025-11-03 (documentation of
-  2025-11-19), published by ANSES (Observatoire des aliments) on
-  recherche.data.gouv.fr, DOI `10.57745/RDMHWY`
-  (<https://doi.org/10.57745/RDMHWY>; site <https://ciqual.anses.fr/>).
-  Downloaded on 2026-11-09 (`alim_2025_11_03.xml`, `compo_2025_11_03.xml`,
-  `const_2025_11_03.xml`); the MD5 of each file is the one the repository
-  publishes. They are not in this repository: only the values of the 42 foods
-  are.
-- Licence: **Licence Ouverte / Open Licence 2.0 (Etalab-2.0)**, as declared by
-  the dataset. Allowed: copy, redistribute and reuse, also commercially, with
-  the obligation to cite the source and the date of the last update, and not
-  to suggest that the producer endorses the app. The file carries the
-  citation (`source.license_note`): ANSES. Table de composition nutritionnelle
-  des aliments Ciqual 2025. <https://ciqual.anses.fr/>. The README repeats it.
-  Compatible with GPL-3.0-only (the data are not code; they are a separate
-  resource of the package).
-- Use: energy (kcal, EU Regulation 1169/2011, constant 328), available
-  carbohydrates (31000), protein (25000) and fat (40000) in g per 100 g of 42
-  common foods, plus the `alim_code` and the original French name of each
-  chosen entry. The data are copied into the file; the app makes no network
-  call to the source. Rule for the values that are not numbers: `traces` is
-  stored as 0, `< x` as x/2, `-` (missing) is never repaired: the food is not
-  verified.
-- Verification: `experiments/verify_foods.py --ciqual-dir <folder with the
-  release>` reads the released files (size-capped, DTDs refused, streamed),
-  compares every entry (and its stored original name) with the table and, with
-  `--apply`, rewrites the values and sets `source.verified_on`. Last run:
-  2026-11-09, all 42 foods found, values written from the release.
-  The choice of the entry for each food, with the reason where it is not
-  obvious, is in the field `ciqual_note` of `foods.json`; three foods are
-  **approximations** (CIQUAL has no fat-free Greek yogurt, no part-skim
-  mozzarella and no black beans) and say so.
-- Replaced USDA FoodData Central (CC0) on 2026-11-09, by the owner's decision
-  (European references) and because about ten of the FDC ids pointed at the
-  wrong food (ADR 008).
-- Alternatives: queries to an API at run time (rejected in ADR 008: network
-  and a new trust boundary); USDA FoodData Central (replaced, see above);
-  CREA (see below).
-- Registered: 2026-11-07; replaced and validated: 2026-11-09.
-
-### CREA "Tabelle di composizione degli alimenti" (data, comparison only)
-
-- Not a dependency and **not copied into the repository**. The Italian
-  reference (CREA Alimenti e Nutrizione, update 2019,
-  <https://www.alimentinutrizione.it/>) is used only as a second opinion on the
-  CIQUAL values.
-- Licence: the site allows consulting the data freely and asks to respect the
-  intellectual property and to cite the source, but states that data and
-  texts "non possono essere copiati o in altro modo riprodotti" without a
-  clear indication of the source; it offers no bulk download and no explicit
-  open licence (the CC-BY 3.0 of the main `crea.gov.it` legal notes is for
-  that site, "salvo ove diversamente indicato"). The conservative reading is
-  that the values must not be redistributed in the app or the repository.
-- Use: `experiments/crea_mapping.json` holds only the CREA code and title of
-  the entry matching each food (a food with no CREA entry: sweet potato,
-  tofu). `experiments/verify_foods.py --crea-fetch` reads the page of each
-  code (one request per second, fixed host, size-capped) and prints a report
-  of the differences over 10% and the tolerance; nothing is stored. It is a
-  report, never a failure: the two tables use different cooking yields,
-  carbohydrate methods and varieties.
-- Registered: 2026-11-09.
+- Removed on 2026-11-10: the meals show only energy and macronutrients (the
+  user's decision), so the app no longer ships a food table. The ANSES-CIQUAL
+  2025 values (Etalab-2.0 licence, registered 2026-11-07, replaced USDA
+  FoodData Central on 2026-11-09) and the CREA comparison (never copied) are no
+  longer used; `foods.json`, `experiments/verify_foods.py` and
+  `experiments/crea_mapping.json` are gone, and the README no longer carries the
+  ANSES attribution. See ADR 008, amendment of 2026-11-10.
 
 ### Leaflet (JavaScript library, vendored, runtime of the map page)
 

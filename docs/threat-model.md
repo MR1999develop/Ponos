@@ -1,5 +1,9 @@
 # Threat model
 
+Amendment 2026-11-10: the app no longer ships a table of foods or example foods (the meals show
+energy and macronutrients only). Boundary B11 and test T-NUT-06 no longer exist; the rows that
+mention them below are kept as history and say so.
+
 Phase 8 version (2026-11-08): adds the plan and the frozen days (phase 5), the
 map and its tile proxy (phase 5b), injuries (phase 6), the Garmin calendar
 (phase 7), the profile backup and the release workflow (phase 8). It builds on
@@ -77,7 +81,7 @@ Boundaries:
 | B8 | App ↔ configuration folder | list of profiles (id, folder, name, last use), lock of the list |
 | B9 | User → login dialog → `garminconnect` library | email, password, MFA code (in memory only, in the login thread) |
 | B10 | App → system notifications | fixed title and number of new activities |
-| B11 | Table of foods (`foods.json`, shipped with the app) → parser | values per 100 g, ids, names, portions. It is part of the package, but it is treated as input: a mistake or a change of source must not reach the guidance |
+| B11 | (removed 2026-11-10) Table of foods (`foods.json`, shipped with the app) → parser | values per 100 g, ids, names, portions. It is part of the package, but it is treated as input: a mistake or a change of source must not reach the guidance |
 | B12 | FIT `session.total_calories` (inside B1 and B2) → model | calories declared by the device: untrusted until checked against the duration |
 | B13 | FIT `record.distance` and `record.speed` (inside B1 and B2) → distance series → threshold test | cumulative distance and its time axis: untrusted until they form a valid series (finite, increasing time, non-decreasing metres) |
 | B14 | Map page (`ponos://app/map.html`, a web engine process) ↔ app | five numeric calls from the page (view, click, hover), the list, the totals and the simplified tracks that Python sends to it. Not drawn in the diagram: it sits next to B4 |
@@ -214,8 +218,8 @@ service, E elevation of privilege.
 | B8 | Two instances that update the list together and lose changes | T | T-DATI-04 |
 | B8 | List entry pointing to a folder with another profile or with no profile | S, T | T-DATI-04, T-UI-01 |
 | B8 | Paths and names of profiles (personal data) in the logs | I | T-SEC-08 |
-| B11 | Food table too large, too deeply nested, with duplicate ids, out-of-range or non-finite values, energy not matching the macros, too few or too many entries | T, D | T-NUT-06, D-F4B-06 |
-| B11 | Food source and licence not recorded; values never checked against the source | T | T-NUT-06, D-F4B-08; accepted risk (section 5) |
+| B11 (removed) | Food table too large, too deeply nested, with duplicate ids, out-of-range or non-finite values, energy not matching the macros, too few or too many entries | T, D | T-NUT-06, D-F4B-06 |
+| B11 (removed) | Food source and licence not recorded; values never checked against the source | T | T-NUT-06, D-F4B-08; accepted risk (section 5) |
 | B12 | Declared calories absurd for the duration (50,000 kcal in 20 minutes) that inflate the expenditure and the target | T | T-NUT-03, D-F4B-02 |
 | B12 | Zero or invalid FIT calories read as real | T | T-NUT-03 |
 | B3 | Migration v3 → v4 interrupted midway, done by two instances, or without a copy | T, D | T-DATI-01 |
@@ -288,7 +292,7 @@ service, E elevation of privilege.
 | B18 | The backup file read by other users of the PC or copied by a cloud client | I | accepted risk (section 5): not encrypted; private permissions where the file system has them |
 | B18 | A backup of a newer version restored by an old app | T | T-DATI-01 (`BackupTooNewError`) |
 | B7 | Release workflow with excessive permissions, an unpinned action, a token with a long life | E | T-SEC-11 (read-only token; only the attestation job has `id-token` and `attestations`; actions pinned to a SHA; the release is a draft: publishing is manual) |
-| B7 | Packaged executable with local paths, user name or development files; `foods.json` missing from the package | I, D | T-SEC-12 (`tests/collaudo/test_fase8_pacchetto.py`) |
+| B7 | Packaged executable with local paths, user name or development files | I, D | T-SEC-12 (`tests/collaudo/test_fase8_pacchetto.py`) |
 | B7 | Package replaced after publication | T | T-SEC-12 (`SHA256SUMS` checked in the workflow, provenance attested, SBOM attested); the executable is not signed (exception 2, section 5) |
 | UI | Interface blocked by a long operation | D | T-UI-02, T-SYNC-06 |
 
@@ -444,13 +448,7 @@ service, E elevation of privilege.
 - Deterministic plan with rigid ramp limits and injury warning signs; no
   diagnosis.
 - Nutrition (phase 4b, ADR 008):
-  - Food table (B11): size cap of 256 KiB and nesting depth of at most 8,
-    both checked before the JSON decoder; then ids, ranges, finite values,
-    energy consistent with the macros (±15% or 15 kcal), between 40 and 200
-    entries; anything else is a `FoodTableError`, never a repaired value. The
-    file is read once by the Composition Root; the domain gets a `FoodTable`.
-    Source and licence are in the file and in `docs/dipendenze.md`;
-    `experiments/verify_foods.py` checks the values before the release.
+  - Food table (B11): removed on 2026-11-10 together with the table (ADR 008, amendment).
   - Declared calories (B12): zero and the FIT invalid value mean "not
     computed"; above 50,000 kcal, or above 1,500 kcal per hour of moving time,
     they are discarded (not clipped) and estimated. With several sessions in a
@@ -662,7 +660,7 @@ service, E elevation of privilege.
 | Nutrition: calories of the activities, declared and estimated | T-NUT-03 |
 | Nutrition: meals and moments, daylight saving time | T-NUT-04 |
 | Nutrition: determinism and dated changes | T-NUT-05 |
-| Table of foods: hostile file, examples, source and licence | T-NUT-06 |
+| (removed 2026-11-10) Table of foods: hostile file, examples, source and licence | T-NUT-06 |
 | Migration v3 → v4 and the rules of the new tables | T-DATI-01 (`tests/collaudo/test_fase4b_migrazione.py`) |
 | Nutrition data in logs and messages | T-SEC-08 (`tests/collaudo/test_fase4b_log_salute.py`) |
 | Calendar and day page (accessibility, languages, memory of the settings) | T-UI-01, T-UI-06, T-UI-07 (`tests/collaudo/test_fase4b_interfaccia.py`) |
@@ -857,8 +855,7 @@ send anything out. Scripts are never allowed inline.
 
 Defects found by the phase 4b acceptance testing (D-F4B-01…09) and the
 behaviour that closes them. The defect tests have the id in the name
-(`test_d_f4b_NN_…`) or in a comment; D-F4B-06 also has a test in
-`tests/nutrition/test_foods.py`.
+(`test_d_f4b_NN_…`) or in a comment; D-F4B-06 and D-F4B-08 concerned the food table, removed on 2026-11-10 with their tests.
 
 | Id | Defect | Behaviour | Test (plan) | Test (file) |
 |---|---|---|---|---|
@@ -867,9 +864,9 @@ behaviour that closes them. The defect tests have the id in the name
 | D-F4B-03 | In an eight-hour ultra the "during" box said 60 g of carbohydrate an hour, but the item held far fewer grams, and dinner kept none | Box and grams agree; lunch and dinner keep at least 1 g/kg of carbohydrate | T-NUT-04 | `tests/collaudo/test_fase4b_modello.py` |
 | D-F4B-04 | The recovery after a session with long stops was placed at the end of the moving time, while the person was still out | The end of a session is the start plus the elapsed time | T-NUT-04 | `tests/collaudo/test_fase4b_giorni.py` |
 | D-F4B-05 | A date of birth of 1900 and a day in 2035 (135 years) raised an exception | The result is "unavailable" (`AGE_OUT_OF_RANGE`) | T-NUT-01 | `tests/collaudo/test_fase4b_giorni.py` |
-| D-F4B-06 | A food table nested 100,000 levels deep exhausted the JSON decoder's recursion | The depth (at most 8) is checked before the decoder; the error is a `FoodTableError` | T-NUT-06 | `tests/collaudo/test_fase4b_alimenti.py`, `tests/nutrition/test_foods.py` |
+| D-F4B-06 | A food table nested 100,000 levels deep exhausted the JSON decoder's recursion | The depth (at most 8) is checked before the decoder; the error is a `FoodTableError` | T-NUT-06 | (removed 2026-11-10) |
 | D-F4B-07 | A session across the change to summer time had its recovery before its end on the wall clock | The end is computed in UTC and then shown in local time | T-NUT-04 | `tests/collaudo/test_fase4b_giorni.py` |
-| D-F4B-08 | The source and licence of the food table (USDA FoodData Central, CC0) were not in the dependency register | Entry "USDA FoodData Central" in `docs/dipendenze.md` | T-NUT-06 | `tests/collaudo/test_fase4b_alimenti.py` |
+| D-F4B-08 | The source and licence of the food table (USDA FoodData Central, CC0) were not in the dependency register | Entry "USDA FoodData Central" in `docs/dipendenze.md` | T-NUT-06 | (removed 2026-11-10) |
 | D-F4B-09 | An activity indexed before v4 lost its declared calories and was estimated | The day reads the original file and uses the declared calories | T-NUT-03 | `tests/collaudo/test_fase4b_giorni.py` |
 
 All closed on 2026-11-07: their tests, born as expected-fail (strict `xfail`),
@@ -913,12 +910,11 @@ only windows with valid HR on at least 90% of the last 20 minutes.
 | A GPX archive file left behind after the v11 migration (interruption between the commit of the database and the removal of the files) | It is an orphan file, harmless and not cited by the database; the opposite (a record without its file) cannot happen because the database commits first. |
 | Activities imported from GPX removed from the profile without the user confirming each one | Decision of the user (2026-11-09, ADR 014): copy of the database in `backup/ponos-v10-v11.sqlite3` before the migration and a notice with the number of activities removed when the profile opens. |
 | No secure deletion of data | Beyond the reach of an app on ordinary file systems. |
-| Food values chosen by hand among CIQUAL entries | Each food was matched to a CIQUAL entry by judgement (three are declared approximations). Mitigations: `experiments/verify_foods.py` checks every value against the CIQUAL file and sets `source.verified_on`; the parser checks energy against macros; a comparison with the CREA tables is reported; the notice says the guidance is general. |
 | Guidance built on population formulas (Mifflin-St Jeor, Keytel, Boer, factors without sport) and on self-assessed level | Individual error of hundreds of kcal is possible, and an app cannot measure more. Mitigations: conservative limits of the deficit, no numbers under 18 years, fixed notice, no diagnosis (ADR 008). |
 | Declared calories that are wrong but plausible | Under 1,500 kcal per hour they cannot be told from a real effort. Only the net energy (without the rest rate) is added to the expenditure, which reduces the effect. |
 | A threshold that is wrong but plausible (a field test, a hard day, a fast downhill window) | It cannot be told from a real effort within the limits of the refusals. Mitigations: the user chooses the activity, the refusals with reasons, the exact undo, the retest every 6–8 weeks; the zones are a training indication, not medical advice (ADR 009). |
 | Distance from a GPS or a treadmill sensor with a systematic error | The pace is only as good as the distance; the app cannot measure more. The HR threshold does not depend on it. |
-| Food names and nutrition advice only in English until translated; no allergy or diet restriction | User decision of 2026-11-07. The examples are an illustration, not a menu. |
+| Nutrition advice is general; no allergy or diet restriction | User decision of 2026-11-07. Since 2026-11-10 there are no example foods: the meals show energy and macronutrients only. |
 | The tile server (`tile.openstreetmap.org`) sees the areas the user looks at, and its address (and so the IP of the user) | Accepted by the user on 2026-11-07 (ADR 010); the host changed on 2026-11-09 and the risk is the same. A map with tiles needs a tile host; the alternative, an offline vector region, is deferred. Mitigations: the page has no network, one host over HTTPS only, the URL is never logged, only tiles that were looked at are asked (no prefetch), the cache follows the headers and is checked with conditional requests, a neutral background when the server cannot be reached. |
 | OpenStreetMap can block the app at any time, with no notice and no guarantee of service; the URL is fixed in the code | Accepted by the user on 2026-11-09 (ADR 010 amendment). The usage policy is followed (see the section on the map), a refusal pauses all requests for 300 s, and the map is a convenience: list, filters and tracks keep working. If the block lasts, a change of source is a code change in one module. |
 | The areas looked at stay in the tile cache (a database in the user's cache folder) | Same readers as the profile (every process of the user). It is outside the profile folder and its backups, derived, and "Clear map cache" empties it. |

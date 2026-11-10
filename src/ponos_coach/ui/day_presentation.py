@@ -21,7 +21,6 @@ from ponos_coach.profiles.day_nutrition import (
     DayActivity,
     DayNutritionReport,
     DayNutritionResult,
-    MealSuggestion,
     NutritionUnavailable,
 )
 from ponos_coach.ui.activity_text import duration_text, sport_text
@@ -180,8 +179,7 @@ def _meal_title(meal: MealItem) -> str:
     return slots_text(meal.slots)
 
 
-def _meal_card(suggestion: MealSuggestion) -> MealCardView:
-    meal = suggestion.meal
+def _meal_card(meal: MealItem) -> MealCardView:
     moved = (
         QCoreApplication.translate("DayPage", "Moved from its usual time because of training.")
         if meal.moved
@@ -222,7 +220,7 @@ def _present_report(
         load_level_text(report.nutrition.level),
         tuple(_activity_row(a) for a in report.activities),
         _totals(report),
-        tuple(_meal_card(m) for m in report.meals),
+        tuple(_meal_card(m) for m in report.nutrition.meals),
         tuple(advisory_text(a) for a in report.nutrition.advisories),
         _unreadable_note(report.unreadable_activities),
         in_progress_text() if in_progress else "",

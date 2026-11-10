@@ -32,18 +32,15 @@ from ponos_coach.nutrition.domain import (
     TrainingSession,
     WeightLossGoal,
     plan_day,
-    suggest_examples,
 )
 from ponos_coach.profiles.day_nutrition import (
     DayActivity,
     DayNutritionReport,
-    MealSuggestion,
     NutritionUnavailable,
     UnavailableReason,
 )
 from ponos_coach.ui.day_presentation import DayView, UnavailableView, present_day
 from ponos_coach.ui.nutrition_texts import (
-    FOOD_NAMES,
     activity_level_text,
     advisory_text,
     energy_source_text,
@@ -55,7 +52,6 @@ from ponos_coach.ui.nutrition_texts import (
     unavailable_text,
 )
 from ponos_coach.ui.translations import APP_CATALOG
-from tests.food_support import load_food_table
 from tests.ui.nutrition_support import plain
 from tests.ui.test_translations import build_real_catalog
 
@@ -76,10 +72,6 @@ def report_for(
     sessions: tuple[TrainingSession, ...] = (),
 ) -> DayNutritionReport:
     nutrition = plan_day(DayInput(person, goal, MealTimes.default(), sessions))
-    foods = load_food_table().foods
-    suggestions = tuple(
-        MealSuggestion(meal, suggest_examples(meal, foods)) for meal in nutrition.meals
-    )
     activities = tuple(
         DayActivity(
             FitIdentity(FileId(1, 1, 1, datetime(2026, 6, 10, 5, tzinfo=UTC))),
@@ -92,7 +84,7 @@ def report_for(
         )
         for s in sessions
     )
-    return DayNutritionReport(DAY, nutrition, goal, MealTimes.default(), suggestions, activities, 0)
+    return DayNutritionReport(DAY, nutrition, goal, MealTimes.default(), activities, 0)
 
 
 ADULT = Person(Sex.MALE, 30, 178, 72.0, ActivityLevel.LIGHT)
@@ -203,14 +195,6 @@ def test_every_category_of_the_domain_has_a_text() -> None:
     assert goal_text(MaintenanceGoal()) == "Maintenance"
 
 
-def test_every_food_of_the_table_has_a_name_to_translate() -> None:
-    ids = {food.food_id for food in load_food_table().foods}
-
-    assert set(FOOD_NAMES) == ids
-    table = {food.food_id: food.name for food in load_food_table().foods}
-    assert all(FOOD_NAMES[food_id] == name for food_id, name in table.items())
-
-
 @pytest.fixture
 def italian(tmp_path: Path, qapp: QCoreApplication) -> Iterator[None]:
     """The project's real Italian catalog installed for the test."""
@@ -302,13 +286,11 @@ def test_the_hourly_intakes_after_a_session_say_their_hour() -> None:
             minutes_to_next_session=240.0,  # another session four hours after the end
         )
     )
-    foods = load_food_table().foods
     report = DayNutritionReport(
         DAY,
         nutrition,
         MaintenanceGoal(),
         MealTimes.default(),
-        tuple(MealSuggestion(m, suggest_examples(m, foods)) for m in nutrition.meals),
         (),
         0,
     )

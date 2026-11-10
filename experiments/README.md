@@ -24,23 +24,3 @@ track reading, scheduled workouts read-only).
   bytes and whether it exceeds 2560 bytes (limit of the generic Credential Manager).
 - `spike_shapes.py` contains `shape_of`, the pure function that anonymises; it is tested
   in `tests/experiments/test_spike_shapes.py`.
-
-## verify_foods.py
-
-- `uv run --locked python experiments/verify_foods.py --ciqual-dir DIR [--apply [--force]]
-  [--crea-dir DIR | --crea-fetch]` checks `src/ponos_coach/nutrition/foods.json` against the
-  ANSES-CIQUAL release in `DIR` (`alim_YYYY_MM_DD.xml` and `compo_YYYY_MM_DD.xml`, downloaded
-  by hand from recherche.data.gouv.fr, DOI 10.57745/RDMHWY; keep them outside the repository).
-  The files are untrusted: size-capped, refused if they declare a DTD, streamed.
-- It prints, per food, the difference from CIQUAL in percent for each value and flags a missing
-  code, a stored original name that is not the entry's and differences over 10% and over
-  0.5 g or 5 kcal. Rule for the values: `traces` is 0, `< x` is x/2, missing is never repaired.
-- With `--apply` it rewrites values, original names and `source.version` from CIQUAL and sets
-  `source.verified_on` to today, only if every code was found (or with `--force`); the new file
-  must pass the table's parser (atomic write).
-- CREA (`alimentinutrizione.it`) is compared, never copied: `experiments/crea_mapping.json` has the
-  CREA code and title of each food; `--crea-fetch` reads the pages (one request per second) and
-  `--crea-dir` reads pages saved as `<code>.html`. The report lists the differences; it never
-  changes the exit status.
-- Exit status: 0 fine, 1 input or network error (no file touched), 2 the table has problems.
-  Tested in `tests/experiments/test_verify_foods.py` (synthetic files, no network).

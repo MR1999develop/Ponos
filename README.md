@@ -95,7 +95,7 @@ sudo apt-get install libegl1 libgl1 libopengl0 libglib2.0-0 libdbus-1-3 \
 
 To check that an unpacked package is complete, run
 `ponos-coach --self-check report.txt` (the file must not exist yet): it checks the
-food table, translations, web resources, time-zone data and the web engine,
+translations, web resources, time-zone data and the web engine,
 writes one line per check to the report and exits with 0 if all passed.
 
 To remove the app, delete its folder. Your profiles are in the folders you
@@ -329,8 +329,3 @@ To report a vulnerability see `SECURITY.md`.
 ## Licence
 
 GPL-3.0-only. The full text is in the `LICENSE` file.
-
-The food values of the nutrition guidance come from the ANSES-CIQUAL table,
-published under the Open Licence 2.0 (Etalab): ANSES. Table de composition
-nutritionnelle des aliments Ciqual 2025 (<https://ciqual.anses.fr/>). The app
-is not endorsed by ANSES.

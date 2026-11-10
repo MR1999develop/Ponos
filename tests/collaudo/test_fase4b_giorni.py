@@ -31,7 +31,6 @@ from ponos_coach.nutrition.domain import (
     MealSlot,
     WeightLossGoal,
 )
-from ponos_coach.nutrition.domain.foods import tolerance_g
 from ponos_coach.profiles.day_nutrition import (
     DayNutritionReport,
     DayNutritionResult,
@@ -41,7 +40,7 @@ from ponos_coach.profiles.day_nutrition import (
 from ponos_coach.profiles.domain import Weight, WeightEntry
 from tests.builders import IMPORTED_AT
 from tests.fixtures.generators import fit_writer as fw
-from tests.profiles.test_day_nutrition import BORN, DAY, FOODS, ROME, Rig
+from tests.profiles.test_day_nutrition import BORN, DAY, ROME, Rig
 
 STEP_S = 10
 
@@ -109,7 +108,7 @@ class Lab(Rig):
             p.activities, self.archive, p.load_cache, p.physiology,
             p.weights, p.fixed_data, p.activity_levels, p.meal_times, p.goal_periods,
         )  # fmt: skip
-        return PlanDayNutrition(sources, decode_stored_activity, ZoneInfo(zone), FOODS)(day)
+        return PlanDayNutrition(sources, decode_stored_activity, ZoneInfo(zone))(day)
 
     def report_in(self, zone: str, day: date) -> DayNutritionReport:
         report = self.plan_in(zone, day)
@@ -126,22 +125,17 @@ def check_report(report: DayNutritionReport) -> None:
     """What must hold of any day (T-NUT-02, T-NUT-04)."""
     n = report.nutrition
     assert min(n.macros.carbs_g, n.macros.protein_g, n.macros.fat_g) >= 0
-    assert min(m.meal.macros.carbs_g for m in report.meals) >= 0
-    assert min(m.meal.macros.protein_g for m in report.meals) >= 0
-    assert min(m.meal.macros.fat_g for m in report.meals) >= 0
-    assert sum(m.meal.macros.carbs_g for m in report.meals) == n.macros.carbs_g
-    assert sum(m.meal.macros.protein_g for m in report.meals) == n.macros.protein_g
-    assert sum(m.meal.macros.fat_g for m in report.meals) == n.macros.fat_g
+    assert min(m.macros.carbs_g for m in report.nutrition.meals) >= 0
+    assert min(m.macros.protein_g for m in report.nutrition.meals) >= 0
+    assert min(m.macros.fat_g for m in report.nutrition.meals) >= 0
+    assert sum(m.macros.carbs_g for m in report.nutrition.meals) == n.macros.carbs_g
+    assert sum(m.macros.protein_g for m in report.nutrition.meals) == n.macros.protein_g
+    assert sum(m.macros.fat_g for m in report.nutrition.meals) == n.macros.fat_g
     assert abs(n.macros.kcal - n.target_kcal) <= 13
     assert n.target_kcal >= n.basal_kcal
     assert n.deficit_kcal <= min(0.2 * n.expenditure_kcal, 750)
-    for suggestion in report.meals:  # the examples are close to the meal's grams (T-NUT-06)
-        meal = suggestion.meal.macros
-        for example in suggestion.examples:
-            assert abs(example.carbs_g - meal.carbs_g) <= tolerance_g(meal.carbs_g) + 1e-9
-            assert abs(example.protein_g - meal.protein_g) <= tolerance_g(meal.protein_g) + 1e-9
-            assert abs(example.fat_g - meal.fat_g) <= tolerance_g(meal.fat_g) + 1e-9
-    assert [m.meal.minute for m in report.meals] == sorted(m.meal.minute for m in report.meals)
+    minutes = [m.minute for m in report.nutrition.meals]
+    assert minutes == sorted(minutes)
 
 
 # --- Days with 0, 1, 2 and 3 sessions -------------------------------------------------------
@@ -163,9 +157,9 @@ def test_t_nut_04_a_day_with_zero_one_two_or_three_files_is_complete_and_consist
     assert (report.nutrition.level is DayLoadLevel.REST) is (count == 0)
     # one recovery per session: a single dose, or the first hour of the hourly refuelling
     recoveries = [
-        m.meal
-        for m in report.meals
-        if MealSlot.POST_TRAINING in m.meal.slots and m.meal.refuel_intake in (None, 1)
+        m
+        for m in report.nutrition.meals
+        if MealSlot.POST_TRAINING in m.slots and m.refuel_intake in (None, 1)
     ]
     assert len(recoveries) == count
 
@@ -177,12 +171,12 @@ def test_t_nut_04_a_run_at_dawn_before_breakfast_has_a_complete_day() -> None:
     report = lab.report()
 
     check_report(report)
-    first = report.meals[0]
-    assert MealSlot.PRE_TRAINING in first.meal.slots
-    assert first.meal.minute == 3 * 60 + 45  # one hour before: two would be before 05:00
+    first = report.nutrition.meals[0]
+    assert MealSlot.PRE_TRAINING in first.slots
+    assert first.minute == 3 * 60 + 45  # one hour before: two would be before 05:00
     # the recovery (06:55) is 35 minutes from breakfast (07:30, just outside the hour that
     # follows the end): the two become one item at 07:30
-    breakfast = next(m.meal for m in report.meals if MealSlot.BREAKFAST in m.meal.slots)
+    breakfast = next(m for m in report.nutrition.meals if MealSlot.BREAKFAST in m.slots)
     assert not breakfast.moved
     assert breakfast.slots == (MealSlot.BREAKFAST, MealSlot.POST_TRAINING)
     assert breakfast.minute == 7 * 60 + 30
@@ -196,7 +190,7 @@ def test_t_nut_04_a_run_at_23_and_one_across_midnight_keep_every_item_inside_the
     report = lab.report()
 
     check_report(report)
-    assert all(0 <= m.meal.minute <= 1439 for m in report.meals)
+    assert all(0 <= m.minute <= 1439 for m in report.nutrition.meals)
     assert len(report.activities) == 2
 
 
@@ -208,7 +202,7 @@ def test_t_nut_04_an_eight_hour_effort_has_the_during_box_and_stays_inside_the_c
 
     check_report(report)
     assert report.nutrition.level is DayLoadLevel.VERY_HIGH
-    (box,) = [m.meal for m in report.meals if m.meal.hourly is not None]
+    (box,) = [m for m in report.nutrition.meals if m.hourly is not None]
     assert box.hourly is not None
     assert box.hourly.carbs_g <= 90 and box.hourly.fluid_ml <= 800
     assert report.nutrition.macros.carbs_g <= 12 * 80
@@ -353,7 +347,7 @@ def test_d_f4b_07_a_session_across_the_spring_change_has_its_recovery_after_it_e
 
     report = lab.report_in("Europe/Rome", date(2026, 3, 29))
 
-    post = next(m.meal for m in report.meals if MealSlot.POST_TRAINING in m.meal.slots)
+    post = next(m for m in report.nutrition.meals if MealSlot.POST_TRAINING in m.slots)
     assert post.minute >= 4 * 60 + 10  # the wall clock shows 04:10 at the end
 
 
@@ -453,7 +447,7 @@ def test_d_f4b_04_the_recovery_comes_after_the_end_of_a_session_with_long_stops(
 
     report = lab.report()
 
-    post = next(m.meal for m in report.meals if MealSlot.POST_TRAINING in m.meal.slots)
+    post = next(m for m in report.nutrition.meals if MealSlot.POST_TRAINING in m.slots)
     assert post.minute >= 11 * 60  # eaten at 09:30 today, while the person is still out
 
 

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-import functools
 import importlib.metadata
 import logging
 import os
@@ -17,7 +16,6 @@ import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from importlib import resources
 from pathlib import Path
 from typing import Final
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -47,13 +45,6 @@ from ponos_coach.maps.ports import (
     TileSource,
 )
 from ponos_coach.maps.use_cases import TileProxy
-from ponos_coach.nutrition.food_table import (
-    FOOD_TABLE_RESOURCE,
-    MAX_FOOD_TABLE_BYTES,
-    FoodTable,
-    FoodTableError,
-    parse_food_table,
-)
 from ponos_coach.platform.folder_kind import SystemFolderKindDetector
 from ponos_coach.platform.notifier import DesktopNotifier
 from ponos_coach.platform.profile_folders import LocalProfileFolders
@@ -291,22 +282,6 @@ def _default_log_dir() -> Path:
     return Path(platformdirs.user_log_dir("PonosCoach", appauthor=False))
 
 
-def _read_food_table() -> FoodTable:
-    """The food table packaged with the app: the bytes are read here (with the size cap), the
-    parser of the nutrition package does the rest.
-
-    Raises:
-        FoodTableError: the resource is missing, too large or invalid.
-    """
-    try:
-        resource = resources.files("ponos_coach.nutrition").joinpath(FOOD_TABLE_RESOURCE)
-        with resource.open("rb") as handle:
-            data = handle.read(MAX_FOOD_TABLE_BYTES + 1)
-    except OSError as exc:
-        raise FoodTableError("the food table cannot be read") from exc
-    return parse_food_table(data)
-
-
 def _default_import_sources() -> ImportSources:
     return ImportSources(files=FilesImportSource, folder=FolderImportSource)
 
@@ -507,7 +482,6 @@ def compose_main_window(  # noqa: PLR0913 - every argument is an injectable vola
             mfa_wait_s=mfa_wait_s,
             preferences=QSettingsSyncPreferences(settings),
         ),
-        foods=functools.cache(_read_food_table),  # read once, on first use
         errors=ErrorContext(_registry_problem, config_dir),
     )
     controller = WorkspaceController(services)
@@ -547,7 +521,7 @@ def _run_self_check(report: Path) -> int:
     prepare_qt()
     app = QApplication([APP_NAME])
     try:
-        return run_self_check(report, _read_food_table)
+        return run_self_check(report)
     except OSError as exc:
         print(f"ponos-coach: {report.name}: {type(exc).__name__}", file=sys.stderr)  # noqa: T201
         return 1
