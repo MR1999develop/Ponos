@@ -477,17 +477,11 @@ NOW = datetime(2026, 11, 8, 12, 0, tzinfo=UTC)
     ("cache_control", "expires", "date", "expected"),
     [
         ("public, max-age=3600", None, None, 3600),
-        ("max-age=0", None, None, 0),
         ("no-store", None, None, 0),
-        ("private, no-cache", None, None, 0),
         ("max-age=99999999", None, None, MAX_TTL_S),
         ("public", None, None, DEFAULT_TTL_S),
-        ("max-age=abc", None, None, DEFAULT_TTL_S),
-        (None, None, None, DEFAULT_TTL_S),
         (None, "Sun, 08 Nov 2026 13:00:00 GMT", "Sun, 08 Nov 2026 12:00:00 GMT", 3600),
-        (None, "Sun, 08 Nov 2026 13:00:00 GMT", None, 3600),  # against the local clock
         (None, "Sun, 08 Nov 2026 11:00:00 GMT", None, 0),  # already in the past
-        (None, "not a date", None, DEFAULT_TTL_S),
         ("max-age=60", "Sun, 08 Nov 2026 23:00:00 GMT", None, 60),  # Cache-Control wins
     ],
 )

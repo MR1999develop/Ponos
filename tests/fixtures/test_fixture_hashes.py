@@ -7,8 +7,6 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-import pytest
-
 DATA = Path(__file__).resolve().parent / "data"
 
 # SHA-256 of the phase 0 fixtures. New fixtures are added; these are not touched.
@@ -43,6 +41,11 @@ FROZEN = {
 }
 
 
-@pytest.mark.parametrize("name", sorted(FROZEN))
-def test_existing_fixture_bytes_are_unchanged(name: str) -> None:
-    assert hashlib.sha256((DATA / name).read_bytes()).hexdigest() == FROZEN[name]
+def test_existing_fixture_bytes_are_unchanged() -> None:
+    changed = [
+        name
+        for name, digest in sorted(FROZEN.items())
+        if hashlib.sha256((DATA / name).read_bytes()).hexdigest() != digest
+    ]
+
+    assert not changed, f"frozen fixtures changed: {', '.join(changed)}"

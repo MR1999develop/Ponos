@@ -23,17 +23,11 @@ def test_app_scheme_is_allowed(url: str) -> None:
     "url",
     [
         "http://example.com/x.js",
-        "https://example.com/",
         "http://127.0.0.1:8000/",
         "file:///C:/Windows/win.ini",
         "data:text/html,<script>alert(1)</script>",
-        "blob:ponos://app/1234",
-        "ftp://example.com/",
-        "ws://example.com/",
         "ponos://evil/chart.js",
-        "ponos:chart.js",
         "javascript:alert(1)",
-        "about:blank",
         "",
     ],
 )

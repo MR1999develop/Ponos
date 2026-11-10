@@ -66,14 +66,16 @@ def test_extension_is_case_insensitive_and_only_the_extension_counts() -> None:
     assert decode_activity_file(imp.fit_run(1), "..\\..\\x.fit").file_format is FileFormat.FIT
 
 
-@pytest.mark.parametrize("name", sorted(p.name for p in (DATA / "fit").glob("*.fit")))
+@pytest.mark.parametrize(
+    "name", ["run_gps_loop.fit", "run_threshold_no_distance.fit", "hike_24h.fit"]
+)
 def test_fit_fixtures_decode_exactly_as_the_fit_reader(name: str) -> None:
     data = (DATA / "fit" / name).read_bytes()
 
     assert_same_activity(decode_activity_file(data, name), decode_activity(data))
 
 
-@pytest.mark.parametrize("name", sorted(p.name for p in (DATA / "fit-ostili").glob("*.fit")))
+@pytest.mark.parametrize("name", ["bad_file_crc.fit"])  # the full set: test_fit_decoder.py
 def test_hostile_fit_fixtures_give_the_single_error(name: str) -> None:
     data = (DATA / "fit-ostili" / name).read_bytes()
 

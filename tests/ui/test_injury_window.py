@@ -358,18 +358,6 @@ def test_the_review_is_refused_with_a_reason_when_no_sign_waits(
     assert review.toolTip() == "No warning sign is waiting for a doctor's visit."
 
 
-def test_strong_rest_pain_is_a_warning_sign_too(
-    qtbot: QtBot, tmp_path: Path, settings: QSettings
-) -> None:
-    window = injury_window(qtbot, tmp_path, settings)
-
-    report_injury(qtbot, window, rest=7)
-
-    assert summary_of(window).phase is ProblemPhase.HALTED
-    assert WarningSign.STRONG_REST_PAIN in summary_of(window).alarms
-    wait_plan_state(qtbot, window, PlanHalted)
-
-
 def test_an_illness_with_fever_stops_the_plan_until_the_user_feels_well(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:

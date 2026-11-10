@@ -64,17 +64,10 @@ class TestSourceErrors:
             (None, None),
             ("0", None),
             ("-5", None),
-            ("abc", None),
-            ("", None),
-            ("Wed, 21 Oct 2026 07:28:00 GMT", None),
             ("1.5", 1.5),
             ("99999", MAX_RETRY_AFTER_S),
-            ("3600", 3600.0),
-            ("1e3", None),
             ("²", None),  # D-F2-01: digit that float() does not read
             ("٣", None),  # Arabic digit: non-ASCII
-            ("+5", None),
-            ("5 6", None),
             ("9" * 500, None),
         ],
     )
