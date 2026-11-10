@@ -7,9 +7,9 @@ Two phases, in this order, both resumable after an interruption (PLAN.md 4.4):
 
 1. **List.** Complete the first time (`ListingKind.FULL`), then incremental (from the most recent
    until a whole page consists of known ids) or, on request, "full check" (which also rearms
-   the entries failed for exhausted attempts). The list ends with a short or
-   empty page, never at the total declared by the first page (Garmin may receive new activities
-   while listing and the oldest would slip past the total). Each page
+   the entries failed for exhausted attempts or not provided by Garmin). The list ends with a
+   short or empty page, never at the total declared by the first page (Garmin may receive new
+   activities while listing and the oldest would slip past the total). Each page
    adds its entries to the journal and saves the cursor in the same transaction: after a kill
    the list restarts from the cursor, without losing or duplicating entries. The cursor is resumed
    even if
@@ -28,12 +28,15 @@ Errors according to how the caller reacts: authentication required, rate limit b
 the caps, unreachable service, archive error or busy database **stop** the
 synchronization with a reason (`StopReason`); unsupported format, corrupt or too large
 file, or an original that is not the one of the entry **fail the entry** definitively and
-it moves on. A round stopped by the network or the rate limit **does not consume attempts**:
-entries that failed because of the network (retryable) are written to the journal only if a later
-request
-receives an answer from Garmin, proof that it was the entry and not the network; if the round
-stops, they stay as they were. No log of names or data (only the type of an unexpected error),
-no wait that cancellation cannot interrupt.
+it moves on. A round stopped by the network or the rate limit **does not consume attempts**.
+An entry whose download gets no useful answer (5xx, no response) after all its attempts is held
+back, not written: if Garmin answers a later download, or a probe request (the first list page)
+when the round stops or ends, it was the entry and not the network, and the round counts as one
+**unanswered round** of that entry (`mark_unanswered`); after
+`SyncPolicy.max_unanswered_rounds` of them the entry fails as `REMOTE_NOT_PROVIDED` and no longer
+holds up the next rounds. If the probe gets no answer either, the round stops with the service
+unavailable and nothing is written. The attempts of the entry are not used. No log of names or data
+(only the type of an unexpected error), no wait that cancellation cannot interrupt.
 """
 
 from __future__ import annotations
@@ -50,6 +53,7 @@ from ponos_coach.activities.decoding import ActivityFileError, ActivityFileReaso
 from ponos_coach.activities.domain import (
     DEFAULT_POLICY,
     MAX_DOWNLOAD_BYTES,
+    REARMABLE_REASONS,
     RETRYABLE_REASONS,
     Activity,
     ActivityOrigin,
@@ -70,6 +74,7 @@ from ponos_coach.activities.domain import (
     mark_downloaded,
     mark_failed,
     mark_matched,
+    mark_unanswered,
     original_matches_listing,
     pause_between_requests_s,
     rearm_exhausted,
@@ -133,7 +138,7 @@ class OriginalExtractionError(Exception):
     unsupported formats such as TCX, `FILE_TOO_LARGE`, `NOT_AN_ACTIVITY`...)."""
 
     def __init__(self, reason: FailureReason) -> None:
-        if reason in RETRYABLE_REASONS or reason is FailureReason.ATTEMPTS_EXHAUSTED:
+        if reason in RETRYABLE_REASONS or reason in REARMABLE_REASONS:
             raise ValueError("extraction always fails for a final cause")
         super().__init__(reason.value)
         self.reason = reason
@@ -363,7 +368,7 @@ class _Run:
         self._failures: list[EntryFailure] = []
         # Entries failed because of the network in this round, not yet written (see
         # `_network_answered`).
-        self._held: list[tuple[JournalEntry, FailureReason]] = []
+        self._held: list[JournalEntry] = []
         self._durations_s: list[float] = []
         self._requested_before = False
         self._unreachable_in_a_row = 0
@@ -374,7 +379,7 @@ class _Run:
             self._rearm_exhausted()
             self._list()
             self._work_through_entries()
-            self._write_held_failures()  # the round is over: they were defects of the entries
+            self._settle_held_after_probe()  # the round is over: the entries or the network?
         except _StopError as stopped:
             stop = stopped.reason
         except StorageBusyError:  # database busy beyond the wait: nothing was touched
@@ -395,7 +400,8 @@ class _Run:
     # --- Full check: exhausted attempts ----------------------------------------------------
 
     def _rearm_exhausted(self) -> None:
-        """Full check only: entries with exhausted attempts go back to download."""
+        """Full check only: entries failed for exhausted attempts or because Garmin did not provide
+        them go back to download."""
         if self._kind is not ListingKind.VERIFY:
             return
         journal = self._p.journal
@@ -519,15 +525,16 @@ class _Run:
 
         With the rate limit it stops immediately, the entry as it was. For the network the entry is
         held back (not written): if Garmin answers for a later entry it was a defect
-        of the entry and it is written; if the service stays silent for
-        `MAX_CONSECUTIVE_UNREACHABLE` entries
-        in a row it stops and none of them consumes an attempt.
+        of the entry and the round counts for it. If the service stays silent for
+        `MAX_CONSECUTIVE_UNREACHABLE` entries in a row the round stops, after a probe that
+        tells the entries (counted) from the network (nothing counted).
         """
         if reason is FailureReason.RATE_LIMITED:
             raise _StopError(StopReason.RATE_LIMITED)
-        self._held.append((entry, reason))
+        self._held.append(entry)
         self._unreachable_in_a_row += 1
         if self._unreachable_in_a_row >= MAX_CONSECUTIVE_UNREACHABLE:
+            self._settle_held_after_probe()
             raise _StopError(StopReason.SERVICE_UNAVAILABLE)
 
     def _network_answered(self) -> None:
@@ -537,9 +544,32 @@ class _Run:
         self._write_held_failures()
 
     def _write_held_failures(self) -> None:
+        """Garmin answered: each held-back entry has one more unanswered round."""
         held, self._held = self._held, []
-        for entry, reason in held:
-            self._fail(entry, reason)
+        for entry in held:
+            unanswered = mark_unanswered(entry, self._now(), self._p.policy.max_unanswered_rounds)
+            self._p.journal.update(unanswered)
+            if unanswered.failure is not None:
+                self._failures.append(EntryFailure(entry.garmin_id, unanswered.failure))
+
+    def _settle_held_after_probe(self) -> None:
+        """No download has answered since the entries were held back: ask Garmin something else.
+
+        The probe is the first list page (one entry). Any answer from Garmin, even a rejection,
+        shows that the network and the service are there, so the held-back entries are the
+        ones with the problem and the round counts for them. No answer at all (the usual
+        attempts and backoff exhausted): the network is down, nothing is written, and the round
+        stops. Authentication and cancellation stop as for any request.
+        """
+        if not self._held:
+            return
+        try:
+            self._request(lambda: self._p.source.list_page(0, 1))
+        except _RequestFailedError as failed:
+            raise _StopError(_stop_for(failed.reason)) from failed
+        except ActivitySourceError:
+            pass  # a rejection is still an answer
+        self._write_held_failures()
 
     def _extract(self, entry: JournalEntry, zipped: bytes) -> ExtractedOriginal | None:
         try:

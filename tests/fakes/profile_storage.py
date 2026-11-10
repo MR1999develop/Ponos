@@ -18,9 +18,9 @@ from pathlib import Path
 from types import MappingProxyType
 
 from ponos_coach.activities.domain import (
+    REARMABLE_REASONS,
     ActivityIdentity,
     ActivityRecord,
-    FailureReason,
     GarminActivityId,
     GeoBox,
     InvalidTransitionError,
@@ -334,7 +334,7 @@ class _Journal:
         exhausted = [
             e
             for e in self._db.journal.values()
-            if e.status is SyncStatus.FAILED and e.failure is FailureReason.ATTEMPTS_EXHAUSTED
+            if e.status is SyncStatus.FAILED and e.failure in REARMABLE_REASONS
         ]
         exhausted.sort(key=lambda e: (e.remote.start, e.garmin_id.value), reverse=True)
         return exhausted[:limit]
@@ -349,7 +349,12 @@ class _Journal:
         if not can_transition(stored.status, entry.status):
             raise InvalidTransitionError(f"{stored.status.value} -> {entry.status.value}")
         self._db.journal[entry.garmin_id] = JournalEntry(
-            stored.remote, entry.status, entry.updated_at, entry.failed_attempts, entry.failure
+            stored.remote,
+            entry.status,
+            entry.updated_at,
+            entry.failed_attempts,
+            entry.failure,
+            entry.unanswered_rounds,
         )
 
     def counts(self) -> Mapping[SyncStatus, int]:

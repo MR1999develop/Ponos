@@ -21,6 +21,7 @@ from ponos_coach.activities.domain import (
     MAX_GARMIN_ACTIVITY_ID,
     MAX_PAGE_SIZE,
     MAX_TOKEN_CHARS,
+    REARMABLE_REASONS,
     RETRYABLE_REASONS,
     ActivityPage,
     FailureReason,
@@ -41,6 +42,7 @@ from ponos_coach.activities.domain import (
     mark_downloaded,
     mark_failed,
     mark_matched,
+    mark_unanswered,
     original_matches_listing,
     pause_between_requests_s,
     pending_entry,
@@ -339,6 +341,23 @@ class TestRearm:
         assert rearmed == pending_entry(remote_activity(1), LATER)
         assert (rearmed.failed_attempts, rearmed.failure) == (0, None)
 
+    def test_an_entry_that_garmin_does_not_provide_goes_back_to_pending_without_rounds(
+        self,
+    ) -> None:
+        stuck = JournalEntry(
+            remote_activity(1),
+            SyncStatus.FAILED,
+            NOW,
+            0,
+            FailureReason.REMOTE_NOT_PROVIDED,
+            3,
+        )
+
+        rearmed = rearm_exhausted(stuck, LATER)
+
+        assert rearmed == pending_entry(remote_activity(1), LATER)
+        assert rearmed.unanswered_rounds == 0
+
     @pytest.mark.parametrize("status", list(SyncStatus))
     def test_any_other_entry_cannot_be_rearmed(self, status: SyncStatus) -> None:
         entry = _entry(status)
@@ -346,9 +365,7 @@ class TestRearm:
         with pytest.raises(InvalidTransitionError):
             rearm_exhausted(entry, LATER)
 
-    @pytest.mark.parametrize(
-        "reason", [r for r in DEFINITIVE if r is not FailureReason.ATTEMPTS_EXHAUSTED]
-    )
+    @pytest.mark.parametrize("reason", [r for r in DEFINITIVE if r not in REARMABLE_REASONS])
     def test_a_definitive_failure_is_not_rearmed(self, reason: FailureReason) -> None:
         entry = JournalEntry(remote_activity(1), SyncStatus.FAILED, NOW, 1, reason)
 
@@ -484,6 +501,79 @@ class TestTransitions:
             entry = mark_failed(entry, reason, LATER, limit)
             assert (entry.status is SyncStatus.FAILED) == (count >= limit)
         assert entry.failed_attempts == min(len(reasons), limit)
+
+
+class TestUnansweredRounds:
+    def test_rounds_go_up_by_one_without_using_the_failed_attempts(self) -> None:
+        entry = _entry()
+        steps = []
+        for _ in range(3):
+            entry = mark_unanswered(entry, LATER, 3)
+            steps.append(
+                (entry.status, entry.failure, entry.failed_attempts, entry.unanswered_rounds)
+            )
+
+        assert steps == [
+            (SyncStatus.RETRYABLE, FailureReason.TRANSIENT_ERROR, 0, 1),
+            (SyncStatus.RETRYABLE, FailureReason.TRANSIENT_ERROR, 0, 2),
+            (SyncStatus.FAILED, FailureReason.REMOTE_NOT_PROVIDED, 0, 3),
+        ]
+
+    def test_with_a_single_round_the_first_one_is_final(self) -> None:
+        failed = mark_unanswered(_entry(), LATER, 1)
+
+        assert failed.failure is FailureReason.REMOTE_NOT_PROVIDED
+
+    def test_zero_rounds_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="round"):
+            mark_unanswered(_entry(), LATER, 0)
+
+    @pytest.mark.parametrize(
+        "status", [SyncStatus.DOWNLOADED, SyncStatus.MATCHED, SyncStatus.FAILED]
+    )
+    def test_a_final_entry_cannot_have_another_round(self, status: SyncStatus) -> None:
+        with pytest.raises(InvalidTransitionError):
+            mark_unanswered(_entry(status), LATER, 3)
+
+    def test_a_download_resets_the_count_and_keeps_the_attempts(self) -> None:
+        entry = JournalEntry(
+            remote_activity(1), SyncStatus.RETRYABLE, NOW, 1, FailureReason.TRANSIENT_ERROR, 2
+        )
+
+        done = mark_downloaded(entry, LATER)
+
+        assert (done.failed_attempts, done.unanswered_rounds) == (1, 0)
+
+    def test_a_retryable_failure_keeps_the_rounds(self) -> None:
+        entry = mark_unanswered(_entry(), LATER, 3)
+
+        failed = mark_failed(entry, FailureReason.TRANSIENT_ERROR, LATER, 3)
+
+        assert (failed.failed_attempts, failed.unanswered_rounds) == (1, 1)
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"status": SyncStatus.PENDING, "unanswered_rounds": 1},
+            {"status": SyncStatus.DOWNLOADED, "unanswered_rounds": -1},
+            {"status": SyncStatus.RETRYABLE, "failure": FailureReason.TRANSIENT_ERROR},
+        ],
+        ids=["pending-with-rounds", "negative", "retryable-without-anything"],
+    )
+    def test_incoherent_counters_are_refused(self, kwargs: dict[str, object]) -> None:
+        with pytest.raises(ValueError, match=r"."):
+            JournalEntry(remote_activity(1), updated_at=NOW, **kwargs)  # type: ignore[arg-type]
+
+    @given(
+        limit=st.integers(min_value=1, max_value=8), rounds=st.integers(min_value=1, max_value=12)
+    )
+    def test_rounds_end_exactly_at_the_limit(self, limit: int, rounds: int) -> None:
+        entry = _entry()
+        for count in range(1, min(rounds, limit) + 1):
+            entry = mark_unanswered(entry, LATER, limit)
+            assert (entry.status is SyncStatus.FAILED) == (count >= limit)
+        assert entry.unanswered_rounds == min(rounds, limit)
+        assert entry.failed_attempts == 0
 
 
 # --- Listing cursor -----------------------------------------------------------------------

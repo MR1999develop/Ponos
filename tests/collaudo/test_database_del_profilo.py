@@ -171,7 +171,9 @@ def write_frozen_v1(path: Path) -> None:
 
 # Columns added by migrations after the ones these frozen tests describe (v8: the track box).
 # The tests of those migrations read them with their own queries.
-LATER_COLUMNS = frozenset({"track_south", "track_west", "track_north", "track_east"})
+LATER_COLUMNS = frozenset(
+    {"track_south", "track_west", "track_north", "track_east", "unanswered_rounds"}
+)
 
 
 def rows(path: Path, table: str) -> list[tuple[object, ...]]:

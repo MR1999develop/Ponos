@@ -29,6 +29,7 @@ def test_every_zip_reason_maps_to_a_definitive_failure(reason: ZipReason) -> Non
 
     assert failure not in RETRYABLE_REASONS
     assert failure is not FailureReason.ATTEMPTS_EXHAUSTED
+    assert failure is not FailureReason.REMOTE_NOT_PROVIDED
 
 
 def test_a_garmin_download_with_a_fit_gives_the_file_and_its_format() -> None:

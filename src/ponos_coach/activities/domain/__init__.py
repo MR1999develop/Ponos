@@ -50,6 +50,7 @@ from ponos_coach.activities.domain.identity import (
 )
 from ponos_coach.activities.domain.journal import (
     ALLOWED_TRANSITIONS,
+    REARMABLE_REASONS,
     RETRYABLE_REASONS,
     WORKABLE_STATUSES,
     FailureReason,
@@ -64,6 +65,7 @@ from ponos_coach.activities.domain.journal import (
     mark_downloaded,
     mark_failed,
     mark_matched,
+    mark_unanswered,
     pending_entry,
     rearm_exhausted,
 )
@@ -135,6 +137,7 @@ __all__ = [
     "MAX_TRACK_POINTS",
     "MAX_TRACK_ZOOM",
     "MIN_ACTIVITY_INSTANT",
+    "REARMABLE_REASONS",
     "RETRYABLE_REASONS",
     "TRACK_GAP_S",
     "TRACK_TOLERANCE_M",
@@ -195,6 +198,7 @@ __all__ = [
     "mark_downloaded",
     "mark_failed",
     "mark_matched",
+    "mark_unanswered",
     "original_matches_listing",
     "parse_amount",
     "parse_distance_km",

@@ -26,6 +26,7 @@ from ponos_coach.activities.domain import (
     mark_downloaded,
     mark_failed,
     mark_matched,
+    mark_unanswered,
     pending_entry,
     rearm_exhausted,
 )
@@ -363,6 +364,35 @@ class SyncJournalContract:
             assert journal.get(_id(3)) == pending_entry(exhausted[0].remote, LATER)
             assert [e.garmin_id for e in journal.next_exhausted(10)] == [_id(2)]
             assert [e.garmin_id for e in journal.next_exhausted(1)] == [_id(2)]
+
+    def test_unanswered_rounds_are_kept_and_the_entry_that_garmin_does_not_provide_is_rearmed(
+        self, harness: StorageHarness
+    ) -> None:
+        with closing(create(harness)) as profile:
+            journal = profile.sync_journal
+            journal.add_pending([remote_activity(1), remote_activity(2)], IMPORTED_AT)
+            first = journal.get(_id(1))
+            assert first is not None
+            first = mark_unanswered(first, IMPORTED_AT, 3)
+            journal.update(first)
+            assert journal.get(_id(1)) == first
+            assert (first.failed_attempts, first.unanswered_rounds) == (0, 1)
+            for _ in range(2):
+                first = mark_unanswered(first, IMPORTED_AT, 3)
+                journal.update(first)
+            second = journal.get(_id(2))
+            assert second is not None
+            journal.update(mark_downloaded(mark_unanswered(second, IMPORTED_AT, 3), LATER))
+
+            stuck = journal.next_exhausted(10)
+
+            assert [e.garmin_id for e in stuck] == [_id(1)]
+            assert stuck[0].failure is FailureReason.REMOTE_NOT_PROVIDED
+            done = journal.get(_id(2))
+            assert done is not None
+            assert (done.status, done.unanswered_rounds) == (SyncStatus.DOWNLOADED, 0)
+            journal.update(rearm_exhausted(stuck[0], LATER))
+            assert journal.get(_id(1)) == pending_entry(stuck[0].remote, LATER)
 
     def test_next_exhausted_needs_a_positive_limit(self, harness: StorageHarness) -> None:
         with closing(create(harness)) as profile, pytest.raises(ValueError, match="limit"):
