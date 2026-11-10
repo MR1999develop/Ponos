@@ -9,7 +9,32 @@ has the field as "buddy" and gives it its text as accessible name, if it does no
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QFormLayout, QLabel, QWidget
+from PySide6.QtCore import QRegularExpression, Qt
+from PySide6.QtGui import QRegularExpressionValidator
+from PySide6.QtWidgets import QFormLayout, QLabel, QLineEdit, QWidget
+
+_THRESHOLD_MAX_CHARS = 3  # 40 to 250
+_PACE_MAX_CHARS = 16  # the same limit the domain checks before reading the text
+
+
+def optional_threshold_edit(parent: QWidget, name: str) -> QLineEdit:
+    """Optional threshold: whole bpm, or empty for the default (shown as the placeholder)."""
+    edit = QLineEdit(parent)
+    edit.setObjectName(name)
+    edit.setMaxLength(_THRESHOLD_MAX_CHARS)
+    edit.setValidator(QRegularExpressionValidator(QRegularExpression(r"[0-9]{0,3}"), edit))
+    edit.setAlignment(Qt.AlignmentFlag.AlignRight)
+    return edit
+
+
+def threshold_pace_edit(parent: QWidget, name: str, accessible_name: str, hint: str) -> QLineEdit:
+    """Threshold pace field (`m:ss`); `hint` is the placeholder."""
+    edit = QLineEdit(parent)
+    edit.setObjectName(name)
+    edit.setAccessibleName(accessible_name)
+    edit.setPlaceholderText(hint)
+    edit.setMaxLength(_PACE_MAX_CHARS)
+    return edit
 
 
 def add_field_row(

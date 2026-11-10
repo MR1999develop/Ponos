@@ -20,6 +20,7 @@ from datetime import date
 from enum import Enum
 from pathlib import Path
 
+from ponos_coach.activities.domain import Sport
 from ponos_coach.load.domain import HeartRateLimits, Physiology, Sex, ThresholdHeartRate
 from ponos_coach.profiles.domain import (
     NAME_MAX_CHARS,
@@ -29,16 +30,26 @@ from ponos_coach.profiles.domain import (
     Height,
     InvalidProfileNameError,
     ProfileName,
+    ThresholdPace,
     Weight,
 )
 from ponos_coach.profiles.use_cases import NewProfileRequest
-from ponos_coach.ui.body_input import BodyProblem, read_birth_date, read_height, read_weight
+from ponos_coach.ui.body_input import (
+    BodyProblem,
+    read_birth_date,
+    read_height,
+    read_threshold_pace,
+    read_weight,
+)
 from ponos_coach.ui.heart_rate_rules import (
     MAX_ALLOWED_BPM,
     MIN_ALLOWED_BPM,
     MIN_THRESHOLD_BPM,
     HeartRateProblem,
     heart_rate_problems,
+    optional_threshold_default,
+    optional_threshold_problems,
+    read_optional_threshold,
 )
 
 __all__ = [
@@ -83,6 +94,9 @@ class Field(Enum):
     MIN_BPM = "min_bpm"
     MAX_BPM = "max_bpm"
     THRESHOLD = "threshold"
+    BIKE_THRESHOLD = "bike_threshold"
+    OTHER_THRESHOLD = "other_threshold"
+    THRESHOLD_PACE = "threshold_pace"
 
 
 class Problem(Enum):
@@ -102,6 +116,13 @@ class Problem(Enum):
     MIN_NOT_BELOW_MAX = (Field.MIN_BPM, "min_not_below_max")
     THRESHOLD_NOT_ABOVE_MIN = (Field.THRESHOLD, "threshold_not_above_min")
     THRESHOLD_ABOVE_MAX = (Field.THRESHOLD, "threshold_above_max")
+    BIKE_NOT_A_THRESHOLD = (Field.BIKE_THRESHOLD, "bike_not_a_threshold")
+    BIKE_NOT_ABOVE_MIN = (Field.BIKE_THRESHOLD, "bike_not_above_min")
+    BIKE_ABOVE_MAX = (Field.BIKE_THRESHOLD, "bike_above_max")
+    OTHER_NOT_A_THRESHOLD = (Field.OTHER_THRESHOLD, "other_not_a_threshold")
+    OTHER_NOT_ABOVE_MIN = (Field.OTHER_THRESHOLD, "other_not_above_min")
+    OTHER_ABOVE_MAX = (Field.OTHER_THRESHOLD, "other_above_max")
+    PACE_INVALID = (Field.THRESHOLD_PACE, "pace_invalid")
 
     @property
     def field(self) -> Field:
@@ -116,6 +137,7 @@ _BODY_PROBLEMS = {
     BodyProblem.WEIGHT_INVALID: Problem.WEIGHT_INVALID,
     BodyProblem.BIRTH_EMPTY: Problem.BIRTH_EMPTY,
     BodyProblem.BIRTH_INVALID: Problem.BIRTH_INVALID,
+    BodyProblem.PACE_INVALID: Problem.PACE_INVALID,
 }
 _PROBLEM_TO_BODY = {problem: body for body, problem in _BODY_PROBLEMS.items()}
 _HEART_RATE_PROBLEMS = {
@@ -123,7 +145,23 @@ _HEART_RATE_PROBLEMS = {
     HeartRateProblem.THRESHOLD_NOT_ABOVE_MIN: Problem.THRESHOLD_NOT_ABOVE_MIN,
     HeartRateProblem.THRESHOLD_ABOVE_MAX: Problem.THRESHOLD_ABOVE_MAX,
 }
-_PROBLEM_TO_HEART_RATE = {problem: rule for rule, problem in _HEART_RATE_PROBLEMS.items()}
+_OPTIONAL_THRESHOLD_PROBLEMS = {
+    Field.BIKE_THRESHOLD: {
+        HeartRateProblem.NOT_A_THRESHOLD: Problem.BIKE_NOT_A_THRESHOLD,
+        HeartRateProblem.THRESHOLD_NOT_ABOVE_MIN: Problem.BIKE_NOT_ABOVE_MIN,
+        HeartRateProblem.THRESHOLD_ABOVE_MAX: Problem.BIKE_ABOVE_MAX,
+    },
+    Field.OTHER_THRESHOLD: {
+        HeartRateProblem.NOT_A_THRESHOLD: Problem.OTHER_NOT_A_THRESHOLD,
+        HeartRateProblem.THRESHOLD_NOT_ABOVE_MIN: Problem.OTHER_NOT_ABOVE_MIN,
+        HeartRateProblem.THRESHOLD_ABOVE_MAX: Problem.OTHER_ABOVE_MAX,
+    },
+}
+_PROBLEM_TO_HEART_RATE = {problem: rule for rule, problem in _HEART_RATE_PROBLEMS.items()} | {
+    problem: rule
+    for by_rule in _OPTIONAL_THRESHOLD_PROBLEMS.values()
+    for rule, problem in by_rule.items()
+}
 
 type BodyReadings = tuple[
     Height | BodyProblem, Weight | BodyProblem, BirthDate | BodyProblem
@@ -172,6 +210,9 @@ class NewProfileForm:
         self.min_bpm = DEFAULT_MIN_BPM
         self.max_bpm = DEFAULT_MAX_BPM
         self.sex = Sex.MALE
+        self.bike_text = ""  # empty: the default (running - 4, above the resting rate)
+        self.other_text = ""  # empty: the default (the running threshold)
+        self.pace_text = ""  # empty: no pace (running sessions stay heart-rate only)
         self._folder_text = ""  # empty until the user chooses: no suggestion
         self._threshold: int | None = None  # None: estimated from the maximum
         self.folder_state: FolderState | None = None  # last known examination of the folder
@@ -217,6 +258,37 @@ class NewProfileForm:
         """The user sets the threshold: it is no longer an estimate."""
         self._threshold = bpm
 
+    def threshold_default(self, field: Field) -> int:
+        """What the cycling or other-activities threshold is when left empty, for the heart rates
+        now entered."""
+        sport = Sport.CYCLING if field is Field.BIKE_THRESHOLD else Sport.OTHER
+        return optional_threshold_default(self.min_bpm, self.max_bpm, self.threshold_bpm, sport)
+
+    def _optional_texts(self) -> tuple[tuple[Field, str], ...]:
+        return ((Field.BIKE_THRESHOLD, self.bike_text), (Field.OTHER_THRESHOLD, self.other_text))
+
+    def _optional_readings(self) -> dict[Field, ThresholdHeartRate | None]:
+        """Valid optional thresholds (`None` where empty or invalid)."""
+        found: dict[Field, ThresholdHeartRate | None] = {}
+        for field, text in self._optional_texts():
+            reading = read_optional_threshold(text)
+            found[field] = None if isinstance(reading, HeartRateProblem) else reading
+        return found
+
+    def _optional_threshold_problems(self) -> list[Problem]:
+        found: list[Problem] = []
+        for field, text in self._optional_texts():
+            by_rule = _OPTIONAL_THRESHOLD_PROBLEMS[field]
+            reading = read_optional_threshold(text)
+            if isinstance(reading, HeartRateProblem):
+                found.append(by_rule[reading])
+            elif reading is not None:
+                found.extend(
+                    by_rule[rule]
+                    for rule in optional_threshold_problems(self.min_bpm, self.max_bpm, reading.bpm)
+                )
+        return found
+
     # --- Validazione ------------------------------------------------------------------
 
     def problems(self, today: date) -> tuple[Problem, ...]:
@@ -240,6 +312,8 @@ class NewProfileForm:
             *self._folder_problems(),
             *(_BODY_PROBLEMS[item] for item in readings if isinstance(item, BodyProblem)),
             *self._heart_rate_problems(),
+            *self._optional_threshold_problems(),
+            *self._pace_problems(),
         ]
         return tuple(found)
 
@@ -279,6 +353,17 @@ class NewProfileForm:
         found = heart_rate_problems(self.min_bpm, self.max_bpm, self.threshold_bpm)
         return [_HEART_RATE_PROBLEMS[item] for item in found]
 
+    def _pace_problems(self) -> list[Problem]:
+        pace = read_threshold_pace(self.pace_text)
+        if pace is BodyProblem.PACE_INVALID:
+            return [Problem.PACE_INVALID]
+        return []
+
+    def _threshold_pace(self) -> ThresholdPace | None:
+        """The typed pace if valid; `None` if empty (checked for validity by `problems`)."""
+        pace = read_threshold_pace(self.pace_text)
+        return pace if isinstance(pace, ThresholdPace) else None
+
     def build_request(self, today: date) -> NewProfileRequest | tuple[Problem, ...]:
         """The creation request, or the problems that prevent it."""
         readings = self._read_body(today)
@@ -291,10 +376,13 @@ class NewProfileForm:
             or isinstance(birth, BodyProblem)
         ):
             return found
+        optional = self._optional_readings()
         physiology = Physiology(
             HeartRateLimits(self.min_bpm, self.max_bpm),
             ThresholdHeartRate(self.threshold_bpm),
             self.sex,
+            optional[Field.BIKE_THRESHOLD],
+            optional[Field.OTHER_THRESHOLD],
         )
         return NewProfileRequest(
             ProfileName.parse(self.name),
@@ -304,4 +392,5 @@ class NewProfileForm:
             today,
             FixedProfileData(height, birth),
             weight,
+            self._threshold_pace(),
         )

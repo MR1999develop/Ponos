@@ -59,7 +59,12 @@ from ponos_coach.ui.body_input import (
     read_threshold_pace,
     read_weight,
 )
-from ponos_coach.ui.heart_rate_rules import HeartRateProblem, heart_rate_problems
+from ponos_coach.ui.heart_rate_rules import (
+    HeartRateProblem,
+    heart_rate_problems,
+    optional_threshold_problems,
+    read_optional_threshold,
+)
 from ponos_coach.ui.new_profile_form import DEFAULT_MAX_BPM, DEFAULT_MIN_BPM, estimated_threshold
 
 
@@ -392,13 +397,8 @@ class MeasurementsForm:
     def _optional_reading(self, text: str) -> OptionalThresholdChange | HeartRateProblem:
         """What the text says: empty is the default, a whole number of bpm in the threshold range
         is a threshold, anything else is a problem."""
-        stripped = text.strip()
-        if not stripped:
-            return ThresholdReset.DEFAULT
-        try:
-            return ThresholdHeartRate(int(stripped))
-        except ValueError:
-            return HeartRateProblem.NOT_A_THRESHOLD
+        reading = read_optional_threshold(text)
+        return ThresholdReset.DEFAULT if reading is None else reading
 
     def _optional_change(
         self, field: EditField, text: str | None
@@ -560,8 +560,7 @@ class MeasurementsForm:
             if shown:
                 found.extend(
                     EditIssue(field, kind)
-                    for kind in heart_rate_problems(self.min_bpm, self.max_bpm, int(shown))
-                    if kind is not HeartRateProblem.MIN_NOT_BELOW_MAX
+                    for kind in optional_threshold_problems(self.min_bpm, self.max_bpm, int(shown))
                 )
         return found
 
