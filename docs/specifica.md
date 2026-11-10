@@ -190,6 +190,10 @@ and the check box "Synchronise when a profile opens".
 - **No network or Garmin not answering:** a few attempts with waits, then it
   stops ("Garmin is not answering. Check your connection and try again"). A
   run stopped this way does not count as a failure of the single activities.
+  When Garmin answers other requests (the list, other downloads) but never
+  the download of one activity, that run counts for the activity; after 3
+  such runs it is set aside ("Garmin lists this activity but does not provide
+  its file; Full check tries again") and no longer holds up the others.
 - **Expired or revoked tokens:** synchronisation stops and the summary offers
   "Connect account...". Until the login is redone, Synchronise and Full check
   are greyed out.

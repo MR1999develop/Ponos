@@ -752,11 +752,19 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       grafico del carico con un solo asse y, trascinamento col tasto destro per
       allungare il grafico, legenda del calendario compatta (`58606f0`); cache
       su disco della mappa chiusa alla chiusura della finestra (`a2092ae`).
-- [ ] Sincronizzazione: una voce che Garmin non scarica mai (errore 5xx o
+- [x] Sincronizzazione: una voce che Garmin non scarica mai (errore 5xx o
       nessuna risposta a ogni giro, mentre l'elenco risponde) resta in attesa
       per sempre e ferma ogni giro dopo 3 voci; serve un contatore di giri
       senza risposta per voce (nuova colonna, schema 13) che dopo N giri la
       segni come fallita, senza consumare tentativi nei guasti veri di Garmin.
+      Fatto (`4ba1cc0`): la voce conta un giro senza risposta
+      (`unanswered_rounds`, schema 13) solo se Garmin risponde ad altro nel giro
+      o a una sonda (prima pagina dell'elenco); al terzo giro
+      (`SyncPolicy.max_unanswered_rounds`) diventa `FAILED` con
+      `REMOTE_NOT_PROVIDED` e non ferma più i giri; 429 e rete assente non
+      consumano nulla; "Verifica completa" la riarma. Test:
+      `tests/activities/test_sync_never_provided.py`,
+      `tests/collaudo/test_fase8_migrazione_v13.py`.
       Caso del 2026-11-09: 30 attività del 2012-2013, sistemate a mano nel
       profilo dell'utente.
 

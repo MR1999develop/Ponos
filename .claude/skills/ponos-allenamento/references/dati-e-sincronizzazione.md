@@ -237,6 +237,10 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   - `METHOD_VERSION` del piano è 6. Il piano salvato è derivato: un piano con `method_version`
     più bassa resta finché il ricalcolo (dopo ogni panoramica) non lo sostituisce; il codice non
     confronta la versione.
+- **Schema v13** (voci che Garmin non fornisce): `sync_journal` ricostruita (SQLite non
+  cambia i CHECK sul posto) con la colonna `unanswered_rounds` e la causa
+  `remote_not_provided`; indice `sync_journal_to_do` ricreato; copia in
+  `backup/ponos-v12-v13.sqlite3`. T-DATI-01: `tests/collaudo/test_fase8_migrazione_v13.py`.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.
@@ -472,7 +476,8 @@ prima Tracestrack con chiave nel portachiavi: tutto ciò che la riguardava è st
    solo all'avanzamento.
 4. "Verifica completa": rielenca tutto lo storico senza riscaricare, per
    trovare attività con date vecchie caricate in ritardo; riarma anche le voci
-   fallite per `ATTEMPTS_EXHAUSTED` (`rearm_exhausted`: tornano `PENDING`).
+   fallite per `ATTEMPTS_EXHAUSTED` o `REMOTE_NOT_PROVIDED` (`REARMABLE_REASONS`,
+   `rearm_exhausted`: tornano `PENDING` con i contatori a zero).
 5. Per ogni voce: download del FIT originale (zip), controlli dei limiti,
    scrittura durevole, lettura, calcolo del carico; una transazione segna la
    voce completata.
@@ -557,14 +562,26 @@ prima Tracestrack con chiave nel portachiavi: tutto ciò che la riguardava è st
 - Cause (`FailureReason`): ritentabili `TRANSIENT_ERROR` e `RATE_LIMITED`;
   definitive `UNSUPPORTED_FORMAT` (per esempio un TCX), `CORRUPT_FILE`,
   `FILE_TOO_LARGE`, `NOT_AN_ACTIVITY`, `ARCHIVE_INVALID`, `REMOTE_REJECTED`
-  (originale assente o rifiutato) e `ATTEMPTS_EXHAUSTED`. `mark_failed`:
+  (originale assente o rifiutato), `ATTEMPTS_EXHAUSTED` e `REMOTE_NOT_PROVIDED`. `mark_failed`:
   causa definitiva → `FAILED`; causa ritentabile → `RETRYABLE` fino al terzo
   fallimento (`max_syncs_per_activity`), poi `FAILED` con
   `ATTEMPTS_EXHAUSTED`. Un errore di scrittura locale (disco pieno) non è
   della voce: ferma la sincronizzazione, non si registra sulla voce. Neppure
   un giro fermato da limite di frequenza o servizio irraggiungibile consuma
-  tentativi: i fallimenti di rete si scrivono solo se Garmin risponde per una
-  voce successiva. Il file scaricato deve coincidere con la voce (inizio e
+  tentativi.
+- Due contatori per voce: `failed_attempts` (fallimenti della voce) e
+  `unanswered_rounds` (schema v13: giri in cui il download della voce non ha avuto
+  risposta utile, 5xx o silenzio, mentre Garmin rispondeva ad altro). La voce senza
+  risposta è trattenuta e non scritta; il giro conta per lei (`mark_unanswered`:
+  `RETRYABLE`/`TRANSIENT_ERROR`, senza toccare `failed_attempts`) solo se Garmin
+  risponde a un download successivo o a una sonda (la prima pagina dell'elenco, chiesta
+  quando il giro si ferma dopo 3 voci senza risposta di fila o finisce con voci
+  trattenute; anche un rifiuto vale come risposta). Senza risposta alla sonda è la
+  rete: nulla si scrive e il giro si ferma. Al terzo giro
+  (`SyncPolicy.max_unanswered_rounds`) la voce diventa `FAILED` con
+  `REMOTE_NOT_PROVIDED` e non ferma più i giri; un download riuscito azzera il
+  contatore. Invariante: `PENDING` ha i due contatori a zero, `RETRYABLE` e `FAILED`
+  ne hanno almeno uno positivo. Il file scaricato deve coincidere con la voce (inizio e
   durata, regola dei duplicati); se no `REMOTE_REJECTED`, mai registrato.
   `SyncOutcome.downloaded` conta solo le attività nuove, `matched` i gemelli
   in un altro formato, `already_present` i file già nel profilo.

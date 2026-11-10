@@ -3657,7 +3657,7 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     </message>
     <message>
         <source>Select an activity to see its track. Circles with a number group the starts of activities.</source>
-        <translation>Seleziona un'attività per vederne la traccia. I cerchi con un numero raggruppano le partenze delle attività.</translation>
+        <translation>Seleziona un&apos;attività per vederne la traccia. I cerchi con un numero raggruppano le partenze delle attività.</translation>
     </message>
     <message>
         <source>Wait a few minutes and move the map again. Tracks, filters and the list work without it.</source>
@@ -5429,6 +5429,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>it failed too many times</source>
         <translation>l&apos;attività è fallita troppe volte</translation>
+    </message>
+    <message>
+        <source>Garmin lists this activity but does not provide its file; Full check tries again</source>
+        <translation>Garmin elenca questa attività ma non ne fornisce il file; Verifica completa riprova</translation>
     </message>
     <message>
         <source>Synchronisation stopped. Nothing is lost: it resumes where it left off.</source>
