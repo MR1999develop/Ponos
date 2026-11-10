@@ -2,6 +2,7 @@
 # Copyright (C) 2026 MR
 """Common test configuration: hypothesis profiles and markers."""
 
+import gc
 import os
 from collections.abc import Iterator
 
@@ -41,3 +42,17 @@ def stop_data_threads() -> Iterator[None]:
     """
     yield
     assert DataThread.stop_all(30_000), "a data thread did not stop"
+
+
+@pytest.fixture(autouse=True)
+def collect_cycles_on_the_main_thread() -> Iterator[None]:
+    """As in the application, the automatic garbage collector is off and cycles are collected
+    on the main thread only (`ui/main_thread_gc.py`): a data thread that triggered a collection
+    could destroy there a Qt object of a closed window of an earlier test, and Qt aborts.
+
+    The tests do not always run the event loop long enough for the collector's timer, so the
+    cycles of each test are collected here, on the main thread, after it.
+    """
+    gc.disable()
+    yield
+    gc.collect()

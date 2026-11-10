@@ -82,6 +82,7 @@ from ponos_coach.ui.bootstrap import prepare_qt
 from ponos_coach.ui.data_thread import DataThread
 from ponos_coach.ui.diagnostics import ErrorNotifier, configure_logging, install_exception_hooks
 from ponos_coach.ui.errors import ErrorContext, RegistryProblem
+from ponos_coach.ui.main_thread_gc import MainThreadCollector
 from ponos_coach.ui.main_window import (
     APP_NAME,
     FolderPicker,
@@ -550,6 +551,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(ponos_coach.__version__)
     app.setWindowIcon(app_icon())  # every window and the taskbar
+    MainThreadCollector(app)  # before any worker thread: cycles are collected on this thread only
     settings = QSettings()
     report = setup_translations(app, command_line, saved=saved_language(settings))
     notifier = ErrorNotifier(app)
