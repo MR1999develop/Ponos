@@ -3347,10 +3347,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Aiuto</translation>
     </message>
     <message>
-        <source>View</source>
-        <translation>Vista</translation>
-    </message>
-    <message>
         <source>Go to Overview</source>
         <translation>Vai alla Panoramica</translation>
     </message>

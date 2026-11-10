@@ -306,7 +306,7 @@ class MainWindow(QMainWindow):
         profile_menu.addAction(self._detail_action)
         profile_menu.addAction(self._use_as_test_action)
         profile_menu.addAction(self._threshold_history_action)
-        self._build_view_menu()
+        self._register_pane_shortcuts()
         self._register_calendar_shortcuts()
         self._map_ui.build_menu(self.menuBar())
         self._build_injuries_menu()
@@ -318,16 +318,16 @@ class MainWindow(QMainWindow):
         help_menu.addSeparator()
         help_menu.addAction(self._about_action)
 
-    def _build_view_menu(self) -> None:
-        """Menu "View": the keyboard focus goes to each of the four panes."""
-        menu = self.menuBar().addMenu(self.tr("View"))
+    def _register_pane_shortcuts(self) -> None:
+        """Ctrl+1 to Ctrl+4 give the keyboard focus to each of the four panes, from the whole
+        window. There is no menu "View" (exception 4 of the project's instructions)."""
         for pane, text, shortcut in (
             (Pane.OVERVIEW, self.tr("Go to Overview"), "Ctrl+1"),
             (Pane.CALENDAR, self.tr("Go to Calendar"), "Ctrl+2"),
             (Pane.ACTIVITIES, self.tr("Go to Activities"), "Ctrl+3"),
             (Pane.MAP, self.tr("Go to Map"), "Ctrl+4"),
         ):
-            menu.addAction(self._action(text, shortcut, partial(self.focus_pane, pane)))
+            self.addAction(self._action(text, shortcut, partial(self.focus_pane, pane)))
 
     def _register_calendar_shortcuts(self) -> None:
         """The commands that used to be in the menu "Calendar" keep their shortcuts: they are in
@@ -971,7 +971,7 @@ class MainWindow(QMainWindow):
         self._calendar.request_selected_day()
 
     def focus_pane(self, pane: Pane) -> None:
-        """Give the keyboard focus to a pane (the commands of the menu "View")."""
+        """Give the keyboard focus to a pane (Ctrl+1 to Ctrl+4)."""
         self._focus_targets[pane].setFocus(Qt.FocusReason.ShortcutFocusReason)
 
     def show_selected_activity_detail(self) -> None:

@@ -151,3 +151,11 @@ Ritmo di lavoro (regola dell'utente del 2026-11-07, per accelerare):
    - Compensazione: tutti i comandi stanno nel menu del tasto destro del
      giorno, con la scorciatoia accanto, e le scorciatoie valgono senza menu
      (test in `tests/ui/test_main_panes.py` e `tests/ui/test_goals_window.py`).
+4. **Niente menu View** (permanente, richiesta dell'utente del 2026-11-10:
+   "elimina il menu Vista"). La regola generale vuole ogni comando nei menu
+   della barra in alto.
+   - Motivo: i quattro riquadri sono sempre visibili; i comandi "Go to …"
+     spostano solo il fuoco della tastiera e non meritano un menu.
+   - Compensazione: Ctrl+1..4 valgono da tutta la finestra (Panoramica,
+     Calendario, Attività, Mappa), descritti in specifica e README; test in
+     `tests/ui/test_main_panes.py`.

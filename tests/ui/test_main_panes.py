@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QLocale, QSettings, Qt
 from PySide6.QtGui import QKeySequence
-from PySide6.QtWidgets import QListWidget, QMenu
+from PySide6.QtWidgets import QListWidget
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.ui.main_panes import Pane
@@ -69,7 +69,7 @@ def test_no_pane_can_be_collapsed_and_the_dividers_can_be_grabbed(
         assert all(size > 0 for size in splitter.sizes())
 
 
-def test_the_panes_are_reached_from_the_keyboard_by_the_view_menu(
+def test_the_panes_are_reached_from_the_keyboard_without_a_view_menu(
     qtbot: QtBot, tmp_path: Path, settings: QSettings
 ) -> None:
     window = compose(tmp_path, settings)
@@ -80,14 +80,16 @@ def test_the_panes_are_reached_from_the_keyboard_by_the_view_menu(
 
     window.focus_pane(Pane.CALENDAR)
     assert window.focusWidget() is window.calendar_page.table
-    view = next(m for m in window.menuBar().findChildren(QMenu) if m.title() == "View")
-    assert [a.text() for a in view.actions()] == [
+    assert "View" not in [a.text() for a in window.menuBar().actions()]
+    # A key press needs an active window, which the offscreen platform does not give: what makes
+    # a shortcut work is that the action is on the window itself.
+    by_keys = {a.shortcut().toString(): a.text() for a in window.actions()}
+    assert [by_keys[f"Ctrl+{n}"] for n in range(1, 5)] == [
         "Go to Overview",
         "Go to Calendar",
         "Go to Activities",
         "Go to Map",
     ]
-    assert all(not a.shortcut().isEmpty() for a in view.actions())
 
 
 def test_the_focus_goes_to_the_table_of_the_activities_when_there_are_some(

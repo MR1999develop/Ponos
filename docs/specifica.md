@@ -978,9 +978,9 @@ Decision: [ADR 010](adr/010-mappa.md).
   sidebar: the Overview at the top left, the Calendar at the bottom left, the
   Activities list (under its filter bar) at the top right and the Map at the
   bottom right. One divider between the columns and one in each column; none
-  can collapse a pane away, and where they were left is remembered. The View
-  menu moves the keyboard focus to each pane: "Go to Overview" (Ctrl+1), "Go to
-  Calendar" (Ctrl+2), "Go to Activities" (Ctrl+3), "Go to Map" (Ctrl+4). The map
+  can collapse a pane away, and where they were left is remembered. There is
+  no View menu: Ctrl+1 to Ctrl+4 move the keyboard focus to the Overview, the
+  Calendar, the Activities list and the Map, from the whole window. The map
   has a minimum height. Selecting an activity in the list selects it on the map
   and the other way round.
 - Map menu: "Show activities and map" (Ctrl+M), "Show all activities" (Ctrl+0),

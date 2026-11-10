@@ -176,7 +176,7 @@ nothing and says so. When the app is closed while a job is running (an
 import), the app stops it and waits for it to finish; if it does not finish
 within 10 seconds, it leaves the window open and warns you, and you only need
 to close it again. The window has four panes you can resize (Overview, Calendar,
-Activities and Map; View, Ctrl+1 to Ctrl+4, moves the focus between them). The
+Activities and Map; Ctrl+1 to Ctrl+4 move the focus between them). The
 app remembers the window, the dividers and the last folders used.
 
 ## Connecting the Garmin account

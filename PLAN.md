@@ -748,7 +748,8 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       mappa (richieste dell'utente del 2026-11-09): quattro riquadri
       ridimensionabili senza barra laterale, Panoramica in alto a sinistra,
       Calendario in basso a sinistra, elenco Attività in alto a destra, Mappa
-      in basso a destra, menu View con Ctrl+1..4, niente menu Calendar,
+      in basso a destra, Ctrl+1..4 per i riquadri (menu View tolto il
+      2026-11-10, eccezione 4 di `CLAUDE.md`), niente menu Calendar,
       bottoni sotto il pannello del giorno tolti (`2836d43`, `ui/main_panes.py`);
       Panoramica con un grafico alla volta scelto da un elenco, mappa con
       altezza minima, tolto il bottone "Activity detail...", più spazio al
