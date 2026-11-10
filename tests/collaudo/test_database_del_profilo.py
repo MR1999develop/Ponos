@@ -159,7 +159,8 @@ def write_frozen_v1(path: Path) -> None:
             (f"fit:1:2:3:{START.isoformat()}", START_MS, ARCHIVE_PATH, SHA, START_MS + 1000),
         )
         raw.execute(
-            "INSERT INTO physiology VALUES ('2026-01-01', 50, 190, 170, 'female')",
+            "INSERT INTO physiology (valid_from, min_bpm, max_bpm, threshold_bpm, sex) "
+            "VALUES ('2026-01-01', 50, 190, 170, 'female')",
         )
         raw.execute(
             "INSERT INTO load_cache VALUES (1, ?, 80.0, 70.0, 75.0, 3500, 3, 12.5, 'estimate')",
@@ -172,7 +173,15 @@ def write_frozen_v1(path: Path) -> None:
 # Columns added by migrations after the ones these frozen tests describe (v8: the track box).
 # The tests of those migrations read them with their own queries.
 LATER_COLUMNS = frozenset(
-    {"track_south", "track_west", "track_north", "track_east", "unanswered_rounds"}
+    {
+        "track_south",
+        "track_west",
+        "track_north",
+        "track_east",
+        "unanswered_rounds",
+        "bike_threshold_bpm",
+        "other_threshold_bpm",
+    }
 )
 
 

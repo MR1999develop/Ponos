@@ -95,7 +95,10 @@ def write_v10(folder: Path, *, with_gpx: bool = True) -> None:
                 ("futuro", "conservami"),
             ],
         )
-        raw.execute("INSERT INTO physiology VALUES ('2026-01-01', 50, 190, 170, 'female')")
+        raw.execute(
+            "INSERT INTO physiology (valid_from, min_bpm, max_bpm, threshold_bpm, sex) "
+            "VALUES ('2026-01-01', 50, 190, 170, 'female')"
+        )
         raw.execute("INSERT INTO sync_cursor VALUES ('full', 40, 40, 1)")
         insert_activity(
             raw, FIT_KEY_1, "fit", ARCHIVE_PATH, calories=612.0, track_box=(1.0, 2.0, 1.5, 2.5)

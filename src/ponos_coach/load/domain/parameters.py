@@ -12,7 +12,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
-from ponos_coach.load.domain.heart_rate import Physiology
+from ponos_coach.activities.domain import Sport
+from ponos_coach.load.domain.heart_rate import Physiology, threshold_for_sport
 from ponos_coach.load.domain.zones import ZONE_STARTS_PERCENT
 
 # Changes when the load formula or the zone definition changes: invalidates every saved
@@ -44,15 +45,19 @@ class LoadFingerprint:
 def load_fingerprint(physiology: Physiology) -> LoadFingerprint:
     """Fingerprint of the parameters that determine the load of an activity.
 
-    It depends on the HR limits, the threshold, the sex, the zone percentages and the version of
-    the load model. Deterministic: the same parameters give the same fingerprint, in every
-    process.
+    It depends on the HR limits, the thresholds in effect for each sport group, the sex, the
+    zone percentages and the version of the load model. Deterministic: the same parameters give
+    the same fingerprint, in every process.
     """
     document = {
         "model": LOAD_MODEL_VERSION,
         "min_bpm": physiology.limits.min_bpm,
         "max_bpm": physiology.limits.max_bpm,
         "threshold_bpm": physiology.threshold.bpm,
+        # The thresholds in effect for the other groups (entered or default), so that entering
+        # the value the default would give leaves the loads valid.
+        "bike_threshold_bpm": threshold_for_sport(physiology, Sport.CYCLING),
+        "other_threshold_bpm": threshold_for_sport(physiology, Sport.OTHER),
         "sex": physiology.sex.value,
         "zones": list(ZONE_STARTS_PERCENT),
     }

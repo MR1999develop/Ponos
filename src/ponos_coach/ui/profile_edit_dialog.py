@@ -14,7 +14,8 @@ from __future__ import annotations
 from datetime import date
 from itertools import pairwise
 
-from PySide6.QtCore import QDate, QLocale, Qt, Signal
+from PySide6.QtCore import QDate, QLocale, QRegularExpression, Qt, Signal
+from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QDateEdit,
     QDialogButtonBox,
@@ -65,8 +66,11 @@ _NOTE_FIELDS = (
     EditField.MIN_BPM,
     EditField.MAX_BPM,
     EditField.THRESHOLD,
+    EditField.BIKE_THRESHOLD,
+    EditField.OTHER_THRESHOLD,
     EditField.THRESHOLD_PACE,
 )
+_THRESHOLD_MAX_CHARS = 3  # 40 to 250
 _PACE_MAX_CHARS = 16  # the same limit the domain checks before reading the text
 
 
@@ -118,6 +122,10 @@ class ProfileEditDialog(SettingsForm):
         self._min.valueChanged.connect(self._on_min_changed)
         self._max.valueChanged.connect(self._on_max_changed)
         self._threshold.valueChanged.connect(self._on_threshold_changed)
+        self._bike = self._optional_threshold_edit("measurementsBikeThresholdHeartRate")
+        self._bike.textEdited.connect(self._on_bike_edited)
+        self._other = self._optional_threshold_edit("measurementsOtherThresholdHeartRate")
+        self._other.textEdited.connect(self._on_other_edited)
         self._pace = QLineEdit(self)
         self._pace.setObjectName("measurementsThresholdPace")
         self._pace.setAccessibleName(self.tr("Threshold pace (min/km)"))
@@ -185,6 +193,8 @@ class ProfileEditDialog(SettingsForm):
             self._min,
             self._max,
             self._threshold,
+            self._bike,
+            self._other,
             self._pace,
             self._table,
             self._save,
@@ -253,7 +263,13 @@ class ProfileEditDialog(SettingsForm):
             (self.tr("Weight (kg)"), self._weight, EditField.WEIGHT),
             (self.tr("Resting heart rate"), self._min, EditField.MIN_BPM),
             (self.tr("Maximum heart rate"), self._max, EditField.MAX_BPM),
-            (self.tr("Threshold heart rate"), self._threshold, EditField.THRESHOLD),
+            (self.tr("Running threshold heart rate"), self._threshold, EditField.THRESHOLD),
+            (self.tr("Cycling threshold heart rate"), self._bike, EditField.BIKE_THRESHOLD),
+            (
+                self.tr("Other activities threshold heart rate"),
+                self._other,
+                EditField.OTHER_THRESHOLD,
+            ),
             (self.tr("Threshold pace (min/km)"), self._pace, EditField.THRESHOLD_PACE),
         )
         for text, widget, field in rows:
@@ -274,6 +290,15 @@ class ProfileEditDialog(SettingsForm):
         box.setRange(low, MAX_ALLOWED_BPM)
         box.setSuffix(self.tr(" bpm"))
         return box
+
+    def _optional_threshold_edit(self, name: str) -> QLineEdit:
+        """Optional threshold: whole bpm, or empty for the default (shown as the placeholder)."""
+        edit = QLineEdit(self)
+        edit.setObjectName(name)
+        edit.setMaxLength(_THRESHOLD_MAX_CHARS)
+        edit.setValidator(QRegularExpressionValidator(QRegularExpression(r"[0-9]{0,3}"), edit))
+        edit.setAlignment(Qt.AlignmentFlag.AlignRight)
+        return edit
 
     def _error_label(self) -> QLabel:
         label = QLabel(self)
@@ -340,6 +365,16 @@ class ProfileEditDialog(SettingsForm):
     def threshold_box(self) -> QSpinBox:
         """Threshold."""
         return self._threshold
+
+    @property
+    def bike_edit(self) -> QLineEdit:
+        """Cycling threshold (empty: the default, shown as the placeholder)."""
+        return self._bike
+
+    @property
+    def other_edit(self) -> QLineEdit:
+        """Threshold of the other activities (empty: the default, shown as the placeholder)."""
+        return self._other
 
     @property
     def pace_edit(self) -> QLineEdit:
@@ -415,6 +450,12 @@ class ProfileEditDialog(SettingsForm):
             box.blockSignals(True)
             box.setValue(value)
             box.blockSignals(False)
+        for edit, field in (
+            (self._bike, EditField.BIKE_THRESHOLD),
+            (self._other, EditField.OTHER_THRESHOLD),
+        ):
+            edit.setText(form.threshold_text(field))
+        self._refresh_placeholders()
         if form.edited_weight_text is None:
             baseline = form.baseline_weight
             self._weight.setText("" if baseline is None else weight_text(baseline))
@@ -422,6 +463,20 @@ class ProfileEditDialog(SettingsForm):
             in_force = form.baseline_pace
             self._pace.setText("" if in_force is None else pace_text(in_force.pace))
             self._pace.setToolTip("" if in_force is None else pace_source_text(in_force))
+
+    def _refresh_placeholders(self) -> None:
+        """The default of each optional threshold, for the heart rates now shown."""
+        form = self._form
+        self._bike.setPlaceholderText(
+            self.tr("default: running - 4 ({value} bpm)").format(
+                value=form.threshold_default(EditField.BIKE_THRESHOLD)
+            )
+        )
+        self._other.setPlaceholderText(
+            self.tr("default: running ({value} bpm)").format(
+                value=form.threshold_default(EditField.OTHER_THRESHOLD)
+            )
+        )
 
     def _refresh_errors(self, extra: tuple[EditIssue, ...] = ()) -> None:
         issues = (*self._form.issues(), *extra) if self._show_errors else extra
@@ -468,6 +523,7 @@ class ProfileEditDialog(SettingsForm):
     # --- From the view to the model -------------------------------------------------------
 
     def _after_edit(self) -> None:
+        self._refresh_placeholders()
         self._update_save_button()
         self._refresh_notes()
         self._refresh_errors()
@@ -514,6 +570,14 @@ class ProfileEditDialog(SettingsForm):
         self._form.edit_threshold_bpm(value)
         self._after_edit()
 
+    def _on_bike_edited(self, text: str) -> None:
+        self._form.edit_bike_threshold(text)
+        self._after_edit()
+
+    def _on_other_edited(self, text: str) -> None:
+        self._form.edit_other_threshold(text)
+        self._after_edit()
+
     def _on_pace_edited(self, text: str) -> None:
         self._form.edit_threshold_pace(text)
         self._after_edit()
@@ -546,6 +610,8 @@ class ProfileEditDialog(SettingsForm):
             EditField.MIN_BPM: self._min,
             EditField.MAX_BPM: self._max,
             EditField.THRESHOLD: self._threshold,
+            EditField.BIKE_THRESHOLD: self._bike,
+            EditField.OTHER_THRESHOLD: self._other,
             EditField.THRESHOLD_PACE: self._pace,
             EditField.HEIGHT: self._height,
             EditField.BIRTH_DATE: self._birth,
@@ -571,6 +637,8 @@ class ProfileEditDialog(SettingsForm):
             self._min,
             self._max,
             self._threshold,
+            self._bike,
+            self._other,
             self._pace,
             self._height,
             self._birth,

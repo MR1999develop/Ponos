@@ -651,7 +651,7 @@ def test_database_refuses_bad_journal_keys_and_cursors(
 
 
 def test_database_refuses_inconsistent_physiology(raw_db: sqlite_database.SqliteDatabase) -> None:
-    insert = "INSERT INTO physiology VALUES (?, ?, ?, ?, ?)"
+    insert = "INSERT INTO physiology VALUES (?, ?, ?, ?, ?, NULL, NULL)"
     raw_db.connection.execute(insert, ("2026-01-01", 50, 190, 170, "male"))
     for bad in (
         ("2026-01-02", 190, 190, 170, "male"),  # minimum not below maximum
