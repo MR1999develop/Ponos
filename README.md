@@ -172,8 +172,9 @@ app: if there is anything else (for example your own files) it deletes
 nothing and says so. When the app is closed while a job is running (an
 import), the app stops it and waits for it to finish; if it does not finish
 within 10 seconds, it leaves the window open and warns you, and you only need
-to close it again. The app remembers the open section, the window and the
-last folders used.
+to close it again. The window has four panes you can resize (Overview, Calendar,
+Activities and Map; View, Ctrl+1 to Ctrl+4, moves the focus between them). The
+app remembers the window, the dividers and the last folders used.
 
 ## Connecting the Garmin account
 
@@ -242,15 +243,16 @@ At the end a summary says how many activities were imported and, for each
 file not imported, the reason. If an activity was already there but its file
 in the archive was missing or altered, importing the same file again puts it
 right: the summary counts it as "repaired". Activities appear in the
-Activities page and in the Overview chart. TCX files are not supported.
+Activities list and in the Overview chart. TCX files are not supported.
 
 ## Charts and activity detail
 
-The Overview shows today's form and three charts: fitness and fatigue (CTL,
-ATL, TSB), weekly load by sport and time in heart-rate zones. A double click
-(or Enter) on an activity in the Activities page, or Profile, Activity
-detail... (Ctrl+D), opens the heart-rate curve with the zones and the time in
-each. All charts can be exported to SVG and PNG, in the light or dark theme,
+The Overview shows three charts, one at a time, chosen from a list on their
+left: fitness and fatigue (CTL, ATL and TSB in one chart), weekly load by sport
+and time in heart-rate zones. Dragging with the right button stretches a chart
+vertically. A double click (or Enter) on an activity in the Activities list,
+or Profile, Activity detail... (Ctrl+D), opens the heart-rate curve with the
+zones and the time in each, and centres the map on the activity. All charts can be exported to SVG and PNG, in the light or dark theme,
 and do not use the network. The zones are percentages of the threshold chosen
 by the project (see the specification, section 6, and
 `docs/adr/007-dati-del-profilo-e-zone.md`).

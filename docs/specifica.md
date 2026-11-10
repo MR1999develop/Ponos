@@ -374,10 +374,15 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 
 ## 6. Load and charts
 
-- The Overview shows today's form, today's session and the PMC chart (CTL, ATL,
-  TSB, daily load, plan projection, goal lines).
+- The Overview shows the PMC chart (CTL, ATL, TSB, daily load, plan
+  projection, goal lines); today's session is in the calendar. The form (TSB) is in the same
+  chart as the load (CTL, ATL), on one y axis.
+- The Overview shows one chart at a time, chosen in a short list on its left:
+  "Fitness and fatigue", "Weekly load" and "Time in zones". The dates stay in
+  step between the three.
 - Other charts: weekly load by sport, time in zones (both in the Overview) and
   activity HR (in the activity detail).
+- Dragging with the right button stretches or squeezes a chart vertically.
 - Axes with translated name and unit, light and dark theme, export to SVG and
   PNG.
 - No meaning is left to colour alone: CTL and ATL can be told apart even
@@ -416,9 +421,9 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 
 ### Activity detail
 
-- It opens with a double click or Enter on a row of the Activities page, or
+- It opens with a double click or Enter on a row of the Activities list, or
   from the Profile menu, "Activity detail..." ("Dettaglio attività...",
-  Ctrl+D). The window is not modal and can be kept open while using the app.
+  Ctrl+D); there is no button for it. The window is not modal and can be kept open while using the app.
 - It shows the summary (start in the profile time zone, moving and elapsed
   time, distance, ascent, load and its origin, threshold and HR limits valid
   on that day), the HR curve with the zone bands and their names, and the table
@@ -459,7 +464,8 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 - Without activities, the page invites you to import files.
 - Filters (date, duration, distance, ascent, sport) are above the table and
   are shared with the Map (section 15).
-- A double click or Enter on a row opens the activity detail (section 6).
+- A double click or Enter on a row opens the activity detail (section 6); the
+  double click also centres the map on that activity.
 
 ## 7. Threshold test
 
@@ -589,15 +595,15 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
 - The app states whether the target time is realistic, ambitious or not
   reachable by the date.
 - The plan is on the calendar, so its commands are in the menu of a day (right
-  button on the day, or the Menu key) and in the Calendar menu; there is no
-  "Plan" menu. In the menu of a day the commands of the day come first ("Add
+  button on the day, or the Menu key); there is no "Plan" menu and no "Calendar"
+  menu (user's request of 2026-11-09). In the menu of a day the commands of the day come first ("Add
   race..." (Ctrl+R), "Add form goal..." (Ctrl+Shift+F) on that day, "Change goal..."
   (Ctrl+Shift+E) and "Remove goal" (Ctrl+Delete) on a day with a goal, then the
   injuries), then, in a group of their own, the commands of the whole plan:
   "Goals and plan status..." (Ctrl+Shift+P), "Training settings..."
-  (Ctrl+Shift+T), Undo and Redo of the goals and the settings. The Calendar
-  menu has the same commands, with the same shortcuts, after the ones that move
-  about the calendar.
+  (Ctrl+Shift+T), Undo and Redo of the goals and the settings. The shortcuts
+  work without opening the menu; moving about the month and removing the goal
+  act only while the calendar has the focus.
   A disabled entry gives the reason in the tooltip. Two races on the same day
   are refused.
 - A race has a date, a priority A, B or C, a distance and an optional target
@@ -605,7 +611,7 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
 
 ## 9. Adaptive plan
 
-- Settings, Training plan page (Calendar menu, "Training settings...", opens it)
+- Settings, Training plan page (the menu of a day, "Training settings...", opens it)
   holds the weekdays on which the user can train (check boxes), the number of
   sessions a week, the day of the long session, the most hours of training in a
   week and the session types the plan may use (decision: [ADR 016](adr/016-disponibilita-giorni-e-sedute.md);
@@ -808,17 +814,16 @@ Rules: [injuries](../.claude/skills/ponos-allenamento/references/infortuni.md).
   asterisk and a tooltip; closing the window (or quitting) with unsaved edits
   asks "Some settings have changes that are not saved." with the buttons Save,
   Discard and Keep editing (default). The commands that open a page from where
-  the user looks for them (Profile menu, Calendar menu and the menu of a day, the
+  the user looks for them (Profile menu, the menu of a day, the
   map notice and the day page) open the same window on that page; the Map
   and Nutrition settings are reached only from Settings itself, the map notice
   and the day page (no menu entry); there is no other dialog for
   the same setting.
 - Undo and redo for goals and calendar.
 - The app remembers window, panels, last profile and last folders. In phase 1:
-  size and position of the window, the open section (saved as soon as it
-  changes; the first time, an invalid value or a section that no longer exists
-  opens the Activities beside the map; an unreadable geometry gives the default
-  window), the position of the divider between the table and the map, the folders of imports, of the profile choice and of
+  size and position of the window (an unreadable geometry gives the default
+  window), the position of the three dividers between the panes (an unreadable
+  value gives equal halves), the folders of imports, of the profile choice and of
   chart export, the last profile.
 - Long operations do not block the window and can be cancelled.
 - An unexpected error shows a generic message; the detail goes in the log,
@@ -834,12 +839,13 @@ no diet or allergy restriction for now.
 
 ### Calendar
 
-- The Calendar section shows one month. Each day shows its activities and
-  load. The days of a nutrition goal period have a colour; the legend says
-  which. A day with no colour is outside any period and is treated as
-  maintenance.
-- "Previous month" (Ctrl+Left), "Next month" (Ctrl+Right), "Today" (Ctrl+T),
-  "Open day" (Ctrl+Return) in the Calendar menu. A click or Enter on a day
+- The Calendar pane shows one month. Each day shows its activities and
+  load. The days of a nutrition goal period have a colour; the legend, compact
+  and wrapped onto several lines, says which. A day with no colour is outside
+  any period and is treated as maintenance.
+- "Previous month" (Ctrl+Left), "Next month" (Ctrl+Right), "Today" (Ctrl+T) and
+  "Open day" (Ctrl+Return) are in the menu of a day and act while the calendar
+  has the focus. The buttons under the day panel are gone. A click or Enter on a day
   opens its page. The calendar has no "Today" button (user's request of
   2026-11-09): Ctrl+T and the menu of the day still go to today.
 - In the window of a day, a click (or Enter) on an activity of its list opens
@@ -956,22 +962,26 @@ Decision: [ADR 010](adr/010-mappa.md).
 
 ### Map
 
-- The map is not a section of its own: the Activities section (the one shown
-  when the app starts) has the table of the activities on the left and the map
-  on the right, with a divider that can be dragged and is remembered. Selecting
-  an activity in the table selects it on the map and the other way round. The
-  sidebar has Overview, Activities and Calendar.
+- The main window has four panes, all visible and all resizable, and no
+  sidebar: the Overview at the top left, the Calendar at the bottom left, the
+  Activities list (under its filter bar) at the top right and the Map at the
+  bottom right. One divider between the columns and one in each column; none
+  can collapse a pane away, and where they were left is remembered. The View
+  menu moves the keyboard focus to each pane: "Go to Overview" (Ctrl+1), "Go to
+  Calendar" (Ctrl+2), "Go to Activities" (Ctrl+3), "Go to Map" (Ctrl+4). The map
+  has a minimum height. Selecting an activity in the list selects it on the map
+  and the other way round.
 - Map menu: "Show activities and map" (Ctrl+M), "Show all activities" (Ctrl+0),
   Zoom in and out, "Filter activities", "Clear filters", "Clear map cache..."
   (Ctrl+Shift+Backspace). There is no "Map settings..." entry: the Map page of
   Settings opens from the button of the map notice and from Clear map cache.
-  The commands that need the map are disabled in the other sections, with the
-  reason in the tooltip.
 - At low zoom the starts of the filtered activities are grouped in circles with
   the number, which split and merge at each level; a click on a group zooms to
-  its area. At higher zoom the tracks of the activities in view are drawn as
-  lines coloured by sport, with a legend (never colour alone). A click on a
-  track selects the activity.
+  its area. Close up the starts are drawn bigger, and starts at the same place
+  fan out around their group when it is clicked at the highest zoom, each one
+  clickable. Only the track of the selected activity is drawn, as a line
+  coloured by sport, with a legend (never colour alone). A double click on an
+  activity in the list centres the map on it.
 - Above the map, the count and the totals (km, ascent, hours) of the activities
   that start in the framed area, after the filters, updated at each move or
   zoom. The separate list of that area is gone, because the table already

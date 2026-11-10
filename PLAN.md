@@ -658,18 +658,23 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       sola volta se salta, workout Garmin con nome e passi propri. Test:
       `T-PIANO-10` in `tests/planning/test_threshold_test_session.py`, oracoli
       di `tests/planning/invariants.py` e del collaudo del piano aggiornati.
-- [ ] Test di soglia nel piano, guscio e interfaccia: `RebuildPlan` passa
+- [x] Test di soglia nel piano, guscio e interfaccia: `RebuildPlan` passa
       `test_protocol` (impostazione dell'utente) e `missed_tests`
       (`missed_threshold_tests` sui giorni congelati e i test applicati); la
       finestra mostra la seduta "Threshold test" e `RetestScheduled`
-      (`ui/plan_texts.py`, ora `mypy` fallisce lì finché manca il caso).
+      (`ui/plan_texts.py`). Fatto: test in
+      `tests/profiles/test_rebuild_plan.py`
+      (`test_the_plan_schedules_the_test_with_the_protocol_the_user_chose`,
+      `test_a_planned_test_that_went_by_undone_is_told_to_the_engine`) e in
+      `tests/ui/test_plan_presentation.py` (`RetestScheduled`); `mypy` passa.
 - [ ] Collaudo completo (sezione 7) superato sull'eseguibile, su Windows e
       Ubuntu, con esiti registrati in `docs/collaudo.md`.
-- [ ] Ubuntu di nuovo nelle matrici di `ci.yml` e `release.yml` (tolto il
+- [x] Ubuntu di nuovo nelle matrici di `ci.yml` e `release.yml` (tolto il
       2026-11-09 su richiesta dell'utente, rimesso lo stesso giorno: eccezione 3
       di `CLAUDE.md` chiusa) e CI verde su Ubuntu. Fatto: matrici e crash di
       `test_tile_service` su Ubuntu (oggetto Qt distrutto da un worker,
-      `ui/worker_handover.py`); manca la CI verde su Ubuntu.
+      `ui/worker_handover.py`); CI verde su Windows e Ubuntu sul commit
+      `a2092ae` (2026-11-09).
 - [x] Valori della tabella degli alimenti verificati contro ANSES-CIQUAL 2025
       (file del 2025-11-03, Etalab 2.0) con `experiments/verify_foods.py
       --ciqual-dir <cartella> --apply` (`source.verified_on` = 2026-11-09, 42
@@ -732,6 +737,21 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       settimanale con una serie per sport, senza "Other" che raggruppa
       (`b94d67a`); calendario senza il bottone Today, restano Ctrl+T e il menu
       del giorno (`2a52928`).
+- [x] Finestra a quattro riquadri e interfaccia della panoramica e della
+      mappa (richieste dell'utente del 2026-11-09): quattro riquadri
+      ridimensionabili senza barra laterale, Panoramica in alto a sinistra,
+      Calendario in basso a sinistra, elenco Attività in alto a destra, Mappa
+      in basso a destra, menu View con Ctrl+1..4, niente menu Calendar,
+      bottoni sotto il pannello del giorno tolti (`2836d43`, `ui/main_panes.py`);
+      Panoramica con un grafico alla volta scelto da un elenco, mappa con
+      altezza minima, tolto il bottone "Activity detail...", più spazio al
+      calendario (`b1343b0`); sulla mappa solo la traccia dell'attività
+      selezionata, doppio clic nell'elenco che apre la finestra e centra la
+      mappa, partenze più grandi da vicino, partenze nello stesso punto a
+      ventaglio e cliccabili (`79180af`, `de89260`); Forma (TSB) nello stesso
+      grafico del carico con un solo asse y, trascinamento col tasto destro per
+      allungare il grafico, legenda del calendario compatta (`58606f0`); cache
+      su disco della mappa chiusa alla chiusura della finestra (`a2092ae`).
 - [ ] Sincronizzazione: una voce che Garmin non scarica mai (errore 5xx o
       nessuna risposta a ogni giro, mentre l'elenco risponde) resta in attesa
       per sempre e ferma ogni giro dopo 3 voci; serve un contatore di giri
