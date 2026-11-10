@@ -1,6 +1,6 @@
 ---
 name: ponos-allenamento
-description: Conoscenza di dominio di Ponos Coach, app di allenamento con dati Garmin e frequenza cardiaca. Modello di carico (TRIMPeq: TRIMP di Banister sull'intensità equivalente di corsa, ATL, CTL, TSB), regole del piano adattivo (macrociclo, mesocicli 3:1, rampa, 80/20), test di soglia di 30 minuti, protocollo degli infortuni con segnali d'allarme e percorso a gradini, formato dei dati (cartella del profilo, SQLite, archivio FIT, identità file_id), sincronizzazione riprendibile con Garmin e import da cartella con i tetti, alimentazione del giorno (metabolismo di base, spesa, deficit con i limiti di sicurezza, macro, momenti, alimenti); da usare quando si scrive, si rivede o si documenta codice di carico, piano, test, infortuni, alimentazione, sincronizzazione o archivio di Ponos Coach.
+description: Conoscenza di dominio di Ponos Coach, app di allenamento con dati Garmin e frequenza cardiaca. Modello di carico (TRIMPeq: TRIMP di Banister sull'intensità equivalente di corsa, ATL, CTL, TSB), regole del piano adattivo (macrociclo, mesocicli 3:1, rampa, 80/20), test di soglia di 30 minuti, protocollo degli infortuni con segnali d'allarme e percorso a gradini, formato dei dati (cartella del profilo, SQLite, archivio FIT, identità file_id), sincronizzazione riprendibile con Garmin e import da cartella con i tetti, alimentazione del giorno (metabolismo di base, spesa, deficit con i limiti di sicurezza, macro, momenti); da usare quando si scrive, si rivede o si documenta codice di carico, piano, test, infortuni, alimentazione, sincronizzazione o archivio di Ponos Coach.
 ---
 
 # Ponos Allenamento
@@ -51,7 +51,6 @@ come "punto aperto" nei file `references/`.
 | MSJ | Mifflin e altri, equazione del metabolismo a riposo (1990) | metabolismo di base |
 | KEYTEL | Keytel e altri, spesa energetica dalla FC (2005) | calorie senza il dato del dispositivo |
 | COMPENDIUM | *Compendium of Physical Activities* | MET per sport |
-| CIQUAL | ANSES-CIQUAL 2025 (Etalab 2.0; CREA solo come confronto) | valori degli alimenti |
 
 ## 1. Modello di carico
 
@@ -90,9 +89,9 @@ Dettagli: `references/infortuni.md`.
 
 Calorie delle attività (dichiarate, Keytel, MET), metabolismo di base,
 spesa del giorno, obiettivi per periodi, deficit con i limiti di sicurezza,
-macro per carico, pre/durante/post, pasti spostati o fusi, tabella degli
-alimenti, massa magra misurata, avviso di dimagrimento lungo. Indicazioni generali, mai consigli medici. Fonti: ISSN, ACSM, IOC,
-GJSN, CSN, MSJ, KEYTEL, COMPENDIUM, CIQUAL. Dettagli: `references/alimentazione.md`; tutti i
+macro per carico, pre/durante/post, pasti spostati o fusi (solo kcal e macro,
+niente alimenti), massa magra misurata, avviso di dimagrimento lungo. Indicazioni generali, mai consigli medici. Fonti: ISSN, ACSM, IOC,
+GJSN, CSN, MSJ, KEYTEL, COMPENDIUM. Dettagli: `references/alimentazione.md`; tutti i
 valori in `nutrition/domain/defaults.py`.
 
 ## 6. Dati e sincronizzazione
