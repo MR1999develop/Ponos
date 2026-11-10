@@ -16,7 +16,7 @@ from ponos_coach.load.domain import (
     Sex,
     ThresholdHeartRate,
 )
-from ponos_coach.profiles.domain import Weight, WeightEntry
+from ponos_coach.profiles.domain import ThresholdPace, ThresholdPaceEntry, Weight, WeightEntry
 from ponos_coach.profiles.measurements import MeasurementHistory
 from ponos_coach.ui.measurement_history_model import (
     Column,
@@ -88,6 +88,7 @@ def test_headers_carry_the_units() -> None:
         "Resting HR (bpm)",
         "Maximum HR (bpm)",
         "Threshold HR (bpm)",
+        "Threshold pace (min/km)",
     ]
 
 
@@ -117,3 +118,30 @@ def test_an_empty_history_has_no_rows_and_no_child_rows() -> None:
     assert model.rowCount() == 0
     assert model.columnCount() == len(Column)
     assert model.data(model.index(0, 0)) is None
+
+
+def test_the_pace_series_has_its_own_dates_and_cells_in_minutes_and_seconds(qtbot: QtBot) -> None:
+    history = MeasurementHistory(
+        None,
+        (WeightEntry(date(2026, 3, 1), Weight(690)),),
+        (),
+        (
+            ThresholdPaceEntry(date(2026, 3, 1), ThresholdPace(335)),
+            ThresholdPaceEntry(date(2026, 4, 2), ThresholdPace(300)),
+        ),
+    )
+    model = MeasurementHistoryModel()
+    model.set_history(history)
+    proxy = sorted_history_model(model)
+
+    def paces() -> list[object]:
+        return [
+            proxy.data(proxy.index(row, Column.THRESHOLD_PACE), Qt.ItemDataRole.DisplayRole)
+            for row in range(proxy.rowCount())
+        ]
+
+    assert paces() == ["5:00", "5:35"]  # 2 April, 1 March
+    proxy.sort(Column.THRESHOLD_PACE, Qt.SortOrder.AscendingOrder)
+    assert paces() == ["5:00", "5:35"]
+    proxy.sort(Column.THRESHOLD_PACE, Qt.SortOrder.DescendingOrder)
+    assert paces() == ["5:35", "5:00"]

@@ -46,6 +46,7 @@ from ponos_coach.profiles.ports import (
     ProfileNotRegisteredError,
     ProfileRegistryError,
     ProfileStorageError,
+    ThresholdPaceStore,
     WeightStore,
 )
 from ponos_coach.profiles.use_cases import (
@@ -148,6 +149,10 @@ class _CountingProfile:
     @property
     def weights(self) -> WeightStore:
         return self._inner.weights
+
+    @property
+    def threshold_paces(self) -> ThresholdPaceStore:
+        return self._inner.threshold_paces
 
     @property
     def fixed_data(self) -> FixedDataStore:

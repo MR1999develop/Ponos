@@ -2,9 +2,9 @@
 # Copyright (C) 2026 MR
 """Measurement history table: one row per date, read-only.
 
-Weight and HR parameters have their own dates: a cell is empty if that measurement was not
-recorded that day. Numbers sit on the right, units are in the header; per-column sorting
-uses numeric keys. Weight and HR are health data, local only.
+Weight, HR parameters and threshold pace have their own dates: a cell is empty if that
+measurement was not recorded that day. Numbers sit on the right, units are in the header;
+per-column sorting uses numeric keys. Weight and HR are health data, local only.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from PySide6.QtCore import (
 )
 
 from ponos_coach.load.domain import Physiology
-from ponos_coach.profiles.domain import Weight
+from ponos_coach.profiles.domain import ThresholdPace, Weight
 from ponos_coach.profiles.measurements import MeasurementHistory
 
 SORT_ROLE = Qt.ItemDataRole.UserRole
@@ -33,6 +33,7 @@ _ALIGN_RIGHT = int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 _ALIGN_LEFT = int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 _MISSING_SORT_KEY = -1.0  # an empty cell comes before every value, in ascending order
 _WEIGHT_DECIMALS = 1
+_SECONDS_PER_MINUTE = 60
 
 
 class Column(IntEnum):
@@ -43,6 +44,7 @@ class Column(IntEnum):
     MIN_BPM = 2
     MAX_BPM = 3
     THRESHOLD = 4
+    THRESHOLD_PACE = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,14 +54,24 @@ class HistoryRow:
     day: date
     weight: Weight | None
     physiology: Physiology | None
+    pace: ThresholdPace | None = None
 
 
 def history_rows(history: MeasurementHistory) -> tuple[HistoryRow, ...]:
     """One row per date that has at least one entry, in ascending date order."""
     weights = {entry.valid_from: entry.weight for entry in history.weights}
     physiology = {entry.valid_from: entry.physiology for entry in history.physiology}
-    days = sorted(weights.keys() | physiology.keys())
-    return tuple(HistoryRow(day, weights.get(day), physiology.get(day)) for day in days)
+    paces = {entry.valid_from: entry.pace for entry in history.threshold_paces}
+    days = sorted(weights.keys() | physiology.keys() | paces.keys())
+    return tuple(
+        HistoryRow(day, weights.get(day), physiology.get(day), paces.get(day)) for day in days
+    )
+
+
+def pace_text(pace: ThresholdPace) -> str:
+    """The pace as `m:ss` (per kilometre)."""
+    minutes, seconds = divmod(pace.s_per_km, _SECONDS_PER_MINUTE)
+    return f"{minutes}:{seconds:02d}"
 
 
 def weight_text(weight: Weight) -> str:
@@ -136,6 +148,7 @@ class MeasurementHistoryModel(QAbstractTableModel):
             Column.MIN_BPM: self.tr("Resting HR (bpm)"),
             Column.MAX_BPM: self.tr("Maximum HR (bpm)"),
             Column.THRESHOLD: self.tr("Threshold HR (bpm)"),
+            Column.THRESHOLD_PACE: self.tr("Threshold pace (min/km)"),
         }
         return headers[column]
 
@@ -157,6 +170,8 @@ def _text(row: HistoryRow, column: Column) -> str:
         )
     if column is Column.WEIGHT:
         return "" if row.weight is None else weight_text(row.weight)
+    if column is Column.THRESHOLD_PACE:
+        return "" if row.pace is None else pace_text(row.pace)
     bpm = _bpm_of(row, column)
     return "" if bpm is None else QLocale().toString(bpm)
 
@@ -166,6 +181,8 @@ def _sort_key(row: HistoryRow, column: Column) -> float:
         return float(row.day.toordinal())
     if column is Column.WEIGHT:
         return _MISSING_SORT_KEY if row.weight is None else float(row.weight.kg)
+    if column is Column.THRESHOLD_PACE:
+        return _MISSING_SORT_KEY if row.pace is None else float(row.pace.s_per_km)
     bpm = _bpm_of(row, column)
     return _MISSING_SORT_KEY if bpm is None else float(bpm)
 

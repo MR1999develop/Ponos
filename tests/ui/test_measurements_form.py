@@ -19,7 +19,10 @@ from ponos_coach.profiles.domain import (
     BirthDate,
     FixedProfileData,
     Height,
+    PaceSource,
     ProfileName,
+    ThresholdPace,
+    ThresholdPaceEntry,
     Weight,
     WeightEntry,
 )
@@ -420,3 +423,145 @@ def test_an_invalid_name_is_an_issue_on_the_name_field_and_blocks_the_save(
 
     assert changed(form)  # "Salva" è attivo: l'errore si mostra al clic
     assert form.build() == (EditIssue(EditField.NAME, problem),)
+
+
+# --- Threshold pace --------------------------------------------------------------------------
+def pace_history(
+    manual: tuple[ThresholdPaceEntry, ...] = (), tests: tuple[ThresholdPaceEntry, ...] = ()
+) -> MeasurementHistory:
+    base = make_history()
+    return MeasurementHistory(base.fixed, base.weights, base.physiology, manual, tests)
+
+
+def pace_entry(day: date, seconds: int) -> ThresholdPaceEntry:
+    return ThresholdPaceEntry(day, ThresholdPace(seconds))
+
+
+def test_a_profile_without_a_pace_has_none_in_force_and_a_typed_pace_is_a_change() -> None:
+    form = make_form()
+    assert form.baseline_pace is None
+    assert not changed(form)
+
+    form.edit_threshold_pace("5:30")
+
+    assert changed(form)
+    request = request_of(form)
+    assert request.update is not None
+    assert request.update.threshold_pace == ThresholdPace(330)
+    assert request.update.weight is None
+    assert not request.update.changes_heart_rate
+
+
+@pytest.mark.parametrize("text", ["5:30", "5.30", "5,30", "5'30", " 5:30 "])
+def test_the_separators_the_user_may_type_all_give_the_same_pace(text: str) -> None:
+    form = make_form()
+
+    form.edit_threshold_pace(text)
+
+    update = request_of(form).update
+    assert update is not None
+    assert update.threshold_pace == ThresholdPace(330)
+
+
+def test_whole_minutes_are_accepted() -> None:
+    form = make_form()
+
+    form.edit_threshold_pace("6")
+
+    update = request_of(form).update
+    assert update is not None
+    assert update.threshold_pace == ThresholdPace(360)
+
+
+@pytest.mark.parametrize("text", ["abc", "5:60", "5:5", "1:29", "60:01", "-5:30", "5:30:10"])
+def test_an_unreadable_or_out_of_range_pace_is_a_problem_on_its_field_and_not_saved(
+    text: str,
+) -> None:
+    form = make_form()
+
+    form.edit_threshold_pace(text)
+
+    assert changed(form)  # a value to correct enables "Save"
+    assert form.build() == (EditIssue(EditField.THRESHOLD_PACE, BodyProblem.PACE_INVALID),)
+
+
+def test_an_empty_pace_is_untouched() -> None:
+    form = make_form()
+    form.edit_threshold_pace("5:30")
+
+    form.edit_threshold_pace("  ")
+
+    assert form.edited_pace_text is None
+    assert not changed(form)
+
+
+def test_the_pace_in_force_is_shown_and_typing_the_same_value_is_not_a_change() -> None:
+    history = pace_history(manual=(pace_entry(date(2026, 2, 1), 330),))
+    form = MeasurementsForm(history, TODAY)
+    assert form.baseline_pace is not None
+    assert form.baseline_pace.pace == ThresholdPace(330)
+
+    form.edit_threshold_pace("5.30")
+
+    assert form.edited_pace_text is None
+    assert not changed(form)
+
+
+def test_a_pace_from_a_test_is_the_baseline_and_says_so() -> None:
+    history = pace_history(tests=(pace_entry(date(2026, 5, 1), 300),))
+    form = MeasurementsForm(history, TODAY)
+
+    assert form.baseline_pace is not None
+    assert (form.baseline_pace.pace, form.baseline_pace.source) == (
+        ThresholdPace(300),
+        PaceSource.TEST,
+    )
+    form.edit_threshold_pace("5:10")
+    assert form.changes() == (FieldChange(EditField.THRESHOLD_PACE, form.baseline_pace),)
+
+
+def test_the_baseline_pace_follows_the_chosen_day() -> None:
+    history = pace_history(
+        manual=(pace_entry(date(2026, 2, 1), 330),),
+        tests=(pace_entry(date(2026, 4, 1), 300),),
+    )
+    form = MeasurementsForm(history, TODAY)
+
+    form.set_valid_from(date(2026, 3, 1))
+    on_march = form.baseline_pace
+    form.set_valid_from(date(2026, 1, 1))
+
+    assert on_march is not None
+    assert on_march.pace == ThresholdPace(330)
+    assert form.baseline_pace is None
+
+
+def test_the_pace_period_ends_the_day_before_the_next_manual_entry() -> None:
+    history = pace_history(manual=(pace_entry(date(2026, 6, 1), 330),))
+    form = MeasurementsForm(history, TODAY)
+    form.set_valid_from(date(2026, 5, 1))
+
+    form.edit_threshold_pace("5:20")
+
+    assert form.pending_periods() == (
+        PendingPeriod(
+            MeasurementSeries.THRESHOLD_PACE,
+            ValidityPeriod(date(2026, 5, 1), date(2026, 5, 31)),
+        ),
+    )
+
+
+def test_pace_together_with_weight_and_heart_rate_is_one_update() -> None:
+    form = make_form()
+    form.edit_weight("68,0")
+    form.edit_threshold_bpm(165)
+    form.edit_threshold_pace("5:15")
+
+    update = request_of(form).update
+
+    assert update is not None
+    assert (update.weight, update.threshold_bpm, update.threshold_pace) == (
+        Weight(680),
+        165,
+        ThresholdPace(315),
+    )

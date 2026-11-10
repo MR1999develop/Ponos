@@ -444,6 +444,7 @@ def test_an_undo_refused_because_the_threshold_was_edited_says_so_and_clears_the
             session.weights,
             access.today,
             session.fixed_data,
+            session.threshold_paces,
         )(MeasurementUpdate(test_day, threshold_bpm=170))
 
     assert window.controller.run_on_profile(edit_threshold, edited.append)

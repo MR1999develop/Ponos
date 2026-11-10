@@ -14,6 +14,7 @@ from enum import Enum
 
 from PySide6.QtCore import QCoreApplication
 
+from ponos_coach.assessment.domain.defaults import MAX_PACE_S_PER_KM, MIN_PACE_S_PER_KM
 from ponos_coach.profiles.domain import (
     HEIGHT_MAX_CM,
     HEIGHT_MIN_CM,
@@ -23,11 +24,13 @@ from ponos_coach.profiles.domain import (
     WEIGHT_MIN_TENTHS_KG,
     BirthDate,
     Height,
+    ThresholdPace,
     Weight,
 )
 
 _HEIGHT_TEXT_MAX_CHARS = 3  # the length is checked before reading the number
 _TENTHS_PER_KG = 10
+_SECONDS_PER_MINUTE = 60
 
 
 class BodyProblem(Enum):
@@ -39,6 +42,8 @@ class BodyProblem(Enum):
     WEIGHT_INVALID = "weight_invalid"
     BIRTH_EMPTY = "birth_empty"
     BIRTH_INVALID = "birth_invalid"
+    PACE_EMPTY = "pace_empty"
+    PACE_INVALID = "pace_invalid"
 
 
 def read_height(text: str) -> Height | BodyProblem:
@@ -64,6 +69,16 @@ def read_weight(text: str) -> Weight | BodyProblem:
         return BodyProblem.WEIGHT_INVALID
 
 
+def read_threshold_pace(text: str) -> ThresholdPace | BodyProblem:
+    """Threshold pace from `m:ss` (also with `.`, `,` or `'`, or whole minutes)."""
+    if not text.strip():
+        return BodyProblem.PACE_EMPTY
+    try:
+        return ThresholdPace.parse(text)
+    except ValueError:
+        return BodyProblem.PACE_INVALID
+
+
 def read_birth_date(value: date | None, today: date) -> BirthDate | BodyProblem:
     """Birth date entered today (at least five years ago, not before 1900)."""
     if value is None:
@@ -77,6 +92,11 @@ def read_birth_date(value: date | None, today: date) -> BirthDate | BodyProblem:
 def latest_birth_date(today: date) -> date:
     """The latest birth date allowed today, per the domain (for the picker limit)."""
     return BirthDate.latest(today)
+
+
+def _pace_limit(seconds: int) -> str:
+    minutes, rest = divmod(seconds, _SECONDS_PER_MINUTE)
+    return f"{minutes}:{rest:02d}"
 
 
 def body_problem_text(problem: BodyProblem) -> str:
@@ -98,6 +118,14 @@ def body_problem_text(problem: BodyProblem) -> str:
         ).format(
             low=WEIGHT_MIN_TENTHS_KG // _TENTHS_PER_KG, high=WEIGHT_MAX_TENTHS_KG // _TENTHS_PER_KG
         ),
+        BodyProblem.PACE_EMPTY: QCoreApplication.translate(
+            "BodyInput", "Enter the threshold pace as minutes and seconds per kilometre."
+        ),
+        BodyProblem.PACE_INVALID: QCoreApplication.translate(
+            "BodyInput",
+            "Enter the pace as minutes and seconds per kilometre, like 5:30, from {fast} to "
+            "{slow}.",
+        ).format(fast=_pace_limit(MIN_PACE_S_PER_KM), slow=_pace_limit(MAX_PACE_S_PER_KM)),
         BodyProblem.BIRTH_EMPTY: QCoreApplication.translate(
             "BodyInput", "Enter the date of birth."
         ),

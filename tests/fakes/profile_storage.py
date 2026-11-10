@@ -96,6 +96,7 @@ from ponos_coach.profiles.domain import (
     ProfileInfo,
     ProfileName,
     ProfilePeek,
+    ThresholdPaceEntry,
     WeightEntry,
 )
 from ponos_coach.profiles.ports import (
@@ -104,6 +105,7 @@ from ponos_coach.profiles.ports import (
     OpenProfile,
     ProfileAlreadyExistsError,
     ProfileNotFoundError,
+    ThresholdPaceStore,
     WeightStore,
 )
 from ponos_coach.profiles.timezones import require_known_timezone
@@ -122,6 +124,7 @@ class _Database:
     garmin_ids: set[int] = field(default_factory=set)
     physiology: dict[date, PhysiologyEntry] = field(default_factory=dict)
     weights: dict[date, WeightEntry] = field(default_factory=dict)
+    threshold_paces: dict[date, ThresholdPaceEntry] = field(default_factory=dict)
     fixed: FixedProfileData | None = None
     sport_weights: dict[Sport, SportWeight] = field(default_factory=dict)
     loads: dict[str, tuple[LoadFingerprint, ActivityLoad]] = field(default_factory=dict)
@@ -152,6 +155,7 @@ class _Database:
                 self.garmin_ids,
                 self.physiology,
                 self.weights,
+                self.threshold_paces,
                 self.fixed,
                 self.sport_weights,
                 self.loads,
@@ -180,6 +184,7 @@ class _Database:
             self.garmin_ids,
             self.physiology,
             self.weights,
+            self.threshold_paces,
             self.fixed,
             self.sport_weights,
             self.loads,
@@ -390,6 +395,17 @@ class _Weights:
 
     def list_entries(self) -> Sequence[WeightEntry]:
         return [self._db.weights[day] for day in sorted(self._db.weights)]
+
+
+class _ThresholdPaces:
+    def __init__(self, database: _Database) -> None:
+        self._db = database
+
+    def put(self, entry: ThresholdPaceEntry) -> None:
+        self._db.threshold_paces[entry.valid_from] = entry
+
+    def list_entries(self) -> Sequence[ThresholdPaceEntry]:
+        return [self._db.threshold_paces[day] for day in sorted(self._db.threshold_paces)]
 
 
 class _FixedData:
@@ -705,6 +721,7 @@ class _OpenProfile:
         self._journal = _Journal(database)
         self._physiology = _Physiology(database)
         self._weights = _Weights(database)
+        self._threshold_paces = _ThresholdPaces(database)
         self._fixed_data = _FixedData(database)
         self._sport_weights = _SportWeights(database)
         self._cache = _Cache(database)
@@ -750,6 +767,10 @@ class _OpenProfile:
     @property
     def weights(self) -> WeightStore:
         return self._weights
+
+    @property
+    def threshold_paces(self) -> ThresholdPaceStore:
+        return self._threshold_paces
 
     @property
     def fixed_data(self) -> FixedDataStore:

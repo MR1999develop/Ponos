@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import numpy as np
 import pytest
 
+from ponos_coach.assessment.domain import ThresholdTest
 from ponos_coach.load.domain import (
     HeartRateLimits,
     Physiology,
@@ -21,8 +23,11 @@ from ponos_coach.profiles.domain import (
     BirthDate,
     FixedProfileData,
     Height,
+    PaceSource,
     ProfileId,
     ProfileName,
+    ThresholdPace,
+    ThresholdPaceEntry,
     Weight,
     WeightEntry,
 )
@@ -31,6 +36,7 @@ from ponos_coach.profiles.measurements import (
     MeasurementProblem,
     MeasurementUpdate,
     ReadMeasurementHistory,
+    SavedMeasurements,
     UpdateMeasurements,
     ValidityPeriod,
 )
@@ -41,7 +47,7 @@ from ponos_coach.profiles.use_cases import (
     ProfilePorts,
     ProfileSession,
 )
-from tests.builders import absolute_path
+from tests.builders import absolute_path, fit_identity
 from tests.fakes.profile_storage import InMemoryDisk, InMemoryProfileStorage
 from tests.fakes.profiles import InMemoryProfileFolders, InMemoryProfileRegistry
 from tests.load.test_profile_overview import World as LoadWorld
@@ -78,7 +84,12 @@ def create_profile(request: NewProfileRequest | None = None, *, number: int = 1)
 
 def updater(session: ProfileSession, today: date = TODAY) -> UpdateMeasurements:
     return UpdateMeasurements(
-        session.activities, session.physiology, session.weights, lambda: today, session.fixed_data
+        session.activities,
+        session.physiology,
+        session.weights,
+        lambda: today,
+        session.fixed_data,
+        session.threshold_paces,
     )
 
 
@@ -192,7 +203,7 @@ def test_weight_and_heart_rate_together_are_saved_together() -> None:
     ids=lambda c: "-".join(f"{k}={v}" for k, v in c.items()),
 )
 def test_inconsistent_heart_rate_is_refused_and_nothing_is_written(
-    changes: dict[str, int],
+    changes: dict[str, Any],
 ) -> None:
     session = create_profile()
     before = (entries(session), list(session.weights.list_entries()))
@@ -278,6 +289,7 @@ def test_t_calc_05_a_heart_rate_change_from_a_date_recalculates_like_from_scratc
         world.profile.weights,
         lambda: date(2026, 3, 1),
         world.profile.fixed_data,
+        world.profile.threshold_paces,
     )(MeasurementUpdate(date(2026, 2, 1), max_bpm=180, threshold_bpm=160))
     after_change = world.overview()
 
@@ -306,7 +318,13 @@ def test_history_lists_fixed_data_weights_and_parameters_by_date() -> None:
     update(MeasurementUpdate(date(2026, 2, 1), Weight(710), threshold_bpm=165))
     update(MeasurementUpdate(date(2026, 1, 1), Weight(720)))
 
-    history = ReadMeasurementHistory(session.fixed_data, session.weights, session.physiology)()
+    history = ReadMeasurementHistory(
+        session.fixed_data,
+        session.weights,
+        session.physiology,
+        session.threshold_paces,
+        session.threshold_tests,
+    )()
 
     assert history.fixed == FIXED
     assert [w.valid_from for w in history.weights] == [date(2026, 1, 1), date(2026, 2, 1), TODAY]
@@ -324,7 +342,13 @@ def test_history_of_a_profile_without_fixed_data_says_so() -> None:
         )
     )
 
-    history = ReadMeasurementHistory(session.fixed_data, session.weights, session.physiology)()
+    history = ReadMeasurementHistory(
+        session.fixed_data,
+        session.weights,
+        session.physiology,
+        session.threshold_paces,
+        session.threshold_tests,
+    )()
 
     assert history.fixed is None
     assert history.weights == ()
@@ -472,3 +496,110 @@ def test_the_oldest_accepted_measurement_day_is_the_first_of_1900(
         with pytest.raises(InvalidMeasurementsError) as error:
             updater(session)(MeasurementUpdate(day, Weight(700)))
         assert error.value.problem is MeasurementProblem.DATE_TOO_OLD
+
+
+# --- The threshold pace: a series of its own ------------------------------------------------------
+PACE = ThresholdPace(330)
+
+
+def test_a_pace_alone_is_a_valid_update_and_touches_no_other_series() -> None:
+    session = create_profile()
+    weights_before = list(session.weights.list_entries())
+    entries_before = entries(session)
+
+    saved = updater(session)(MeasurementUpdate(TODAY, threshold_pace=PACE))
+
+    assert list(session.threshold_paces.list_entries()) == [ThresholdPaceEntry(TODAY, PACE)]
+    assert (list(session.weights.list_entries()), entries(session)) == (
+        weights_before,
+        entries_before,
+    )
+    assert saved == SavedMeasurements(None, None, False, ValidityPeriod(TODAY, None))
+
+
+def test_the_pace_is_saved_in_the_same_transaction_as_the_other_measurements() -> None:
+    session = create_profile()
+
+    saved = updater(session)(
+        MeasurementUpdate(date(2026, 2, 1), Weight(710), threshold_bpm=165, threshold_pace=PACE)
+    )
+
+    assert saved.threshold_pace == ValidityPeriod(date(2026, 2, 1), None)
+    assert saved.weight is not None
+    assert saved.heart_rate is not None
+    assert len(list(session.threshold_paces.list_entries())) == 1
+
+
+def test_a_refused_update_writes_no_pace() -> None:
+    session = create_profile()
+
+    with pytest.raises(InvalidMeasurementsError):
+        updater(session)(MeasurementUpdate(TODAY, min_bpm=171, threshold_pace=PACE))
+
+    assert list(session.threshold_paces.list_entries()) == []
+
+
+@pytest.mark.parametrize(
+    ("day", "problem"),
+    [
+        (TODAY + timedelta(days=1), MeasurementProblem.DATE_IN_FUTURE),
+        (date(1899, 12, 31), MeasurementProblem.DATE_TOO_OLD),
+    ],
+)
+def test_the_date_rules_of_the_other_measurements_apply_to_the_pace(
+    day: date, problem: MeasurementProblem
+) -> None:
+    session = create_profile()
+
+    with pytest.raises(InvalidMeasurementsError) as error:
+        updater(session)(MeasurementUpdate(day, threshold_pace=PACE))
+
+    assert error.value.problem is problem
+    assert list(session.threshold_paces.list_entries()) == []
+
+
+def test_a_past_pace_is_valid_until_the_day_before_the_next_existing_entry() -> None:
+    session = create_profile()
+    update = updater(session)
+    update(MeasurementUpdate(date(2026, 2, 1), threshold_pace=ThresholdPace(320)))
+
+    saved = update(MeasurementUpdate(date(2026, 1, 1), threshold_pace=PACE))
+
+    assert saved.threshold_pace == ValidityPeriod(date(2026, 1, 1), date(2026, 1, 31))
+
+
+def test_the_same_day_replaces_the_pace() -> None:
+    session = create_profile()
+    update = updater(session)
+    update(MeasurementUpdate(TODAY, threshold_pace=PACE))
+
+    update(MeasurementUpdate(TODAY, threshold_pace=ThresholdPace(315)))
+
+    assert list(session.threshold_paces.list_entries()) == [
+        ThresholdPaceEntry(TODAY, ThresholdPace(315))
+    ]
+
+
+def test_history_has_the_pace_series_and_the_paces_of_the_tests() -> None:
+    session = create_profile()
+    updater(session)(MeasurementUpdate(TODAY, threshold_pace=PACE))
+    start = datetime(2026, 2, 1, 7, 0, tzinfo=UTC)
+    session.threshold_tests.add(ThresholdTest(fit_identity(7), date(2026, 2, 1), start, 168, 300))
+
+    history = ReadMeasurementHistory(
+        session.fixed_data,
+        session.weights,
+        session.physiology,
+        session.threshold_paces,
+        session.threshold_tests,
+    )()
+
+    assert history.threshold_paces == (ThresholdPaceEntry(TODAY, PACE),)
+    assert history.test_paces == (ThresholdPaceEntry(date(2026, 2, 1), ThresholdPace(300)),)
+    in_force = history.pace_in_force(TODAY)
+    assert in_force is not None
+    assert (in_force.pace, in_force.source) == (PACE, PaceSource.MANUAL)
+    from_test = history.pace_in_force(date(2026, 2, 15))
+    assert from_test is not None
+    assert from_test.source is PaceSource.TEST
+    assert history.pace_in_force(date(2026, 1, 1)) is None

@@ -44,10 +44,11 @@ from ponos_coach.ui.heart_rate_rules import (
 )
 from ponos_coach.ui.measurement_history_model import (
     MeasurementHistoryModel,
+    pace_text,
     sorted_history_model,
     weight_text,
 )
-from ponos_coach.ui.measurement_texts import in_force_text, superseded_text
+from ponos_coach.ui.measurement_texts import in_force_text, pace_source_text, superseded_text
 from ponos_coach.ui.measurements_form import (
     EditField,
     EditIssue,
@@ -59,7 +60,14 @@ from ponos_coach.ui.settings_form import SettingsForm
 from ponos_coach.ui.tokens import SPACE_1, SPACE_2, SPACE_4, Theme, tokens_for
 
 _TABLE_MIN_HEIGHT = 140
-_NOTE_FIELDS = (EditField.WEIGHT, EditField.MIN_BPM, EditField.MAX_BPM, EditField.THRESHOLD)
+_NOTE_FIELDS = (
+    EditField.WEIGHT,
+    EditField.MIN_BPM,
+    EditField.MAX_BPM,
+    EditField.THRESHOLD,
+    EditField.THRESHOLD_PACE,
+)
+_PACE_MAX_CHARS = 16  # the same limit the domain checks before reading the text
 
 
 class ProfileEditDialog(SettingsForm):
@@ -110,6 +118,12 @@ class ProfileEditDialog(SettingsForm):
         self._min.valueChanged.connect(self._on_min_changed)
         self._max.valueChanged.connect(self._on_max_changed)
         self._threshold.valueChanged.connect(self._on_threshold_changed)
+        self._pace = QLineEdit(self)
+        self._pace.setObjectName("measurementsThresholdPace")
+        self._pace.setAccessibleName(self.tr("Threshold pace (min/km)"))
+        self._pace.setPlaceholderText(self.tr("m:ss"))
+        self._pace.setMaxLength(_PACE_MAX_CHARS)
+        self._pace.textEdited.connect(self._on_pace_edited)
 
         self._build_fixed_fields()
         self._build_history_table()
@@ -171,6 +185,7 @@ class ProfileEditDialog(SettingsForm):
             self._min,
             self._max,
             self._threshold,
+            self._pace,
             self._table,
             self._save,
         ]
@@ -239,6 +254,7 @@ class ProfileEditDialog(SettingsForm):
             (self.tr("Resting heart rate"), self._min, EditField.MIN_BPM),
             (self.tr("Maximum heart rate"), self._max, EditField.MAX_BPM),
             (self.tr("Threshold heart rate"), self._threshold, EditField.THRESHOLD),
+            (self.tr("Threshold pace (min/km)"), self._pace, EditField.THRESHOLD_PACE),
         )
         for text, widget, field in rows:
             add_field_row(layout, text, widget, self._with_error(widget, field))
@@ -326,6 +342,11 @@ class ProfileEditDialog(SettingsForm):
         return self._threshold
 
     @property
+    def pace_edit(self) -> QLineEdit:
+        """Threshold pace field (`m:ss`)."""
+        return self._pace
+
+    @property
     def height_edit(self) -> QLineEdit:
         """Height to complete (hidden if the profile already has the fixed data)."""
         return self._height
@@ -397,6 +418,10 @@ class ProfileEditDialog(SettingsForm):
         if form.edited_weight_text is None:
             baseline = form.baseline_weight
             self._weight.setText("" if baseline is None else weight_text(baseline))
+        if form.edited_pace_text is None:
+            in_force = form.baseline_pace
+            self._pace.setText("" if in_force is None else pace_text(in_force.pace))
+            self._pace.setToolTip("" if in_force is None else pace_source_text(in_force))
 
     def _refresh_errors(self, extra: tuple[EditIssue, ...] = ()) -> None:
         issues = (*self._form.issues(), *extra) if self._show_errors else extra
@@ -489,6 +514,10 @@ class ProfileEditDialog(SettingsForm):
         self._form.edit_threshold_bpm(value)
         self._after_edit()
 
+    def _on_pace_edited(self, text: str) -> None:
+        self._form.edit_threshold_pace(text)
+        self._after_edit()
+
     def _on_height_edited(self, text: str) -> None:
         self._form.height_text = text
         self._after_edit()
@@ -517,6 +546,7 @@ class ProfileEditDialog(SettingsForm):
             EditField.MIN_BPM: self._min,
             EditField.MAX_BPM: self._max,
             EditField.THRESHOLD: self._threshold,
+            EditField.THRESHOLD_PACE: self._pace,
             EditField.HEIGHT: self._height,
             EditField.BIRTH_DATE: self._birth,
         }
@@ -541,6 +571,7 @@ class ProfileEditDialog(SettingsForm):
             self._min,
             self._max,
             self._threshold,
+            self._pace,
             self._height,
             self._birth,
         ):

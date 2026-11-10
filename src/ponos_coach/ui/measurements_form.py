@@ -2,11 +2,10 @@
 # Copyright (C) 2026 MR
 """Form "Edit profile": state and rules, testable without a window.
 
-Measurements (weight, minimum HR, maximum HR, threshold) apply from a day chosen by the user (today
-by
-default, never in the future). A field the user has not touched shows, and has, the value in force
-that day; changing the day, untouched fields follow. A typed value equal to the one in
-force is not a change: the field goes back to "untouched" and follows the day. Only changed fields
+Measurements (weight, minimum HR, maximum HR, threshold HR, threshold pace) apply from a day
+chosen by the user (today by default, never in the future). A field the user has not touched
+shows, and has, the value in force that day; changing the day, untouched fields follow. A typed
+value equal to the one in force is not a change: the field goes back to "untouched" and follows the day. Only changed fields
 are saved; `changes` says what changes relative to the chosen day and `pending_periods` for how long
 the new values would apply (a measurement applies until the next already existing entry).
 For a profile created before they existed, height and birth date are completed once.
@@ -36,7 +35,9 @@ from ponos_coach.profiles.domain import (
     MIN_MEASUREMENT_DATE,
     FixedProfileData,
     InvalidProfileNameError,
+    PaceInForce,
     ProfileName,
+    ThresholdPace,
     Weight,
 )
 from ponos_coach.profiles.measurements import (
@@ -45,7 +46,13 @@ from ponos_coach.profiles.measurements import (
     MeasurementUpdate,
     ValidityPeriod,
 )
-from ponos_coach.ui.body_input import BodyProblem, read_birth_date, read_height, read_weight
+from ponos_coach.ui.body_input import (
+    BodyProblem,
+    read_birth_date,
+    read_height,
+    read_threshold_pace,
+    read_weight,
+)
 from ponos_coach.ui.heart_rate_rules import HeartRateProblem, heart_rate_problems
 from ponos_coach.ui.new_profile_form import DEFAULT_MAX_BPM, DEFAULT_MIN_BPM, estimated_threshold
 
@@ -60,6 +67,7 @@ class EditField(Enum):
     MIN_BPM = "min_bpm"
     MAX_BPM = "max_bpm"
     THRESHOLD = "threshold"
+    THRESHOLD_PACE = "threshold_pace"
     HEIGHT = "height"
     BIRTH_DATE = "birth_date"
 
@@ -83,10 +91,11 @@ class EditIssue:
 
 
 class MeasurementSeries(Enum):
-    """The profile's two dated series: each has its own entries and validity periods."""
+    """The profile's three dated series: each has its own entries and validity periods."""
 
     WEIGHT = "weight"
     HEART_RATE = "heart_rate"
+    THRESHOLD_PACE = "threshold_pace"
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +103,7 @@ class FieldChange:
     """A value that saving would change, and the one that applied that day before."""
 
     field: EditField
-    before: Weight | int | None  # None: no weight recorded up to that day
+    before: Weight | int | PaceInForce | None  # None: nothing recorded up to that day
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +178,7 @@ class MeasurementsForm:
         self._min_bpm: int | None = None
         self._max_bpm: int | None = None
         self._threshold_bpm: int | None = None
+        self._pace_text: str | None = None  # None: untouched
         self.height_text = ""  # only to complete the fixed data
         self.birth_date: date | None = None
 
@@ -261,6 +271,17 @@ class MeasurementsForm:
             return self._threshold_bpm
         return self._baseline().threshold.bpm
 
+    @property
+    def baseline_pace(self) -> PaceInForce | None:
+        """The threshold pace in force on the chosen day, from the profile's settings or from the
+        last threshold test (the more recent; the settings on the same day); `None` if neither."""
+        return self._history.pace_in_force(self._valid_from)
+
+    @property
+    def edited_pace_text(self) -> str | None:
+        """The pace typed by the user, `None` if the field was not touched."""
+        return self._pace_text
+
     def _baseline(self) -> Physiology:
         try:
             return physiology_for_day(self._history.physiology, self._valid_from)
@@ -284,6 +305,16 @@ class MeasurementsForm:
             not isinstance(reading, BodyProblem) and reading == self.baseline_weight
         )
         self._weight_text = None if untouched else text
+
+    def edit_threshold_pace(self, text: str) -> None:
+        """The user types the pace. Empty or equal to the one in force: the field goes back to
+        untouched and follows the chosen day."""
+        reading = read_threshold_pace(text)
+        baseline = self.baseline_pace
+        untouched = reading is BodyProblem.PACE_EMPTY or (
+            isinstance(reading, ThresholdPace) and baseline is not None and reading == baseline.pace
+        )
+        self._pace_text = None if untouched else text
 
     def edit_min_bpm(self, value: int) -> None:
         """The user changes the minimum HR (equal to the one in force: goes back to untouched)."""
@@ -317,6 +348,7 @@ class MeasurementsForm:
             self._name_text is not None
             or self._weight_differs()
             or heart_rate
+            or self._pace_differs()
             or (self.needs_fixed_data and self._fixed_started())
         )
 
@@ -326,6 +358,14 @@ class MeasurementsForm:
             return False
         reading = read_weight(self._weight_text)
         return isinstance(reading, BodyProblem) or reading != self.baseline_weight
+
+    def _pace_differs(self) -> bool:
+        """A typed pace that is not the one in force (even if it needs correcting)."""
+        if self._pace_text is None:
+            return False
+        reading = read_threshold_pace(self._pace_text)
+        baseline = self.baseline_pace
+        return isinstance(reading, BodyProblem) or baseline is None or reading != baseline.pace
 
     def changes(self) -> tuple[FieldChange, ...]:
         """The valid values that saving would change, with the one in force on the chosen day."""
@@ -340,6 +380,8 @@ class MeasurementsForm:
         ):
             if edited is not None and edited != before:
                 found.append(FieldChange(field, before))
+        if self._changed_pace() is not None:
+            found.append(FieldChange(EditField.THRESHOLD_PACE, self.baseline_pace))
         return tuple(found)
 
     def pending_periods(self) -> tuple[PendingPeriod, ...]:
@@ -352,6 +394,9 @@ class MeasurementsForm:
         if any(value is not None for value in self._heart_rate_changes()):
             days = [entry.valid_from for entry in self._history.physiology]
             found.append(PendingPeriod(MeasurementSeries.HEART_RATE, self._period_in(days)))
+        if self._changed_pace() is not None:
+            days = [entry.valid_from for entry in self._history.threshold_paces]
+            found.append(PendingPeriod(MeasurementSeries.THRESHOLD_PACE, self._period_in(days)))
         return tuple(found)
 
     def _period_in(self, entry_days: list[date]) -> ValidityPeriod:
@@ -377,9 +422,16 @@ class MeasurementsForm:
                 EditIssue(_HEART_RATE_FIELD[kind], kind)
                 for kind in heart_rate_problems(self.min_bpm, self.max_bpm, self.threshold_bpm)
             )
+        found.extend(self._pace_issues())
         if self.needs_fixed_data and self._fixed_started():
             found.extend(self._fixed_issues())
         return tuple(found)
+
+    def _pace_issues(self) -> list[EditIssue]:
+        if self._pace_text is None:
+            return []
+        pace = read_threshold_pace(self._pace_text)
+        return [EditIssue(EditField.THRESHOLD_PACE, pace)] if isinstance(pace, BodyProblem) else []
 
     def _fixed_issues(self) -> list[EditIssue]:
         height = read_height(self.height_text)
@@ -397,10 +449,17 @@ class MeasurementsForm:
         if found:
             return found
         weight = self._changed_weight()
+        pace = self._changed_pace()
         min_bpm, max_bpm, threshold_bpm = self._heart_rate_changes()
         update = None
-        if weight is not None or any(v is not None for v in (min_bpm, max_bpm, threshold_bpm)):
-            update = MeasurementUpdate(self._valid_from, weight, min_bpm, max_bpm, threshold_bpm)
+        if (
+            weight is not None
+            or pace is not None
+            or any(v is not None for v in (min_bpm, max_bpm, threshold_bpm))
+        ):
+            update = MeasurementUpdate(
+                self._valid_from, weight, min_bpm, max_bpm, threshold_bpm, pace
+            )
         fixed = self._built_fixed()
         name = self._name_reading()
         new_name = name if isinstance(name, ProfileName) else None
@@ -414,6 +473,16 @@ class MeasurementsForm:
             return None
         reading = read_weight(self._weight_text)
         if isinstance(reading, BodyProblem) or reading == self.baseline_weight:
+            return None
+        return reading
+
+    def _changed_pace(self) -> ThresholdPace | None:
+        """The typed pace, if valid and different from the one in force on the chosen day."""
+        if self._pace_text is None:
+            return None
+        reading = read_threshold_pace(self._pace_text)
+        baseline = self.baseline_pace
+        if isinstance(reading, BodyProblem) or (baseline is not None and reading == baseline.pace):
             return None
         return reading
 

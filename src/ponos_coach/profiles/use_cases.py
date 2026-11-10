@@ -62,6 +62,7 @@ from ponos_coach.profiles.ports import (
     ProfileRegistry,
     ProfileRegistryError,
     ProfileStorage,
+    ThresholdPaceStore,
     WeightStore,
 )
 from ponos_coach.profiles.timezones import require_known_timezone
@@ -150,6 +151,11 @@ class ProfileSession:
     def weights(self) -> WeightStore:
         """Weight series with validity date."""
         return self._opened.weights
+
+    @property
+    def threshold_paces(self) -> ThresholdPaceStore:
+        """Threshold pace series with validity date."""
+        return self._opened.threshold_paces
 
     @property
     def fixed_data(self) -> FixedDataStore:

@@ -21,13 +21,18 @@ saved. Health-related data: never in logs or error messages.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import Enum
 
 from ponos_coach.activities.ports import ActivityIndex
-from ponos_coach.assessment.domain import DEFAULT_PROTOCOL, ThresholdProtocol, retest_status
+from ponos_coach.assessment.domain import (
+    DEFAULT_PROTOCOL,
+    ThresholdProtocol,
+    ThresholdTest,
+    retest_status,
+)
 from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.goals.domain import FitnessGoal, RaceGoal, WeeklyAvailability
 from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
@@ -52,6 +57,8 @@ from ponos_coach.planning.domain import (
     missed_threshold_tests,
 )
 from ponos_coach.planning.ports import FrozenDay, PlanStore, StoredPlan
+from ponos_coach.profiles.domain import entries_of_tests, threshold_pace_in_force
+from ponos_coach.profiles.ports import ThresholdPaceStore
 from ponos_coach.profiles.use_cases import ProfileSession
 
 # How far back the frozen days are searched for a planned threshold test that was missed: the
@@ -73,6 +80,7 @@ class PlanSources:
     threshold_tests: ThresholdTestStore
     plans: PlanStore
     injuries: InjuryStore
+    threshold_paces: ThresholdPaceStore
 
 
 def plan_sources_of(session: ProfileSession) -> PlanSources:
@@ -87,6 +95,7 @@ def plan_sources_of(session: ProfileSession) -> PlanSources:
         session.threshold_tests,
         session.plans,
         session.injuries,
+        session.threshold_paces,
     )
 
 
@@ -196,9 +205,7 @@ class RebuildPlan:
             physiology=physiology,
             fitness=fitness,
             weights=effective_weights(src.sport_weights.load()),
-            threshold_pace_s_per_km=next(
-                (t.pace_s_per_km for t in reversed(tests) if t.pace_s_per_km is not None), None
-            ),
+            threshold_pace_s_per_km=self._threshold_pace(tests, today),
             retest=retest_status((t.test_day for t in tests), today),
             injuries=plan_injuries(problems),
             after_injury=recently_returned(problems, today),
@@ -210,6 +217,13 @@ class RebuildPlan:
         if isinstance(built, Plan):
             return PlanBuilt(built, saved)
         return PlanRefused(built, saved)
+
+    def _threshold_pace(self, tests: Sequence[ThresholdTest], today: date) -> int | None:
+        """The pace in force today: the latest between the one set in the profile and the one of
+        the last threshold test that measured it (the profile's wins on the same day)."""
+        manual = self._src.threshold_paces.list_entries()
+        in_force = threshold_pace_in_force(manual, entries_of_tests(tests), today)
+        return None if in_force is None else in_force.pace.s_per_km
 
     def _lived_days(self, today: date) -> list[PlanDay]:
         """The planned days before today within the look-back: those already frozen and those

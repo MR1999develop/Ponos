@@ -194,6 +194,7 @@ def wire(profile: RealProfile, today: date = TODAY) -> ThresholdProfile:
         session.weights,
         lambda: today,
         session.fixed_data,
+        session.threshold_paces,
     )
     tests = session.threshold_tests
     return ThresholdProfile(

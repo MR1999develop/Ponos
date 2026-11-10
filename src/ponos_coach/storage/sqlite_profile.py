@@ -34,6 +34,7 @@ from ponos_coach.profiles.ports import (
     OpenProfile,
     ProfileCorruptError,
     ProfileStorageError,
+    ThresholdPaceStore,
     WeightStore,
 )
 from ponos_coach.profiles.timezones import require_known_timezone
@@ -62,6 +63,7 @@ from ponos_coach.storage.sqlite_planning import SqlitePlanStore
 from ponos_coach.storage.sqlite_profile_data import (
     SqliteFixedDataStore,
     SqliteSportWeightStore,
+    SqliteThresholdPaceStore,
     SqliteWeightStore,
 )
 from ponos_coach.storage.sqlite_stores import (
@@ -114,6 +116,7 @@ class SqliteOpenProfile:
         self._sync_journal = SqliteSyncJournal(database)
         self._physiology = SqlitePhysiologyStore(database)
         self._weights = SqliteWeightStore(database)
+        self._threshold_paces = SqliteThresholdPaceStore(database)
         self._fixed_data = SqliteFixedDataStore(database)
         self._sport_weights = SqliteSportWeightStore(database)
         self._load_cache = SqliteLoadCache(database)
@@ -164,6 +167,11 @@ class SqliteOpenProfile:
     def weights(self) -> WeightStore:
         """Weight series."""
         return self._weights
+
+    @property
+    def threshold_paces(self) -> ThresholdPaceStore:
+        """Threshold pace series."""
+        return self._threshold_paces
 
     @property
     def fixed_data(self) -> FixedDataStore:
