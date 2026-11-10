@@ -23,7 +23,8 @@ invia. Nessun I/O nel motore.
   (tipologie scelte per sport: facile, lungo, medio, soglia, VO2max,
   recupero, forza, alternativa). Tutti validi per costruzione.
 - `planning/domain`: `PlanInputs` (obiettivi, disponibilità, tipologie,
-  `Physiology`, `FitnessState` = CTL e ATL a fine di oggi, pesi degli sport,
+  `Physiology`, `FitnessState` = CTL e ATL a fine di oggi (senza pesi degli
+  sport, tolti il 2026-11-10),
   ritmo di soglia `int | None`, `after_injury`, `injuries` = istantanee dei
   casi aperti di `injury`, `retest` = esito di `assessment.retest_status`,
   `test_protocol` = protocollo scelto dall'utente, `missed_tests` = giorni in cui il
@@ -231,11 +232,16 @@ Le ripetute: soglia 8×2 in base e mantenimento, 10×3 in costruzione, 12×3 in
 picco; VO2max 3×3 in costruzione, 4×3 in picco. Il recupero segue ogni
 ripetizione tranne l'ultima.
 
-**Carico stimato** con lo stesso modello del carico: hrTSS al minuto alla FC
+**Carico stimato** con lo stesso modello del carico (TRIMPeq dal 2026-11-10,
+`METHOD_VERSION` 7; le soglie del piano restano in scala "100 = un'ora alla
+soglia", senza conversione; il test `tests/planning/test_trimp_eq_equivalence.py`
+confronta 11 scenari di sola corsa con il golden
+`tests/planning/golden/plans_hrtss.json`): TRIMP al minuto alla FC
 che rappresenta la zona (70, 82, 90, 97, 103% della soglia, limitata alla FC
 massima: circa il mezzo di ogni zona delle zone nuove, 103 per la Z5, default del progetto;
-prima della versione 3 erano 75, 87, 92, 97, 103), con TRIMP di Banister e `TRIMP_1h_soglia` dello sport, per il peso
-dello sport; carico = Σ minuti per zona × tasso della zona. Gara: stessa
+prima della versione 3 erano 75, 87, 92, 97, 103), con TRIMP di Banister e il peso di un'ora alla soglia di corsa, senza peso
+dello sport (nota: per gli sport con soglia propria la FC della zona sta sulla
+loro soglia); carico = Σ minuti per zona × tasso della zona. Gara: stessa
 formula con la miscela di zone per durata (fino a 60' Z3/Z4/Z5 al 20/60/20%;
 fino a 150' Z3/Z4 30/70; oltre Z2/Z3 40/60); durata prevista = tempo obiettivo,
 altrimenti il miglior tempo possibile, altrimenti 6:00/km.
@@ -363,7 +369,7 @@ le ore sono poche; `test_a_plan_from_ctl_100…` tiene il CTL sopra 65).
   `GoalAlreadyExistsError`, `RaceDayTakenError` (due gare nello stesso giorno),
   radice `GoalStoreError`.
 - `profiles/rebuild_plan.py`: `RebuildPlan(sources, overview)(today)` legge
-  disponibilità, tipologie, obiettivi, fisiologia del giorno, pesi, ultimo
+  disponibilità, tipologie, obiettivi, fisiologia del giorno, ultimo
   ritmo di soglia (il test più recente che ne ha uno, non oltre oggi), stato del
   retest e il PMC (stessa `compute_pmc` della panoramica sui carichi già in
   cache), chiama `build_plan` e salva se l'esito differisce dall'ultimo
@@ -390,7 +396,7 @@ le ore sono poche; `test_a_plan_from_ctl_100…` tiene il CTL sopra 65).
   mancato); il piano corrente subentra solo per i giorni dopo l'ultimo congelato.
 - **Aggancio al ricalcolo:** `ui/workspace.py` (`WorkspaceController`), dopo
   ogni panoramica calcolata con successo (apertura del profilo, import,
-  sincronizzazione, cambio di misure o pesi) mette in coda un secondo lavoro sul
+  sincronizzazione, cambio di misure) mette in coda un secondo lavoro sul
   thread dei dati che ricostruisce il piano dai carichi appena calcolati
   (`_start_plan`); segnale `plan_rebuilt(PlanBuilt | PlanRefused | PlanNotBuilt)`.
   Un nuovo calcolo della panoramica annulla il lavoro del piano in coda; se il

@@ -77,7 +77,7 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
 - Tempi in millisecondi UTC interi; durate misurate in secondi.
 - Contiene l'indice delle attività, i parametri fisiologici, la cache dei
   carichi, (dalla v2) il giornale della sincronizzazione e (dalla v3) i dati
-  personali, il peso e i pesi degli sport; obiettivi, piani, infortuni e
+  personali, il peso (e fino al 2026-11-10 i pesi degli sport, ora non usati); obiettivi, piani, infortuni e
   impostazioni arrivano con le loro fasi, con nuove migrazioni.
   Carichi e PMC sono derivati e rigenerabili.
 - **Schema v2** (`sync_journal`, `sync_cursor`, `sync_state`, tutte `STRICT`,
@@ -99,17 +99,21 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
     prima del 1900-01-01) e `tenths_kg` intero
     (200-3000: nessun float binario). Si aggiunge con `UpdateMeasurements`;
     la stessa data sostituisce.
-  - `sport_weights`: solo i pesi diversi dal default (`REAL` tra 0 e 5);
-    `SetSportWeights` sostituisce l'insieme in una transazione.
+  - `sport_weights`: solo i pesi diversi dal default (`REAL` tra 0 e 5).
+    **Dal 2026-11-10 la tabella resta ma non è né letta né scritta** (il
+    carico è il TRIMPeq, senza pesi): niente più `SetSportWeights` né
+    `SportWeightStore`; la toglierà una migrazione futura (expand-contract).
   - `load_cache` guadagna `zone1_s ... zone5_s` (secondi in zona, `>= 0`).
     La cache è derivata: la migrazione la svuota, così nessun carico resta
-    senza zone (`LOAD_MODEL_VERSION` 2 lo garantisce anche per le impronte).
+    senza zone (`LOAD_MODEL_VERSION` lo garantisce anche per le impronte; 3 dal
+    TRIMPeq). Dal TRIMPeq la colonna `hr_tss` riceve 0, mentre `trimp` e `load`
+    ricevono il TRIMPeq; l'impronta `load_fingerprint(physiology)` non ha pesi.
   - La migrazione v2 → v3 passa da `backup/ponos-v2-v3.sqlite3`. T-DATI-01:
     `tests/collaudo/test_fase3_migrazione.py` ha la v3 congelata e un
     database v2 scritto a mano, dati intatti, copia coerente, migrazione
     interrotta a metà, limiti dei CHECK e trigger.
-  - `OpenProfile` espone anche `weights` (`WeightStore`), `fixed_data`
-    (`FixedDataStore`) e `sport_weights` (`SportWeightStore`): stessa
+  - `OpenProfile` espone anche `weights` (`WeightStore`) e `fixed_data`
+    (`FixedDataStore`): stessa
     connessione e stessa transazione di `activities.transaction()`.
   - Altezza, peso e data di nascita sono dati di salute: mai nei log né nei
     messaggi d'errore (i tipi di dominio e gli store non ripetono i valori).
@@ -701,12 +705,12 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
   lenta, `FakeGarminAccount`) e `tests/fakes/tokens.py`; contratti in
   `tests/contracts/contract_sync.py` e `contract_tokens.py`.
 - Porte: `ActivityArchive` e `ActivityIndex` (`activities/ports.py`),
-  `PhysiologyStore`, `SportWeightStore` e `LoadCache` (`load/ports.py`),
+  `PhysiologyStore` e `LoadCache` (`load/ports.py`),
   `WeightStore` e `FixedDataStore` (`profiles/ports.py`), `ProfileRegistry`,
   `ProfileFolders` e `ProfileStorage` (`profiles/ports.py`). `ProfileStorage`
   apre un `OpenProfile` i cui store condividono una connessione:
-  `activities.transaction()` copre anche parametri, peso, dati fissi, pesi
-  degli sport e cache.
+  `activities.transaction()` copre anche parametri, peso, dati fissi
+  e cache.
 - Una transazione per volta (annidare è `TransactionStateError`); fuori da
   una transazione ogni operazione è atomica da sola.
 - Il lock del profilo (`ProfileFolders.acquire_lock`) è separato dal database:

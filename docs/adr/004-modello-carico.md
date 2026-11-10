@@ -62,3 +62,79 @@ Formulas, units and examples: skill `ponos-allenamento`, file
   T-CALC-03 (invariants), T-CALC-04 (PMC), T-CALC-05 (validity date),
   T-CALC-06 (bike threshold and estimates), T-CALC-07 (edge cases).
 - Mutation test T-QUAL-01 on `load`.
+
+## Amendment 2026-11-10: the load is TRIMPeq
+
+This amendment replaces the decision above (hrTSS multiplied by the weight of
+the sport). The text above stays as written at the time.
+
+### Context
+
+Fixed sport weights are project choices with no source. They also made an hour
+at threshold worth different loads in different sports (strength 1.2, bike
+0.8), so the plan's rule "100 = one hour at threshold" held only for running.
+
+### Options
+
+1. **Keep hrTSS with sport weights.**
+   - Con: arbitrary numbers; no equivalence between sports.
+2. **Raw Banister TRIMP.**
+   - Pro: no further parameters.
+   - Con: not readable (one hour at threshold is about 170 for one person and
+     another value for the next); the plan thresholds would have to be
+     converted per person; no equivalence between sports.
+3. **Sum of bpm above the minimum, or a ratio on the absolute HR.**
+   - Con: load at rest (a resting heart rate would count as effort).
+4. **iTRIMP.**
+   - Con: needs a laboratory lactate curve.
+5. **TRIMPeq: Banister on the running-equivalent intensity.**
+   - Pro: keeps Banister's curve (validated on lactate) and the hrTSS scale;
+     one hour at the threshold of its own sport is 100 in every sport; no
+     weights.
+   - Con: the load depends on the running threshold, so an error of 4 bpm
+     changes it by about 10%.
+
+### Decision
+
+Option 5. The only measure of load is the TRIMPeq:
+
+- `HRr = (HR - HRmin) / (HRmax - HRmin)`;
+  `HRr_T(x) = (threshold_x - HRmin) / (HRmax - HRmin)`;
+- `HRr_eq = min(1, HRr * HRr_T(run) / HRr_T(sport))`;
+- `w = HRr_eq * 0.64 * e^(k * HRr_eq)`, k = 1.92 for men, 1.67 for women;
+- `load = 100 * sum(dt_min * w) / (60 * w(HRr_T(run)))`.
+
+The threshold of each sport comes from `threshold_for_sport`: running and the
+sports with no threshold of their own have ratio 1; the bike uses the derived
+threshold (running - 4 bpm, or the bike test). For running and the sports with
+no threshold of their own the load equals the old hrTSS. At minimum HR the load
+is 0; the clamp to 1 applies at maximum HR. The estimate without HR stays
+`hours * 100 * IF^2`, marked "estimated". The plan thresholds keep the scale
+"100 = one hour at threshold" and need no conversion; `METHOD_VERSION` of the
+plan is 7.
+
+### Consequences
+
+- Strength is no longer x1.2 and the alternative sessions are no longer x0.8;
+  the bike is evaluated on its own threshold. Frozen bike value in
+  `test_fase4_distanza`: 40.1935 (32.18 with the weights).
+- The sport weights are removed from the calculation, the settings (page and
+  Ctrl+Shift+W), the use cases and the ports. The table `sport_weights` stays
+  in the database, neither read nor written (expand-contract: a later
+  migration drops it). In `load_cache` the column `hr_tss` receives 0; `trimp`
+  and `load` receive the TRIMPeq.
+- `LOAD_MODEL_VERSION` is 3 and the fingerprint (`load_fingerprint(physiology)`)
+  has no weights: all loads are recalculated from scratch (T-CALC-05).
+- Interface labels: "Load (TRIMPeq)", "TRIMPeq per day", "TRIMPeq per week",
+  "{load} TRIMPeq".
+- Nutrition does not use the load for energy expenditure; it uses it only for
+  the day-level thresholds (60/120/200), which stay valid.
+
+### How compliance is verified
+
+- T-CALC-01…07 on the new formulas (`tests/load/test_activity_load.py`,
+  `tests/load/test_parameters.py`, `tests/collaudo/test_fase3_carico.py`).
+- Equivalence with the previous plans for running only:
+  `tests/planning/test_trimp_eq_equivalence.py` compares 11 scenarios with the
+  golden file `tests/planning/golden/plans_hrtss.json`.
+- Frozen bike value: `tests/collaudo/test_fase4_distanza.py`.

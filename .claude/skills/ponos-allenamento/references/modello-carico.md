@@ -2,26 +2,41 @@
 
 **Quando leggerlo:** scrivendo o rivedendo `load`, i test `T-CALC`, i grafici
 del PMC o la documentazione dei numeri. Sezione 1 di `SKILL.md`. Fonti: BAN,
-COG. ADR: `docs/adr/004-modello-carico.md`; misure datate, pesi salvati e zone:
+COG. ADR: `docs/adr/004-modello-carico.md`; misure datate e zone:
 `docs/adr/007-dati-del-profilo-e-zone.md` (qui le regole operative, non le
 motivazioni).
 
 ## 1. Formule
 
-Per ogni campione di FC al tempo t:
+L'unica misura di carico è il **TRIMPeq** (decisione del 2026-11-10, emendamento
+all'ADR 004): Banister sull'intensità equivalente di corsa. Non ci sono più
+hrTSS né pesi per sport. Codice: `load/domain/banister.py`.
+
+Per ogni campione di FC al tempo t, per un'attività di sport `s`:
 
 - `HRr(t) = (HR(t) − FCmin) / (FCmax − FCmin)`; HR, FCmin, FCmax in bpm;
   HRr senza unità, tra 0 e 1.
-- `TRIMP = Σ Δt[min] · HRr · 0,64 · e^(k · HRr)`; Δt in minuti.
+- `HRr_T(x) = (Soglia_x − FCmin) / (FCmax − FCmin)`, rapporto della soglia
+  dello sport x (`threshold_reserve_ratio`).
+- `HRr_eq = min(1, HRr · HRr_T(corsa) / HRr_T(s))`
+  (`equivalent_reserve_ratio`; il fattore è `equivalence_factor`). Equivale a
+  `FCeq = FCmin + (FC − FCmin) · (Soglia_corsa − FCmin) / (Soglia_s − FCmin)`.
+  Il clamp a 1 vale per la FC massima; HRr = 0 resta 0.
+- `w = HRr_eq · 0,64 · e^(k · HRr_eq)` (`trimp_per_minute`).
   - `k = 1,92` per il sesso maschile, `k = 1,67` per il femminile (BAN;
     dal profilo).
   - Il coefficiente 0,64 è quello di Banister.
-- `TRIMP_1h_soglia` = TRIMP di 60 minuti con HR pari alla FC di soglia.
-- `hrTSS = 100 · TRIMP / TRIMP_1h_soglia` (COG per la scala: 100 = un'ora alla
-  soglia).
-- `carico = hrTSS · peso_sport` (peso senza unità).
+- `carico = 100 · Σ(Δt[min] · w) / (60 · w(HRr_T(corsa)))`; il denominatore è
+  `reference_hour_weight`: un'ora alla soglia del proprio sport vale 100 in
+  ogni sport (COG per la scala).
+- Soglie per sport: solo da `threshold_for_sport` (`heart_rate.py`), unico punto
+  da cambiare. Corsa e sport senza soglia propria hanno rapporto 1; la bici usa
+  la soglia derivata (sezione 2) o quella del test in bici.
 
-Un'ora esatta alla FC di soglia dà hrTSS 100. HR = FCmin dà HRr = 0 e carico 0.
+HR = FCmin dà carico 0. Per la corsa e per gli sport senza soglia propria il
+carico coincide con l'hrTSS dei modelli precedenti. Perché questa scelta e le
+alternative scartate: ADR 004, emendamento. Prezzo: il carico dipende dalla
+soglia di corsa, quindi un errore di 4 bpm vale circa il 10%.
 
 ## 2. Parametri con data di validità
 
@@ -29,7 +44,7 @@ Un'ora esatta alla FC di soglia dà hrTSS 100. HR = FCmin dà HRr = 0 e carico 0
 - Ogni valore ha una data di validità. Un'attività usa i valori in vigore alla
   sua data d'inizio. Quale istante conta per un'attività a cavallo di un
   cambio: **punto aperto** (si propone: la data d'inizio).
-- Quando un valore o un peso cambia, i carichi derivati si ricalcolano per
+- Quando un valore cambia, i carichi derivati si ricalcolano per
   tutte le attività dal giorno di validità in poi. Il risultato è uguale al
   calcolo da zero (T-CALC-05).
 - Soglia in bici = `max(soglia della corsa − 4, FCmin + 1)` bpm, finché non
@@ -67,7 +82,7 @@ Un'ora esatta alla FC di soglia dà hrTSS 100. HR = FCmin dà HRr = 0 e carico 0
   progetto).
 - Attività senza FC, o con più del 30% di campioni scartati o mancanti
   (default del progetto): carico stimato da `durata × intensità tipica dello
-  sport`, marcato "stimato" in tabella e nei grafici. La durata è il **tempo
+  sport` (`ore × 100 × IF²`, invariato dal TRIMPeq), marcato "stimato" in tabella e nei grafici. La durata è il **tempo
   in movimento** (`total_timer_time` del FIT; se manca, `total_elapsed_time`),
   non il tempo trascorso, che include le pause (default del progetto). La
   regola del 30% confronta i secondi contati con il 70% del tempo in
@@ -76,25 +91,19 @@ Un'ora esatta alla FC di soglia dà hrTSS 100. HR = FCmin dà HRr = 0 e carico 0
 - Forma esatta della tabella di stima e trattamento di attività senza durata:
   punto aperto.
 
-## 4. Pesi degli sport
+## 4. Pesi degli sport (tolti il 2026-11-10)
 
-Default del progetto (`load/domain/sport.py`), provvisori. L'utente li
-cambia: i pesi scelti stanno nel profilo (tabella `sport_weights`, solo quelli
-diversi dal default) e `ComputeProfileOverview` legge quelli salvati a ogni
-calcolo. L'impronta di un carico comprende solo il peso dello sport di
-quell'attività: cambiare il peso della bici non fa ricalcolare le corse.
+Non esistono più pesi per sport: né nel calcolo, né nelle impostazioni, né nei
+casi d'uso e nelle porte. L'equivalenza tra gli sport la dà il rapporto delle
+soglie (sezione 1). Effetti: la forza non vale più ×1,2, le sedute alternative
+non valgono più ×0,8, la bici è valutata sulla propria soglia.
 
-| Sport | Peso |
-|---|---|
-| Corsa | 1,0 |
-| Trail | 1,1 |
-| Ciclismo | 0,8 |
-| Escursionismo | 0,8 |
-| Camminata | 0,6 |
-| Forza | 1,2 |
-| Altro | 0,8 |
-
-Motivo per la forza: la FC sottostima il suo carico. Peso 0 dà carico 0.
+- La tabella `sport_weights` resta nel database ma non è più né letta né
+  scritta (expand-contract: la toglierà una migrazione futura).
+- In `load_cache` la colonna `hr_tss` riceve 0; `trimp` e `load` ricevono il
+  TRIMPeq.
+- `LOAD_MODEL_VERSION` = 3; l'impronta `load_fingerprint(physiology)` non ha
+  pesi. Tutti i carichi si ricalcolano da zero (T-CALC-05).
 
 ## 4b. Zone di FC
 
@@ -120,9 +129,9 @@ edizioni precedenti, 85/90/95/100); percentuali in un solo posto
   per una stima fatta con pochi campioni validi sono quelli misurati.
 - Si salvano nella cache dei carichi (colonne `zone1_s ... zone5_s`) legati alla
   stessa impronta del carico; l'impronta comprende le percentuali delle zone e
-  `LOAD_MODEL_VERSION` (2 dalla fase 3). Cambiando le percentuali (fase 5: dalle zone
+  `LOAD_MODEL_VERSION` (3 dal TRIMPeq). Cambiando le percentuali (fase 5: dalle zone
   85/90/95/100 a 78/87/94/100) l'impronta cambia, quindi i **secondi per zona si
-  ricalcolano** alla prossima panoramica, mentre TRIMP e hrTSS **restano identici**
+  ricalcolano** alla prossima panoramica, mentre il carico **resta identico**
   (le zone classificano soltanto i secondi); `LOAD_MODEL_VERSION` non cambia perché la
   formula del carico non cambia. Le zone di ritmo dell'`assessment` (78/88/94/100
   della velocità di soglia) restano.
@@ -157,17 +166,25 @@ edizioni precedenti, 85/90/95/100); percentuali in un solo posto
 
 Dati: FCmin 50, FCmax 190, soglia 170, sesso maschile (k = 1,92).
 
-**Esempio A: un'ora alla soglia.**
-HRr = (170 − 50) / 140 = 0,857143.
+**Esempio A: peso di un'ora alla soglia di corsa** (`reference_hour_weight`, il
+denominatore del carico, non un carico).
+HRr_T(corsa) = (170 − 50) / 140 = 0,857143.
 Per minuto: 0,857143 · 0,64 · e^(1,92 · 0,857143) = 0,548571 · e^1,645714 =
-0,548571 · 5,18471 = 2,8442 TRIMP/min.
-Un'ora: TRIMP_1h_soglia = 60 · 2,8442 ≈ 170,65. hrTSS = 100.
+0,548571 · 5,18471 = 2,8442.
+Un'ora: 60 · 2,8442 ≈ 170,65. Un'ora esatta alla soglia dà carico 100.
 
-**Esempio B: 30 minuti a 120 bpm, corsa.**
-HRr = (120 − 50) / 140 = 0,5.
+**Esempio B: 30 minuti a 120 bpm, sport senza soglia propria** (corsa, forza,
+altro: rapporto 1).
+HRr = HRr_eq = (120 − 50) / 140 = 0,5.
 Per minuto: 0,5 · 0,64 · e^0,96 = 0,32 · 2,611696 = 0,83574.
-30 minuti: TRIMP = 25,07. hrTSS = 100 · 25,07 / 170,65 ≈ 14,69.
-Carico corsa (peso 1,0) ≈ 14,7. Stessa seduta di forza (peso 1,2) ≈ 17,6.
+30 minuti: 25,07. Carico = 100 · 25,07 / 170,65 ≈ 14,69, uguale in ogni sport
+senza soglia propria (la forza non vale più 17,6).
+
+**Esempio B2: un'ora in bici alla soglia della bici.** Soglia bici = 170 − 4 =
+166; HRr_T(bici) = 116 / 140 = 0,828571; fattore = 0,857143 / 0,828571 ≈
+1,03448. A 166 bpm HRr = 0,828571, HRr_eq = 0,857143: peso di un'ora 170,65,
+carico 100. Valore congelato di `test_fase4_distanza` per la bici: 40,1935
+(con i pesi era 32,18).
 
 **Esempio C: FC uguale alla minima.** HR = 50, HRr = 0, TRIMP = 0, carico 0.
 

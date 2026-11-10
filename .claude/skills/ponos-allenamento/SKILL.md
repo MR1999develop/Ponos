@@ -1,6 +1,6 @@
 ---
 name: ponos-allenamento
-description: Conoscenza di dominio di Ponos Coach, app di allenamento con dati Garmin e frequenza cardiaca. Modello di carico (TRIMP di Banister, hrTSS, pesi degli sport, ATL, CTL, TSB), regole del piano adattivo (macrociclo, mesocicli 3:1, rampa, 80/20), test di soglia di 30 minuti, protocollo degli infortuni con segnali d'allarme e percorso a gradini, formato dei dati (cartella del profilo, SQLite, archivio FIT, identità file_id), sincronizzazione riprendibile con Garmin e import da cartella con i tetti, alimentazione del giorno (metabolismo di base, spesa, deficit con i limiti di sicurezza, macro, momenti, alimenti); da usare quando si scrive, si rivede o si documenta codice di carico, piano, test, infortuni, alimentazione, sincronizzazione o archivio di Ponos Coach.
+description: Conoscenza di dominio di Ponos Coach, app di allenamento con dati Garmin e frequenza cardiaca. Modello di carico (TRIMPeq: TRIMP di Banister sull'intensità equivalente di corsa, ATL, CTL, TSB), regole del piano adattivo (macrociclo, mesocicli 3:1, rampa, 80/20), test di soglia di 30 minuti, protocollo degli infortuni con segnali d'allarme e percorso a gradini, formato dei dati (cartella del profilo, SQLite, archivio FIT, identità file_id), sincronizzazione riprendibile con Garmin e import da cartella con i tetti, alimentazione del giorno (metabolismo di base, spesa, deficit con i limiti di sicurezza, macro, momenti, alimenti); da usare quando si scrive, si rivede o si documenta codice di carico, piano, test, infortuni, alimentazione, sincronizzazione o archivio di Ponos Coach.
 ---
 
 # Ponos Allenamento
@@ -55,10 +55,11 @@ come "punto aperto" nei file `references/`.
 
 ## 1. Modello di carico
 
-TRIMP, hrTSS e carico per sport; parametri e misure con data di validità
-(regola "vale fino alla successiva"); campioni fuori limiti, buchi, attività
-senza FC; pesi di default e pesi salvati; zone di FC sulla soglia; PMC con TSB
-del mattino; esempi numerici verificabili a mano. Fonti: BAN, COG.
+Carico in TRIMPeq (un'ora alla soglia del proprio sport vale 100 in ogni
+sport, senza pesi per sport); parametri e misure con data di validità (regola
+"vale fino alla successiva"); campioni fuori limiti, buchi, attività senza FC;
+zone di FC sulla soglia; PMC con TSB del mattino; esempi numerici
+verificabili a mano. Fonti: BAN, COG.
 Dettagli: `references/modello-carico.md`; decisioni in
 `docs/adr/007-dati-del-profilo-e-zone.md`.
 
@@ -124,6 +125,8 @@ tetti, esiti dell'import, lock, dati personali, schema da v3 a v7. Dettagli:
   nei messaggi e nelle catene d'errore.
 - Altezza e data di nascita si scrivono una volta; il peso è un intero in
   decimi di chilo; una misura vale fino alla voce successiva della sua serie.
+- Il carico è solo il TRIMPeq: niente hrTSS né pesi per sport; le soglie per
+  sport vengono da `threshold_for_sport`, unico punto da cambiare.
 - Le percentuali delle zone stanno solo in `ZONE_STARTS_PERCENT` (78/87/94/100,
   FRI5); l'impronta dei carichi le contiene, quindi i secondi per zona si ricalcolano da
   soli; `LOAD_MODEL_VERSION` si alza solo se cambia la formula del carico. Se cambiano le

@@ -368,19 +368,19 @@ restores to a profile that is migrated the same way when opened.
 - Activities without HR, or with too many discarded samples, have an estimated
   load, marked "estimated" in the table and in the charts.
 
-### Sport weights
+### Load: TRIMPeq (since 2026-11-10)
 
-- Settings, Sport weights page (Profile menu, "Sport weights..." ("Pesi degli
-  sport...", Ctrl+Shift+W), opens it): a
-  weight from 0 to 5 for each sport, with two decimals. The weight multiplies
-  the load of every activity of that sport: 1.00 leaves the load as
-  calculated, 0 removes the sport from the load.
-- Changing a weight recalculates only the activities of that sport.
-- "Restore defaults" ("Ripristina predefiniti") brings all weights back to the
-  starting value (disabled if they already are). "Save weights" ("Salva pesi")
-  is disabled without changes, with the reason in the tooltip. "Cancel"
-  changes nothing.
-- Only the weights different from the default are saved.
+- The only measure of load is the TRIMPeq: Banister's TRIMP on the
+  running-equivalent intensity, scaled so that one hour at the threshold of the
+  sport is 100 in every sport. There are no sport weights and no settings page
+  for them. Changing the minimum HR, maximum HR or a threshold recalculates the
+  loads from the validity day on.
+- The load depends on the running threshold: an error of 4 bpm changes it by
+  about 10%.
+- Strength and the other sports with no threshold of their own are valued on
+  the running threshold; the bike on its own threshold.
+- The table `sport_weights` stays in the database, neither read nor written;
+  a later migration drops it.
 
 Formulas and values: [load model](../.claude/skills/ponos-allenamento/references/modello-carico.md).
 
@@ -411,7 +411,7 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
   seven colours): no sport is grouped into "Other", which holds only the
   activities of sport "Other" (user's request of 2026-11-09). No red or orange
   colour, reserved for errors and warnings.
-- Unit: hrTSS per week. The tooltip on the segment gives sport and value.
+- Unit: TRIMPeq per week ("TRIMPeq per week"). The tooltip on the segment gives sport and value.
 
 ### Time in zones
 
@@ -469,7 +469,7 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 - One row per activity, sorted by date, most recent first. It is re-sorted by
   clicking a column header.
 - Columns: date and time (in the profile time zone), sport, moving time
-  (h:mm:ss), distance (km), positive ascent (m), load (hrTSS), origin of the
+  (h:mm:ss), distance (km), positive ascent (m), load (TRIMPeq), origin of the
   load (heart rate or estimate) and file format (always FIT).
 - Numbers right-aligned, units in the header, no lines. The cell is empty where
   the data is missing (for example the distance of an indoor session).
@@ -812,7 +812,7 @@ Rules: [injuries](../.claude/skills/ponos-allenamento/references/infortuni.md).
   (opening it again brings it forward on the page it showed). On the left the
   categories, on the right the page: Profile (name, measurements and history),
   Garmin account (status, connect and disconnect, synchronise when a profile
-  opens), Sport weights, Training plan (and the threshold test protocol and
+  opens), Training plan (and the threshold test protocol and
   the history of the tests), Nutrition, Map, Language. Each page keeps the way
   of saving that its content always had (changes that apply at once, with their
   own undo, or edits that wait to be saved). The window has a "Save changes"

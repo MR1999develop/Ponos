@@ -24,7 +24,7 @@ completata e verificata.
 | Motore del piano | Regole deterministiche (stessi dati → stesso piano), niente LLM |
 | Adattamento | Solo carico da FC (ATL, CTL, TSB) e carico passato |
 | Test di valutazione | Test di soglia di 30' in corsa all'inizio, ripetuto ogni 6–8 settimane |
-| Formula del carico | hrTSS da TRIMP di Banister sul tracciato FC, moltiplicato per il peso dello sport |
+| Formula del carico | hrTSS da TRIMP di Banister sul tracciato FC, moltiplicato per il peso dello sport. **Nota 2026-11-10: sostituita dal TRIMPeq, senza hrTSS né pesi (fase 8, ADR 004 emendato)** |
 | Profili | Più profili utente; per ogni profilo l'utente sceglie la cartella in cui stanno tutti i suoi dati |
 | FC minima e massima | Inserite dall'utente; un valore di FC fuori da questi limiti è un errore |
 | Soglia in bici | FC di soglia della corsa − 4 bpm, finché non c'è un test in bici |
@@ -70,6 +70,7 @@ completata e verificata.
 7. **Pesi di default degli sport** (provvisori, da tarare in fase 3): corsa
    1,0; trail 1,1; ciclismo 0,8; escursionismo 0,8; camminata 0,6; forza 1,2
    (la FC sottostima il carico della forza); altro 0,8.
+   *Nota 2026-11-10: pesi tolti, il carico è il TRIMPeq (fase 8).*
 8. **Disponibilità settimanale** inserita dall'utente: giorni disponibili,
    sedute a settimana, ore massime a settimana, giorno del lungo (dal
    2026-11-09, ADR 016; prima i minuti di ogni giorno). Il piano non la supera
@@ -137,7 +138,7 @@ Ogni dipendenza diretta si valida e si registra in `docs/dipendenze.md`
 ```
 src/ponos_coach/
   activities/       attività, lettura FIT, import, sincronizzazione (casi d'uso)
-  load/             TRIMP, hrTSS, pesi degli sport, PMC (ATL, CTL, TSB), parametri fisiologici
+  load/             TRIMPeq (dal 2026-11-10; prima hrTSS e pesi degli sport), PMC (ATL, CTL, TSB), parametri fisiologici
   assessment/       test di soglia 30', zone FC e di ritmo, retest
   goals/            obiettivi (gara A/B/C, tempo obiettivo, CTL a una data)
   planning/         periodizzazione, modelli di seduta, adattamento, proiezione del PMC
@@ -241,6 +242,11 @@ src/ponos_coach/
 
 ### 4.5 Modello di carico
 
+> **Nota 2026-11-10:** le formule di hrTSS e `peso_sport` qui sotto descrivono
+> lo stato di fase 3. Dal 2026-11-10 il carico è il TRIMPeq, senza hrTSS né
+> pesi: formule in `.claude/skills/ponos-allenamento/references/modello-carico.md`
+> sezione 1 e in `docs/adr/004-modello-carico.md` (emendamento).
+
 - `HRr(t) = (HR(t) − FCmin) / (FCmax − FCmin)`, con FC minima (a riposo) e
   massima inserite dall'utente; i campioni fuori da `[FCmin, FCmax]` sono
   errori: si scartano e si contano.
@@ -316,7 +322,7 @@ src/ponos_coach/
 - Barra laterale: Panoramica (PMC, seduta di oggi, forma), Attività (tabella
   e dettaglio con FC e zone), Calendario (mese e settimana: fatto,
   pianificato, obiettivi, test, infortuni), Obiettivi, Infortuni, Test,
-  Impostazioni del profilo (pesi, FC minima, massima e soglia con date,
+  Impostazioni del profilo (pesi [tolti il 2026-11-10], FC minima, massima e soglia con date,
   sesso, disponibilità, tipologie di seduta, account Garmin).
 - Menu File: Nuovo profilo, Apri profilo da cartella, Cambia profilo,
   Rimuovi profilo dall'elenco; il nome del profilo attivo sta nel titolo
@@ -485,7 +491,8 @@ POSIX compresi; campagna di collaudo verde su Windows (esiti in
       minima e massima, sesso, soglia; soglia in bici = corsa − 4 bpm);
       campioni fuori limiti scartati e contati.
 - [x] TRIMP e hrTSS, pesi degli sport, stima per attività senza FC; ricalcolo
-      quando cambiano parametri o pesi.
+      quando cambiano parametri o pesi. (Superata il 2026-11-10: vedi fase 8,
+      "Carico in TRIMPeq".)
 - [x] PMC (ATL, CTL, TSB) con property test.
 - [x] Grafici Plotly in `QWebEngineView` isolato: PMC, carico settimanale per
       sport, zone, FC dell'attività; esportazione SVG e PNG. Zone FC sulla
@@ -760,6 +767,26 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       `tests/profiles/test_threshold_pace.py`, `test_measurements.py`,
       `test_rebuild_plan.py`, `tests/storage/test_threshold_pace_store.py`,
       `tests/ui/test_measurements_form.py`.
+- [x] Carico in TRIMPeq (richiesta dell'utente del 2026-11-10, commit
+      `9ef5622`, merge `297c478`, testi italiani `fe6527a`; ADR 004 emendato):
+      un'unica misura, Banister sull'intensità equivalente di corsa
+      (`HRr_eq = min(1, HRr · HRr_T(corsa) / HRr_T(sport))`), scala "100 = un'ora
+      alla soglia del proprio sport"; tolti hrTSS e i pesi per sport (calcolo,
+      impostazioni e Ctrl+Shift+W, casi d'uso, porte); la tabella `sport_weights`
+      resta nel database, non più letta né scritta (la toglierà una migrazione
+      futura); `load_cache.hr_tss` = 0; `LOAD_MODEL_VERSION` 3 (ricalcolo da zero,
+      T-CALC-05); `METHOD_VERSION` del piano 7, soglie del piano invariate;
+      etichette "Load (TRIMPeq)", "TRIMPeq per day", "TRIMPeq per week". Effetti:
+      forza e sedute alternative senza moltiplicatore, bici sulla propria
+      soglia (valore congelato di `test_fase4_distanza`: 40,1935, prima 32,18).
+      Test: `tests/load/` (T-CALC-01…07 aggiornati),
+      `tests/planning/test_trimp_eq_equivalence.py` (11 scenari di sola corsa
+      contro il golden `tests/planning/golden/plans_hrtss.json`),
+      `tests/collaudo/test_fase4_distanza.py`, `tests/collaudo/test_fase3_carico.py`.
+- [ ] Soglie FC per corsa, ciclismo e altre attività nel profilo (richiesta
+      dell'utente del 2026-11-10): misure datate; bici di default corsa − 4,
+      altre attività di default la corsa; `threshold_for_sport` unico punto da
+      cambiare; migrazione dello schema.
 - [x] Sincronizzazione: una voce che Garmin non scarica mai (errore 5xx o
       nessuna risposta a ogni giro, mentre l'elenco risponde) resta in attesa
       per sempre e ferma ogni giro dopo 3 voci; serve un contatore di giri
@@ -839,7 +866,8 @@ model e gli esiti del collaudo possono citarlo.
 ### 7.3 Calcolo del carico (T-CALC)
 
 - **T-CALC-01** Valori calcolati a mano: 60 minuti a FC costante pari alla
-  soglia danno hrTSS 100; FC uguale alla minima dà 0.
+  soglia danno carico 100 (dal 2026-11-10 TRIMPeq, alla soglia del proprio
+  sport; prima hrTSS); FC uguale alla minima dà 0.
 - **T-CALC-02** Property test: implementazione vettoriale uguale a quella
   ingenua, con tolleranza dichiarata, su tracciati casuali.
 - **T-CALC-03** Invarianti: carico ≥ 0; crescente con durata e FC; un

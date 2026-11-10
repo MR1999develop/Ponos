@@ -8,7 +8,7 @@ read from FIT files, the history of the tests in schema v5, threshold
 HR and pace, pace zones), on that of phase 4b (2026-11-07: the
 nutrition of the day: activity calories, activity level, meal times, goal
 periods, the table of foods and the guidance itself), on that of phase 3 (2026-11-06: height, weight and
-date of birth as personal health data, dated measurements, sport weights, HR
+date of birth as personal health data, dated measurements, sport weights (removed on 2026-11-10: the load is TRIMPeq), HR
 zones and activity details), on that of phase 2 (2026-11-06: login in the app, token
 store, Garmin responses and downloads, library log and notifications), on that
 of phase 1 (2026-11-05, updated on 2026-11-06 with the acceptance defects and
@@ -177,7 +177,7 @@ service, E elevation of privilege.
 | B3 | Weight, height or date of birth out of range, with non-ASCII digits, NaN, exponents or huge text (user input or altered profile file) | T, D | T-QUAL-02, T-DATI-01 |
 | B3 | Measurement with a validity day in the future, before 1900-01-01 or that brings inconsistent HR | T | T-QUAL-02 |
 | B3 | Weight of a sport that is NaN, infinite or outside 0-5 that zeroes or inflates the load | T | T-QUAL-02, D-F3-02 |
-| B3 | Load of a previous version mixed with the new ones after a change of parameters, weights, zones or model | T | T-CALC-05, T-CALC-01 |
+| B3 | Load of a previous version mixed with the new ones after a change of parameters, zones or model (TRIMPeq, no weights) | T | T-CALC-05, T-CALC-01 |
 | B3 | Height, weight, date of birth or HR in logs, messages, error chains | I | T-SEC-08 |
 | B3 | Database of a future version rewritten by an old version | T | T-DATI-01 |
 | B3 | Deleting a profile folder that leads outside (link, junction) or deletes user files not created by the app | T, E | T-SEC-04, T-UI-03 |
@@ -189,7 +189,7 @@ service, E elevation of privilege.
 | B4 | SVG/PNG export with unwanted content | I | T-UI-04 |
 | B4 | Phase 3 charts (weekly load, zones, activity HR) with unchecked names or texts in the page | T, E | T-SEC-06, T-UI-04 |
 | B3 | Archive file gone or altered while the detail is open or while calculating | T | T-DATI-03, scenarios of `tests/collaudo/test_fase3_scenari.py` |
-| B3 | Weights changed during a synchronisation: loads that do not match the calculation from scratch | T | T-CALC-05, `tests/collaudo/test_fase3_scenari.py` |
+| B3 | Parameters (minimum and maximum HR, thresholds) changed during a synchronisation: loads that do not match the calculation from scratch (before 2026-11-10 the sport weights too) | T | T-CALC-05, `tests/collaudo/test_fase3_scenari.py` |
 | B5 | Token in the folder, in the configuration, in the logs, in temporary files, in backups | I | T-SEC-07 |
 | B5 | Token not deleted after logout | I | T-SEC-07 |
 | B5 | Another process of the user reads the token | I | accepted risk (assumptions) |
@@ -429,7 +429,7 @@ service, E elevation of privilege.
   checked on the result. None of these values enters a log, a message or the
   chain of an error (T-SEC-08); the interface shows problems with enumerated
   categories, not with the value.
-- Measurements, sport weights and fixed data are written in a single
+- Measurements and fixed data (and, before 2026-11-10, sport weights) are written in a single
   transaction (all or nothing); the v3 migration goes through the safety copy
   and is tested interrupted at every statement (T-DATI-01). The load cache is
   derived: the migration empties it and the fingerprint includes parameters,
@@ -655,7 +655,7 @@ service, E elevation of privilege.
 | Personal body data: limits, weight grammar, immutable fixed data | T-QUAL-02, T-DATI-01 |
 | Interrupted or concurrent v3 migration | T-DATI-01 |
 | Height, weight, date of birth and HR in logs | T-SEC-08 (`tests/collaudo/test_fase3_log_salute.py`) |
-| Consistent load after changes of parameters, weights and zones | T-CALC-01…07 |
+| Consistent load after changes of parameters and zones | T-CALC-01…07 |
 | Phase 3 charts and windows (contrast, keyboard, accessible names, languages) | T-UI-04, T-UI-05, T-UI-06, T-UI-07 |
 | Budget with 5,000 activities | T-PERF-01 |
 | Nutrition: model, limits of the deficit, minors, low body mass index | T-NUT-01, T-NUT-02 |
@@ -727,7 +727,7 @@ that closes them. All closed on 2026-11-06: their tests, born as expected-fail
 | Id | Defect | Behaviour | Test (plan) | Test (file) |
 |---|---|---|---|---|
 | D-F3-01 | `Weight.parse` accepted "7_0.5", non-ASCII or full-width digits and exponents | Only ASCII digits with one decimal separator | T-QUAL-02 | `tests/collaudo/test_fase3_dati_personali.py`, `tests/profiles/test_body_types.py` |
-| D-F3-02 | `SportWeightsForm.set_value(nan)` made `build()` raise | A NaN or an infinity does not change the value in force; `build()` always gives weights between 0 and 5 | T-QUAL-02 | `tests/collaudo/test_fase3_dati_personali.py` |
+| D-F3-02 | `SportWeightsForm.set_value(nan)` made `build()` raise | A NaN or an infinity does not change the value in force; `build()` always gives weights between 0 and 5 (form removed on 2026-11-10 with the sport weights) | T-QUAL-02 | `tests/collaudo/test_fase3_dati_personali.py` |
 | D-F3-03 | The three HR boxes of "Edit profile" had no accessible name (the label was bound to the container, not to the box) | Each box has its own accessible name | T-UI-05 | `tests/collaudo/test_fase3_interfaccia.py` |
 | D-F3-04 | In "New profile" name, folder and HR boxes without an accessible name (same cause as D-F3-03) | Each control has its own accessible name | T-UI-05 | `tests/collaudo/test_fase3_interfaccia.py` |
 | D-F3-05 | In "Edit profile", for a profile without fixed data, Tab started from the measurements and visited height and date of birth, at the top of the dialog, last | The Tab order follows the visual order, from the top | T-UI-05 | `tests/collaudo/test_fase3_interfaccia.py` |

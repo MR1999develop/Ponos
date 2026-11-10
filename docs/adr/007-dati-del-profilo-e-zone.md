@@ -230,3 +230,17 @@ Constraints:
 - T-PERF-01: overview with 5,000 activities, full recalculation and charts
   within budget (`tests/collaudo/test_fase3_prestazioni.py`).
 - `import-linter` in the CI: the domain stays pure.
+
+## Amendment 2026-11-10: sport weights and hrTSS removed
+
+The load is now the TRIMPeq (amendment to ADR 004). The parts of this ADR on
+the sport weights (options, decision, consequences and the tests
+`tests/load/test_sport_weights.py`) no longer apply, and the references to hrTSS
+mean the TRIMPeq. The rest of the ADR stays valid.
+
+- The table `sport_weights` stays in the schema, neither read nor written; a
+  later migration drops it (expand-contract).
+- `LOAD_MODEL_VERSION` is 3 and the fingerprint of a load, `load_fingerprint(physiology)`,
+  has no weights: it depends on the HR parameters and the zone percentages.
+  Everything is recalculated from scratch (T-CALC-05).
+- The zones keep their definition on the threshold of the sport.
