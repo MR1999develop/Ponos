@@ -354,21 +354,25 @@ restores to a profile that is migrated the same way when opened.
 - **Profiles created before phase 3.** They have no height or date of birth and
   remain valid. "Edit profile" asks for them once, in the same save as the
   other measurements, and afterwards they cannot be changed.
-- **Threshold per sport.** Besides running (and trail running), the profile
-  has an optional threshold heart rate for cycling and one for the other
-  activities (walking, hiking, strength, other), in the same dated series as
-  the minimum, maximum and running threshold. Left empty, the default applies
-  and is shown in grey in the field: cycling = running minus 4 bpm (at least
-  minimum + 1), other activities = running. Same limits as the running
-  threshold (minimum < threshold <= maximum, 40-250 bpm). The threshold of a
-  sport sets its HR zones, the zones of its planned sessions and its TRIMPeq.
-  The 30-minute test updates only the running threshold.
+- **LT1 and LT2 per group of sports.** Two groups: running and trail running,
+  and other sports (everything else, cycling included). Each has an LT1
+  (aerobic threshold) and an LT2 (lactate threshold), in the same dated series
+  as the minimum and maximum HR; the running LT2 is the threshold of the
+  profile. The other-sports LT2 and both LT1 are optional. Left empty, the
+  default applies and is shown in grey in the field: other-sports LT2 = running
+  LT2; LT1 = 83% of the LT2 of its group (rounded half up, at least minimum + 1,
+  never above the LT2). Limits: minimum < LT2 <= maximum (40-250 bpm) and
+  minimum < LT1 < LT2. The LT2 of a group sets its HR zones, the zones of its
+  planned sessions and its TRIMPeq (the bike no longer has its own threshold:
+  before 2026-11-10 it was the running one minus 4 bpm); the LT1 does not
+  change any load or zone. Each field has a tooltip that says what it is and
+  how to estimate it. The 30-minute test updates only the running LT2.
 - **Field widths.** In the settings every field is as wide as its kind of
   content (short number, date, choice), from the font metrics of a sample
   text, the same on every page and aligned left; the profile name and folder
   stay wider.
-- **New profile.** Besides the running threshold, the dialog asks, optionally,
-  for the cycling and other-activities thresholds (empty: the defaults above)
+- **New profile.** Besides the running LT2, the dialog asks, optionally,
+  for the running LT1 and the LT1 and LT2 of the other sports (empty: the defaults above)
   and the threshold pace in `m:ss` (empty: no pace), with the same fields and
   checks as Edit profile. They go into the first physiology entry and the
   `threshold_pace` series, dated as the heart-rate values, in the transaction
@@ -395,7 +399,7 @@ restores to a profile that is migrated the same way when opened.
 - The load depends on the running threshold: an error of 4 bpm changes it by
   about 10%.
 - Strength and the other sports with no threshold of their own are valued on
-  the running threshold; the bike on its own threshold.
+  the running threshold; the bike on the other-sports LT2 (the running one if none is entered).
 - The table `sport_weights` stays in the database, neither read nor written;
   a later migration drops it.
 
@@ -442,11 +446,11 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
 
 - Stacked bars in hours per week, with Z1 at the bottom and Z5 at the top, over
   the same 26 weeks.
-- The five zones are defined on the threshold of the sport (on the bike, the
-  bike threshold), chosen by the user on 2026-11-10: Z1 below 75% (50-74%;
-  everything below also counts in Z1), Z2 from 75% to 84%, Z3 from 85% to 94%,
-  Z4 from 95% to 102%, Z5 from 103% up to the maximum HR (before: 78, 87, 94
-  and 100, from the 5th edition of the reference text). A sample
+- The five zones are defined on the LT2 of the sport's group (running, or
+  other sports, the bike included), chosen by the user on 2026-11-10: Z1 below
+  75% (50-74%; everything below also counts in Z1), Z2 from 75% to 84%, Z3 from
+  85% to 94%, Z4 from 95% to 102%, Z5 from 103% up to the maximum HR (before:
+  78, 87, 94 and 100, from the 5th edition of the reference text). A sample
   on the boundary belongs to the higher zone. The change moves only the seconds
   in each zone and the planned load of a session, not the load of an activity
   already done ([ADR 007](adr/007-dati-del-profilo-e-zone.md)).
@@ -466,9 +470,13 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
   app. It has no map preview (user's request of 2026-11-10).
 - It shows the summary in a compact grid of label and value pairs (start in
   the profile time zone, moving and elapsed time, distance, ascent, load and
-  its origin, threshold and HR limits valid on that day), the HR curve with the
-  zone bands and their names, and the table of the time in each zone (time and
-  percentage share), as tall as its rows, with no scroll bar.
+  its origin, the LT1 and LT2 of its sport group and the HR limits valid on
+  that day), the HR curve with the zone bands and their names, and two small
+  tables side by side, as tall as their rows, with no scroll bar: the time in
+  each zone (time and percentage share) and the time below LT1, between LT1 and
+  LT2 and above LT2 (heart rate range, time and share). The three domains use
+  the same samples as the zones: below LT1 is `bpm < LT1`, between is
+  `LT1 <= bpm < LT2`, above is `bpm >= LT2`.
 - The HR samples discarded from the load are marked on the chart with a cross;
   a warning says how many they are, and how many the file reader skipped
   because of a repeated or backward timestamp.

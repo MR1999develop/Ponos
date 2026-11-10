@@ -171,7 +171,7 @@ def test_double_click_opens_the_detail_with_summary_chart_and_time_in_zones(
     qtbot.waitUntil(dialog.shows_chart, timeout=WAIT_MS)
     assert "Running" in dialog.title_text
     assert dialog.summary_text("moving") == "0:30:00"
-    assert dialog.summary_text("threshold") == "171"
+    assert dialog.summary_text("thresholds") == "142 / 171"  # LT1 (default 83%) / LT2
     assert dialog.summary_text("limits") == "50 to 190"
     assert dialog.zone_model.rowCount() == 5
     zone_times = [dialog.zone_model.data(dialog.zone_model.index(r, 2)) for r in range(5)]
@@ -183,6 +183,13 @@ def test_double_click_opens_the_detail_with_summary_chart_and_time_in_zones(
     assert dialog.zone_model.headerData(4, Qt.Orientation.Horizontal) == "Load (TRIMPeq)"
     zone_loads = [dialog.zone_model.data(dialog.zone_model.index(r, 4)) for r in range(5)]
     assert all(isinstance(text, str) and text for text in zone_loads)
+    assert dialog.domain_model.rowCount() == 3
+    domain_names = [dialog.domain_model.data(dialog.domain_model.index(r, 0)) for r in range(3)]
+    assert domain_names == ["Below LT1", "Between LT1 and LT2", "Above LT2"]
+    domain_times = [dialog.domain_model.data(dialog.domain_model.index(r, 2)) for r in range(3)]
+    assert sum(_seconds(text) for text in domain_times) == sum(
+        _seconds(text) for text in zone_times
+    )
     figure = dialog.chart.current_figure
     assert figure is not None
     assert figure.data[0].name == "Heart rate"
@@ -379,4 +386,5 @@ def test_without_heart_rate_the_detail_hides_the_table_of_the_zones(qtbot: QtBot
     table = dialog.findChild(QTableView, "detailZones")
     assert table is not None
     assert not table.isVisibleTo(dialog)  # five rows at 0:00:00 would be lying
+    assert not dialog.domain_table.isVisibleTo(dialog)  # nor three
     assert dialog.message_page.title_text == "No heart-rate data"

@@ -320,20 +320,21 @@ class SqlitePhysiologyStore:
         with translating(LoadStoreError):
             self._db.connection.execute(
                 "INSERT INTO physiology (valid_from, min_bpm, max_bpm, threshold_bpm, sex, "
-                "bike_threshold_bpm, other_threshold_bpm) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (valid_from) DO UPDATE SET "
+                "other_threshold_bpm, run_lt1_bpm, other_lt1_bpm) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (valid_from) DO UPDATE SET "
                 "min_bpm = excluded.min_bpm, max_bpm = excluded.max_bpm, "
                 "threshold_bpm = excluded.threshold_bpm, sex = excluded.sex, "
-                "bike_threshold_bpm = excluded.bike_threshold_bpm, "
-                "other_threshold_bpm = excluded.other_threshold_bpm",
+                "other_threshold_bpm = excluded.other_threshold_bpm, "
+                "run_lt1_bpm = excluded.run_lt1_bpm, other_lt1_bpm = excluded.other_lt1_bpm",
                 (
                     entry.valid_from.isoformat(),
                     physiology.limits.min_bpm,
                     physiology.limits.max_bpm,
                     physiology.threshold.bpm,
                     physiology.sex.value,
-                    _bpm_or_none(physiology.bike_threshold),
                     _bpm_or_none(physiology.other_threshold),
+                    _bpm_or_none(physiology.run_lt1),
+                    _bpm_or_none(physiology.other_lt1),
                 ),
             )
 
@@ -351,7 +352,7 @@ class SqlitePhysiologyStore:
         with translating(LoadStoreError):
             rows = self._db.connection.execute(
                 "SELECT valid_from, min_bpm, max_bpm, threshold_bpm, sex, "
-                "bike_threshold_bpm, other_threshold_bpm "
+                "other_threshold_bpm, run_lt1_bpm, other_lt1_bpm "
                 "FROM physiology ORDER BY valid_from"
             ).fetchall()
         try:
@@ -362,8 +363,9 @@ class SqlitePhysiologyStore:
                         HeartRateLimits(row[1], row[2]),
                         ThresholdHeartRate(row[3]),
                         Sex(row[4]),
-                        _optional_threshold(row[5]),
-                        _optional_threshold(row[6]),
+                        other_threshold=_optional_threshold(row[5]),
+                        run_lt1=_optional_threshold(row[6]),
+                        other_lt1=_optional_threshold(row[7]),
                     ),
                 )
                 for row in rows

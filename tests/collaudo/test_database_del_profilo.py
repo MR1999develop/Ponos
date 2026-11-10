@@ -182,6 +182,8 @@ LATER_COLUMNS = frozenset(
         "unanswered_rounds",
         "bike_threshold_bpm",
         "other_threshold_bpm",
+        "run_lt1_bpm",
+        "other_lt1_bpm",
         "ascent_m",
     }
 )

@@ -27,7 +27,7 @@ completata e verificata.
 | Formula del carico | hrTSS da TRIMP di Banister sul tracciato FC, moltiplicato per il peso dello sport. **Nota 2026-11-10: sostituita dal TRIMPeq, senza hrTSS né pesi (fase 8, ADR 004 emendato)** |
 | Profili | Più profili utente; per ogni profilo l'utente sceglie la cartella in cui stanno tutti i suoi dati |
 | FC minima e massima | Inserite dall'utente; un valore di FC fuori da questi limiti è un errore |
-| Soglia in bici | FC di soglia della corsa − 4 bpm, finché non c'è un test in bici |
+| Soglia in bici | FC di soglia della corsa − 4 bpm, finché non c'è un test in bici. **Nota 2026-11-10: sostituita da LT1 e LT2 per due gruppi, corsa e trail / altri sport (bici compresa); senza LT2 degli altri sport vale quella della corsa** |
 | Tipologie di seduta | Scelte dall'utente; il piano programma solo quelle |
 | Import da cartella | Oltre alla sincronizzazione, su richiesta: si sceglie una cartella e si aggiungono i file FIT che contiene |
 | Formati dei file | Solo FIT (decisione del 2026-11-09, fase 8, ADR 014): GPX e import di ZIP tolti; lo ZIP scaricato da Garmin con dentro il FIT resta |
@@ -871,7 +871,7 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       del 2026-11-10, `db698a1`; caso d'uso `PlannedDay`).
 - [x] Soglie FC per corsa, ciclismo e altre attività nel profilo (richiesta
       dell'utente del 2026-11-10): misure datate; bici di default corsa − 4,
-      altre attività di default la corsa; `threshold_for_sport` unico punto da
+      altre attività di default la corsa; **superato dalla voce successiva (due gruppi, LT1 e LT2)**; `threshold_for_sport` unico punto da
       cambiare; migrazione dello schema. Fatto (`fc09bb6`, `a335b5b`): gruppi
       `SportGroup` corsa/trail, ciclismo, altre (camminata, escursionismo,
       forza, altro); soglie facoltative nella stessa serie datata della
@@ -888,6 +888,32 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       percentuali, quindi i secondi per zona si ricalcolano e il TRIMPeq no. Le
       zone di ritmo non cambiano. Test: `tests/load/test_zones.py`,
       `tests/collaudo/test_fase5_zone_fri5.py`, `tests/planning/`, `tests/ui/`.
+- [x] LT1 e LT2 per due gruppi di sport (richiesta dell'utente del 2026-11-10):
+      «corsa e trail» e «altri sport» (tutto il resto, bici compresa; la soglia
+      separata del ciclismo sparisce). Modello: `Physiology` tiene `threshold`
+      (LT2 corsa), `other_threshold` (LT2 altri sport, facoltativa, default la
+      corsa), `run_lt1` e `other_lt1` (facoltative); vincolo
+      `FCmin < LT1 < LT2 ≤ FCmax` verificato alla costruzione, con la LT2 del
+      gruppo (per gli altri sport quella effettiva). Senza LT1 inserita vale
+      l'83% della LT2 del gruppo, arrotondato per eccesso a metà
+      (`DEFAULT_LT1_PERCENT`, `default_lt1`, portato a `FCmin + 1` e mai oltre
+      la LT2); `lt1_for_sport` è il gemello di `threshold_for_sport`. Le zone
+      restano in percentuale della LT2 del gruppo. Effetto sulla bici: il
+      TRIMPeq e le zone usano ora la LT2 degli altri sport (prima il default
+      era corsa − 4), quindi `LOAD_MODEL_VERSION` 5 e tutti i carichi delle
+      attività in bici si ricalcolano da soli. Dati: migrazione 18
+      `LT1_MIGRATION` (`run_lt1_bpm`, `other_lt1_bpm` in `physiology`, con
+      CHECK); `bike_threshold_bpm` resta nella tabella ma non si legge né si
+      scrive più (expand-contract: una migrazione futura la toglie). Interfaccia:
+      Edit profile e Nuovo profilo hanno i gruppi «Running and trail» e «Other
+      sports» con LT1 (default grigio) e LT2 e un tooltip su cosa sono e come
+      stimarle; la finestra di un'attività mostra il tempo sotto LT1, tra LT1 e
+      LT2 e sopra LT2 (`lactate_domains.py`, `domain_rows`), campioni uguali a
+      quelli delle zone, e «LT1 / LT2» nel riepilogo. Test:
+      `tests/load/test_lactate_domains.py`, `tests/load/test_sport_thresholds.py`,
+      `tests/storage/test_lt1_store.py`, `tests/profiles/test_sport_thresholds_update.py`,
+      `tests/ui/test_sport_thresholds_form.py`, `tests/ui/test_new_profile_thresholds.py`,
+      `tests/ui/test_activity_detail*.py`.
 - [x] Sincronizzazione: una voce che Garmin non scarica mai (errore 5xx o
       nessuna risposta a ogni giro, mentre l'elenco risponde) resta in attesa
       per sempre e ferma ogni giro dopo 3 voci; serve un contatore di giri
@@ -978,7 +1004,8 @@ model e gli esiti del collaudo possono citarlo.
   calcolato con i valori del giorno prima.
 - **T-CALC-05** Parametri con data di validità: attività a cavallo di un
   cambio; ricalcolo dopo una modifica uguale al calcolo da zero.
-- **T-CALC-06** Soglia in bici = soglia corsa − 4 bpm; attività senza FC o
+- **T-CALC-06** La bici usa la LT2 degli altri sport (senza valore, quella della
+  corsa; dal 2026-11-10, prima corsa − 4 bpm); attività senza FC o
   con più del 30% di campioni scartati → stima marcata.
 - **T-CALC-07** Casi limite: attività di 1 s e di 24 h, FC piatta, buchi
   oltre 10 s, attività a cavallo della mezzanotte, cambio dell'ora legale,

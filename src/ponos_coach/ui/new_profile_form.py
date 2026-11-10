@@ -47,6 +47,8 @@ from ponos_coach.ui.heart_rate_rules import (
     MIN_THRESHOLD_BPM,
     HeartRateProblem,
     heart_rate_problems,
+    lt1_default,
+    lt1_problems,
     optional_threshold_default,
     optional_threshold_problems,
     read_optional_threshold,
@@ -94,8 +96,9 @@ class Field(Enum):
     MIN_BPM = "min_bpm"
     MAX_BPM = "max_bpm"
     THRESHOLD = "threshold"
-    BIKE_THRESHOLD = "bike_threshold"
     OTHER_THRESHOLD = "other_threshold"
+    RUN_LT1 = "run_lt1"
+    OTHER_LT1 = "other_lt1"
     THRESHOLD_PACE = "threshold_pace"
 
 
@@ -116,12 +119,15 @@ class Problem(Enum):
     MIN_NOT_BELOW_MAX = (Field.MIN_BPM, "min_not_below_max")
     THRESHOLD_NOT_ABOVE_MIN = (Field.THRESHOLD, "threshold_not_above_min")
     THRESHOLD_ABOVE_MAX = (Field.THRESHOLD, "threshold_above_max")
-    BIKE_NOT_A_THRESHOLD = (Field.BIKE_THRESHOLD, "bike_not_a_threshold")
-    BIKE_NOT_ABOVE_MIN = (Field.BIKE_THRESHOLD, "bike_not_above_min")
-    BIKE_ABOVE_MAX = (Field.BIKE_THRESHOLD, "bike_above_max")
     OTHER_NOT_A_THRESHOLD = (Field.OTHER_THRESHOLD, "other_not_a_threshold")
     OTHER_NOT_ABOVE_MIN = (Field.OTHER_THRESHOLD, "other_not_above_min")
     OTHER_ABOVE_MAX = (Field.OTHER_THRESHOLD, "other_above_max")
+    RUN_LT1_NOT_A_THRESHOLD = (Field.RUN_LT1, "run_lt1_not_a_threshold")
+    RUN_LT1_NOT_ABOVE_MIN = (Field.RUN_LT1, "run_lt1_not_above_min")
+    RUN_LT1_NOT_BELOW_LT2 = (Field.RUN_LT1, "run_lt1_not_below_lt2")
+    OTHER_LT1_NOT_A_THRESHOLD = (Field.OTHER_LT1, "other_lt1_not_a_threshold")
+    OTHER_LT1_NOT_ABOVE_MIN = (Field.OTHER_LT1, "other_lt1_not_above_min")
+    OTHER_LT1_NOT_BELOW_LT2 = (Field.OTHER_LT1, "other_lt1_not_below_lt2")
     PACE_INVALID = (Field.THRESHOLD_PACE, "pace_invalid")
 
     @property
@@ -146,10 +152,15 @@ _HEART_RATE_PROBLEMS = {
     HeartRateProblem.THRESHOLD_ABOVE_MAX: Problem.THRESHOLD_ABOVE_MAX,
 }
 _OPTIONAL_THRESHOLD_PROBLEMS = {
-    Field.BIKE_THRESHOLD: {
-        HeartRateProblem.NOT_A_THRESHOLD: Problem.BIKE_NOT_A_THRESHOLD,
-        HeartRateProblem.THRESHOLD_NOT_ABOVE_MIN: Problem.BIKE_NOT_ABOVE_MIN,
-        HeartRateProblem.THRESHOLD_ABOVE_MAX: Problem.BIKE_ABOVE_MAX,
+    Field.RUN_LT1: {
+        HeartRateProblem.NOT_A_THRESHOLD: Problem.RUN_LT1_NOT_A_THRESHOLD,
+        HeartRateProblem.LT1_NOT_ABOVE_MIN: Problem.RUN_LT1_NOT_ABOVE_MIN,
+        HeartRateProblem.LT1_NOT_BELOW_LT2: Problem.RUN_LT1_NOT_BELOW_LT2,
+    },
+    Field.OTHER_LT1: {
+        HeartRateProblem.NOT_A_THRESHOLD: Problem.OTHER_LT1_NOT_A_THRESHOLD,
+        HeartRateProblem.LT1_NOT_ABOVE_MIN: Problem.OTHER_LT1_NOT_ABOVE_MIN,
+        HeartRateProblem.LT1_NOT_BELOW_LT2: Problem.OTHER_LT1_NOT_BELOW_LT2,
     },
     Field.OTHER_THRESHOLD: {
         HeartRateProblem.NOT_A_THRESHOLD: Problem.OTHER_NOT_A_THRESHOLD,
@@ -210,8 +221,9 @@ class NewProfileForm:
         self.min_bpm = DEFAULT_MIN_BPM
         self.max_bpm = DEFAULT_MAX_BPM
         self.sex = Sex.MALE
-        self.bike_text = ""  # empty: the default (running - 4, above the resting rate)
-        self.other_text = ""  # empty: the default (the running threshold)
+        self.run_lt1_text = ""  # empty: the default (a share of the running LT2)
+        self.other_text = ""  # empty: the default (the running LT2)
+        self.other_lt1_text = ""  # empty: the default (a share of the other-sports LT2)
         self.pace_text = ""  # empty: no pace (running sessions stay heart-rate only)
         self._folder_text = ""  # empty until the user chooses: no suggestion
         self._threshold: int | None = None  # None: estimated from the maximum
@@ -259,13 +271,29 @@ class NewProfileForm:
         self._threshold = bpm
 
     def threshold_default(self, field: Field) -> int:
-        """What the cycling or other-activities threshold is when left empty, for the heart rates
-        now entered."""
-        sport = Sport.CYCLING if field is Field.BIKE_THRESHOLD else Sport.OTHER
-        return optional_threshold_default(self.min_bpm, self.max_bpm, self.threshold_bpm, sport)
+        """What an optional value is when left empty, for the heart rates now entered: the
+        running LT2 for the other-sports LT2, the default share of the LT2 of its group for an LT1
+        (the other-sports one follows the other-sports LT2 as typed, if valid)."""
+        if field is Field.OTHER_THRESHOLD:
+            return optional_threshold_default(
+                self.min_bpm, self.max_bpm, self.threshold_bpm, Sport.OTHER
+            )
+        return lt1_default(self.min_bpm, self._lt2_of(field))
+
+    def _lt2_of(self, lt1_field: Field) -> int:
+        """The LT2 an LT1 field is compared with: the running one, or the other-sports one as
+        typed if valid, else the running one."""
+        if lt1_field is Field.RUN_LT1:
+            return self.threshold_bpm
+        reading = read_optional_threshold(self.other_text)
+        return self.threshold_bpm if not isinstance(reading, ThresholdHeartRate) else reading.bpm
 
     def _optional_texts(self) -> tuple[tuple[Field, str], ...]:
-        return ((Field.BIKE_THRESHOLD, self.bike_text), (Field.OTHER_THRESHOLD, self.other_text))
+        return (
+            (Field.OTHER_THRESHOLD, self.other_text),
+            (Field.RUN_LT1, self.run_lt1_text),
+            (Field.OTHER_LT1, self.other_lt1_text),
+        )
 
     def _optional_readings(self) -> dict[Field, ThresholdHeartRate | None]:
         """Valid optional thresholds (`None` where empty or invalid)."""
@@ -283,11 +311,13 @@ class NewProfileForm:
             if isinstance(reading, HeartRateProblem):
                 found.append(by_rule[reading])
             elif reading is not None:
-                found.extend(
-                    by_rule[rule]
-                    for rule in optional_threshold_problems(self.min_bpm, self.max_bpm, reading.bpm)
-                )
+                found.extend(by_rule[rule] for rule in self._rules_broken_by(field, reading.bpm))
         return found
+
+    def _rules_broken_by(self, field: Field, bpm: int) -> tuple[HeartRateProblem, ...]:
+        if field is Field.OTHER_THRESHOLD:
+            return optional_threshold_problems(self.min_bpm, self.max_bpm, bpm)
+        return lt1_problems(self.min_bpm, bpm, self._lt2_of(field))
 
     # --- Validazione ------------------------------------------------------------------
 
@@ -381,8 +411,9 @@ class NewProfileForm:
             HeartRateLimits(self.min_bpm, self.max_bpm),
             ThresholdHeartRate(self.threshold_bpm),
             self.sex,
-            optional[Field.BIKE_THRESHOLD],
-            optional[Field.OTHER_THRESHOLD],
+            other_threshold=optional[Field.OTHER_THRESHOLD],
+            run_lt1=optional[Field.RUN_LT1],
+            other_lt1=optional[Field.OTHER_LT1],
         )
         return NewProfileRequest(
             ProfileName.parse(self.name),

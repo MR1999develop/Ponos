@@ -39,7 +39,7 @@ Parameters:
 - minimum and maximum HR entered by the user, with a validity date; a sample
   outside these limits is an error and is discarded (and counted);
 - threshold on the bike = running threshold HR − 4 bpm, until there is a bike
-  test;
+  test (superseded 2026-11-10: see the amendment at the end);
 - weights per sport (provisional values, to be tuned in phase 3);
 - activities without HR or with too many discarded samples: estimated, marked
   load.
@@ -149,3 +149,18 @@ other = running). The fingerprint of a cached load includes the threshold of the
 group only when it differs from the default, so profiles that never set one
 keep their saved loads. Verification: `tests/load/test_sport_thresholds*.py`
 and T-CALC-05 for cycling.
+
+## Amendment 2026-11-10: two groups, LT1 and LT2
+
+The bike has no threshold of its own any more. There are two groups of sports:
+running and trail, and other sports (everything else, cycling included); each has
+an LT2 (the threshold of the earlier text: `Physiology.threshold` for running,
+`other_threshold` for the other sports, defaulting to the running one) and an
+optional LT1 (`run_lt1`, `other_lt1`; default 83% of the LT2 of the group,
+rounded half up). `threshold_for_sport` stays the only place that decides an LT2
+and `lt1_for_sport` is its twin for LT1. `HRr_eq` and the zones use the LT2 of the
+group. Consequence for the bike: the equivalence ratio is now 1 unless an
+other-sports LT2 is entered (before: running − 4), so the TRIMPeq of the same ride
+is lower; `LOAD_MODEL_VERSION` is 5 and every saved load is recomputed on its own.
+LT1 enters no load and no zone: it only splits the time of an activity below LT1,
+between LT1 and LT2 and above LT2 in the activity detail.

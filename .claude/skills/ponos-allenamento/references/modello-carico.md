@@ -29,11 +29,18 @@ Per ogni campione di FC al tempo t, per un'attività di sport `s`:
 - `carico = 100 · Σ(Δt[min] · w) / (60 · w(HRr_T(corsa)))`; il denominatore è
   `reference_hour_weight`: un'ora alla soglia del proprio sport vale 100 in
   ogni sport (COG per la scala).
-- Soglie per sport: solo da `threshold_for_sport` (`heart_rate.py`), unico punto
-  da cambiare, per gruppo (`SportGroup`, `sport_group`): corsa e trail, ciclismo,
-  altre attività (camminata, escursionismo, forza, altro). Il valore inserito nel
-  profilo vince; se manca, ciclismo = `max(corsa − 4, FCmin + 1)` e altre = corsa
-  (rapporto 1).
+- LT2 per sport: solo da `threshold_for_sport` (`heart_rate.py`), unico punto
+  da cambiare, per due gruppi (`SportGroup`, `sport_group`): corsa e trail, e
+  «altri sport» (tutto il resto, bici compresa). Il valore inserito nel profilo
+  vince; se manca, gli altri sport usano la LT2 della corsa (rapporto 1). Dal
+  2026-11-10 la bici non ha più una soglia propria (prima corsa − 4).
+- LT1 per sport: solo da `lt1_for_sport`, gemella della precedente: il valore
+  inserito per il gruppo, altrimenti `DEFAULT_LT1_PERCENT` (83%) della LT2 del
+  gruppo, arrotondato per eccesso a metà (`default_lt1`), portato a `FCmin + 1`
+  e mai oltre la LT2. La LT1 non entra nel carico né nelle zone: serve alla
+  finestra di un'attività, per il tempo sotto LT1, tra LT1 e LT2 e sopra LT2
+  (`domain_seconds`; sotto = bpm < LT1, tra = LT1 ≤ bpm < LT2, sopra = bpm ≥ LT2,
+  sugli stessi campioni delle zone).
 
 HR = FCmin dà carico 0. Per la corsa e per gli sport senza soglia propria il
 carico coincide con l'hrTSS dei modelli precedenti. Perché questa scelta e le
@@ -49,15 +56,15 @@ soglia di corsa, quindi un errore di 4 bpm vale circa il 10%.
 - Quando un valore cambia, i carichi derivati si ricalcolano per
   tutte le attività dal giorno di validità in poi. Il risultato è uguale al
   calcolo da zero (T-CALC-05).
-- Soglie del ciclismo e delle altre attività (schema v15): facoltative in
-  `Physiology` (`bike_threshold`, `other_threshold`, `None` = default), nella
-  stessa serie datata di FCmin, FCmax e soglia di corsa, con lo stesso limite
-  `FCmin < soglia ≤ FCmax` per tutte e tre. Default del ciclismo
-  `max(soglia della corsa − 4, FCmin + 1)` bpm (default del progetto, portato al
-  limite invece di rifiutare). Nel caso d'uso `ThresholdReset.DEFAULT` torna al
-  default, `None` lascia invariato. Entrano nell'impronta del carico solo se
-  diverse dal default (nessun ricalcolo per chi non le imposta). Il test dei 30
-  minuti aggiorna solo la soglia di corsa.
+- LT2 degli altri sport e LT1 dei due gruppi (schema v15 e v18): facoltative in
+  `Physiology` (`other_threshold`, `run_lt1`, `other_lt1`, `None` = default),
+  nella stessa serie datata di FCmin, FCmax e LT2 di corsa (`threshold`). Limiti:
+  `FCmin < LT2 ≤ FCmax` per le LT2 e `FCmin < LT1 < LT2` per le LT1, con la LT2
+  effettiva del gruppo. Nel caso d'uso `ThresholdReset.DEFAULT` torna al default,
+  `None` lascia invariato. Solo la LT2 degli altri sport entra nell'impronta del
+  carico, e solo se diversa dalla corsa; `LOAD_MODEL_VERSION` 5 (la bici non è più
+  corsa − 4). La colonna `bike_threshold_bpm` (v15) resta ma non si legge più
+  (expand-contract). Il test dei 30 minuti aggiorna solo la LT2 di corsa.
 - Intervalli ammessi (default del progetto, nei tipi di dominio): FC minima
   20-250, FC massima fino a 250 con minima < massima, soglia 40-250 con
   minima < soglia <= massima; il vincolo si verifica sul risultato di un
@@ -114,7 +121,7 @@ non valgono più ×0,8, la bici è valutata sulla propria soglia.
 
 ## 4b. Zone di FC
 
-Cinque zone sulla soglia dello sport (in bici la soglia della bici), **scelta
+Cinque zone sulla LT2 dello sport (in bici la LT2 degli altri sport), **scelta
 dell'utente del 2026-11-10** (prima: Friel 5ª ed. 78/87/94/100, ancora prima
 85/90/95/100); percentuali in un solo posto
 (`ZONE_STARTS_PERCENT` in `load/domain/zones.py`):
@@ -187,8 +194,9 @@ Per minuto: 0,5 · 0,64 · e^0,96 = 0,32 · 2,611696 = 0,83574.
 30 minuti: 25,07. Carico = 100 · 25,07 / 170,65 ≈ 14,69, uguale in ogni sport
 senza soglia propria (la forza non vale più 17,6).
 
-**Esempio B2: un'ora in bici alla soglia della bici.** Soglia bici = 170 − 4 =
-166; HRr_T(bici) = 116 / 140 = 0,828571; fattore = 0,857143 / 0,828571 ≈
+**Esempio B2: un'ora in bici alla LT2 degli altri sport.** Con LT2 degli altri
+sport = 166 (dal 2026-11-10 non più il default corsa − 4: senza valore la bici usa
+la LT2 della corsa, rapporto 1); HRr_T(bici) = 116 / 140 = 0,828571; fattore = 0,857143 / 0,828571 ≈
 1,03448. A 166 bpm HRr = 0,828571, HRr_eq = 0,857143: peso di un'ora 170,65,
 carico 100. Valore congelato di `test_fase4_distanza` per la bici: 40,1935
 (con i pesi era 32,18).

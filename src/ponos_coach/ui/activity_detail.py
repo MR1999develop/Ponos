@@ -10,6 +10,7 @@ UI thread. The view chooses the texts.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 
 from ponos_coach.load.activity_detail import ActivityDetail
 from ponos_coach.load.domain import ZONE_COUNT, zone_bpm_ranges
@@ -64,4 +65,47 @@ def zone_rows(detail: ActivityDetail) -> tuple[ZoneRow, ...]:
             bpm[zone],
         )
         for zone in range(ZONE_COUNT)
+    )
+
+
+class DomainKind(Enum):
+    """The three intensity domains delimited by LT1 and LT2."""
+
+    BELOW_LT1 = "below_lt1"
+    BETWEEN = "between"
+    ABOVE_LT2 = "above_lt2"
+
+
+@dataclass(frozen=True, slots=True)
+class DomainRow:
+    """One domain: which one, seconds, share of the time in the three domains (0-1) and its
+    whole-bpm range that day, both ends included (None when no whole bpm lies inside the
+    limits). The view chooses the name."""
+
+    kind: DomainKind
+    seconds: float
+    share: float
+    bpm: tuple[int, int] | None
+
+
+def _range_or_none(low: int, high: int) -> tuple[int, int] | None:
+    return (low, high) if low <= high else None
+
+
+def domain_rows(detail: ActivityDetail) -> tuple[DomainRow, ...]:
+    """Three rows: below LT1 (`bpm < LT1`), between (`LT1 <= bpm < LT2`) and above LT2
+    (`bpm >= LT2`), with the LT1 and LT2 of the day. Without HR the times and shares are 0."""
+    measured = detail.domain_seconds
+    values = (0.0, 0.0, 0.0) if measured is None else measured.as_tuple()
+    total = sum(values)
+    limits = detail.limits
+    lt1, lt2 = detail.lt1_bpm, detail.threshold_bpm
+    ranges = (
+        _range_or_none(limits.min_bpm, min(lt1 - 1, limits.max_bpm)),
+        _range_or_none(max(lt1, limits.min_bpm), min(lt2 - 1, limits.max_bpm)),
+        _range_or_none(max(lt2, limits.min_bpm), limits.max_bpm),
+    )
+    return tuple(
+        DomainRow(kind, seconds, seconds / total if total else 0.0, bpm)
+        for kind, seconds, bpm in zip(DomainKind, values, ranges, strict=True)
     )

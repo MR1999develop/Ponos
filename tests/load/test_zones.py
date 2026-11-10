@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 from hypothesis import given
@@ -14,6 +16,7 @@ from ponos_coach.load.domain import (
     ZONE_COUNT,
     ZONE_STARTS_PERCENT,
     LoadSource,
+    ThresholdHeartRate,
     ZoneSeconds,
     compute_activity_load,
     load_fingerprint,
@@ -62,7 +65,7 @@ def test_extremes_fall_in_the_first_and_last_zone() -> None:
 
 
 def test_boundary_with_a_fractional_threshold_percentage_is_exact() -> None:
-    # threshold 166 (bike of a running threshold 170):
+    # threshold 166 (a fractional share of it):
     # 75% = 124.5; 85% = 141.1; 95% = 157.7; 103% = 170.98
     assert zones_of(124, 125, threshold=166) == [0, 1]
     assert zones_of(141, 142, threshold=166) == [1, 2]
@@ -122,21 +125,18 @@ def test_gaps_over_ten_seconds_are_in_no_zone() -> None:
     assert result.zone_seconds.values == (0.0, 0.0, 0.0, 0.0, 9.0)
 
 
-def test_the_cycling_zones_use_the_bike_threshold_four_bpm_lower() -> None:
-    """T-CALC-06: on the bike the threshold is the running one minus 4 bpm, for the zones too."""
-    series = series_at_1_hz(*[172.0] * 10)  # 172 bpm = 103.6% of the bike threshold
+def test_the_cycling_zones_use_the_other_sports_lt2_like_every_non_running_sport() -> None:
+    """T-CALC-06: the bike has no threshold of its own: the other-sports LT2, else the running."""
+    series = series_at_1_hz(*[172.0] * 10)  # 103.6% of 166, 101.2% of 170
+    other_166 = replace(PHYSIOLOGY, other_threshold=ThresholdHeartRate(166))
 
-    bike = compute_activity_load(Sport.CYCLING, 10.0, series, PHYSIOLOGY)
-    run = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY)
+    bike = compute_activity_load(Sport.CYCLING, 10.0, series, other_166)
+    run = compute_activity_load(Sport.RUNNING, 10.0, series, other_166)
+    bike_default = compute_activity_load(Sport.CYCLING, 10.0, series, PHYSIOLOGY)
 
-    assert bike.zone_seconds.values == (
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        10.0,
-    )  # Z5 above 103% of the bike threshold
+    assert bike.zone_seconds.values == (0.0, 0.0, 0.0, 0.0, 10.0)  # Z5: from 103% of its LT2 166
     assert run.zone_seconds.values == (0.0, 0.0, 0.0, 10.0, 0.0)  # 172/170 = 101.2%: Z4
+    assert bike_default.zone_seconds == run.zone_seconds  # no value entered: the running LT2
 
 
 def test_an_activity_without_heart_rate_has_no_zone_seconds() -> None:

@@ -113,13 +113,32 @@ def test_the_zone_edges_in_the_domain_are_the_percentages_chosen_by_the_user() -
         assert np.all(np.diff(zone) >= 0)  # never a lower zone at a higher heart rate
 
 
-def test_a_bike_ride_uses_the_threshold_four_beats_lower(lab: RealProfile) -> None:
-    # running threshold 100 -> on the bike 96: 99 is Z5, 98 is Z4 (103% of 96 = 98.88: Z5 from 99)
+def test_a_bike_ride_uses_the_other_sports_lt2_when_one_is_entered(lab: RealProfile) -> None:
+    # running LT2 100, other-sports LT2 96: 99 is Z5, 98 is Z4 (103% of 96 = 98.88: Z5 from 99)
+    lab.session.physiology.put(
+        PhysiologyEntry(
+            FIRST_DAY,
+            Physiology(
+                HeartRateLimits(*LIMITS),
+                ThresholdHeartRate(100),
+                Sex.MALE,
+                other_threshold=ThresholdHeartRate(96),
+            ),
+        )
+    )
     import_legs(lab, [Leg(100, 98, 8.0), Leg(100, 99, 8.0)], sport=fw.Sport.CYCLING)
     activity = only_activity(lab)
 
     assert activity.sport is Sport.CYCLING
     assert activity.load.zone_seconds.values == (0.0, 0.0, 0.0, 100.0, 101.0)
+
+
+def test_a_bike_ride_without_an_other_sports_lt2_uses_the_running_one(lab: RealProfile) -> None:
+    # running LT2 100: 95 and 96 are both Z4 (94% to 99%); before the two groups the bike used 96
+    import_legs(lab, [Leg(100, 95, 8.0), Leg(100, 96, 8.0)], sport=fw.Sport.CYCLING)
+    activity = only_activity(lab)
+
+    assert activity.load.zone_seconds.values == (0.0, 0.0, 0.0, 201.0, 0.0)
 
 
 # --- The load that was done did not move ----------------------------------------------------------

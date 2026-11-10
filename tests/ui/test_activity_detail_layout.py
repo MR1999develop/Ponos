@@ -11,7 +11,7 @@ from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
 
-from ponos_coach.load.domain import ZoneSeconds
+from ponos_coach.load.domain import DomainSeconds, ZoneSeconds
 from ponos_coach.ui.activity_detail import DetailReady
 from ponos_coach.ui.activity_detail_dialog import ActivityDetailDialog
 from ponos_coach.ui.chart_payload import PreparedChart
@@ -21,7 +21,7 @@ from tests.ui.test_activity_detail import detail_with
 
 MAX_HEIGHT_PX = 640  # before the rework the window asked for more than that
 SUMMARY_KEYS = (
-    "start", "moving", "elapsed", "distance", "ascent", "load", "source", "threshold", "limits",
+    "start", "moving", "elapsed", "distance", "ascent", "load", "source", "thresholds", "limits",
 )  # fmt: skip
 
 
@@ -31,7 +31,9 @@ def ready_dialog(qtbot: QtBot) -> ActivityDetailDialog:
     )
     qtbot.addWidget(dialog)
     zones = ZoneSeconds((300.0, 100.0, 0.0, 0.0, 100.0))
-    dialog.show_outcome(DetailReady(detail_with(zones), PreparedChart(go.Figure(), "", "#fff")))
+    domains = DomainSeconds(300.0, 100.0, 100.0)
+    detail = detail_with(zones, domains)
+    dialog.show_outcome(DetailReady(detail, PreparedChart(go.Figure(), "", "#fff")))
     dialog.show()
     qtbot.waitExposed(dialog)
     for _ in range(5):
@@ -57,6 +59,23 @@ def test_the_zone_table_shows_every_row_without_a_vertical_scroll_bar(qtbot: QtB
     )
     assert table.height() >= content
     assert not table.verticalScrollBar().isVisible()
+
+
+def test_the_domain_table_shows_its_three_rows_without_a_scroll_bar_beside_the_zones(
+    qtbot: QtBot,
+) -> None:
+    dialog = ready_dialog(qtbot)
+    table, zones = dialog.domain_table, dialog.zone_table
+
+    content = table.horizontalHeader().height() + sum(
+        table.rowHeight(row) for row in range(table.model().rowCount())
+    )
+    assert table.model().rowCount() == 3
+    assert table.height() >= content
+    assert not table.verticalScrollBar().isVisible()
+    assert table.isVisibleTo(dialog)
+    assert table.x() > zones.x() + zones.width() - 1  # beside the zones, not below them
+    assert table.height() <= zones.height()  # three rows are lower than five: the window is not
 
 
 def test_the_window_is_lower_and_the_summary_sits_in_columns(qtbot: QtBot) -> None:

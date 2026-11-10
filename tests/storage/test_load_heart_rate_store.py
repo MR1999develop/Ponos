@@ -68,6 +68,8 @@ def test_a_profile_from_before_the_migration_loses_its_cached_loads_and_gets_the
     with closing(sqlite3.connect(path)) as raw:
         raw.execute("ALTER TABLE load_cache DROP COLUMN avg_bpm")
         raw.execute("ALTER TABLE load_cache DROP COLUMN max_bpm")
+        for later in ("run_lt1_bpm", "other_lt1_bpm"):  # added by a migration after this one
+            raw.execute(f"ALTER TABLE physiology DROP COLUMN {later}")
         raw.execute(
             "INSERT INTO load_cache (activity_id, fingerprint, trimp, hr_tss, load, used_samples, "
             "discarded_samples, excluded_seconds, source, zone1_s, zone2_s, zone3_s, zone4_s, "

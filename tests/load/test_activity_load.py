@@ -20,6 +20,7 @@ from ponos_coach.load.domain import (
     ActivityLoad,
     LoadSource,
     Physiology,
+    ThresholdHeartRate,
     compute_activity_load,
     equivalence_factor,
     load_per_zone,
@@ -27,6 +28,14 @@ from ponos_coach.load.domain import (
     typical_intensity,
 )
 from tests.load.helpers import PHYSIOLOGY
+
+# Other sports (the bike too) with their own LT2 of 166 against the running 170.
+WITH_OTHER_166 = Physiology(
+    PHYSIOLOGY.limits,
+    PHYSIOLOGY.threshold,
+    PHYSIOLOGY.sex,
+    other_threshold=ThresholdHeartRate(166),
+)
 
 # Declared comparison tolerance (T-CALC-01/02): relative rounding error
 # of the floating-point sum, far below the precision of the hand examples.
@@ -89,7 +98,16 @@ def naive_load(
     low, high = physiology.limits.min_bpm, physiology.limits.max_bpm
     k = physiology.sex.banister_k
     threshold = physiology.threshold.bpm
-    sport_threshold = max(threshold - 4, low + 1) if sport is Sport.CYCLING else threshold
+    sport_threshold = (
+        threshold
+        if physiology.other_threshold is None
+        or sport
+        in (
+            Sport.RUNNING,
+            Sport.TRAIL,
+        )
+        else physiology.other_threshold.bpm
+    )
     hrr_run = (threshold - low) / (high - low)
     ratio = hrr_run / ((sport_threshold - low) / (high - low))
     one_hour = 60 * hrr_run * 0.64 * math.exp(k * hrr_run)
@@ -300,14 +318,19 @@ def test_t_calc_07_the_rule_uses_the_moving_time_given_not_a_longer_elapsed_time
     assert with_pauses_counted.source is LoadSource.ESTIMATE
 
 
-def test_t_calc_06_bike_threshold_is_four_bpm_lower() -> None:
-    at_bike_threshold = constant(166, 3600)
+def test_t_calc_06_the_bike_uses_the_other_sports_lt2_not_a_threshold_of_its_own() -> None:
+    at_166 = constant(166, 3600)
 
-    bike = compute_activity_load(Sport.CYCLING, 3600, at_bike_threshold, PHYSIOLOGY)
-    run = compute_activity_load(Sport.RUNNING, 3600, at_bike_threshold, PHYSIOLOGY)
+    without = compute_activity_load(Sport.CYCLING, 3600, at_166, PHYSIOLOGY)
+    bike = compute_activity_load(Sport.CYCLING, 3600, at_166, WITH_OTHER_166)
+    run = compute_activity_load(Sport.RUNNING, 3600, at_166, WITH_OTHER_166)
 
-    assert bike.trimp_eq == pytest.approx(100.0, rel=REL_TOL)
-    assert run.trimp_eq < 100.0
+    assert bike.trimp_eq == pytest.approx(100.0, rel=REL_TOL)  # one hour at its LT2
+    assert run.trimp_eq < 100.0  # the running LT2 (170) is higher
+    # Before the two groups the bike without a value used run - 4 (166): 100. Now it is the
+    # running LT2 like every other sport, so the same ride is worth less.
+    assert without.trimp_eq < 100.0
+    assert without.trimp_eq == run.trimp_eq
 
 
 # --- Load per zone ---------------------------------------------------------------
@@ -349,7 +372,8 @@ def test_the_equivalence_ratio_is_one_without_a_threshold_of_the_sports_own() ->
         Sport.OTHER,
     ):
         assert equivalence_factor(PHYSIOLOGY, sport) == 1.0
-    assert equivalence_factor(PHYSIOLOGY, Sport.CYCLING) == pytest.approx(120 / 116)
+    assert equivalence_factor(PHYSIOLOGY, Sport.CYCLING) == 1.0  # the bike is an "other" sport
+    assert equivalence_factor(WITH_OTHER_166, Sport.CYCLING) == pytest.approx(120 / 116)
 
 
 @pytest.mark.parametrize("sport", [Sport.TRAIL, Sport.HIKING, Sport.WALKING, Sport.STRENGTH])
@@ -362,8 +386,8 @@ def test_a_sport_without_a_threshold_of_its_own_loads_like_running(sport: Sport)
     assert other.trimp_eq == run.trimp_eq
 
 
-def test_one_hour_at_the_bike_threshold_is_100_as_one_hour_at_the_running_one() -> None:
-    bike = compute_activity_load(Sport.CYCLING, 3600, constant(166, 3600), PHYSIOLOGY)
+def test_one_hour_at_the_other_sports_lt2_is_100_as_one_hour_at_the_running_one() -> None:
+    bike = compute_activity_load(Sport.CYCLING, 3600, constant(166, 3600), WITH_OTHER_166)
 
     assert bike.trimp_eq == pytest.approx(100.0, rel=REL_TOL)
 
@@ -373,7 +397,7 @@ def test_the_equivalent_intensity_is_clamped_to_one_at_the_boundary() -> None:
     # below stays under the clamp (off point), one above is clamped to the maximum weight.
     on_point = 50 + 140 * 116 / 120
     at = {
-        bpm: compute_activity_load(Sport.CYCLING, 600, constant(bpm, 600), PHYSIOLOGY)
+        bpm: compute_activity_load(Sport.CYCLING, 600, constant(bpm, 600), WITH_OTHER_166)
         for bpm in (185.0, on_point, 186.0, 190.0)
     }
 

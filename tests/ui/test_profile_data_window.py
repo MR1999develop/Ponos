@@ -220,7 +220,7 @@ def test_the_stored_body_data_come_back_in_edit_profile_and_the_weight_in_the_hi
     assert model.rowCount() == 1
     assert model.data(model.index(0, 1)) == "71.3"
     assert (
-        model.data(model.index(0, 4)) == "171"
+        model.data(model.index(0, Column.THRESHOLD)) == "171"
     )  # threshold estimated at 90% of the maximum of 190
 
 
@@ -319,7 +319,7 @@ def test_only_the_changed_fields_are_stored_and_the_history_lists_the_new_row(
         for row in range(model.rowCount())
     ]
     # the new entry keeps the previous minimum and maximum HR: only the threshold changes
-    thresholds = {row[4] for row in rows}
+    thresholds = {row[Column.THRESHOLD] for row in rows}
     assert thresholds == {"171", "150"}
     assert {row[2] for row in rows} == {"50"}
     assert {row[3] for row in rows} == {"190"}

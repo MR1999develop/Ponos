@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Form "New profile": cycling threshold, other-activities threshold and threshold pace."""
+"""Form "New profile": LT1 of both groups, other-sports LT2 and threshold pace."""
 
 from __future__ import annotations
 
@@ -24,58 +24,90 @@ def test_empty_optional_fields_give_the_defaults_and_no_pace() -> None:
 
     request = built(form)
 
-    assert request.physiology.bike_threshold is None
     assert request.physiology.other_threshold is None
+    assert request.physiology.run_lt1 is None
+    assert request.physiology.other_lt1 is None
     assert request.threshold_pace is None
-    assert form.threshold_default(Field.BIKE_THRESHOLD) == 167  # running 171 - 4
-    assert form.threshold_default(Field.OTHER_THRESHOLD) == 171
+    assert form.threshold_default(Field.OTHER_THRESHOLD) == 171  # the running LT2
+    assert form.threshold_default(Field.RUN_LT1) == 142  # 83% of 171 = 141.93
+    assert form.threshold_default(Field.OTHER_LT1) == 142
 
 
 def test_the_defaults_follow_the_rates_entered() -> None:
     form = make_form()
     form.set_threshold(100)
-    assert form.threshold_default(Field.BIKE_THRESHOLD) == 96
+    assert form.threshold_default(Field.RUN_LT1) == 83
+    assert form.threshold_default(Field.OTHER_LT1) == 83
     form.min_bpm = 98
-    assert form.threshold_default(Field.BIKE_THRESHOLD) == 99  # kept above the resting rate
+    assert form.threshold_default(Field.RUN_LT1) == 99  # kept above the resting rate
     form.min_bpm = 180  # rates that do not fit: still a number to show
     assert form.threshold_default(Field.OTHER_THRESHOLD) == 100
 
 
+def test_the_default_other_lt1_follows_the_other_lt2_typed() -> None:
+    form = make_form()
+    form.other_text = "150"
+
+    assert form.threshold_default(Field.OTHER_LT1) == 125  # 124.5: half rounds up
+    assert form.threshold_default(Field.RUN_LT1) == 142  # the running one does not follow it
+    form.other_text = "abc"  # not a number: back to the running LT2
+    assert form.threshold_default(Field.OTHER_LT1) == 142
+
+
 def test_typed_thresholds_and_pace_go_into_the_request() -> None:
     form = make_form()
-    form.bike_text = " 160 "
+    form.run_lt1_text = " 140 "
     form.other_text = "168"
+    form.other_lt1_text = "130"
     form.pace_text = "5,30"
 
     request = built(form)
 
-    assert request.physiology.bike_threshold == ThresholdHeartRate(160)
+    assert request.physiology.run_lt1 == ThresholdHeartRate(140)
     assert request.physiology.other_threshold == ThresholdHeartRate(168)
+    assert request.physiology.other_lt1 == ThresholdHeartRate(130)
     assert request.threshold_pace == ThresholdPace(330)
 
 
 @pytest.mark.parametrize(
-    ("bike", "other", "expected"),
+    ("run_lt1", "other", "other_lt1", "expected"),
     [
-        ("abc", "", Problem.BIKE_NOT_A_THRESHOLD),
-        ("39", "", Problem.BIKE_NOT_A_THRESHOLD),  # outside the threshold range
-        ("251", "", Problem.BIKE_NOT_A_THRESHOLD),
-        ("50", "", Problem.BIKE_NOT_ABOVE_MIN),  # equal to the resting rate
-        ("191", "", Problem.BIKE_ABOVE_MAX),
-        ("", "x", Problem.OTHER_NOT_A_THRESHOLD),
-        ("", "50", Problem.OTHER_NOT_ABOVE_MIN),
-        ("", "200", Problem.OTHER_ABOVE_MAX),
+        ("abc", "", "", Problem.RUN_LT1_NOT_A_THRESHOLD),
+        ("39", "", "", Problem.RUN_LT1_NOT_A_THRESHOLD),  # outside the threshold range
+        ("50", "", "", Problem.RUN_LT1_NOT_ABOVE_MIN),  # equal to the resting rate
+        ("171", "", "", Problem.RUN_LT1_NOT_BELOW_LT2),  # equal to LT2 (on point)
+        ("172", "", "", Problem.RUN_LT1_NOT_BELOW_LT2),
+        ("", "x", "", Problem.OTHER_NOT_A_THRESHOLD),
+        ("", "50", "", Problem.OTHER_NOT_ABOVE_MIN),
+        ("", "200", "", Problem.OTHER_ABOVE_MAX),
+        ("", "", "50", Problem.OTHER_LT1_NOT_ABOVE_MIN),
+        ("", "", "171", Problem.OTHER_LT1_NOT_BELOW_LT2),  # the other LT2 is empty: LT2 of running
+        ("", "150", "150", Problem.OTHER_LT1_NOT_BELOW_LT2),  # equal to the other LT2
     ],
 )
-def test_an_invalid_optional_threshold_is_a_problem_on_its_field_and_blocks_the_request(
-    bike: str, other: str, expected: Problem
+def test_an_invalid_optional_value_is_a_problem_on_its_field_and_blocks_the_request(
+    run_lt1: str, other: str, other_lt1: str, expected: Problem
 ) -> None:
     form = make_form()
-    form.bike_text = bike
+    form.run_lt1_text = run_lt1
     form.other_text = other
+    form.other_lt1_text = other_lt1
 
     assert form.problems(TODAY) == (expected,)
     assert form.build_request(TODAY) == (expected,)
+
+
+@pytest.mark.parametrize(
+    ("lt1", "other", "accepted"), [("149", "150", True), ("151", "150", False)]
+)
+def test_the_other_lt1_is_compared_with_the_other_lt2_typed(
+    lt1: str, other: str, accepted: bool
+) -> None:
+    form = make_form()
+    form.other_text = other
+    form.other_lt1_text = lt1
+
+    assert (form.problems(TODAY) == ()) is accepted
 
 
 @pytest.mark.parametrize("text", ["fast", "5:75", "0:10", "99:00", "5:3x"])

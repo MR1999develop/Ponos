@@ -225,8 +225,9 @@ def test_t_calc_05_the_detail_of_every_activity_gives_the_same_load_as_the_overv
         assert result.load == item.load
         assert result.local_day == item.local_day
         run_threshold = 160  # the first entry (1 February) also holds for the days that precede it
-        bike_offset = 4 if item.sport is Sport.CYCLING else 0
-        assert result.threshold_bpm == run_threshold - bike_offset
+        # every sport, the bike included, has the running LT2 when no other-sports one is entered
+        assert result.threshold_bpm == run_threshold
+        assert result.lt1_bpm == 133  # 83% of 160 = 132.8
         assert result.zone_starts_bpm == tuple(
             result.threshold_bpm * percent / 100 for percent in (75, 85, 95, 103)
         )
@@ -401,16 +402,17 @@ def test_t_calc_05_a_stored_database_refuses_incoherent_heart_rate_even_without_
     profile = create_profile(tmp_path)
     database = profile.folder / "ponos.sqlite3"
     profile.close()
+    insert = "INSERT INTO physiology (valid_from, min_bpm, max_bpm, threshold_bpm, sex) VALUES "
     statements = (
         # threshold = minimum
-        "INSERT INTO physiology VALUES ('2026-04-01', 50, 190, 50, 'male', NULL, NULL)",
+        f"{insert}('2026-04-01', 50, 190, 50, 'male')",
         # threshold > maximum
-        "INSERT INTO physiology VALUES ('2026-04-01', 50, 190, 191, 'male', NULL, NULL)",
+        f"{insert}('2026-04-01', 50, 190, 191, 'male')",
         # minimum = maximum
-        "INSERT INTO physiology VALUES ('2026-04-01', 50, 50, 50, 'male', NULL, NULL)",
-        "INSERT INTO physiology VALUES ('2026-04-01', 19, 190, 170, 'male', NULL, NULL)",
-        "INSERT INTO physiology VALUES ('2026-04-01', 50, 251, 170, 'male', NULL, NULL)",
-        "INSERT INTO physiology VALUES ('2026-04-01', 50, 190, 39, 'male', NULL, NULL)",
+        f"{insert}('2026-04-01', 50, 50, 50, 'male')",
+        f"{insert}('2026-04-01', 19, 190, 170, 'male')",
+        f"{insert}('2026-04-01', 50, 251, 170, 'male')",
+        f"{insert}('2026-04-01', 50, 190, 39, 'male')",
     )
     with closing(sqlite3.connect(database)) as raw:
         for statement in statements:

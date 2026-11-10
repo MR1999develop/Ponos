@@ -261,3 +261,15 @@ adds the nullable columns `bike_threshold_bpm` and `other_threshold_bpm` to
 default. They share the dated series of the other HR parameters: one entry per
 day, one row in the history, one constraint. The HR zones of a sport are on its
 threshold.
+
+## Amendment 2026-11-10 (second): LT1 and the two groups
+
+Migration 18 (`LT1_MIGRATION`, `storage/schema_lt1.py`) adds the nullable columns
+`run_lt1_bpm` and `other_lt1_bpm` to `physiology`, with
+`CHECK (NULL OR (> min_bpm AND < LT2))`; for `other_lt1_bpm` the LT2 is
+`COALESCE(other_threshold_bpm, threshold_bpm)`. The column `bike_threshold_bpm`
+of migration 15 stays in the table but is neither read nor written any more,
+because cycling belongs to the other-sports group (expand-contract: a later
+migration drops it). `other_threshold_bpm` is the LT2 of every sport that is not
+running or trail. The load cache is not cleared: `LOAD_MODEL_VERSION` 5 changes
+the fingerprint of every load.
