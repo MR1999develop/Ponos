@@ -40,10 +40,12 @@ def race(
     priority: Priority = Priority.A,
     distance_m: int = 10_000,
     target_time_s: int | None = None,
+    *,
     sport: Sport = Sport.RUNNING,
+    ascent_m: int = 0,
 ) -> RaceGoal:
-    """A race with a neutral id."""
-    return RaceGoal(GoalId(goal_id), day, priority, sport, distance_m, target_time_s)
+    """A race with a neutral id (`ascent_m` is its elevation gain, 0 for a flat race)."""
+    return RaceGoal(GoalId(goal_id), day, priority, sport, distance_m, target_time_s, ascent_m)
 
 
 def fitness_goal(goal_id: str, day: date, ctl: float) -> FitnessGoal:

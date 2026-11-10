@@ -14,6 +14,10 @@ from ponos_coach.activities.domain import Sport
 
 MIN_DISTANCE_M = 400
 MAX_DISTANCE_M = 500_000
+# Positive elevation gain of a race. The most of any known race is about 24 000 m (330 km), so
+# 30 000 m leaves room; a race is never steeper on average than MAX_MEAN_GRADE_PERCENT.
+MAX_ASCENT_M = 30_000
+MAX_MEAN_GRADE_PERCENT = 50
 MIN_TARGET_TIME_S = 60
 MAX_TARGET_TIME_S = 7 * 24 * 3600
 MAX_CTL = 200.0
@@ -42,7 +46,8 @@ class GoalId:
 
 @dataclass(frozen=True, slots=True)
 class RaceGoal:
-    """A race on a date: sport, distance in metres, optional target time in seconds."""
+    """A race on a date: sport, distance in metres, optional target time in seconds, and the
+    positive elevation gain `ascent_m` in metres (0 = a flat race, the default)."""
 
     goal_id: GoalId
     day: date
@@ -50,16 +55,26 @@ class RaceGoal:
     sport: Sport
     distance_m: int
     target_time_s: int | None = None
+    ascent_m: int = 0
 
     def __post_init__(self) -> None:
         if self.day < _FIRST_DAY:
             raise ValueError("a goal date cannot precede 1900-01-01")
         if not MIN_DISTANCE_M <= self.distance_m <= MAX_DISTANCE_M:
             raise ValueError(f"distance must be in [{MIN_DISTANCE_M}, {MAX_DISTANCE_M}] m")
+        if not 0 <= self.ascent_m <= MAX_ASCENT_M:
+            raise ValueError(f"elevation gain must be in [0, {MAX_ASCENT_M}] m")
+        if self.ascent_m * 100 > self.distance_m * MAX_MEAN_GRADE_PERCENT:
+            raise ValueError(f"mean grade cannot exceed {MAX_MEAN_GRADE_PERCENT}%")
         if self.target_time_s is not None and not (
             MIN_TARGET_TIME_S <= self.target_time_s <= MAX_TARGET_TIME_S
         ):
             raise ValueError("target time outside the plausible range")
+
+    @property
+    def ascent_m_per_km(self) -> float:
+        """Mean climb per kilometre (0.0 for a flat race)."""
+        return self.ascent_m * 1000 / self.distance_m
 
 
 @dataclass(frozen=True, slots=True)

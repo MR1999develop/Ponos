@@ -18,7 +18,7 @@ from datetime import date, timedelta
 from ponos_coach.activities.domain import Sport
 from ponos_coach.assessment.domain import NoTest, NotYet, Overdue, ThresholdProtocol
 from ponos_coach.goals.domain import HARD_TYPES, INTENSE_TYPES, Priority, RaceGoal, SessionType
-from ponos_coach.injury.domain import PlanRestriction
+from ponos_coach.injury.domain import PlanRestriction, RunAllowance
 from ponos_coach.planning.domain import defaults
 from ponos_coach.planning.domain.health import LIMITED_FILLERS, allowed_types, restriction_of
 from ponos_coach.planning.domain.inputs import PlanInputs, PlanRefusal, RefusalReason
@@ -71,6 +71,7 @@ from ponos_coach.planning.domain.target import (
     TargetClass,
     best_time_by_race_s,
     classify_target,
+    equivalent_distance_m,
     race_class_for,
     recovery_days_for,
     taper_days_for,
@@ -120,6 +121,7 @@ class _RaceTarget:
     day: date
     race_class: RaceClass
     pace_s_per_km: int | None
+    hill_slope_m_per_km: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,13 +280,36 @@ def _session_sport(session_type: SessionType, plan_sport: Sport) -> Sport:
     return plan_sport
 
 
+def _flat_distance_m(race: RaceGoal) -> int:
+    """The flat distance that asks as much as the race: its time, pace and load are computed on it
+    (the distance itself for a flat race)."""
+    return equivalent_distance_m(race.distance_m, race.ascent_m)
+
+
 def _expected_time_s(race: RaceGoal, pace: int | None, days_to_race: int) -> int:
-    """Time the plan expects of a race: the target, else the best time possible, else a default."""
+    """Time the plan expects of a race: the target, else the best time possible, else a default;
+    the last two on the flat-equivalent distance."""
     if race.target_time_s is not None:
         return race.target_time_s
     if pace is not None and race.sport in _RUNNING:
-        return round(best_time_by_race_s(pace, race.distance_m, days_to_race))
-    return max(1, race.distance_m * defaults.DEFAULT_RACE_PACE_S_PER_KM // 1000)
+        return round(best_time_by_race_s(pace, _flat_distance_m(race), days_to_race))
+    return max(1, _flat_distance_m(race) * defaults.DEFAULT_RACE_PACE_S_PER_KM // 1000)
+
+
+def _hill_slope_m_per_km(race: RaceGoal, restriction: PlanRestriction, sport: Sport) -> int:
+    """The mean climb per kilometre that the preparation for this race trains for, whole metres, or
+    0 when it has no hill work: only an A race of a running plan with at least
+    `HILL_MIN_SLOPE_M_PER_KM` of mean climb, and only when no injury or illness limits the running
+    or the intensity (a zone that forbids running forbids the hills too)."""
+    slope = race.ascent_m_per_km
+    free = restriction.limits_nothing or (
+        restriction.halt is None
+        and restriction.running is RunAllowance.FULL
+        and restriction.intense
+    )
+    if sport not in _RUNNING or not free or slope < defaults.HILL_MIN_SLOPE_M_PER_KM:
+        return 0
+    return round(slope)
 
 
 def _context(inputs: PlanInputs, macro: Macrocycle, today: date, max_ramp: float) -> _Context:
@@ -303,18 +328,20 @@ def _context(inputs: PlanInputs, macro: Macrocycle, today: date, max_ramp: float
             race.distance_m,
             expected,
             race_load(expected, rates[race.sport]),
+            race.ascent_m,
         )
     pace = inputs.threshold_pace_s_per_km
+    restriction = restriction_of(inputs.injuries)
     targets = tuple(
         _RaceTarget(
             r.day,
             race_class_for(r.distance_m),
             _race_pace_s_per_km(r, pace, (r.day - today).days),
+            _hill_slope_m_per_km(r, restriction, sport),
         )
         for r in inputs.races
         if r.priority is Priority.A
     )
-    restriction = restriction_of(inputs.injuries)
     chosen = allowed_types(inputs.choices.for_sport(sport), sport, restriction)
     return _Context(
         inputs,
@@ -353,17 +380,18 @@ def _threshold_test_plan(inputs: PlanInputs, start: date) -> _TestPlan | None:
 
 def _race_pace_s_per_km(race: RaceGoal, pace: int | None, days_to_race: int) -> int | None:
     """Pace the race is expected to be run at, whole s/km: from the target time, else from the
-    best time possible (Riegel's prediction from the threshold pace); `None` for a race that is
-    not a run or when neither is known (the session then goes by its zone alone)."""
+    best time possible (Riegel's prediction from the threshold pace), both over the flat-equivalent
+    distance (a metre of climb counts as `ASCENT_EQUIVALENT_M_PER_M` flat metres); `None` for a
+    race that is not a run or when neither is known (the session then goes by its zone alone)."""
     if race.sport not in _RUNNING:
         return None
     if race.target_time_s is not None:
         time_s = float(race.target_time_s)
     elif pace is not None:
-        time_s = best_time_by_race_s(pace, race.distance_m, days_to_race)
+        time_s = best_time_by_race_s(pace, _flat_distance_m(race), days_to_race)
     else:
         return None
-    return round(time_s * 1000 / race.distance_m)
+    return round(time_s * 1000 / _flat_distance_m(race))
 
 
 def _next_target(context: _Context, day: date) -> _RaceTarget | None:
@@ -486,6 +514,7 @@ def _day_info(context: _Context, day: date) -> DayInfo:
         _taper_fraction(phase, target, day),
         None if target is None else target.race_class,
         None if target is None else (target.day - day).days,
+        0 if target is None else target.hill_slope_m_per_km,
     )
 
 
@@ -666,7 +695,7 @@ def _assess_targets(inputs: PlanInputs, today: date) -> tuple[TargetAssessment, 
         if pace is None or race.sport not in _RUNNING:
             out.append(TargetAssessment(race.goal_id.value, TargetClass.NOT_ESTIMABLE, None))
             continue
-        best = best_time_by_race_s(pace, race.distance_m, (race.day - today).days)
+        best = best_time_by_race_s(pace, _flat_distance_m(race), (race.day - today).days)
         verdict = classify_target(race.target_time_s, best)
         out.append(TargetAssessment(race.goal_id.value, verdict, round(best)))
     return tuple(out)

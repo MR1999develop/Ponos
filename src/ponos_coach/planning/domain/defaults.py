@@ -28,7 +28,10 @@ from ponos_coach.planning.domain.phases import Phase, RaceClass
 # and a day is as long as the types allow; the long session is the longest of its week.
 # 7: the load is TRIMPeq (no hrTSS, no sport weights): the session rates of a sport carry no weight;
 # the scale is still 100 = one hour at the threshold, so the running plan is the same as before.
-METHOD_VERSION: Final = 7
+# 8: the elevation gain of a race (`RaceGoal.ascent_m`): the time and the pace of a race are
+# computed on the flat-equivalent distance, and a steep A race gets hill repeats and hilly long
+# runs in the build and the peak.
+METHOD_VERSION: Final = 8
 
 # --- Horizon -----------------------------------------------------------------------------------
 HORIZON_DAYS: Final = 364  # a plan covers 52 weeks from tomorrow at most
@@ -243,6 +246,13 @@ INTERVAL_MODELS: Final[dict[tuple[SessionType, Phase], IntervalModel]] = {
     (SessionType.THRESHOLD, Phase.TAPER): IntervalModel(10, 10, 8, 2, 4, 2, 2),
     (SessionType.VO2MAX, Phase.TAPER): IntervalModel(10, 10, 3, 3, 5, 3, 3),
 }
+# Hill repeats replace one quality session of the build and the peak of a hilly race: the work is
+# run uphill and the rest is the jog back down. Short and hard (zone 5) in the build; longer and
+# at the threshold (zone 4) in the peak. No pace target on a slope: heart rate only.
+HILL_REPEAT_MODELS: Final[dict[Phase, IntervalModel]] = {
+    Phase.BUILD: IntervalModel(15, 10, 2, 3, 5, 6, 10),
+    Phase.PEAK: IntervalModel(15, 10, 3, 3, 4, 4, 8),
+}
 
 # Heart rate that stands for a zone when estimating a session's load, in percent of the threshold:
 # about the middle of the zone of `load.ZONE_STARTS_PERCENT` (Z1 <78, Z2 78-86, Z3 87-93,
@@ -256,6 +266,26 @@ RACE_ZONE_MIX: Final = (
     (10**9, (0.0, 0.4, 0.6, 0.0, 0.0)),
 )
 DEFAULT_RACE_PACE_S_PER_KM: Final = 360  # to size a race's load when nothing else is known
+
+# --- Elevation gain (project defaults) ---------------------------------------------------------
+# A metre of climb counts as this many metres of flat running: 100 m of climb are 1 km, the rule
+# of thumb behind the "km-effort" of trail races. The race's time, pace and load are computed on
+# the flat-equivalent distance, `distance + ascent * ASCENT_EQUIVALENT_M_PER_M`.
+ASCENT_EQUIVALENT_M_PER_M: Final = 10
+# An A race whose mean climb is at least this many metres per kilometre is a hilly race: its
+# build and peak have hill work. 20 m/km is 200 m in 10 km or 420 m in a half marathon, well above
+# a road race (a flat half marathon has 50 to 150 m) and below the mountain races (UTMB about
+# 58 m/km).
+HILL_MIN_SLOPE_M_PER_KM: Final = 20
+# The phases whose weeks hold hill work: the specific preparation, never the base, the taper or an
+# unload week.
+HILL_PHASES: Final = frozenset({Phase.BUILD, Phase.PEAK})
+# Indicative speed of a hilly long run (km/h), so that its elevation gain follows the race's mean
+# climb: gain = hours * speed * slope.
+HILLY_LONG_KM_PER_HOUR: Final = 7
+# Indicative climb of a minute of hill-repeat work (about an 8% grade at 7.5 km/h).
+HILL_REPEAT_ASCENT_M_PER_MIN: Final = 10
+HILL_ASCENT_ROUND_M: Final = 10  # the indicative gain of a session is a multiple of this
 
 # --- Adaptation --------------------------------------------------------------------------------
 RECOVERY_TSB: Final = -30.0  # tomorrow's TSB below this inserts recovery days
@@ -304,6 +334,8 @@ PARAMETER_NAMES: Final = (
     "test_cooldown_minutes",
     "test_attempt_weeks",
     "test_max_planned",
+    "ascent_equivalent_m_per_m",
+    "hill_min_slope_m_per_km",
 )
 
 
@@ -343,5 +375,7 @@ def parameter_snapshot(max_ramp: float) -> tuple[tuple[str, float], ...]:
         TEST_COOLDOWN_MINUTES,
         TEST_ATTEMPT_WEEKS,
         TEST_MAX_PLANNED,
+        ASCENT_EQUIVALENT_M_PER_M,
+        HILL_MIN_SLOPE_M_PER_KM,
     )
     return tuple((name, float(value)) for name, value in zip(PARAMETER_NAMES, values, strict=True))

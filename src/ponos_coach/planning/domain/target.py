@@ -51,6 +51,13 @@ def recovery_days_for(distance_m: int) -> int:
     return defaults.RECOVERY_DAYS[race_class_for(distance_m)]
 
 
+def equivalent_distance_m(distance_m: int, ascent_m: int) -> int:
+    """The flat distance that asks as much as a race of `distance_m` with `ascent_m` of climb:
+    every metre of climb counts as `ASCENT_EQUIVALENT_M_PER_M` metres of flat running. A flat race
+    (no climb) keeps its own distance."""
+    return distance_m + ascent_m * defaults.ASCENT_EQUIVALENT_M_PER_M
+
+
 def predicted_time_today_s(threshold_pace_s_per_km: int, distance_m: int) -> float:
     """Time predicted today for the distance, by Riegel's formula.
 

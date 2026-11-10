@@ -35,6 +35,7 @@ from ponos_coach.ui.birth_date_edit import from_qdate, to_qdate
 from ponos_coach.ui.form_rows import add_field_row
 from ponos_coach.ui.goal_draft import (
     COMMON_DISTANCES_M,
+    MAX_ASCENT_M,
     MAX_DISTANCE_KM,
     MAX_FORM_CTL,
     MIN_DISTANCE_KM,
@@ -58,6 +59,36 @@ _CTL_STEP = 1.0
 _METRES_PER_KM = 1000
 
 
+def _ascent_problem_text(problem: GoalProblem) -> str:
+    """A problem of the elevation gain field."""
+    translate = QCoreApplication.translate
+    if problem is GoalProblem.ASCENT_NOT_UNDERSTOOD:
+        return translate(
+            "GoalDialog", "Write the elevation gain in whole metres, for example 1200."
+        )
+    if problem is GoalProblem.ASCENT_OUT_OF_RANGE:
+        # {last}: the largest elevation gain, in metres.
+        return translate("GoalDialog", "The elevation gain must be between 0 and {last} m.").format(
+            last=QLocale().toString(MAX_ASCENT_M)
+        )
+    return translate(
+        "GoalDialog",
+        "The elevation gain is too large for this distance. Check the distance and "
+        "the elevation gain.",
+    )
+
+
+def _time_problem_text(problem: GoalProblem) -> str:
+    """A problem of the target time field."""
+    if problem is GoalProblem.TIME_NOT_UNDERSTOOD:
+        return QCoreApplication.translate(
+            "GoalDialog", "Write the time as h:mm:ss, for example 1:45:00."
+        )
+    return QCoreApplication.translate(
+        "GoalDialog", "The target time must be between 1 minute and 7 days."
+    )
+
+
 def problem_text(issue: GoalIssue) -> str:
     """A problem of a field, in plain words with the way out."""
     translate = QCoreApplication.translate
@@ -76,10 +107,14 @@ def problem_text(issue: GoalIssue) -> str:
                 first=QLocale().toString(MIN_DISTANCE_KM, "g", 6),
                 last=QLocale().toString(MAX_DISTANCE_KM, "g", 6),
             )
-        case GoalProblem.TIME_NOT_UNDERSTOOD:
-            return translate("GoalDialog", "Write the time as h:mm:ss, for example 1:45:00.")
-        case GoalProblem.TIME_OUT_OF_RANGE:
-            return translate("GoalDialog", "The target time must be between 1 minute and 7 days.")
+        case (
+            GoalProblem.ASCENT_NOT_UNDERSTOOD
+            | GoalProblem.ASCENT_OUT_OF_RANGE
+            | GoalProblem.ASCENT_TOO_STEEP
+        ):
+            return _ascent_problem_text(issue.problem)
+        case GoalProblem.TIME_NOT_UNDERSTOOD | GoalProblem.TIME_OUT_OF_RANGE:
+            return _time_problem_text(issue.problem)
         case GoalProblem.CTL_OUT_OF_RANGE:
             # {last}: the highest fitness (CTL) that can be asked for.
             return translate("GoalDialog", "The fitness must be between 0 and {last}.").format(
@@ -187,6 +222,19 @@ class GoalDialog(QDialog):
         column.addWidget(error)
         return holder
 
+    def _build_ascent_field(self) -> None:
+        self._ascent = QLineEdit(self)
+        self._ascent.setObjectName("goalAscent")
+        self._ascent.setPlaceholderText(self.tr("0"))
+        self._ascent.setAccessibleName(self.tr("Elevation gain in metres"))
+        self._ascent.setAccessibleDescription(
+            self.tr("Optional. Leave empty for a flat race. For example 1200.")
+        )
+        self._ascent.textChanged.connect(self._update)
+        self._ascent_error = self._error_label(
+            "goalAscentError", self.tr("Problem with the elevation gain")
+        )
+
     def _build_race_fields(self, form: QFormLayout) -> None:
         self._priority = QComboBox(self)
         self._priority.setObjectName("goalPriority")
@@ -220,6 +268,7 @@ class GoalDialog(QDialog):
         column.addWidget(self._distance)
         column.addWidget(self._custom_km)
         column.addWidget(self._distance_error)
+        self._build_ascent_field()
         self._time = QLineEdit(self)
         self._time.setObjectName("goalTargetTime")
         self._time.setPlaceholderText(self.tr("h:mm:ss"))
@@ -231,6 +280,12 @@ class GoalDialog(QDialog):
         add_field_row(form, self.tr("Distance"), self._distance, distance_holder)
         add_field_row(
             form,
+            self.tr("Elevation gain (m)"),
+            self._ascent,
+            self._with_error(self._ascent, self._ascent_error),
+        )
+        add_field_row(
+            form,
             self.tr("Target time (optional)"),
             self._time,
             self._with_error(self._time, self._time_error),
@@ -239,7 +294,8 @@ class GoalDialog(QDialog):
         QWidget.setTabOrder(self._priority, self._sport)
         QWidget.setTabOrder(self._sport, self._distance)
         QWidget.setTabOrder(self._distance, self._custom_km)
-        QWidget.setTabOrder(self._custom_km, self._time)
+        QWidget.setTabOrder(self._custom_km, self._ascent)
+        QWidget.setTabOrder(self._ascent, self._time)
 
     def _build_form_fields(self, form: QFormLayout) -> None:
         self._ctl = QDoubleSpinBox(self)
@@ -271,6 +327,7 @@ class GoalDialog(QDialog):
         else:
             self._distance.setCurrentIndex(self._distance.count() - 1)
             self._custom_km.setValue(draft.distance_m / _METRES_PER_KM)
+        self._ascent.setText(draft.ascent_text)
         self._time.setText(draft.target_time_text)
 
     # --- State ---------------------------------------------------------------------------------
@@ -299,6 +356,11 @@ class GoalDialog(QDialog):
     def custom_distance_spin(self) -> QDoubleSpinBox:
         """The distance in kilometres, for "Other distance" (races only)."""
         return self._custom_km
+
+    @property
+    def ascent_edit(self) -> QLineEdit:
+        """The elevation gain field, in metres (races only)."""
+        return self._ascent
 
     @property
     def target_time_edit(self) -> QLineEdit:
@@ -336,6 +398,7 @@ class GoalDialog(QDialog):
             sport if sport in RACE_SPORTS else RACE_SPORTS[0],
             distance_m,
             self._time.text(),
+            ascent_text=self._ascent.text(),
         )
 
     def issues(self) -> tuple[GoalIssue, ...]:
@@ -364,6 +427,7 @@ class GoalDialog(QDialog):
         if self._kind is GoalFormKind.RACE:
             labels += [
                 (GoalField.DISTANCE, self._distance_error),
+                (GoalField.ASCENT, self._ascent_error),
                 (GoalField.TARGET_TIME, self._time_error),
             ]
         else:
