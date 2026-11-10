@@ -2284,6 +2284,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Giudizio sul tempo obiettivo</translation>
     </message>
     <message>
+        <source>Fitness asked</source>
+        <translation>Forma richiesta</translation>
+    </message>
+    <message>
         <source>Best time possible by the race: {time}</source>
         <translation>Miglior tempo possibile alla gara: {time}</translation>
     </message>
@@ -4868,12 +4872,38 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Dai loro più tempo, oppure rendi una delle due una gara B.</translation>
     </message>
     <message>
+        <source>Allow about {needed} h a week in the training settings (now {now} h), or ask for less fitness or move the goal later.</source>
+        <translation>Concedi circa {needed} h a settimana nelle impostazioni di allenamento (ora {now} h), oppure chiedi meno forma o sposta l&apos;obiettivo più avanti.</translation>
+    </message>
+    <message>
         <source>The fitness asked for {goal} is out of reach: the plan reaches {projected} of {target} CTL.</source>
         <translation>La condizione richiesta per {goal} è fuori portata: il piano arriva a {projected} CTL su {target}.</translation>
     </message>
     <message>
         <source>Move the goal later or ask for less fitness: the plan never ramps faster than the safe limit.</source>
         <translation>Sposta l&apos;obiettivo più avanti o chiedi meno condizione: il piano non sale mai più in fretta del limite di sicurezza.</translation>
+    </message>
+    <message>
+        <source>! Out of reach</source>
+        <translation>! Non raggiungibile</translation>
+    </message>
+    <message>
+        <source>Out of reach: {projected} of {target} CTL</source>
+        <translation>Non raggiungibile: {projected} di {target} CTL</translation>
+    </message>
+    <message numerus="yes">
+        <source>Goals out of reach with the plan&apos;s hours: %n</source>
+        <translation>
+            <numerusform>Obiettivo non raggiungibile con le ore del piano: %n</numerusform>
+            <numerusform>Obiettivi non raggiungibili con le ore del piano: %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Goals out of reach: %n</source>
+        <translation>
+            <numerusform>Obiettivo non raggiungibile: %n</numerusform>
+            <numerusform>Obiettivi non raggiungibili: %n</numerusform>
+        </translation>
     </message>
     <message>
         <source>The target time of {goal} cannot be reached by the race.</source>
@@ -4933,6 +4963,21 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Threshold test planned on {date}</source>
         <translation>Test di soglia previsto il {date}</translation>
+    </message>
+</context>
+<context>
+    <name>PlanAlertStrip</name>
+    <message>
+        <source>Training settings...</source>
+        <translation>Impostazioni di allenamento...</translation>
+    </message>
+    <message>
+        <source>Show the goals</source>
+        <translation>Mostra gli obiettivi</translation>
+    </message>
+    <message>
+        <source>Warning</source>
+        <translation>Avviso</translation>
     </message>
 </context>
 <context>

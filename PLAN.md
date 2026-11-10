@@ -835,6 +835,16 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       `b325abb`), anche nei test (`tests/conftest.py`). Il log degli errori non
       gestiti ora dice anche il punto del codice (`e0e93a6`), per trovare la causa
       dei 145 `RuntimeError` del 2026-11-10 alle 10:12 se si ripresentano.
+- [x] Obiettivi non raggiungibili ben visibili (richiesta dell'utente del
+      2026-11-10, dopo un obiettivo di forma CTL 55 con 6,5 h a settimana):
+      causa ore o rampa nel dominio con le ore che basterebbero, rimedio giusto
+      nel testo, striscia d'avviso sopra il Calendario, "! Out of reach" nel
+      giorno, colonna "Fitness asked" negli obiettivi; `METHOD_VERSION` 9
+      (merge del 2026-11-10). Test: `tests/planning/test_ctl_limit.py`,
+      `tests/ui/test_out_of_reach.py`.
+- [x] Elenco attività con tempo totale, FC media e FC massima, senza "Format";
+      FC dai campioni usati per il carico, salvata nella cache dei carichi
+      (schema 17, `LOAD_MODEL_VERSION` 4: i carichi si ricalcolano una volta).
 - [x] Doppio clic su un'attività nella mappa (partenza o traccia selezionata)
       apre la sua finestra; altrove ingrandisce (richiesta dell'utente del
       2026-11-10). Test: `tests/ui/test_map_page_web.py`.

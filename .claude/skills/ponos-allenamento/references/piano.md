@@ -128,7 +128,14 @@ picco):
   di allenamento e il suo carico è fuori dal controllo della rampa. Il motore
   riduce il carico della settimana finché il vincolo regge.
 - `CtlTargetNotReached` se a fine rampa il CTL proiettato è sotto la meta di
-  più di 5 punti.
+  più di 5 punti. Il campo `limit` dice la causa (`METHOD_VERSION` 9):
+  `LimitedByHours(minutes_needed, current_minutes)` se un tetto settimanale più alto
+  (griglia di 30 minuti, `HOURS_SEARCH_STEP_MIN`, fino a `HOURS_SEARCH_MAX_MIN` = 1200)
+  raggiunge il CTL, altrimenti `LimitedByRamp` (rampa, tempo o numero di sedute).
+  `build_plan` = `_build_plan` (il motore senza analisi) + `_with_limits`: prima il tetto
+  massimo, poi bisezione sui piani rifatti; costo +0 ms senza avviso, circa +11 ms con
+  limite di rampa, circa +80 ms con limite di ore (un anno, due obiettivi). Test:
+  `tests/planning/test_ctl_limit.py`.
 
 ## 6. Mesocicli e settimana
 

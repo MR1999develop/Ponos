@@ -692,6 +692,13 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
   session type for the sport. Otherwise it always exists and what is not right
   goes in warnings (for example a half marathon without a long session, two A
   races three weeks apart, a CTL that cannot be reached at the maximum ramp).
+- When the fitness asked for a goal is out of reach, the plan says whether the
+  limit is the weekly hours (and how many would be enough, in 30-minute steps
+  up to 20 hours) or the ramp and the time left. Goals out of reach show in a
+  warning strip above the Calendar (with a button to the training settings when
+  hours are the limit, otherwise to the goals), with "! Out of reach" in the
+  day of the goal and its reason in the tooltip, and in the "Fitness asked"
+  column of the goals table (user's request of 2026-11-10).
 - The threshold test, when one is due, is a session of the plan (ADR 015):
   - due with no test, with the retest window open or gone; not with a recent
     test, with an open injury or illness (or one closed within 28 days), or
