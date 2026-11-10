@@ -163,6 +163,12 @@ def test_the_fingerprint_changes_with_an_entered_threshold_that_differs_from_the
     )
 
 
+def test_a_profile_that_never_set_them_keeps_the_fingerprint_it_had() -> None:
+    assert load_fingerprint(with_thresholds(170)) == load_fingerprint(
+        Physiology(LIMITS, ThresholdHeartRate(170), Sex.MALE)
+    )
+
+
 def test_entering_the_value_the_default_would_give_keeps_the_loads_valid() -> None:
     base = load_fingerprint(with_thresholds(170))
 

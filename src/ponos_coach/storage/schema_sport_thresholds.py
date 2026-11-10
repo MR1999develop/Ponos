@@ -10,7 +10,7 @@ running threshold heart rates (one entry per date, one history row, one fingerpr
 NULL means "not set": the default of `threshold_for_sport` applies. When set they obey the same
 bounds as the running threshold: at least 40 and `min_bpm < value <= max_bpm`. Existing rows get
 NULL, so every existing load is computed as before; the load cache is not cleared because its
-fingerprint now includes the thresholds in effect and changes on its own.
+fingerprint includes a threshold wherever it differs from the default, so it changes on its own.
 """
 
 from __future__ import annotations

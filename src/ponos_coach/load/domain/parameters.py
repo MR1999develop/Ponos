@@ -9,7 +9,7 @@ import json
 import re
 from bisect import bisect_right
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 from ponos_coach.activities.domain import Sport
@@ -47,20 +47,23 @@ def load_fingerprint(physiology: Physiology) -> LoadFingerprint:
 
     It depends on the HR limits, the thresholds in effect for each sport group, the sex, the
     zone percentages and the version of the load model. Deterministic: the same parameters give
-    the same fingerprint, in every process.
+    the same fingerprint, in every process. A cycling or other-activities threshold enters it
+    only where it differs from the default: a profile that never set them keeps the fingerprint
+    (and the saved loads) it had, and entering the value the default would give changes nothing.
     """
-    document = {
+    document: dict[str, object] = {
         "model": LOAD_MODEL_VERSION,
         "min_bpm": physiology.limits.min_bpm,
         "max_bpm": physiology.limits.max_bpm,
         "threshold_bpm": physiology.threshold.bpm,
-        # The thresholds in effect for the other groups (entered or default), so that entering
-        # the value the default would give leaves the loads valid.
-        "bike_threshold_bpm": threshold_for_sport(physiology, Sport.CYCLING),
-        "other_threshold_bpm": threshold_for_sport(physiology, Sport.OTHER),
         "sex": physiology.sex.value,
         "zones": list(ZONE_STARTS_PERCENT),
     }
+    defaults = replace(physiology, bike_threshold=None, other_threshold=None)
+    for key, sport in (("bike_threshold_bpm", Sport.CYCLING), ("other_threshold_bpm", Sport.OTHER)):
+        in_effect = threshold_for_sport(physiology, sport)
+        if in_effect != threshold_for_sport(defaults, sport):
+            document[key] = in_effect
     text = json.dumps(document, sort_keys=True, separators=(",", ":"))
     return LoadFingerprint(hashlib.sha256(text.encode("utf-8")).hexdigest())
 
