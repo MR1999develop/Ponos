@@ -23,6 +23,7 @@
   var profileLayer = null;
   var cursor = null;
   var startsByIdx = new Map(); // activity index -> [lat, lon, sport]
+  var startsGen = 0; // the number of the list the activity indexes belong to
   var tracksByIdx = new Map(); // activity index -> [polyline, ...]
   var selected = null;
   var profile = null; // { idx, lat, lon, segment, zone, mode }
@@ -106,6 +107,7 @@
       fadeAnimation: !reduceMotion,
       markerZoomAnimation: !reduceMotion,
       keyboard: true,
+      doubleClickZoom: false,  // done by onMapDoubleClick, which first looks for an activity
       center: [cfg.view.lat, cfg.view.lon],
       zoom: cfg.view.zoom,
     });
@@ -123,6 +125,7 @@
     map.on("zoomend", resizeStarts);
     map.on("mousemove", onMouseMove);
     map.on("mouseout", leaveProfile);
+    map.on("dblclick", onMapDoubleClick);
     scheduleView();
   }
 
@@ -146,6 +149,7 @@
     var markers = [];
     var radius = startRadius();
     startsByIdx = new Map();
+    startsGen = payload.gen;
     for (var k = 0; k + 3 < data.length; k += 4) {
       var idx = data[k + 2];
       var sport = data[k + 3];
@@ -157,6 +161,7 @@
       marker.ponosIdx = idx;
       marker.ponosGen = payload.gen;
       marker.on("click", onItemClick);
+      marker.on("dblclick", onItemDoubleClick);
       markers.push(marker);
     }
     startMarkers = markers;
@@ -166,7 +171,29 @@
   }
 
   function onItemClick(event) {
+    // Not on to the map: a click there folds the fanned-out starts, and the second click of a
+    // double click would then miss the start it was meant for.
+    L.DomEvent.stopPropagation(event);
     if (bridge !== null) { bridge.activityClicked(event.target.ponosIdx, event.target.ponosGen); }
+  }
+
+  // A double click on a start opens the activity's window (user's request of 2026-11-10); the
+  // map must not also zoom.
+  function onItemDoubleClick(event) {
+    L.DomEvent.stopPropagation(event);
+    if (bridge !== null) { bridge.activityOpened(event.target.ponosIdx, event.target.ponosGen); }
+  }
+
+  // A double click on the selected activity's track opens its window; anywhere else it zooms in
+  // around the pointer (out with Shift), as Leaflet's own double click zoom.
+  function onMapDoubleClick(event) {
+    if (bridge !== null && profile !== null && profile.idx === selected &&
+        nearestProfilePoint(event.containerPoint) >= 0) {
+      bridge.activityOpened(selected, startsGen);
+      return;
+    }
+    var step = event.originalEvent && event.originalEvent.shiftKey ? -1 : 1;
+    map.setZoomAround(event.containerPoint, map.getZoom() + step);
   }
 
   // --- Tracks -------------------------------------------------------------------------

@@ -264,6 +264,7 @@ class MapPage(QWidget):
         bridge = self._map.bridge
         bridge.view_changed.connect(controller.set_view)
         bridge.activity_clicked.connect(controller.select_index)
+        bridge.activity_opened.connect(controller.open_index)
         bridge.point_hovered.connect(self._on_map_point)
         bridge.point_left.connect(self._on_map_point_left)
         self._chart.hovered.connect(self._on_chart_point)

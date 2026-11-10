@@ -1027,7 +1027,8 @@ Decision: [ADR 010](adr/010-mappa.md).
   Calendar, the Activities list and the Map, from the whole window. The map
   has a minimum height and takes 3/5 of its pane, the elevation profile under
   it 2/5 (the divider can be dragged). Selecting an activity in the list selects it on the map
-  and the other way round.
+  and the other way round. A double click on an activity in the map (its start,
+  or the selected track) opens its window; elsewhere it zooms in.
 - Map menu: "Show activities and map" (Ctrl+M), "Show all activities" (Ctrl+0),
   Zoom in and out, "Filter activities", "Clear filters", "Clear map cache..."
   (Ctrl+Shift+Backspace). There is no "Map settings..." entry: the Map page of

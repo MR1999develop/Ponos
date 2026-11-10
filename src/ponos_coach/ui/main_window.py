@@ -489,6 +489,7 @@ class MainWindow(QMainWindow):
         )
         self._activities.detail_requested.connect(self._dialogs.show_activity_detail)
         self._activities.detail_requested.connect(self._map_ui.focus_activity)
+        self._map_ui.controller.open_requested.connect(self._dialogs.show_activity_detail)
         self._dialogs.threshold_test_requested.connect(self._on_detail_threshold_test)
         self._nutrition = NutritionUi(
             self,

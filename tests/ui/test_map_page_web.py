@@ -332,6 +332,66 @@ def test_starts_at_the_same_place_fan_out_and_a_click_selects_one(
     qtbot.waitUntil(lambda: page_state(qtbot, view)["selected"] == 3, timeout=WAIT_MS)
 
 
+def test_a_double_click_on_a_start_opens_the_window_of_that_activity(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    # The user's request of 2026-11-10: a real double click on an activity of the map (not a call
+    # of the bridge) opens its window, and the map does not zoom for it.
+    window, view = window_with_page(qtbot, tmp_path, settings)
+    show_view(qtbot, window, NEAR)
+    qtbot.waitUntil(lambda: page_state(qtbot, view)["starts"] == 8, timeout=WAIT_MS)
+    evaluate(qtbot, view, "window.ponosMap.pixelOf({start: 3, zoom: 19})")
+    qtbot.waitUntil(lambda: cluster_icons(qtbot, view) == 1, timeout=WAIT_MS)
+    execute(qtbot, view, "document.querySelector('.ponos-cluster').click();")
+    qtbot.waitUntil(lambda: page_state(qtbot, view)["fannedOut"] == 8, timeout=WAIT_MS)
+    spot = evaluate(qtbot, view, "window.ponosMap.pixelOf({start: 3})")
+    assert isinstance(spot, dict)
+    zoom = page_state(qtbot, view)["zoom"]
+    opened: list[object] = []
+    window.map_ui.controller.open_requested.connect(opened.append)
+
+    execute(
+        qtbot,
+        view,
+        f"var target = document.elementFromPoint({spot['x']}, {spot['y']});"
+        f"var init = {{clientX: {spot['x']}, clientY: {spot['y']}, bubbles: true}};"
+        "['mousedown', 'mouseup', 'click', 'mousedown', 'mouseup', 'click', 'dblclick']"
+        ".forEach(function (kind) { target.dispatchEvent(new MouseEvent(kind, init)); });",
+    )
+
+    qtbot.waitUntil(lambda: len(opened) == 1, timeout=WAIT_MS)
+    search = window.map_ui.controller.search
+    assert search is not None
+    assert opened == [search.activities[3].identity]
+    assert window.map_ui.controller.selected == search.activities[3].identity
+    dialogs = window.profile_dialogs.detail_dialogs
+    assert len(dialogs) == 1
+    assert page_state(qtbot, view)["zoom"] == zoom  # the double click did not zoom the map
+
+
+def test_a_double_click_on_an_empty_spot_still_zooms_in(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window, view = window_with_page(qtbot, tmp_path, settings)
+    show_view(qtbot, window, NEAR)
+    wait_until_the_page_reported_its_view(qtbot, view)
+    zoom = page_state(qtbot, view)["zoom"]
+    assert isinstance(zoom, int)
+    opened: list[object] = []
+    window.map_ui.controller.open_requested.connect(opened.append)
+
+    execute(
+        qtbot,
+        view,
+        "var box = document.getElementById('map').getBoundingClientRect();"
+        "var init = {clientX: box.left + 5, clientY: box.top + 5, bubbles: true};"
+        "document.getElementById('map').dispatchEvent(new MouseEvent('dblclick', init));",
+    )
+
+    qtbot.waitUntil(lambda: page_state(qtbot, view)["zoom"] == zoom + 1, timeout=WAIT_MS)
+    assert opened == []
+
+
 def cluster_icons(qtbot: QtBot, view: MapWebView) -> int:
     count = evaluate(qtbot, view, "document.querySelectorAll('.ponos-cluster').length")
     assert isinstance(count, int)
@@ -431,6 +491,7 @@ def test_the_page_can_reach_one_object_with_five_slots_and_nothing_else(
     assert isinstance(methods, list)
     slots = {
         "activityClicked",
+        "activityOpened",
         "pageReady",
         "pointHovered",
         "pointLeft",
@@ -452,6 +513,8 @@ def test_the_page_can_reach_one_object_with_five_slots_and_nothing_else(
         "b.viewChanged(0, 10, 1, 5, 5)",
         "b.activityClicked(-1, GEN)",
         "b.activityClicked(1e12, GEN)",
+        "b.activityOpened(-1, GEN)",
+        "b.activityOpened(1e12, GEN)",
         "b.pointHovered(5, 0)",
         "b.pointHovered(-1, 0)",
     ],
@@ -468,6 +531,7 @@ def test_malformed_messages_from_the_page_are_rejected_without_effect(
     seen: list[object] = []
     view.bridge.view_changed.connect(seen.append)
     view.bridge.activity_clicked.connect(seen.append)
+    view.bridge.activity_opened.connect(seen.append)
     view.bridge.point_hovered.connect(seen.append)
 
     script = script.replace("GEN", str(view.bridge.activity_generation))

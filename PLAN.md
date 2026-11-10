@@ -803,6 +803,9 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       Test: `tests/ui/test_new_profile_thresholds.py`,
       `tests/ui/test_new_profile_form_thresholds.py`,
       `tests/profiles/test_create_profile_thresholds.py`.
+- [x] Doppio clic su un'attività nella mappa (partenza o traccia selezionata)
+      apre la sua finestra; altrove ingrandisce (richiesta dell'utente del
+      2026-11-10). Test: `tests/ui/test_map_page_web.py`.
 - [x] Pasti senza esempi di alimenti, solo calorie e macronutrienti (richiesta
       dell'utente del 2026-11-10): tolti dalla finestra del giorno gli esempi e
       la nota sui valori non verificati.

@@ -34,6 +34,7 @@ class MapController(QObject):
     selection_changed = Signal(object, bool)  # ActivityIdentity | None, bring it into view
     profile_opened = Signal()  # a profile was opened: the map should frame its activities
     failed = Signal(object)  # ErrorMessage
+    open_requested = Signal(object)  # ActivityIdentity: a double click on it in the map
 
     def __init__(
         self,
@@ -159,6 +160,16 @@ class MapController(QObject):
         index = parse_activity_index(position, 0 if search is None else len(search.activities))
         if search is not None and index is not None:
             self.select_identity(search.activities[index].identity)
+
+    def open_index(self, position: object) -> None:
+        """Select the activity at a position of the last search result and ask for its window
+        (a double click on it in the map). A position outside the list changes nothing."""
+        search = self._search
+        index = parse_activity_index(position, 0 if search is None else len(search.activities))
+        if search is not None and index is not None:
+            identity = search.activities[index].identity
+            self.select_identity(identity)
+            self.open_requested.emit(identity)
 
     # --- Reactions of the workspace --------------------------------------------------------
 

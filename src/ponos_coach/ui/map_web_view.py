@@ -38,6 +38,7 @@ class MapBridge(QObject):
     ready = Signal()
     view_changed = Signal(object)  # MapView
     activity_clicked = Signal(int)
+    activity_opened = Signal(int)
     point_hovered = Signal(int)
     point_left = Signal()
 
@@ -71,14 +72,28 @@ class MapBridge(QObject):
         self, position: int, generation: int
     ) -> None:
         """An activity (a start or a track) was clicked; `generation` is the list it came from."""
+        index = self._checked_activity(position, generation)
+        if index is not None:
+            self.activity_clicked.emit(index)
+
+    @Slot(int, int)
+    def activityOpened(  # noqa: N802 - called from JavaScript
+        self, position: int, generation: int
+    ) -> None:
+        """An activity (a start or the selected track) was double clicked: open its window."""
+        index = self._checked_activity(position, generation)
+        if index is not None:
+            self.activity_opened.emit(index)
+
+    def _checked_activity(self, position: int, generation: int) -> int | None:
+        """The position if it names an activity of the current list; counted and None if not."""
         if generation != self.activity_generation:
             self.stale += 1
-            return
+            return None
         index = parse_activity_index(position, self.activity_count)
         if index is None:
             self.rejected += 1
-            return
-        self.activity_clicked.emit(index)
+        return index
 
     @Slot(int, int)
     def pointHovered(  # noqa: N802 - called from JavaScript
