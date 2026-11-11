@@ -137,10 +137,11 @@ def test_t_dati_04_a_kill_before_the_commit_of_a_restore_leaves_the_activities_d
         world.close()
 
 
-def test_t_dati_04_a_kill_right_after_the_first_commit_of_a_restore_leaves_one_back_and_one_deleted(
+def test_t_dati_04_a_kill_right_after_the_commit_of_a_restore_leaves_every_activity_back(
     tmp_path: Path, profile_at_rest: tuple[Path, list[ActivityIdentity]]
 ) -> None:
-    """Each activity of a restore has its own transaction: the first is back, the second is not."""
+    """A restore is one transaction (all or none since the review of 2026-11-11): once it has
+    committed, every activity is back and a second restore has nothing to do."""
     folder, ids = profile_at_rest
     first, second = (ids[i] for i in TARGETS)
     world = reopen(tmp_path, folder)
@@ -152,11 +153,10 @@ def test_t_dati_04_a_kill_right_after_the_first_commit_of_a_restore_leaves_one_b
 
     world = reopen(tmp_path, folder)
     try:
-        assert first in identities(world.profile)
-        assert [t.identity for t in tombstones(world.profile)] == [second]
+        assert {first, second} <= set(identities(world.profile))
+        assert tombstones(world.profile) == []
         assert_one_table_each(world.profile, RUNS)
-        assert restore_use_case(world.profile)([first]).results == ()
-        assert restore_use_case(world.profile)([second]).restored == (second,)
+        assert restore_use_case(world.profile)([first, second]).results == ()
         again = world.overview()
         assert again.activities == full.activities and same_pmc(again.pmc, full.pmc)
         assert_one_table_each(world.profile, RUNS)
