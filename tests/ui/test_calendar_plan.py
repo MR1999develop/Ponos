@@ -17,11 +17,13 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QPushButton, QWidget
 from pytestqt.qtbot import QtBot
 
+from ponos_coach.activities.domain import Sport
 from ponos_coach.assessment.domain import ThresholdProtocol
 from ponos_coach.goals.domain import GoalId, SessionType
 from ponos_coach.goals.ports import Goal
 from ponos_coach.planning.domain import DayAdherence, Phase, Plan, PlanDay
 from ponos_coach.planning.ports import FrozenDay
+from ponos_coach.ui.activity_text import sport_text
 from ponos_coach.ui.calendar_model import (
     CalendarDay,
     PlanLayer,
@@ -31,8 +33,13 @@ from ponos_coach.ui.calendar_model import (
     last_month_shown,
     plan_layer_of,
 )
-from ponos_coach.ui.calendar_page import STRIPE_ROLE, CalendarPage, phase_color
-from ponos_coach.ui.calendar_texts import cell_description, cell_text, day_detail_text
+from ponos_coach.ui.calendar_page import STRIPE_ROLE, CalendarPage, stripe_color
+from ponos_coach.ui.calendar_texts import (
+    cell_description,
+    cell_text,
+    day_detail_text,
+    sport_short_text,
+)
 from ponos_coach.ui.plan_texts import phase_text
 from ponos_coach.ui.tokens import Theme, tokens_for
 from tests.ui.helpers import profile_activity
@@ -129,8 +136,10 @@ def test_a_future_cell_names_the_session_the_phase_and_the_race_with_its_priorit
     race_lines = cell_text(race_cell).split("\n")
 
     assert lines[0] == str(target.day.day)
-    assert re.fullmatch(r"Plan: .+, \d+ min", lines[1])
-    assert lines[2] == phase_text(target.phase)
+    assert target.session is not None
+    assert lines[1] == sport_short_text(target.session.sport)
+    assert re.fullmatch(r"Plan: .+, \d+ min", lines[2])
+    assert lines[3] == phase_text(target.phase)
     assert "Race A" in race_lines
     assert phase_text(Phase.RACE) in race_lines
 
@@ -294,22 +303,27 @@ def test_the_selection_survives_a_new_plan(page: CalendarPage, plan: Plan) -> No
     assert page.selected_day() == PLAN_TODAY + timedelta(days=3)
 
 
-def test_the_stripe_of_a_cell_is_the_colour_of_its_phase_and_follows_the_theme(
+def _session_day(plan: Plan) -> PlanDay:
+    return next(d for d in plan.days if d.session is not None and d.day > PLAN_TODAY)
+
+
+def test_the_stripe_of_a_cell_is_the_colour_of_its_sport_and_follows_the_theme(
     page: CalendarPage, plan: Plan
 ) -> None:
-    day = plan.days[2]
+    day = _session_day(plan)
+    assert day.session is not None
     index = page.model.index_of(day.day)
 
     light = page.model.data(index, STRIPE_ROLE)
     page.apply_theme(Theme.DARK)
     dark = page.model.data(index, STRIPE_ROLE)
 
-    assert light == phase_color(day.phase, Theme.LIGHT)
-    assert dark == phase_color(day.phase, Theme.DARK)
+    assert light == stripe_color(day.session.sport, Theme.LIGHT)
+    assert dark == stripe_color(day.session.sport, Theme.DARK)
     assert page.model.data(page.model.index_of(date(2026, 2, 3)), STRIPE_ROLE) is None
 
 
-def test_a_rest_day_has_no_stripe_and_no_phase_in_the_legend(qtbot: QtBot) -> None:
+def test_a_rest_day_has_no_stripe_and_no_sport_in_the_legend(qtbot: QtBot) -> None:
     rest = PlanDay(PLAN_TODAY + timedelta(days=2), Phase.BASE, None, None, 0.0)
     widget = CalendarPage(PLAN_TODAY)
     qtbot.addWidget(widget)
@@ -317,38 +331,44 @@ def test_a_rest_day_has_no_stripe_and_no_phase_in_the_legend(qtbot: QtBot) -> No
     widget.set_plan_layer(PlanLayer(planned={rest.day: rest}))
 
     assert widget.model.data(widget.model.index_of(rest.day), STRIPE_ROLE) is None
-    assert widget.phase_legend_texts == ()
+    assert widget.sport_legend_texts == ()
 
 
 @pytest.mark.parametrize("theme", list(Theme))
-def test_phase_colours_are_not_warm_and_stand_out_from_the_background(theme: Theme) -> None:
+def test_sport_colours_are_distinct_and_stand_out_from_the_background(theme: Theme) -> None:
     background = tokens_for(theme).background
-    colours = {phase: phase_color(phase, theme) for phase in Phase}
+    colours = {sport: stripe_color(sport, theme) for sport in Sport}
 
-    assert len(set(colours.values())) >= 6  # taper and mini taper share one; names tell them apart
+    assert len(set(colours.values())) == len(Sport)
     for colour in colours.values():
         assert _contrast(colour, background) >= 3.0
 
 
-def test_the_phase_legend_names_only_the_phases_of_the_month_shown(
+def test_the_sport_legend_names_only_the_sports_of_the_month_shown(
     page: CalendarPage, plan: Plan
 ) -> None:
     month = build_month(page.current_month, PLAN_TODAY, [], [], plan_layer_of(plan, [], [], []))
-    expected = tuple(
-        phase_text(phase)
-        for phase in Phase
-        if phase in {p.phase for c in month.days if (p := c.grid_plan) is not None}
-    )
+    present = {s for c in month.days if (s := c.stripe_sport) is not None}
+    expected = tuple(sport_text(sport) for sport in Sport if sport in present)
 
-    assert page.phase_legend_texts == expected
+    assert page.sport_legend_texts == expected
     assert expected
 
 
-def test_without_a_plan_there_is_no_phase_legend(qtbot: QtBot) -> None:
+def test_a_planned_day_writes_its_sport_never_only_its_colour(
+    page: CalendarPage, plan: Plan
+) -> None:
+    day = _session_day(plan)
+    assert day.session is not None
+    lines = str(page.model.data(page.model.index_of(day.day))).splitlines()
+    assert sport_short_text(day.session.sport) in lines
+
+
+def test_without_a_plan_there_is_no_sport_legend(qtbot: QtBot) -> None:
     widget = CalendarPage(PLAN_TODAY)
     qtbot.addWidget(widget)
 
-    assert widget.phase_legend_texts == ()
+    assert widget.sport_legend_texts == ()
 
 
 def test_the_calendar_goes_a_year_ahead_and_not_further(page: CalendarPage) -> None:
@@ -425,10 +445,11 @@ def _contrast(first: str, second: str) -> float:
     return (light + 0.05) / (dark + 0.05)
 
 
-def test_the_stripe_of_the_phase_is_really_painted_on_the_top_edge_of_the_cell(
+def test_the_stripe_of_the_sport_is_really_painted_on_the_top_edge_of_the_cell(
     qtbot: QtBot, page: CalendarPage, plan: Plan
 ) -> None:
-    day = plan.days[2]
+    day = _session_day(plan)
+    assert day.session is not None
     page.resize(1000, 700)
     page.show()
     qtbot.waitExposed(page)
@@ -439,5 +460,5 @@ def test_the_stripe_of_the_phase_is_really_painted_on_the_top_edge_of_the_cell(
 
     top = image.pixelColor(rect.x() + rect.width() // 2, rect.y() + 1)
     below = image.pixelColor(rect.x() + rect.width() // 2, rect.y() + 12)
-    assert top.name().upper() == phase_color(day.phase, Theme.LIGHT).upper()
+    assert top.name().upper() == stripe_color(day.session.sport, Theme.LIGHT).upper()
     assert below.name().upper() != top.name().upper()

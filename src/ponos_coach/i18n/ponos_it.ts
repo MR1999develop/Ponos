@@ -751,8 +751,8 @@
         <translation>Il calendario mostra fino a un anno in avanti.</translation>
     </message>
     <message>
-        <source>Training phase:</source>
-        <translation>Fase di allenamento:</translation>
+        <source>Sport:</source>
+        <translation>Sport:</translation>
     </message>
 </context>
 <context>

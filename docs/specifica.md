@@ -1072,9 +1072,13 @@ no diet or allergy restriction for now.
   load. The days of a nutrition goal period have a colour; the legend, compact
   and wrapped onto several lines, says which. A day with no colour is outside
   any period and is treated as maintenance.
+- A stripe on top of a day has the colour of its sport, the same as in the
+  load charts: the first sport done, else that of the planned session or race.
+  The training phase is only written, never coloured (user's request of
+  2026-11-11). A planned day also writes its sport, and the legend names the
+  sports of the month shown.
 - A planned rest day is a blank cell, as if there were no plan: no line, no
-  phase, no phase stripe, and its phase is not in the legend unless another day
-  of the month has it (user's request of 2026-11-11). Its tooltip and its page
+  phase and no stripe (user's request of 2026-11-11). Its tooltip and its page
   still say it is a rest day.
 - "Previous month" (Ctrl+Left), "Next month" (Ctrl+Right), "Today" (Ctrl+T) and
   "Open day" (Ctrl+Return) are in the menu of a day and act while the calendar

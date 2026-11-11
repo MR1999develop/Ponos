@@ -7,8 +7,9 @@ first), navigation is by buttons and keys (Page Up and Page Down change month; a
 days; Enter or double click opens a day up to today). Every day of the month can be selected, also
 the days ahead, up to a year from today: the tooltip of a cell shows the day in full, and its
 window the planned session. Under the grid only the legends. The nutrition goal period of a day is
-a faint colour and the training phase a stripe on top of the cell; both always have their name in
-the cell and in the legend (never the colour alone).
+a faint colour and the sport of the day (done, else planned) a stripe on top of the cell; the
+phase is only written. Colours always have their name in the cell and in the legend (never the
+colour alone).
 """
 
 from __future__ import annotations
@@ -40,9 +41,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ponos_coach.activities.domain import Sport
 from ponos_coach.load.use_cases import ProfileActivity
 from ponos_coach.nutrition.domain import GoalPeriod
-from ponos_coach.planning.domain import Phase
+from ponos_coach.ui.activity_text import sport_text
 from ponos_coach.ui.calendar_model import (
     DAYS_PER_WEEK,
     CalendarDay,
@@ -65,38 +67,25 @@ from ponos_coach.ui.calendar_texts import (
 )
 from ponos_coach.ui.flow_layout import FlowLayout
 from ponos_coach.ui.injury_presentation import ProblemSpan
+from ponos_coach.ui.load_figures import sport_color
 from ponos_coach.ui.plan_alert_strip import PlanAlertStrip
 from ponos_coach.ui.plan_presentation import PlanAlert
-from ponos_coach.ui.plan_texts import phase_text
 from ponos_coach.ui.tokens import SPACE_2, SPACE_3, SPACE_4, Theme, goal_tints_for, tokens_for
 
 _ALIGN_TOP_LEFT = int(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 _LEGEND_SWATCH = 16
 _MIN_CELL_HEIGHT = 64
 _STRIPE_HEIGHT = 4
-STRIPE_ROLE = Qt.ItemDataRole.UserRole  # the colour of the phase stripe of a cell, or None
-
-# The colour slot of each phase in the theme's categories (never red or orange). Taper and mini
-# taper share a slot: their names tell them apart.
-_PHASE_SLOT = {
-    Phase.MAINTENANCE: 6,
-    Phase.BASE: 0,
-    Phase.BUILD: 2,
-    Phase.PEAK: 3,
-    Phase.RECOVERY: 4,
-    Phase.MINI_TAPER: 1,
-    Phase.TAPER: 1,
-    Phase.RACE: 5,
-}
+STRIPE_ROLE = Qt.ItemDataRole.UserRole  # the colour of the sport stripe of a cell, or None
 
 
-def phase_color(phase: Phase, theme: Theme) -> str:
-    """The colour of a phase's stripe and legend swatch in a theme."""
-    return tokens_for(theme).categories[_PHASE_SLOT[phase]]
+def stripe_color(sport: Sport, theme: Theme) -> str:
+    """The colour of a sport's stripe and legend swatch in a theme (that of the load charts)."""
+    return sport_color(sport, tokens_for(theme))
 
 
 class MonthModel(QAbstractTableModel):
-    """The cells of a month: texts, descriptions, goal backgrounds and phase stripes.
+    """The cells of a month: texts, descriptions, goal backgrounds and sport stripes.
 
     Only the days of the month are enabled."""
 
@@ -107,7 +96,7 @@ class MonthModel(QAbstractTableModel):
         self._theme = Theme.LIGHT
 
     def set_month(self, month: MonthView, theme: Theme) -> None:
-        """Replace the month shown; `theme` chooses the goal tints and the phase stripes."""
+        """Replace the month shown; `theme` chooses the goal tints and the sport stripes."""
         self.beginResetModel()
         self._month = month
         self._theme = theme
@@ -181,8 +170,8 @@ class MonthModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.AccessibleDescriptionRole:
             return cell_description(cell)
         if role == STRIPE_ROLE:
-            plan = cell.grid_plan
-            return None if plan is None else phase_color(plan.phase, self._theme)
+            sport = cell.stripe_sport
+            return None if sport is None else stripe_color(sport, self._theme)
         return self._style(cell, role)
 
     def _style(self, cell: CalendarDay, role: int) -> object:
@@ -199,7 +188,7 @@ class MonthModel(QAbstractTableModel):
 
 
 class StripeDelegate(QStyledItemDelegate):
-    """Draws the cell as usual and, over it, a thin stripe in the colour of the day's phase."""
+    """Draws the cell as usual and, over it, a thin stripe in the colour of the day's sport."""
 
     def paint(
         self,
@@ -326,15 +315,15 @@ class CalendarPage(QWidget):
         self._table.selectionModel().currentChanged.connect(self._on_current_changed)
 
     def _build_legends(self) -> QWidget:
-        """Goals and phases on one row when the pane is wide enough, wrapping only when not (the
+        """Goals and sports on one row when the pane is wide enough, wrapping only when not (the
         user's request of 2026-11-09: the legend under the calendar takes less room)."""
         self._legends = QWidget(self)
         self._legends.setObjectName("calendarLegends")
         self._legend = FlowLayout(self._legends, spacing=SPACE_4)
         self._build_goal_legend()
-        self._goal_legend_items = self._legend.count()  # the phases follow, month by month
-        self._phase_legend_row = self._legends  # where the phase names are found
-        self._phase_legend = self._legend
+        self._goal_legend_items = self._legend.count()  # the sports follow, month by month
+        self._sport_legend_row = self._legends  # where the sport names are found
+        self._sport_legend = self._legend
         return self._legends
 
     def _legend_pair(self, swatch: QFrame, name: QLabel, parent: QWidget) -> QWidget:
@@ -402,12 +391,12 @@ class CalendarPage(QWidget):
         return self._next
 
     @property
-    def phase_legend_texts(self) -> tuple[str, ...]:
-        """The names in the phase legend (the phases of the month shown)."""
+    def sport_legend_texts(self) -> tuple[str, ...]:
+        """The names in the sport legend (the sports of the month shown)."""
         return tuple(
             label.text()
-            for label in self._phase_legend_row.findChildren(QLabel)
-            if label.objectName() == "phaseLegendName"
+            for label in self._sport_legend_row.findChildren(QLabel)
+            if label.objectName() == "sportLegendName"
         )
 
     @property
@@ -576,29 +565,29 @@ class CalendarPage(QWidget):
         tints = goal_tints_for(self._theme)
         for kind, swatch in self._legend_swatches.items():
             swatch.setStyleSheet(f"background-color: {tints[list(GoalKind).index(kind)]};")
-        self._refresh_phase_legend(month)
+        self._refresh_sport_legend(month)
         self._say_selection()
 
-    def _refresh_phase_legend(self, month: MonthView) -> None:
-        present = {plan.phase for cell in month.days if (plan := cell.grid_plan) is not None}
-        # The training phases of the month shown follow the goals in the same row.
-        while self._phase_legend.count() > self._goal_legend_items:
-            item = self._phase_legend.takeAt(self._goal_legend_items)
+    def _refresh_sport_legend(self, month: MonthView) -> None:
+        present = {sport for cell in month.days if (sport := cell.stripe_sport) is not None}
+        # The sports of the month shown follow the goals in the same row.
+        while self._sport_legend.count() > self._goal_legend_items:
+            item = self._sport_legend.takeAt(self._goal_legend_items)
             widget = None if item is None else item.widget()
             if widget is not None:
                 widget.hide()
                 widget.deleteLater()
         if not present:
             return
-        self._phase_legend.addWidget(QLabel(self.tr("Training phase:"), self._phase_legend_row))
-        for phase in Phase:
-            if phase not in present:
+        self._sport_legend.addWidget(QLabel(self.tr("Sport:"), self._sport_legend_row))
+        for sport in Sport:
+            if sport not in present:
                 continue
-            swatch = QFrame(self._phase_legend_row)
+            swatch = QFrame(self._sport_legend_row)
             swatch.setFixedSize(_LEGEND_SWATCH, _LEGEND_SWATCH)
             swatch.setFrameShape(QFrame.Shape.Box)
-            swatch.setStyleSheet(f"background-color: {phase_color(phase, self._theme)};")
-            swatch.setAccessibleName(phase_text(phase))
-            name = QLabel(phase_text(phase), self._phase_legend_row)
-            name.setObjectName("phaseLegendName")
-            self._phase_legend.addWidget(self._legend_pair(swatch, name, self._phase_legend_row))
+            swatch.setStyleSheet(f"background-color: {stripe_color(sport, self._theme)};")
+            swatch.setAccessibleName(sport_text(sport))
+            name = QLabel(sport_text(sport), self._sport_legend_row)
+            name.setObjectName("sportLegendName")
+            self._sport_legend.addWidget(self._legend_pair(swatch, name, self._sport_legend_row))
