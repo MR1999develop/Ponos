@@ -39,6 +39,14 @@
         <source>Estimated</source>
         <translation>Stima</translation>
     </message>
+    <message>
+        <source>Active calories (kcal)</source>
+        <translation>Calorie attive (kcal)</translation>
+    </message>
+    <message>
+        <source>≈ {kcal}</source>
+        <translation>≈ {kcal}</translation>
+    </message>
 </context>
 <context>
     <name>ActivitiesPage</name>
@@ -234,10 +242,6 @@
         <translation>Dislivello (m)</translation>
     </message>
     <message>
-        <source>Active calories (kcal)</source>
-        <translation>Calorie attive (kcal)</translation>
-    </message>
-    <message>
         <source>Load (TRIMPeq)</source>
         <translation>Carico (TRIMPeq)</translation>
     </message>
@@ -284,10 +288,6 @@
     <message>
         <source>{low} to {high}</source>
         <translation>da {low} a {high}</translation>
-    </message>
-    <message>
-        <source>≈ {kcal}</source>
-        <translation>≈ {kcal}</translation>
     </message>
     <message numerus="yes">
         <source>Heart-rate samples outside your limits: %n. They were not used and are marked in the chart.</source>
@@ -3867,10 +3867,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Average speed (km/h)</source>
         <translation>Velocità media (km/h)</translation>
-    </message>
-    <message>
-        <source>Energy (kcal)</source>
-        <translation>Energia (kcal)</translation>
     </message>
     <message>
         <source>Zoom in</source>
