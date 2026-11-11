@@ -816,6 +816,18 @@ Closed on 2026-11-08.
 | D-F8-03 | `docs/backup-format.md` said a failed restore removes the folder only "if it created it", but any empty folder was removed, also one the user had made | Only a folder the restore created is removed; an empty folder of the user stays | T-DATI-05 | `tests/collaudo/test_fase8_backup.py` |
 | D-F8-04 | The pattern of the entry names used `\d` (any Unicode digit): a backup could carry a year folder in Arabic-Indic digits and the restore created it; the writer (`str.isdecimal`) was as lenient | The year is 4 ASCII digits, in the reader and in the writer | T-SEC-02 | `tests/collaudo/test_fase8_zip_ostili.py` |
 
+### Cases closed by the pre-release acceptance testing and review (D-F9)
+
+Closed on 2026-11-11, on the work since 2026-11-08.
+
+| Id | Defect | Behaviour | Test (plan) | Test (file) |
+|---|---|---|---|---|
+| D-F9-01 | Restoring several deleted activities used one transaction each: a busy or refusing database in the middle left the first ones restored while the job reported a failure (no outcome, no overview refresh, no undo for them) | Every file is read first; the activities whose file is good go back in one transaction, all or none; a missing or damaged file still leaves only its own activity deleted | T-DATI-07, T-DATI-04 | `tests/activities/test_deletion.py`, `tests/collaudo/test_fase9_eliminazione_interruzioni.py` |
+| D-F9-02 | Keytel's calorie estimate took the plain mean of the heart-rate samples: with smart recording it gave about a third fewer calories than the same effort recorded every second | The estimate takes the load's average heart rate, weighed by time over the counted samples (the one the detail shows) | T-NUT-09 | `tests/profiles/test_activity_energy.py` |
+| D-F9-03 | A page title with a date carrying an offset produced an aware datetime that could not be compared with a naive one (TypeError in the slot) | A date with an offset is refused like any malformed value | T-SEC-14 | `tests/ui/test_chart_view.py` |
+| D-F9-04 | A map cache folder that could not be made raised a raw `OSError`, and the settings page asked for the cache size while the window was built: the app did not start | The disk cache raises `TileCacheError` (the proxy takes it as a miss); the settings page says the cache cannot be opened and disables "Clear map cache..." | T-MAP-11 | `tests/platform/test_tile_cache.py`, `tests/ui/test_map_settings.py` |
+| D-F9-05 | The UI timing probe of the acceptance campaign (T-UI-02) used the user's own map cache folder | The probe has its own folder; every test composes the window with a temporary cache | T-UI-02 | `tests/fixtures/generators/collaudo_ui_probe.py` |
+
 ### The map page (phase 5b, T-SEC-14 and T-SEC-15)
 
 The activity-detail window has its own small map page, `ponos://app/track.html` (`track.js`,

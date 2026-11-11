@@ -1209,6 +1209,10 @@ model e gli esiti del collaudo possono citarlo.
 - **T-DATI-06** Creazione del profilo interrotta in ogni passo, anche in gara
   con un'altra istanza sulla stessa cartella: si annulla solo ciò che ha creato
   quell'istanza, mai il profilo dell'altra.
+- **T-DATI-07** Attività eliminate (ADR 018): carico, PMC e piano senza le
+  attività eliminate uguali a quelli di un profilo che non le ha mai avute, e
+  dopo il ripristino uguali a prima; ripristino tutto o niente, anche con il
+  processo ucciso (T-DATI-04).
 - **T-SYNC-01** Prima sincronizzazione completa e poi incrementale, con il
   fake di Garmin e uno storico di 5.000 attività.
 - **T-SYNC-02** Processo terminato davvero (kill di un sottoprocesso) durante
@@ -1223,6 +1227,12 @@ model e gli esiti del collaudo possono citarlo.
   duplicato; "Verifica completa" trova le attività caricate in ritardo.
 - **T-SYNC-06** Annulla: la sincronizzazione si ferma entro 1 s e lascia lo
   stato coerente.
+- **T-SYNC-07** Un'attività eliminata non si riscarica in nessuna modalità
+  (anche importata da file, o con un altro id Garmin); una ripristinata non
+  si duplica.
+- **T-SYNC-08** Voci che Garmin elenca ma non fornisce: `REMOTE_NOT_PROVIDED`
+  dopo tre giri muti, riarmate dal "Controllo completo"; un 404 resta un
+  rifiuto definitivo; nessun giro bloccato.
 - **T-IMP-01** Albero con sottocartelle, duplicati, file non FIT e FIT
   rovinati: riepilogo esatto, file per file.
 - **T-IMP-02** Tetti: 50.000 file di attività, 500.000 voci e 32 livelli, ciascuno
@@ -1262,6 +1272,13 @@ model e gli esiti del collaudo possono citarlo.
   cartella di import.
 - **T-UI-08** Gestore unico degli errori: un'eccezione imprevista mostra un
   messaggio generico e registra il dettaglio.
+- **T-UI-09** Dettaglio di un'attività ostile: senza distanza, senza FC,
+  sempre ferma, con una pausa lunga; il dettaglio si legge sempre e il
+  grafico velocità/passo c'è solo se ha dati.
+- **T-UI-10** Eliminazione dall'interfaccia: l'intera lista eliminata e
+  riportata con l'annulla; la finestra di un'attività eliminata non si rompe.
+- **T-UI-11** Margine dell'asse y: ogni curva intera con il 6% sopra e sotto
+  (passo e profilo altimetrico compresi), per qualunque serie.
 
 ### 7.7 Sicurezza (T-SEC)
 
@@ -1405,6 +1422,10 @@ riportano p50, p95 e massimo, mai la sola media, con l'ambiente di misura.
 - **T-MAP-11** Cache: il tetto scelto non si supera, le tile scadute si
   rinnovano, "Svuota cache" la porta a zero; nessun prefetch fuori dall'area
   guardata.
+- **T-MAP-12** Tre sfondi: ognuno chiede solo il suo percorso con il nome
+  dell'app, la cache li tiene separati per la stessa tessera, uno zoom oltre
+  il massimo dello sfondo si rifiuta prima di ogni richiesta; un certificato
+  non valido ferma solo quello sfondo (T-SEC-15).
 
 ### 7.12 Alimentazione (T-NUT, fase 4b)
 
@@ -1433,3 +1454,7 @@ riportano p50, p95 e massimo, mai la sola media, con l'ambiente di misura.
   scarico che la precede (anche dopo la gara nella stessa settimana), deficit
   di nuovo fuori, nessuna pausa per le C o senza obiettivo di dimagrimento;
   avviso; property test sul modello puro.
+- **T-NUT-09** Calorie attive: dettaglio, mappa e nutrizione del giorno danno
+  la stessa energia per la stessa attività; il totale del dispositivo vale
+  fino a 1.500 kcal/h e oltre si scarta (mai tagliato); la stima Keytel usa
+  la FC media pesata sul tempo del carico.

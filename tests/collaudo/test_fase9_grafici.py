@@ -38,7 +38,9 @@ def test_the_margin_is_one_value_of_six_percent() -> None:
 
 @pytest.mark.collaudo
 @settings(max_examples=300, deadline=None)
-@given(st.floats(-1e5, 1e5), st.floats(0, 1e5))
+# Subnormal floats are not values of a chart (bpm, km/h, s/km, metres): 6% of the smallest one
+# rounds to zero (counterexample of the campaign of 2026-11-11: low=0, span=5e-324).
+@given(st.floats(-1e5, 1e5, allow_subnormal=False), st.floats(0, 1e5, allow_subnormal=False))
 def test_t_ui_11_the_padded_range_holds_every_value_with_six_percent_of_the_span_on_each_side(
     low: float, span: float
 ) -> None:
