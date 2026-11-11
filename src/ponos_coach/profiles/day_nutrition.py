@@ -21,9 +21,6 @@ from datetime import UTC, date, datetime, time, timedelta
 from enum import Enum
 from zoneinfo import ZoneInfo
 
-import numpy as np
-from numpy.typing import NDArray
-
 from ponos_coach.activities.domain import (
     MAX_ACTIVITY_FILE_BYTES,
     Activity,
@@ -35,7 +32,7 @@ from ponos_coach.activities.ports import ActivityArchive, ActivityIndex
 from ponos_coach.goals.domain import Priority
 from ponos_coach.load.activity_detail import ActivityDetail
 from ponos_coach.load.domain import (
-    HeartRateLimits,
+    ActivityLoad,
     MissingPhysiologyError,
     Physiology,
     load_fingerprint,
@@ -60,7 +57,6 @@ from ponos_coach.nutrition.domain import (
     TrainingSession,
     WeightLossGoal,
     activity_energy,
-    average_valid_bpm,
     defaults,
     goal_for_day,
     is_plausible_lean_mass,
@@ -367,11 +363,11 @@ class PlanDayNutrition:
             )
         unreadable = isinstance(original, ExclusionReason)
         activity = None if isinstance(original, ExclusionReason) else original
-        if cached is not None:
-            load = cached.trimp_eq
-        else:
-            load = 0.0 if activity is None else load_of_activity(activity, physiology).trimp_eq
-        energy = energy_of_record(Subject(person, physiology), record, activity)
+        activity_load = cached
+        if activity_load is None and activity is not None:
+            activity_load = load_of_activity(activity, physiology)
+        load = 0.0 if activity_load is None else activity_load.trimp_eq
+        energy = energy_of_record(Subject(person, physiology), record, activity, activity_load)
         local = record.start.astimezone(self._timezone)
         start_minute = local.hour * _MINUTES_PER_HOUR + local.minute
         day_activity = DayActivity(
@@ -437,29 +433,33 @@ def energy_of_activity(
     sport: Sport,
     timer_s: float,
     declared_kcal: float | None,
-    heart_rate_bpm: NDArray[np.float64] | None,
+    load: ActivityLoad | None,
 ) -> ActivityEnergy:
     """The one place where the arguments of `activity_energy` are prepared, for the nutrition of
     a day and for the activity detail: the person of the day, the moving time, the device's total
-    and the mean of the heart-rate samples inside that day's limits."""
-    average_bpm = _mean_bpm(heart_rate_bpm, subject.physiology.limits)
+    and the average heart rate of the activity's load (time-weighted over the samples the load
+    counts, the one the detail shows; review of 2026-11-11), None without a load."""
+    average_bpm = None if load is None else load.avg_bpm
     return activity_energy(subject.person, sport, timer_s, declared_kcal, average_bpm)
 
 
 def energy_of_record(
-    subject: Subject, record: ActivityRecord, activity: Activity | None
+    subject: Subject,
+    record: ActivityRecord,
+    activity: Activity | None,
+    load: ActivityLoad | None = None,
 ) -> ActivityEnergy:
     """Energy of an indexed activity, the rule of the day's nutrition: the device's total from
-    the index (or, for a record indexed before it was kept, from the file), the mean HR of the
-    file. `activity` is the decoded original; it is only needed when the index has no credible
-    total (see `declared_energy_is_credible`)."""
+    the index (or, for a record indexed before it was kept, from the file), the average HR of the
+    activity's load. `activity` is the decoded original; it is only needed when the index has no
+    credible total (see `declared_energy_is_credible`). `load` is the load already at hand (the
+    cache); without its average HR the load of `activity` is computed."""
     declared = record.summary.calories_kcal
     if declared is None and activity is not None:
         declared = activity.summary.calories_kcal
-    series = None if activity is None else activity.heart_rate
-    return energy_of_activity(
-        subject, record.sport, record.timer_s, declared, None if series is None else series.bpm
-    )
+    if (load is None or load.avg_bpm is None) and activity is not None:
+        load = load_of_activity(activity, subject.physiology)
+    return energy_of_activity(subject, record.sport, record.timer_s, declared, load)
 
 
 class GetRecordEnergy:
@@ -519,9 +519,8 @@ class GetActivityEnergy:
         subject = subject_on(self._src, detail.local_day)
         if isinstance(subject, NutritionUnavailable):
             return None
-        bpm = None if detail.trace is None else detail.trace.bpm
         return energy_of_activity(
-            subject, detail.sport, detail.timer_s, detail.summary.calories_kcal, bpm
+            subject, detail.sport, detail.timer_s, detail.summary.calories_kcal, detail.load
         )
 
 
@@ -592,13 +591,6 @@ def _loss_days(periods: Sequence[GoalPeriod], goal: NutritionGoal, day: date) ->
         if period.contains(day):
             return (day - period.first_day).days
     return None
-
-
-def _mean_bpm(bpm: NDArray[np.float64] | None, limits: HeartRateLimits) -> float | None:
-    """Mean of the heart-rate samples inside the limits, if there is a series."""
-    if bpm is None:
-        return None
-    return average_valid_bpm(bpm, limits.min_bpm, limits.max_bpm)
 
 
 def _age_problem(age: int) -> UnavailableReason | None:

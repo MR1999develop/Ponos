@@ -40,8 +40,11 @@ anche questo file e i test `T-NUT`.
   default del progetto). Oltre, si scarta (mai si taglia al tetto) e si stima
   come se mancasse.
 - Se mancano, in quest'ordine (`activity_energy`):
-  1. **Keytel** con la FC media dei campioni dentro `[FCmin, FCmax]` (e tra 40 e
-     250 bpm), peso, età e sesso:
+  1. **Keytel** con la FC media del carico (`ActivityLoad.avg_bpm`: pesata sul
+     tempo, sui campioni dentro `[FCmin, FCmax]` con intervallo fino a 10 s, la
+     stessa del dettaglio; mai la media semplice dei campioni, che con la
+     registrazione intelligente sottostima: revisione del 2026-11-11), peso, età e
+     sesso (FC tra 40 e 250 bpm):
      - uomo: `kJ/min = −55,0969 + 0,6309·FC + 0,1988·peso + 0,2017·età`;
      - donna: `kJ/min = −20,4022 + 0,4472·FC − 0,1263·peso + 0,074·età`;
      - `kcal/min = kJ/min / 4,184`, mai sotto zero;

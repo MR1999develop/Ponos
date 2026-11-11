@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import math
 
-import numpy as np
 import pytest
 
 from ponos_coach.activities.domain import Sport
@@ -16,7 +15,6 @@ from ponos_coach.nutrition.domain import (
     EnergySource,
     Person,
     activity_energy,
-    average_valid_bpm,
     basal_metabolic_rate,
     keytel_kcal_per_minute,
     met_kcal,
@@ -161,16 +159,6 @@ def test_an_invalid_duration_is_refused(duration: float) -> None:
 def test_invalid_declared_calories_are_refused(declared: float) -> None:
     with pytest.raises(ValueError, match="calories"):
         activity_energy(MAN, Sport.RUNNING, HOUR_S, declared, None)
-
-
-def test_the_average_heart_rate_only_counts_samples_inside_the_limits() -> None:
-    bpm = np.array([30.0, 100.0, 140.0, 260.0])
-
-    assert average_valid_bpm(bpm, 40, 250) == pytest.approx(120.0)
-
-
-def test_there_is_no_average_heart_rate_when_every_sample_is_out_of_range() -> None:
-    assert average_valid_bpm(np.array([10.0, 300.0]), 40, 250) is None
 
 
 # --- Declared calories must be credible for the time (1,500 kcal an hour at most) ------------

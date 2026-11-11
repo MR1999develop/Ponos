@@ -13,9 +13,6 @@ import math
 from dataclasses import dataclass
 from enum import Enum
 
-import numpy as np
-from numpy.typing import NDArray
-
 from ponos_coach.activities.domain import Sport
 from ponos_coach.load.domain import Sex
 from ponos_coach.nutrition.domain import defaults
@@ -102,12 +99,6 @@ def keytel_kcal_per_minute(person: Person, average_bpm: float) -> float:
 def met_kcal(sport: Sport, weight_kg: float, duration_s: float) -> float:
     """Gross energy of a sport at its typical METs: METs x kg x hours."""
     return defaults.SPORT_MET[sport] * weight_kg * duration_s / 3600.0
-
-
-def average_valid_bpm(bpm: NDArray[np.float64], min_bpm: int, max_bpm: int) -> float | None:
-    """Mean of the samples inside `[min_bpm, max_bpm]`; None if there are none."""
-    valid = bpm[(bpm >= min_bpm) & (bpm <= max_bpm)]
-    return float(valid.mean()) if valid.size else None
 
 
 def activity_energy(

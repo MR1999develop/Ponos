@@ -9,6 +9,7 @@ import pytest
 from ponos_coach.load.activity_detail import ActivityDetail, GetActivityDetail
 from ponos_coach.nutrition.domain import ActivityEnergy, EnergySource
 from ponos_coach.profiles.day_nutrition import GetActivityEnergy, GetRecordEnergy, NutritionSources
+from tests.fixtures.generators import fit_writer as fw
 from tests.profiles.test_day_nutrition import ROME, Rig, at, decode_fit, fit_bytes
 
 BASAL_KCAL_PER_DAY = 1780.0  # male, 180 cm, 30 y, 80 kg (Mifflin-St Jeor)
@@ -112,3 +113,37 @@ def test_without_the_body_data_a_record_has_no_energy(rig: Rig) -> None:
     rig.add_file(fit_bytes(at(18), 1, calories=700))
 
     assert record_energy(rig) is None
+
+
+EASY_S = 600  # ten easy minutes, then fifty hard ones
+EASY_BPM, HARD_BPM = 100, 170
+HOUR_S = 3600
+
+
+def effort_file(serial: int, hard_step_s: int) -> bytes:
+    """The same hour (easy, then hard), with the hard part recorded every `hard_step_s` seconds,
+    as a device with smart recording does when the heart rate is steady."""
+    start = at(18)
+    first = fw.datetime_to_fit(start)
+    times = [*range(EASY_S), *range(EASY_S, HOUR_S + 1, hard_step_s)]
+    samples = [fw.Sample(first + t, EASY_BPM if t < EASY_S else HARD_BPM) for t in times]
+    spec = fw.ActivitySpec(
+        start, fw.Sport.RUNNING, fw.SubSport.GENERIC, samples, serial_number=serial
+    )
+    return fw.build_activity(spec)
+
+
+def test_the_estimate_weighs_the_heart_rate_by_time_not_by_number_of_samples() -> None:
+    # Review of 2026-11-11: the plain mean of the samples (about 123 bpm here with one sample
+    # every 10 s in the hard part) gave fewer calories than the same effort recorded every
+    # second (about 158 bpm). The average of the load, the one the detail shows, weighs by time.
+    every_second, every_ten = Rig(), Rig()
+    every_second.add_file(effort_file(1, 1))
+    every_ten.add_file(effort_file(2, 10))
+
+    dense, sparse = energy_of_first(every_second), energy_of_first(every_ten)
+
+    assert dense is not None and sparse is not None
+    assert sparse.source is EnergySource.HEART_RATE
+    assert sparse.total_kcal == pytest.approx(dense.total_kcal, rel=0.01)
+    assert record_energy(every_ten) == sparse  # the map and the day's nutrition agree
