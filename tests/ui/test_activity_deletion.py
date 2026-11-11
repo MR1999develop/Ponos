@@ -172,7 +172,7 @@ def test_a_deleted_activity_does_not_come_back_with_the_next_synchronization(
     link_account(qtbot, window, mfa=False)  # Garmin lists the four runs again
     sync_and_wait(qtbot, window, verify=True)
 
-    assert activity_count(window) == RUNS - 1
+    wait_activities(qtbot, window, RUNS - 1)  # the overview the round may have asked for
     assert window.controller.sync.account_status is AccountStatus.LINKED
     assert len(window.activity_deletion.page.model.rows) == 1  # still deleted, still listed
 
@@ -429,7 +429,8 @@ def test_a_restored_activity_whose_file_is_gone_stays_deleted_and_says_why(
     deletion.page.restore_button.click()
 
     qtbot.waitUntil(lambda: bool(shown), timeout=WAIT_MS)
-    assert activity_count(window) == RUNS - 1
+    # The outcome has already asked for a new overview (Loading): wait for it, not the old one.
+    wait_activities(qtbot, window, RUNS - 1)
     assert len(deletion.page.model.rows) == 1
 
 
