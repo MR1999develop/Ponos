@@ -304,3 +304,60 @@ def test_a_saved_race_opens_with_its_elevation_gain(qtbot: QtBot) -> None:
 
     assert dialog.ascent_edit.text() == "1800"
     assert dialog.draft().ascent_text == "1800"
+
+
+# --- A cycling race ----------------------------------------------------------------------------
+def choose_sport(dialog: GoalDialog, sport: Sport) -> None:
+    dialog.sport_combo.setCurrentIndex(dialog.sport_combo.findData(sport))
+
+
+def test_a_cycling_race_turns_off_the_target_time_and_says_why(qtbot: QtBot) -> None:
+    dialog = new_race_dialog(qtbot)
+    dialog.target_time_edit.setText("3:30:00")
+
+    choose_sport(dialog, Sport.CYCLING)
+
+    assert not dialog.target_time_edit.isEnabled()
+    assert dialog.target_time_edit.placeholderText() == "Not used for cycling races"
+    assert "distance and elevation gain" in dialog.target_time_edit.accessibleDescription()
+    assert dialog.save_button.isEnabled()
+
+
+def test_a_cycling_race_takes_its_distance_in_kilometres_from_the_chosen_one(
+    qtbot: QtBot,
+) -> None:
+    dialog = new_race_dialog(qtbot)  # a marathon by default
+
+    choose_sport(dialog, Sport.CYCLING)
+
+    assert dialog.distance_combo.currentText() == "Other distance"
+    assert not dialog.distance_combo.isEnabled()
+    assert dialog.custom_distance_spin.isEnabled()
+    assert dialog.custom_distance_spin.value() == pytest.approx(42.195)
+    dialog.custom_distance_spin.setValue(110.0)
+    dialog.ascent_edit.setText("1500")
+    draft = dialog.draft()
+    assert (draft.sport, draft.distance_m, draft.ascent_text) == (Sport.CYCLING, 110_000, "1500")
+
+
+def test_back_to_running_the_target_time_and_the_distances_return(qtbot: QtBot) -> None:
+    dialog = new_race_dialog(qtbot)
+    choose_sport(dialog, Sport.CYCLING)
+
+    choose_sport(dialog, Sport.RUNNING)
+
+    assert dialog.target_time_edit.isEnabled()
+    assert dialog.target_time_edit.placeholderText() == "h:mm:ss"
+    assert dialog.distance_combo.isEnabled()
+
+
+def test_a_saved_cycling_race_opens_with_distance_and_climb_and_no_time(qtbot: QtBot) -> None:
+    race = RaceGoal(GoalId("x"), RACE_DAY, Priority.A, Sport.CYCLING, 130_000, 18_000, 2_100)
+    dialog = GoalDialog.for_goal(race, [race], TODAY)
+    qtbot.addWidget(dialog)
+
+    assert dialog.sport_combo.currentData() is Sport.CYCLING
+    assert dialog.custom_distance_spin.value() == pytest.approx(130.0)
+    assert dialog.ascent_edit.text() == "2100"
+    assert dialog.target_time_edit.text() == ""
+    assert not dialog.target_time_edit.isEnabled()

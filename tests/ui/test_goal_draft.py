@@ -170,11 +170,37 @@ def test_the_problems_come_in_the_order_of_the_fields() -> None:
 
 
 def test_a_valid_draft_makes_the_domain_goal() -> None:
-    draft = GoalDraft(GoalFormKind.RACE, RACE_DAY, Priority.B, Sport.CYCLING, 100_000, "3:30:00")
+    draft = GoalDraft(GoalFormKind.RACE, RACE_DAY, Priority.B, Sport.TRAIL, 50_000, "6:30:00")
 
     goal = goal_of(draft, [], TODAY, GoalId("x"))
 
-    assert goal == RaceGoal(GoalId("x"), RACE_DAY, Priority.B, Sport.CYCLING, 100_000, 12_600)
+    assert goal == RaceGoal(GoalId("x"), RACE_DAY, Priority.B, Sport.TRAIL, 50_000, 23_400)
+
+
+def test_a_cycling_race_is_made_of_distance_and_climb_and_never_has_a_target_time() -> None:
+    draft = GoalDraft(
+        GoalFormKind.RACE, RACE_DAY, Priority.A, Sport.CYCLING, 120_000, "3:30:00",
+        ascent_text="1 800",
+    )  # fmt: skip
+
+    goal = goal_of(draft, [], TODAY, GoalId("x"))
+
+    assert goal == RaceGoal(GoalId("x"), RACE_DAY, Priority.A, Sport.CYCLING, 120_000, None, 1_800)
+
+
+@pytest.mark.parametrize("typed", ["abc", "0:10", "999:00:00"])
+def test_whatever_is_left_in_the_time_field_is_no_problem_for_a_cycling_race(typed: str) -> None:
+    draft = GoalDraft(GoalFormKind.RACE, RACE_DAY, sport=Sport.CYCLING, target_time_text=typed)
+    running = GoalDraft(GoalFormKind.RACE, RACE_DAY, sport=Sport.RUNNING, target_time_text=typed)
+
+    assert issues_of(draft, [], TODAY) == ()
+    assert [i.field for i in issues_of(running, [], TODAY)] == [GoalField.TARGET_TIME]
+
+
+def test_a_cycling_race_saved_with_a_time_opens_without_it() -> None:
+    saved = RaceGoal(GoalId("x"), RACE_DAY, Priority.A, Sport.CYCLING, 80_000, 9_000, 900)
+
+    assert draft_of(saved).target_time_text == ""
 
 
 def test_a_race_without_a_target_time_has_none() -> None:

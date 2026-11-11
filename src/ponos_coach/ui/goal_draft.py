@@ -6,7 +6,8 @@ A `GoalDraft` is what the user has typed (a race or a form goal); `issues_of` sa
 which problem, as soon as it appears; `goal_of` gives the domain goal once there are no problems.
 The store checks the same rules again when saving (a day with another race, for example): here the
 user hears about them on the field. A goal needs a day after today, because the plan starts
-tomorrow. The target time is read from text, tolerantly (`1:45:00` or `45:00`).
+tomorrow. The target time is read from text, tolerantly (`1:45:00` or `45:00`); a race of a sport
+without target time (cycling) ignores whatever the field holds.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from datetime import date
 from enum import Enum
 
 from ponos_coach.activities.domain import Sport
-from ponos_coach.goals.domain import FitnessGoal, GoalId, Priority, RaceGoal
+from ponos_coach.goals.domain import FitnessGoal, GoalId, Priority, RaceGoal, takes_target_time
 from ponos_coach.goals.domain.goal import (
     MAX_ASCENT_M,
     MAX_CTL,
@@ -208,15 +209,21 @@ def _race_issues(draft: GoalDraft) -> list[GoalIssue]:
     issues = []
     if not MIN_DISTANCE_M <= draft.distance_m <= MAX_DISTANCE_M:
         issues.append(GoalIssue(GoalField.DISTANCE, GoalProblem.DISTANCE_OUT_OF_RANGE))
-    match parse_target_time(draft.target_time_text):
-        case TimeNotUnderstood():
-            issues.append(GoalIssue(GoalField.TARGET_TIME, GoalProblem.TIME_NOT_UNDERSTOOD))
-        case TargetTime(seconds) if not MIN_TARGET_TIME_S <= seconds <= MAX_TARGET_TIME_S:
-            issues.append(GoalIssue(GoalField.TARGET_TIME, GoalProblem.TIME_OUT_OF_RANGE))
-        case _:
-            pass
+    issues.extend(_time_issues(draft))
     issues.extend(_ascent_issues(draft))
     return issues
+
+
+def _time_issues(draft: GoalDraft) -> list[GoalIssue]:
+    if not takes_target_time(draft.sport):
+        return []
+    match parse_target_time(draft.target_time_text):
+        case TimeNotUnderstood():
+            return [GoalIssue(GoalField.TARGET_TIME, GoalProblem.TIME_NOT_UNDERSTOOD)]
+        case TargetTime(seconds) if not MIN_TARGET_TIME_S <= seconds <= MAX_TARGET_TIME_S:
+            return [GoalIssue(GoalField.TARGET_TIME, GoalProblem.TIME_OUT_OF_RANGE)]
+        case _:
+            return []
 
 
 def _ascent_issues(draft: GoalDraft) -> list[GoalIssue]:
@@ -242,7 +249,11 @@ def goal_of(
     if draft.kind is GoalFormKind.FORM:
         return FitnessGoal(goal_id, draft.day, draft.ctl)
     parsed = parse_target_time(draft.target_time_text)
-    seconds = parsed.seconds if isinstance(parsed, TargetTime) else None
+    seconds = (
+        parsed.seconds
+        if isinstance(parsed, TargetTime) and takes_target_time(draft.sport)
+        else None
+    )
     return RaceGoal(
         goal_id,
         draft.day,
@@ -264,7 +275,7 @@ def draft_of(goal: Goal) -> GoalDraft:
         goal.priority,
         goal.sport,
         goal.distance_m,
-        target_time_text(goal.target_time_s),
+        target_time_text(goal.planned_target_time_s),
         ascent_text=ascent_text(goal.ascent_m),
     )
 

@@ -72,9 +72,11 @@ from ponos_coach.planning.domain.target import (
     TargetClass,
     best_time_by_race_s,
     classify_target,
+    cycling_time_s,
     equivalent_distance_m,
     race_class_for,
     recovery_days_for,
+    rule_distance_m,
     taper_days_for,
     target_ctl_for_distance,
 )
@@ -330,7 +332,8 @@ def _anchors(inputs: PlanInputs) -> list[Anchor]:
     for race in inputs.races:
         if race.priority is not Priority.A:
             continue
-        ctl = target_ctl_for_distance(race.distance_m)
+        rule_distance = _rule_distance_m(race)
+        ctl = target_ctl_for_distance(rule_distance)
         goal = fitness_on.get(race.day)
         if goal is not None:
             ctl = goal.ctl
@@ -340,9 +343,9 @@ def _anchors(inputs: PlanInputs) -> list[Anchor]:
                 race.goal_id.value,
                 race.day,
                 True,
-                taper_days_for(race.distance_m),
+                taper_days_for(rule_distance),
                 defaults.PEAK_DAYS,
-                recovery_days_for(race.distance_m),
+                recovery_days_for(rule_distance),
                 ctl,
             )
         )
@@ -376,11 +379,19 @@ def _flat_distance_m(race: RaceGoal) -> int:
     return equivalent_distance_m(race.distance_m, race.ascent_m)
 
 
+def _rule_distance_m(race: RaceGoal) -> int:
+    """The distance the rules written for running races go by (`rule_distance_m`)."""
+    return rule_distance_m(race.sport, race.distance_m, race.ascent_m)
+
+
 def _expected_time_s(race: RaceGoal, pace: int | None, days_to_race: int) -> int:
     """Time the plan expects of a race: the target, else the best time possible, else a default;
-    the last two on the flat-equivalent distance."""
-    if race.target_time_s is not None:
-        return race.target_time_s
+    the last two on the flat-equivalent distance. A cycling race has no target: its time comes
+    from distance and climb at a cycling speed."""
+    if race.sport is Sport.CYCLING:
+        return cycling_time_s(race.distance_m, race.ascent_m)
+    if race.planned_target_time_s is not None:
+        return race.planned_target_time_s
     if pace is not None and race.sport in _RUNNING:
         return round(best_time_by_race_s(pace, _flat_distance_m(race), days_to_race))
     return max(1, _flat_distance_m(race) * defaults.DEFAULT_RACE_PACE_S_PER_KM // 1000)
@@ -425,7 +436,7 @@ def _context(inputs: PlanInputs, macro: Macrocycle, today: date, max_ramp: float
     targets = tuple(
         _RaceTarget(
             r.day,
-            race_class_for(r.distance_m),
+            race_class_for(_rule_distance_m(r)),
             _race_pace_s_per_km(r, pace, (r.day - today).days),
             _hill_slope_m_per_km(r, restriction, sport),
         )
@@ -475,8 +486,8 @@ def _race_pace_s_per_km(race: RaceGoal, pace: int | None, days_to_race: int) -> 
     race that is not a run or when neither is known (the session then goes by its zone alone)."""
     if race.sport not in _RUNNING:
         return None
-    if race.target_time_s is not None:
-        time_s = float(race.target_time_s)
+    if race.planned_target_time_s is not None:
+        time_s = float(race.planned_target_time_s)
     elif pace is not None:
         time_s = best_time_by_race_s(pace, _flat_distance_m(race), days_to_race)
     else:
@@ -780,13 +791,14 @@ def _assess_targets(inputs: PlanInputs, today: date) -> tuple[TargetAssessment, 
     pace = inputs.threshold_pace_s_per_km
     out: list[TargetAssessment] = []
     for race in inputs.races:
-        if race.target_time_s is None:
+        target_s = race.planned_target_time_s
+        if target_s is None:
             continue
         if pace is None or race.sport not in _RUNNING:
             out.append(TargetAssessment(race.goal_id.value, TargetClass.NOT_ESTIMABLE, None))
             continue
         best = best_time_by_race_s(pace, _flat_distance_m(race), (race.day - today).days)
-        verdict = classify_target(race.target_time_s, best)
+        verdict = classify_target(target_s, best)
         out.append(TargetAssessment(race.goal_id.value, verdict, round(best)))
     return tuple(out)
 
@@ -799,7 +811,7 @@ def _choice_warnings(inputs: PlanInputs) -> list[PlanWarning]:
         if race.priority is Priority.C:
             continue
         chosen = inputs.choices.for_sport(race.sport)
-        if race.distance_m >= defaults.HALF_MARATHON_M and SessionType.LONG not in chosen:
+        if _rule_distance_m(race) >= defaults.HALF_MARATHON_M and SessionType.LONG not in chosen:
             warnings.append(MissingLongSession(race.goal_id.value))
         if not chosen & {SessionType.THRESHOLD, SessionType.VO2MAX}:
             warnings.append(MissingIntenseSessions(race.goal_id.value))

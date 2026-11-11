@@ -776,6 +776,13 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
     goal) and the description of a race with climb reads "Race A, 12.5 km,
     +800 m, date";
   - races saved before have no gain.
+- A cycling race (user's request of 2026-11-11) has a date, a priority, a
+  distance and an elevation gain, never a target time: in the dialog, choosing
+  "Cycling" turns the target time field off (its placeholder says "Not used for
+  cycling races") and the distance is typed in kilometres (the common distances
+  are those of running; one already chosen becomes its kilometres). A cycling
+  race saved earlier with a target time keeps it in the store, but the goals
+  table, the dialog and the plan ignore it.
 
 ## 9. Adaptive plan
 
@@ -842,6 +849,16 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
     expected time. The race class (length of the taper and of the recovery), the
     CTL target of the distance and the warning about a missing long session stay
     on the real distance;
+  - a cycling race (method version 12) has no target time: its expected time
+    is its distance plus 25 m for every metre of climb, at 25 km/h (1000 m of
+    climb add an hour, the cyclists' rule of thumb, a project default), and
+    its load follows from it. The rules written for running distances (race
+    class, so the taper and the recovery; CTL target; missing long session;
+    no VO2max in the peak beyond a 10 km) take it as the run of equal
+    duration at 6 min/km: an hour of riding is a 10 km, so up to 1 hour is a
+    short race, up to about 2 h 07 a half, beyond a long one. The plan of a
+    cycling A race trains on the bike with sessions by duration and heart-rate
+    zone (the cycling threshold), never by pace, and has no hill work;
   - hill sessions are added only for the A race, in a running plan (running or
     trail), when the mean climb is at least 20 m per kilometre, in the build and
     the peak, never in the base, the final taper or an unload week, and not while

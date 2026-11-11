@@ -684,6 +684,12 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       `tests/planning/test_race_ascent.py`, `tests/storage/test_race_ascent_store.py`.
       Aperti: i valori 7 km/h e 10 m al minuto di lavoro sono stime non
       validate; il calendario distingue le sedute in salita solo dal nome.
+- [x] Gare di ciclismo nel calendario (richiesta dell'utente del 2026-11-11):
+      distanza e dislivello, nessun tempo obiettivo; tempo stimato a 25 km/h con
+      1000 m di D+ = un'ora, regole di distanza sulla corsa di pari durata
+      (versione 12 del metodo); piano in bici con sedute per durata e FC.
+      Test: `T-PIANO-12`. Aperti: velocità e equivalenza del dislivello sono
+      default non validati (non usano lo storico delle uscite in bici).
 - [ ] Collaudo completo (sezione 7) superato sull'eseguibile, su Windows e
       Ubuntu, con esiti registrati in `docs/collaudo.md`.
 - [x] Ubuntu di nuovo nelle matrici di `ci.yml` e `release.yml` (tolto il
@@ -1184,6 +1190,14 @@ model e gli esiti del collaudo possono citarlo.
   per una gara che non è di corsa, con un infortunio che limita corsa o intensità (tornano
   all'ultimo gradino); determinismo; property test: gli invarianti di `invariants.py` valgono
   con D+ casuale.
+- **T-PIANO-12** Gare di ciclismo (`tests/planning/test_cycling_races.py`,
+  `tests/ui/test_goal_draft.py`, `tests/ui/test_goal_dialog.py`): tempo stimato da distanza e
+  D+ (1000 m di D+ = un'ora a 25 km/h), corsa di pari durata (un'ora = 10 km); scarico per
+  durata (48' corto, 1 h 36 mezza, 2 h 30 lungo) e 40 km in bici non sono una maratona; lungo
+  richiesto solo oltre la mezza equivalente; sedute in bici per durata e FC, senza ritmo né
+  salite; tempo salvato ignorato e nessun verdetto; campo del tempo spento e distanza in km nel
+  dialogo, qualunque testo nel tempo non è un problema; invarianti e determinismo; la gara di
+  corsa resta com'era.
 - **T-PIANO-06** Test di soglia: FC di soglia = media degli ultimi 20' su
   tracciati sintetici; test interrotto o troppo corto rifiutato; retest
   proposto tra 6 e 8 settimane dopo l'ultimo test (dalla fase 5 anche in una

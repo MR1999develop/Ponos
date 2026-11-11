@@ -11,6 +11,7 @@ from datetime import timedelta
 from ponos_coach.assessment.domain import NotYet
 from ponos_coach.goals.domain import HARD_TYPES, INTENSE_TYPES, Priority, SessionType
 from ponos_coach.planning.domain import Phase, Plan, PlanDay, WeekKind
+from ponos_coach.planning.domain.target import rule_distance_m
 
 MAX_RAMP = 5.0
 MAX_INTENSE_SHARE_PERCENT = 25
@@ -163,7 +164,11 @@ def _check_quality_before_races(plan: Plan) -> list[str]:
                 problems.append(
                     f"{day.day}: intense session {back} days before {race.goal_id.value}"
                 )
-    a_races = sorted((r.day, r.distance_m) for r in plan.inputs.races if r.priority is Priority.A)
+    a_races = sorted(
+        (r.day, rule_distance_m(r.sport, r.distance_m, r.ascent_m))
+        for r in plan.inputs.races
+        if r.priority is Priority.A
+    )
     for day in plan.days:
         session = day.session
         if day.phase is not Phase.PEAK or session is None:

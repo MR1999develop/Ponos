@@ -2377,6 +2377,14 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Condizione da raggiungere (CTL)</translation>
     </message>
     <message>
+        <source>Not used for cycling races</source>
+        <translation>Non usato per le gare di ciclismo</translation>
+    </message>
+    <message>
+        <source>A cycling race is planned from its distance and elevation gain.</source>
+        <translation>Una gara di ciclismo si pianifica dalla distanza e dal dislivello.</translation>
+    </message>
+    <message>
         <source>Solve the problem written under the field first.</source>
         <translation>Risolvi prima il problema scritto sotto il campo.</translation>
     </message>
@@ -4864,10 +4872,6 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>VO2max</translation>
     </message>
     <message>
-        <source>Recovery run</source>
-        <translation>Corsa di recupero</translation>
-    </message>
-    <message>
         <source>Strength</source>
         <translation>Forza</translation>
     </message>
@@ -5162,6 +5166,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Move the goal later or ask for less fitness: the plan never ramps faster than the safe limit.</source>
         <translation>Sposta l&apos;obiettivo più avanti o chiedi meno condizione: il piano non sale mai più in fretta del limite di sicurezza.</translation>
+    </message>
+    <message>
+        <source>Recovery</source>
+        <translation>Recupero</translation>
     </message>
     <message>
         <source>! Out of reach</source>

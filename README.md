@@ -40,7 +40,8 @@ use: use it at your own risk. Manual import of FIT files is always available.
   6-8 weeks; applying a test can be undone.
 - Nutrition of the day: energy needs, deficit within safe limits, and each
   meal's calories and macronutrients.
-- Goals (A/B/C races with distance, elevation gain and target time, fitness
+- Goals (A/B/C races with distance, elevation gain and target time; cycling
+  races with distance and elevation gain only; fitness
   level) and an adaptive, deterministic training plan, with hill sessions for
   a steep A race.
 - Search and map of the activities: filters, tracks coloured by sport,

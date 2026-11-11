@@ -118,8 +118,9 @@ def test_target_without_threshold_pace_is_not_estimable() -> None:
 
 
 def test_target_on_a_non_running_race_is_not_estimable() -> None:
-    cycling = race("r", TODAY + timedelta(days=30), target_time_s=3000, sport=Sport.CYCLING)
-    plan = build_plan(inputs([cycling], pace=300, choices_for=Sport.CYCLING), TODAY)
+    # A cycling race has no target time at all (tests/planning/test_cycling_races.py).
+    hike = race("r", TODAY + timedelta(days=30), target_time_s=3000, sport=Sport.HIKING)
+    plan = build_plan(inputs([hike], pace=300, choices_for=Sport.HIKING), TODAY)
     assert isinstance(plan, Plan)
     assert plan.targets[0].classification is TargetClass.NOT_ESTIMABLE
 

@@ -6,6 +6,9 @@ The dialog edits a copy: "Cancel" changes nothing. A problem (a day that is not 
 that already has another race, a time that is not `h:mm:ss`) is written under its field, in words,
 as soon as it appears, and the save button stays off until it is solved. The rules are in
 `goal_draft`; the store checks them again when saving.
+
+A cycling race is planned from distance and elevation gain: for it the target time is off and the
+distance is typed in kilometres (the common distances are those of running).
 """
 
 from __future__ import annotations
@@ -28,7 +31,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ponos_coach.goals.domain import GoalId, Priority
+from ponos_coach.activities.domain import Sport
+from ponos_coach.goals.domain import GoalId, Priority, takes_target_time
 from ponos_coach.goals.ports import Goal
 from ponos_coach.ui.activity_text import sport_text
 from ponos_coach.ui.birth_date_edit import from_qdate, to_qdate
@@ -244,6 +248,7 @@ class GoalDialog(QDialog):
         self._sport.setObjectName("goalSport")
         for sport in RACE_SPORTS:
             self._sport.addItem(sport_text(sport), sport)
+        self._sport.currentIndexChanged.connect(self._on_sport_changed)
         self._distance = QComboBox(self)
         self._distance.setObjectName("goalDistance")
         for metres in COMMON_DISTANCES_M:
@@ -329,6 +334,7 @@ class GoalDialog(QDialog):
             self._custom_km.setValue(draft.distance_m / _METRES_PER_KM)
         self._ascent.setText(draft.ascent_text)
         self._time.setText(draft.target_time_text)
+        self._on_sport_changed()
 
     # --- State ---------------------------------------------------------------------------------
 
@@ -409,6 +415,31 @@ class GoalDialog(QDialog):
         """The problem written under a field, empty if there is none."""
         label = dict(self._error_labels()).get(field)
         return "" if label is None else label.text()
+
+    def _selected_sport(self) -> Sport:
+        sport = self._sport.currentData()
+        return sport if isinstance(sport, Sport) else RACE_SPORTS[0]
+
+    def _on_sport_changed(self) -> None:
+        """A cycling race: no target time, and the distance in kilometres (a common running
+        distance already chosen becomes its kilometres)."""
+        timed = takes_target_time(self._selected_sport())
+        self._time.setEnabled(timed)
+        self._time.setPlaceholderText(
+            self.tr("h:mm:ss") if timed else self.tr("Not used for cycling races")
+        )
+        self._time.setAccessibleDescription(
+            self.tr("Optional. For example 1:45:00.")
+            if timed
+            else self.tr("A cycling race is planned from its distance and elevation gain.")
+        )
+        if not timed:
+            metres = self._distance.currentData()
+            if metres is not None:
+                self._custom_km.setValue(metres / _METRES_PER_KM)
+                self._distance.setCurrentIndex(self._distance.count() - 1)
+        self._distance.setEnabled(timed)
+        self._update()
 
     def _update(self) -> None:
         issues = {issue.field: issue for issue in self.issues()}
