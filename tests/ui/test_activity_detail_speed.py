@@ -245,3 +245,26 @@ def test_the_pointer_on_one_chart_shows_the_same_minute_on_the_other(qtbot: QtBo
 
     assert scripts["speed"] == ["ponosHoverAt(12.5);", "ponosHoverAt(null);"]
     assert scripts["hr"] == ["ponosHoverAt(3.25);"]  # one way each: no echo
+
+
+def test_the_pointer_on_the_charts_is_reported_in_seconds_and_another_view_s_is_shown(
+    qtbot: QtBot,
+) -> None:
+    # The user's request of 2026-11-11: the map follows the charts and the other way round.
+    dialog = dialog_with(qtbot, hr=True, speed=True)
+    scripts: dict[str, list[str]] = {"speed": [], "hr": []}
+    dialog.speed_chart.run_script = scripts["speed"].append  # type: ignore[method-assign, assignment]
+    dialog.chart.run_script = scripts["hr"].append  # type: ignore[method-assign, assignment]
+    reports: list[object] = []
+    dialog.cursor_moved.connect(reports.append)
+
+    dialog.chart.hovered_x.emit(2.5)
+    dialog.speed_chart.hovered_x.emit(None)
+    assert reports == [150.0, None]
+
+    scripts["hr"].clear()
+    scripts["speed"].clear()
+    dialog.show_cursor_at(90.0)
+    dialog.show_cursor_at(None)
+    assert scripts["hr"] == scripts["speed"] == ["ponosHoverAt(1.5);", "ponosHoverAt(null);"]
+    assert reports == [150.0, None]  # nothing echoed back

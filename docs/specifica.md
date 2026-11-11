@@ -529,6 +529,12 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
   chart shows the values of the same minute on the other one, and leaving it
   hides them on both. The page reports only the user's own pointer, so the
   two charts never echo each other.
+- The pointer is shared with the map as well (user's request of 2026-11-11):
+  when the map shows the same activity, moving over the HR or speed chart
+  marks that moment on the track and on the elevation profile, and moving
+  over the track or the profile shows that minute on both charts. The common
+  key is the time from the first record of the file; the map marks the point
+  nearest in time. Another activity on the map is left alone.
 - The speed comes from the cumulative distance of the file (when a file has
   no distance field the reader integrates its speed field), computed on the
   data thread by `smoothed_speed`: the distance covered in a window of 30 s

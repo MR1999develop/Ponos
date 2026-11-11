@@ -311,3 +311,39 @@ def test_without_physiological_parameters_there_are_no_zones_and_the_reason_is_g
     assert profile.zone is None
     assert profile.zone_absence is ZoneAbsence.NO_PARAMETERS
     assert profile.altitude_m is not None  # the rest of the profile is still there
+
+
+def test_the_profile_keeps_the_time_of_each_point_on_the_axis_of_the_hr_chart() -> None:
+    # The common key of the linked pointer (the user's request of 2026-11-11): seconds from the
+    # first record, as the HR and speed series of the same file count them.
+    first = first_second()
+    data = run_file([sample(first, i, bpm=150) for i in range(60)])
+
+    profile = World().profile_of(data)
+    activity = decode_fit(data, FileFormat.FIT)
+
+    assert activity.heart_rate is not None
+    assert profile.seconds[0] == activity.heart_rate.seconds[0] == 0.0
+    assert np.all(np.diff(profile.seconds) > 0)
+    assert not profile.seconds.flags.writeable
+
+
+@pytest.mark.parametrize(
+    ("seconds", "expected"),
+    [
+        (-5.0, 0),  # before the first point
+        (0.0, 0),
+        (2.4, 2),
+        (2.6, 3),
+        (2.5, 2),  # halfway: the earlier one
+        (59.0, 59),
+        (1e9, 59),  # after the last point
+        (float("nan"), None),
+        (float("inf"), None),
+    ],
+)
+def test_the_point_at_a_time_is_the_nearest_in_time(seconds: float, expected: int | None) -> None:
+    first = first_second()
+    profile = World().profile_of(run_file([sample(first, i, bpm=150) for i in range(60)]))
+
+    assert profile.index_at(seconds) == expected

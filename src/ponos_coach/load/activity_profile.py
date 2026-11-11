@@ -12,6 +12,7 @@ the HR is health data: no log.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import date
 from enum import Enum
@@ -78,12 +79,14 @@ class ActivityProfileData:
     chart is absent, with that reason), `NaN` at the points that lack it. `zone` is 0 for Z1 ...
     4 for Z5 or `NO_ZONE`; the stretch that starts at point i takes `zone[i]`. `zone` is `None`
     when there is no zone at all, and `zone_absence` says why. `zone_starts_bpm` are the HRs
-    where Z2 ... Z5 start that day (for the legend).
+    where Z2 ... Z5 start that day (for the legend). `seconds` counts from the first record of
+    the file, the time axis of the HR and speed charts, and increases along the points.
     """
 
     identity: ActivityIdentity
     sport: Sport
     local_day: date
+    seconds: NDArray[np.float64]
     segment: NDArray[np.intp]
     distance_m: NDArray[np.float64]
     lat_deg: NDArray[np.float64]
@@ -97,6 +100,7 @@ class ActivityProfileData:
     def __post_init__(self) -> None:
         count = self.segment.size
         columns: list[NDArray[np.generic]] = [
+            self.seconds,
             self.segment,
             self.distance_m,
             self.lat_deg,
@@ -112,6 +116,21 @@ class ActivityProfileData:
 
     def __len__(self) -> int:
         return int(self.segment.size)
+
+    def index_at(self, seconds: float) -> int | None:
+        """The point nearest in time to `seconds` (from the first record); None without points
+        or for a time that is not a finite number."""
+        count = len(self)
+        if count == 0 or not math.isfinite(seconds):
+            return None
+        after = int(np.searchsorted(self.seconds, seconds))
+        if after == 0:
+            return 0
+        if after == count:
+            return count - 1
+        before = after - 1
+        nearer_before = seconds - self.seconds[before] <= self.seconds[after] - seconds
+        return before if nearer_before else after
 
 
 def _flatten(
@@ -251,6 +270,7 @@ class GetActivityProfile:
             identity=identity,
             sport=activity.sport,
             local_day=local_day,
+            seconds=seconds[keep],
             segment=segment[keep],
             distance_m=distance[keep],
             lat_deg=lat[keep],

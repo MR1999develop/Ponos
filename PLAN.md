@@ -1026,6 +1026,18 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       sostituisce il vecchio flag `hover`. Test: `tests/ui/test_chart_view.py`,
       `tests/ui/test_activity_detail_speed.py`, `tests/ui/test_hr_figure.py`,
       `tests/ui/test_speed_figure.py`.
+- [x] Puntatore condiviso tra finestra dell'attività e mappa (richiesta
+      dell'utente del 2026-11-11: «muovendosi sul grafico di fc o velocità, si
+      deve spostare anche l'indicatore sulla mappa e altimetria. Anche
+      viceversa»): `ActivityProfileData.seconds` (secondi dal primo record,
+      la base delle serie FC e velocità) e `index_at` (punto più vicino nel
+      tempo); `MapPage.cursor_moved`/`show_cursor_at` e
+      `ActivityDetailDialog.cursor_moved`/`show_cursor_at`, collegati dalla
+      finestra principale attraverso `ProfileDialogs` con l'identità
+      dell'attività: un'altra attività sulla mappa non si tocca, e nessuna
+      vista rimanda indietro ciò che riceve. Test:
+      `tests/ui/test_activity_cursor.py`, `tests/load/test_activity_profile.py`,
+      `tests/ui/test_activity_detail_speed.py`.
 - [x] Curva sempre intera con un leggero margine sopra e sotto (richiesta
       dell'utente del 2026-11-11: «i grafici devono sempre essere scalati in
       altezza in modo da visualizzare completamente la curva e avere comunque

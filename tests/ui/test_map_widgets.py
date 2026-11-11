@@ -138,6 +138,7 @@ def profile(*, altitude: bool = True, zones: bool = True) -> ActivityProfileData
         identity=IDENTITY,
         sport=Sport.RUNNING,
         local_day=date(2026, 5, 3),
+        seconds=np.arange(count, dtype=np.float64) * 150.0,
         segment=np.array([0, 0, 0, 0, 1, 1, 1, 1], dtype=np.intp),
         distance_m=np.arange(count, dtype=np.float64) * 500.0,
         lat_deg=np.linspace(-30.0, -29.99, count),

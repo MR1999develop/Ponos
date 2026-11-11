@@ -76,6 +76,7 @@ _ALIGN_LEFT = int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 _PERCENT = 100
 _ONE_DECIMAL_BELOW = 10.0
 _DEFAULT_SIZE = (940, 900)
+_SECONDS_PER_MINUTE = 60.0  # the charts' time axis is in minutes
 _CHART_MIN_HEIGHT = 190  # the plot area keeps about 90 px between the legend and the axis
 _SUMMARY_PAIRS_PER_ROW = 3  # caption and value, three times on a row
 _ZONES_STRETCH = 5  # the zones table has five columns, the domains table four
@@ -277,6 +278,9 @@ class ActivityDetailDialog(QDialog):
     """Summary, HR chart, speed or pace chart and time per zone of an activity."""
 
     threshold_test_requested = Signal(object)  # ActivityIdentity
+    # The user's pointer on the HR or speed chart: seconds from the first record of the file,
+    # None when it leaves (the map follows it).
+    cursor_moved = Signal(object)
 
     def __init__(
         self,
@@ -303,6 +307,8 @@ class ActivityDetailDialog(QDialog):
         # and one pointer: the minute under it shows its values on both charts
         self._chart.hovered_x.connect(self._speed_chart.show_hover_at)
         self._speed_chart.hovered_x.connect(self._chart.show_hover_at)
+        self._chart.hovered_x.connect(self._report_cursor)
+        self._speed_chart.hovered_x.connect(self._report_cursor)
         self._zone_model = ZoneTableModel(self)
         self._domain_model = DomainTableModel(self)
         self._build()
@@ -664,6 +670,18 @@ class ActivityDetailDialog(QDialog):
                 )
             )
         return " ".join(notes)
+
+    def show_cursor_at(self, seconds: object) -> None:
+        """The pointer of another view of this activity (the track or the elevation profile) is
+        at `seconds` from the first record, or left (None): both charts show that minute.
+        Nothing is reported back."""
+        minutes = seconds / _SECONDS_PER_MINUTE if isinstance(seconds, float | int) else None
+        self._chart.show_hover_at(minutes)
+        self._speed_chart.show_hover_at(minutes)
+
+    def _report_cursor(self, minutes: object) -> None:
+        seconds = minutes * _SECONDS_PER_MINUTE if isinstance(minutes, float | int) else None
+        self.cursor_moved.emit(seconds)
 
     def _set_test_command(self, identity: ActivityIdentity | None, reason: str) -> None:
         """Use as threshold test works on the activity shown, if it is a run."""

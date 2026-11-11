@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from zoneinfo import ZoneInfo
 
-from PySide6.QtCore import QDate, QDateTime, QLocale, QSettings, Qt, QTime
+from PySide6.QtCore import QDate, QDateTime, QLocale, QSettings, Qt, QTime, Signal
 from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QComboBox,
@@ -91,6 +91,10 @@ def _speed_text(distance_m: float | None, moving_s: float) -> str:
 
 class MapPage(QWidget):
     """The map section."""
+
+    # The user's pointer on the track or on the elevation profile: the activity and the seconds
+    # from its first record, None when it leaves (the activity window follows it).
+    cursor_moved = Signal(object, object)
 
     def __init__(  # noqa: PLR0913 - every argument is a distinct collaborator of the page
         self,
@@ -617,18 +621,46 @@ class MapPage(QWidget):
         profile = self._profile
         if isinstance(profile, ActivityProfileData) and 0 <= index < len(profile):
             self._call("setCursor", {"index": index})
+            self.cursor_moved.emit(profile.identity, float(profile.seconds[index]))
 
     def _on_chart_point_left(self) -> None:
         self._call("setCursor", {"index": None})
+        self._emit_cursor_left()
 
     def _on_map_point(self, index: int) -> None:
         profile = self._profile
         if isinstance(profile, ActivityProfileData) and 0 <= index < len(profile):
-            km = float(profile.distance_m[index]) / 1000.0
-            self._chart.run_script(f"ponosCursor({km!r});")
+            self._show_profile_cursor(profile, index)
+            self.cursor_moved.emit(profile.identity, float(profile.seconds[index]))
 
     def _on_map_point_left(self) -> None:
         self._chart.run_script("ponosCursor(null);")
+        self._emit_cursor_left()
+
+    def _show_profile_cursor(self, profile: ActivityProfileData, index: int) -> None:
+        km = float(profile.distance_m[index]) / 1000.0
+        self._chart.run_script(f"ponosCursor({km!r});")
+
+    def _emit_cursor_left(self) -> None:
+        profile = self._profile
+        if isinstance(profile, ActivityProfileData):
+            self.cursor_moved.emit(profile.identity, None)
+
+    def show_cursor_at(self, identity: object, seconds: object) -> None:
+        """The pointer of another view of the same activity (its HR or speed chart) is at
+        `seconds` from the first record, or left (None): the point nearest in time is marked
+        on the track and on the elevation profile. Another activity is ignored. Nothing is
+        reported back."""
+        profile = self._profile
+        if not isinstance(profile, ActivityProfileData) or profile.identity != identity:
+            return
+        index = profile.index_at(seconds) if isinstance(seconds, float | int) else None
+        if index is None:
+            self._call("setCursor", {"index": None})
+            self._chart.run_script("ponosCursor(null);")
+            return
+        self._call("setCursor", {"index": index})
+        self._show_profile_cursor(profile, index)
 
     # --- Texts and legends -------------------------------------------------------------------
 

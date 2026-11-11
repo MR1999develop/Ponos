@@ -514,6 +514,9 @@ class MainWindow(QMainWindow):
         self._activities.detail_requested.connect(self._map_ui.focus_activity)
         self._map_ui.controller.open_requested.connect(self._dialogs.show_activity_detail)
         self._dialogs.threshold_test_requested.connect(self._on_detail_threshold_test)
+        # one pointer for an activity: its detail window, its track and its elevation profile
+        self._dialogs.activity_cursor_moved.connect(self._map_ui.page.show_cursor_at)
+        self._map_ui.page.cursor_moved.connect(self._dialogs.show_activity_cursor)
         self._nutrition = NutritionUi(
             self,
             self._controller,

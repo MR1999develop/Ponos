@@ -56,6 +56,9 @@ class ProfileDialogs(QObject):
     """Own the profile data pages and windows and connect them to the data thread jobs."""
 
     threshold_test_requested = Signal(object)  # ActivityIdentity, from the detail window
+    # The pointer on a detail window's charts: the activity and the seconds from its first
+    # record, None when it leaves.
+    activity_cursor_moved = Signal(object, object)
 
     def __init__(  # noqa: PLR0913 - each argument is a dependency of the parent window
         self,
@@ -230,6 +233,7 @@ class ProfileDialogs(QObject):
         loader.failed.connect(dialog.show_error_of)
         dialog.finished.connect(partial(self._on_detail_closed, identity))
         dialog.threshold_test_requested.connect(self.threshold_test_requested)
+        dialog.cursor_moved.connect(partial(self.activity_cursor_moved.emit, identity))
         self._cascade(dialog)
         self._details[identity] = (dialog, loader)
         _bring_forward(dialog)
@@ -254,6 +258,13 @@ class ProfileDialogs(QObject):
         warm_up.setSingleShot(True)
         warm_up.timeout.connect(dialog.warm_up_chart)
         warm_up.start(0)
+
+    def show_activity_cursor(self, identity: object, seconds: object) -> None:
+        """Another view of an activity (the map) has the pointer at `seconds` from its first
+        record, or not any more (None): its detail window, if open, shows that minute."""
+        known = self._details.get(identity) if isinstance(identity, ActivityIdentity) else None
+        if known is not None:
+            known[0].show_cursor_at(seconds)
 
     def _cascade(self, dialog: ActivityDetailDialog) -> None:
         """A new window sits a little below and to the right of the last one, so none hides
