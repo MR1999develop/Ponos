@@ -1016,6 +1016,18 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       e una riga lo dice. Test: `tests/activities/test_speed_series.py`,
       `tests/ui/test_speed_figure.py`, `tests/ui/test_activity_detail_speed.py`,
       `tests/load/test_activity_detail.py`, `tests/ui/test_chart_view.py`.
+- [x] Sfondi della mappa valutati e non aggiunti (decisioni dell'utente del
+      2026-11-11; non riproporli senza un fatto nuovo):
+      - bergfex OSM: le condizioni d'uso di bergfex (AGB, sezione 7)
+        ammettono l'uso dei dati solo dopo accordo con bergfex GmbH, non c'è
+        un'API pubblica e le tessere sono JPEG. Si aggiunge solo con un
+        permesso scritto di bergfex.
+      - Satellite: Google vieta l'accesso diretto alle tessere fuori dalle sue
+        API (la Map Tiles API vuole un account con fatturazione e una chiave
+        dell'utente); i termini di Esri World Imagery non sono verificabili e
+        richiedono probabilmente un account; EOX Sentinel-2 cloudless è
+        gratuito per uso non commerciale ma ha 10 m per pixel, troppo poco per
+        i sentieri. L'utente ha scelto di non avere una mappa satellitare.
 
 ## 6. Squadra di agenti e modelli
 
