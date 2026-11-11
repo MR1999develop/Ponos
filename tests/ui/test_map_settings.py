@@ -74,6 +74,7 @@ def test_clearing_the_cache_reports_what_it_freed(tmp_path: Path) -> None:
     model, cache, _settings = model_with(tmp_path)
     cache.put(TileAddress(3, 1, 1), TileImage(make_png(), 3600), datetime.now(UTC))
     used = model.cache_used_bytes()
+    assert used is not None
     assert used > 0
 
     assert model.clear_cache() == used
