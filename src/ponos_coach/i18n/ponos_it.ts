@@ -299,11 +299,11 @@
     </message>
     <message>
         <source>This activity has no distance or speed data, so there is no pace chart.</source>
-        <translation>Questa attività non ha dati di distanza o velocità, quindi non c'è il grafico del passo.</translation>
+        <translation>Questa attività non ha dati di distanza o velocità, quindi non c&apos;è il grafico del passo.</translation>
     </message>
     <message>
         <source>This activity has no distance or speed data, so there is no speed chart.</source>
-        <translation>Questa attività non ha dati di distanza o velocità, quindi non c'è il grafico della velocità.</translation>
+        <translation>Questa attività non ha dati di distanza o velocità, quindi non c&apos;è il grafico della velocità.</translation>
     </message>
     <message numerus="yes">
         <source>Heart-rate samples outside your limits: %n. They were not used and are marked in the chart.</source>
@@ -3934,6 +3934,10 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Enter a size in GB between {low} and {high}, for example 4.</source>
         <translation>Inserisci una dimensione in GB tra {low} e {high}, per esempio 4.</translation>
+    </message>
+    <message>
+        <source>The map cache cannot be opened, so the map loads every tile from the server. Restart Ponos Coach to try again.</source>
+        <translation>La cache della mappa non si può aprire, quindi la mappa scarica ogni tessera dal server. Riavvia Ponos Coach per riprovare.</translation>
     </message>
     <message>
         <source>Clear map cache</source>

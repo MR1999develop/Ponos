@@ -158,11 +158,13 @@ def test_the_cache_folder_is_created_when_missing_and_reused_when_present(tmp_pa
     assert (folder / CACHE_FILE_NAME).is_file()
 
 
-def test_a_path_that_is_a_file_is_an_error_not_a_silent_fallback(tmp_path: Path) -> None:
+def test_a_path_that_is_a_file_is_a_cache_error_not_a_silent_fallback(tmp_path: Path) -> None:
+    # The port's error, which the proxy takes as a miss: a raw OSError stopped the tile request
+    # and, through the settings page, the window (acceptance campaign of 2026-11-11).
     blocker = tmp_path / "maps"
     blocker.write_bytes(b"x")
 
-    with pytest.raises(OSError):
+    with pytest.raises(TileCacheError):
         DiskTileCache(blocker, 100_000)
 
 

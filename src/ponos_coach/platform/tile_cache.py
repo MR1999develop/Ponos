@@ -116,9 +116,17 @@ class DiskTileCache:
     """
 
     def __init__(self, folder: Path, limit_bytes: int) -> None:
+        """Raises:
+        ValueError: the cap is not positive.
+        TileCacheError: the folder or the file cannot be made or opened (the proxy takes it as
+            a miss: the map works without the cache).
+        """
         if limit_bytes <= 0:
             raise ValueError("the cache cap must be positive")
-        _ensure_private_folder(folder)
+        try:
+            _ensure_private_folder(folder)
+        except OSError as exc:  # a folder that is a file, a disk that refuses
+            raise TileCacheError("tile cache cannot be opened") from exc
         self._path = folder / CACHE_FILE_NAME
         self._limit = limit_bytes
         self._lock = threading.Lock()

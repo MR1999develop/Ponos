@@ -125,6 +125,7 @@ def main(argv: list[str]) -> int:
         settings=QSettings(str(root / "settings.ini"), QSettings.Format.IniFormat),
         config_dir=root / "config",
         documents_dir=root / "documents",
+        map_cache_dir=root / "map-cache",  # never the user's cache folder
         system_timezone_id="Europe/Rome",
         clock=lambda _zone: date(2026, 12, 31),
     )

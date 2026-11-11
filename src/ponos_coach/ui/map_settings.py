@@ -62,14 +62,18 @@ class MapSettingsModel(QObject):
         self._settings.setValue(KEY_CACHE_GIB, f"{limit.bytes / GIB:g}")
         return CacheSizeResult(limit)
 
-    def cache_used_bytes(self) -> int:
-        """Bytes the stored tiles count against the cap."""
-        return self._cache.used_bytes()
+    def cache_used_bytes(self) -> int | None:
+        """Bytes the stored tiles count against the cap, or `None` if the cache cannot be opened
+        (the map works without it)."""
+        try:
+            return self._cache.used_bytes()
+        except TileCacheError:
+            return None
 
     def clear_cache(self) -> int | None:
         """Empty the cache; the bytes freed, or `None` if it could not be done."""
-        before = self._cache.used_bytes()
         try:
+            before = self._cache.used_bytes()
             self._proxy.clear_cache()
         except TileCacheError:
             return None

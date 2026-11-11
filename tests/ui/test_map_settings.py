@@ -17,12 +17,12 @@ from PySide6.QtWidgets import QMessageBox, QWidget
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.maps.domain import DEFAULT_CACHE_BYTES, GIB, TileAddress
-from ponos_coach.maps.ports import TileImage
+from ponos_coach.maps.ports import TileCacheError, TileImage
 from ponos_coach.maps.use_cases import TileProxy
 from ponos_coach.ui.map_settings import KEY_CACHE_GIB, MapSettingsModel
 from ponos_coach.ui.map_settings_dialog import MapSettingsDialog
 from tests.fakes.tiles import FakeTileSource, InMemoryTileCache, make_png, serving
-from tests.ui.workspace_support import WAIT_MS
+from tests.ui.workspace_support import WAIT_MS, close_window, compose, make_settings
 
 
 def model_with(tmp_path: Path) -> tuple[MapSettingsModel, InMemoryTileCache, QSettings]:
@@ -163,3 +163,48 @@ def test_keeping_the_cache_leaves_it_and_clearing_empties_it(qtbot: QtBot, tmp_p
     answer_clear(dialog, "Clear cache")
     assert cache.used_bytes() == 0
     assert cleared == [1]
+
+
+# --- A cache that cannot be opened (acceptance campaign of 2026-11-11) -------------------------
+
+
+class UnopenableTileCache(InMemoryTileCache):
+    """A cache whose file cannot be opened (a folder that is a file, a disk that refuses)."""
+
+    def used_bytes(self) -> int:
+        raise TileCacheError("tile cache cannot be opened")
+
+    def clear(self) -> None:
+        raise TileCacheError("tile cache cannot be opened")
+
+
+def test_a_cache_that_cannot_be_opened_is_said_and_cannot_be_cleared(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    cache = UnopenableTileCache(DEFAULT_CACHE_BYTES)
+    proxy = TileProxy(serving(FakeTileSource()), cache, lambda: datetime.now(UTC), time.monotonic)
+    settings = QSettings(str(tmp_path / "map.ini"), QSettings.Format.IniFormat)
+    model = MapSettingsModel(proxy, cache, settings)
+
+    dialog = MapSettingsDialog(model)  # building the page must not raise
+    qtbot.addWidget(dialog)
+
+    assert model.cache_used_bytes() is None
+    assert model.clear_cache() is None
+    assert dialog.cache_message_text.startswith("The map cache cannot be opened")
+    assert not dialog.clear_button.isEnabled()
+    assert dialog.clear_button.toolTip()  # the reason, where the user looks
+
+
+def test_the_window_opens_when_the_map_cache_folder_is_unusable(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    # The folder of the map cache is a file: the window opens, the map works without the cache.
+    (tmp_path / "map-cache").write_bytes(b"not a folder")
+    window = compose(tmp_path, make_settings(tmp_path))
+    qtbot.addWidget(window)
+
+    page = window.map_ui.settings_dialog
+    assert page is not None
+    assert page.cache_message_text.startswith("The map cache cannot be opened")
+    close_window(qtbot, window)

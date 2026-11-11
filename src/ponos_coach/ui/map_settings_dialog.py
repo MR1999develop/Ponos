@@ -95,7 +95,14 @@ class MapSettingsDialog(SettingsForm):
         self._show_cache_usage()
 
     def _show_cache_usage(self) -> None:
-        used = QLocale().formattedDataSize(self._model.cache_used_bytes())
+        used_bytes = self._model.cache_used_bytes()
+        self._clear_button.setEnabled(used_bytes is not None)
+        if used_bytes is None:
+            self._cache_message.setText(self._unavailable_text())
+            self._clear_button.setToolTip(self._unavailable_text())
+            return
+        self._clear_button.setToolTip("")
+        used = QLocale().formattedDataSize(used_bytes)
         total = QLocale().formattedDataSize(self._model.cache_limit().bytes)
         # {used}: space taken by the saved tiles; {total}: the chosen cap.
         self._cache_message.setText(
@@ -121,9 +128,19 @@ class MapSettingsDialog(SettingsForm):
             return
         self.refresh()
 
+    def _unavailable_text(self) -> str:
+        return self.tr(
+            "The map cache cannot be opened, so the map loads every tile from the server. "
+            "Restart Ponos Coach to try again."
+        )
+
     def ask_clear_cache(self) -> None:
         """Ask before emptying the cache, saying how much it frees."""
-        freed = QLocale().formattedDataSize(self._model.cache_used_bytes())
+        used_bytes = self._model.cache_used_bytes()
+        if used_bytes is None:  # the button is disabled then; the state may have changed since
+            self._show_cache_usage()
+            return
+        freed = QLocale().formattedDataSize(used_bytes)
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Question)
         box.setWindowTitle(self.tr("Clear map cache"))
