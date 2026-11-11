@@ -20,7 +20,7 @@ import tarfile
 import tempfile
 import types
 import zipfile
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from importlib import metadata
 from pathlib import Path
@@ -86,21 +86,36 @@ class Needle:
     case_sensitive: bool
 
 
-def local_needles(project_root: Path) -> list[Needle]:
+def on_github_hosted_runner(environment: Mapping[str, str]) -> bool:
+    """True on a runner that GitHub provides, whose account is generic and shared."""
+    return (
+        environment.get("GITHUB_ACTIONS") == "true"
+        and environment.get("RUNNER_ENVIRONMENT") == "github-hosted"
+    )
+
+
+def local_needles(project_root: Path, *, hosted_runner: bool = False) -> list[Needle]:
     """The user folder, the project folder (both with `\\` and `/`), the working directory
-    and the user name, as they are on this machine."""
+    and the user name, as they are on this machine.
+
+    On a GitHub-hosted runner the user folder and the user name are left out: the account
+    (`runneradmin`) is generic, not the maintainer's, and the same account built third-party
+    wheels (numpy, curl_cffi) whose metadata keep its folder. The project folder and the working
+    directory are still searched there.
+    """
     needles: list[Needle] = []
     paths = {
-        "user folder": Path.home(),
         "project folder": project_root,
         "working directory": Path.cwd(),
     }
+    if not hosted_runner:
+        paths["user folder"] = Path.home()
     for label, path in paths.items():
         text = str(path)
         variants = {text, text.replace("\\", "/"), path.as_posix()}
         needles.extend(Needle(label, variant, case_sensitive=False) for variant in variants)
     user = getpass.getuser()
-    if len(user) >= _MIN_USER_NAME_CHARS:
+    if not hosted_runner and len(user) >= _MIN_USER_NAME_CHARS:
         needles += [
             Needle("user name in a path", f"{sep}{user}{sep}", False) for sep in ("\\", "/")
         ]
@@ -274,7 +289,10 @@ def _command_smoke(app_folder: Path) -> int:
 
 
 def _command_traces(app_folder: Path, project_root: Path) -> int:
-    needles = local_needles(project_root)
+    hosted = on_github_hosted_runner(os.environ)
+    if hosted:
+        print("GitHub-hosted runner: its generic account is not searched")  # noqa: T201
+    needles = local_needles(project_root, hosted_runner=hosted)
     traces = [(path.as_posix(), label) for path, label in find_traces(app_folder, needles)]
     traces += [
         (f"module {name}", label)

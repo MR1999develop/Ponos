@@ -122,6 +122,35 @@ class TestLocalTraces:
 
         assert {"user folder", "project folder", "working directory"} <= labels
 
+    def test_on_a_hosted_runner_the_generic_account_is_not_a_needle(self, tmp_path: Path) -> None:
+        # The account of a GitHub runner (runneradmin) is the one that also built third-party
+        # wheels such as numpy: its folder in their metadata is no trace of the maintainer.
+        labels = {n.label for n in local_needles(tmp_path, hosted_runner=True)}
+
+        assert labels == {"project folder", "working directory"}
+
+    def test_on_a_maintainer_machine_the_user_folder_is_always_a_needle(
+        self, tmp_path: Path
+    ) -> None:
+        labels = {n.label for n in local_needles(tmp_path, hosted_runner=False)}
+
+        assert "user folder" in labels
+
+    @pytest.mark.parametrize(
+        ("environment", "hosted"),
+        [
+            ({"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted"}, True),
+            ({"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "self-hosted"}, False),
+            ({"RUNNER_ENVIRONMENT": "github-hosted"}, False),
+            ({}, False),
+        ],
+        ids=["hosted", "self-hosted", "no-actions", "local"],
+    )
+    def test_only_a_github_hosted_runner_counts_as_hosted(
+        self, environment: dict[str, str], *, hosted: bool
+    ) -> None:
+        assert dist_checks.on_github_hosted_runner(environment) is hosted
+
     def test_every_form_of_the_project_folder_is_a_needle(self, tmp_path: Path) -> None:
         texts = {n.text for n in local_needles(tmp_path) if n.label == "project folder"}
 

@@ -617,6 +617,13 @@ service, E elevation of privilege.
   CycloneDX SBOM made from the lockfile, and attaches them to a draft release;
   publishing is manual. Only the attestation job has `id-token` and
   `attestations`. The executable is not signed (exception 2).
+- Scan for local traces (`release/dist_checks.py`, T-SEC-12): on the
+  maintainer's machine it searches the user folder, the user name, the project
+  folder and the working directory. On a GitHub-hosted runner it leaves out the
+  user folder and name: the account (`runneradmin`) is generic and is the same
+  that built third-party wheels (numpy, curl_cffi), whose metadata keep its
+  folder (the release of 2026-11-11 failed on that). The maintainer's own
+  traces are searched by `nox -s dist` on their machine before a release.
 
 ## 4. Did we do it right?
 

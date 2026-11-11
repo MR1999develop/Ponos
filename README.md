@@ -329,6 +329,7 @@ between modules, tests, translation tests and `pip-audit`.
 
 `uv run --locked nox -s dist` builds the PyInstaller package (`release/`),
 smoke-tests the executable, checks that no local path or user name is in it
+(on a GitHub-hosted runner the generic runner account is not searched)
 and writes the archive and `SHA256SUMS` to `dist/release/`; it takes a few
 minutes. The release workflow (`.github/workflows/release.yml`) runs it on
 Windows (Ubuntu is paused for now) when a `v*` tag is pushed and attaches the result to a
