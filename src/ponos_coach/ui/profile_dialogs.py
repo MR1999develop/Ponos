@@ -40,6 +40,7 @@ from ponos_coach.ui.measurements_form import (
 from ponos_coach.ui.profile_edit_dialog import ProfileEditDialog
 from ponos_coach.ui.profile_editor import ProfileEditor, SavedEdit
 from ponos_coach.ui.settings_page import SettingsCategory, SettingsPage
+from ponos_coach.ui.speed_figure import SpeedLabels
 from ponos_coach.ui.tokens import Theme, tokens_for
 
 _CASCADE_PX = 32
@@ -239,7 +240,13 @@ class ProfileDialogs(QObject):
             discarded=QCoreApplication.translate("ProfileDialogs", "Samples outside your limits"),
             chrome=chart_chrome(),
         )
-        if not loader.load(identity, labels, tokens_for(self._theme())):
+        speed_labels = SpeedLabels(
+            x_axis=QCoreApplication.translate("ProfileDialogs", "Time"),
+            speed=QCoreApplication.translate("ProfileDialogs", "Speed"),
+            pace=QCoreApplication.translate("ProfileDialogs", "Pace"),
+            chrome=chart_chrome(),
+        )
+        if not loader.load(identity, labels, speed_labels, tokens_for(self._theme())):
             dialog.close()
             return
         # the web page loads while the worker decodes: started after the window has painted

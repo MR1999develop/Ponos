@@ -1000,6 +1000,22 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       profilo ripristinato con lo stesso id, che usa i token Garmin di quell'id.
       Test: `tests/platform/test_tile_http.py`, `tests/maps/test_use_cases.py`,
       `tests/ui/test_map_widgets.py`.
+- [x] Grafico della velocità nella finestra attività (richiesta dell'utente
+      del 2026-11-11: «oltre al grafico FC metti anche il grafico velocità»):
+      sotto il grafico FC, con lo stesso asse del tempo (zoom e scorrimento
+      collegati: `ValueRange` nel report dell'intervallo della pagina, titolo
+      della pagina validato come i numeri e le date). Passo in min/km (`m:ss`,
+      asse capovolto, più veloce in alto, tacche proprie, asse y fisso) per
+      `PACE_SPORTS` (corsa, trail, escursionismo: la regola del passo medio);
+      km/h per gli altri. Serie nel dominio, `smoothed_speed`
+      (`activities/domain/speed_series.py`): finestra di 30 s centrata e
+      tagliata alle pause, pause oltre 10 s e tratti sotto 0,5 m/s sono buchi
+      (mai picchi), al massimo circa 3000 punti; calcolata in
+      `GetActivityDetail` dalla distanza del FIT (che già integra la velocità
+      se manca la distanza). Senza distanza né velocità il grafico non compare
+      e una riga lo dice. Test: `tests/activities/test_speed_series.py`,
+      `tests/ui/test_speed_figure.py`, `tests/ui/test_activity_detail_speed.py`,
+      `tests/load/test_activity_detail.py`, `tests/ui/test_chart_view.py`.
 
 ## 6. Squadra di agenti e modelli
 

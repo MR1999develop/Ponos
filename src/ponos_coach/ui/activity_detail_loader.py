@@ -3,7 +3,8 @@
 """Loading an activity's detail on the data thread.
 
 The job reads the original file from the archive, decodes it, computes zones and load with the
-parameters valid on that day and builds the HR figure: all off the UI thread.
+parameters valid on that day and builds the HR figure and the speed or pace figure: all
+off the UI thread.
 A request superseded by another delivers nothing.
 """
 
@@ -21,6 +22,7 @@ from ponos_coach.ui.activity_detail import DetailOutcome, DetailReady, DetailUna
 from ponos_coach.ui.data_thread import JobFailed, JobOutcome, JobSucceeded
 from ponos_coach.ui.hr_figure import HeartRateLabels, prepare_heart_rate_chart
 from ponos_coach.ui.nutrition_sources import nutrition_sources
+from ponos_coach.ui.speed_figure import SpeedLabels, prepare_speed_chart
 from ponos_coach.ui.tokens import ThemeTokens
 from ponos_coach.ui.workspace import ProfileAccess, WorkspaceController
 
@@ -28,10 +30,11 @@ from ponos_coach.ui.workspace import ProfileAccess, WorkspaceController
 def _detail_of(
     identity: ActivityIdentity,
     labels: HeartRateLabels,
+    speed_labels: SpeedLabels,
     tokens: ThemeTokens,
     access: ProfileAccess,
 ) -> DetailOutcome:
-    """The data thread job: use case and HR figure."""
+    """The data thread job: use case, HR figure and speed or pace figure."""
     session = access.session
     result = GetActivityDetail(
         session.activities,
@@ -47,7 +50,12 @@ def _detail_of(
         chart = prepare_heart_rate_chart(
             result.trace, result.limits, result.zone_starts_bpm, labels, tokens
         )
-    return DetailReady(result, chart, GetActivityEnergy(nutrition_sources(access))(result))
+    speed_chart = None
+    if result.speed is not None:
+        speed_chart = prepare_speed_chart(result.speed, result.sport, speed_labels, tokens)
+    return DetailReady(
+        result, chart, GetActivityEnergy(nutrition_sources(access))(result), speed_chart
+    )
 
 
 class ActivityDetailLoader(QObject):
@@ -62,13 +70,17 @@ class ActivityDetailLoader(QObject):
         self._request = 0
 
     def load(
-        self, identity: ActivityIdentity, labels: HeartRateLabels, tokens: ThemeTokens
+        self,
+        identity: ActivityIdentity,
+        labels: HeartRateLabels,
+        speed_labels: SpeedLabels,
+        tokens: ThemeTokens,
     ) -> bool:
         """Start loading. False if no profile is open or the app is closing."""
         self._request += 1
         request = self._request
 
-        work = partial(_detail_of, identity, labels, tokens)
+        work = partial(_detail_of, identity, labels, speed_labels, tokens)
 
         def done(outcome: JobOutcome) -> None:
             if request != self._request:

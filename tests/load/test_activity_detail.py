@@ -52,6 +52,7 @@ def add_activity(
     start: datetime = START,
     with_gps: bool = False,
     sport: fw.Sport = fw.Sport.RUNNING,
+    speed_m_s: float | None = None,
 ) -> ActivityRecord:
     """A 1 Hz activity with these bpm (None = no valid HR) in the world's archive; with
     `with_gps` it runs north-east from a made-up point, one step of 0.0001 degrees per second."""
@@ -62,6 +63,7 @@ def add_activity(
             value,
             lat_deg=45.0 + i * 0.0001 if with_gps else None,
             lon_deg=9.0 + i * 0.0001 if with_gps else None,
+            distance_m=None if speed_m_s is None else speed_m_s * i,
         )
         for i, value in enumerate(bpm)
     ]
@@ -393,3 +395,31 @@ def test_an_activity_without_heart_rate_has_no_domain_seconds() -> None:
     record = add_activity(world, [None] * 600)
 
     assert detail_of(world, record).domain_seconds is None
+
+
+def test_the_detail_has_the_smoothed_speed_of_the_distance_in_the_file() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [150] * 300, speed_m_s=3.0)
+
+    detail = detail_of(world, record)
+
+    assert detail.speed is not None
+    assert detail.speed.meters_per_second == pytest.approx(3.0, rel=1e-3)
+    assert detail.speed.seconds[0] == 0.0
+
+
+def test_a_file_without_distance_has_no_speed() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [150] * 300)
+
+    assert detail_of(world, record).speed is None
+
+
+def test_a_file_that_never_moves_has_no_speed() -> None:
+    world = World()
+    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
+    record = add_activity(world, [150] * 300, speed_m_s=0.0)
+
+    assert detail_of(world, record).speed is None

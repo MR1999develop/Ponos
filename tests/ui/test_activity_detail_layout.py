@@ -55,7 +55,7 @@ def test_the_window_has_no_map(qtbot: QtBot) -> None:
     assert not hasattr(dialog, "track")
     assert not hasattr(dialog, "shows_track")
     assert dialog.findChild(QWidget, "detailNoGps") is None
-    assert dialog.findChildren(ChartView) == [dialog.chart]
+    assert dialog.findChildren(ChartView) == [dialog.chart, dialog.speed_chart]  # no map view
 
 
 def test_the_zone_table_shows_every_row_without_a_vertical_scroll_bar(qtbot: QtBot) -> None:

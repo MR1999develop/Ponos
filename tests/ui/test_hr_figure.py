@@ -202,13 +202,16 @@ def test_the_prepared_chart_is_one_ascii_json_argument_with_its_file_name() -> N
     assert payload["figure"]["data"][0]["name"] == "Heart rate"
 
 
-def test_the_wheel_zooms_and_a_left_drag_pans_the_time_axis_only() -> None:
+def test_the_wheel_zooms_and_a_left_drag_pans_the_time_axis_only_in_step_with_the_speed_chart() -> (
+    None
+):
     prepared = prepare_heart_rate_chart(
         trace_of([120.0, 140.0, 160.0]), LIMITS, STARTS, LABELS, tokens_for(Theme.LIGHT)
     )
 
     payload = json.loads(prepared.script[len("ponosRender(") : -2])
     assert payload["zoom"] is True  # the page turns on the wheel zoom
-    assert "linkedX" not in payload  # minutes of one session: nothing to keep in step
+    assert payload["linkedX"] is True  # the speed chart under it follows the zoom and the pan
+    assert "fixedY" not in payload  # the bpm axis follows the stretch in view
     assert prepared.figure.layout.dragmode == "pan"
     assert prepared.figure.layout.yaxis.fixedrange is True  # bpm stay as drawn

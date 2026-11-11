@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -67,11 +68,33 @@ _MAX_TITLE_CHARS = 7 + 2 * _MAX_DATE_CHARS + 2 + 16
 
 
 @dataclass(frozen=True, slots=True)
+class ValueRange:
+    """Numbers shown on a chart's x axis, from `start` to `end` (a time axis in minutes)."""
+
+    start: float
+    end: float
+
+
+@dataclass(frozen=True, slots=True)
 class DateRange:
     """Dates shown on a chart's x axis, from `start` to `end` (naive: the chart's own days)."""
 
     start: datetime
     end: datetime
+
+
+_NUMBER_CHARS = frozenset("0123456789+-.eE")
+
+
+def _parse_number(text: str) -> float | None:
+    """A finite number written by Plotly (`12.5`, `1e-7`); None otherwise."""
+    if not 0 < len(text) <= _MAX_DATE_CHARS or not set(text) <= _NUMBER_CHARS:
+        return None
+    try:
+        value = float(text)
+    except ValueError:
+        return None
+    return value if math.isfinite(value) else None
 
 
 def _parse_date(text: str) -> datetime | None:
@@ -88,12 +111,25 @@ def _parse_date(text: str) -> datetime | None:
 class RangeReport:
     """What the page reported after a zoom or pan: the dates shown, or None for the whole series."""
 
-    shown: DateRange | None
+    shown: DateRange | ValueRange | None
+
+
+def _parse_span(first: str, last: str) -> DateRange | ValueRange | None:
+    """The two ends of an axis as numbers (a time axis) or as dates; None if they are neither,
+    or not in increasing order. A date always has a character a number has not."""
+    low, high = _parse_number(first), _parse_number(last)
+    if low is not None and high is not None:
+        return ValueRange(low, high) if low < high else None
+    start, end = _parse_date(first), _parse_date(last)
+    if start is None or end is None or not start < end:
+        return None
+    return DateRange(start, end)
 
 
 def parse_range_title(title: str) -> RangeReport | None:
     """The report in a page title `xrange|START|END|N` or `xrange|auto|N`; None if the title is
-    not a valid range report (a page title is untrusted text: only well-formed dates pass)."""
+    not a valid range report (a page title is untrusted text: only well-formed numbers or dates
+    pass)."""
     if len(title) > _MAX_TITLE_CHARS:
         return None
     parts = title.split("|")
@@ -103,10 +139,8 @@ def parse_range_title(title: str) -> RangeReport | None:
         return RangeReport(None)
     if len(parts) != _RANGE_PARTS:
         return None
-    start, end = _parse_date(parts[1]), _parse_date(parts[2])
-    if start is None or end is None or not start < end:
-        return None
-    return RangeReport(DateRange(start, end))
+    span = _parse_span(parts[1], parts[2])
+    return None if span is None else RangeReport(span)
 
 
 class AppOnlyInterceptor(QWebEngineUrlRequestInterceptor):
@@ -307,7 +341,7 @@ class ChartView(QWidget):
     load_failed = Signal()
     hovered = Signal(int)  # index of the point under the pointer (the chart asked for it)
     hover_left = Signal()
-    x_range_changed = Signal(object)  # DateRange, or None for the whole series (user's zoom/pan)
+    x_range_changed = Signal(object)  # DateRange or ValueRange, None for the whole series
 
     _page_url = APP_PAGE_URL  # a subclass shows another page of the same scheme
 
@@ -368,10 +402,19 @@ class ChartView(QWidget):
         else:
             self._queued.append(script)
 
-    def set_x_range(self, shown: DateRange | None) -> None:
-        """Show these dates on the x axis (None: the whole series), without reporting it back."""
+    def set_accessible_name(self, name: str) -> None:
+        """Change the name assistive technology gives the chart (the pace chart or the speed
+        chart is only known when the activity arrives)."""
+        self._accessible_name = name
+        if self._view is not None:
+            self._view.setAccessibleName(name)
+
+    def set_x_range(self, shown: DateRange | ValueRange | None) -> None:
+        """Show this stretch of the x axis (None: the whole series), without reporting it back."""
         if shown is None:
             arguments = "null, null"
+        elif isinstance(shown, ValueRange):
+            arguments = f"{shown.start!r}, {shown.end!r}"
         else:
             arguments = ", ".join(
                 json.dumps(moment.isoformat(sep=" ")) for moment in (shown.start, shown.end)

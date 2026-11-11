@@ -510,6 +510,27 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
   body data of that day are missing (height, date of birth, weight, HR
   parameters, or younger than 18) the pair is left out and the next ones close
   the gap.
+- Under the HR chart there is a speed chart on the same time axis (user's
+  request of 2026-11-11): the wheel zooms and a left drag pans, and the two
+  charts follow each other. Running, trail running and hiking (the sports of
+  the average pace) show a pace in min/km, `m:ss`, on an upside-down axis so
+  that faster is higher; cycling and the other sports show a speed in km/h.
+  Both axes are named with their unit. The series is the green of the category
+  palette (never red or orange), the same in the light and the dark theme.
+  The pace axis keeps the range the session covers and its own `m:ss` ticks:
+  it does not follow the zoom and the right drag does not stretch it.
+- The speed comes from the cumulative distance of the file (when a file has
+  no distance field the reader integrates its speed field), computed on the
+  data thread by `smoothed_speed`: the distance covered in a window of 30 s
+  centred on each record, cut at a pause, so a pause is never averaged in.
+  A pause (more than 10 s between two records, the limit of the HR load) and
+  a stretch slower than 0.5 m/s (1.8 km/h, a pace of 33:20 min/km: standing
+  still) are holes in the line, never a peak or a zero. Long sessions are
+  thinned to about 3,000 points, keeping the edges of every hole.
+- Without distance or speed in the file (or with an activity that never
+  moves) there is no speed chart: a line under the summary says so and the HR
+  chart takes the space. Without HR but with speed the speed chart is shown
+  and the line says the load is estimated.
 - The HR samples discarded from the load are marked on the chart with a cross;
   a warning says how many they are, and how many the file reader skipped
   because of a repeated or backward timestamp.

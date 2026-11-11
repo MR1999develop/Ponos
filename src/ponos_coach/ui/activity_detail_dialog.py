@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Window "Activity detail": summary, HR chart with zones and time per zone.
+"""Window "Activity detail": summary, HR chart with zones, speed or pace chart and time per
+zone.
 
 The window is not modal: the user can keep it next to the overview. It shows one of three
 states: loading, the use case outcome (detail or the reason the file is not usable) or error.
@@ -74,7 +75,7 @@ _ALIGN_RIGHT = int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 _ALIGN_LEFT = int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 _PERCENT = 100
 _ONE_DECIMAL_BELOW = 10.0
-_DEFAULT_SIZE = (940, 780)
+_DEFAULT_SIZE = (940, 900)
 _CHART_MIN_HEIGHT = 190  # the plot area keeps about 90 px between the legend and the axis
 _SUMMARY_PAIRS_PER_ROW = 3  # caption and value, three times on a row
 _ZONES_STRETCH = 5  # the zones table has five columns, the domains table four
@@ -273,7 +274,7 @@ def _zone_load_text(load: float | None) -> str:
 
 
 class ActivityDetailDialog(QDialog):
-    """Summary, HR chart and time per zone of an activity."""
+    """Summary, HR chart, speed or pace chart and time per zone of an activity."""
 
     threshold_test_requested = Signal(object)  # ActivityIdentity
 
@@ -294,10 +295,16 @@ class ActivityDetailDialog(QDialog):
         self.resize(*_DEFAULT_SIZE)
         self._chart = ChartView(engine, self.tr("Heart rate chart"), self)
         self._chart.setMinimumHeight(_CHART_MIN_HEIGHT)
+        self._speed_chart = ChartView(engine, self.tr("Speed chart"), self)
+        self._speed_chart.setMinimumHeight(_CHART_MIN_HEIGHT)
+        # one time axis for both charts: zooming or panning one moves the other
+        self._chart.x_range_changed.connect(self._speed_chart.set_x_range)
+        self._speed_chart.x_range_changed.connect(self._chart.set_x_range)
         self._zone_model = ZoneTableModel(self)
         self._domain_model = DomainTableModel(self)
         self._build()
         self.finished.connect(self._chart.dispose)
+        self.finished.connect(self._speed_chart.dispose)
         self.show_loading()
 
     # --- Costruzione ------------------------------------------------------------------
@@ -321,8 +328,14 @@ class ActivityDetailDialog(QDialog):
         self._message = StatePage(self)
         self._message.button.setVisible(False)
         self._body = QStackedWidget(self)
+        self._charts = QWidget(self)
+        charts_layout = QVBoxLayout(self._charts)
+        charts_layout.setContentsMargins(0, 0, 0, 0)
+        charts_layout.setSpacing(SPACE_2)
+        charts_layout.addWidget(self._chart, stretch=1)
+        charts_layout.addWidget(self._speed_chart, stretch=1)
         self._body.addWidget(self._message)
-        self._body.addWidget(self._chart)
+        self._body.addWidget(self._charts)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
         buttons.rejected.connect(self.reject)
@@ -444,6 +457,19 @@ class ActivityDetailDialog(QDialog):
         return self._chart
 
     @property
+    def speed_chart(self) -> ChartView:
+        """The speed chart (a pace chart for the sports measured by pace)."""
+        return self._speed_chart
+
+    def shows_speed_chart(self) -> bool:
+        """True if the speed or pace chart is visible."""
+        return self.shows_chart_page() and self._speed_chart.isVisibleTo(self)
+
+    def shows_chart_page(self) -> bool:
+        """True if the charts are the visible page (some activity data is drawn)."""
+        return self._body.currentWidget() is self._charts
+
+    @property
     def zone_model(self) -> ZoneTableModel:
         """The zones table model."""
         return self._zone_model
@@ -492,8 +518,8 @@ class ActivityDetailDialog(QDialog):
         return self._use_as_test
 
     def shows_chart(self) -> bool:
-        """True if the chart is the visible page."""
-        return self._body.currentWidget() is self._chart
+        """True if the HR chart is visible."""
+        return self.shows_chart_page() and self._chart.isVisibleTo(self)
 
     # --- Stati ------------------------------------------------------------------------
 
@@ -534,23 +560,33 @@ class ActivityDetailDialog(QDialog):
         self._set_test_command(
             detail.identity if can_be_threshold_test(detail.sport) else None, not_a_run_reason()
         )
-        self._fill_summary(detail, ready.energy)
+        self._fill_summary(detail, ready.energy, has_hr_chart=ready.chart is not None)
         self._set_details_visible(True)
         self._zone_model.set_rows(zone_rows(detail))
         self._domain_model.set_rows(domain_rows(detail))
         self._table.setVisible(ready.chart is not None)
         self._domain_table.setVisible(ready.chart is not None)
         self._fit_table_height()
-        if ready.chart is None:
+        self._chart.setVisible(ready.chart is not None)
+        self._speed_chart.setVisible(ready.speed_chart is not None)
+        if ready.chart is None and ready.speed_chart is None:
             self._show_message(
                 self.tr("No heart-rate data"),
                 self.tr("This activity has no heart-rate samples, so its load is estimated."),
             )
-        else:
+            return
+        if ready.chart is not None:
             self._chart.show_prepared(ready.chart)
-            self._body.setCurrentWidget(self._chart)
+        if ready.speed_chart is not None:
+            self._speed_chart.set_accessible_name(
+                self.tr("Pace chart") if detail.sport in PACE_SPORTS else self.tr("Speed chart")
+            )
+            self._speed_chart.show_prepared(ready.speed_chart)
+        self._body.setCurrentWidget(self._charts)
 
-    def _fill_summary(self, detail: ActivityDetail, energy: ActivityEnergy | None) -> None:
+    def _fill_summary(
+        self, detail: ActivityDetail, energy: ActivityEnergy | None, *, has_hr_chart: bool
+    ) -> None:
         local = detail.start.astimezone(self._zone)
         started = QLocale().toString(
             QDateTime(
@@ -587,11 +623,24 @@ class ActivityDetailDialog(QDialog):
             and (key != "calories" or energy is not None)
         )
         self._lay_out_summary(shown)
-        self._notice.setText(self._notice_text(detail))
+        self._notice.setText(self._notice_text(detail, has_hr_chart=has_hr_chart))
         self._notice.setVisible(bool(self._notice.text()))
 
-    def _notice_text(self, detail: ActivityDetail) -> str:
+    def _notice_text(self, detail: ActivityDetail, *, has_hr_chart: bool) -> str:
         notes = []
+        if not has_hr_chart and detail.speed is not None:
+            # the HR chart's own message page is not shown: say it here
+            notes.append(
+                self.tr("This activity has no heart-rate samples, so its load is estimated.")
+            )
+        if detail.speed is None:
+            notes.append(
+                self.tr("This activity has no distance or speed data, so there is no pace chart.")
+                if detail.sport in PACE_SPORTS
+                else self.tr(
+                    "This activity has no distance or speed data, so there is no speed chart."
+                )
+            )
         discarded = detail.load.discarded_samples
         if discarded:
             notes.append(
