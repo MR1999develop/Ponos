@@ -214,6 +214,10 @@
         <translation>Usa come test di soglia...</translation>
     </message>
     <message>
+        <source>Speed chart</source>
+        <translation>Grafico della velocità</translation>
+    </message>
+    <message>
         <source>Time below LT1, between LT1 and LT2 and above LT2</source>
         <translation>Tempo sotto LT1, tra LT1 e LT2 e sopra LT2</translation>
     </message>
@@ -278,6 +282,10 @@
         <translation>Questa attività non ha campioni di frequenza cardiaca, quindi il carico è stimato.</translation>
     </message>
     <message>
+        <source>Pace chart</source>
+        <translation>Grafico del passo</translation>
+    </message>
+    <message>
         <source>{sport}, {started}</source>
         <translation>{sport}, {started}</translation>
     </message>
@@ -288,6 +296,14 @@
     <message>
         <source>{low} to {high}</source>
         <translation>da {low} a {high}</translation>
+    </message>
+    <message>
+        <source>This activity has no distance or speed data, so there is no pace chart.</source>
+        <translation>Questa attività non ha dati di distanza o velocità, quindi non c'è il grafico del passo.</translation>
+    </message>
+    <message>
+        <source>This activity has no distance or speed data, so there is no speed chart.</source>
+        <translation>Questa attività non ha dati di distanza o velocità, quindi non c'è il grafico della velocità.</translation>
     </message>
     <message numerus="yes">
         <source>Heart-rate samples outside your limits: %n. They were not used and are marked in the chart.</source>
@@ -5343,6 +5359,14 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
     <message>
         <source>Samples outside your limits</source>
         <translation>Campioni fuori dai limiti</translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation>Velocità</translation>
+    </message>
+    <message>
+        <source>Pace</source>
+        <translation>Passo</translation>
     </message>
     <message>
         <source>The profile is busy. Save again when the operation has finished.</source>
