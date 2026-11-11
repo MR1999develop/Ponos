@@ -138,7 +138,7 @@ def naive_zone_seconds(
             continue
         counted += valid_s
         scaled = bpm * 100
-        zone = sum(1 for percent in (75, 85, 95, 103) if scaled >= percent * threshold)
+        zone = sum(1 for percent in (72, 85, 95, 103) if scaled >= percent * threshold)
         zones[zone] += valid_s
     return zones, counted
 
@@ -229,7 +229,7 @@ def test_t_calc_05_the_detail_of_every_activity_gives_the_same_load_as_the_overv
         assert result.threshold_bpm == run_threshold
         assert result.lt1_bpm == 133  # 83% of 160 = 132.8
         assert result.zone_starts_bpm == tuple(
-            result.threshold_bpm * percent / 100 for percent in (75, 85, 95, 103)
+            result.threshold_bpm * percent / 100 for percent in (72, 85, 95, 103)
         )
 
 

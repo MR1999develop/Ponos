@@ -85,7 +85,7 @@ di 20 minuti e coincide con il segmento.
 - **Giorno del test:** il giorno locale (fuso del profilo) dell'inizio
   dell'attività; i limiti FC sono quelli in vigore quel giorno.
 - **Zone FC:** quelle del carico (`load/domain/zones.py`, scelta dell'utente del
-  2026-11-10: Z1 sotto 75% della soglia, 75–85, 85–95, 95–103, Z5 da 103%), con `zone_starts_bpm(soglia)`.
+  2026-11-10: Z1 sotto 72% della soglia, 72–85, 85–95, 95–103, Z5 da 103%), con `zone_starts_bpm(soglia)`.
 - **Zone di ritmo** (`assessment/domain/pace_zones.py`): cinque zone allineate
   alle zone FC, come percentuale della **velocità** di soglia: Z1 sotto 78%,
   Z2 78–88%, Z3 88–94%, Z4 94–100%, Z5 100% e oltre (nel ritmo, circa: più

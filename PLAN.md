@@ -965,6 +965,16 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
 - [x] Scala delle distanze sulla mappa (richiesta dell'utente del
       2026-11-11): scala di Leaflet in basso a sinistra, solo metrica (m e
       km), con i colori del tema. Test: `tests/ui/test_map_page_web.py`.
+- [x] Confine Z1/Z2 delle zone FC a 72% (richiesta dell'utente del
+      2026-11-11: "Z1 <72% e Z2 dal 72%"): Z1 50-71%, Z2 72-84%, Z3 85-94%,
+      Z4 95-102%, Z5 da 103% (`ZONE_STARTS_PERCENT = (72, 85, 95, 103)`); gli
+      altri confini e le FC rappresentative (66/82/90/97/103) non cambiano.
+      `METHOD_VERSION` 11 (cambiano gli intervalli FC dei blocchi Z1 e Z2) e
+      golden di `plans_hrtss.json` riregistrato (cambiano solo i limiti FC
+      dei blocchi al confine Z1/Z2, 127/128 diventano 122/123; carichi, tipi
+      di seduta, giorni e avvisi no); i secondi per zona si
+      ricalcolano, il TRIMPeq no. Test: `tests/load/test_zones.py`,
+      `tests/collaudo/test_fase5_zone_fri5.py`, `tests/planning/`, `tests/ui/`.
 
 ## 6. Squadra di agenti e modelli
 

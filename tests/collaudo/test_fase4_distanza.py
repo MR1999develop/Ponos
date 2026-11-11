@@ -46,13 +46,14 @@ LEGS = [Leg(300, 110, 2.5), Leg(300, 150, 3.0), Leg(300, 160, 3.2), Leg(300, 172
 # Frozen with the code of commit d5b7b3b (no distance series): (TRIMPeq of a run, used samples,
 # excluded seconds, seconds per zone); the number is the hrTSS of that time, the same
 # formula. The same files must give the same numbers: the load did not
-# change when the zones of the user came (75/85/95/103%, 2026-11-10), only the seconds per zone
-# and the fingerprint of the saved loads, which therefore recompute.
-FROZEN_LOAD = (36.81167026367779, 1801, 0.0, (601.0, 0.0, 600.0, 300.0, 300.0))
-# Model 5 (the bike has no threshold of its own any more) with the zones 75/85/95/103%: the hash of
-# {"max_bpm":190,"min_bpm":50,"model":5,"sex":"male","threshold_bpm":170,"zones":[75,85,95,103]}
+# change when the zones of the user came (2026-11-10, Z1/Z2 boundary moved to 72% on
+# 2026-11-11), only the seconds per zone and the fingerprint of the saved loads, which
+# therefore recompute.
+FROZEN_LOAD = (36.81167026367779, 1801, 0.0, (300.0, 301.0, 600.0, 300.0, 300.0))
+# Model 5 (the bike has no threshold of its own any more) with the zones 72/85/95/103%: the hash of
+# {"max_bpm":190,"min_bpm":50,"model":5,"sex":"male","threshold_bpm":170,"zones":[72,85,95,103]}
 # worked out outside the code.
-FROZEN_FINGERPRINT = "457c20329fa8cd6ec9e61a74e551b62b64c1ebf1b9a5d439801c113270675979"
+FROZEN_FINGERPRINT = "f6cf34cc2f7e731b3b9a3ef8f7ee18008a13715a9a9d6b73a4e2edae7ebae7bd"
 
 
 BIKE_TRIMP_EQ = 40.193518072841776
@@ -128,7 +129,7 @@ def test_the_load_with_gaps_is_the_one_computed_before() -> None:
     trimp_eq, used, excluded, zones = load_of(decode(data))
 
     assert trimp_eq == pytest.approx(36.23208601003227, rel=1e-12)
-    assert (used, excluded, zones) == (1765, 31.0, (601.0, 0.0, 574.0, 295.0, 300.0))
+    assert (used, excluded, zones) == (1765, 31.0, (300.0, 301.0, 574.0, 295.0, 300.0))
 
 
 def test_the_heart_rate_series_does_not_depend_on_the_distance() -> None:

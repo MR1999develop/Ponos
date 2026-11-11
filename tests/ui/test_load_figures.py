@@ -160,8 +160,8 @@ def test_zones_figure_has_five_stacked_series_z1_to_z5_with_their_boundaries() -
     figure = build_weekly_zones_figure(weekly, ZONES_LABELS, tokens_for(Theme.LIGHT))
 
     assert [t.name for t in figure.data] == [
-        "Z1 <75%",
-        "Z2 75\u201384%",
+        "Z1 <72%",
+        "Z2 72\u201384%",
         "Z3 85\u201394%",
         "Z4 95\u2013102%",
         "Z5 \u2265103%",
@@ -171,8 +171,8 @@ def test_zones_figure_has_five_stacked_series_z1_to_z5_with_their_boundaries() -
 
 
 def test_zone_labels_follow_the_single_source_of_the_boundaries() -> None:
-    assert ZONE_STARTS_PERCENT == (75, 85, 95, 103)
-    assert zone_label(0).endswith("<75%")
+    assert ZONE_STARTS_PERCENT == (72, 85, 95, 103)
+    assert zone_label(0).endswith("<72%")
     assert zone_label(ZONE_COUNT - 1).endswith("\u2265103%")
     with_boundaries = [zone_label(i) for i in range(1, ZONE_COUNT - 1)]
     for label, start, end in zip(
@@ -217,7 +217,7 @@ def test_the_prepared_chart_carries_one_json_argument_and_an_ascii_script() -> N
     assert prepared.script.isascii()  # quotes and symbols pass as JSON escapes
     payload = json.loads(prepared.script[len(prefix) : -len(suffix)])
     assert payload["filename"] == "ponos-coach-zones"
-    assert payload["figure"]["data"][0]["name"] == "Z1 <75%"
+    assert payload["figure"]["data"][0]["name"] == "Z1 <72%"
     assert prepared.background == tokens.background
 
 
@@ -341,8 +341,8 @@ def test_zone_labels_with_non_integer_boundaries_say_less_than_the_next_boundary
 
 
 def test_zone_labels_with_whole_boundaries_end_one_point_before_the_next() -> None:
-    assert zone_label(1, (75.0, 85.0, 95.0, 103.0)) == "Z2 75\u201384%"
-    assert zone_label(1) == "Z2 75\u201384%"
+    assert zone_label(1, (72.0, 85.0, 95.0, 103.0)) == "Z2 72\u201384%"
+    assert zone_label(1) == "Z2 72\u201384%"
 
 
 def test_the_box_under_the_pointer_is_small_and_see_through() -> None:

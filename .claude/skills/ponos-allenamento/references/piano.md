@@ -247,10 +247,10 @@ picco):
 ## 7. Modelli di seduta (`defaults.py`, `sessions.py`)
 
 Zone FC e di ritmo sono quelle esistenti (`load.zones`, scelta dell'utente del 2026-11-10:
-Z1 sotto 75% della soglia, Z2 75–84%, Z3 85–94%, Z4 95–102%, Z5 da 103%;
+Z1 sotto 72% della soglia, Z2 72–84%, Z3 85–94%, Z4 95–102%, Z5 da 103%;
 `assessment.pace_zones`, invariate); gli intervalli di FC di ogni blocco seguono da sole le
 zone, e così quelli di ritmo; le strutture della tabella qui sotto non cambiano, ma una zona
-è più larga (la Z2 va da 75% a 85%). Ogni blocco ha il suo intervallo in bpm e in s/km (ritmo solo per corsa con
+è più larga (la Z2 va da 72% a 85%). Ogni blocco ha il suo intervallo in bpm e in s/km (ritmo solo per corsa con
 ritmo di soglia). Nell'allenamento Garmin, con un intervallo di ritmo il ritmo
 è l'obiettivo principale e la FC il secondario; senza, la FC resta la principale
 (sezione 10 di `dati-e-sincronizzazione.md`).
@@ -398,7 +398,7 @@ non minuti per giorno; giorni di seduta spaziati dalla regola della sezione 6;
 lungo sempre il più lungo: ADR 016; la 5 aveva i minuti per giorno). La **5** (il test di soglia è una seduta del piano: campo
 `threshold_test` nella seduta, `test_protocol` e `missed_tests` tra gli ingressi; i piani
 e i giorni congelati salvati con la 4 non si rileggono, il formato ha un campo in più; la 4
-aveva infortuni e malattie aperti; la 10 ha le zone FC dell'utente (75/85/95/103); la 3 aveva le zone FC della 5ª edizione e FC rappresentative delle zone
+aveva infortuni e malattie aperti; la 11 sposta il confine Z1/Z2 da 75 a 72% (zone FC dell'utente 72/85/95/103); la 10 aveva le zone FC dell'utente (75/85/95/103); la 3 aveva le zone FC della 5ª edizione e FC rappresentative delle zone
 per il carico stimato; la 2 aveva scarico a gradini, distribuzione 80/20 per sedute,
 giorni duri, ritmo gara, scarico del 3:1 al 70%). I piani salvati con la
 versione 1 non si rileggono (il formato ha campi in più), né quelli della 3 (il campo
