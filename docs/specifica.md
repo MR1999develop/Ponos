@@ -810,8 +810,10 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
   goal further away stays in the list with a warning. It has one session a day
   and one sport (that of the first A race).
 - The plan is refused, with the reason, when there are no goals, a goal is today
-  or in the past, two races are on the same day, there is no availability or no
-  session type for the sport. Otherwise it always exists and what is not right
+  or in the past, two races are on the same day or there is no availability. A
+  sport with no session type chosen (for example cycling, when only running
+  types are ticked) uses the suggested ones: easy, long, threshold and
+  recovery (method version 12). Otherwise it always exists and what is not right
   goes in warnings (for example a half marathon without a long session, two A
   races three weeks apart, a CTL that cannot be reached at the maximum ramp).
 - When the fitness asked for a goal is out of reach, the plan says whether the

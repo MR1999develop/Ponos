@@ -13,6 +13,7 @@ from ponos_coach.goals.domain.goal import (
 from ponos_coach.goals.domain.session_types import (
     HARD_TYPES,
     INTENSE_TYPES,
+    SUGGESTED_TYPES,
     SessionChoices,
     SessionType,
 )
@@ -20,6 +21,7 @@ from ponos_coach.goals.domain.session_types import (
 __all__ = [
     "HARD_TYPES",
     "INTENSE_TYPES",
+    "SUGGESTED_TYPES",
     "FitnessGoal",
     "GoalId",
     "Priority",

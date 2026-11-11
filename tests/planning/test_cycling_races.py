@@ -12,7 +12,7 @@ from datetime import timedelta
 import pytest
 
 from ponos_coach.activities.domain import Sport
-from ponos_coach.goals.domain import RaceGoal, SessionType, takes_target_time
+from ponos_coach.goals.domain import SUGGESTED_TYPES, RaceGoal, SessionType, takes_target_time
 from ponos_coach.planning.domain import (
     MissingLongSession,
     Phase,
@@ -139,6 +139,18 @@ def test_the_training_is_on_the_bike_by_time_and_heart_rate_never_by_pace() -> N
             assert block.pace_fast_s_per_km is None
             assert block.race_pace_s_per_km is None
     assert all(s.ascent_m == 0 for s in training)  # no hill work on the bike
+
+
+def test_a_cycling_race_brings_bike_sessions_with_only_running_types_chosen() -> None:
+    plan = build_plan(
+        inputs([bike_race(90_000, 1_200)], avail=BIG_WEEK, choices_for=Sport.RUNNING), TODAY
+    )
+    assert isinstance(plan, Plan)
+    sessions = [d.session for d in plan.days if d.session is not None]
+    assert sessions
+    assert all(s.sport is Sport.CYCLING for s in sessions)
+    assert {s.session_type for s in sessions} <= SUGGESTED_TYPES
+    assert violations(plan) == []
 
 
 def test_a_cycling_plan_respects_every_constraint() -> None:

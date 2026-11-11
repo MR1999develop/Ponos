@@ -64,7 +64,7 @@ invia. Nessun I/O nel motore.
 | `GOAL_NOT_IN_FUTURE` | un obiettivo oggi o nel passato (gli id in `goal_ids`) |
 | `GOALS_ON_SAME_DAY` | due gare nello stesso giorno |
 | `NO_AVAILABILITY` | nessun giorno disponibile o zero minuti a settimana |
-| `NO_SESSION_TYPES` | nessuna tipologia scelta per lo sport del piano |
+| `NO_SESSION_TYPES` | solo nei piani salvati prima della versione 12: da allora uno sport senza tipologie scelte usa `SUGGESTED_TYPES` (facile, lungo, soglia, recupero) |
 
 Altrimenti il piano esiste sempre; ciò che non va sta negli avvisi
 (`Plan.warnings`, un tipo per avviso):
@@ -226,7 +226,9 @@ picco):
     tabella del CTL, `MissingLongSession`, niente VO2max nel picco oltre i 10 km) usano
     `target.rule_distance_m`: per il ciclismo la corsa di pari durata a 6 min/km
     (`EFFORT_PACE_S_PER_KM`; un'ora in bici = 10 km). Sedute in bici per durata e zone di FC
-    (soglia del ciclismo), senza ritmo e senza salite;
+    (soglia del ciclismo), senza ritmo e senza salite. Se per il ciclismo non è scelta nessuna
+    tipologia, il piano usa `SUGGESTED_TYPES` (`SessionChoices.for_sport_or_suggested`, vale per
+    ogni sport) invece di rifiutarsi;
   - **Sedute in salita** solo per la gara A, con piano di corsa (RUNNING o TRAIL), pendenza media
     ≥ 20 m/km (`HILL_MIN_SLOPE_M_PER_KM`; 19,9 no, 20 sì), nelle fasi `HILL_PHASES` = costruzione
     e picco; mai in base, mantenimento, scarico finale, recupero né nelle settimane di scarico

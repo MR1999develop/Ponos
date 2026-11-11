@@ -297,8 +297,6 @@ def _refusal(inputs: PlanInputs, today: date) -> PlanRefusal | None:
         return PlanRefusal(RefusalReason.GOALS_ON_SAME_DAY, tuple(clash))
     if inputs.availability.is_empty:
         return PlanRefusal(RefusalReason.NO_AVAILABILITY)
-    if not inputs.choices.for_sport(inputs.plan_sport()):
-        return PlanRefusal(RefusalReason.NO_SESSION_TYPES)
     return None
 
 
@@ -443,7 +441,7 @@ def _context(inputs: PlanInputs, macro: Macrocycle, today: date, max_ramp: float
         for r in inputs.races
         if r.priority is Priority.A
     )
-    chosen = allowed_types(inputs.choices.for_sport(sport), sport, restriction)
+    chosen = allowed_types(inputs.choices.for_sport_or_suggested(sport), sport, restriction)
     return _Context(
         inputs,
         macro,
@@ -810,7 +808,7 @@ def _choice_warnings(inputs: PlanInputs) -> list[PlanWarning]:
     for race in inputs.races:
         if race.priority is Priority.C:
             continue
-        chosen = inputs.choices.for_sport(race.sport)
+        chosen = inputs.choices.for_sport_or_suggested(race.sport)
         if _rule_distance_m(race) >= defaults.HALF_MARATHON_M and SessionType.LONG not in chosen:
             warnings.append(MissingLongSession(race.goal_id.value))
         if not chosen & {SessionType.THRESHOLD, SessionType.VO2MAX}:

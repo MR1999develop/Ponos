@@ -121,7 +121,9 @@ class RefusalReason(Enum):
     GOAL_NOT_IN_FUTURE = "goal_not_in_future"  # `goal_ids` lists them
     GOALS_ON_SAME_DAY = "goals_on_same_day"  # two races on one day
     NO_AVAILABILITY = "no_availability"
-    NO_SESSION_TYPES = "no_session_types"  # nothing chosen for the sport of the plan
+    # Nothing chosen for the sport of the plan. Since method version 12 the plan uses the suggested
+    # types instead; the value stays for plans stored before.
+    NO_SESSION_TYPES = "no_session_types"
 
 
 @dataclass(frozen=True, slots=True)

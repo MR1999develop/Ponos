@@ -49,7 +49,7 @@ def _is_hard(day: PlanDay) -> bool:
 def _check_days(plan: Plan) -> list[str]:
     problems: list[str] = []
     inputs = plan.inputs
-    allowed = inputs.choices.for_sport(inputs.plan_sport())
+    allowed = inputs.choices.for_sport_or_suggested(inputs.plan_sport())
     for day in plan.days:
         if day.session is None:
             continue
@@ -188,7 +188,7 @@ def _check_taper_frequency(plan: Plan) -> list[str]:
     no easy type is chosen (the taper is made of easy sessions)."""
     inputs = plan.inputs
     available = inputs.availability
-    chosen = inputs.choices.for_sport(inputs.plan_sport())
+    chosen = inputs.choices.for_sport_or_suggested(inputs.plan_sport())
     shortest = next((m for t, m in FILLER_MINUTES if t in chosen), None)
     if (
         inputs.ramp_reduced

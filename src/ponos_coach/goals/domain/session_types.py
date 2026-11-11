@@ -28,6 +28,11 @@ class SessionType(Enum):
 INTENSE_TYPES = frozenset({SessionType.MEDIUM, SessionType.THRESHOLD, SessionType.VO2MAX})
 # Sessions that are hard on the body: two of them never fall on consecutive days.
 HARD_TYPES = INTENSE_TYPES | {SessionType.LONG}
+# What the plan schedules for a sport the user chose nothing for (user's request, 2026-11-11: a
+# cycling race brings cycling sessions without first ticking them in the training settings).
+SUGGESTED_TYPES = frozenset(
+    {SessionType.EASY, SessionType.LONG, SessionType.THRESHOLD, SessionType.RECOVERY}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,3 +68,7 @@ class SessionChoices:
             if chosen_sport is sport:
                 return types
         return frozenset()
+
+    def for_sport_or_suggested(self, sport: Sport) -> frozenset[SessionType]:
+        """The session types chosen for the sport, or `SUGGESTED_TYPES` if none is."""
+        return self.for_sport(sport) or SUGGESTED_TYPES

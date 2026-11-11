@@ -10,7 +10,7 @@ from datetime import date, timedelta
 import pytest
 
 from ponos_coach.assessment.domain import NoTest, NotYet, Overdue
-from ponos_coach.goals.domain import Priority, SessionType, WeeklyAvailability
+from ponos_coach.goals.domain import SUGGESTED_TYPES, Priority, SessionType, WeeklyAvailability
 from ponos_coach.planning.domain import (
     CloseARaces,
     CtlTargetNotReached,
@@ -226,9 +226,10 @@ def test_two_races_on_one_day_are_refused() -> None:
     assert result == PlanRefusal(RefusalReason.GOALS_ON_SAME_DAY, ("a", "b"))
 
 
-def test_no_session_type_for_the_sport_is_refused() -> None:
-    result = build_plan(inputs([race("a", _weeks_ahead(5))], types=[]), TODAY)
-    assert result == PlanRefusal(RefusalReason.NO_SESSION_TYPES)
+def test_no_session_type_for_the_sport_means_the_suggested_ones() -> None:
+    plan = _plan([race("a", _weeks_ahead(12))], types=[], avail=BIG_WEEK)
+    assert _types(plan) <= SUGGESTED_TYPES
+    assert SessionType.EASY in _types(plan)
 
 
 # --- Session types: only the chosen ones, with a warning for what is missing ---------------------
