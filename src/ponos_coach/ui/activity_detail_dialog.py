@@ -300,6 +300,9 @@ class ActivityDetailDialog(QDialog):
         # one time axis for both charts: zooming or panning one moves the other
         self._chart.x_range_changed.connect(self._speed_chart.set_x_range)
         self._speed_chart.x_range_changed.connect(self._chart.set_x_range)
+        # and one pointer: the minute under it shows its values on both charts
+        self._chart.hovered_x.connect(self._speed_chart.show_hover_at)
+        self._speed_chart.hovered_x.connect(self._chart.show_hover_at)
         self._zone_model = ZoneTableModel(self)
         self._domain_model = DomainTableModel(self)
         self._build()

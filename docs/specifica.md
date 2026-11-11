@@ -519,6 +519,10 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
   palette (never red or orange), the same in the light and the dark theme.
   The pace axis keeps the range the session covers and its own `m:ss` ticks:
   it does not follow the zoom and the right drag does not stretch it.
+- The pointer is shared too (user's request of 2026-11-11): moving over one
+  chart shows the values of the same minute on the other one, and leaving it
+  hides them on both. The page reports only the user's own pointer, so the
+  two charts never echo each other.
 - The speed comes from the cumulative distance of the file (when a file has
   no distance field the reader integrates its speed field), computed on the
   data thread by `smoothed_speed`: the distance covered in a window of 30 s

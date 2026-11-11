@@ -110,6 +110,16 @@ class XNavigation(Enum):
     LINKED_FIXED_Y = "linked-fixed-y"  # as LINKED, and the y range stays as the figure sets it
 
 
+class PointerReport(Enum):
+    """What the page tells about the user's pointer."""
+
+    NONE = "none"
+    INDEX = "index"  # the index of the point under it (see `ChartView.hovered`)
+    # Linked charts: the x under it (see `ChartView.hovered_x`), and the hover shown at an x
+    # it is given (see `ChartView.show_hover_at`).
+    LINKED_X = "linked-x"
+
+
 def enable_wheel_navigation(figure: go.Figure) -> None:
     """The wheel zooms and a left drag pans the x axis; the y axes stay as drawn."""
     figure.update_layout(dragmode="pan")
@@ -121,12 +131,12 @@ def render_script(
     chrome: ChartChrome,
     filename: str,
     *,
-    hover: bool = False,
+    pointer: PointerReport = PointerReport.NONE,
     navigation: XNavigation = XNavigation.FIXED,
 ) -> str:
     """JavaScript call that draws the figure: the argument is a single JSON (`json.dumps`).
 
-    With `hover` the page reports the point under the pointer (see `ChartView.hovered`); with
+    `pointer` says what the page reports about the pointer (`PointerReport`); with
     `navigation` WHEEL the wheel zooms and a drag pans the x axis; with LINKED the page also
     reports the range it shows (see `ChartView.x_range_changed`); with LINKED_FIXED_Y the y range
     does not follow the part in view and the right drag does not stretch it (an axis with its own
@@ -139,8 +149,10 @@ def render_script(
         "locale": {"name": PLOTLY_LOCALE_NAME, "dictionary": dict(chrome.modebar)},
         "filename": filename,
     }
-    if hover:
+    if pointer is PointerReport.INDEX:
         payload["hover"] = True
+    if pointer is PointerReport.LINKED_X:
+        payload["linkedHover"] = True
     if navigation is not XNavigation.FIXED:
         payload["zoom"] = True
     if navigation in (XNavigation.LINKED, XNavigation.LINKED_FIXED_Y):
@@ -156,7 +168,7 @@ def prepare_figure(
     filename: str,
     tokens: ThemeTokens,
     *,
-    hover: bool = False,
+    pointer: PointerReport = PointerReport.NONE,
     navigation: XNavigation = XNavigation.FIXED,
 ) -> PreparedChart:
     """Figure, JSON and background together: pure, heavy work, suited to a non-UI thread.
@@ -168,6 +180,6 @@ def prepare_figure(
         enable_wheel_navigation(figure)
     return PreparedChart(
         figure,
-        render_script(figure, chrome, filename, hover=hover, navigation=navigation),
+        render_script(figure, chrome, filename, pointer=pointer, navigation=navigation),
         tokens.background,
     )

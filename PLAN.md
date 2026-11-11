@@ -1016,6 +1016,16 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       e una riga lo dice. Test: `tests/activities/test_speed_series.py`,
       `tests/ui/test_speed_figure.py`, `tests/ui/test_activity_detail_speed.py`,
       `tests/load/test_activity_detail.py`, `tests/ui/test_chart_view.py`.
+- [x] Puntatore collegato tra grafico FC e grafico velocità (richiesta
+      dell'utente del 2026-11-11: «spostandosi su un grafico deve mostrare i
+      dati anche sull'altro grafico»): la pagina riporta il minuto sotto il
+      puntatore dell'utente (`hoverx|X|N`, `hoverx|none|N`, titolo validato
+      come i numeri dell'intervallo) e mostra le etichette a un minuto dato
+      (`ponosHoverAt`) senza riportarlo, quindi niente eco. `PointerReport`
+      (nessuno, indice del punto per il profilo della mappa, minuto collegato)
+      sostituisce il vecchio flag `hover`. Test: `tests/ui/test_chart_view.py`,
+      `tests/ui/test_activity_detail_speed.py`, `tests/ui/test_hr_figure.py`,
+      `tests/ui/test_speed_figure.py`.
 - [x] Sfondi della mappa valutati e non aggiunti (decisioni dell'utente del
       2026-11-11; non riproporli senza un fatto nuovo):
       - bergfex OSM: le condizioni d'uso di bergfex (AGB, sezione 7)

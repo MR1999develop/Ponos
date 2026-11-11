@@ -22,6 +22,7 @@ from ponos_coach.ui.activity_detail import PACE_SPORTS
 from ponos_coach.ui.activity_text import pace_text
 from ponos_coach.ui.chart_payload import (
     ChartChrome,
+    PointerReport,
     PreparedChart,
     XNavigation,
     axis_style,
@@ -151,4 +152,5 @@ def prepare_speed_chart(
         PACE_EXPORT_STEM if uses_pace(sport) else SPEED_EXPORT_STEM,
         tokens,
         navigation=XNavigation.LINKED_FIXED_Y if uses_pace(sport) else XNavigation.LINKED,
+        pointer=PointerReport.LINKED_X,
     )

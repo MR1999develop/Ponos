@@ -167,6 +167,7 @@ def test_the_page_gets_a_linked_time_axis_and_a_fixed_pace_axis(
     assert payload["linkedX"] is True
     assert payload["zoom"] is True
     assert payload.get("fixedY", False) is fixed_y
+    assert payload["linkedHover"] is True
     assert payload["filename"] == stem
     assert payload["labels"] == {"png": "Save as PNG", "svg": "Save as SVG"}
     assert prepared.background == tokens_for(Theme.LIGHT).background

@@ -230,3 +230,18 @@ def test_zooming_one_chart_moves_the_other_without_an_echo(qtbot: QtBot) -> None
 
     assert scripts["speed"] == ["ponosSetXRange(1.0, 4.5);"]
     assert scripts["hr"] == ["ponosSetXRange(null, null);"]
+
+
+def test_the_pointer_on_one_chart_shows_the_same_minute_on_the_other(qtbot: QtBot) -> None:
+    # The user's request of 2026-11-11: moving over a chart shows the data on the other one too.
+    dialog = dialog_with(qtbot, hr=True, speed=True)
+    scripts: dict[str, list[str]] = {"speed": [], "hr": []}
+    dialog.speed_chart.run_script = scripts["speed"].append  # type: ignore[method-assign, assignment]
+    dialog.chart.run_script = scripts["hr"].append  # type: ignore[method-assign, assignment]
+
+    dialog.chart.hovered_x.emit(12.5)
+    dialog.chart.hovered_x.emit(None)
+    dialog.speed_chart.hovered_x.emit(3.25)
+
+    assert scripts["speed"] == ["ponosHoverAt(12.5);", "ponosHoverAt(null);"]
+    assert scripts["hr"] == ["ponosHoverAt(3.25);"]  # one way each: no echo

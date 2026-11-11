@@ -12,19 +12,22 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import plotly.graph_objects as go
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, QUrl
 from PySide6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
 from shiboken6 import isValid
 
-from ponos_coach.ui.chart_payload import XNavigation, prepare_figure
+from ponos_coach.ui.chart_payload import PointerReport, XNavigation, prepare_figure
 from ponos_coach.ui.chart_view import (
     ChartEngine,
     ChartView,
     DateRange,
+    HoverReport,
     RangeReport,
     ValueRange,
+    parse_hover_x_title,
     parse_range_title,
 )
 from ponos_coach.ui.pmc_figure import EXPORT_FILE_STEM, build_pmc_figure
@@ -291,6 +294,84 @@ def test_only_well_formed_ranges_pass_from_the_page_title(
 
 
 @pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("hoverx|12.5|3", HoverReport(12.5)),
+        ("hoverx|0|1", HoverReport(0.0)),
+        ("hoverx|1e-3|1", HoverReport(0.001)),
+        ("hoverx|none|7", HoverReport(None)),
+        ("hoverx|nan|1", None),
+        ("hoverx|1e999|1", None),  # not finite
+        ("hoverx|2026-01-02|1", None),  # a date: only a time axis in minutes is linked
+        ("hoverx|<b>|1", None),
+        ("hoverx|12.5", None),
+        ("hoverx|12.5|x", None),
+        ("hoverx|12.5|1|2", None),
+        ("hoverx|" + "1" * 40 + "|1", None),
+        ("xrange|auto|1", None),
+    ],
+)
+def test_only_well_formed_pointer_positions_pass_from_the_page_title(
+    title: str, expected: HoverReport | None
+) -> None:
+    assert parse_hover_x_title(title) == expected
+
+
+def minutes_view(qtbot: QtBot) -> ChartView:
+    """A chart over a time axis in minutes that links its hover, as in the activity window."""
+    engine = ChartEngine(lambda _name: None)
+    view = ChartView(engine, "Minutes chart")
+    engine.setParent(view)
+    qtbot.addWidget(view)
+    view.resize(900, 400)
+    view.show()
+    figure = go.Figure(go.Scatter(x=[0.0, 1.0, 2.0, 3.0, 4.0], y=[120, 130, 140, 150, 160]))
+    figure.update_layout(hovermode="x", paper_bgcolor="#ffffff", font={"color": "#222222"})
+    with qtbot.waitSignal(view.drawn, timeout=WAIT_MS):
+        view.show_prepared(
+            prepare_figure(
+                figure,
+                LABELS.chrome,
+                EXPORT_FILE_STEM,
+                tokens_for(Theme.LIGHT),
+                navigation=XNavigation.LINKED,
+                pointer=PointerReport.LINKED_X,
+            )
+        )
+    return view
+
+
+def hover_labels(qtbot: QtBot, view: ChartView) -> object:
+    return evaluate(qtbot, view, "document.querySelectorAll('.hoverlayer .hovertext').length")
+
+
+def test_the_pointer_is_reported_and_a_hover_shown_by_the_app_is_not(qtbot: QtBot) -> None:
+    view = minutes_view(qtbot)
+    reports: list[object] = []
+    view.hovered_x.connect(reports.append)
+
+    view.show_hover_at(3.0)  # the linked chart's pointer is at minute 3
+    qtbot.waitUntil(lambda: hover_labels(qtbot, view) == 1, timeout=WAIT_MS)
+    assert evaluate(qtbot, view, "document.getElementById('chart')._hoverdata[0].x") == 3
+    view.show_hover_at(None)
+    qtbot.waitUntil(lambda: hover_labels(qtbot, view) == 0, timeout=WAIT_MS)
+    assert reports == []  # nothing echoed back to the other chart
+
+    # the user's own pointer, moved over minute 2 of the plot area, is reported
+    execute(
+        qtbot,
+        view,
+        "var gd = document.getElementById('chart');"
+        "var drag = gd.querySelector('.nsewdrag');"
+        "var box = drag.getBoundingClientRect();"
+        "drag.dispatchEvent(new MouseEvent('mousemove', {bubbles: true,"
+        " clientX: box.left + gd._fullLayout.xaxis.l2p(2), clientY: box.top + box.height / 2}));",
+    )
+    qtbot.waitUntil(lambda: bool(reports), timeout=WAIT_MS)
+    assert reports == [2.0]
+
+
+@pytest.mark.parametrize(
     ("title", "signal"),
     [
         ("drawn-1", "drawn"),
@@ -298,6 +379,7 @@ def test_only_well_formed_ranges_pass_from_the_page_title(
         ("leave-1", "hover_left"),
         ("xrange|auto|1", "x_range_changed"),
         ("xrange|2026-01-02|2026-01-03|1", "x_range_changed"),
+        ("hoverx|12.5|1", "hovered_x"),
     ],
 )
 def test_a_page_title_over_the_limit_is_dropped_before_it_is_parsed(

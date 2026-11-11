@@ -23,6 +23,7 @@ from ponos_coach.load.domain import HeartRateLimits
 from ponos_coach.ui.chart_payload import (
     LEGEND_Y,
     ChartChrome,
+    PointerReport,
     PreparedChart,
     XNavigation,
     axis_style,
@@ -201,5 +202,10 @@ def prepare_heart_rate_chart(
     # the wheel zooms into a stretch of the session, a left drag moves along it; the speed
     # chart below follows (the window links the two)
     return prepare_figure(
-        figure, labels.chrome, HR_EXPORT_STEM, tokens, navigation=XNavigation.LINKED
+        figure,
+        labels.chrome,
+        HR_EXPORT_STEM,
+        tokens,
+        navigation=XNavigation.LINKED,
+        pointer=PointerReport.LINKED_X,
     )

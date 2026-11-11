@@ -3,7 +3,8 @@
 "use strict";
 
 // Draws a Plotly figure. The only entry point is `ponosRender(payload)`, where `payload` is
-// a JSON object produced by Python with json.dumps: { figure, labels, locale, filename, hover }.
+// a JSON object produced by Python with json.dumps: { figure, labels, locale, filename, hover,
+// zoom, linkedX, fixedY, linkedHover }.
 // No data enters as HTML: Plotly receives only objects. With `hover` true the chart tells Python
 // which point is under the pointer through the page title (`hover-I-N`, `leave-N`: no channel),
 // and `ponosCursor(x)` draws (or, with null, removes) a vertical cursor line at x.
@@ -27,6 +28,46 @@
       document.title = "leave-" + hoverCount;
     });
   }
+
+  // Linked hover (the user's request of 2026-11-11): the x under the user's pointer is reported
+  // as `hoverx|X|N`, and `hoverx|none|N` when it leaves; `ponosHoverAt(x)` shows the hover
+  // labels at x (null: hides them) without reporting it back, so linked charts do not echo.
+  var hoverXCount = 0;
+
+  function bindLinkedHover(gd) {
+    if (gd.ponosLinkedHoverBound) { return; }
+    gd.ponosLinkedHoverBound = true;
+    gd.on("plotly_hover", function (event) {
+      var point = event.points[0];
+      if (point === undefined || typeof point.x !== "number" || !isFinite(point.x)) { return; }
+      hoverXCount += 1;
+      document.title = "hoverx|" + String(point.x) + "|" + hoverXCount;
+    });
+    gd.on("plotly_unhover", function () {
+      hoverXCount += 1;
+      document.title = "hoverx|none|" + hoverXCount;
+    });
+  }
+
+  // A burst of calls (one per pointer move on the linked chart) draws at most once per frame.
+  var wantedHoverX = null;
+  var hoverFrame = null;
+
+  function applyWantedHover() {
+    hoverFrame = null;
+    if (host.data === undefined || host._fullLayout === undefined) { return; }
+    if (wantedHoverX === null) {
+      Plotly.Fx.unhover(host);
+    } else {
+      // The fourth argument keeps Plotly from emitting plotly_hover: nothing is reported back.
+      Plotly.Fx.hover(host, { xval: wantedHoverX }, "xy", true);
+    }
+  }
+
+  window.ponosHoverAt = function (x) {
+    wantedHoverX = x;
+    if (hoverFrame === null) { hoverFrame = window.requestAnimationFrame(applyWantedHover); }
+  };
 
   // Date range of the x axis after a zoom or a pan by the user: `xrange|START|END|N`, or
   // `xrange|auto|N` after a reset. A range set by `ponosSetXRange` is not reported back, so linked
@@ -244,6 +285,7 @@
     Plotly.react(host, payload.figure.data, payload.figure.layout, config).then(function (gd) {
       if (payload.hover === true) { bindHover(gd); }
       if (payload.linkedX === true) { bindRange(gd); }
+      if (payload.linkedHover === true) { bindLinkedHover(gd); }
       if (payload.zoom === true && payload.fixedY !== true) {
         bindStretch(gd);
         bindAutoY(gd);

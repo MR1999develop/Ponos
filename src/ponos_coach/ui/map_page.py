@@ -44,7 +44,7 @@ from ponos_coach.ui.activity_text import (
     duration_text,
     sport_text,
 )
-from ponos_coach.ui.chart_payload import prepare_figure
+from ponos_coach.ui.chart_payload import PointerReport, prepare_figure
 from ponos_coach.ui.chart_texts import chart_chrome
 from ponos_coach.ui.chart_view import ChartEngine, ChartView
 from ponos_coach.ui.elevation_figure import (
@@ -493,7 +493,9 @@ class MapPage(QWidget):
         figure = build_elevation_figure(
             profile, self._elevation_labels(profile), tokens, by_zone=mode == MODE_ZONES
         )
-        prepared = prepare_figure(figure, chart_chrome(), EXPORT_FILE_STEM, tokens, hover=True)
+        prepared = prepare_figure(
+            figure, chart_chrome(), EXPORT_FILE_STEM, tokens, pointer=PointerReport.INDEX
+        )
         self._detail_stack.setCurrentIndex(_STACK_CHART)
         if self._started:
             self._chart.show_prepared(prepared)

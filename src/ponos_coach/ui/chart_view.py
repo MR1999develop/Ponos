@@ -61,6 +61,7 @@ _HOVER_PARTS = 3  # "hover", the index, a counter that makes every title new
 _MAX_INDEX_DIGITS = 6
 _RANGE_PARTS = 4  # "xrange", start, end, a counter
 _AUTO_RANGE_PARTS = 3  # "xrange", "auto", a counter
+_HOVER_X_PARTS = 3  # "hoverx", the x or "none", a counter
 _MAX_DATE_CHARS = 32
 _DATE_CHARS = frozenset("0123456789-: .T")
 # The longest well-formed title is a range report: "xrange|" + two dates + separators + a counter.
@@ -331,6 +332,27 @@ class ChartEngine(QObject):
         request.accept()
 
 
+@dataclass(frozen=True, slots=True)
+class HoverReport:
+    """What the page reported about the pointer: the x under it, or None when it left."""
+
+    x: float | None
+
+
+def parse_hover_x_title(title: str) -> HoverReport | None:
+    """The report in a page title `hoverx|X|N` or `hoverx|none|N`; None if the title is not a
+    valid hover report (untrusted text: only a well-formed finite number passes)."""
+    if len(title) > _MAX_TITLE_CHARS:
+        return None
+    parts = title.split("|")
+    if len(parts) != _HOVER_X_PARTS or parts[0] != "hoverx" or not parts[2].isdecimal():
+        return None
+    if parts[1] == "none":
+        return HoverReport(None)
+    x = _parse_number(parts[1])
+    return None if x is None else HoverReport(x)
+
+
 class ChartView(QWidget):
     """Show a chart. `drawn` signals that Plotly has finished drawing.
 
@@ -342,6 +364,7 @@ class ChartView(QWidget):
     hovered = Signal(int)  # index of the point under the pointer (the chart asked for it)
     hover_left = Signal()
     x_range_changed = Signal(object)  # DateRange or ValueRange, None for the whole series
+    hovered_x = Signal(object)  # the x under the user's pointer (float), None when it left
 
     _page_url = APP_PAGE_URL  # a subclass shows another page of the same scheme
 
@@ -421,6 +444,11 @@ class ChartView(QWidget):
             )
         self.run_script(f"ponosSetXRange({arguments});")
 
+    def show_hover_at(self, x: float | None) -> None:
+        """Show the hover labels at x (None: hide them), without reporting it back."""
+        argument = "null" if x is None or not math.isfinite(x) else repr(float(x))
+        self.run_script(f"ponosHoverAt({argument});")
+
     @property
     def current_figure(self) -> go.Figure | None:
         """Last figure shown (or waiting to be shown)."""
@@ -488,7 +516,7 @@ class ChartView(QWidget):
 
     def _on_title_changed(self, title: str) -> None:
         """The page talks through its title (no channel): `drawn-N`, `hover-I-N`, `leave-N`,
-        `xrange|START|END|N`, `xrange|auto|N`.
+        `xrange|START|END|N`, `xrange|auto|N`, `hoverx|X|N`, `hoverx|none|N`.
 
         The index is parsed as digits only; the caller checks it against its data. The title is
         untrusted text: one over the limit is dropped before anything is split.
@@ -503,6 +531,15 @@ class ChartView(QWidget):
             if report is not None:
                 self.x_range_changed.emit(report.shown)
             return
+        if title.startswith("hoverx|"):
+            hover = parse_hover_x_title(title)
+            if hover is not None:
+                self.hovered_x.emit(hover.x)
+            return
+        self._on_point_title(title)
+
+    def _on_point_title(self, title: str) -> None:
+        """`hover-I-N` (the index of the point under the pointer) or `leave-N`."""
         parts = title.split("-")
         if parts[0] == "leave":
             self.hover_left.emit()

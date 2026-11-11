@@ -213,5 +213,6 @@ def test_the_wheel_zooms_and_a_left_drag_pans_the_time_axis_only_in_step_with_th
     assert payload["zoom"] is True  # the page turns on the wheel zoom
     assert payload["linkedX"] is True  # the speed chart under it follows the zoom and the pan
     assert "fixedY" not in payload  # the bpm axis follows the stretch in view
+    assert payload["linkedHover"] is True  # the pointer shows its minute on the speed chart too
     assert prepared.figure.layout.dragmode == "pan"
     assert prepared.figure.layout.yaxis.fixedrange is True  # bpm stay as drawn
