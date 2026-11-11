@@ -499,6 +499,16 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
   distance. It is shown only for running, trail running and hiking (user's
   request of 2026-11-10); for the other sports the pair is left out and the
   next ones close the gap. Without a distance (indoor) the value is empty.
+- The active calories (kcal, whole number, after the ascent; user's request of
+  2026-11-11) are the net energy that the nutrition of the day uses for the
+  same activity: the total (the device's if credible, otherwise estimated from
+  the average HR or the sport's METs) minus the basal metabolism of the moving
+  time, never below zero, for the person as of the activity's day. One
+  function (`energy_of_activity`) prepares the arguments for both. A total
+  that is not the device's is shown as an estimate, with a leading "≈". If the
+  body data of that day are missing (height, date of birth, weight, HR
+  parameters, or younger than 18) the pair is left out and the next ones close
+  the gap.
 - The HR samples discarded from the load are marked on the chart with a cross;
   a warning says how many they are, and how many the file reader skipped
   because of a repeated or backward timestamp.

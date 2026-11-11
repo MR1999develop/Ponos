@@ -388,3 +388,22 @@ def test_without_heart_rate_the_detail_hides_the_table_of_the_zones(qtbot: QtBot
     assert not table.isVisibleTo(dialog)  # five rows at 0:00:00 would be lying
     assert not dialog.domain_table.isVisibleTo(dialog)  # nor three
     assert dialog.message_page.title_text == "No heart-rate data"
+
+
+def test_the_detail_of_a_run_with_the_body_data_shows_the_estimated_active_calories(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = window_with_activities(qtbot, tmp_path, settings)
+    table = window.activities_page.table
+    show_activities_section(window)
+    qtbot.waitExposed(window)
+    table.selectRow(0)
+    rect = table.visualRect(first_row_index(window))
+
+    QTest.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=rect.center())
+    QTest.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=rect.center())
+
+    dialog = open_detail(qtbot, window)
+    qtbot.waitUntil(dialog.shows_chart, timeout=WAIT_MS)
+    assert dialog.summary_value_widget("calories").isVisibleTo(dialog)
+    assert dialog.summary_text("calories").startswith("≈ ")  # the fixture declares no energy

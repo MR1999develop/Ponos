@@ -965,6 +965,14 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
 - [x] Scala delle distanze sulla mappa (richiesta dell'utente del
       2026-11-11): scala di Leaflet in basso a sinistra, solo metrica (m e
       km), con i colori del tema. Test: `tests/ui/test_map_page_web.py`.
+- [x] Calorie attive nel dettaglio dell'attività (richiesta dell'utente del
+      2026-11-11): voce «Active calories (kcal)» dopo la salita, uguale al
+      netto che l'alimentazione del giorno usa per quell'attività (stessa
+      persona alla data, stesso totale credibile, stessa FC media, via
+      `energy_of_activity`); «≈» davanti se il totale è stimato; la voce
+      manca senza dati del corpo. Test: `tests/profiles/test_activity_energy.py`,
+      `tests/ui/test_activity_detail_layout.py`,
+      `tests/ui/test_activity_detail_window.py`.
 
 ## 6. Squadra di agenti e modelli
 

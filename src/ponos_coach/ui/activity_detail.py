@@ -16,16 +16,19 @@ from ponos_coach.activities.domain import Sport
 from ponos_coach.load.activity_detail import ActivityDetail
 from ponos_coach.load.domain import ZONE_COUNT, zone_bpm_ranges
 from ponos_coach.load.use_cases import ExclusionReason
+from ponos_coach.nutrition.domain import ActivityEnergy
 from ponos_coach.ui.chart_payload import PreparedChart
 from ponos_coach.ui.load_figures import zone_label
 
 
 @dataclass(frozen=True, slots=True)
 class DetailReady:
-    """The detail is available. `chart` is `None` if the activity has no HR."""
+    """The detail is available. `chart` is `None` if the activity has no HR; `energy` is `None`
+    if the body data of the activity's day do not allow computing it."""
 
     detail: ActivityDetail
     chart: PreparedChart | None
+    energy: ActivityEnergy | None = None
 
 
 @dataclass(frozen=True, slots=True)
