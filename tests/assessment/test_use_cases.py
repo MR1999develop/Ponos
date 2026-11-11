@@ -51,7 +51,7 @@ def test_the_chosen_activity_is_evaluated_with_the_local_day_and_the_limits_of_t
     assert result.selection is SegmentSelection.BY_DISTANCE
     assert (result.threshold_bpm, result.pace_s_per_km) == (168, 278)
     assert result.hr_zone_starts_bpm == pytest.approx(
-        (168 * 0.75, 168 * 0.85, 168 * 0.95, 168 * 1.03)
+        (168 * 0.72, 168 * 0.85, 168 * 0.95, 168 * 1.03)
     )
 
 

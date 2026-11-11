@@ -2,13 +2,13 @@
 # Copyright (C) 2026 MR
 """Heart-rate zones on the threshold (five zones, the user's choice of 2026-11-10).
 
-Z1 50-74% of the threshold, Z2 75-84%, Z3 85-94%, Z4 95-102%, Z5 from 103% up to the maximum HR
-(the boundaries are whole percentages of the threshold: Z2 starts at 75, Z3 at 85, Z4 at 95, Z5
+Z1 50-71% of the threshold, Z2 72-84%, Z3 85-94%, Z4 95-102%, Z5 from 103% up to the maximum HR
+(the boundaries are whole percentages of the threshold: Z2 starts at 72, Z3 at 85, Z4 at 95, Z5
 at 103). Z1 collects everything below Z2, also under 50%. They live only here (the pace zones of
 `assessment` have their own, on the speed). The lower boundary belongs to the higher zone
-(`bpm >= 75% of the threshold` is Z2). Comparisons are on floating-point values but exact:
+(`bpm >= 72% of the threshold` is Z2). Comparisons are on floating-point values but exact:
 `bpm * 100` against `percentage * threshold` (integer), never a floating-point percentage at the
-boundary.
+boundary. The Z1/Z2 boundary moved from 75 to 72 on 2026-11-11.
 
 Exactness: the decoders give integer bpm (FIT carries integers, from 0 to 255),
 so `bpm * 100` and `percentage * threshold` are small integers, represented exactly by
@@ -28,7 +28,7 @@ from numpy.typing import NDArray
 
 ZONE_COUNT = 5
 # Threshold percentages from which each zone beyond the first starts (Z2, Z3, Z4, Z5).
-ZONE_STARTS_PERCENT: tuple[int, ...] = (75, 85, 95, 103)
+ZONE_STARTS_PERCENT: tuple[int, ...] = (72, 85, 95, 103)
 _PERCENT = 100
 
 

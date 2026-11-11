@@ -106,6 +106,9 @@ Constraints:
 
 ### HR zones
 
+> **Amendment of 2026-11-11.** The Z1/Z2 boundary moves from 75% to 72% (user's
+> request): Z1 50-71%, Z2 72-84%; the other boundaries stay. `METHOD_VERSION` 11.
+>
 > **Amendment of 2026-11-10.** The percentages are the user's choice: Z1 below
 > 75% (50-74%, and everything lower), Z2 75-84%, Z3 85-94%, Z4 95-102%, Z5 from
 > 103% to the maximum HR (the 5th edition's 78/87/94/100 are superseded). Same

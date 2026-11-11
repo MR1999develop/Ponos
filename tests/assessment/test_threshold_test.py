@@ -96,7 +96,7 @@ def test_the_hr_zones_follow_the_threshold_just_found() -> None:
     result = accepted(evaluate(standard_test(hr=165)))
 
     assert result.hr_zone_starts_bpm == pytest.approx(
-        (165 * 0.75, 165 * 0.85, 165 * 0.95, 165 * 1.03)
+        (165 * 0.72, 165 * 0.85, 165 * 0.95, 165 * 1.03)
     )
 
 

@@ -86,8 +86,8 @@ def test_each_zone_row_has_its_whole_bpm_range_of_the_day() -> None:
     rows = zone_rows(detail_with(ZoneSeconds.ZERO))  # threshold 171, limits 50 to 190
 
     assert [row.bpm for row in rows] == [
-        (50, 128),
-        (129, 145),
+        (50, 123),
+        (124, 145),
         (146, 162),
         (163, 176),
         (177, 190),
@@ -102,7 +102,7 @@ def test_the_zone_table_shows_the_bpm_range_next_to_the_zone(qtbot: object) -> N
     assert model.columnCount() == 5
     assert model.headerData(0, Qt.Orientation.Horizontal) == "Zone (% of threshold)"
     assert model.headerData(1, Qt.Orientation.Horizontal) == "Heart rate (bpm)"
-    assert model.data(model.index(0, 1)) == f"50{chr(0x2013)}128"
+    assert model.data(model.index(0, 1)) == f"50{chr(0x2013)}123"
     assert model.data(model.index(4, 1)) == f"177{chr(0x2013)}190"
     assert model.data(model.index(1, 1), Qt.ItemDataRole.TextAlignmentRole) == int(
         Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter

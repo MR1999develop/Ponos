@@ -95,7 +95,7 @@ def test_the_pace_zones_follow_the_threshold_pace() -> None:
         (300 / 0.78, 300 / 0.88, 300 / 0.94, 300.0)
     )
     assert result.hr_zone_starts_bpm == pytest.approx(
-        (162 * 0.75, 162 * 0.85, 162 * 0.95, 162 * 1.03)
+        (162 * 0.72, 162 * 0.85, 162 * 0.95, 162 * 1.03)
     )
 
 

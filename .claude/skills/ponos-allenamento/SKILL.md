@@ -128,8 +128,8 @@ tetti, esiti dell'import, attività eliminate (tombe, `SKIPPED`, ADR 018), lock,
   sport viene da `threshold_for_sport` e la LT1 da `lt1_for_sport`, unici punti da
   cambiare. Due gruppi: corsa e trail, e «altri sport» (bici compresa); senza LT1
   inserita vale l'83% della LT2 del gruppo. La LT1 non cambia carichi né zone.
-- Le percentuali delle zone stanno solo in `ZONE_STARTS_PERCENT` (75/85/95/103,
-  scelta dell'utente del 2026-11-10); l'impronta dei carichi le contiene, quindi i secondi per zona si ricalcolano da
+- Le percentuali delle zone stanno solo in `ZONE_STARTS_PERCENT` (72/85/95/103,
+  scelta dell'utente del 2026-11-10, confine Z1/Z2 a 72 dal 2026-11-11); l'impronta dei carichi le contiene, quindi i secondi per zona si ricalcolano da
   soli; `LOAD_MODEL_VERSION` si alza solo se cambia la formula del carico. Se cambiano le
   zone si alza anche `METHOD_VERSION` del piano.
 - Un file originale (FIT) si scrive su temporaneo, flush, rinomina; il

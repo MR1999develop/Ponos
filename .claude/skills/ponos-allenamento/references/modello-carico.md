@@ -128,14 +128,14 @@ dell'utente del 2026-11-10** (prima: Friel 5ª ed. 78/87/94/100, ancora prima
 
 | Zona | FC in % della soglia |
 |---|---|
-| Z1 | 50-74% (sotto 75%: raccoglie anche ciò che sta sotto il 50%) |
-| Z2 | da 75% a 84% (sotto 85%) |
+| Z1 | 50-71% (sotto 72%: raccoglie anche ciò che sta sotto il 50%) |
+| Z2 | da 72% a 84% (sotto 85%) |
 | Z3 | da 85% a 94% (sotto 95%) |
 | Z4 | da 95% a 102% (sotto 103%) |
 | Z5 | 103% e oltre, fino alla FC massima |
 
-- Il confine inferiore appartiene alla zona più alta (127,5 bpm con soglia 170 è
-  il confine di Z2: 128 è Z2, 127 è Z1; con soglia 100 il 75 è esattamente Z2). Il confronto è su interi (`bpm * 100`
+- Il confine inferiore appartiene alla zona più alta (122,4 bpm con soglia 170 è
+  il confine di Z2: 123 è Z2, 122 è Z1; con soglia 100 il 72 è esattamente Z2). Il confronto è su interi (`bpm * 100`
   contro `percentuale * soglia`), mai su percentuali in virgola mobile.
 - I **secondi in ogni zona** (`ActivityLoad.zone_seconds`, `ZoneSeconds`) sono
   quelli dei campioni contati dal carico: stessi scarti (FC fuori limiti) e
@@ -144,7 +144,7 @@ dell'utente del 2026-11-10** (prima: Friel 5ª ed. 78/87/94/100, ancora prima
 - Si salvano nella cache dei carichi (colonne `zone1_s ... zone5_s`) legati alla
   stessa impronta del carico; l'impronta comprende le percentuali delle zone e
   `LOAD_MODEL_VERSION` (3 dal TRIMPeq). Cambiando le percentuali (2026-11-10: dalle zone
-  78/87/94/100 a 75/85/95/103) l'impronta cambia, quindi i **secondi per zona si
+  78/87/94/100 a 75/85/95/103; 2026-11-11: il confine Z1/Z2 da 75 a 72) l'impronta cambia, quindi i **secondi per zona si
   ricalcolano** alla prossima panoramica, mentre il carico **resta identico**
   (le zone classificano soltanto i secondi); `LOAD_MODEL_VERSION` non cambia perché la
   formula del carico non cambia. Le zone di ritmo dell'`assessment` (78/88/94/100

@@ -36,7 +36,9 @@ from ponos_coach.planning.domain.phases import Phase, RaceClass
 # the same, but the saved plans lack the cause, so they are rebuilt.
 # 10: heart-rate zones chosen by the user on 2026-11-10 (Z2 from 75%, Z3 from 85%, Z4 from 95%,
 # Z5 from 103% of the threshold): the HR ranges of the blocks and the estimated loads change.
-METHOD_VERSION: Final = 10
+# 11: the Z1/Z2 boundary moves from 75% to 72% of the threshold (user's request, 2026-11-11): the
+# lower bound of the Z2 blocks and the upper bound of the Z1 blocks change.
+METHOD_VERSION: Final = 11
 
 # --- Why a CTL target is missed ----------------------------------------------------------------
 # To tell hours from ramp the engine rebuilds the plan with a higher weekly cap, on a grid of
@@ -267,7 +269,7 @@ HILL_REPEAT_MODELS: Final[dict[Phase, IntervalModel]] = {
 }
 
 # Heart rate that stands for a zone when estimating a session's load, in percent of the threshold,
-# inside the zone of `load.ZONE_STARTS_PERCENT` (Z1 50-74, Z2 75-84, Z3 85-94, Z4 95-102, Z5 from
+# inside the zone of `load.ZONE_STARTS_PERCENT` (Z1 50-71, Z2 72-84, Z3 85-94, Z4 95-102, Z5 from
 # 103): as before, a point in the part of the zone where the sessions of that zone are run: Z1 66
 # (upper part: recovery and warm-up jogging), Z2 82 (upper part: easy running), Z3 90 (middle),
 # Z4 97 (lower-middle), and the lower bound for Z5, which is open towards the maximum HR (its
