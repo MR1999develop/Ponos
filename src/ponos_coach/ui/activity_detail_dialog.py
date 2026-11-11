@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
 
 from ponos_coach.activities.domain import ActivityIdentity
 from ponos_coach.load.activity_detail import ActivityDetail
-from ponos_coach.nutrition.domain import ActivityEnergy, EnergySource
+from ponos_coach.nutrition.domain import ActivityEnergy
 from ponos_coach.ui.activity_detail import (
     PACE_SPORTS,
     DetailOutcome,
@@ -55,6 +55,8 @@ from ponos_coach.ui.activity_detail import (
     zone_rows,
 )
 from ponos_coach.ui.activity_text import (
+    active_calories_caption,
+    active_calories_text,
     ascent_m_text,
     distance_km_text,
     duration_text,
@@ -422,7 +424,7 @@ class ActivityDetailDialog(QDialog):
             ("distance", self.tr("Distance (km)")),
             ("pace", self.tr("Average pace (min/km)")),
             ("ascent", self.tr("Ascent (m)")),
-            ("calories", self.tr("Active calories (kcal)")),
+            ("calories", active_calories_caption()),
             ("load", self.tr("Load (TRIMPeq)")),
             ("source", self.tr("Load from")),
             ("thresholds", self.tr("LT1 / LT2 (bpm)")),
@@ -567,7 +569,7 @@ class ActivityDetailDialog(QDialog):
             "distance": distance_km_text(detail.summary.distance_m),
             "pace": pace_text(average_pace_s_per_km(detail)),
             "ascent": ascent_m_text(detail.summary.ascent_m),
-            "calories": self._active_calories_text(energy),
+            "calories": active_calories_text(energy),
             "load": QLocale().toString(round(detail.load.trimp_eq)),
             "source": load_source_text(detail.load.source),
             "thresholds": self.tr("{lt1} / {lt2}").format(
@@ -587,16 +589,6 @@ class ActivityDetailDialog(QDialog):
         self._lay_out_summary(shown)
         self._notice.setText(self._notice_text(detail))
         self._notice.setVisible(bool(self._notice.text()))
-
-    def _active_calories_text(self, energy: ActivityEnergy | None) -> str:
-        """Net energy to the whole kcal; a value not declared by the device is marked as an
-        estimate."""
-        if energy is None:
-            return ""
-        kcal = QLocale().toString(round(energy.net_kcal))
-        if energy.source is EnergySource.DECLARED:
-            return kcal
-        return self.tr("≈ {kcal}").format(kcal=kcal)
 
     def _notice_text(self, detail: ActivityDetail) -> str:
         notes = []

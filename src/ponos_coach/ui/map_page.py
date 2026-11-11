@@ -34,8 +34,11 @@ from ponos_coach.load.activity_profile import ActivityProfileData, NoTrack, Zone
 from ponos_coach.load.use_cases import ExcludedActivity
 from ponos_coach.maps.domain import BACKGROUNDS, MapBackground
 from ponos_coach.maps.ports import TileProblem
+from ponos_coach.nutrition.domain import ActivityEnergy
 from ponos_coach.ui import map_texts as texts
 from ponos_coach.ui.activity_text import (
+    active_calories_caption,
+    active_calories_text,
     ascent_m_text,
     distance_km_text,
     duration_text,
@@ -86,10 +89,6 @@ def _speed_text(distance_m: float | None, moving_s: float) -> str:
     return QLocale().toString(distance_m / moving_s * _MS_TO_KMH, "f", 1)
 
 
-def _calories_text(kcal: float | None) -> str:
-    return "" if kcal is None else QLocale().toString(round(kcal))
-
-
 class MapPage(QWidget):
     """The map section."""
 
@@ -119,6 +118,7 @@ class MapPage(QWidget):
         self._search: SearchResult | None = None
         self._area: AreaView | None = None
         self._profile: _Profile = None
+        self._energy: tuple[ActivityIdentity, ActivityEnergy | None] | None = None
         self._selected: ActivityIdentity | None = None
         self._tile_problem: TileProblem | None = None
         self._map = MapWebView(engine, self.tr("Map of activities"), self)
@@ -235,7 +235,7 @@ class MapPage(QWidget):
             ("distance", self.tr("Distance (km)")),
             ("ascent", self.tr("Ascent (m)")),
             ("speed", self.tr("Average speed (km/h)")),
-            ("calories", self.tr("Energy (kcal)")),
+            ("calories", active_calories_caption()),
         )
 
     def _build_area_summary(self) -> QWidget:
@@ -268,6 +268,7 @@ class MapPage(QWidget):
         controller.area_changed.connect(self._on_area)
         controller.selection_changed.connect(self._on_selection)
         controller.profile_changed.connect(self._on_profile)
+        controller.energy_changed.connect(self._on_energy)
         bridge = self._map.bridge
         bridge.view_changed.connect(controller.set_view)
         bridge.activity_clicked.connect(controller.select_index)
@@ -578,10 +579,24 @@ class MapPage(QWidget):
             "distance": distance_km_text(summary.distance_m),
             "ascent": ascent_m_text(summary.ascent_m),
             "speed": _speed_text(summary.distance_m, record.timer_s),
-            "calories": _calories_text(summary.calories_kcal),
+            "calories": self._energy_text(record),
         }
         for key, text in values.items():
             self._summary_values[key].setText(text)
+
+    def _energy_text(self, record: ActivityRecord) -> str:
+        """Active calories of the record, empty until the data thread has answered for it."""
+        held = self._energy
+        if held is None or held[0] != record.identity:
+            return ""
+        return active_calories_text(held[1])
+
+    def _on_energy(self, identity: object, energy: object) -> None:
+        """The active calories of an activity arrived; they count only for the selected one."""
+        if not isinstance(identity, ActivityIdentity) or identity != self._selected:
+            return
+        self._energy = (identity, energy if isinstance(energy, ActivityEnergy) else None)
+        self._update_summary(self._record_of(self._selected))
 
     def summary_text(self, key: str) -> str:
         """One value of the data beside the elevation profile (empty when it is hidden)."""

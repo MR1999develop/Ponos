@@ -26,6 +26,8 @@ from ponos_coach.activities.map_queries import (
 )
 from ponos_coach.load.activity_profile import ActivityProfileData, GetActivityProfile, NoTrack
 from ponos_coach.load.use_cases import ExcludedActivity
+from ponos_coach.nutrition.domain import ActivityEnergy
+from ponos_coach.profiles.day_nutrition import GetRecordEnergy
 from ponos_coach.profiles.use_cases import ProfileSession
 from ponos_coach.ui.map_messages import (
     MapView,
@@ -34,6 +36,7 @@ from ponos_coach.ui.map_messages import (
     starts_message,
     tracks_message,
 )
+from ponos_coach.ui.nutrition_sources import nutrition_sources
 from ponos_coach.ui.workspace import ProfileAccess
 
 type ProfileOutcome = ActivityProfileData | NoTrack | ExcludedActivity
@@ -116,6 +119,11 @@ class MapQueryHost:
             else None
         )
         return ProfilePage(outcome, generation, script)
+
+    def energy(self, access: ProfileAccess, identity: ActivityIdentity) -> ActivityEnergy | None:
+        """Active-calorie energy of one activity (as in the day's nutrition and the detail), or
+        None if the body data of its day are missing."""
+        return GetRecordEnergy(nutrition_sources(access), access.decode, access.zone)(identity)
 
     def area(self, access: ProfileAccess, criteria: ActivityFilter, view: MapView) -> AreaView:
         """Starts in the area, their totals and, from zoom 11, the tracks."""

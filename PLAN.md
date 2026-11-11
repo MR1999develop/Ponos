@@ -973,6 +973,14 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       manca senza dati del corpo. Test: `tests/profiles/test_activity_energy.py`,
       `tests/ui/test_activity_detail_layout.py`,
       `tests/ui/test_activity_detail_window.py`.
+- [x] Calorie attive anche accanto all'altimetria (richiesta dell'utente
+      del 2026-11-11): la Mappa mostra le calorie attive al posto del totale
+      dell'indice, calcolate sul thread dati con `GetRecordEnergy` (regola
+      comune `energy_of_record` con l'alimentazione del giorno, nessuna
+      lettura del file se il totale dichiarato è credibile), con testo e
+      didascalia condivisi in `ui/activity_text.py`; arrivano dopo la
+      selezione e una risposta per un'attività non più selezionata si scarta.
+      Test: `tests/profiles/test_activity_energy.py`, `tests/ui/test_map_window.py`.
 
 ## 6. Squadra di agenti e modelli
 

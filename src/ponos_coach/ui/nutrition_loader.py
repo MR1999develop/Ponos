@@ -39,7 +39,6 @@ from ponos_coach.planning.domain import PlanDay
 from ponos_coach.planning.use_cases import PlannedDay
 from ponos_coach.profiles.day_nutrition import (
     DayNutritionResult,
-    NutritionSources,
     PlanContext,
     PlanDayNutrition,
 )
@@ -52,6 +51,7 @@ from ponos_coach.profiles.lean_mass import (
 )
 from ponos_coach.ui.data_thread import JobFailed, JobOutcome, JobSucceeded
 from ponos_coach.ui.errors import ErrorMessage
+from ponos_coach.ui.nutrition_sources import nutrition_sources
 from ponos_coach.ui.nutrition_undo import LeanMassCell
 from ponos_coach.ui.workspace import ProfileAccess, WorkspaceController
 
@@ -142,18 +142,7 @@ def _read(cases: _Cases) -> SettingsRead:
 def _plan_day(day: date, access: ProfileAccess) -> DayLoaded:
     """The data thread job of a day: gather the profile's data and plan the day."""
     session = access.session
-    sources = NutritionSources(
-        session.activities,
-        access.archive,
-        session.load_cache,
-        session.physiology,
-        session.weights,
-        session.fixed_data,
-        session.activity_levels,
-        session.meal_times,
-        session.goal_periods,
-        session.lean_masses,
-    )
+    sources = nutrition_sources(access)
     context = PlanContext(session.plans, access.today())
     plan = PlanDayNutrition(sources, access.decode, access.zone, plan_context=context)
     return DayLoaded(day, plan(day), PlannedDay(session.plans)(day))
