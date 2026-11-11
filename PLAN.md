@@ -952,6 +952,10 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       tengono ogni identità in una sola tabella), ADR 018. Test:
       `tests/activities/test_deletion.py`, `tests/ui/test_activity_deletion.py`,
       `tests/ui/test_deleted_activities_page.py`, contract test.
+- [x] Niente giorni di riposo nel calendario (richiesta dell'utente del
+      2026-11-11): la cella di un riposo del piano mostra solo la fase; tooltip
+      e pagina del giorno dicono ancora «riposo». Test:
+      `tests/ui/test_calendar_plan.py`.
 
 ## 6. Squadra di agenti e modelli
 

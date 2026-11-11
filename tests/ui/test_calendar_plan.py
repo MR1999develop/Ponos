@@ -166,7 +166,7 @@ def test_the_phase_is_in_the_text_of_every_planned_cell_not_only_in_a_colour(pla
                 assert phase_text(cell.plan.phase) in cell_text(cell).split("\n")
 
 
-def test_a_rest_day_of_the_plan_says_so() -> None:
+def test_a_rest_day_is_not_written_in_the_grid_but_the_tooltip_and_the_detail_say_so() -> None:
     rest = PlanDay(date(2026, 3, 4), Phase.BASE, None, None, 0.0)
     layer = PlanLayer(planned={rest.day: rest})
     cell = next(
@@ -175,7 +175,7 @@ def test_a_rest_day_of_the_plan_says_so() -> None:
         if c.day == rest.day
     )
 
-    assert "Plan: rest day" in cell_text(cell).split("\n")
+    assert cell_text(cell).split("\n") == ["4", phase_text(Phase.BASE)]
     assert "Planned: rest day" in cell_description(cell)
     assert "Rest day" in day_detail_text(cell)
 

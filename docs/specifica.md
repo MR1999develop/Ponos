@@ -1005,6 +1005,8 @@ no diet or allergy restriction for now.
   load. The days of a nutrition goal period have a colour; the legend, compact
   and wrapped onto several lines, says which. A day with no colour is outside
   any period and is treated as maintenance.
+- A planned rest day shows only its phase in the cell, with no "rest day" line
+  (user's request of 2026-11-11); its tooltip and its page still say so.
 - "Previous month" (Ctrl+Left), "Next month" (Ctrl+Right), "Today" (Ctrl+T) and
   "Open day" (Ctrl+Return) are in the menu of a day and act while the calendar
   has the focus. Under the month there are only the legends (user's request of

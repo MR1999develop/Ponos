@@ -80,7 +80,9 @@ def load_text(load: float) -> str:
 
 
 def _plan_lines(cell: CalendarDay) -> list[str]:
-    """The goal of the day, the planned session and the phase, one short line each."""
+    """The goal of the day, the planned session and the phase, one short line each. A rest day has
+    no line of its own: the grid shows only the days with something to do (the tooltip and the day
+    in full still say "rest day")."""
     lines = []
     for item in cell.goals:
         lines.append(goal_kind_cell_text(item.goal))
@@ -99,8 +101,6 @@ def _plan_lines(cell: CalendarDay) -> list[str]:
                 session=session_title(plan.session)
             )
         )
-    else:
-        lines.append(QCoreApplication.translate("Calendar", "Plan: rest day"))
     lines.append(phase_text(plan.phase))
     return lines
 

@@ -633,10 +633,6 @@
         <translation>Piano: {session}</translation>
     </message>
     <message>
-        <source>Plan: rest day</source>
-        <translation>Piano: riposo</translation>
-    </message>
-    <message>
         <source>Today</source>
         <translation>Oggi</translation>
     </message>
