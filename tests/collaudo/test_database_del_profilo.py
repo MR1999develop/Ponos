@@ -285,6 +285,7 @@ def test_t_dati_01_a_frozen_v1_database_gets_exactly_the_latest_tables(tmp_path:
         "injury_pain_free",
         "injury_checkin",
         "injury_sign",
+        "deleted_activity",  # schema 19 (ADR 018)
     }
 
 
