@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Notifica di sistema: non blocca, non solleva, registra solo il tipo di un errore."""
+"""System notification: does not block, does not raise, records only the type of an error."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ WAIT_S = 10.0
 
 
 class RecordingSender:
-    """Mittente finto: registra ciò che gli arriva e segnala quando ha finito."""
+    """Fake sender: records what it receives and signals when it is done."""
 
     def __init__(self, *, fail_with: Exception | None = None) -> None:
         self.sent: list[tuple[str, str]] = []
@@ -53,7 +53,7 @@ def test_notify_returns_at_once_and_sends_from_its_own_thread() -> None:
 
     notifier.notify(
         "Titolo di prova", "5 nuove"
-    )  # il mittente è fermo: tornare subito prova che non attende
+    )  # the sender is stopped: returning immediately proves it does not wait
 
     assert sender.sent == []
     sender.release.set()
@@ -118,7 +118,7 @@ def test_a_notification_arriving_while_one_is_being_sent_is_dropped() -> None:
     notifier, _ = notifier_with(sender)
 
     notifier.notify("Titolo", "prima")
-    notifier.notify("Titolo", "seconda")  # la prima non è ancora partita: questa si scarta
+    notifier.notify("Titolo", "seconda")  # the first has not started yet: this one is discarded
     sender.release.set()
     assert sender.sent_event.wait(WAIT_S)
     _wait_until_free(notifier)
@@ -127,11 +127,11 @@ def test_a_notification_arriving_while_one_is_being_sent_is_dropped() -> None:
 
 
 def _wait_until_free(notifier: DesktopNotifier) -> None:
-    """Attende che il thread della notifica abbia rilasciato il suo posto."""
+    """Wait until the notification thread has released its slot."""
     deadline = threading.Event()
     for _ in range(int(WAIT_S / 0.01)):
         if notifier._sending.acquire(blocking=False):
             notifier._sending.release()
             return
         deadline.wait(0.01)
-    raise AssertionError("il thread della notifica non ha finito")
+    raise AssertionError("the notification thread did not finish")

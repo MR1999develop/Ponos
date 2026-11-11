@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Comportamenti dell'adattatore `GarminActivitySource` che il contratto non copre."""
+"""Behaviors of the `GarminActivitySource` adapter that the contract does not cover."""
 
 from __future__ import annotations
 
@@ -84,7 +84,7 @@ class TestListPage:
     def test_a_response_that_is_not_a_list_is_definitive(self, listing: object) -> None:
         source = GarminActivitySource(ScriptedClient(listing=listing))
 
-        with pytest.raises(DefinitiveSourceError, match="non interpretabile"):
+        with pytest.raises(DefinitiveSourceError, match="not interpretable"):
             source.list_page(0, 10)
 
     def test_a_response_over_the_page_limit_is_definitive(self) -> None:
@@ -126,7 +126,7 @@ class TestListPage:
 
         records = [r for r in caplog.records if r.name.startswith("ponos_coach.garmin")]
         assert len(records) == 1
-        assert records[0].getMessage() == "voci dell'elenco scartate"
+        assert records[0].getMessage() == "list entries discarded"
         assert "2000001" not in caplog.text
         assert "script" not in caplog.text
 
@@ -143,7 +143,7 @@ class TestDownload:
     def test_a_non_positive_limit_is_refused(self, max_bytes: int) -> None:
         source = GarminActivitySource(ScriptedClient(downloads={1: b"x"}))
 
-        with pytest.raises(ValueError, match="positivo"):
+        with pytest.raises(ValueError, match="positive"):
             source.download_original(GarminActivityId(1), max_bytes)
 
     def test_too_large_is_reported_after_reading(self) -> None:
@@ -154,7 +154,7 @@ class TestDownload:
 
     def test_something_that_is_not_bytes_is_definitive(self) -> None:
         client = ScriptedClient()
-        client.set_download(1, "testo")  # type: ignore[arg-type]  # il client reale non lo fa
+        client.set_download(1, "testo")  # type: ignore[arg-type]  # the real client does not do this
         source = GarminActivitySource(client)
 
         with pytest.raises(DefinitiveSourceError, match="byte"):

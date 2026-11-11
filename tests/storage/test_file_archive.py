@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Archivio sul file system: contratto, interruzioni (T-DATI-02), integrità (T-DATI-03)."""
+"""Archive on the file system: contract, interruptions (T-DATI-02), integrity (T-DATI-03)."""
 
 from __future__ import annotations
 
@@ -60,15 +60,15 @@ class TestFileArchiveContract(ActivityArchiveContract):
         return _DiskArchiveHarness(tmp_path / "archivio")
 
 
-# --- Iniezione di guasti ----------------------------------------------------------------------
+# --- Fault injection ----------------------------------------------------------------------
 
 
 class SimulatedCrashError(BaseException):
-    """Il processo "muore" in quel punto: nessun codice di pulizia dell'archivio lo cattura."""
+    """The process "dies" at that point: no archive cleanup code catches it."""
 
 
 class FaultyOps:
-    """`OsWriteOps` che fallisce (o muore) alla `fail_at`-esima operazione, contandole tutte."""
+    """`OsWriteOps` that fails (or dies) at the `fail_at`-th operation, counting them all."""
 
     def __init__(
         self,
@@ -93,15 +93,15 @@ class FaultyOps:
         self._open.clear()
 
     def _tick(self, name: str) -> None:
-        if self._dead:  # i blocchi `finally` di un processo morto non fanno I/O
+        if self._dead:  # `finally` blocks of a dead process do no I/O
             raise SimulatedCrashError(name)
         self.names.append(name)
         if len(self.names) == self._fail_at:
             if self._crash:
-                self._release_descriptors()  # un processo morto non tiene file aperti
+                self._release_descriptors()  # a dead process holds no open files
                 self._dead = True
                 raise SimulatedCrashError(name)
-            raise OSError(f"guasto simulato in {name}")
+            raise OSError(f"simulated failure in {name}")
 
     def make_dir(self, path: Path) -> bool:
         self._tick("make_dir")
@@ -127,7 +127,7 @@ class FaultyOps:
         if self._dead:
             raise SimulatedCrashError("close")
         self._open.discard(descriptor)
-        self._real.close(descriptor)  # anche un close che fallisce rilascia il descrittore
+        self._real.close(descriptor)  # even a failing close releases the descriptor
         self._tick("close")
 
     def replace(self, source: Path, destination: Path) -> None:
@@ -167,7 +167,7 @@ def _temporaries(root: Path) -> list[Path]:
 def test_a_full_write_runs_the_operations_in_the_durable_order(tmp_path: Path) -> None:
     names = _record_operations(tmp_path / "archivio")
 
-    # cartelle, temporaneo, scrittura, fsync, close, rinomina, fsync delle cartelle
+    # folders, temporary, write, fsync, close, rename, fsync of the folders
     assert names[:2] == ["make_dir", "make_dir"]
     body = names[2:]
     assert body[:5] == ["create_exclusive", "write", "fsync", "close", "replace"]
@@ -177,7 +177,7 @@ def test_a_full_write_runs_the_operations_in_the_durable_order(tmp_path: Path) -
 def test_interruption_with_an_error_at_every_step_leaves_nothing_half_written(
     tmp_path: Path,
 ) -> None:
-    """T-DATI-02, errore di I/O all'N-esima operazione: la pulizia toglie il temporaneo."""
+    """T-DATI-02, I/O error at the N-th operation: cleanup removes the temporary."""
     total = len(_record_operations(tmp_path / "count"))
     replace_index = _record_operations(tmp_path / "count2").index("replace") + 1
 
@@ -189,7 +189,7 @@ def test_interruption_with_an_error_at_every_step_leaves_nothing_half_written(
         final = list(root.glob("*/*.fit"))
         assert bool(final) == (step > replace_index), step
         assert _temporaries(root) == [], step
-        for path in final:  # se il file c'è, è intero
+        for path in final:  # if the file is there, it is whole
             assert path.read_bytes() == CONTENT
         assert FileArchive(root).list_orphan_temporaries() == []
 
@@ -197,7 +197,7 @@ def test_interruption_with_an_error_at_every_step_leaves_nothing_half_written(
 def test_crash_at_every_step_leaves_at_most_an_orphan_temporary_that_is_removed(
     tmp_path: Path,
 ) -> None:
-    """T-DATI-02, morte del processo all'N-esima operazione: niente file a metà."""
+    """T-DATI-02, process death at the N-th operation: no half-written file."""
     total = len(_record_operations(tmp_path / "count"))
     replace_index = _record_operations(tmp_path / "count2").index("replace") + 1
 
@@ -213,15 +213,15 @@ def test_crash_at_every_step_leaves_at_most_an_orphan_temporary_that_is_removed(
         orphans = _temporaries(root)
         assert len(orphans) <= 1
         if step > replace_index:
-            assert orphans == []  # dopo la rinomina il temporaneo non esiste più
+            assert orphans == []  # after the rename the temporary no longer exists
 
-        reopened = FileArchive(root)  # "riavvio"
+        reopened = FileArchive(root)  # "restart"
         assert len(reopened.list_orphan_temporaries()) == len(orphans)
         assert reopened.remove_orphan_temporaries() == len(orphans)
         assert reopened.list_orphan_temporaries() == []
         assert _temporaries(root) == []
 
-        archived = reopened.store(CONTENT, FileFormat.FIT, START)  # e si riparte
+        archived = reopened.store(CONTENT, FileFormat.FIT, START)  # and start again
         assert reopened.read(archived, len(CONTENT)) == CONTENT
 
 
@@ -259,7 +259,7 @@ def test_a_failed_write_does_not_touch_the_files_already_archived(tmp_path: Path
     assert archive.list_orphan_temporaries() == []
 
 
-# --- Integrità (T-DATI-03) ----------------------------------------------------------------------
+# --- Integrity (T-DATI-03) ----------------------------------------------------------------------
 
 
 def test_altered_file_is_reported_never_used_silently(tmp_path: Path) -> None:
@@ -309,7 +309,7 @@ def test_file_missing_from_an_existing_year_folder_is_reported(tmp_path: Path) -
 def test_verify_streams_a_file_larger_than_one_block(tmp_path: Path) -> None:
     content = os.urandom(2 * 1024 * 1024 + 5)
     archive = FileArchive(tmp_path / "archivio")
-    archived = archive.store(content, FileFormat.GPX, START)
+    archived = archive.store(content, FileFormat.FIT, START)
 
     archive.verify(archived)
     assert archive.read(archived, len(content)) == content
@@ -319,7 +319,7 @@ def _make_symlink(link: Path, target: Path, *, directory: bool) -> None:
     try:
         link.symlink_to(target, target_is_directory=directory)
     except (OSError, NotImplementedError):
-        pytest.skip("collegamenti simbolici non permessi su questo sistema")
+        pytest.skip("symbolic links not allowed on this system")
 
 
 def test_a_link_in_place_of_the_file_is_never_followed(tmp_path: Path) -> None:
@@ -350,13 +350,13 @@ def test_a_link_in_place_of_the_year_folder_is_never_followed(tmp_path: Path) ->
     assert list(elsewhere.iterdir()) == []
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="le giunzioni esistono solo su Windows")
+@pytest.mark.skipif(sys.platform != "win32", reason="junctions exist only on Windows")
 def test_a_junction_in_place_of_the_year_folder_is_never_followed(tmp_path: Path) -> None:
     root = tmp_path / "archivio"
     root.mkdir()
     elsewhere = tmp_path / "altrove"
     elsewhere.mkdir()
-    subprocess.run(  # noqa: S603 - comando fisso, percorsi creati dal test
+    subprocess.run(  # noqa: S603 - fixed command, paths created by the test
         [os.environ["COMSPEC"], "/c", "mklink", "/J", str(root / "2026"), str(elsewhere)],
         check=True,
         capture_output=True,
@@ -368,20 +368,20 @@ def test_a_junction_in_place_of_the_year_folder_is_never_followed(tmp_path: Path
     assert list(elsewhere.iterdir()) == []
 
 
-# --- Nomi, permessi, contorni -------------------------------------------------------------------
+# --- Names, permissions, surroundings -------------------------------------------------------------
 
 
 def test_final_name_is_year_sha256_extension_and_nothing_else_is_left(tmp_path: Path) -> None:
     root = tmp_path / "archivio"
     start = datetime(2024, 12, 31, 23, 59, tzinfo=UTC)
 
-    archived = FileArchive(root).store(CONTENT, FileFormat.GPX, start)
+    archived = FileArchive(root).store(CONTENT, FileFormat.FIT, start)
 
     digest = hashlib.sha256(CONTENT).hexdigest()
-    assert str(archived.relative_path) == f"2024/{digest}.gpx"
+    assert str(archived.relative_path) == f"2024/{digest}.fit"
     assert sorted(p.relative_to(root).as_posix() for p in root.rglob("*")) == [
         "2024",
-        f"2024/{digest}.gpx",
+        f"2024/{digest}.fit",
     ]
 
 
@@ -400,7 +400,7 @@ def test_empty_content_is_stored_and_read_back(tmp_path: Path) -> None:
     assert archive.read(archived, 0) == b""
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="permessi POSIX")
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permissions")
 def test_files_and_folders_are_private_to_the_user_on_posix(tmp_path: Path) -> None:
     root = tmp_path / "archivio"
 

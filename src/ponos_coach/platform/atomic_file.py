@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Lettura con tetto di dimensione e scrittura atomica di piccoli file di configurazione.
+"""Reading with a size cap and atomic writing of small configuration files.
 
-La scrittura durevole sta in `ponos_coach.fsio`, condivisa con l'archivio."""
+Durable writing lives in `ponos_coach.fsio`, shared with the archive."""
 
 from __future__ import annotations
 
@@ -12,17 +12,17 @@ from ponos_coach.fsio import write_file_atomically
 
 
 class FileTooLargeError(Exception):
-    """Il file supera il tetto di dimensione: non si legge oltre."""
+    """The file exceeds the size cap: it is not read beyond."""
 
 
 def read_limited(path: Path, max_bytes: int) -> bytes | None:
-    """Contenuto del file, o None se non esiste.
+    """Content of the file, or None if it does not exist.
 
-    Si leggono al massimo `max_bytes + 1` byte, mai l'intero file se è più grande.
+    At most `max_bytes + 1` bytes are read, never the whole file if it is larger.
 
     Raises:
-        FileTooLargeError: il file ha più di `max_bytes` byte.
-        OSError: lettura impossibile (permessi, I/O, è una cartella).
+        FileTooLargeError: the file has more than `max_bytes` bytes.
+        OSError: reading impossible (permissions, I/O, it is a folder).
     """
     try:
         with path.open("rb") as handle:
@@ -35,11 +35,12 @@ def read_limited(path: Path, max_bytes: int) -> bytes | None:
 
 
 def write_atomic(path: Path, data: bytes) -> None:
-    """Scrive `data` in `path` senza mai lasciarlo a metà (vedi `fsio.write_file_atomically`).
+    """Writes `data` to `path` without ever leaving it half-written (see
+    `fsio.write_file_atomically`).
 
-    Il file di prima resta intatto se qualcosa fallisce. La cartella deve esistere.
+    The previous file stays intact if anything fails. The folder must exist.
 
     Raises:
-        OSError: scrittura o rinomina non riuscite; il temporaneo viene tolto.
+        OSError: write or rename failed; the temporary is removed.
     """
     write_file_atomically(path, data)

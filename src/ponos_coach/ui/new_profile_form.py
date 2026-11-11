@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Modulo "Nuovo profilo": stato e validazione, testabili senza finestra.
+"""Form "New profile": state and validation, testable without a window.
 
-Il modello tiene i valori, decide dove vanno i dati (la cartella scelta, o una sottocartella con
-il nome del profilo se la scelta contiene già altro), stima la FC di soglia dalla massima
-finché l'utente non la fissa, e dice quali campi hanno un problema (categorie, non testi: i
-messaggi li sceglie la vista). Dà una `NewProfileRequest` solo se tutto è valido.
+The model holds the values, decides where the data goes (the chosen folder, or a subfolder with
+the profile name if the chosen one already contains something else), estimates the threshold HR
+from the maximum
+until the user sets it, and says which fields have a problem (categories, not texts: the
+view chooses the messages). It gives a `NewProfileRequest` only if everything is valid.
 
-Altezza, peso e data di nascita sono dati di salute: stanno nel modulo come testo o data, si
-leggono con `body_input` e non compaiono mai in un messaggio né in un log.
+Height, weight and birth date are health data: they stay in the form as text or date, are
+read with `body_input` and never appear in a message or a log.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from datetime import date
 from enum import Enum
 from pathlib import Path
 
+from ponos_coach.activities.domain import Sport
 from ponos_coach.load.domain import HeartRateLimits, Physiology, Sex, ThresholdHeartRate
 from ponos_coach.profiles.domain import (
     NAME_MAX_CHARS,
@@ -28,16 +30,28 @@ from ponos_coach.profiles.domain import (
     Height,
     InvalidProfileNameError,
     ProfileName,
+    ThresholdPace,
     Weight,
 )
 from ponos_coach.profiles.use_cases import NewProfileRequest
-from ponos_coach.ui.body_input import BodyProblem, read_birth_date, read_height, read_weight
+from ponos_coach.ui.body_input import (
+    BodyProblem,
+    read_birth_date,
+    read_height,
+    read_threshold_pace,
+    read_weight,
+)
 from ponos_coach.ui.heart_rate_rules import (
     MAX_ALLOWED_BPM,
     MIN_ALLOWED_BPM,
     MIN_THRESHOLD_BPM,
     HeartRateProblem,
     heart_rate_problems,
+    lt1_default,
+    lt1_problems,
+    optional_threshold_default,
+    optional_threshold_problems,
+    read_optional_threshold,
 )
 
 __all__ = [
@@ -59,11 +73,11 @@ __all__ = [
 
 DEFAULT_MIN_BPM = 50
 DEFAULT_MAX_BPM = 190
-THRESHOLD_SHARE_OF_MAX = 0.9  # soglia stimata: 90% della FC massima
+THRESHOLD_SHARE_OF_MAX = 0.9  # estimated threshold: 90% of the maximum HR
 
 _FORBIDDEN_IN_FOLDER_NAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
-# Nomi che Windows riserva ai dispositivi, anche con un'estensione (CON.txt); COM e LPT con le
-# cifre in apice sono riservati allo stesso modo.
+# Names that Windows reserves for devices, even with an extension (CON.txt); COM and LPT with
+# superscript digits are reserved in the same way.
 _RESERVED_DEVICE_NAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL"}
     | {f"{prefix}{digit}" for prefix in ("COM", "LPT") for digit in "123456789¹²³"}
@@ -72,7 +86,7 @@ RESERVED_NAME_SUFFIX = "_profile"
 
 
 class Field(Enum):
-    """Campo del modulo."""
+    """Form field."""
 
     NAME = "name"
     FOLDER = "folder"
@@ -82,10 +96,14 @@ class Field(Enum):
     MIN_BPM = "min_bpm"
     MAX_BPM = "max_bpm"
     THRESHOLD = "threshold"
+    OTHER_THRESHOLD = "other_threshold"
+    RUN_LT1 = "run_lt1"
+    OTHER_LT1 = "other_lt1"
+    THRESHOLD_PACE = "threshold_pace"
 
 
 class Problem(Enum):
-    """Che cosa non va in un campo."""
+    """What is wrong with a field."""
 
     NAME_EMPTY = (Field.NAME, "name_empty")
     NAME_TOO_LONG = (Field.NAME, "name_too_long")
@@ -101,10 +119,20 @@ class Problem(Enum):
     MIN_NOT_BELOW_MAX = (Field.MIN_BPM, "min_not_below_max")
     THRESHOLD_NOT_ABOVE_MIN = (Field.THRESHOLD, "threshold_not_above_min")
     THRESHOLD_ABOVE_MAX = (Field.THRESHOLD, "threshold_above_max")
+    OTHER_NOT_A_THRESHOLD = (Field.OTHER_THRESHOLD, "other_not_a_threshold")
+    OTHER_NOT_ABOVE_MIN = (Field.OTHER_THRESHOLD, "other_not_above_min")
+    OTHER_ABOVE_MAX = (Field.OTHER_THRESHOLD, "other_above_max")
+    RUN_LT1_NOT_A_THRESHOLD = (Field.RUN_LT1, "run_lt1_not_a_threshold")
+    RUN_LT1_NOT_ABOVE_MIN = (Field.RUN_LT1, "run_lt1_not_above_min")
+    RUN_LT1_NOT_BELOW_LT2 = (Field.RUN_LT1, "run_lt1_not_below_lt2")
+    OTHER_LT1_NOT_A_THRESHOLD = (Field.OTHER_LT1, "other_lt1_not_a_threshold")
+    OTHER_LT1_NOT_ABOVE_MIN = (Field.OTHER_LT1, "other_lt1_not_above_min")
+    OTHER_LT1_NOT_BELOW_LT2 = (Field.OTHER_LT1, "other_lt1_not_below_lt2")
+    PACE_INVALID = (Field.THRESHOLD_PACE, "pace_invalid")
 
     @property
     def field(self) -> Field:
-        """Il campo a cui appartiene il problema."""
+        """The field the problem belongs to."""
         return self.value[0]
 
 
@@ -115,6 +143,7 @@ _BODY_PROBLEMS = {
     BodyProblem.WEIGHT_INVALID: Problem.WEIGHT_INVALID,
     BodyProblem.BIRTH_EMPTY: Problem.BIRTH_EMPTY,
     BodyProblem.BIRTH_INVALID: Problem.BIRTH_INVALID,
+    BodyProblem.PACE_INVALID: Problem.PACE_INVALID,
 }
 _PROBLEM_TO_BODY = {problem: body for body, problem in _BODY_PROBLEMS.items()}
 _HEART_RATE_PROBLEMS = {
@@ -122,29 +151,50 @@ _HEART_RATE_PROBLEMS = {
     HeartRateProblem.THRESHOLD_NOT_ABOVE_MIN: Problem.THRESHOLD_NOT_ABOVE_MIN,
     HeartRateProblem.THRESHOLD_ABOVE_MAX: Problem.THRESHOLD_ABOVE_MAX,
 }
-_PROBLEM_TO_HEART_RATE = {problem: rule for rule, problem in _HEART_RATE_PROBLEMS.items()}
+_OPTIONAL_THRESHOLD_PROBLEMS = {
+    Field.RUN_LT1: {
+        HeartRateProblem.NOT_A_THRESHOLD: Problem.RUN_LT1_NOT_A_THRESHOLD,
+        HeartRateProblem.LT1_NOT_ABOVE_MIN: Problem.RUN_LT1_NOT_ABOVE_MIN,
+        HeartRateProblem.LT1_NOT_BELOW_LT2: Problem.RUN_LT1_NOT_BELOW_LT2,
+    },
+    Field.OTHER_LT1: {
+        HeartRateProblem.NOT_A_THRESHOLD: Problem.OTHER_LT1_NOT_A_THRESHOLD,
+        HeartRateProblem.LT1_NOT_ABOVE_MIN: Problem.OTHER_LT1_NOT_ABOVE_MIN,
+        HeartRateProblem.LT1_NOT_BELOW_LT2: Problem.OTHER_LT1_NOT_BELOW_LT2,
+    },
+    Field.OTHER_THRESHOLD: {
+        HeartRateProblem.NOT_A_THRESHOLD: Problem.OTHER_NOT_A_THRESHOLD,
+        HeartRateProblem.THRESHOLD_NOT_ABOVE_MIN: Problem.OTHER_NOT_ABOVE_MIN,
+        HeartRateProblem.THRESHOLD_ABOVE_MAX: Problem.OTHER_ABOVE_MAX,
+    },
+}
+_PROBLEM_TO_HEART_RATE = {problem: rule for rule, problem in _HEART_RATE_PROBLEMS.items()} | {
+    problem: rule
+    for by_rule in _OPTIONAL_THRESHOLD_PROBLEMS.values()
+    for rule, problem in by_rule.items()
+}
 
 type BodyReadings = tuple[
     Height | BodyProblem, Weight | BodyProblem, BirthDate | BodyProblem
-]  # altezza, peso e data di nascita letti una volta sola
+]  # height, weight and birth date read only once
 
 
 def heart_rate_problem_of(problem: Problem) -> HeartRateProblem | None:
-    """La regola di `heart_rate_rules` violata da un problema di FC."""
+    """The `heart_rate_rules` rule violated by an HR problem."""
     return _PROBLEM_TO_HEART_RATE.get(problem)
 
 
 def body_problem_of(problem: Problem) -> BodyProblem | None:
-    """La categoria di `body_input` di un problema di altezza, peso o data di nascita."""
+    """The `body_input` category of a height, weight or birth date problem."""
     return _PROBLEM_TO_BODY.get(problem)
 
 
 def folder_name_from(profile_name: str) -> str:
-    """Nome di cartella derivato da un nome di profilo.
+    """Folder name derived from a profile name.
 
-    I caratteri vietati diventano `_`; un nome che Windows riserva a un dispositivo (CON, PRN,
-    AUX, NUL, COM1-9, LPT1-9, anche con un'estensione) prende il suffisso `_profile` prima
-    dell'estensione.
+    Forbidden characters become `_`; a name that Windows reserves for a device (CON, PRN,
+    AUX, NUL, COM1-9, LPT1-9, even with an extension) gets the suffix `_profile` before
+    the extension.
     """
     cleaned = _FORBIDDEN_IN_FOLDER_NAME.sub("_", unicodedata.normalize("NFC", profile_name))
     cleaned = cleaned.strip().rstrip(". ")
@@ -155,46 +205,51 @@ def folder_name_from(profile_name: str) -> str:
 
 
 def estimated_threshold(max_bpm: int) -> int:
-    """FC di soglia stimata dalla massima (90%), portata nei limiti ammessi."""
+    """Threshold HR estimated from the maximum (90%), brought within the allowed limits."""
     return max(MIN_THRESHOLD_BPM, min(MAX_ALLOWED_BPM, round(max_bpm * THRESHOLD_SHARE_OF_MAX)))
 
 
 class NewProfileForm:
-    """Valori del modulo e regole. Non conosce widget né testi."""
+    """Form values and rules. It knows neither widgets nor texts."""
 
     def __init__(self, timezone_name: str) -> None:
         self.timezone_name = timezone_name
         self.name = ""
-        self.height_text = ""  # vuoti finché l'utente non li scrive: nessuna proposta
+        self.height_text = ""  # empty until the user types them: no suggestion
         self.weight_text = ""
         self.birth_date: date | None = None
         self.min_bpm = DEFAULT_MIN_BPM
         self.max_bpm = DEFAULT_MAX_BPM
         self.sex = Sex.MALE
-        self._folder_text = ""  # vuota finché l'utente non sceglie: nessuna proposta
-        self._threshold: int | None = None  # None: stimata dalla massima
-        self.folder_state: FolderState | None = None  # ultimo esame noto della cartella
+        self.run_lt1_text = ""  # empty: the default (a share of the running LT2)
+        self.other_text = ""  # empty: the default (the running LT2)
+        self.other_lt1_text = ""  # empty: the default (a share of the other-sports LT2)
+        self.pace_text = ""  # empty: no pace (running sessions stay heart-rate only)
+        self._folder_text = ""  # empty until the user chooses: no suggestion
+        self._threshold: int | None = None  # None: estimated from the maximum
+        self.folder_state: FolderState | None = None  # last known examination of the folder
 
-    # --- Cartella e soglia ------------------------------------------------------------
+    # --- Folder and threshold ------------------------------------------------------------
 
     @property
     def folder_text(self) -> str:
-        """Cartella scelta dall'utente (vuota finché non la sceglie)."""
+        """Folder chosen by the user (empty until chosen)."""
         return self._folder_text
 
     def choose_folder(self, text: str) -> None:
-        """L'utente sceglie o scrive la cartella; l'esame precedente non vale più."""
+        """The user chooses or types the folder; the previous examination no longer applies."""
         self._folder_text = text
         self.folder_state = None
 
     @property
     def uses_subfolder(self) -> bool:
-        """Vero se la cartella scelta contiene già altro: i dati vanno in una sottocartella."""
+        """True if the chosen folder already contains something else: the data goes in a
+        subfolder."""
         return self.folder_state is FolderState.NOT_EMPTY
 
     @property
     def destination(self) -> str:
-        """Cartella in cui andranno i dati (vuota se non è ancora determinabile)."""
+        """Folder where the data will go (empty if not yet determinable)."""
         chosen = self._folder_text.strip()
         if not chosen or not self.uses_subfolder:
             return chosen
@@ -203,29 +258,78 @@ class NewProfileForm:
 
     @property
     def threshold_bpm(self) -> int:
-        """FC di soglia: quella fissata, o la stima dalla massima."""
+        """Threshold HR: the one set, or the estimate from the maximum."""
         return estimated_threshold(self.max_bpm) if self._threshold is None else self._threshold
 
     @property
     def threshold_is_estimate(self) -> bool:
-        """Vero finché la soglia è una stima da confermare con il test."""
+        """True while the threshold is an estimate to confirm with the test."""
         return self._threshold is None
 
     def set_threshold(self, bpm: int) -> None:
-        """L'utente fissa la soglia: non è più una stima."""
+        """The user sets the threshold: it is no longer an estimate."""
         self._threshold = bpm
+
+    def threshold_default(self, field: Field) -> int:
+        """What an optional value is when left empty, for the heart rates now entered: the
+        running LT2 for the other-sports LT2, the default share of the LT2 of its group for an LT1
+        (the other-sports one follows the other-sports LT2 as typed, if valid)."""
+        if field is Field.OTHER_THRESHOLD:
+            return optional_threshold_default(
+                self.min_bpm, self.max_bpm, self.threshold_bpm, Sport.OTHER
+            )
+        return lt1_default(self.min_bpm, self._lt2_of(field))
+
+    def _lt2_of(self, lt1_field: Field) -> int:
+        """The LT2 an LT1 field is compared with: the running one, or the other-sports one as
+        typed if valid, else the running one."""
+        if lt1_field is Field.RUN_LT1:
+            return self.threshold_bpm
+        reading = read_optional_threshold(self.other_text)
+        return self.threshold_bpm if not isinstance(reading, ThresholdHeartRate) else reading.bpm
+
+    def _optional_texts(self) -> tuple[tuple[Field, str], ...]:
+        return (
+            (Field.OTHER_THRESHOLD, self.other_text),
+            (Field.RUN_LT1, self.run_lt1_text),
+            (Field.OTHER_LT1, self.other_lt1_text),
+        )
+
+    def _optional_readings(self) -> dict[Field, ThresholdHeartRate | None]:
+        """Valid optional thresholds (`None` where empty or invalid)."""
+        found: dict[Field, ThresholdHeartRate | None] = {}
+        for field, text in self._optional_texts():
+            reading = read_optional_threshold(text)
+            found[field] = None if isinstance(reading, HeartRateProblem) else reading
+        return found
+
+    def _optional_threshold_problems(self) -> list[Problem]:
+        found: list[Problem] = []
+        for field, text in self._optional_texts():
+            by_rule = _OPTIONAL_THRESHOLD_PROBLEMS[field]
+            reading = read_optional_threshold(text)
+            if isinstance(reading, HeartRateProblem):
+                found.append(by_rule[reading])
+            elif reading is not None:
+                found.extend(by_rule[rule] for rule in self._rules_broken_by(field, reading.bpm))
+        return found
+
+    def _rules_broken_by(self, field: Field, bpm: int) -> tuple[HeartRateProblem, ...]:
+        if field is Field.OTHER_THRESHOLD:
+            return optional_threshold_problems(self.min_bpm, self.max_bpm, bpm)
+        return lt1_problems(self.min_bpm, bpm, self._lt2_of(field))
 
     # --- Validazione ------------------------------------------------------------------
 
     def problems(self, today: date) -> tuple[Problem, ...]:
-        """Problemi dei valori attuali, nell'ordine dei campi (vuoto se tutto è valido).
+        """Problems of the current values, in field order (empty if everything is valid).
 
-        `today` (data di oggi nel fuso del profilo) serve al limite della data di nascita.
+        `today` (today's date in the profile's time zone) serves for the birth date limit.
         """
         return self._problems_of(self._read_body(today))
 
     def _read_body(self, today: date) -> BodyReadings:
-        """Altezza, peso e data di nascita: valori validi o la categoria del problema."""
+        """Height, weight and birth date: valid values or the problem category."""
         return (
             read_height(self.height_text),
             read_weight(self.weight_text),
@@ -238,6 +342,8 @@ class NewProfileForm:
             *self._folder_problems(),
             *(_BODY_PROBLEMS[item] for item in readings if isinstance(item, BodyProblem)),
             *self._heart_rate_problems(),
+            *self._optional_threshold_problems(),
+            *self._pace_problems(),
         ]
         return tuple(found)
 
@@ -254,7 +360,8 @@ class NewProfileForm:
         return []
 
     def folder_problem(self) -> Problem | None:
-        """Problema della cartella scelta (il solo che blocca "Crea profilo" da subito)."""
+        """Problem of the chosen folder (the only one that blocks "Create profile" from the
+        start)."""
         text = self._folder_text.strip()
         if not text:
             return Problem.FOLDER_EMPTY
@@ -269,15 +376,26 @@ class NewProfileForm:
         if found is not None:
             return [found]
         if self.uses_subfolder and not self.destination and not self._name_problems():
-            return [Problem.NAME_INVALID]  # nome valido ma senza un nome di cartella utilizzabile
+            return [Problem.NAME_INVALID]  # valid name but without a usable folder name
         return []
 
     def _heart_rate_problems(self) -> list[Problem]:
         found = heart_rate_problems(self.min_bpm, self.max_bpm, self.threshold_bpm)
         return [_HEART_RATE_PROBLEMS[item] for item in found]
 
+    def _pace_problems(self) -> list[Problem]:
+        pace = read_threshold_pace(self.pace_text)
+        if pace is BodyProblem.PACE_INVALID:
+            return [Problem.PACE_INVALID]
+        return []
+
+    def _threshold_pace(self) -> ThresholdPace | None:
+        """The typed pace if valid; `None` if empty (checked for validity by `problems`)."""
+        pace = read_threshold_pace(self.pace_text)
+        return pace if isinstance(pace, ThresholdPace) else None
+
     def build_request(self, today: date) -> NewProfileRequest | tuple[Problem, ...]:
-        """La richiesta di creazione, oppure i problemi che la impediscono."""
+        """The creation request, or the problems that prevent it."""
         readings = self._read_body(today)
         height, weight, birth = readings
         found = self._problems_of(readings)
@@ -288,10 +406,14 @@ class NewProfileForm:
             or isinstance(birth, BodyProblem)
         ):
             return found
+        optional = self._optional_readings()
         physiology = Physiology(
             HeartRateLimits(self.min_bpm, self.max_bpm),
             ThresholdHeartRate(self.threshold_bpm),
             self.sex,
+            other_threshold=optional[Field.OTHER_THRESHOLD],
+            run_lt1=optional[Field.RUN_LT1],
+            other_lt1=optional[Field.OTHER_LT1],
         )
         return NewProfileRequest(
             ProfileName.parse(self.name),
@@ -301,4 +423,5 @@ class NewProfileForm:
             today,
             FixedProfileData(height, birth),
             weight,
+            self._threshold_pace(),
         )

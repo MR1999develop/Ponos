@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Confine di lettura dei file FIT: `bytes` → `Activity` oppure `FitDecodeError`.
+"""Reading boundary for FIT files: `bytes` → `Activity` or `FitDecodeError`.
 
-Nessun I/O: il chiamante legge i byte (con un massimo) e li passa qui. Dimensione, numero di
-record e durata si controllano con i limiti di `FitLimits`; i CRC si verificano; un file non
-valido non si ripara mai, si rifiuta con un motivo enumerato. Gli errori di `fitdecode` e le
-sole eccezioni del parser osservate su file ostili e byte casuali diventano
-`FitDecodeReason.CORRUPT`; un errore di programmazione si propaga.
+No I/O: the caller reads the bytes (with a maximum) and passes them here. Size, number of
+records and duration are checked against the `FitLimits` limits; CRCs are verified; an invalid
+file is never repaired, it is rejected with an enumerated reason. `fitdecode` errors and the
+only parser exceptions observed on hostile files and random bytes become
+`FitDecodeReason.CORRUPT`; a programming error propagates.
 """
 
 from __future__ import annotations
@@ -21,17 +21,22 @@ from enum import Enum
 
 import fitdecode
 import numpy as np
+from numpy.typing import NDArray
 
 from ponos_coach.activities.domain import (
     MAX_ACTIVITY_FILE_BYTES,
+    MAX_ACTIVITY_KCAL,
     Activity,
     ActivitySummary,
+    ActivityTrack,
+    DistanceSeries,
     FileFormat,
     FileId,
     FitIdentity,
     GeoPoint,
     HeartRateSeries,
     Sport,
+    build_track,
     encode_polyline,
     is_plausible_instant,
     is_plausible_span,
@@ -39,7 +44,7 @@ from ponos_coach.activities.domain import (
     truncate_to_millisecond,
 )
 
-# Numeri del profilo FIT (campo `sport` e `sub_sport` del messaggio `session`).
+# FIT profile numbers (field `sport` and `sub_sport` of the `session` message).
 _FIT_SPORT_RUNNING = 1
 _FIT_SPORT_CYCLING = 2
 _FIT_SPORT_TRAINING = 10
@@ -48,24 +53,25 @@ _FIT_SPORT_HIKING = 17
 _FIT_SUB_SPORT_TRAIL = 3
 _FIT_SUB_SPORT_STRENGTH = 20
 _FIT_TYPE_ACTIVITY = 4
-_MESSAGES_PER_RECORD = 5  # tetto ai messaggi di dati totali: 5 volte i record ammessi
-_SEMICIRCLE_INVALID = 0x7FFFFFFF  # valore non valido di un campo sint32
-_SEMICIRCLES_HALF_TURN = 2**31  # 180 gradi
-_SEMICIRCLES_QUARTER_TURN = 2**30  # 90 gradi
+_MESSAGES_PER_RECORD = 5  # cap on total data messages: 5 times the allowed records
+_SEMICIRCLE_INVALID = 0x7FFFFFFF  # invalid value of an sint32 field
+_SEMICIRCLES_HALF_TURN = 2**31  # 180 degrees
+_SEMICIRCLES_QUARTER_TURN = 2**30  # 90 degrees
 _DEGREES_PER_SEMICIRCLE = 180.0 / _SEMICIRCLES_HALF_TURN
-_TIMER_EXCESS_TOLERANCE_MS = 1000  # tempo in movimento oltre il trascorso: fino a 1 s si porta
+_TIMER_EXCESS_TOLERANCE_MS = 1000  # moving time above elapsed: up to 1 s it is brought down
 _MS_PER_S = 1000
+_SPEED_GAP_S = 10.0  # longer intervals between records are pauses: no distance is integrated
 
-# Errori di `fitdecode` e sole eccezioni di Python osservate dentro il suo parser su `fit-ostili/`
-# e su byte casuali o mutati (le fa scattare, su dati ostili, un controllo mancante della
-# libreria): TypeError (processore di date), struct.error (header troncato), AssertionError
-# (lunghezza di chunk) e ValueError (lettura oltre la fine). Valgono solo attorno alla lettura
-# dei frame: un errore del nostro codice non passa di qui e si propaga.
+# `fitdecode` errors and the only Python exceptions observed inside its parser on `fit-ostili/`
+# and on random or mutated bytes (triggered, on hostile data, by a missing check in the
+# library): TypeError (date processor), struct.error (truncated header), AssertionError
+# (chunk length) and ValueError (read past the end). They apply only around the reading
+# of frames: an error in our code does not pass through here and propagates.
 _PARSER_ERRORS = (fitdecode.FitError, TypeError, struct.error, AssertionError, ValueError)
 
 
 class FitDecodeReason(Enum):
-    """Motivo per cui un file non diventa un'attività."""
+    """Reason why a file does not become an activity."""
 
     EMPTY = "empty"
     TOO_LARGE = "too_large"
@@ -76,7 +82,7 @@ class FitDecodeReason(Enum):
 
 
 class FitDecodeError(Exception):
-    """Il file non è un'attività valida entro i limiti; `reason` dice perché."""
+    """The file is not a valid activity within the limits; `reason` says why."""
 
     def __init__(self, reason: FitDecodeReason) -> None:
         super().__init__(reason.value)
@@ -85,7 +91,7 @@ class FitDecodeError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class FitLimits:
-    """Tetti di lettura (default del progetto): 50 MB, un milione di record, 7 giorni."""
+    """Reading caps (project default): 50 MB, one million records, 7 days."""
 
     max_bytes: int = MAX_ACTIVITY_FILE_BYTES
     max_records: int = 1_000_000
@@ -93,13 +99,13 @@ class FitLimits:
 
     def __post_init__(self) -> None:
         if self.max_bytes <= 0 or self.max_records <= 0:
-            raise ValueError("i limiti di byte e record devono essere positivi")
+            raise ValueError("byte and record limits must be positive")
         if not math.isfinite(self.max_duration_s) or self.max_duration_s <= 0:
-            raise ValueError("la durata massima deve essere finita e positiva")
+            raise ValueError("the maximum duration must be finite and positive")
 
 
 def map_sport(sport: int | None, sub_sport: int | None) -> Sport:
-    """Sport FIT (numeri del profilo) → `Sport`; ciò che non si riconosce è `OTHER`."""
+    """FIT sport (profile numbers) → `Sport`; what is not recognized is `OTHER`."""
     if sport == _FIT_SPORT_RUNNING:
         return Sport.TRAIL if sub_sport == _FIT_SUB_SPORT_TRAIL else Sport.RUNNING
     if sport == _FIT_SPORT_TRAINING:
@@ -121,7 +127,8 @@ class _Session:
     sub_sport: int | None
     distance_m: float | None
     ascent_m: float | None
-    start_lat: int | None  # semicerchi
+    calories_kcal: float | None
+    start_lat: int | None  # semicircles
     start_lon: int | None
 
 
@@ -132,8 +139,14 @@ class _Parsed:
     record_times: list[datetime] = field(default_factory=list)
     hr_times: list[datetime] = field(default_factory=list)
     hr_values: list[int] = field(default_factory=list)
-    pos_lat: list[int] = field(default_factory=list)  # semicerchi, solo coppie valide
+    distance_times: list[datetime] = field(default_factory=list)
+    distance_values: list[float] = field(default_factory=list)  # cumulative metres
+    speed_times: list[datetime] = field(default_factory=list)
+    speed_values: list[float] = field(default_factory=list)  # m/s
+    pos_lat: list[int] = field(default_factory=list)  # semicircles, valid pairs only
     pos_lon: list[int] = field(default_factory=list)
+    pos_record: list[int] = field(default_factory=list)  # index of the record of each position
+    pos_altitude: list[float] = field(default_factory=list)  # metres, NaN if unknown
     messages: int = 0
     records: int = 0
 
@@ -145,7 +158,7 @@ def _value(frame: fitdecode.FitDataMessage, name: str, *, raw: bool = False) -> 
 
 
 def _as_datetime(value: object) -> datetime | None:
-    """Istante UTC, o None se manca il fuso o la conversione non è rappresentabile."""
+    """UTC instant, or None if the time zone is missing or the conversion is not representable."""
     if not isinstance(value, datetime) or value.tzinfo is None:
         return None
     try:
@@ -165,7 +178,7 @@ def _as_float(value: object) -> float | None:
 
 
 def _semicircles(value: object) -> int | None:
-    """Semicerchi validi (non 0x7FFFFFFF e dentro l'intervallo di una coordinata) o None."""
+    """Valid semicircles (not 0x7FFFFFFF and within the range of a coordinate) or None."""
     number = _as_int(value)
     if number is None or number == _SEMICIRCLE_INVALID or abs(number) > _SEMICIRCLES_HALF_TURN:
         return None
@@ -173,7 +186,7 @@ def _semicircles(value: object) -> int | None:
 
 
 def _position(frame: fitdecode.FitDataMessage, lat: str, lon: str) -> tuple[int, int] | None:
-    """Coppia di coordinate in semicerchi se entrambe valide (±90° di latitudine)."""
+    """Coordinate pair in semicircles if both valid (±90° of latitude)."""
     latitude = _semicircles(_value(frame, lat, raw=True))
     longitude = _semicircles(_value(frame, lon, raw=True))
     if latitude is None or longitude is None or abs(latitude) > _SEMICIRCLES_QUARTER_TURN:
@@ -184,6 +197,26 @@ def _position(frame: fitdecode.FitDataMessage, lat: str, lon: str) -> tuple[int,
 def _non_negative(value: object) -> float | None:
     number = _as_float(value)
     return number if number is not None and number >= 0.0 else None
+
+
+def _declared_kcal(value: object) -> float | None:
+    """Energy declared by the device, only if credible (0 means "not computed")."""
+    number = _as_float(value)
+    return number if number is not None and 0.0 < number <= MAX_ACTIVITY_KCAL else None
+
+
+def _take_motion(frame: fitdecode.FitDataMessage, when: datetime, parsed: _Parsed) -> None:
+    """Cumulative distance and speed of a record, when it has them."""
+    distance = _non_negative(_value(frame, "distance"))
+    if distance is not None:
+        parsed.distance_times.append(when)
+        parsed.distance_values.append(distance)
+    speed = _non_negative(_value(frame, "enhanced_speed"))
+    if speed is None:
+        speed = _non_negative(_value(frame, "speed"))
+    if speed is not None:
+        parsed.speed_times.append(when)
+        parsed.speed_values.append(speed)
 
 
 def _take_record(frame: fitdecode.FitDataMessage, parsed: _Parsed, limits: FitLimits) -> None:
@@ -198,10 +231,16 @@ def _take_record(frame: fitdecode.FitDataMessage, parsed: _Parsed, limits: FitLi
     if position is not None:
         parsed.pos_lat.append(position[0])
         parsed.pos_lon.append(position[1])
+        parsed.pos_record.append(len(parsed.record_times) - 1)
+        altitude = _as_float(_value(frame, "enhanced_altitude"))
+        if altitude is None:
+            altitude = _as_float(_value(frame, "altitude"))
+        parsed.pos_altitude.append(math.nan if altitude is None else altitude)
     heart_rate = _as_int(_value(frame, "heart_rate"))
     if heart_rate is not None:
         parsed.hr_times.append(when)
         parsed.hr_values.append(heart_rate)
+    _take_motion(frame, when, parsed)
 
 
 def _take_message(frame: fitdecode.FitDataMessage, parsed: _Parsed, limits: FitLimits) -> None:
@@ -229,6 +268,7 @@ def _take_message(frame: fitdecode.FitDataMessage, parsed: _Parsed, limits: FitL
                 _as_int(_value(frame, "sub_sport", raw=True)),
                 _non_negative(_value(frame, "total_distance")),
                 _non_negative(_value(frame, "total_ascent")),
+                _declared_kcal(_value(frame, "total_calories")),
                 start[0] if start else None,
                 start[1] if start else None,
             )
@@ -236,7 +276,7 @@ def _take_message(frame: fitdecode.FitDataMessage, parsed: _Parsed, limits: FitL
 
 
 def _frames(data: bytes) -> Iterator[fitdecode.FitDataMessage]:
-    """Messaggi di dati del file; un guasto del parser diventa `FitDecodeError(CORRUPT)`."""
+    """Data messages of the file; a parser failure becomes `FitDecodeError(CORRUPT)`."""
     try:
         with fitdecode.FitReader(
             io.BytesIO(data),
@@ -279,10 +319,10 @@ def _file_id(parsed: _Parsed) -> FileId:
 
 
 def _timing(parsed: _Parsed) -> tuple[datetime, float, float]:
-    """Inizio UTC, tempo trascorso e tempo in movimento (secondi).
+    """UTC start, elapsed time and moving time (seconds).
 
-    Dalle sessioni; se mancano, dai record. Il tempo in movimento è `total_timer_time` e, per
-    una sessione che non lo dichiara, il suo tempo trascorso (default del progetto).
+    From the sessions; if missing, from the records. The moving time is `total_timer_time` and, for
+    a session that does not declare it, its elapsed time (project default).
     """
     times = parsed.record_times
     if not parsed.sessions and not times:
@@ -301,27 +341,78 @@ def _timing(parsed: _Parsed) -> tuple[datetime, float, float]:
 
 
 def _series(parsed: _Parsed) -> tuple[HeartRateSeries | None, int]:
-    """Serie di FC e numero di campioni scartati.
+    """HR series and number of discarded samples.
 
-    Un campione con timestamp non maggiore di tutti i precedenti (ripetuto o all'indietro) si
-    scarta: vale il primo di una ripetizione e un ritorno indietro non entra mai (default del
-    progetto, deterministico).
+    A sample with a timestamp not greater than all the previous ones (repeated or backwards) is
+    discarded: the first of a repetition counts and a step backwards never enters (project
+    default, deterministic).
     """
     if not parsed.hr_values:
         return None, 0
-    origin = parsed.record_times[0]
-    seconds = np.array([(t - origin).total_seconds() for t in parsed.hr_times])
+    seconds = _seconds_from_first_record(parsed, parsed.hr_times)
     bpm = np.array(parsed.hr_values, dtype=np.float64)
-    keep = np.ones(seconds.size, dtype=bool)
-    keep[1:] = seconds[1:] > np.maximum.accumulate(seconds)[:-1]
+    keep = _increasing_mask(seconds)
+    if not keep.any():
+        return None, int(seconds.size)
     return HeartRateSeries(seconds[keep], bpm[keep]), int(seconds.size - np.count_nonzero(keep))
 
 
-def _moving_time(elapsed_s: float, timer_s: float) -> float:
-    """Tempo in movimento coerente con il trascorso.
+def _seconds_from_first_record(parsed: _Parsed, times: list[datetime]) -> NDArray[np.float64]:
+    origin = parsed.record_times[0]
+    return np.array([(t - origin).total_seconds() for t in times], dtype=np.float64)
 
-    Oltre 1 s sopra il trascorso il file è corrotto; entro 1 s si porta al trascorso (default
-    del progetto: il timer dell'orologio e il trascorso si arrotondano in modo indipendente).
+
+def _increasing_mask(seconds: NDArray[np.float64]) -> NDArray[np.bool_]:
+    """Samples on the series' axis whose time is greater than all the previous ones (the first
+    of a repetition counts, a step backwards never enters). A sample before the first record of
+    the file (negative second) is outside the axis and never enters."""
+    keep = seconds >= 0
+    inside = seconds[keep]
+    increasing = np.ones(inside.size, dtype=bool)
+    if inside.size:
+        increasing[1:] = inside[1:] > np.maximum.accumulate(inside)[:-1]
+    keep[keep] = increasing
+    return keep
+
+
+def _integrated(seconds: NDArray[np.float64], speed: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Cumulative metres from speed samples (trapezoid); an interval over 10 s adds nothing."""
+    interval = np.diff(seconds)
+    step = 0.5 * (speed[1:] + speed[:-1]) * interval
+    step[interval > _SPEED_GAP_S] = 0.0
+    return np.concatenate(([0.0], np.cumsum(step)))
+
+
+def _distance_series(parsed: _Parsed) -> DistanceSeries | None:
+    """Cumulative distance of the records: the `distance` field or, if no record has it, the
+    integral of `speed`. A distance that goes backwards is not usable: no series (never repaired).
+    """
+    if parsed.distance_values:
+        seconds = _seconds_from_first_record(parsed, parsed.distance_times)
+        meters = np.array(parsed.distance_values, dtype=np.float64)
+        keep = _increasing_mask(seconds)
+        seconds, meters = seconds[keep], meters[keep]
+    elif parsed.speed_values:
+        seconds = _seconds_from_first_record(parsed, parsed.speed_times)
+        speed = np.array(parsed.speed_values, dtype=np.float64)
+        keep = _increasing_mask(seconds)
+        seconds = seconds[keep]
+        meters = _integrated(seconds, speed[keep])
+    else:
+        return None
+    if seconds.size == 0:
+        return None
+    if not np.isfinite(meters).all() or (np.diff(meters) < 0).any():
+        return None
+    return DistanceSeries(seconds, meters)
+
+
+def _moving_time(elapsed_s: float, timer_s: float) -> float:
+    """Moving time consistent with the elapsed time.
+
+    Above 1 s over the elapsed time the file is corrupt; within 1 s it is brought to the elapsed
+    time (project
+    default: the watch timer and the elapsed time are rounded independently).
     """
     excess_ms = round(timer_s * _MS_PER_S) - round(elapsed_s * _MS_PER_S)
     if excess_ms > _TIMER_EXCESS_TOLERANCE_MS:
@@ -334,8 +425,18 @@ def _sum_declared(values: list[float | None]) -> float | None:
     return float(sum(declared)) if declared else None
 
 
+def _total_kcal(parsed: _Parsed) -> float | None:
+    """Sum of the sessions' declared energy, only if every session declares it and the total is
+    credible: a partial sum would understate the activity."""
+    declared = [s.calories_kcal for s in parsed.sessions]
+    if not declared or any(v is None for v in declared):
+        return None
+    total = float(sum(v for v in declared if v is not None))
+    return total if total <= MAX_ACTIVITY_KCAL else None
+
+
 def _start_point(parsed: _Parsed) -> GeoPoint | None:
-    """Partenza dalla prima sessione che la dichiara, altrimenti il primo record valido."""
+    """Start from the first session that declares it, otherwise the first valid record."""
     first = parsed.sessions[0] if parsed.sessions else None
     if first is not None and first.start_lat is not None and first.start_lon is not None:
         lat, lon = first.start_lat, first.start_lon
@@ -347,7 +448,7 @@ def _start_point(parsed: _Parsed) -> GeoPoint | None:
 
 
 def _track_polyline(parsed: _Parsed) -> str | None:
-    """Traccia semplificata (RDP, tetto del progetto) dai record con posizione valida."""
+    """Simplified track (RDP, project cap) from the records with a valid position."""
     if not parsed.pos_lat:
         return None
     lat = np.array(parsed.pos_lat, dtype=np.float64) * _DEGREES_PER_SEMICIRCLE
@@ -362,17 +463,23 @@ def _summary(parsed: _Parsed) -> ActivitySummary:
         _sum_declared([s.ascent_m for s in parsed.sessions]),
         _start_point(parsed),
         _track_polyline(parsed),
+        _total_kcal(parsed),
     )
 
 
 def _require_plausible_times(parsed: _Parsed, start: datetime, elapsed_s: float) -> None:
-    """Inizio, fine e orari dei record dentro la finestra ammessa, altrimenti `CORRUPT`."""
+    """Start, end and times of the records within the allowed window, otherwise `CORRUPT`."""
     times = parsed.record_times
     stamps = [start, *(s.start for s in parsed.sessions if s.start is not None)]
     if times:
         stamps += [min(times), max(times)]
     if not (is_plausible_span(start, elapsed_s) and all(map(is_plausible_instant, stamps))):
         raise FitDecodeError(FitDecodeReason.CORRUPT)
+
+
+def _first_record_offset_s(parsed: _Parsed, start: datetime) -> float:
+    """Seconds from the start of the activity to its first record (the origin of the series)."""
+    return (parsed.record_times[0] - start).total_seconds() if parsed.record_times else 0.0
 
 
 def _build(parsed: _Parsed, limits: FitLimits) -> Activity:
@@ -390,20 +497,21 @@ def _build(parsed: _Parsed, limits: FitLimits) -> Activity:
     series, discarded = _series(parsed)
     return Activity(
         FitIdentity(file_id), FileFormat.FIT, sport, start, elapsed_s, timer_s, series,
-        _summary(parsed), discarded,
+        _summary(parsed), discarded, _distance_series(parsed),
+        _first_record_offset_s(parsed, start),
     )  # fmt: skip
 
 
 def decode_activity(data: bytes, limits: FitLimits | None = None) -> Activity:
-    """Decodifica un file FIT di attività.
+    """Decodes an activity FIT file.
 
-    Controlla prima la dimensione, poi legge con verifica dei CRC e dei limiti di record e di
-    durata. L'identità (`FileId`) richiede `file_id` di tipo attività con produttore, prodotto,
-    numero di serie e ora di creazione; senza, il file non è un'attività. Secondi della serie
-    di FC dal primo record; campioni con FC non valida (0xFF) omessi.
+    Checks the size first, then reads verifying the CRCs and the record and duration
+    limits. The identity (`FileId`) requires an activity-type `file_id` with manufacturer, product,
+    serial number and creation time; without it, the file is not an activity. Seconds of the
+    HR and distance series from the first record; samples with invalid HR (0xFF) omitted.
 
     Raises:
-        FitDecodeError: l'unico errore in uscita, con il motivo in `reason`.
+        FitDecodeError: the only error raised, with the reason in `reason`.
     """
     limits = limits or FitLimits()
     if not data:
@@ -411,3 +519,43 @@ def decode_activity(data: bytes, limits: FitLimits | None = None) -> Activity:
     if len(data) > limits.max_bytes:
         raise FitDecodeError(FitDecodeReason.TOO_LARGE)
     return _build(_parse(data, limits), limits)
+
+
+def _track(parsed: _Parsed) -> ActivityTrack | None:
+    """Full track from the records with a position; a record without GPS splits the segment.
+
+    Seconds start from the first record, like the HR series.
+    """
+    if not parsed.pos_record:
+        return None
+    origin = parsed.record_times[0]
+    record = np.array(parsed.pos_record, dtype=np.intp)
+    seconds = np.array(
+        [(parsed.record_times[i] - origin).total_seconds() for i in parsed.pos_record]
+    )
+    run_id = np.concatenate(([0], np.cumsum(np.diff(record) > 1))).astype(np.intp)
+    return build_track(
+        seconds,
+        np.array(parsed.pos_lat, dtype=np.float64) * _DEGREES_PER_SEMICIRCLE,
+        np.array(parsed.pos_lon, dtype=np.float64) * _DEGREES_PER_SEMICIRCLE,
+        np.array(parsed.pos_altitude, dtype=np.float64),
+        run_id,
+    )
+
+
+def decode_track(data: bytes, limits: FitLimits | None = None) -> ActivityTrack | None:
+    """Full track (positions and altitude) of a FIT file, `None` if it has no positions.
+
+    Meant for a file already accepted by `decode_activity` and archived: same size, record and
+    CRC checks, but none of the identity or duration checks. Load and the HR series do not
+    depend on this function.
+
+    Raises:
+        FitDecodeError: empty, too large, corrupt file or too many records.
+    """
+    limits = limits or FitLimits()
+    if not data:
+        raise FitDecodeError(FitDecodeReason.EMPTY)
+    if len(data) > limits.max_bytes:
+        raise FitDecodeError(FitDecodeReason.TOO_LARGE)
+    return _track(_parse(data, limits))

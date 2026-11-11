@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Scrittore di archivi ZIP per i test dell'import, validi e ostili, solo libreria standard.
+"""Writer of ZIP archives for the import tests, valid and hostile, standard library only.
 
-Gli ZIP ostili (bomba, dimensioni false, CRC sbagliato, voci cifrate, nomi con `../`) si
-ottengono scrivendo uno ZIP valido e ritoccandone i campi con `patch_entry`. I file grandi si
-generano nei test e non si versionano.
+Hostile ZIPs (bomb, false sizes, wrong CRC, encrypted entries, names with `../`) are
+obtained by writing a valid ZIP and tweaking its fields with `patch_entry`. Large files are
+generated in the tests and are not versioned.
 """
 
 from __future__ import annotations
@@ -16,13 +16,13 @@ from collections.abc import Sequence
 
 LOCAL_SIGNATURE = b"PK\x03\x04"
 CENTRAL_SIGNATURE = b"PK\x01\x02"
-# Posizioni dei campi nei due tipi di intestazione.
+# Positions of the fields in the two header types.
 _CENTRAL_FLAGS, _CENTRAL_CRC, _CENTRAL_COMPRESSED, _CENTRAL_SIZE = 8, 16, 20, 24
 _LOCAL_FLAGS, _LOCAL_CRC, _LOCAL_COMPRESSED, _LOCAL_SIZE = 6, 14, 18, 22
 
 
 def build_zip(entries: Sequence[tuple[str, bytes]], *, method: int = zipfile.ZIP_DEFLATED) -> bytes:
-    """ZIP con le voci date (nome, contenuto). I nomi non si ripuliscono: `../x` resta `../x`."""
+    """ZIP with the given entries (name, content). Names are not cleaned: `../x` stays `../x`."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=method) as archive:
         for name, content in entries:
@@ -33,17 +33,19 @@ def build_zip(entries: Sequence[tuple[str, bytes]], *, method: int = zipfile.ZIP
 
 
 def garmin_download(fit: bytes, activity_id: int = 12345678901) -> bytes:
-    """Come l'originale scaricato dal sito Garmin: uno ZIP con un solo `<id>_ACTIVITY.fit`."""
+    """Like the original downloaded from the Garmin site: a ZIP with a single
+    `<id>_ACTIVITY.fit`."""
     return build_zip([(f"{activity_id}_ACTIVITY.fit", fit)])
 
 
 def zero_bomb(size_bytes: int, name: str = "bomb.fit") -> bytes:
-    """Uno ZIP con una voce di `size_bytes` zeri: si comprime di centinaia di volte."""
+    """A ZIP with one entry of `size_bytes` zeros: it compresses hundreds of times."""
     return build_zip([(name, bytes(size_bytes))])
 
 
 def many_entries(count: int, *, suffix: str = ".txt", prefix: str = "e") -> bytes:
-    """Uno ZIP con `count` voci vuote senza compressione (per i tetti sul numero di voci)."""
+    """A ZIP with `count` empty entries without compression (for the caps on the number of
+    entries)."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
         for i in range(count):
@@ -75,8 +77,8 @@ def patch_entry(
     flags: int | None = None,
     local_too: bool = True,
 ) -> bytes:
-    """Ritocca i campi dichiarati della voce `index` (directory centrale e, se `local_too`,
-    anche l'intestazione locale). Non ricalcola nulla: i valori falsi restano falsi."""
+    """Tweaks the declared fields of entry `index` (central directory and, if `local_too`,
+    also the local header). Recalculates nothing: false values stay false."""
     data = bytearray(zip_bytes)
     central = _central_offsets(zip_bytes)[index]
     local = _local_offset(zip_bytes, central)

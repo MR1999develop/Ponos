@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Preferenze della sincronizzazione: una scelta per profilo, valori illeggibili = predefinito."""
+"""Synchronization preferences: one choice per profile, unreadable values = default."""
 
 from __future__ import annotations
 

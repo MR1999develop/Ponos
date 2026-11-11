@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Impalcatura del collaudo della fase 2: la pila vera della sincronizzazione senza rete.
+"""Scaffolding for the phase 2 acceptance campaign: the real synchronisation stack without network.
 
-Profilo vero (SQLite, archivio su disco, lock), `SyncWorker` e `GarminConnectAccount` veri; di finto
-c'e solo il client di `garminconnect` (`ScriptedClient`/`ScriptedFactory`) e, dove serve, il
-portachiavi in memoria. Nessun login reale e nessuna chiamata di rete.
+Real profile (SQLite, on-disk archive, lock), real `SyncWorker` and `GarminConnectAccount`; the only
+fake is the `garminconnect` client (`ScriptedClient`/`ScriptedFactory`) and, where needed, the
+in-memory keyring. No real login and no network call.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ def scripted_client(
     history: Sequence[RemoteActivity] | None = None,
     **options: object,
 ) -> ScriptedClient:
-    """Un client finto con le corse `first..first+count-1` (elenco dalla più recente, ZIP veri)."""
+    """A fake client with runs `first..first+count-1` (list from the most recent, real ZIPs)."""
     runs = list(history) if history is not None else make_remote_history(first + count)[first:]
     ordered = newest_first(runs)
     downloads = {a.garmin_id.value: original_zip(a.garmin_id.value - 1_000_000) for a in runs}
@@ -69,7 +69,7 @@ def scripted_client(
 
 @dataclass(slots=True)
 class Stack:
-    """Profilo vero + worker vero + client finto, con tutto ciò che serve per osservarli."""
+    """Real profile + real worker + fake client, with everything needed to observe them."""
 
     profile: RealProfile
     worker: SyncWorker
@@ -83,7 +83,7 @@ class Stack:
         return self.profile.folder
 
     def link(self, mfa_code: str | None = None) -> object:
-        """Collega l'account come farebbe l'utente."""
+        """Links the account as the user would."""
         return self.worker.log_in(
             self.profile_id,
             Credentials(EMAIL, PASSWORD),
@@ -122,7 +122,7 @@ def attach_stack(
     policy: SyncPolicy = FAST,
     linked: bool = True,
 ) -> Stack:
-    """Mette worker e client finto sopra un profilo già aperto."""
+    """Puts worker and fake client on top of an already opened profile."""
     factory = ScriptedFactory(client or scripted_client())
     store: TokenStore = tokens if tokens is not None else InMemoryTokenStore()
     clock = FakeSyncClock()
@@ -152,7 +152,7 @@ def build_stack(
     folder_name: str = "profilo",
     linked: bool = True,
 ) -> Stack:
-    """Costruisce la pila su un profilo nuovo in `base / folder_name`."""
+    """Builds the stack on a new profile in `base / folder_name`."""
     profile = create_profile(base, folder_name=folder_name)
     return attach_stack(profile, client, tokens=tokens, policy=policy, linked=linked)
 
@@ -166,14 +166,14 @@ def reopen_stack(
     policy: SyncPolicy = FAST,
     linked: bool = False,
 ) -> Stack:
-    """Riapre come l'app al riavvio un profilo che c'è già (stessa configurazione di `base`)."""
+    """Reopens an existing profile as the app does on restart (same configuration as `base`)."""
     profile = open_profile_from_folder(real_ports(base / "config"), folder)
     return attach_stack(profile, client, tokens=tokens, policy=policy, linked=linked)
 
 
 def adapter_rig(client: ScriptedClient, count_in_memory: int = 0) -> SyncRig:
-    """Un rig in memoria (attesa e orologio finti, niente `sleep`) la cui sorgente è
-    l'adattatore Garmin vero sopra `client`: si prova la traduzione dei guasti e dei tetti."""
+    """An in-memory rig (fake wait and clock, no `sleep`) whose source is
+    the real Garmin adapter on top of `client`: failure and cap translation is exercised."""
     rig = in_memory_rig(count_in_memory)
     rig.source = GarminActivitySource(client)
     return rig

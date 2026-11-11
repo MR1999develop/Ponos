@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Archivio degli originali in memoria (porta `ActivityArchive`)."""
+"""In-memory archive of originals (`ActivityArchive` port)."""
 
 from __future__ import annotations
 
@@ -17,14 +17,14 @@ from ponos_coach.activities.ports import (
 
 
 class InMemoryActivityArchive:
-    """File in un dizionario; i temporanei orfani si simulano con `plant_orphan_temporary`."""
+    """Files in a dictionary; orphan temporaries are simulated with `plant_orphan_temporary`."""
 
     def __init__(self) -> None:
         self.files: dict[PurePosixPath, bytes] = {}
         self.temporaries: set[PurePosixPath] = set()
 
     def store(self, content: bytes, file_format: FileFormat, start: datetime) -> ArchivedFile:
-        """Vedi `ActivityArchive.store`: percorso `<anno>/<sha256>.<estensione>`."""
+        """See `ActivityArchive.store`: path `<year>/<sha256>.<extension>`."""
         if len(content) > MAX_ACTIVITY_FILE_BYTES:
             raise ArchiveTooLargeError(len(content))
         digest = hashlib.sha256(content).hexdigest()
@@ -33,7 +33,7 @@ class InMemoryActivityArchive:
         return ArchivedFile(path, digest, len(content))
 
     def read(self, file: ArchivedFile, max_bytes: int) -> bytes:
-        """Vedi `ActivityArchive.read`."""
+        """See `ActivityArchive.read`."""
         data = self._get(file)
         if len(data) > max_bytes:
             raise ArchiveTooLargeError(len(data))
@@ -41,21 +41,21 @@ class InMemoryActivityArchive:
         return data
 
     def verify(self, file: ArchivedFile) -> None:
-        """Vedi `ActivityArchive.verify`."""
+        """See `ActivityArchive.verify`."""
         self._check(file, self._get(file))
 
     def list_orphan_temporaries(self) -> list[PurePosixPath]:
-        """Vedi `ActivityArchive.list_orphan_temporaries`."""
+        """See `ActivityArchive.list_orphan_temporaries`."""
         return sorted(self.temporaries)
 
     def remove_orphan_temporaries(self) -> int:
-        """Vedi `ActivityArchive.remove_orphan_temporaries`."""
+        """See `ActivityArchive.remove_orphan_temporaries`."""
         removed = len(self.temporaries)
         self.temporaries.clear()
         return removed
 
     def plant_orphan_temporary(self) -> None:
-        """Simula una scrittura interrotta (solo per i test)."""
+        """Simulate an interrupted write (tests only)."""
         self.temporaries.add(PurePosixPath(f"2026/.tmp-{len(self.temporaries)}"))
 
     def _get(self, file: ArchivedFile) -> bytes:

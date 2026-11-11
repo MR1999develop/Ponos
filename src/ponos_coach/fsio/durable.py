@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Sostituzione durevole di un file: temporaneo esclusivo, flush, fsync, rinomina.
+"""Durable replacement of a file: exclusive temporary, flush, fsync, rename.
 
-Windows: `MoveFileExW` con `MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH`, che torna a
-nome durevole; una cartella non si può svuotare con `fsync`, quindi `sync_directory` non fa
-nulla. POSIX: `os.replace` (atomica), poi `fsync` della cartella che contiene il nome nuovo.
+Windows: `MoveFileExW` with `MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH`, which returns on a
+durable name; a directory cannot be flushed with `fsync`, so `sync_directory` does
+nothing. POSIX: `os.replace` (atomic), then `fsync` of the directory containing the new name.
 """
 
 from __future__ import annotations
@@ -21,9 +21,9 @@ from typing import Final
 _MOVEFILE_REPLACE_EXISTING: Final = 0x1
 _MOVEFILE_WRITE_THROUGH: Final = 0x8
 _DIR_MODE: Final = 0o700
-_REPLACE_ATTEMPTS: Final = 5  # antivirus e indicizzatori danno PermissionError transitori
+_REPLACE_ATTEMPTS: Final = 5  # antivirus and indexers cause transient PermissionError
 _REPLACE_PAUSE_S: Final = 0.05
-_IS_WINDOWS: Final[bool] = sys.platform == "win32"  # bool, non Literal: mypy non scarta un ramo
+_IS_WINDOWS: Final[bool] = sys.platform == "win32"  # bool, not Literal: mypy does not drop a branch
 
 
 if sys.platform == "win32":
@@ -39,17 +39,17 @@ if sys.platform == "win32":
 else:
 
     def _move_file_write_through(source: Path, destination: Path) -> None:
-        raise NotImplementedError("solo Windows")
+        raise NotImplementedError("Windows only")
 
 
 def replace_file(source: Path, destination: Path) -> None:
-    """Rinomina `source` su `destination` (stesso volume), sostituendo l'esistente.
+    """Renames `source` to `destination` (same volume), replacing the existing one.
 
-    Su Windows il nome nuovo è già durevole al ritorno; su POSIX serve `sync_directory`. Un
-    `PermissionError` transitorio (Windows) si ritenta poche volte, poi si solleva.
+    On Windows the new name is already durable on return; on POSIX `sync_directory` is needed. A
+    transient `PermissionError` (Windows) is retried a few times, then raised.
 
     Raises:
-        OSError: rinomina non riuscita; `destination` resta com'era.
+        OSError: rename failed; `destination` stays as it was.
     """
     for attempt in range(_REPLACE_ATTEMPTS):
         try:
@@ -66,7 +66,7 @@ def replace_file(source: Path, destination: Path) -> None:
 
 
 def sync_directory(folder: Path) -> None:
-    """Rende durevoli i nomi nella cartella (`fsync` su POSIX; su Windows non fa nulla)."""
+    """Makes the names in the directory durable (`fsync` on POSIX; on Windows it does nothing)."""
     if _IS_WINDOWS:
         return
     descriptor = os.open(folder, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
@@ -77,14 +77,14 @@ def sync_directory(folder: Path) -> None:
 
 
 def write_file_atomically(path: Path, data: bytes) -> None:
-    """Scrive `data` in `path` senza mai lasciarlo a metà.
+    """Writes `data` to `path` without ever leaving it half-written.
 
-    Temporaneo creato in modo esclusivo (0600) nella stessa cartella, flush, fsync, rinomina e
-    sincronizzazione della cartella. Il file di prima resta intatto se qualcosa fallisce. La
-    cartella deve esistere.
+    Temporary created exclusively (0600) in the same directory, flush, fsync, rename and
+    directory synchronization. The previous file stays intact if anything fails. The
+    folder must exist.
 
     Raises:
-        OSError: scrittura o rinomina non riuscite; il temporaneo viene tolto.
+        OSError: write or rename failed; the temporary is removed.
     """
     descriptor, temporary_name = tempfile.mkstemp(
         dir=path.parent, prefix=f"{path.name}.", suffix=".tmp"
@@ -104,15 +104,15 @@ def write_file_atomically(path: Path, data: bytes) -> None:
 
 
 def make_subdirectory(path: Path) -> bool:
-    """Crea una sottocartella (un solo livello) di una cartella già privata.
+    """Creates a subfolder (a single level) of an already private folder.
 
-    POSIX: modo 0700. Windows: nessun modo, così la cartella eredita il descrittore della
-    cartella madre (`mkdir(mode=0o700)` di Python 3.13 per Windows ne scriverebbe un altro).
-    Vero se l'ha creata, falso se c'era già una cartella.
+    POSIX: mode 0700. Windows: no mode, so the folder inherits the descriptor of the
+    parent folder (Python 3.13's `mkdir(mode=0o700)` for Windows would write a different one).
+    True if it created it, false if a folder already existed.
 
     Raises:
-        FileExistsError: esiste, ma non è una cartella.
-        OSError: creazione non riuscita.
+        FileExistsError: exists, but is not a folder.
+        OSError: creation failed.
     """
     try:
         if _IS_WINDOWS:

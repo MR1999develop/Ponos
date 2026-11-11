@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Il "client": ciò che il pacchetto chiede a `garminconnect`, come protocollo interno.
+"""The "client": what the package asks of `garminconnect`, as an internal protocol.
 
-La mappatura delle risposte e degli errori si prova con un client finto; la sola classe che
-usa davvero la libreria è `connect.ConnectClient`. Le risposte sono JSON non fidato (`object`):
-le interpreta chi chiama, al confine. Gli errori sono quelli della libreria, non ancora
-tradotti nelle porte.
+The mapping of responses and errors is tested with a fake client; the only class that
+really uses the library is `connect.ConnectClient`. Responses are untrusted JSON (`object`):
+the caller interprets them, at the boundary. The errors are those of the library, not yet
+translated into the ports' types.
 """
 
 from __future__ import annotations
@@ -15,36 +15,36 @@ from typing import Protocol
 
 
 class GarminClient(Protocol):
-    """Una sessione autenticata verso Garmin Connect. Ogni chiamata ha un timeout."""
+    """An authenticated session with Garmin Connect. Every call has a timeout."""
 
     def list_activities(self, offset: int, limit: int) -> object:
-        """Una pagina dell'elenco delle attività, dalle più recenti, come JSON non interpretato
-        (di solito una lista di oggetti)."""
+        """A page of the activity list, from the most recent, as uninterpreted JSON
+        (usually a list of objects)."""
         ...
 
     def count_activities(self) -> object:
-        """Il totale delle attività dichiarato da Garmin, come valore non interpretato."""
+        """The total of activities declared by Garmin, as an uninterpreted value."""
         ...
 
     def download_original(self, activity_id: int) -> bytes:
-        """I byte dell'originale (uno ZIP) di un'attività, per id numerico già validato."""
+        """The bytes of the original (a ZIP) of an activity, by an already validated numeric id."""
         ...
 
     def dump_tokens(self) -> str:
-        """I token della sessione, serializzati, da salvare nel portachiavi. Segreti."""
+        """The session tokens, serialized, to save in the keyring. Secrets."""
         ...
 
 
 class GarminClientFactory(Protocol):
-    """Crea sessioni: con email e password (e MFA) o dai token salvati."""
+    """Creates sessions: with email and password (and MFA) or from saved tokens."""
 
     def login(self, email: str, password: str, prompt_mfa: Callable[[], str]) -> GarminClient:
-        """Accede con le credenziali; se serve l'MFA chiama `prompt_mfa` per il codice.
+        """Logs in with the credentials; if MFA is needed it calls `prompt_mfa` for the code.
 
-        Il login non ritenta: gli errori sono quelli della libreria.
+        Login does not retry: the errors are those of the library.
         """
         ...
 
     def resume(self, tokens: str) -> GarminClient:
-        """Riprende la sessione da token serializzati (JSON), senza password."""
+        """Resumes the session from serialized tokens (JSON), without a password."""
         ...

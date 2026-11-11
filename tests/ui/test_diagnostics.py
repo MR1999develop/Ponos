@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Log su file con rotazione, formatter sicuro e gestore di ultima istanza (R5, D-F1-05)."""
+"""File logging with rotation, safe formatter and last-resort handler (R5, D-F1-05)."""
 
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ from ponos_coach.ui.diagnostics import (
     SafeFormatter,
     configure_logging,
     exception_chain,
+    exception_place,
     install_exception_hooks,
     neutralize,
 )
@@ -44,7 +45,7 @@ def record_of(message: str, *args: object, exc: BaseException | None = None) -> 
 
 @pytest.fixture(autouse=True)
 def restore_global_state() -> Iterator[None]:
-    """Gestori e log sono dello stato globale del processo: ogni test li lascia come li trova."""
+    """Handlers and logs are global process state: each test leaves them as it found them."""
     logger = logging.getLogger("ponos_coach")
     handlers, level = list(logger.handlers), logger.level
     excepthook, thread_hook = sys.excepthook, threading.excepthook
@@ -91,11 +92,11 @@ def test_the_chain_follows_implicit_context_and_stops_on_a_loop() -> None:
 
     try:
         try:
-            raise KeyError("k")  # noqa: TRY301 - il raise serve alla catena
+            raise KeyError("k")  # noqa: TRY301 - the raise is needed for the chain
         except KeyError:
             raise OuterError("o") from None
     except OuterError as hidden:
-        assert exception_chain(hidden).endswith(".OuterError")  # `from None` nasconde il contesto
+        assert exception_chain(hidden).endswith(".OuterError")  # `from None` hides the context
         assert "KeyError" not in exception_chain(hidden)
     loop = RuntimeError("a")
     loop.__cause__ = loop
@@ -120,7 +121,7 @@ def test_logging_goes_to_a_rotating_file_with_a_cap_in_the_log_folder(tmp_path: 
     text = log_file.read_text(encoding="utf-8")
     assert "Ponos Coach 9.9 started" in text
     assert "ERROR ponos_coach.ui.test Something failed\\nERROR fake" in text
-    assert not [line for line in text.splitlines() if line.startswith("ERROR")]  # data prima
+    assert not [line for line in text.splitlines() if line.startswith("ERROR")]  # date first
 
 
 def test_configuring_twice_replaces_the_handler_instead_of_duplicating_it(tmp_path: Path) -> None:
@@ -178,7 +179,7 @@ def test_the_main_thread_hook_logs_and_notifies_but_lets_ctrl_c_through(tmp_path
     install_exception_hooks(lambda: calls.append("notified"))
 
     try:
-        raise OSError(USER_FOLDER)  # noqa: TRY301 - il raise serve al test
+        raise OSError(USER_FOLDER)  # noqa: TRY301 - the raise is needed by the test
     except OSError:
         sys.excepthook(*sys.exc_info())
     for handler in logging.getLogger("ponos_coach").handlers:
@@ -186,8 +187,10 @@ def test_the_main_thread_hook_logs_and_notifies_but_lets_ctrl_c_through(tmp_path
 
     assert calls == ["notified"]
     text = log_file.read_text(encoding="utf-8")
-    assert "Unhandled exception in the main thread: OSError" in text
+    assert "Unhandled exception in the main thread: OSError at test_diagnostics.py:" in text
+    assert "in test_the_main_thread_hook_logs_and_notifies_but_lets_ctrl_c_through" in text
     assert USER_FOLDER not in text
+    assert str(tmp_path) not in text and "\\" not in text.split(" at ")[-1]  # no local path
 
 
 def test_a_failing_notification_is_logged_and_does_not_raise(tmp_path: Path) -> None:
@@ -199,7 +202,7 @@ def test_a_failing_notification_is_logged_and_does_not_raise(tmp_path: Path) -> 
 
     install_exception_hooks(failing)
     try:
-        raise ValueError("x")  # noqa: TRY301 - il raise serve al test
+        raise ValueError("x")  # noqa: TRY301 - the raise is needed by the test
     except ValueError:
         sys.excepthook(*sys.exc_info())
     for handler in logging.getLogger("ponos_coach").handlers:
@@ -233,13 +236,15 @@ def test_the_composition_root_logs_to_the_user_log_folder_and_installs_the_hooks
     monkeypatch.setattr(
         entry_point,
         "setup_translations",
-        lambda *_a, **_k: TranslationReport(Language.ENGLISH, False, False, ()),  # niente lingua
+        lambda *_a, **_k: TranslationReport(Language.ENGLISH, False, False, ()),  # no language
     )
     monkeypatch.setattr(entry_point, "QSettings", lambda: make_settings(tmp_path))
     monkeypatch.setattr(app, "exec", fake_exec, raising=False)
     monkeypatch.setattr(platformdirs, "user_log_dir", lambda *_a, **_k: str(logs), raising=True)
     monkeypatch.setattr(platformdirs, "user_config_dir", lambda *_a, **_k: str(tmp_path / "config"))
     monkeypatch.setattr(platformdirs, "user_data_dir", lambda *_a, **_k: str(tmp_path / "data"))
+    # The map's tile cache too: never the user's own cache folder.
+    monkeypatch.setattr(platformdirs, "user_cache_dir", lambda *_a, **_k: str(tmp_path / "cache"))
 
     assert entry_point.main([]) == 0
 
@@ -247,3 +252,16 @@ def test_the_composition_root_logs_to_the_user_log_folder_and_installs_the_hooks
     text = (logs / LOG_FILE_NAME).read_text(encoding="utf-8")
     assert "Ponos Coach" in text
     assert "started (Python" in text
+
+
+def test_the_place_of_an_error_is_the_innermost_frame_of_the_application_with_no_local_path() -> (
+    None
+):
+    try:
+        exception_chain(object())  # type: ignore[arg-type]  # fails inside the application code
+    except AttributeError:
+        place = exception_place(sys.exc_info()[2])
+
+    assert place.startswith("ponos_coach/ui/diagnostics.py:")
+    assert place.endswith(" in exception_chain")
+    assert exception_place(None) == "an unknown place"

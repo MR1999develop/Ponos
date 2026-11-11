@@ -24,20 +24,20 @@ completata e verificata.
 | Motore del piano | Regole deterministiche (stessi dati → stesso piano), niente LLM |
 | Adattamento | Solo carico da FC (ATL, CTL, TSB) e carico passato |
 | Test di valutazione | Test di soglia di 30' in corsa all'inizio, ripetuto ogni 6–8 settimane |
-| Formula del carico | hrTSS da TRIMP di Banister sul tracciato FC, moltiplicato per il peso dello sport |
+| Formula del carico | hrTSS da TRIMP di Banister sul tracciato FC, moltiplicato per il peso dello sport. **Nota 2026-11-10: sostituita dal TRIMPeq, senza hrTSS né pesi (fase 8, ADR 004 emendato)** |
 | Profili | Più profili utente; per ogni profilo l'utente sceglie la cartella in cui stanno tutti i suoi dati |
 | FC minima e massima | Inserite dall'utente; un valore di FC fuori da questi limiti è un errore |
-| Soglia in bici | FC di soglia della corsa − 4 bpm, finché non c'è un test in bici |
+| Soglia in bici | FC di soglia della corsa − 4 bpm, finché non c'è un test in bici. **Nota 2026-11-10: sostituita da LT1 e LT2 per due gruppi, corsa e trail / altri sport (bici compresa); senza LT2 degli altri sport vale quella della corsa** |
 | Tipologie di seduta | Scelte dall'utente; il piano programma solo quelle |
-| Import da cartella | Oltre alla sincronizzazione, su richiesta: si sceglie una cartella e si aggiungono i file FIT e GPX che contiene |
-| Formati dei file | FIT e GPX, anche dentro archivi ZIP (come quelli scaricati dal sito Garmin), sia nell'import sia nella sincronizzazione con Garmin |
+| Import da cartella | Oltre alla sincronizzazione, su richiesta: si sceglie una cartella e si aggiungono i file FIT che contiene |
+| Formati dei file | Solo FIT (decisione del 2026-11-09, fase 8, ADR 014): GPX e import di ZIP tolti; lo ZIP scaricato da Garmin con dentro il FIT resta |
 | Dati di salute sul disco | In chiaro nella cartella del profilo, protetti dai permessi del sistema (solo l'utente); il README consiglia la cifratura del disco; nessuna password dell'app |
-| Ricerca e mappa (fase 9) | Filtri delle attività per data, durata, distanza e dislivello; mappa zoomabile con le attività raggruppate in cerchi numerati che cambiano con lo zoom e, a destra, l'elenco delle attività visibili nell'area |
+| Ricerca e mappa (fase 5b) | Filtri delle attività per data, durata, distanza e dislivello; mappa in stile Komoot con le tracce delle attività svolte (linee per sport; a zoom basso partenze raggruppate in cerchi numerati), sfondo OpenStreetMap senza chiave (dal 2026-11-09; prima Tracestrack Topo con chiave personale nel portachiavi), sfondo neutro con avviso senza rete o se il server rifiuta, tile servite da un proxy in Python (la pagina non ha rete), cache su disco LRU con tetto esatto scelto nelle impostazioni (default 4 GB); accanto alla mappa profilo altimetrico collegato alla traccia, traccia colorabile per zone FC, elenco e totali delle attività nell'area. Subito dopo la fase 5 (decisioni del 2026-11-07; prima era la fase 9, dopo il rilascio) |
 | Sincronizzazione | All'avvio e con il pulsante Sincronizza; la prima scarica tutto lo storico, le successive solo le attività mancanti; riprende da dove era rimasta dopo una chiusura; notifica a fine sincronizzazione; niente area di notifica |
 | Calendario Garmin | In una fase successiva: invio degli allenamenti a scelta dell'utente ed eliminazione degli allenamenti futuri programmati |
 | Lingue | Inglese come lingua predefinita, italiano scelto dal menu Lingua e ricordato (decisione del 2026-11-06; prima seguiva la lingua del sistema) |
 | Dati del profilo | Alla creazione: nome, cartella, altezza, peso, data di nascita, sesso, FC minima e massima, soglia. Poi si aggiornano con una data di validità peso, FC minima, FC massima e soglia; nome, altezza, data di nascita e sesso restano fissi (decisione del 2026-11-06) |
-| Alimentazione (fase 4b) | Cliccando un giorno passato del calendario: kcal e grammi di carboidrati, proteine e grassi per colazione, pranzo, cena, pre, durante (sedute lunghe) e post allenamento, con 2-3 esempi di alimenti; nessun diario dei pasti; obiettivo alimentare per periodi (dimagrimento, mantenimento, performance); calorie fuori dallo sport da un livello di attività nel profilo; nessuna restrizione alimentare per ora; i giorni futuri arriveranno con il piano (fase 5) (decisioni del 2026-11-07) |
+| Alimentazione (fase 4b) | Cliccando un giorno passato del calendario: kcal e grammi di carboidrati, proteine e grassi per colazione, pranzo, cena, pre, durante (sedute lunghe) e post allenamento, (dal 2026-11-10 senza esempi di alimenti); nessun diario dei pasti; obiettivo alimentare per periodi (dimagrimento, mantenimento, performance); calorie fuori dallo sport da un livello di attività nel profilo; nessuna restrizione alimentare per ora; i giorni futuri arriveranno con il piano (fase 5) (decisioni del 2026-11-07) |
 | Piattaforme e repository | Windows e Ubuntu, GitHub con CI (repository pubblico); il push lo fa l'utente a mano (regola del 2026-11-07; dal 2026-11-06 al 2026-11-07 era automatico); su `main` solo con PR |
 
 ## 2. Decisioni di default (le ho fissate io: da confermare o correggere)
@@ -70,15 +70,19 @@ completata e verificata.
 7. **Pesi di default degli sport** (provvisori, da tarare in fase 3): corsa
    1,0; trail 1,1; ciclismo 0,8; escursionismo 0,8; camminata 0,6; forza 1,2
    (la FC sottostima il carico della forza); altro 0,8.
-8. **Disponibilità settimanale** inserita dall'utente: giorni disponibili, ore
-   massime a settimana, giorno del lungo. Il piano non la supera mai.
+   *Nota 2026-11-10: pesi tolti, il carico è il TRIMPeq (fase 8).*
+8. **Disponibilità settimanale** inserita dall'utente: giorni disponibili,
+   sedute a settimana, ore massime a settimana, giorno del lungo (dal
+   2026-11-09, ADR 016; prima i minuti di ogni giorno). Il piano non la supera
+   mai.
 9. **Dati sul disco:** file FIT originali come fonte di verità delle attività;
    SQLite come indice e per i dati dell'utente (obiettivi, piani, infortuni,
    impostazioni); carichi e PMC derivati e rigenerabili.
 10. **Messaggio di responsabilità** nell'app e nel README: Ponos Coach non è un
     dispositivo medico.
-11. **Import da cartella:** file `.fit` e `.gpx`, anche dentro archivi
-    `.zip`, sottocartelle comprese; i file
+11. **Import da cartella:** file `.fit`, sottocartelle comprese; gli altri
+    file (GPX, ZIP, TCX…) si ignorano in una cartella e si segnalano come
+    formato non supportato se scelti a mano; i file
     si copiano nell'archivio del profilo e la cartella d'origine non si
     tocca; i duplicati (già importati o già scaricati da Garmin) si saltano;
     alla fine un riepilogo. L'app ricorda l'ultima cartella usata. Tetti:
@@ -86,22 +90,16 @@ completata e verificata.
     32 livelli di sottocartelle, 50 MB per file. Il primo tetto è circa sette
     volte un decennio con due attività al giorno; gli altri impediscono di
     scandire per errore un disco intero.
-12. **File GPX:** si leggono traccia, orari, quota e FC dalle estensioni
-    Garmin (`gpxtpx:hr`); lo sport dal campo `type` se riconosciuto,
-    altrimenti "altro". Il GPX non ha pause: il tempo in movimento è la somma
-    degli intervalli tra punti fino a 30 s; distanza con la formula
-    dell'emisenoverso; dislivello positivo con una soglia di 3 m contro il
-    rumore della quota. Un GPX senza orari non è un'attività e si rifiuta. I
-    TCX non sono supportati: rifiutati con il motivo.
+12. **File GPX: tolti** (2026-11-09, fase 8, ADR 014). Il lettore GPX, la sua
+    identità (SHA-256), i duplicati tra formati e la dipendenza `defusedxml`
+    non esistono più; le attività già importate da GPX si tolgono dal
+    profilo alla prima apertura (schema v11, dopo una copia del database in
+    `backup/`), con un avviso che dice quante.
 
 ## 2b. Decisioni rimandate
 
-- **Integrazione AI** (valutata il 2026-11-06, da decidere in seguito):
-  server MCP in sola lettura su stdio, usabile da Claude o Gemini senza
-  chiavi nell'app (consigliato, dopo la fase 5); in alternativa un
-  assistente dentro l'app via API, opzionale e disattivato di default, con
-  consenso esplicito prima di inviare dati di salute. In nessun caso il
-  modello decide il piano: le regole restano l'unica autorità sui carichi.
+- **Integrazione AI**: nessuna. Il server MCP valutato il 2026-11-06 è
+  stato tolto dal piano su richiesta dell'utente del 2026-11-10.
 
 ## 3. Rischi principali
 
@@ -126,7 +124,7 @@ Ogni dipendenza diretta si valida e si registra in `docs/dipendenze.md`
   PySide6 e `garminconnect` lo supportano), `uv` con `uv.lock`.
 - Esecuzione: `PySide6` con `PySide6-Addons` per QtWebEngine (LGPL-3.0),
   `plotly` (MIT, anche per il `plotly.js` incluso), `garminconnect` (MIT),
-  `fitdecode` (MIT), `defusedxml` (PSF, per i GPX), `numpy` (BSD), `keyring` (MIT), `desktop-notifier`
+  `fitdecode` (MIT), `numpy` (BSD), `keyring` (MIT), `desktop-notifier`
   (MIT), `platformdirs` (MIT).
 - Sviluppo: `pytest`, `pytest-qt`, `hypothesis`, `ruff`, `mypy --strict`,
   `import-linter`, `pip-audit`, `nox`, `pyinstaller` (`.spec` versionato).
@@ -136,7 +134,7 @@ Ogni dipendenza diretta si valida e si registra in `docs/dipendenze.md`
 ```
 src/ponos_coach/
   activities/       attività, lettura FIT, import, sincronizzazione (casi d'uso)
-  load/             TRIMP, hrTSS, pesi degli sport, PMC (ATL, CTL, TSB), parametri fisiologici
+  load/             TRIMPeq (dal 2026-11-10; prima hrTSS e pesi degli sport), PMC (ATL, CTL, TSB), parametri fisiologici
   assessment/       test di soglia 30', zone FC e di ritmo, retest
   goals/            obiettivi (gara A/B/C, tempo obiettivo, CTL a una data)
   planning/         periodizzazione, modelli di seduta, adattamento, proiezione del PMC
@@ -164,7 +162,7 @@ src/ponos_coach/
 - Cartella del profilo, scelta dall'utente: `ponos.sqlite3` (WAL,
   `foreign_keys = ON`, parametri `?`, schema con `user_version` e migrazioni
   versionate; contiene id del profilo e versione del formato),
-  `archivio/<anno>/<sha256>.fit` o `.gpx` (file originali, con il nome
+  `archivio/<anno>/<sha256>.fit` (file originali, con il nome
   dato dal loro SHA-256), `backup/`, `ponos.lock` (creato in modo
   esclusivo: un solo processo per profilo).
 - Configurazione dell'app (`platformdirs`): elenco dei profili con le loro
@@ -175,11 +173,9 @@ src/ponos_coach/
   ora di creazione), uguale per lo stesso file scaricato da Garmin o copiato
   dall'orologio; l'id Garmin si aggiunge quando è noto. Così la stessa
   attività non entra due volte, qualunque sia la sua origine.
-- Un GPX non ha `file_id`: la sua identità è lo SHA-256 del file. La stessa
-  attività arrivata come FIT e come GPX si riconosce come duplicato se
-  l'inizio dista al massimo 60 s e la durata al massimo il 5% (default del
-  progetto); si tiene la prima arrivata. Il formato si riconosce dal
-  contenuto e deve coincidere con l'estensione.
+- Solo FIT (fase 8): l'estensione `.fit` decide se un file si prova a
+  leggere, il lettore ne verifica firma, CRC e struttura. Un profilo creato
+  prima, con attività GPX, le perde alla prima apertura (schema v11, ADR 014).
 - Dal FIT si ricavano anche distanza, dislivello positivo, tempo in
   movimento, punto di partenza e una traccia semplificata (per la mappa),
   salvati nell'indice SQLite e rigenerabili dal FIT. Le posizioni GPS sono
@@ -204,7 +200,7 @@ src/ponos_coach/
    comando "Verifica completa" rielenca tutto lo storico (solo l'elenco,
    senza riscaricare) per trovare attività caricate su Garmin in ritardo con
    date vecchie.
-3. Per ogni voce: download del file originale (zip con un FIT o un GPX), controlli dei limiti,
+3. Per ogni voce: download del file originale (zip con un FIT; uno zip con solo un GPX è "formato non supportato"), controlli dei limiti,
    scrittura durevole nell'archivio, lettura, calcolo del carico; una sola
    transazione segna la voce come completata.
 4. Pausa tra le richieste con jitter; su 429 o errori transitori backoff
@@ -221,7 +217,7 @@ src/ponos_coach/
 **Import da cartella** (comando "Importa da cartella…", su richiesta):
 
 1. Si sceglie una cartella e la si esamina prima di importare (solo nomi e
-   dimensioni): file `.fit`, `.gpx` e `.zip` anche nelle sottocartelle, solo file regolari
+   dimensioni): file `.fit` anche nelle sottocartelle, solo file regolari
    che stanno davvero dentro la cartella (niente collegamenti o reparse
    point che portano fuori). Tetti: 50.000 file di attività, 500.000 voci
    esaminate, 32 livelli, 50 MB per file (i file più grandi sono segnalati
@@ -235,11 +231,17 @@ src/ponos_coach/
 4. Worker con avanzamento e Annulla; alla fine un riepilogo (importate, già
    presenti, ignorate, con errore e motivo per ogni file), PMC e piano
    aggiornati.
-5. ZIP (anche da "Importa file"): si leggono solo le voci `.fit` e `.gpx`,
-   che contano nei tetti come file; nell'archivio del profilo va il file
-   estratto, non lo ZIP. Limiti in sezione 4.9.
+5. Solo FIT: GPX e ZIP non si importano (una cartella li ignora, scelti a
+   mano si segnalano come formato non supportato). Lo ZIP si legge solo per
+   l'originale scaricato da Garmin (sincronizzazione) e per il backup del
+   profilo; limiti in sezione 4.9.
 
 ### 4.5 Modello di carico
+
+> **Nota 2026-11-10:** le formule di hrTSS e `peso_sport` qui sotto descrivono
+> lo stato di fase 3. Dal 2026-11-10 il carico è il TRIMPeq, senza hrTSS né
+> pesi: formule in `.claude/skills/ponos-allenamento/references/modello-carico.md`
+> sezione 1 e in `docs/adr/004-modello-carico.md` (emendamento).
 
 - `HRr(t) = (HR(t) − FCmin) / (FCmax − FCmin)`, con FC minima (a riposo) e
   massima inserite dall'utente; i campioni fuori da `[FCmin, FCmax]` sono
@@ -267,14 +269,16 @@ src/ponos_coach/
   scelte, infortuni attivi, ultimo test (FC e ritmo di soglia), pesi degli
   sport.
 - **Macrociclo** per ogni obiettivo A, all'indietro dalla data: scarico
-  (7–14 giorni secondo la distanza), picco, costruzione, base. CTL obiettivo
+  (7 giorni fino a 10 km, 14 per la mezza, 21 a gradini per la maratona e oltre: KNO24, HAU22), picco, costruzione, base. CTL obiettivo
   dal livello di forma richiesto o da una stima per distanza e tempo, limitato
   dalla rampa massima (default +5 CTL a settimana, +3 dopo un infortunio).
 - **Mesocicli 3:1:** tre settimane di carico e una di scarico (60–70%).
 - **Obiettivi B:** 3–4 giorni di mini-scarico; **C:** nessuno scarico.
-- **Settimana:** carico obiettivo distribuito nei giorni disponibili,
-  alternanza duro/facile, al massimo 2–3 sedute intense, lungo nel giorno
-  scelto, distribuzione 80/20 dell'intensità in base.
+- **Settimana:** carico obiettivo distribuito nei giorni di seduta (tanti
+  quante le sedute a settimana scelte, tra i giorni disponibili, il più
+  distanziati possibile; ADR 016), alternanza duro/facile, al massimo 2–3
+  sedute intense, lungo nel giorno scelto e sempre la seduta più lunga,
+  distribuzione 80/20 dell'intensità in base.
 - **Sedute** da modelli per sport e fase (facile, lungo, medio, soglia a
   intervalli, VO2max, recupero, forza, alternativa), **solo tra le tipologie
   scelte dall'utente**: durata, zone FC o di ritmo, carico stimato (che
@@ -287,8 +291,9 @@ src/ponos_coach/
   pianificato e si ricalcola da domani; il passato resta storia. TSB sotto
   −30 o ATL/CTL oltre 1,5 inseriscono recupero; il carico perso non si
   recupera oltre la rampa massima.
-- **Test:** test di soglia 30' prima del piano e ogni 6–8 settimane in una
-  settimana di scarico; dopo il test si aggiornano soglia e zone.
+- **Test:** test di soglia (30' o 20') come seduta dura nella prima settimana del
+  piano se non c'è un test recente (ADR 015, versione 5 del metodo), poi ogni 6–8
+  settimane in una settimana di scarico; dopo il test si aggiornano soglia e zone.
 - Piano salvato con versione e con i parametri che l'hanno generato.
 
 ### 4.7 Infortuni
@@ -313,17 +318,20 @@ src/ponos_coach/
 - Barra laterale: Panoramica (PMC, seduta di oggi, forma), Attività (tabella
   e dettaglio con FC e zone), Calendario (mese e settimana: fatto,
   pianificato, obiettivi, test, infortuni), Obiettivi, Infortuni, Test,
-  Impostazioni del profilo (pesi, FC minima, massima e soglia con date,
+  Impostazioni del profilo (pesi [tolti il 2026-11-10], FC minima, massima e soglia con date,
   sesso, disponibilità, tipologie di seduta, account Garmin).
 - Menu File: Nuovo profilo, Apri profilo da cartella, Cambia profilo,
   Rimuovi profilo dall'elenco; il nome del profilo attivo sta nel titolo
   della finestra.
-- Fase 9: filtri delle attività (data, durata, distanza, dislivello, sport),
-  con un solo stato condiviso da tabella e mappa; vista Mappa con la mappa
-  zoomabile al centro, le attività raggruppate in cerchi numerati che si
-  dividono o si uniscono con lo zoom, e a destra l'elenco delle attività
-  visibili nell'area, con selezione sincronizzata. Il modello d'interazione
-  è quello delle viste mappa delle app outdoor per smartphone; l'aspetto
+- Fase 5b: filtri delle attività (data, durata, distanza, dislivello, sport),
+  con un solo stato condiviso da tabella e mappa; vista Mappa in stile
+  Komoot: mappa topografica al centro con le tracce delle attività svolte
+  (linee colorate per sport, con legenda), che a zoom basso diventano
+  partenze raggruppate in cerchi numerati; a destra l'elenco delle attività
+  nell'area con i totali; sotto, per l'attività selezionata, il profilo
+  altimetrico collegato alla traccia (passando sul profilo si vede il punto
+  sulla mappa) e la scelta del colore della traccia (sport o zone FC). Il
+  modello d'interazione è quello delle app outdoor come Komoot; l'aspetto
   resta quello di Ponos Coach.
 - Menu completi con scorciatoie (Sincronizza: F5), annulla e ripeti
   (`QUndoStack`) per obiettivi e calendario, barra di stato con l'ultima
@@ -356,22 +364,31 @@ src/ponos_coach/
 - Cartella del profilo scelta dall'utente: verificata scrivibile, file creati
   in modo esclusivo, lock contro due istanze; i token non stanno nella
   cartella, che contiene invece dati di salute (va protetta come tale).
-- GPX: XML non fidato letto con `defusedxml`, senza DTD né entità, con
-  limiti di dimensione (50 MB), profondità, numero di punti (1.000.000) e
-  lunghezza dei testi, controllati prima e durante la lettura.
-- ZIP: voci e dimensioni dichiarate controllate prima di estrarre (al
-  massimo 50.000 voci, 50 MB per voce, 5 GB in tutto, rapporto di
-  compressione al massimo 100:1), estrazione in memoria a blocchi con la
+- Nessun parser XML (fase 8): si importano solo file `.fit`; GPX e ZIP
+  scelti dall'utente non si aprono mai.
+- ZIP scaricato da Garmin: voci e dimensioni dichiarate controllate prima di
+  estrarre (al massimo 50.000 voci, 50 MB per voce, 5 GB in tutto, rapporto
+  di compressione al massimo 100:1), estrazione in memoria a blocchi con la
   dimensione reale ricontrollata, nomi delle voci mai usati come percorsi,
   ZIP annidati e voci cifrate rifiutati, CRC verificato (default del
-  progetto).
-- Pagina della mappa (fase 9): unica eccezione al blocco della rete, solo
-  HTTPS verso l'host delle mappe scelto, con un User-Agent generico dell'app
-  e l'attribuzione richiesta; cache delle tile con tetto di dimensione e
-  comando per svuotarla; `QWebChannel` con due soli messaggi dalla pagina
-  (area visibile, attività cliccata), validati. L'host delle mappe vede le
-  aree consultate: rischio da dichiarare nel threat model, assente con una
-  mappa offline.
+  progetto); si estrae solo l'unica voce `.fit`.
+- Pagina della mappa (fase 5b): **nessuna rete**, come la pagina dei
+  grafici (intercettore che blocca tutto, CSP senza host esterni). Le tile le
+  chiede a un proxy di tile in Python: la pagina carica
+  `ponos://tiles/{z}/{x}/{y}`, il guscio valida z/x/y (interi nei limiti),
+  scarica da `https://tile.openstreetmap.org` (dal 2026-11-09, ADR 010
+  emendato; prima Tracestrack con chiave) con timeout, User-Agent con nome,
+  versione e contatto dell'app e l'attribuzione "© OpenStreetMap
+  contributors". Nessuna chiave. Cache su disco propria, con tetto
+  esatto e rimozione delle tile meno usate di recente (LRU), default 4 GB,
+  nella cartella cache del sistema (non nel profilo); comando per svuotarla;
+  scadenza secondo gli header (7 giorni se mancano), richieste condizionali
+  per le tile scadute, pausa di 300 s se il server rifiuta (403/429); solo le
+  tile guardate, mai scaricamenti in massa. `QWebChannel` con pochi
+  messaggi dalla pagina (area visibile, attività cliccata, punto del
+  profilo), validati. Il server vede le aree consultate e può bloccare l'app
+  senza preavviso: rischi dichiarati nel threat model e accettati
+  dall'utente.
 
 ## 5. Fasi
 
@@ -419,13 +436,13 @@ Agenti: `generatore-fixture`, `sviluppatore-nucleo`, `sviluppatore-interfaccia`,
       SHA-256.
 - [x] Lettore FIT con limiti, tipi di dominio (attività, sport, tracciato FC)
       e test di fuzzing.
-- [x] Lettore GPX (sezione 2 punto 12, sezione 4.9) con lo stesso tipo
+- [x] (tolto in fase 8) Lettore GPX (sezione 2 punto 12, sezione 4.9) con lo stesso tipo
       d'errore e gli stessi tipi di dominio del lettore FIT; riconoscimento
       del formato dal contenuto; duplicati tra FIT e GPX.
-- [x] Casi d'uso "Importa file" FIT, GPX e ZIP (menu e trascinamento) e "Importa da
+- [x] Casi d'uso "Importa file" FIT (all'epoca anche GPX e ZIP, tolti in fase 8) (menu e trascinamento) e "Importa da
       cartella" (sottocartelle, duplicati saltati per `file_id`, riepilogo
       finale), tabella delle attività con ordinamento (i filtri sono della
-      fase 9).
+      fase 5b).
 - [x] Dal FIT anche distanza, dislivello positivo, tempo in movimento,
       punto di partenza e traccia semplificata, salvati nell'indice: la fase
       9 non dovrà rileggere l'archivio né migrare lo schema per averli.
@@ -447,7 +464,7 @@ POSIX compresi; campagna di collaudo verde su Windows (esiti in
       poi solo le attività mancanti, "Verifica completa"; giornale, pause,
       backoff, annullamento, ripresa dopo chiusura (test che interrompe a
       metà, sia durante l'elenco sia durante i download).
-- [x] Originali GPX scaricati da Garmin (attività caricate come GPX) letti
+- [x] (tolto in fase 8: ora "formato non supportato") Originali GPX scaricati da Garmin (attività caricate come GPX) letti
       come quelli importati.
 - [x] Abbinamento con le attività già importate da file, senza duplicati né
       download inutili.
@@ -470,12 +487,14 @@ POSIX compresi; campagna di collaudo verde su Windows (esiti in
       minima e massima, sesso, soglia; soglia in bici = corsa − 4 bpm);
       campioni fuori limiti scartati e contati.
 - [x] TRIMP e hrTSS, pesi degli sport, stima per attività senza FC; ricalcolo
-      quando cambiano parametri o pesi.
+      quando cambiano parametri o pesi. (Superata il 2026-11-10: vedi fase 8,
+      "Carico in TRIMPeq".)
 - [x] PMC (ATL, CTL, TSB) con property test.
 - [x] Grafici Plotly in `QWebEngineView` isolato: PMC, carico settimanale per
       sport, zone, FC dell'attività; esportazione SVG e PNG. Zone FC sulla
       soglia secondo Friel, cinque zone (Z1 < 85%, Z2 85–89%, Z3 90–94%,
-      Z4 95–99%, Z5 ≥ 100%: default del progetto, rivisto in fase 4).
+      Z4 95–99%, Z5 ≥ 100%: default del progetto, rivisto in fase 4; zone poi cambiate,
+      vedi fase 8, 2026-11-10).
 
 *Stato 2026-11-06: completata sul ramo `fase-3-carico-e-grafici`; controlli e
 collaudo verdi su Windows. I plurali inglesi usano frasi invarianti
@@ -484,10 +503,10 @@ catalogo proprio.*
 
 ### Fase 4 — Test di valutazione
 
-- [ ] Protocollo del test di soglia 30' (istruzioni nell'app), riconoscimento
+- [x] Protocollo del test di soglia 30' (istruzioni nell'app), riconoscimento
       dell'attività del test (scelta dall'utente), calcolo della FC e del
       ritmo di soglia, zone FC e di ritmo.
-- [ ] Storico dei test e retest proposto ogni 6–8 settimane.
+- [x] Storico dei test e retest proposto ogni 6–8 settimane.
 
 ### Fase 4b — Alimentazione dei giorni passati
 
@@ -495,116 +514,558 @@ Decisioni dell'utente del 2026-11-07 (sezione 1). Valori e soglie sono default
 del progetto da linee guida pubblicate (ISSN, ACSM, consenso IOC), in un solo
 posto e documentati nella skill del progetto; non sono consigli medici.
 
-- [ ] **Dati**: calorie dell'attività dal FIT (`session.total_calories`) nel
+- [x] **Dati**: calorie dell'attività dal FIT (`session.total_calories`) nel
       riepilogo e nell'indice (schema v4); stima quando mancano (GPX o FIT
       senza calorie): formula di Keytel sulla FC con età, peso e sesso, e se
       manca la FC un MET per sport. Le calorie del metabolismo di base durante
       l'attività si tolgono, per non contarle due volte.
-- [ ] **Profilo**: livello di attività fuori dallo sport con data di validità
+- [x] **Profilo**: livello di attività fuori dallo sport con data di validità
       (sedentario, leggero, attivo, molto attivo); orari tipici di colazione,
       pranzo e cena; obiettivi alimentari per periodi nel calendario
       (dimagrimento con un ritmo in kg a settimana, mantenimento,
       performance), con annulla.
-- [ ] **Modello** (dominio puro, deterministico):
+- [x] **Modello** (dominio puro, deterministico):
       - metabolismo di base con Mifflin-St Jeor (età dalla data di nascita,
         altezza, peso valido quel giorno, sesso); spesa del giorno = base ×
         fattore del livello fuori sport + calorie nette delle attività;
-      - dimagrimento: deficit dal ritmo scelto, al massimo il 20% della spesa
-        e 750 kcal al giorno, mai sotto il metabolismo di base; deficit ridotto
-        nei giorni di carico alto; nessun deficit sotto i 18 anni né con IMC
-        sotto 18,5 (avviso); performance: carboidrati secondo il carico;
+      - dimagrimento: deficit dal ritmo scelto, al massimo l'1% del peso a
+        settimana (ACSM 2016), il 20% della spesa e 750 kcal al giorno, mai
+        sotto il metabolismo di base né sotto 1.200 kcal (donne) o 1.500 kcal
+        (uomini), mai con una disponibilità energetica sotto 30 kcal per kg di
+        massa magra (stimata con la formula di Boer); deficit ridotto nei
+        giorni di carico alto; nessuna indicazione numerica sotto i 18 anni,
+        nessun deficit con IMC sotto 18,5 (avviso); performance: carboidrati
+        secondo il carico;
       - macro: carboidrati in g/kg secondo il carico del giorno (riposo e
         leggero 3–5, moderato 5–7, alto 6–10, molto alto 8–12), proteine
         1,6 g/kg (2,0 in deficit), grassi il resto con un minimo del 20% delle
         kcal;
       - momenti: pre 1–4 h prima (carboidrati circa 1 g/kg se la seduta supera
-        un'ora), durante oltre 75 minuti (30–60 g/h, oltre 2,5 h fino a
-        90 g/h, liquidi e sodio indicativi), post entro un'ora (proteine circa
+        un'ora), durante oltre 75 minuti (30–60 g/h, oltre 2,5 h al massimo
+        60 g/h perché la tabella non distingue le miscele glucosio-fruttosio;
+        liquidi e sodio indicativi), post entro un'ora (proteine circa
         0,3 g/kg e carboidrati 1–1,2 g/kg se la seduta è lunga o ce n'è
-        un'altra entro 24 h); il resto distribuito su colazione, pranzo e cena
+        un'altra entro 8 h); il resto distribuito su colazione, pranzo e cena
         secondo gli orari tipici, con pasti spostati o fusi quando cadono
         vicino all'allenamento; due sedute nello stesso giorno gestite.
-- [ ] **Alimenti**: tabella curata di alimenti comuni con kcal e macro per
+- [x] ~~**Alimenti**~~ (SUPERATO il 2026-11-10: tabella ed esempi tolti, i pasti mostrano solo calorie e macro): tabella curata di alimenti comuni con kcal e macro per
       100 g da una fonte con licenza compatibile (USDA FoodData Central, di
-      pubblico dominio: da verificare nel registro delle dipendenze), nomi
-      tradotti; 2–3 esempi per pasto con porzioni arrotondate.
-- [ ] **Calendario** dei giorni passati (vista mese, carico e attività per
+      pubblico dominio; dal 2026-11-09 ANSES-CIQUAL 2025, Etalab 2.0, per
+      richiesta dell'utente: riferimenti europei, vedi ADR 008 e
+      `docs/dipendenze.md`), nomi tradotti; 2–3 esempi per pasto con porzioni
+      arrotondate.
+- [x] **Calendario** dei giorni passati (vista mese, carico e attività per
       giorno): clic su un giorno → dettaglio con attività, carico e
       indicazione alimentare; base del calendario della fase 5.
-- [ ] Avviso fisso: indicazioni generali, non consigli medici o
+- [x] Avviso fisso: indicazioni generali, non consigli medici o
       nutrizionali personalizzati; con patologie, gravidanza, disturbi
       alimentari o farmaci rivolgersi a un professionista.
-- [ ] Test T-NUT (sezione 7.12), collaudo, revisione, documenti (ADR della
+- [x] Test T-NUT (sezione 7.12), collaudo, revisione, documenti (ADR della
       fase), traduzioni.
 
 ### Fase 5 — Obiettivi e piano adattivo
 
-- [ ] Obiettivi nel calendario (A/B/C, tempo obiettivo, CTL a una data), con
+- [x] Obiettivi nel calendario (A/B/C, tempo obiettivo, CTL a una data), con
       annulla.
-- [ ] Disponibilità settimanale.
-- [ ] Scelta delle tipologie di seduta per sport; avviso quando un obiettivo
+- [x] Disponibilità settimanale.
+- [x] Scelta delle tipologie di seduta per sport; avviso quando un obiettivo
       ne richiede una esclusa.
-- [ ] Motore del piano (sezione 4.6) con test a scenari (un obiettivo, due A
+- [x] Motore del piano (sezione 4.6) con test a scenari (un obiettivo, due A
       vicini, A + B, obiettivo irraggiungibile, sedute saltate, carico
       eccessivo).
-- [ ] Vista calendario: pianificato contro fatto; proiezione del PMC nel
+- [x] Vista calendario: pianificato contro fatto; proiezione del PMC nel
       grafico.
-- [ ] Ricalcolo del piano dopo ogni sincronizzazione.
+- [x] Ricalcolo del piano dopo ogni sincronizzazione.
+- [x] Alimentazione dei giorni futuri dal piano (ADR 011, T-NUT-07 e 08), con lo stesso modello della
+      fase 4b; nessun deficit nella settimana di una gara A o B e nello
+      scarico che la precede (ACSM 2016: dimagrire lontano dalle gare), con
+      un avviso quando un periodo di dimagrimento si sovrappone.
 
-### Fase 6 — Infortuni e recupero
+### Fase 5b — Ricerca e mappa delle attività (stile Komoot)
 
-- [ ] Questionario, segnali d'allarme, percorso a gradini, check-in
-      giornaliero (sezione 4.7), con test per ogni regola di salita, discesa e
-      stop.
-- [ ] Integrazione con il piano: zona colpita sospesa, alternative, rampa
-      ridotta dopo il rientro.
+Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
 
-### Fase 7 — Calendario Garmin
-
-- [ ] Porta `WorkoutCalendar`: invio degli allenamenti strutturati (zone FC,
-      durate), a scelta dell'utente (piano intero, settimana, singola seduta).
-- [ ] Elenco degli allenamenti futuri programmati su Garmin ed eliminazione
-      selettiva con conferma che mostra l'elenco e un bottone con il verbo;
-      copia locale di ciò che si elimina, per poterlo ricreare.
-- [ ] Gli allenamenti creati dall'app sono riconoscibili (prefisso nel nome).
-
-### Fase 8 — Rilascio
-
-- [ ] Collaudo completo (sezione 7) superato sull'eseguibile, su Windows e
-      Ubuntu, con esiti registrati in `docs/collaudo.md`.
-- [ ] Backup e ripristino di un profilo in un file versionato, con test di
-      ripristino.
-- [ ] PyInstaller con `.spec` versionato per Windows e Ubuntu, smoke test
-      sull'eseguibile, `SHA256SUMS`, misura della dimensione del pacchetto.
-- [ ] Controllo di conformità: licenze, intestazioni, autore dei commit,
-      nessun dato personale né percorso locale nel pacchetto.
-- [ ] README con installazione, verifica dell'hash, avviso di SmartScreen,
-      messaggio di responsabilità medica.
-
-### Fase 9 — Ricerca e mappa delle attività (dopo il primo rilascio)
-
-- [ ] ADR della mappa, dopo un prototipo misurato con 50.000 attività: sorgente
-      della mappa (tile raster OpenStreetMap online, mappa vettoriale
-      offline di una regione scaricata una volta, fornitore configurabile) e
-      libreria (Leaflet con il raggruppamento dei marcatori, oppure MapLibre
-      GL JS con i cluster integrati). Aggiornati threat model e specifica.
-- [ ] Filtri dell'elenco attività: data (da–a), durata, distanza, dislivello
+- [x] ADR della mappa, dopo un prototipo misurato con 50.000 attività e le
+      loro tracce: libreria (MapLibre GL JS, che disegna molte linee sulla
+      GPU e raggruppa le partenze, oppure Leaflet con canvas e
+      raggruppamento dei marcatori; scelta: Leaflet con
+      leaflet.markercluster, nessuna GPU richiesta), sfondo raster Tracestrack Topo nella
+      lingua dell'app (`topo_it`/`topo_en`, nomi locali dove manca; sostituito da
+      OpenStreetMap il 2026-11-09, vedi fase 8), libreria
+      inclusa nel pacchetto e servita dallo schema `ponos://`, tile servite
+      dal proxy in Python (`ponos://tiles/...`), pagina senza rete (bozza in
+      `docs/adr/010-mappa.md`). Aggiornati
+      threat model, specifica e registro delle dipendenze (licenze della
+      libreria e condizioni Tracestrack).
+- [x] Dati: traccia semplificata (Douglas-Peucker con tolleranza per zoom) e
+      riquadro di ogni attività nell'indice, rigenerabili dal FIT o dal GPX;
+      serie della quota per il profilo; nessuna posizione nei log.
+- [x] Impostazioni › Mappa: chiave Tracestrack (nel portachiavi, con verifica
+      e messaggio chiaro se rifiutata), dimensione della cache (default
+      4 GB), "Svuota cache"; senza chiave, senza rete o con il credito
+      esaurito la mappa resta usabile su sfondo neutro con un avviso che dice
+      perché e cosa fare. (Dal 2026-11-09 la chiave non c'è più: resta la
+      dimensione della cache e "Svuota cache"; vedi fase 8.)
+- [x] Filtri dell'elenco attività: data (da–a), durata, distanza, dislivello
       positivo, sport. Minimo e massimo facoltativi (vuoto = nessun limite),
       input tolleranti (virgola o punto, "1:30" o "90" per la durata),
       minimo e massimo invertiti scambiati. Un solo stato dei filtri,
       condiviso da tabella e mappa; l'app ricorda gli ultimi filtri.
-- [ ] Vista Mappa: attività come punti di partenza, raggruppate in cerchi
-      con il numero di attività che si dividono o si uniscono a ogni livello
-      di zoom; clic su un gruppo → zoom sull'area; clic su un'attività →
-      selezione e traccia sulla mappa.
-- [ ] Elenco a destra delle attività visibili nell'area inquadrata (dopo i
-      filtri), con il conteggio, aggiornato a ogni spostamento o zoom;
-      selezione sincronizzata con la mappa; attività senza posizione
-      (indoor, forza) contate a parte.
-- [ ] Pagina della mappa isolata come quella dei grafici, con la sola
-      eccezione della sezione 4.9.
-- [ ] Test T-FILT e T-MAP (sezione 7.11), T-SEC-14 e T-SEC-15; collaudo e
-      rilascio ripetuti come in fase 8.
+- [x] Vista Mappa: tracce delle attività filtrate come linee colorate per
+      sport (legenda, mai il solo colore); a zoom basso partenze raggruppate
+      in cerchi con il numero, che si dividono o si uniscono a ogni livello;
+      clic su un gruppo → zoom sull'area; clic su una traccia → selezione,
+      traccia evidenziata e riga dell'elenco selezionata.
+- [x] Elenco a destra delle attività visibili nell'area inquadrata (dopo i
+      filtri), con conteggio e totali (km, dislivello, ore), aggiornato a
+      ogni spostamento o zoom; selezione sincronizzata con la mappa; attività
+      senza posizione (indoor, forza) contate a parte.
+- [x] Dettaglio dell'attività selezionata: profilo altimetrico (quota sulla
+      distanza) collegato alla traccia nei due sensi; traccia colorabile per
+      zone FC con la legenda delle zone del giorno dell'attività.
+- [x] Pagina della mappa isolata come quella dei grafici e senza alcuna rete
+      (sezione 4.9); proxy delle tile in Python con timeout, chiave dal
+      portachiavi e cache su disco LRU con tetto esatto.
+- [x] Test T-FILT e T-MAP (sezione 7.11), T-SEC-14 e T-SEC-15; collaudo.
+
+### Fase 6 — Infortuni e recupero
+
+- [x] Questionario, segnali d'allarme, percorso a gradini, check-in
+      giornaliero (sezione 4.7), con test per ogni regola di salita, discesa e
+      stop.
+- [x] Integrazione con il piano: zona colpita sospesa, alternative, rampa
+      ridotta dopo il rientro.
+
+### Fase 7 — Calendario Garmin
+
+- [x] Porta `WorkoutCalendar`: invio degli allenamenti strutturati (zone FC,
+      durate), a scelta dell'utente (piano intero, settimana, singola seduta).
+- [x] Elenco degli allenamenti futuri programmati su Garmin ed eliminazione
+      selettiva con conferma che mostra l'elenco e un bottone con il verbo;
+      copia locale di ciò che si elimina, per poterlo ricreare.
+- [x] Gli allenamenti creati dall'app sono riconoscibili (prefisso nel nome).
+
+### Fase 8 — Rilascio
+
+- [x] Solo file FIT (richiesta dell'utente del 2026-11-09, ADR 014): import
+      solo di `.fit` (file e cartelle); tolti il lettore GPX, `GpxIdentity`,
+      il formato `gpx`, i duplicati tra formati, l'import di ZIP scelti
+      dall'utente e `defusedxml`; lo ZIP resta per l'originale di Garmin e
+      per il backup. Schema v11: toglie le attività GPX (dopo una copia del
+      database in `backup/`), stringe `file_format` e le chiavi di
+      `threshold_test` a `fit`, svuota la cache dei carichi e riarma le voci
+      del giornale; poi elimina i file GPX dall'archivio. Avviso una volta con il numero di attività tolte.
+      Test: `tests/collaudo/test_fase8_solo_fit.py`.
+- [x] Test di soglia nel piano, motore (richiesta dell'utente del 2026-11-09,
+      ADR 015): il motore programma la seduta "Threshold test" nella prima
+      settimana (versione 5 del metodo) con regole scritte, la ripropone una
+      sola volta se salta, workout Garmin con nome e passi propri. Test:
+      `T-PIANO-10` in `tests/planning/test_threshold_test_session.py`, oracoli
+      di `tests/planning/invariants.py` e del collaudo del piano aggiornati.
+- [x] Test di soglia nel piano, guscio e interfaccia: `RebuildPlan` passa
+      `test_protocol` (impostazione dell'utente) e `missed_tests`
+      (`missed_threshold_tests` sui giorni congelati e i test applicati); la
+      finestra mostra la seduta "Threshold test" e `RetestScheduled`
+      (`ui/plan_texts.py`). Fatto: test in
+      `tests/profiles/test_rebuild_plan.py`
+      (`test_the_plan_schedules_the_test_with_the_protocol_the_user_chose`,
+      `test_a_planned_test_that_went_by_undone_is_told_to_the_engine`) e in
+      `tests/ui/test_plan_presentation.py` (`RetestScheduled`); `mypy` passa.
+- [x] Dislivello della gara e sedute in salita (richiesta dell'utente del
+      2026-11-10, "quando aggiungi gara, aggiungi anche dislivello gara", ADR 017;
+      l'utente ha scelto che il D+ cambi la stima del carico e faccia inserire
+      sedute in salita): `RaceGoal.ascent_m` (0-30 000 m, pendenza media al
+      massimo 50%), schema v16 (`goal.ascent_m`), distanza equivalente piana
+      (distanza + 10 × D+) per tempo atteso, ritmo gara e verdetto, ripetute in
+      salita e lunghi collinari per la gara A ripida (≥ 20 m/km) in costruzione e
+      picco (versione 8 del metodo, nessun nuovo `SessionType`), workout Garmin
+      "Hill repeats" e "Hilly long", campo, colonna e testi nell'interfaccia
+      (italiano compreso). Test: `T-PIANO-11` in
+      `tests/planning/test_race_ascent.py`, `tests/storage/test_race_ascent_store.py`.
+      Aperti: i valori 7 km/h e 10 m al minuto di lavoro sono stime non
+      validate; il calendario distingue le sedute in salita solo dal nome.
+- [ ] Collaudo completo (sezione 7) superato sull'eseguibile, su Windows e
+      Ubuntu, con esiti registrati in `docs/collaudo.md`.
+- [x] Ubuntu di nuovo nelle matrici di `ci.yml` e `release.yml` (tolto il
+      2026-11-09 su richiesta dell'utente, rimesso lo stesso giorno: eccezione 3
+      di `CLAUDE.md` chiusa) e CI verde su Ubuntu. Fatto: matrici e crash di
+      `test_tile_service` su Ubuntu (oggetto Qt distrutto da un worker,
+      `ui/worker_handover.py`); CI verde su Windows e Ubuntu sul commit
+      `a2092ae` (2026-11-09).
+- [ ] Ubuntu di nuovo in CI e rilascio: tolto dalle matrici di `ci.yml` e
+      `release.yml` il 2026-11-11 su richiesta dell'utente ("per ora abbandona
+      ubuntu") dopo due tentativi falliti per errori DNS dei mirror Ubuntu sul
+      runner; eccezione 5 di `CLAUDE.md`. Per riprenderlo: `ubuntu-latest` nelle
+      due matrici, README, eccezione chiusa, CI verde su Ubuntu.
+- [x] ~~Valori della tabella degli alimenti verificati~~ (SUPERATO il 2026-11-10: tabella tolta; la revisione a mano delle voci CIQUAL prima del rilascio non serve più) Valori della tabella degli alimenti verificati contro ANSES-CIQUAL 2025
+      (file del 2025-11-03, Etalab 2.0) con `experiments/verify_foods.py
+      --ciqual-dir <cartella> --apply` (`source.verified_on` = 2026-11-09, 42
+      alimenti su 42 trovati); confronto con CREA solo come rapporto (licenza
+      che non permette di copiare i valori), codici in
+      `experiments/crea_mapping.json`. Tre alimenti sono approssimazioni
+      dichiarate nella tabella (yogurt greco 0%, mozzarella parzialmente
+      scremata, fagioli neri); la scelta di ogni voce CIQUAL è da rivedere a
+      mano prima del rilascio (vedi `ciqual_note`). Il codice USDA sbagliato
+      di circa dieci alimenti è superato dal cambio di fonte. Test:
+      `tests/experiments/test_verify_foods.py`, `tests/nutrition/test_foods.py`.
+- [x] ~~`nutrition/foods.json` incluso nel pacchetto PyInstaller.~~ (SUPERATO il 2026-11-10: file tolto dal pacchetto e dal controllo di avvio)
+- [x] Backup e ripristino di un profilo in un file versionato, con test di
+      ripristino.
+- [x] PyInstaller con `.spec` versionato per Windows e Ubuntu, smoke test
+      sull'eseguibile, `SHA256SUMS`, misura della dimensione del pacchetto.
+- [ ] Controllo di conformità: licenze, intestazioni, autore dei commit,
+      nessun dato personale né percorso locale nel pacchetto.
+- [x] README con installazione, verifica dell'hash, avviso di SmartScreen,
+      messaggio di responsabilità medica.
+- [x] Richieste dell'utente dal collaudo a mano del 2026-11-09: zoom con la
+      rotella e spostamento trascinando nei grafici della panoramica, con le
+      date sincronizzate fra PMC e grafici settimanali; carico (hrTSS) di
+      ogni zona nel dettaglio attività; rifornimento rapido in 2 apporti ogni
+      2 ore, che si uniscono al pasto vicino, al posto di 4 apporti orari;
+      una finestra per ogni attività e per ogni giorno del calendario; dati
+      dell'attività accanto all'altimetria della mappa; riga dei grassi non
+      più tagliata; nome del profilo modificabile; obiettivi e infortuni dal
+      menu del giorno nel calendario (sezioni tolte dalla barra laterale);
+      impostazioni riunite in File → Settings.
+- [x] Sfondo della mappa da OpenStreetMap, senza chiave (richiesta
+      dell'utente del 2026-11-09, commit `6ca8b68`, ADR 010 emendato): host
+      `tile.openstreetmap.org`; tolti la chiave Tracestrack, il suo
+      portachiavi e i messaggi relativi. Regole d'uso rispettate:
+      User-Agent con nome, versione e contatto, attribuzione "© OpenStreetMap
+      contributors" su entrambe le mappe, cache secondo gli header (7 giorni
+      se mancano), richieste condizionali (`ETag`, `Last-Modified`) per le
+      tile scadute, niente prefetch né scaricamenti in blocco, pausa di 300 s
+      se il server rifiuta (403/429). Cache delle tile schema 2 (senza stile,
+      con validatori; il file v1 si ricostruisce vuoto). Rischi accettati
+      (threat model): il server può bloccare l'app senza preavviso, nessuna
+      garanzia di servizio, URL fisso nel codice. Resta da fare prima del
+      rilascio: rileggere le regole d'uso di OpenStreetMap.
+- [x] Tre sfondi della mappa a scelta (richiesta dell'utente del 2026-11-10:
+      "cambiare layer", poi "aggiungi OpenTopoMap e CyclOSM"; ADR 010 emendato
+      una seconda volta): OpenStreetMap (default), OpenTopoMap (zoom 17) e
+      CyclOSM (zoom 20), valori chiusi del dominio (`maps/domain.py`: chiave,
+      host e sottodomini, percorso, zoom massimo, attribuzione); schema interno
+      `ponos://tiles/{source}/{z}/{x}/{y}` con la sorgente validata contro
+      l'elenco; stesse regole d'uso per tutti, pausa di 300 s per sorgente;
+      cache delle tile schema 3 con la sorgente nella chiave (i file v1 e v2 si
+      ricostruiscono vuoti). Scelta in Mappa → Sfondo (Ctrl+Shift+1..3, voci
+      esclusive) e con un controllo in alto a destra della mappa, sincronizzati
+      e ricordati (`QSettings`, `map/background`); la pagina cambia layer senza
+      ricaricarsi (`setBackground`), aggiorna attribuzione e zoom massimo;
+      l'avviso di un problema porta il nome dello sfondo. Host verificati il
+      2026-11-10 sulle pagine dei progetti. Rischi accettati (threat model):
+      servizi gratuiti senza garanzia, OpenTopoMap a tratti lento, CyclOSM sui
+      server di OSM Francia finanziati da donazioni. Test in
+      `tests/ui/test_map_background.py`, `tests/maps`, `tests/platform`.
+- [x] Impostazioni di allenamento: giorni disponibili (caselle), sedute a
+      settimana, giorno del lungo, ore massime a settimana; niente più minuti
+      per giorno (richiesta dell'utente del 2026-11-09, commit `58409cc`,
+      ADR 016). Giorni di seduta: prima il lungo, poi ogni volta il giorno
+      disponibile più lontano da quelli scelti (settimana circolare, a parità
+      il più basso); tetto di un giorno = massimo del tipo di seduta
+      (`DAY_MAX_MINUTES` = 240); il lungo è sempre la seduta più lunga della
+      settimana (facile e recupero al massimo il 75%). `METHOD_VERSION` 6.
+      Schema 12 con migrazione da 11 (copia in `backup/`).
+- [x] Altre richieste dell'utente del 2026-11-09, ognuna nel suo commit:
+      corsa negli allenamenti Garmin con il passo come obiettivo principale e
+      la FC come secondario quando c'è un intervallo di passo, e l'app elenca
+      il passo prima della FC (`9a14d4a`, ADR 013 emendato); bottone "Save
+      changes" (Ctrl+S) sempre visibile in Impostazioni, che salva la pagina in
+      vista (`aa34231`); clic su un'attività nella finestra del giorno ne apre
+      la finestra o la porta in primo piano (`f26cabf`); grafico del carico
+      settimanale con una serie per sport, senza "Other" che raggruppa
+      (`b94d67a`); calendario senza il bottone Today, restano Ctrl+T e il menu
+      del giorno (`2a52928`).
+- [x] Finestra a quattro riquadri e interfaccia della panoramica e della
+      mappa (richieste dell'utente del 2026-11-09): quattro riquadri
+      ridimensionabili senza barra laterale, Panoramica in alto a sinistra,
+      Calendario in basso a sinistra, elenco Attività in alto a destra, Mappa
+      in basso a destra, Ctrl+1..4 per i riquadri (menu View tolto il
+      2026-11-10, eccezione 4 di `CLAUDE.md`), niente menu Calendar,
+      bottoni sotto il pannello del giorno tolti (`2836d43`, `ui/main_panes.py`);
+      Panoramica con un grafico alla volta scelto da un elenco, mappa con
+      altezza minima, tolto il bottone "Activity detail...", più spazio al
+      calendario (`b1343b0`); sulla mappa solo la traccia dell'attività
+      selezionata, doppio clic nell'elenco che apre la finestra e centra la
+      mappa, partenze più grandi da vicino, partenze nello stesso punto a
+      ventaglio e cliccabili (`79180af`, `de89260`); Forma (TSB) nello stesso
+      grafico del carico con un solo asse y, trascinamento col tasto destro per
+      allungare il grafico, legenda del calendario compatta (`58606f0`); cache
+      su disco della mappa chiusa alla chiusura della finestra (`a2092ae`).
+- [x] Passo soglia nelle impostazioni del profilo (richiesta dell'utente del
+      2026-11-10, merge `1de5db0`): serie datata a sé (`threshold_pace`,
+      schema 14), campo `m:ss` tollerante accanto alla soglia FC, colonna nello
+      storico; per il piano vale il più recente per data fra misura manuale e
+      ultimo test con passo, a pari giorno la manuale. Test:
+      `tests/profiles/test_threshold_pace.py`, `test_measurements.py`,
+      `test_rebuild_plan.py`, `tests/storage/test_threshold_pace_store.py`,
+      `tests/ui/test_measurements_form.py`.
+- [x] Carico in TRIMPeq (richiesta dell'utente del 2026-11-10, commit
+      `9ef5622`, merge `297c478`, testi italiani `fe6527a`; ADR 004 emendato):
+      un'unica misura, Banister sull'intensità equivalente di corsa
+      (`HRr_eq = min(1, HRr · HRr_T(corsa) / HRr_T(sport))`), scala "100 = un'ora
+      alla soglia del proprio sport"; tolti hrTSS e i pesi per sport (calcolo,
+      impostazioni e Ctrl+Shift+W, casi d'uso, porte); la tabella `sport_weights`
+      resta nel database, non più letta né scritta (la toglierà una migrazione
+      futura); `load_cache.hr_tss` = 0; `LOAD_MODEL_VERSION` 3 (ricalcolo da zero,
+      T-CALC-05); `METHOD_VERSION` del piano 7, soglie del piano invariate;
+      etichette "Load (TRIMPeq)", "TRIMPeq per day", "TRIMPeq per week". Effetti:
+      forza e sedute alternative senza moltiplicatore, bici sulla propria
+      soglia (valore congelato di `test_fase4_distanza`: 40,1935, prima 32,18).
+      Test: `tests/load/` (T-CALC-01…07 aggiornati),
+      `tests/planning/test_trimp_eq_equivalence.py` (11 scenari di sola corsa
+      contro il golden `tests/planning/golden/plans_hrtss.json`),
+      `tests/collaudo/test_fase4_distanza.py`, `tests/collaudo/test_fase3_carico.py`.
+- [x] Nuovo profilo con soglie FC di ciclismo e altre attività e passo soglia,
+      facoltativi, con gli stessi componenti e controlli di Edit profile;
+      creazione atomica (richiesta dell'utente del 2026-11-10, `6046260`).
+      Test: `tests/ui/test_new_profile_thresholds.py`,
+      `tests/ui/test_new_profile_form_thresholds.py`,
+      `tests/profiles/test_create_profile_thresholds.py`.
+- [x] Richieste dell'utente del 2026-11-10 sull'interfaccia: Panoramica con due
+      linguette verticali (`5bd05e1`); finestra attività senza anteprima della
+      mappa, riepilogo in griglia, zone FC senza barra di scorrimento (`4f98c22`);
+      finestra attività più veloce: una sola decodifica del FIT, pagina del grafico
+      preparata mentre il worker lavora, curva FC alleggerita sopra 3000 campioni
+      conservando picchi e valli (`2afe673`; 4 h a 1 Hz: da circa 1750 a 880 ms
+      mediani, misura `experiments/activity_detail_timing.py`); barra dei filtri
+      con campi larghi quanto una data e "Clear filters" in linea (`9beaa35`);
+      campi delle Impostazioni larghi secondo il tipo (`042125d`, `FieldKind` in
+      `ui/form_rows.py`); finestra del giorno con i pasti in tabella e grande
+      quanto il contenuto entro lo schermo (`2ca43ce`).
+- [x] Crash del processo (eccezione fatale di Windows 0x80000003) quando il
+      garbage collector di Python partiva nel thread dei dati e distruggeva lì un
+      oggetto Qt dell'interfaccia rimasto in un ciclo (visto nei test della mappa
+      eseguiti insieme e una volta dopo un'unione): raccolta automatica spenta e
+      raccolta dei cicli solo nel thread dell'interfaccia (`ui/main_thread_gc.py`,
+      `b325abb`), anche nei test (`tests/conftest.py`). Il log degli errori non
+      gestiti ora dice anche il punto del codice (`e0e93a6`), per trovare la causa
+      dei 145 `RuntimeError` del 2026-11-10 alle 10:12 se si ripresentano.
+- [x] Obiettivi non raggiungibili ben visibili (richiesta dell'utente del
+      2026-11-10, dopo un obiettivo di forma CTL 55 con 6,5 h a settimana):
+      causa ore o rampa nel dominio con le ore che basterebbero, rimedio giusto
+      nel testo, striscia d'avviso sopra il Calendario, "! Out of reach" nel
+      giorno, colonna "Fitness asked" negli obiettivi; `METHOD_VERSION` 9
+      (merge del 2026-11-10). Test: `tests/planning/test_ctl_limit.py`,
+      `tests/ui/test_out_of_reach.py`.
+- [x] Elenco attività con tempo totale, FC media e FC massima, senza "Format";
+      FC dai campioni usati per il carico, salvata nella cache dei carichi
+      (schema 17, `LOAD_MODEL_VERSION` 4: i carichi si ricalcolano una volta).
+- [x] Doppio clic su un'attività nella mappa (partenza o traccia selezionata)
+      apre la sua finestra; altrove ingrandisce (richiesta dell'utente del
+      2026-11-10). Test: `tests/ui/test_map_page_web.py`.
+- [x] Pasti senza esempi di alimenti, solo calorie e macronutrienti (richiesta
+      dell'utente del 2026-11-10): tolti dalla finestra del giorno gli esempi e
+      la nota sui valori non verificati.
+- [x] Tolto tutto ciò che serviva solo agli esempi (2026-11-10, conferma
+      dell'utente): `suggest_examples`, `Food`/`FoodExample`/porzioni,
+      `MealSuggestion` (il rapporto del giorno ha solo `nutrition.meals`),
+      `foods.json`, `food_table.py`, `experiments/verify_foods.py`, nomi degli
+      alimenti da tradurre, controllo di avvio della tabella, voce del pacchetto
+      PyInstaller, attribuzione ANSES del README; ADR 008 emendato. Le quantità
+      per pasto non cambiano.
+- [x] Mappa 3/5 e profilo altimetrico 2/5 del riquadro (richiesta dell'utente
+      del 2026-11-10, `ab94cb2`).
+- [x] Sotto il calendario solo la legenda (richiesta dell'utente del
+      2026-11-10): tolto il pannello del giorno; il dettaglio completo del
+      giorno è nel tooltip della cella, modifica e rimozione degli obiettivi
+      dal menu del giorno. Test: `tests/ui/test_calendar_plan.py`,
+      `tests/ui/test_pane_contents.py`.
+- [x] Finestra del giorno con la seduta programmata completa (fase, blocchi,
+      carico stimato), come il pannello del calendario (richiesta dell'utente
+      del 2026-11-10, `db698a1`; caso d'uso `PlannedDay`).
+- [x] Soglie FC per corsa, ciclismo e altre attività nel profilo (richiesta
+      dell'utente del 2026-11-10): misure datate; bici di default corsa − 4,
+      altre attività di default la corsa; **superato dalla voce successiva (due gruppi, LT1 e LT2)**; `threshold_for_sport` unico punto da
+      cambiare; migrazione dello schema. Fatto (`fc09bb6`, `a335b5b`): gruppi
+      `SportGroup` corsa/trail, ciclismo, altre (camminata, escursionismo,
+      forza, altro); soglie facoltative nella stessa serie datata della
+      fisiologia (`bike_threshold_bpm`, `other_threshold_bpm`, NULL = default,
+      migrazione 15 `SPORT_THRESHOLDS_MIGRATION`); entrano nell'impronta del
+      carico solo se diverse dal default, così chi non le imposta non ricalcola
+      nulla; il test dei 30 minuti aggiorna solo la soglia di corsa. Test:
+      `tests/{load,profiles,storage,planning}/test_sport_thresholds*.py`,
+      `tests/ui/test_sport_thresholds_form.py`.
+- [x] Nuove zone FC (richiesta dell'utente del 2026-11-10): Z1 sotto 75%
+      (50-74%), Z2 75-84%, Z3 85-94%, Z4 95-102%, Z5 da 103% della soglia
+      (`ZONE_STARTS_PERCENT = (75, 85, 95, 103)`); FC rappresentative del piano
+      66/82/90/97/103; `METHOD_VERSION` 10; l'impronta dei carichi comprende le
+      percentuali, quindi i secondi per zona si ricalcolano e il TRIMPeq no. Le
+      zone di ritmo non cambiano. Test: `tests/load/test_zones.py`,
+      `tests/collaudo/test_fase5_zone_fri5.py`, `tests/planning/`, `tests/ui/`.
+- [x] LT1 e LT2 per due gruppi di sport (richiesta dell'utente del 2026-11-10):
+      «corsa e trail» e «altri sport» (tutto il resto, bici compresa; la soglia
+      separata del ciclismo sparisce). Modello: `Physiology` tiene `threshold`
+      (LT2 corsa), `other_threshold` (LT2 altri sport, facoltativa, default la
+      corsa), `run_lt1` e `other_lt1` (facoltative); vincolo
+      `FCmin < LT1 < LT2 ≤ FCmax` verificato alla costruzione, con la LT2 del
+      gruppo (per gli altri sport quella effettiva). Senza LT1 inserita vale
+      l'83% della LT2 del gruppo, arrotondato per eccesso a metà
+      (`DEFAULT_LT1_PERCENT`, `default_lt1`, portato a `FCmin + 1` e mai oltre
+      la LT2); `lt1_for_sport` è il gemello di `threshold_for_sport`. Le zone
+      restano in percentuale della LT2 del gruppo. Effetto sulla bici: il
+      TRIMPeq e le zone usano ora la LT2 degli altri sport (prima il default
+      era corsa − 4), quindi `LOAD_MODEL_VERSION` 5 e tutti i carichi delle
+      attività in bici si ricalcolano da soli. Dati: migrazione 18
+      `LT1_MIGRATION` (`run_lt1_bpm`, `other_lt1_bpm` in `physiology`, con
+      CHECK); `bike_threshold_bpm` resta nella tabella ma non si legge né si
+      scrive più (expand-contract: una migrazione futura la toglie). Interfaccia:
+      Edit profile e Nuovo profilo hanno i gruppi «Running and trail» e «Other
+      sports» con LT1 (default grigio) e LT2 e un tooltip su cosa sono e come
+      stimarle; la finestra di un'attività mostra il tempo sotto LT1, tra LT1 e
+      LT2 e sopra LT2 (`lactate_domains.py`, `domain_rows`), campioni uguali a
+      quelli delle zone, e «LT1 / LT2» nel riepilogo. Test:
+      `tests/load/test_lactate_domains.py`, `tests/load/test_sport_thresholds.py`,
+      `tests/storage/test_lt1_store.py`, `tests/profiles/test_sport_thresholds_update.py`,
+      `tests/ui/test_sport_thresholds_form.py`, `tests/ui/test_new_profile_thresholds.py`,
+      `tests/ui/test_activity_detail*.py`.
+- [x] Sincronizzazione: una voce che Garmin non scarica mai (errore 5xx o
+      nessuna risposta a ogni giro, mentre l'elenco risponde) resta in attesa
+      per sempre e ferma ogni giro dopo 3 voci; serve un contatore di giri
+      senza risposta per voce (nuova colonna, schema 13) che dopo N giri la
+      segni come fallita, senza consumare tentativi nei guasti veri di Garmin.
+      Fatto (`4ba1cc0`): la voce conta un giro senza risposta
+      (`unanswered_rounds`, schema 13) solo se Garmin risponde ad altro nel giro
+      o a una sonda (prima pagina dell'elenco); al terzo giro
+      (`SyncPolicy.max_unanswered_rounds`) diventa `FAILED` con
+      `REMOTE_NOT_PROVIDED` e non ferma più i giri; 429 e rete assente non
+      consumano nulla; "Verifica completa" la riarma. Test:
+      `tests/activities/test_sync_never_provided.py`,
+      `tests/collaudo/test_fase8_migrazione_v13.py`.
+      Caso del 2026-11-09: 30 attività del 2012-2013, sistemate a mano nel
+      profilo dell'utente.
+- [x] Meno test a ogni controllo (richiesta dell'utente del 2026-11-10):
+      `tests/collaudo` solo in `nox -s collaudo`, 30 esempi hypothesis, tolti
+      i casi doppi a basso rischio (liste ostili ridondanti, segnali d'allarme
+      su due segni, fixture FIT ripetute, hash in un solo test): da 8023 test
+      in 13 min a 5501 in 4 min 41 s.
+- [x] Passo medio in min/km nella finestra di un'attività, solo per corsa,
+      trail ed escursionismo (richiesta dell'utente del 2026-11-10): tempo in
+      movimento diviso per la distanza; per gli altri sport la voce non c'è e
+      le altre chiudono il buco. Test: `tests/ui/test_activity_detail.py`,
+      `tests/ui/test_activity_detail_layout.py`.
+- [x] Impostazioni con un solo «Save changes», in fondo alla finestra
+      (richiesta dell'utente del 2026-11-10): tolti i bottoni di Profilo,
+      Piano e Alimentazione; ogni pagina dice se si può salvare
+      (`SettingsForm.can_save`) e perché no (`save_blocked_reason`); Invio in
+      un campo salva. Test: `tests/ui/test_settings_window.py`.
+- [x] Eliminare attività dall'elenco (richiesta dell'utente del 2026-11-10):
+      tasto destro o Canc, annullabile; il file FIT resta in archivio e la
+      finestra «Deleted activities...» le ripristina; sincronizzazione e
+      import da cartella le saltano (`SyncStatus.SKIPPED`), un file scelto a
+      mano le riporta. Dati: schema 19 (`deleted_activity` e trigger che
+      tengono ogni identità in una sola tabella), ADR 018. Test:
+      `tests/activities/test_deletion.py`, `tests/ui/test_activity_deletion.py`,
+      `tests/ui/test_deleted_activities_page.py`, contract test.
+- [x] Niente giorni di riposo nel calendario (richiesta dell'utente del
+      2026-11-11): la cella di un riposo del piano resta vuota come senza
+      piano (niente riga, fase, striscia di colore né voce in legenda;
+      `CalendarDay.grid_plan`); tooltip e pagina del giorno dicono ancora
+      «riposo». Test:
+      `tests/ui/test_calendar_plan.py`.
+- [x] Altimetria più bassa nella Mappa (richiesta dell'utente del
+      2026-11-11): il grafico scende del 30%, dai 2/5 al 28% del riquadro, e
+      la mappa sale al 72% (`MAP_SHARE = (18, 7)`). Test:
+      `tests/ui/test_pane_contents.py`.
+- [x] Scala delle distanze sulla mappa (richiesta dell'utente del
+      2026-11-11): scala di Leaflet in basso a sinistra, solo metrica (m e
+      km), con i colori del tema. Test: `tests/ui/test_map_page_web.py`.
+- [x] Calorie attive nel dettaglio dell'attività (richiesta dell'utente del
+      2026-11-11): voce «Active calories (kcal)» dopo la salita, uguale al
+      netto che l'alimentazione del giorno usa per quell'attività (stessa
+      persona alla data, stesso totale credibile, stessa FC media, via
+      `energy_of_activity`); «≈» davanti se il totale è stimato; la voce
+      manca senza dati del corpo. Test: `tests/profiles/test_activity_energy.py`,
+      `tests/ui/test_activity_detail_layout.py`,
+      `tests/ui/test_activity_detail_window.py`.
+- [x] Calorie attive anche accanto all'altimetria (richiesta dell'utente
+      del 2026-11-11): la Mappa mostra le calorie attive al posto del totale
+      dell'indice, calcolate sul thread dati con `GetRecordEnergy` (regola
+      comune `energy_of_record` con l'alimentazione del giorno, nessuna
+      lettura del file se il totale dichiarato è credibile), con testo e
+      didascalia condivisi in `ui/activity_text.py`; arrivano dopo la
+      selezione e una risposta per un'attività non più selezionata si scarta.
+      Test: `tests/profiles/test_activity_energy.py`, `tests/ui/test_map_window.py`.
+- [x] Confine Z1/Z2 delle zone FC a 72% (richiesta dell'utente del
+      2026-11-11: "Z1 <72% e Z2 dal 72%"): Z1 50-71%, Z2 72-84%, Z3 85-94%,
+      Z4 95-102%, Z5 da 103% (`ZONE_STARTS_PERCENT = (72, 85, 95, 103)`); gli
+      altri confini e le FC rappresentative (66/82/90/97/103) non cambiano.
+      `METHOD_VERSION` 11 (cambiano gli intervalli FC dei blocchi Z1 e Z2) e
+      golden di `plans_hrtss.json` riregistrato (cambiano solo i limiti FC
+      dei blocchi al confine Z1/Z2, 127/128 diventano 122/123; carichi, tipi
+      di seduta, giorni e avvisi no); i secondi per zona si
+      ricalcolano, il TRIMPeq no. Test: `tests/load/test_zones.py`,
+      `tests/collaudo/test_fase5_zone_fri5.py`, `tests/planning/`, `tests/ui/`.
+- [x] Revisione di sicurezza del design del 2026-11-11, due voci Should
+      (richiesta dell'utente del 2026-11-11): un certificato di un server delle
+      tessere che non si verifica (come quello scaduto di OpenTopoMap) ha un
+      motivo suo, `TileProblem.UNTRUSTED_SERVER`, con pausa di 300 s e un
+      avviso che parla del certificato invece di «niente rete»; la verifica
+      resta piena. Nel threat model la riga B15 e il rischio accettato del
+      profilo ripristinato con lo stesso id, che usa i token Garmin di quell'id.
+      Test: `tests/platform/test_tile_http.py`, `tests/maps/test_use_cases.py`,
+      `tests/ui/test_map_widgets.py`.
+- [x] Grafico della velocità nella finestra attività (richiesta dell'utente
+      del 2026-11-11: «oltre al grafico FC metti anche il grafico velocità»):
+      sotto il grafico FC, con lo stesso asse del tempo (zoom e scorrimento
+      collegati: `ValueRange` nel report dell'intervallo della pagina, titolo
+      della pagina validato come i numeri e le date). Passo in min/km (`m:ss`,
+      asse capovolto, più veloce in alto, tacche proprie, asse y fisso) per
+      `PACE_SPORTS` (corsa, trail, escursionismo: la regola del passo medio);
+      km/h per gli altri. Serie nel dominio, `smoothed_speed`
+      (`activities/domain/speed_series.py`): finestra di 30 s centrata e
+      tagliata alle pause, pause oltre 10 s e tratti sotto 0,5 m/s sono buchi
+      (mai picchi), al massimo circa 3000 punti; calcolata in
+      `GetActivityDetail` dalla distanza del FIT (che già integra la velocità
+      se manca la distanza). Senza distanza né velocità il grafico non compare
+      e una riga lo dice. Test: `tests/activities/test_speed_series.py`,
+      `tests/ui/test_speed_figure.py`, `tests/ui/test_activity_detail_speed.py`,
+      `tests/load/test_activity_detail.py`, `tests/ui/test_chart_view.py`.
+- [x] Puntatore collegato tra grafico FC e grafico velocità (richiesta
+      dell'utente del 2026-11-11: «spostandosi su un grafico deve mostrare i
+      dati anche sull'altro grafico»): la pagina riporta il minuto sotto il
+      puntatore dell'utente (`hoverx|X|N`, `hoverx|none|N`, titolo validato
+      come i numeri dell'intervallo) e mostra le etichette a un minuto dato
+      (`ponosHoverAt`) senza riportarlo, quindi niente eco. `PointerReport`
+      (nessuno, indice del punto per il profilo della mappa, minuto collegato)
+      sostituisce il vecchio flag `hover`. Test: `tests/ui/test_chart_view.py`,
+      `tests/ui/test_activity_detail_speed.py`, `tests/ui/test_hr_figure.py`,
+      `tests/ui/test_speed_figure.py`.
+- [x] Puntatore condiviso tra finestra dell'attività e mappa (richiesta
+      dell'utente del 2026-11-11: «muovendosi sul grafico di fc o velocità, si
+      deve spostare anche l'indicatore sulla mappa e altimetria. Anche
+      viceversa»): `ActivityProfileData.seconds` (secondi dal primo record,
+      la base delle serie FC e velocità) e `index_at` (punto più vicino nel
+      tempo); `MapPage.cursor_moved`/`show_cursor_at` e
+      `ActivityDetailDialog.cursor_moved`/`show_cursor_at`, collegati dalla
+      finestra principale attraverso `ProfileDialogs` con l'identità
+      dell'attività: un'altra attività sulla mappa non si tocca, e nessuna
+      vista rimanda indietro ciò che riceve. Test:
+      `tests/ui/test_activity_cursor.py`, `tests/load/test_activity_profile.py`,
+      `tests/ui/test_activity_detail_speed.py`.
+- [x] Curva sempre intera con un leggero margine sopra e sotto (richiesta
+      dell'utente del 2026-11-11: «i grafici devono sempre essere scalati in
+      altezza in modo da visualizzare completamente la curva e avere comunque
+      un leggero margine sotto e sopra»): `Y_MARGIN_FRACTION` (6%) e
+      `padded_range` in `ui/chart_payload.py`, passati alla pagina
+      (`yMargin`), che adatta l'asse y con il margine anche sotto; barre e
+      aree riempite da zero tengono lo zero come base. Il passo va dal punto
+      più veloce al più lento (non più i percentili 1–99), il profilo
+      altimetrico ha il suo intervallo con il margine. Test:
+      `tests/ui/test_chart_view.py`, `tests/ui/test_speed_figure.py`,
+      `tests/ui/test_map_widgets.py`.
+- [x] Sfondi della mappa valutati e non aggiunti (decisioni dell'utente del
+      2026-11-11; non riproporli senza un fatto nuovo):
+      - bergfex OSM: le condizioni d'uso di bergfex (AGB, sezione 7)
+        ammettono l'uso dei dati solo dopo accordo con bergfex GmbH, non c'è
+        un'API pubblica e le tessere sono JPEG. Si aggiunge solo con un
+        permesso scritto di bergfex.
+      - Satellite: Google vieta l'accesso diretto alle tessere fuori dalle sue
+        API (la Map Tiles API vuole un account con fatturazione e una chiave
+        dell'utente); i termini di Esri World Imagery non sono verificabili e
+        richiedono probabilmente un account; EOX Sentinel-2 cloudless è
+        gratuito per uso non commerciale ma ha 10 m per pixel, troppo poco per
+        i sentieri. L'utente ha scelto di non avere una mappa satellitare.
 
 ## 6. Squadra di agenti e modelli
 
@@ -669,7 +1130,8 @@ model e gli esiti del collaudo possono citarlo.
 ### 7.3 Calcolo del carico (T-CALC)
 
 - **T-CALC-01** Valori calcolati a mano: 60 minuti a FC costante pari alla
-  soglia danno hrTSS 100; FC uguale alla minima dà 0.
+  soglia danno carico 100 (dal 2026-11-10 TRIMPeq, alla soglia del proprio
+  sport; prima hrTSS); FC uguale alla minima dà 0.
 - **T-CALC-02** Property test: implementazione vettoriale uguale a quella
   ingenua, con tolleranza dichiarata, su tracciati casuali.
 - **T-CALC-03** Invarianti: carico ≥ 0; crescente con durata e FC; un
@@ -679,7 +1141,8 @@ model e gli esiti del collaudo possono citarlo.
   calcolato con i valori del giorno prima.
 - **T-CALC-05** Parametri con data di validità: attività a cavallo di un
   cambio; ricalcolo dopo una modifica uguale al calcolo da zero.
-- **T-CALC-06** Soglia in bici = soglia corsa − 4 bpm; attività senza FC o
+- **T-CALC-06** La bici usa la LT2 degli altri sport (senza valore, quella della
+  corsa; dal 2026-11-10, prima corsa − 4 bpm); attività senza FC o
   con più del 30% di campioni scartati → stima marcata.
 - **T-CALC-07** Casi limite: attività di 1 s e di 24 h, FC piatta, buchi
   oltre 10 s, attività a cavallo della mezzanotte, cambio dell'ora legale,
@@ -691,7 +1154,8 @@ model e gli esiti del collaudo possono citarlo.
   byte una volta serializzato; l'ordine di inserimento degli obiettivi non
   conta.
 - **T-PIANO-02** Vincoli sempre rispettati, con property test su ingressi
-  casuali: rampa del CTL entro il massimo, ore entro la disponibilità, solo
+  casuali (anche con infortuni e malattie aperti: rampa +3, solo tipologie
+  scelte, nessuna seduta con un segnale d'allarme): rampa del CTL entro il massimo, ore entro la disponibilità, solo
   giorni disponibili, solo tipologie scelte, al massimo 3 sedute intense a
   settimana, mai due dure di seguito, scarico prima di ogni obiettivo A e B.
 - **T-PIANO-03** Scenari: un obiettivo A; due A a 3 settimane; A + B + C;
@@ -703,9 +1167,27 @@ model e gli esiti del collaudo possono citarlo.
   pianificate, attività vecchie arrivate tardi che cambiano il passato.
 - **T-PIANO-05** Tempo obiettivo: classificazione realistico, ambizioso o
   irraggiungibile, verificata ai confini.
+- **T-PIANO-10** Test di soglia nel piano (ADR 015): piano senza test recente
+  (nessun test, finestra aperta o passata) → test del protocollo scelto nella
+  prima settimana, in un giorno non accanto al lungo né a un giorno duro; con un
+  test recente nessuno; gara vicina → mai nelle 72 ore prima, spostato dopo o assente;
+  infortunio o malattia aperti, o rientro recente → assente; un test saltato torna
+  una volta la settimana dopo, due volte saltato mai più; seduta dura (limiti
+  settimanali, carico nella rampa e nella proiezione); determinismo; nome e
+  passi del workout Garmin; piano salvato che si rilegge.
+- **T-PIANO-11** Dislivello della gara (ADR 017, `tests/planning/test_race_ascent.py`):
+  distanza equivalente (100 m di D+ = 1 km) e tempo atteso, carico, ritmo gara e ritmo
+  predefinito calcolati su di essa; soglia di pendenza ai confini (199 e 200 m in 10 km, cioè
+  19,9 e 20 m/km); salite solo in costruzione e picco, mai in una settimana di scarico, in base
+  o nello scarico finale; una ripetuta in salita a settimana, senza ritmo, in zona alta; ogni
+  lungo di una settimana di carico collinare; nessuna salita per una B accanto a una A piana,
+  per una gara che non è di corsa, con un infortunio che limita corsa o intensità (tornano
+  all'ultimo gradino); determinismo; property test: gli invarianti di `invariants.py` valgono
+  con D+ casuale.
 - **T-PIANO-06** Test di soglia: FC di soglia = media degli ultimi 20' su
   tracciati sintetici; test interrotto o troppo corto rifiutato; retest
-  proposto dopo 6–8 settimane in una settimana di scarico.
+  proposto tra 6 e 8 settimane dopo l'ultimo test (dalla fase 5 anche in una
+  settimana di scarico del piano).
 - **T-INF-01** Ogni segnale d'allarme, uno per test, ferma il piano della
   zona e mostra l'invito al medico.
 - **T-INF-02** Percorso a gradini: si sale con dolore ≤ 3 e mattino normale,
@@ -732,6 +1214,10 @@ model e gli esiti del collaudo possono citarlo.
 - **T-DATI-06** Creazione del profilo interrotta in ogni passo, anche in gara
   con un'altra istanza sulla stessa cartella: si annulla solo ciò che ha creato
   quell'istanza, mai il profilo dell'altra.
+- **T-DATI-07** Attività eliminate (ADR 018): carico, PMC e piano senza le
+  attività eliminate uguali a quelli di un profilo che non le ha mai avute, e
+  dopo il ripristino uguali a prima; ripristino tutto o niente, anche con il
+  processo ucciso (T-DATI-04).
 - **T-SYNC-01** Prima sincronizzazione completa e poi incrementale, con il
   fake di Garmin e uno storico di 5.000 attività.
 - **T-SYNC-02** Processo terminato davvero (kill di un sottoprocesso) durante
@@ -746,21 +1232,29 @@ model e gli esiti del collaudo possono citarlo.
   duplicato; "Verifica completa" trova le attività caricate in ritardo.
 - **T-SYNC-06** Annulla: la sincronizzazione si ferma entro 1 s e lascia lo
   stato coerente.
+- **T-SYNC-07** Un'attività eliminata non si riscarica in nessuna modalità
+  (anche importata da file, o con un altro id Garmin); una ripristinata non
+  si duplica.
+- **T-SYNC-08** Voci che Garmin elenca ma non fornisce: `REMOTE_NOT_PROVIDED`
+  dopo tre giri muti, riarmate dal "Controllo completo"; un 404 resta un
+  rifiuto definitivo; nessun giro bloccato.
 - **T-IMP-01** Albero con sottocartelle, duplicati, file non FIT e FIT
   rovinati: riepilogo esatto, file per file.
 - **T-IMP-02** Tetti: 50.000 file di attività, 500.000 voci e 32 livelli, ciascuno
   provato al limite e un passo oltre (nessun import, messaggio); file oltre
   50 MB saltato e segnalato.
 - **T-IMP-03** Idempotenza: import ripetuto → nessun cambiamento.
-- **T-IMP-04** ZIP: archivio con un solo FIT (come dal sito Garmin), con
-  molte attività FIT e GPX, con voci di altri tipi ignorate; le voci contano
-  nei tetti; nell'archivio del profilo finisce il file estratto.
-- **T-GPX-01** GPX validi: un segmento e più segmenti, con e senza FC
-  (estensioni Garmin), con e senza quota, senza orari (rifiutato: non è
-  un'attività), tipo di sport noto e ignoto; distanza, dislivello e tempo in
-  movimento confrontati con valori calcolati a mano.
-- **T-GPX-02** Stessa attività come FIT e come GPX: la seconda è riconosciuta
-  come duplicato, in qualunque ordine arrivi.
+- **T-IMP-04** Solo FIT: una cartella ignora GPX, ZIP e altri file senza
+  segnalarli; scelti a mano GPX e ZIP si segnalano come formato non
+  supportato; l'estensione si confronta senza badare alle maiuscole.
+- **T-GPX-01, T-GPX-02** (GPX validi, duplicati tra FIT e GPX): tolti in
+  fase 8 insieme al formato.
+- **T-DATI-01 (fase 8)** Migrazione v11: un profilo v10 con attività FIT e GPX e
+  i loro file diventa un profilo di sole attività FIT (copia del database,
+  file GPX tolti dopo la conferma, giornale riarmato, cache svuotata,
+  conteggio giusto, test di soglia delle attività tolte tolti); la migrazione uccisa a ogni istruzione lascia v10 e i
+  file intatti e riprende; un percorso fuori dalla forma dell'archivio non si
+  elimina mai.
 
 ### 7.6 Interfaccia (T-UI)
 
@@ -783,6 +1277,13 @@ model e gli esiti del collaudo possono citarlo.
   cartella di import.
 - **T-UI-08** Gestore unico degli errori: un'eccezione imprevista mostra un
   messaggio generico e registra il dettaglio.
+- **T-UI-09** Dettaglio di un'attività ostile: senza distanza, senza FC,
+  sempre ferma, con una pausa lunga; il dettaglio si legge sempre e il
+  grafico velocità/passo c'è solo se ha dati.
+- **T-UI-10** Eliminazione dall'interfaccia: l'intera lista eliminata e
+  riportata con l'annulla; la finestra di un'attività eliminata non si rompe.
+- **T-UI-11** Margine dell'asse y: ogni curva intera con il 6% sopra e sotto
+  (passo e profilo altimetrico compresi), per qualunque serie.
 
 ### 7.7 Sicurezza (T-SEC)
 
@@ -793,13 +1294,11 @@ model e gli esiti del collaudo possono citarlo.
   test normale.
 - **T-SEC-02** FIT ostili: dimensioni dichiarate enormi, record senza fine,
   file oltre 50 MB, estensione `.fit` con altro contenuto → rifiutati prima
-  di allocare. GPX ostili: DTD ed entità (anche esterne ed espansione
-  esponenziale), annidamento profondo, milioni di punti, testo enorme,
-  estensione `.gpx` con altro contenuto → rifiutati con limiti, senza
-  risolvere entità. ZIP ostili: bomba di decompressione, rapporto oltre
-  100:1, troppe voci, dimensione dichiarata falsa, ZIP annidati, voci
-  cifrate, CRC sbagliato, nomi con `../` o percorsi assoluti → rifiutati
-  senza scrivere nulla fuori dall'archivio del profilo.
+  di allocare. XML (GPX con DTD, entità, annidamento) e ZIP ostili scelti
+  dall'utente: mai aperti (una cartella li ignora, scelti a mano → formato
+  non supportato), nessuna connessione, nessuna scrittura fuori
+  dall'archivio. ZIP ostili scaricati da Garmin (bomba, voci, nomi, cifrati,
+  annidati): rifiutati dall'adattatore ZIP (`tests/zipread`).
 - **T-SEC-03** Risposte Garmin ostili: JSON enormi o annidati in profondità,
   tipi sbagliati, id non numerici o con percorsi (`../`), nomi di attività
   con HTML o script → rifiutati o trattati come testo.
@@ -834,12 +1333,18 @@ model e gli esiti del collaudo possono citarlo.
 - **T-SEC-13** Revisione manuale finale: threat model riletto con un
   giudizio scritto, percorso dei dati non fidati (FIT, JSON, cartelle)
   seguito a mano nel codice, rischi accettati riconfermati.
-- **T-SEC-14** Canale della mappa (fase 9): messaggi malformati (coordinate
+- **T-SEC-14** Canale della mappa (fase 5b): messaggi malformati (coordinate
   non numeriche o fuori intervallo, payload enormi, id inesistenti)
   rifiutati senza effetti; la pagina non può chiamare altro.
-- **T-SEC-15** Rete della mappa (fase 9): richieste verso host diversi da
-  quello delle mappe, o in HTTP, bloccate; nessuna posizione GPS nei log né
-  in file fuori dalle cartelle previste.
+- **T-SEC-15** Rete della mappa (fase 5b): la pagina non fa nessuna richiesta
+  di rete (tutto tranne `ponos://` bloccato); il proxy chiama solo
+  `https://tile.openstreetmap.org` e, dal 2026-11-10, i due host di
+  OpenTopoMap e CyclOSM dell'elenco chiuso degli sfondi (altri host, sorgenti
+  sconosciute, HTTP e z/x/y fuori limite rifiutati, timeout rispettati, User-Agent presente, validatori anomali
+  scartati); nessuna posizione GPS nei log né in file fuori dalle cartelle
+  previste. (Fino al 2026-11-09 il test controllava anche che la chiave
+  Tracestrack non finisse in pagina, log, profilo o cache: la chiave non c'è
+  più.)
 
 ### 7.8 Prestazioni e durata (T-PERF)
 
@@ -882,7 +1387,7 @@ riportano p50, p95 e massimo, mai la sola media, con l'ambiente di misura.
   descrivere un infortunio); problemi registrati e corretti prima del
   rilascio.
 
-### 7.11 Ricerca e mappa (T-FILT, T-MAP, fase 9)
+### 7.11 Ricerca e mappa (T-FILT, T-MAP, fase 5b)
 
 - **T-FILT-01** Ogni filtro da solo: confini inclusi e valore appena fuori;
   filtro vuoto = tutte le attività.
@@ -906,6 +1411,26 @@ riportano p50, p95 e massimo, mai la sola media, con l'ambiente di misura.
   elenco aggiornato entro 0,4 s (p95).
 - **T-MAP-06** Selezione sincronizzata: clic nell'elenco → attività
   evidenziata e traccia sulla mappa; clic sulla mappa → riga selezionata.
+- **T-MAP-07** Tracce: semplificazione con errore entro la tolleranza del
+  livello di zoom (property test contro la traccia piena), tracce spezzate
+  dai buchi del GPS, attività a cavallo dell'antimeridiano; con 50.000
+  tracce il primo disegno entro 2 s e lo spostamento entro 0,4 s (p95).
+- **T-MAP-08** Profilo altimetrico: punto del profilo e punto sulla mappa
+  coincidono nei due sensi; attività senza quota → profilo assente con il
+  motivo.
+- **T-MAP-09** Traccia per zone FC: zona di ogni tratto uguale a quella del
+  calcolo del carico per lo stesso campione; legenda e motivo oltre al
+  colore.
+- **T-MAP-10** Ripiego: senza chiave, con chiave rifiutata, senza rete e con
+  credito esaurito (risposte simulate) → sfondo neutro, tracce visibili,
+  avviso con il rimedio; nessun ritentativo senza limite.
+- **T-MAP-11** Cache: il tetto scelto non si supera, le tile scadute si
+  rinnovano, "Svuota cache" la porta a zero; nessun prefetch fuori dall'area
+  guardata.
+- **T-MAP-12** Tre sfondi: ognuno chiede solo il suo percorso con il nome
+  dell'app, la cache li tiene separati per la stessa tessera, uno zoom oltre
+  il massimo dello sfondo si rifiuta prima di ogni richiesta; un certificato
+  non valido ferma solo quello sfondo (T-SEC-15).
 
 ### 7.12 Alimentazione (T-NUT, fase 4b)
 
@@ -924,5 +1449,17 @@ riportano p50, p95 e massimo, mai la sola media, con l'ambiente di misura.
   dei pasti.
 - **T-NUT-05** Determinismo: stessi dati, stessa indicazione; cambio del
   peso o dell'obiettivo a una data che vale solo dal suo giorno.
-- **T-NUT-06** Alimenti: porzioni coerenti con i grammi del pasto entro una
+- **T-NUT-06** (SUPERATO il 2026-11-10: tabella ed esempi tolti) Alimenti: porzioni coerenti con i grammi del pasto entro una
   tolleranza dichiarata; tabella con licenza registrata.
+- **T-NUT-07** Giorni futuri (fase 5, ADR 011): le sedute e la gara del
+  piano diventano le attività del giorno (ora tipica o 18:00, energia dai
+  MET, momenti intorno all'allenamento); senza piano, con un rifiuto o oltre
+  l'orizzonte nessuna indicazione, con il motivo; determinismo.
+- **T-NUT-08** Nessun deficit nella settimana di una gara A o B e nello
+  scarico che la precede (anche dopo la gara nella stessa settimana), deficit
+  di nuovo fuori, nessuna pausa per le C o senza obiettivo di dimagrimento;
+  avviso; property test sul modello puro.
+- **T-NUT-09** Calorie attive: dettaglio, mappa e nutrizione del giorno danno
+  la stessa energia per la stessa attività; il totale del dispositivo vale
+  fino a 1.500 kcal/h e oltre si scarta (mai tagliato); la stima Keytel usa
+  la FC media pesata sul tempo del carico.

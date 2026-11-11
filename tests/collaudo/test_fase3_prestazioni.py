@@ -1,20 +1,22 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-PERF-01 (parziale) per la fase 3: panoramica e grafici con 5.000 attività in dieci anni.
+"""T-PERF-01 (partial) for phase 3: overview and charts with 5,000 activities over ten years.
 
-Test lunghi: solo nella sessione `collaudo`. Ogni misura si ripete e si riporta con p50, p95 e
-massimo (mai la sola media); le asserzioni sono i budget del piano dove sono misurabili qui e
-tetti larghi altrove (il rumore della macchina rende instabile un confronto stretto). Le attività
-sono sintetiche: la FC è generata, i file non sono FIT veri tranne dove si misura la decodifica.
+Long tests: only in the `collaudo` session. Every measurement is repeated and reported with p50,
+p95 and
+maximum (never the mean alone); the assertions are the plan's budgets where they can be measured
+here and
+loose caps elsewhere (machine noise makes a tight comparison unstable). The activities
+are synthetic: HR is generated, the files are not real FIT files except where decoding is measured.
 
-Misurato qui:
-- panoramica dalla cache piena (apertura di un profilo noto) e dopo un cambio dei pesi di tutti
-  gli sport (nessun carico in cache: ricalcolo completo, con decodifica sintetica);
-- PMC (`compute_pmc`) e aggregazioni settimanali;
-- costruzione delle tre figure e del loro JSON;
-- disegno del PMC nel motore web con 3.650 giorni;
-- costo di decodifica di un FIT vero (per stimare il ricalcolo completo reale);
-- apertura della finestra dal Composition Root con 5.000 attività in cache.
+Measured here:
+- overview from the full cache (opening a known profile) and after a change of the weights of all
+  sports (no load in cache: full recalculation, with synthetic decoding);
+- PMC (`compute_pmc`) and weekly aggregations;
+- construction of the three figures and their JSON;
+- drawing of the PMC in the web engine with 3,650 days;
+- decoding cost of a real FIT (to estimate the real full recalculation);
+- opening of the window from the Composition Root with 5,000 activities in cache.
 """
 
 from __future__ import annotations
@@ -43,18 +45,17 @@ from ponos_coach.activities.domain import (
 from ponos_coach.load.domain import (
     ActivityLoad,
     LoadSource,
-    SportWeight,
     ZoneSeconds,
     compute_pmc,
     load_fingerprint,
 )
-from ponos_coach.load.use_cases import ComputeProfileOverview, ProfileOverview, SetSportWeights
+from ponos_coach.load.use_cases import ComputeProfileOverview, ProfileOverview
 from ponos_coach.ui.chart_view import ChartEngine, ChartView
 from ponos_coach.ui.load_figures import prepare_weekly_load_chart, prepare_weekly_zones_chart
 from ponos_coach.ui.overview_state import Ready
 from ponos_coach.ui.pmc_figure import ChartActivity, prepare_chart
 from ponos_coach.ui.tokens import Theme, tokens_for
-from tests.builders import fit_identity, make_record, physiology
+from tests.builders import fit_identity, make_record, physiology, physiology_entry
 from tests.collaudo.fase3_support import TODAY
 from tests.collaudo.support import RealProfile, create_profile
 from tests.collaudo.test_fase3_grafici import LOAD_LABELS, ZONES_LABELS
@@ -67,19 +68,19 @@ pytestmark = pytest.mark.collaudo
 
 ACTIVITIES = 5000
 YEARS_DAYS = 3650
-SAMPLES = 3600  # un'ora a un campione al secondo: il costo del calcolo è quello vero
+SAMPLES = 3600  # one hour at one sample per second: the cost of the calculation is the real one
 REPEATS = 7
 WAIT_MS = 120_000
 FIRST_DAY = date(2016, 7, 2)
 SPORTS = (Sport.RUNNING, Sport.RUNNING, Sport.CYCLING, Sport.TRAIL, Sport.STRENGTH, Sport.HIKING)
-BUDGET_PMC_S = 1.0  # PLAN 7.8: ricalcolo completo del PMC < 1 s
-BUDGET_WINDOW_S = 2.0  # PLAN 7.8: finestra usabile entro 2 s dall'avvio
-LOOSE_COLD_S = 120.0  # tetto largo: il ricalcolo da zero con decodifica sintetica
+BUDGET_PMC_S = 1.0  # PLAN 7.8: full PMC recalculation < 1 s
+BUDGET_WINDOW_S = 2.0  # PLAN 7.8: window usable within 2 s of start-up
+LOOSE_COLD_S = 120.0  # loose cap: recalculation from scratch with synthetic decoding
 LOOSE_FIGURE_S = 2.0
 
 
 def report(line: str) -> None:
-    print(line)  # noqa: T201 - il rapporto delle misure
+    print(line)  # noqa: T201 - the report of the measurements
 
 
 def describe(values: Sequence[float]) -> str:
@@ -136,7 +137,7 @@ def profile(tmp_path: Path) -> Iterator[RealProfile]:
 
 
 def fill_index(profile: RealProfile, archive: InMemoryActivityArchive | None) -> None:
-    """5.000 attività nell'indice vero (SQLite), a blocchi di 500 per transazione."""
+    """5,000 activities in the real index (SQLite), in blocks of 500 per transaction."""
     index = profile.session.activities
     for first in range(0, ACTIVITIES, 500):
         with index.transaction():
@@ -154,13 +155,13 @@ def fill_index(profile: RealProfile, archive: InMemoryActivityArchive | None) ->
 
 
 def fill_cache(profile: RealProfile) -> None:
-    """Un carico in cache per ogni attività, con l'impronta che la panoramica si aspetta."""
-    fingerprint = load_fingerprint(physiology(), {})
+    """A cached load for every activity, with the fingerprint the overview expects."""
+    fingerprint = load_fingerprint(physiology())
     zones = ZoneSeconds((600.0, 900.0, 1200.0, 600.0, 300.0))
     with profile.session.activities.transaction():
         for record in profile.session.activities.list_by_start():
             load = ActivityLoad(
-                60.0, 60.0, 60.0 * (1 + record.start.day % 3), SAMPLES, 0, 0.0,
+                60.0 * (1 + record.start.day % 3), SAMPLES, 0, 0.0,
                 LoadSource.HEART_RATE, zones,
             )  # fmt: skip
             profile.session.load_cache.put(record.identity, fingerprint, load)
@@ -176,7 +177,6 @@ def overview_of(
         session.physiology,
         session.load_cache,
         synthetic_decode,
-        sport_weights=session.sport_weights,
         timezone=ZoneInfo("Europe/Rome"),
         today=lambda: TODAY,
     ).execute()
@@ -193,14 +193,15 @@ def test_t_perf_01_overview_from_the_cache_pmc_aggregations_and_figures_with_500
     overview = overview_of(profile)
     daily: dict[date, float] = {}
     for item in overview.activities:
-        daily[item.local_day] = daily.get(item.local_day, 0.0) + item.load.load
+        daily[item.local_day] = daily.get(item.local_day, 0.0) + item.load.trimp_eq
     first_day = min(daily)
     pmc_times = measure(lambda: compute_pmc(daily, first_day, TODAY), repeats=15)
     aggregation = measure(
         lambda: (overview.weekly_load(TODAY), overview.weekly_zones(TODAY)), repeats=15
     )
     entries = [
-        ChartActivity(a.local_day, a.load.load, f"a{n}") for n, a in enumerate(overview.activities)
+        ChartActivity(a.local_day, a.load.trimp_eq, f"a{n}")
+        for n, a in enumerate(overview.activities)
     ]
     pmc_figure = measure(lambda: prepare_chart(overview.pmc, entries, LABELS, tokens))
     load_figure = measure(
@@ -213,57 +214,54 @@ def test_t_perf_01_overview_from_the_cache_pmc_aggregations_and_figures_with_500
 
     with capsys.disabled():
         report(
-            f"\nT-PERF-01 [{ACTIVITIES} attivita in {YEARS_DAYS} giorni, SQLite vero, cache piena]"
+            f"\nT-PERF-01 [{ACTIVITIES} activities in {YEARS_DAYS} days, real SQLite, full cache]"
         )
-        report(f"  panoramica dalla cache:   {describe(warm)}")
-        report(f"  PMC ({len(overview.pmc)} giorni): {describe(pmc_times)}")
+        report(f"  overview from the cache:   {describe(warm)}")
+        report(f"  PMC ({len(overview.pmc)} days): {describe(pmc_times)}")
         report(f"  aggregazioni settimanali: {describe(aggregation)}")
         report(f"  figura PMC + JSON:        {describe(pmc_figure)} ({len(payload) // 1024} KiB)")
-        report(f"  figura carico + JSON:     {describe(load_figure)}")
+        report(f"  load figure + JSON:       {describe(load_figure)}")
         report(f"  figura zone + JSON:       {describe(zones_figure)}")
     assert len(overview.activities) == ACTIVITIES
     assert len(overview.pmc) >= YEARS_DAYS
     assert percentile95(pmc_times) < BUDGET_PMC_S
-    assert percentile95(warm) + percentile95(pmc_times) < BUDGET_PMC_S  # PLAN: PMC completo < 1 s
+    assert percentile95(warm) + percentile95(pmc_times) < BUDGET_PMC_S  # PLAN: full PMC < 1 s
     assert percentile95(aggregation) < 0.5
     for times in (pmc_figure, load_figure, zones_figure):
         assert percentile95(times) < LOOSE_FIGURE_S
 
 
-def test_t_perf_01_full_recalculation_after_a_change_of_every_weight_with_5000_activities(
+def test_t_perf_01_full_recalculation_after_a_change_of_the_threshold_with_5000_activities(
     profile: RealProfile, capsys: pytest.CaptureFixture[str]
 ) -> None:
     archive = InMemoryActivityArchive()
     fill_index(profile, archive)
     session = profile.session
-    save = SetSportWeights(session.activities, session.sport_weights)
     cold: list[float] = []
-    for run, factor in enumerate((1.5, 0.75, 1.25)):  # ogni giro cambia l'impronta di ogni sport
-        save({sport: SportWeight(factor) for sport in Sport})
+    for run, threshold in enumerate((160, 165, 168)):  # every round changes the fingerprint
+        session.physiology.put(physiology_entry(TODAY, threshold))
         started = time.perf_counter()
         overview = overview_of(profile, archive)
         cold.append(time.perf_counter() - started)
         assert len(overview.activities) == ACTIVITIES, run
         assert overview.excluded == ()
-        assert all(
-            a.load.load == pytest.approx(a.load.hr_tss * factor) for a in overview.activities
-        )
+        assert all(a.load.trimp_eq > 0 for a in overview.activities)
     started = time.perf_counter()
-    again = overview_of(profile, archive)  # stessi pesi dell'ultimo giro: tutto dalla cache
+    again = overview_of(
+        profile, archive
+    )  # same parameters as the last round: everything from the cache
     cached_s = time.perf_counter() - started
 
     with capsys.disabled():
+        report(f"\nT-PERF-01 full recalculation ({SAMPLES} samples per activity, fake decoding)")
         report(
-            f"\nT-PERF-01 ricalcolo completo ({SAMPLES} campioni per attivita, decodifica finta)"
+            f"  from scratch: {describe(cold)}  "
+            f"per activity ~{statistics.median(cold) / ACTIVITIES * 1e6:.0f} us"
         )
-        report(
-            f"  da zero: {describe(cold)}  "
-            f"per attivita ~{statistics.median(cold) / ACTIVITIES * 1e6:.0f} us"
-        )
-        report(f"  subito dopo, dalla cache: {cached_s * 1000:.1f}ms")
+        report(f"  right after, from the cache: {cached_s * 1000:.1f}ms")
     assert len(again.activities) == ACTIVITIES
     assert max(cold) < LOOSE_COLD_S
-    assert cached_s < statistics.median(cold)  # la cache serve davvero
+    assert cached_s < statistics.median(cold)  # the cache really works
 
 
 def test_t_perf_01_cost_of_decoding_a_real_fit_and_the_extrapolated_cold_recalculation(
@@ -278,12 +276,12 @@ def test_t_perf_01_cost_of_decoding_a_real_fit_and_the_extrapolated_cold_recalcu
 
     with capsys.disabled():
         report(
-            f"\nT-PERF-01 decodifica di un FIT vero (30 min, un campione ogni 10 s): "
+            f"\nT-PERF-01 decoding of a real FIT (30 min, one sample every 10 s): "
             f"{describe(per_file)}"
         )
         report(
-            f"  ricalcolo da zero di {ACTIVITIES} attivita ~{extrapolated:.1f}s: oltre il "
-            "budget di 1 s del PMC, che vale solo dalla cache"
+            f"  from scratch for {ACTIVITIES} activities ~{extrapolated:.1f}s: above the "
+            "1 s PMC budget, which only holds from the cache"
         )
     assert extrapolated < LOOSE_COLD_S
 
@@ -311,17 +309,15 @@ def test_t_perf_01_the_pmc_chart_redraws_in_the_web_engine_with_3650_days(
             view.show_prepared(prepared)
         times.append(time.perf_counter() - started)
 
-    first, rest = times[0], times[1:]  # il primo disegno comprende l'avvio del motore
+    first, rest = times[0], times[1:]  # the first drawing includes the engine start
     with capsys.disabled():
-        report(
-            f"\nT-PERF-01 disegno del PMC, {days} giorni, motore web: primo {first * 1000:.0f}ms"
-        )
-        report(f"  ridisegni: {describe(rest)}  (budget interattivo 0,4 s, solo come riferimento)")
-    assert percentile95(rest) < 5.0  # tetto largo: il budget di 0,4 s riguarda lo zoom, non questo
+        report(f"\nT-PERF-01 PMC drawing, {days} days, web engine: first {first * 1000:.0f}ms")
+        report(f"  redraws: {describe(rest)}  (interactive budget 0.4 s, only as a reference)")
+    assert percentile95(rest) < 5.0  # loose cap: the 0.4 s budget concerns zoom, not this
 
 
 def open_once(qtbot: QtBot, tmp_path: Path, settings: QSettings) -> tuple[float, float]:
-    """Apre la finestra, attende la panoramica e misura un evento di input; poi la chiude."""
+    """Opens the window, waits for the overview and measures an input event; then closes it."""
     window = compose(tmp_path, settings)
     qtbot.addWidget(window)
     started = time.perf_counter()
@@ -357,8 +353,8 @@ def test_t_perf_01_the_window_opens_a_profile_of_5000_activities_and_shows_the_o
         latencies.append(latency_s)
 
     with capsys.disabled():
-        report(f"\nT-PERF-01 apertura della finestra con {ACTIVITIES} attivita (cache piena)")
-        report(f"  dall'avvio alla panoramica pronta: {describe(times)}")
-        report(f"  un evento di input subito dopo:     {describe(latencies)}")
+        report(f"\nT-PERF-01 window opening with {ACTIVITIES} activities (full cache)")
+        report(f"  from start to overview ready: {describe(times)}")
+        report(f"  an input event right after:   {describe(latencies)}")
     assert percentile95(times) < BUDGET_WINDOW_S
     assert max(latencies) < 0.1

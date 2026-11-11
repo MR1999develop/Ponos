@@ -1,21 +1,27 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Vista di un grafico: un `QWebEngineView` isolato che mostra la pagina locale di Plotly.
+"""View of a chart: an isolated `QWebEngineView` showing the local Plotly page.
 
-Isolamento: profilo senza archivio su disco, pagina e script serviti solo dallo schema
-dell'app, intercettore che blocca ogni altra richiesta, nessun `QWebChannel`, nessun menu
-contestuale, nessuna finestra aggiuntiva. I dati entrano come JSON (`render_script`).
+Isolation: profile without on-disk storage, page and scripts served only by the app's
+scheme, an interceptor that blocks every other request, no `QWebChannel` (the map page, a
+subclass, is the one that has it), no context menu, no extra windows. Data enters as JSON
+(`render_script`). The same engine also answers the map's tile requests (`ponos://tiles/...`)
+through the tile service, never from the network.
 
-Il profilo del motore web (`ChartEngine`) è uno solo per l'app e serve tutti i grafici: ogni
-`ChartView` ha la sua pagina e si registra nel motore. Alla chiusura `ChartEngine.dispose`
-distrugge in modo sincrono le pagine registrate e poi il profilo: l'ordine non dipende da quello
-dei figli di Qt.
+The web engine profile (`ChartEngine`) is unique to the app and serves all charts: each
+`ChartView` has its own page and registers with the engine. On close `ChartEngine.dispose`
+synchronously destroys the registered pages and then the profile: the order does not depend on that
+of the Qt children.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import math
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import plotly.graph_objects as go
@@ -37,19 +43,115 @@ from shiboken6 import delete as delete_now
 from shiboken6 import isValid
 
 from ponos_coach.ui.chart_payload import PreparedChart
-from ponos_coach.ui.web_policy import APP_PAGE_URL, APP_SCHEME, is_request_allowed
+from ponos_coach.ui.tile_service import TileService
+from ponos_coach.ui.web_policy import (
+    APP_PAGE_URL,
+    APP_SCHEME,
+    TILES_HOST,
+    is_navigation_allowed,
+    is_request_allowed,
+)
 from ponos_coach.ui.web_resources import resource_for_path
 
 _LOG = logging.getLogger(__name__)
 
 type ExportPathChooser = Callable[[str], Path | None]
 
+_HOVER_PARTS = 3  # "hover", the index, a counter that makes every title new
+_MAX_INDEX_DIGITS = 6
+_RANGE_PARTS = 4  # "xrange", start, end, a counter
+_AUTO_RANGE_PARTS = 3  # "xrange", "auto", a counter
+_HOVER_X_PARTS = 3  # "hoverx", the x or "none", a counter
+_MAX_DATE_CHARS = 32
+_DATE_CHARS = frozenset("0123456789-: .T")
+# The longest well-formed title is a range report: "xrange|" + two dates + separators + a counter.
+_MAX_TITLE_CHARS = 7 + 2 * _MAX_DATE_CHARS + 2 + 16
+
+
+@dataclass(frozen=True, slots=True)
+class ValueRange:
+    """Numbers shown on a chart's x axis, from `start` to `end` (a time axis in minutes)."""
+
+    start: float
+    end: float
+
+
+@dataclass(frozen=True, slots=True)
+class DateRange:
+    """Dates shown on a chart's x axis, from `start` to `end` (naive: the chart's own days)."""
+
+    start: datetime
+    end: datetime
+
+
+_NUMBER_CHARS = frozenset("0123456789+-.eE")
+
+
+def _parse_number(text: str) -> float | None:
+    """A finite number written by Plotly (`12.5`, `1e-7`); None otherwise."""
+    if not 0 < len(text) <= _MAX_DATE_CHARS or not set(text) <= _NUMBER_CHARS:
+        return None
+    try:
+        value = float(text)
+    except ValueError:
+        return None
+    return value if math.isfinite(value) else None
+
+
+def _parse_date(text: str) -> datetime | None:
+    """A date written by Plotly (`2026-03-01` or `2026-03-01 12:30:15.25`); None otherwise,
+    also for a date with an offset (the chart's dates are naive: one with an offset could not be
+    compared with them)."""
+    if not 0 < len(text) <= _MAX_DATE_CHARS or not set(text) <= _DATE_CHARS:
+        return None
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return moment if moment.tzinfo is None else None
+
+
+@dataclass(frozen=True, slots=True)
+class RangeReport:
+    """What the page reported after a zoom or pan: the dates shown, or None for the whole series."""
+
+    shown: DateRange | ValueRange | None
+
+
+def _parse_span(first: str, last: str) -> DateRange | ValueRange | None:
+    """The two ends of an axis as numbers (a time axis) or as dates; None if they are neither,
+    or not in increasing order. A date always has a character a number has not."""
+    low, high = _parse_number(first), _parse_number(last)
+    if low is not None and high is not None:
+        return ValueRange(low, high) if low < high else None
+    start, end = _parse_date(first), _parse_date(last)
+    if start is None or end is None or not start < end:
+        return None
+    return DateRange(start, end)
+
+
+def parse_range_title(title: str) -> RangeReport | None:
+    """The report in a page title `xrange|START|END|N` or `xrange|auto|N`; None if the title is
+    not a valid range report (a page title is untrusted text: only well-formed numbers or dates
+    pass)."""
+    if len(title) > _MAX_TITLE_CHARS:
+        return None
+    parts = title.split("|")
+    if parts[0] != "xrange":
+        return None
+    if len(parts) == _AUTO_RANGE_PARTS and parts[1] == "auto":
+        return RangeReport(None)
+    if len(parts) != _RANGE_PARTS:
+        return None
+    span = _parse_span(parts[1], parts[2])
+    return None if span is None else RangeReport(span)
+
 
 class AppOnlyInterceptor(QWebEngineUrlRequestInterceptor):
-    """Blocca ogni richiesta che non sia dello schema dell'app (decide `is_request_allowed`)."""
+    """Block every request that is not of the app's scheme (`is_request_allowed` decides)."""
 
     def interceptRequest(self, info: QWebEngineUrlRequestInfo) -> None:  # noqa: N802 - Qt
-        """Chiamata dal motore web, anche fuori dal thread della UI."""
+        """Called by the web engine, also off the UI thread."""
         url = info.requestUrl()
         if not is_request_allowed(url):
             _LOG.warning("Blocked web request with scheme %r", url.scheme())
@@ -57,31 +159,61 @@ class AppOnlyInterceptor(QWebEngineUrlRequestInterceptor):
 
 
 class AppSchemeHandler(QWebEngineUrlSchemeHandler):
-    """Serve le risorse dell'elenco chiuso di `web_resources`; tutto il resto e 404."""
+    """Serve the resources of the closed list in `web_resources` and, from the tile service, the
+    map tiles; everything else is 404."""
+
+    def __init__(self, tiles: TileService | None, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._tiles = tiles
 
     def requestStarted(self, job: QWebEngineUrlRequestJob) -> None:  # noqa: N802 - Qt
-        """Risponde a una richiesta dello schema dell'app."""
-        resource = None
-        if job.requestMethod() == b"GET":
-            resource = resource_for_path(job.requestUrl().path())
+        """Answer a request of the app's scheme."""
+        if job.requestMethod() != b"GET":
+            job.fail(QWebEngineUrlRequestJob.Error.RequestDenied)
+        elif job.requestUrl().host() == TILES_HOST:
+            self._serve_tile(job)
+        else:
+            self._serve_resource(job)
+
+    def _serve_resource(self, job: QWebEngineUrlRequestJob) -> None:
+        resource = resource_for_path(job.requestUrl().path())
         if resource is None:
             job.fail(QWebEngineUrlRequestJob.Error.UrlNotFound)
             return
-        buffer = QBuffer(job)  # vive quanto la richiesta
+        buffer = QBuffer(job)  # lives as long as the request
         buffer.setData(resource.content)
         buffer.open(QIODevice.OpenModeFlag.ReadOnly)
         job.reply(resource.mime_type.encode("ascii"), buffer)
 
+    def _serve_tile(self, job: QWebEngineUrlRequestJob) -> None:
+        """Ask the tile service; the job waits (the page may close it meanwhile)."""
+        alive = [True]
+        job.destroyed.connect(lambda *_: alive.__setitem__(0, False))
+
+        def reply(png: bytes | None) -> None:
+            if not alive[0] or not isValid(job):
+                return
+            if png is None:
+                job.fail(QWebEngineUrlRequestJob.Error.UrlNotFound)
+                return
+            buffer = QBuffer(job)
+            buffer.setData(png)
+            buffer.open(QIODevice.OpenModeFlag.ReadOnly)
+            job.reply(b"image/png", buffer)
+
+        if self._tiles is None or not self._tiles.request(job.requestUrl().path(), reply):
+            job.fail(QWebEngineUrlRequestJob.Error.UrlNotFound)
+
 
 class _AppPage(QWebEnginePage):
-    """Pagina che non naviga mai fuori dallo schema dell'app."""
+    """Page that never navigates outside the app's scheme."""
 
     def acceptNavigationRequest(  # noqa: N802 - Qt
         self, url: QUrl | str, nav_type: QWebEnginePage.NavigationType, is_main_frame: bool
     ) -> bool:
-        """Solo `ponos://app/...`."""
+        """Only `ponos://app/...`."""
         del nav_type, is_main_frame
-        return is_request_allowed(QUrl(url))
+        return is_navigation_allowed(QUrl(url))
 
 
 def _harden(settings: QWebEngineSettings) -> None:
@@ -107,24 +239,31 @@ def _harden(settings: QWebEngineSettings) -> None:
 
 
 class ChartEngine(QObject):
-    """Il profilo del motore web, condiviso da tutti i grafici dell'app.
+    """The web engine profile, shared by all the app's charts.
 
-    Non si crea nel costruttore: costa circa 180 ms nel thread della UI, che Chromium non permette
-    di spostare. Lo avvia `start`, che la finestra chiama subito dopo il primo `show()`; chi
-    disegna prima lo avvia da sé. Tiene gli oggetti del motore, perché i riferimenti li tengono
-    vivi.
+    It is not created in the constructor: it costs about 180 ms on the UI thread, which Chromium
+    does not allow
+    to be moved. `start` starts it, which the window calls right after the first `show()`; whoever
+    draws earlier starts it by itself. It holds the engine objects, because the references keep them
+    alive.
 
-    Ordine di distruzione: il profilo non può sparire prima delle pagine. Le viste si registrano
-    (`register`); `dispose`, chiamata alla chiusura della finestra e da `aboutToQuit`, distrugge
-    subito le pagine delle viste ancora vive e poi il profilo. Una vista chiusa prima (un dialogo)
-    ha già distrutto la sua pagina da sé.
+    Destruction order: the profile cannot vanish before the pages. Views register
+    (`register`); `dispose`, called when the window closes and from `aboutToQuit`, immediately
+    destroys
+    the pages of the views still alive and then the profile. A view closed earlier (a dialog)
+    has already destroyed its own page.
     """
 
     def __init__(
-        self, choose_export_path: ExportPathChooser, parent: QObject | None = None
+        self,
+        choose_export_path: ExportPathChooser,
+        parent: QObject | None = None,
+        *,
+        tiles: TileService | None = None,
     ) -> None:
         super().__init__(parent)
         self._choose_export_path = choose_export_path
+        self._tiles = tiles
         self._profile: QWebEngineProfile | None = None
         self._interceptor: AppOnlyInterceptor | None = None
         self._scheme_handler: AppSchemeHandler | None = None
@@ -132,28 +271,33 @@ class ChartEngine(QObject):
         self._views: list[ChartView] = []
 
     def register(self, view: ChartView) -> None:
-        """Una vista che userà il profilo: `dispose` ne distruggerà la pagina prima del profilo."""
+        """A view that will use the profile: `dispose` will destroy its page before the profile."""
         self._views = [known for known in self._views if isValid(known)]
         self._views.append(view)
 
     @property
+    def tiles(self) -> TileService | None:
+        """The tile service the pages' tile requests go to (None where there is no map)."""
+        return self._tiles
+
+    @property
     def started(self) -> bool:
-        """Vero se il profilo è stato creato (e non ancora distrutto)."""
+        """True if the profile has been created (and not yet destroyed)."""
         return self._profile is not None
 
     @property
     def disposed(self) -> bool:
-        """Vero dopo `dispose`: nessuna pagina nuova."""
+        """True after `dispose`: no new pages."""
         return self._disposed
 
     def start(self) -> QWebEngineProfile | None:
-        """Crea il profilo se serve e lo dà; `None` se il motore è stato rilasciato."""
+        """Create the profile if needed and return it; `None` if the engine has been released."""
         if self._disposed:
             return None
         if self._profile is None:
-            profile = QWebEngineProfile(self)  # senza nome: nessun dato su disco
+            profile = QWebEngineProfile(self)  # no name: no data on disk
             self._interceptor = AppOnlyInterceptor(self)
-            self._scheme_handler = AppSchemeHandler(self)
+            self._scheme_handler = AppSchemeHandler(self._tiles, self)
             profile.setUrlRequestInterceptor(self._interceptor)
             profile.installUrlSchemeHandler(APP_SCHEME.encode("ascii"), self._scheme_handler)
             profile.downloadRequested.connect(self._on_download_requested)
@@ -162,10 +306,10 @@ class ChartEngine(QObject):
         return self._profile
 
     def dispose(self) -> None:
-        """Distrugge le pagine delle viste registrate ancora vive e poi il profilo, subito.
+        """Destroy the pages of the registered views still alive and then the profile, immediately.
 
-        Idempotente. Da chiamare alla chiusura della finestra e da `aboutToQuit`; dopo, il motore
-        non crea più pagine.
+        Idempotent. To call when the window closes and from `aboutToQuit`; afterwards the engine
+        creates no more pages.
         """
         if self._disposed:
             return
@@ -174,6 +318,8 @@ class ChartEngine(QObject):
             if isValid(view):
                 view.dispose()
         self._views.clear()
+        if self._tiles is not None:
+            self._tiles.shutdown()
         profile, self._profile = self._profile, None
         if profile is not None and isValid(profile):
             delete_now(profile)
@@ -189,14 +335,41 @@ class ChartEngine(QObject):
         request.accept()
 
 
-class ChartView(QWidget):
-    """Mostra un grafico. `drawn` segnala che Plotly ha finito di disegnare.
+@dataclass(frozen=True, slots=True)
+class HoverReport:
+    """What the page reported about the pointer: the x under it, or None when it left."""
 
-    La pagina web (e la vista) non si creano nel costruttore: le avvia `start_engine`.
+    x: float | None
+
+
+def parse_hover_x_title(title: str) -> HoverReport | None:
+    """The report in a page title `hoverx|X|N` or `hoverx|none|N`; None if the title is not a
+    valid hover report (untrusted text: only a well-formed finite number passes)."""
+    if len(title) > _MAX_TITLE_CHARS:
+        return None
+    parts = title.split("|")
+    if len(parts) != _HOVER_X_PARTS or parts[0] != "hoverx" or not parts[2].isdecimal():
+        return None
+    if parts[1] == "none":
+        return HoverReport(None)
+    x = _parse_number(parts[1])
+    return None if x is None else HoverReport(x)
+
+
+class ChartView(QWidget):
+    """Show a chart. `drawn` signals that Plotly has finished drawing.
+
+    The web page (and the view) are not created in the constructor: `start_engine` starts them.
     """
 
     drawn = Signal()
     load_failed = Signal()
+    hovered = Signal(int)  # index of the point under the pointer (the chart asked for it)
+    hover_left = Signal()
+    x_range_changed = Signal(object)  # DateRange or ValueRange, None for the whole series
+    hovered_x = Signal(object)  # the x under the user's pointer (float), None when it left
+
+    _page_url = APP_PAGE_URL  # a subclass shows another page of the same scheme
 
     def __init__(
         self, engine: ChartEngine, accessible_name: str, parent: QWidget | None = None
@@ -207,6 +380,7 @@ class ChartView(QWidget):
         self._current_figure: go.Figure | None = None
         self._page_loaded = False
         self._pending_script: str | None = None
+        self._queued: list[str] = []
         self._disposed = False
         self._page: _AppPage | None = None
         self._view: QWebEngineView | None = None
@@ -216,11 +390,11 @@ class ChartView(QWidget):
 
     @property
     def engine_started(self) -> bool:
-        """Vero se la pagina web di questa vista è stata creata."""
+        """True if this view's web page has been created."""
         return self._page is not None
 
     def start_engine(self) -> None:
-        """Crea la pagina e carica il documento; non fa nulla se già fatto o se si è chiusi."""
+        """Create the page and load the document; do nothing if already done or if closed."""
         if self._page is not None or self._disposed:
             return
         profile = self._engine.start()
@@ -229,6 +403,7 @@ class ChartView(QWidget):
         page = _AppPage(profile, self)
         page.loadFinished.connect(self._on_load_finished)
         page.titleChanged.connect(self._on_title_changed)
+        self._prepare_page(page)
         view = QWebEngineView(self)
         view.setPage(page)
         view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
@@ -236,18 +411,57 @@ class ChartView(QWidget):
         self._layout.addWidget(view)
         self._page = page
         self._view = view
-        view.setUrl(QUrl(APP_PAGE_URL))
+        view.setUrl(QUrl(self._page_url))
+
+    def _prepare_page(self, page: QWebEnginePage) -> None:
+        """Hook: a subclass attaches what its page needs (before the document is loaded)."""
+        del page
+
+    def run_script(self, script: str) -> None:
+        """Run a script in the page once it is loaded (kept if it is not yet; dropped if the
+        view is closed). Only strings made by the application."""
+        self.start_engine()
+        if self._page is None:
+            return
+        if self._page_loaded:
+            self._page.runJavaScript(script)
+        else:
+            self._queued.append(script)
+
+    def set_accessible_name(self, name: str) -> None:
+        """Change the name assistive technology gives the chart (the pace chart or the speed
+        chart is only known when the activity arrives)."""
+        self._accessible_name = name
+        if self._view is not None:
+            self._view.setAccessibleName(name)
+
+    def set_x_range(self, shown: DateRange | ValueRange | None) -> None:
+        """Show this stretch of the x axis (None: the whole series), without reporting it back."""
+        if shown is None:
+            arguments = "null, null"
+        elif isinstance(shown, ValueRange):
+            arguments = f"{shown.start!r}, {shown.end!r}"
+        else:
+            arguments = ", ".join(
+                json.dumps(moment.isoformat(sep=" ")) for moment in (shown.start, shown.end)
+            )
+        self.run_script(f"ponosSetXRange({arguments});")
+
+    def show_hover_at(self, x: float | None) -> None:
+        """Show the hover labels at x (None: hide them), without reporting it back."""
+        argument = "null" if x is None or not math.isfinite(x) else repr(float(x))
+        self.run_script(f"ponosHoverAt({argument});")
 
     @property
     def current_figure(self) -> go.Figure | None:
-        """Ultima figura mostrata (o in attesa di essere mostrata)."""
+        """Last figure shown (or waiting to be shown)."""
         return self._current_figure
 
     def show_prepared(self, prepared: PreparedChart) -> None:
-        """Disegna un grafico già preparato (appena la pagina è pronta)."""
+        """Draw an already prepared chart (as soon as the page is ready)."""
         self._current_figure = prepared.figure
         self.start_engine()
-        if self._page is None:  # chiusa: niente da disegnare
+        if self._page is None:  # closed: nothing to draw
             return
         self._page.setBackgroundColor(QColor(prepared.background))
         if self._page_loaded:
@@ -257,14 +471,14 @@ class ChartView(QWidget):
 
     @property
     def page(self) -> QWebEnginePage:
-        """La pagina web (per diagnostica e test di integrazione); avvia il motore se serve."""
+        """The web page (for diagnostics and integration tests); starts the engine if needed."""
         self.start_engine()
         if self._page is None:
             raise RuntimeError("the chart view was disposed")
         return self._page
 
     def dispose(self) -> None:
-        """Distrugge subito la pagina (il motore la vuole prima del profilo); idempotente."""
+        """Destroy the page immediately (the engine wants it before the profile); idempotent."""
         if self._disposed:
             return
         self._disposed = True
@@ -274,14 +488,14 @@ class ChartView(QWidget):
         if page is None or view is None:
             return
         if isValid(view):
-            view.setPage(None)  # type: ignore[arg-type]  # stub senza Optional
+            view.setPage(None)  # type: ignore[arg-type]  # stub without Optional
         if isValid(page):
             delete_now(page)
         if isValid(view):
             delete_now(view)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt
-        """Chiudendo il widget si rilascia la pagina."""
+        """Closing the widget releases the page."""
         self.dispose()
         super().closeEvent(event)
 
@@ -291,10 +505,51 @@ class ChartView(QWidget):
             self.load_failed.emit()
             return
         self._page_loaded = True
-        if self._pending_script is not None and self._page is not None:
-            script, self._pending_script = self._pending_script, None
+        self._flush_scripts()
+
+    def _flush_scripts(self) -> None:
+        if self._page is None:
+            return
+        scripts, self._queued = self._queued, []
+        if self._pending_script is not None:
+            scripts.insert(0, self._pending_script)
+            self._pending_script = None
+        for script in scripts:
             self._page.runJavaScript(script)
 
     def _on_title_changed(self, title: str) -> None:
+        """The page talks through its title (no channel): `drawn-N`, `hover-I-N`, `leave-N`,
+        `xrange|START|END|N`, `xrange|auto|N`, `hoverx|X|N`, `hoverx|none|N`.
+
+        The index is parsed as digits only; the caller checks it against its data. The title is
+        untrusted text: one over the limit is dropped before anything is split.
+        """
+        if len(title) > _MAX_TITLE_CHARS:
+            return
         if title.startswith("drawn-"):
             self.drawn.emit()
+            return
+        if title.startswith("xrange|"):
+            report = parse_range_title(title)
+            if report is not None:
+                self.x_range_changed.emit(report.shown)
+            return
+        if title.startswith("hoverx|"):
+            hover = parse_hover_x_title(title)
+            if hover is not None:
+                self.hovered_x.emit(hover.x)
+            return
+        self._on_point_title(title)
+
+    def _on_point_title(self, title: str) -> None:
+        """`hover-I-N` (the index of the point under the pointer) or `leave-N`."""
+        parts = title.split("-")
+        if parts[0] == "leave":
+            self.hover_left.emit()
+        elif (
+            parts[0] == "hover"
+            and len(parts) == _HOVER_PARTS
+            and parts[1].isdecimal()
+            and len(parts[1]) <= _MAX_INDEX_DIGITS
+        ):
+            self.hovered.emit(int(parts[1]))

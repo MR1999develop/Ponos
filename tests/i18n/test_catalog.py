@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Controlli sul catalogo `.ts`: voci mancanti, obsolete, non tradotte, segnaposto diversi."""
+"""Checks on the `.ts` catalog: missing, obsolete, untranslated entries, mismatched placeholders."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def kinds(problems: list[Problem]) -> list[tuple[ProblemKind, str]]:
     return [(p.kind, p.source) for p in problems]
 
 
-# --- Lettura ----------------------------------------------------------------------------
+# --- Reading ----------------------------------------------------------------------------
 
 
 def test_parse_reads_plain_unfinished_obsolete_and_plural_messages() -> None:
@@ -103,7 +103,7 @@ def test_external_entities_are_never_resolved(tmp_path: Path) -> None:
         parse_catalog(data)
 
 
-# --- Segnaposto -------------------------------------------------------------------------
+# --- Placeholders -----------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -120,7 +120,7 @@ def test_placeholders_are_named_braces_and_percent_n(text: str, expected: set[st
     assert placeholders_of(text) == expected
 
 
-# --- Confronto --------------------------------------------------------------------------
+# --- Comparison --------------------------------------------------------------------------
 
 
 def test_a_complete_catalog_has_no_problems() -> None:
@@ -181,10 +181,10 @@ def test_unfinished_and_empty_translations_are_reported_once_each() -> None:
 @pytest.mark.parametrize(
     ("source", "forms"),
     [
-        ("Version {version}", ("Versione {versione}",)),  # nome tradotto per errore
-        ("Version {version}", ("Versione",)),  # segnaposto perso
-        ("Plain", ("Semplice {extra}",)),  # segnaposto inventato
-        ("%n file(s)", ("un file", "%n file")),  # %n perso in una forma plurale
+        ("Version {version}", ("Versione {versione}",)),  # name translated by mistake
+        ("Version {version}", ("Versione",)),  # lost placeholder
+        ("Plain", ("Semplice {extra}",)),  # invented placeholder
+        ("%n file(s)", ("un file", "%n file")),  # %n lost in a plural form
         ("{n} of %n", ("{n} su",)),
     ],
 )
@@ -198,7 +198,7 @@ def test_problem_is_formatted_with_kind_context_and_source() -> None:
     assert str(Problem(ProblemKind.MISSING, "Main", "Quit")) == "missing: [Main] 'Quit'"
 
 
-# --- Riga di comando --------------------------------------------------------------------
+# --- Command line --------------------------------------------------------------------
 
 
 def write_catalog(path: Path, *messages: str) -> Path:

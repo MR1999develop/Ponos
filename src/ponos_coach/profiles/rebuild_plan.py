@@ -1,0 +1,302 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 MR
+"""Use cases that tie the plan to the rest of the profile.
+
+- `RebuildPlan`: gathers what the plan engine needs (the PMC of what was really done, the goals, the
+  availability, the session types, the day's physiology, the last threshold
+  pace, the retest status, the open injuries and illnesses), calls `build_plan` and saves the
+  result if it differs from the last one.
+- `PlanAdherence`: planned against done for a range of days, using what was planned *at the time*.
+
+The past stays history. A plan only covers the days after the day it was generated, so when a new
+plan replaces one, the days of the old plan that have become past (up to today) are frozen first,
+each with the date of the plan it came from, and a frozen day never changes. A calendar of the
+past then shows what was really planned on each day, not what today's plan would have said.
+
+A refusal (no goals, a goal in the past...) is a state like any plan: it is saved too, so the
+interface can show why there is no plan. If the physiological parameters are missing nothing is
+saved. Health-related data: never in logs or error messages.
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from datetime import date, timedelta
+from enum import Enum
+
+from ponos_coach.activities.ports import ActivityIndex
+from ponos_coach.assessment.domain import (
+    DEFAULT_PROTOCOL,
+    ThresholdProtocol,
+    ThresholdTest,
+    retest_status,
+)
+from ponos_coach.assessment.ports import ThresholdTestStore
+from ponos_coach.goals.domain import FitnessGoal, RaceGoal, WeeklyAvailability
+from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
+from ponos_coach.injury.domain import plan_injuries, recently_returned
+from ponos_coach.injury.ports import InjuryStore
+from ponos_coach.load.domain import (
+    MissingPhysiologyError,
+    compute_pmc,
+    physiology_for_day,
+)
+from ponos_coach.load.ports import PhysiologyStore
+from ponos_coach.load.use_cases import ProfileOverview
+from ponos_coach.planning.domain import (
+    DayAdherence,
+    FitnessState,
+    Plan,
+    PlanDay,
+    PlanInputs,
+    PlanRefusal,
+    build_plan,
+    missed_threshold_tests,
+)
+from ponos_coach.planning.ports import FrozenDay, PlanStore, StoredPlan
+from ponos_coach.profiles.domain import entries_of_tests, threshold_pace_in_force
+from ponos_coach.profiles.ports import ThresholdPaceStore
+from ponos_coach.profiles.use_cases import ProfileSession
+
+# How far back the frozen days are searched for a planned threshold test that was missed: the
+# engine proposes it again only in the following weeks (ADR 015), so a few months are plenty.
+MISSED_TEST_LOOKBACK_DAYS = 84
+_NO_AVAILABILITY = WeeklyAvailability.empty()
+
+
+@dataclass(frozen=True, slots=True)
+class PlanSources:
+    """The stores of the open profile that the plan reads and writes."""
+
+    activities: ActivityIndex
+    goals: GoalStore
+    availability: AvailabilityStore
+    choices: SessionChoicesStore
+    physiology: PhysiologyStore
+    threshold_tests: ThresholdTestStore
+    plans: PlanStore
+    injuries: InjuryStore
+    threshold_paces: ThresholdPaceStore
+
+
+def plan_sources_of(session: ProfileSession) -> PlanSources:
+    """The plan's stores of an open profile."""
+    return PlanSources(
+        session.activities,
+        session.goals,
+        session.availability,
+        session.session_choices,
+        session.physiology,
+        session.threshold_tests,
+        session.plans,
+        session.injuries,
+        session.threshold_paces,
+    )
+
+
+# --- What a rebuild gives back -------------------------------------------------------------------
+@dataclass(frozen=True, slots=True)
+class PlanBuilt:
+    """A plan; `saved` is False when it is the same as the last one (nothing was written)."""
+
+    plan: Plan
+    saved: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PlanRefused:
+    """No plan, and why; `saved` is False when the last result was already this refusal."""
+
+    refusal: PlanRefusal
+    saved: bool
+
+
+class NotBuiltReason(Enum):
+    """Why the plan engine was not even asked. The value is a stable identifier."""
+
+    MISSING_PHYSIOLOGY = "missing_physiology"  # no heart-rate parameters yet
+
+
+@dataclass(frozen=True, slots=True)
+class PlanNotBuilt:
+    """The plan could not be attempted; nothing was saved and the last plan stays."""
+
+    reason: NotBuiltReason
+
+
+type RebuildResult = PlanBuilt | PlanRefused | PlanNotBuilt
+
+
+# --- Shared steps --------------------------------------------------------------------------------
+def _daily_loads(overview: ProfileOverview) -> dict[date, float]:
+    """The load actually done on each local day (sum over the activities)."""
+    daily: dict[date, float] = defaultdict(float)
+    for activity in overview.activities:
+        daily[activity.local_day] += activity.load.trimp_eq
+    return dict(daily)
+
+
+def _fitness_on(daily: dict[date, float], today: date) -> FitnessState:
+    """CTL and ATL at the end of `today`: the PMC of the overview (same function, same days)."""
+    if not daily or min(daily) > today:
+        return FitnessState(0.0, 0.0)
+    pmc = compute_pmc(daily, min(daily), today)
+    return FitnessState(float(pmc.ctl[-1]), float(pmc.atl[-1]))
+
+
+def _same_result(saved: Plan | PlanRefusal, new: Plan | PlanRefusal) -> bool:
+    """Two results are the same if their canonical forms are (a plan is saved rounded)."""
+    if isinstance(saved, Plan) and isinstance(new, Plan):
+        return saved.to_json() == new.to_json()
+    return isinstance(saved, PlanRefusal) and saved == new
+
+
+class RebuildPlan:
+    """Rebuilds the plan from today and saves it if it changed.
+
+    Volatile dependencies injected: the stores and `overview`, which gives the loads of what was
+    done (the overview use case: the load cache makes it cheap, or an overview just computed).
+    """
+
+    def __init__(
+        self,
+        sources: PlanSources,
+        overview: Callable[[], ProfileOverview],
+        *,
+        test_protocol: ThresholdProtocol = DEFAULT_PROTOCOL,
+    ) -> None:
+        self._src = sources
+        self._overview = overview
+        self._test_protocol = test_protocol  # the user's choice, for the test the plan schedules
+
+    def __call__(self, today: date) -> RebuildResult:
+        """The plan from tomorrow on (or the refusal), saved if different from the last result.
+
+        `today` is the profile's local date. The days of the old plan up to today are frozen as
+        part of the same transaction that replaces it; if nothing changed, nothing is written.
+
+        Raises:
+            OverviewCancelledError: the overview was cancelled; nothing is saved.
+            LoadStoreError, AssessmentStoreError, GoalStoreError, InjuryStoreError,
+                PlanStoreError: a store could not be read or written; nothing is saved.
+        """
+        src = self._src
+        try:  # first: without parameters the overview itself cannot be computed
+            physiology = physiology_for_day(src.physiology.list_entries(), today)
+        except MissingPhysiologyError:
+            return PlanNotBuilt(NotBuiltReason.MISSING_PHYSIOLOGY)
+        fitness = _fitness_on(_daily_loads(self._overview()), today)
+        goals = src.goals.list_goals()
+        saved_availability = src.availability.get()
+        tests = [t for t in src.threshold_tests.list_tests() if t.test_day <= today]
+        problems = src.injuries.list_problems()
+        test_days = [t.test_day for t in tests]
+        lived = self._lived_days(today)
+        inputs = PlanInputs(
+            races=tuple(g for g in goals if isinstance(g, RaceGoal)),
+            fitness_goals=tuple(g for g in goals if isinstance(g, FitnessGoal)),
+            availability=_NO_AVAILABILITY if saved_availability is None else saved_availability,
+            choices=src.choices.get(),
+            physiology=physiology,
+            fitness=fitness,
+            threshold_pace_s_per_km=self._threshold_pace(tests, today),
+            retest=retest_status((t.test_day for t in tests), today),
+            injuries=plan_injuries(problems),
+            after_injury=recently_returned(problems, today),
+            test_protocol=self._test_protocol,
+            missed_tests=missed_threshold_tests(lived, test_days, today),
+        )
+        built = build_plan(inputs, today)
+        saved = self._save(built, today)
+        if isinstance(built, Plan):
+            return PlanBuilt(built, saved)
+        return PlanRefused(built, saved)
+
+    def _threshold_pace(self, tests: Sequence[ThresholdTest], today: date) -> int | None:
+        """The pace in force today: the latest between the one set in the profile and the one of
+        the last threshold test that measured it (the profile's wins on the same day)."""
+        manual = self._src.threshold_paces.list_entries()
+        in_force = threshold_pace_in_force(manual, entries_of_tests(tests), today)
+        return None if in_force is None else in_force.pace.s_per_km
+
+    def _lived_days(self, today: date) -> list[PlanDay]:
+        """The planned days before today within the look-back: those already frozen and those
+        of the current plan that went by since it was made (they are frozen only when this
+        rebuild saves the new plan)."""
+        plans = self._src.plans
+        first = today - timedelta(days=MISSED_TEST_LOOKBACK_DAYS)
+        lived = [frozen.day for frozen in plans.past_days(first, today - timedelta(days=1))]
+        stored = plans.current()
+        if isinstance(stored, StoredPlan) and isinstance(stored.state, Plan):
+            lived += [
+                day
+                for day in stored.state.days
+                if stored.generated_on < day.day < today and day.day >= first
+            ]
+        return lived
+
+    def _save(self, result: Plan | PlanRefusal, today: date) -> bool:
+        """Replaces the saved result with this one, freezing the past days of the old plan."""
+        plans = self._src.plans
+        with self._src.activities.transaction():
+            stored = plans.current()
+            if isinstance(stored, StoredPlan):
+                if _same_result(stored.state, result):
+                    return False
+                if isinstance(stored.state, Plan):
+                    plans.freeze(
+                        [
+                            FrozenDay(stored.generated_on, day)
+                            for day in stored.state.days
+                            if stored.generated_on < day.day <= today
+                        ]
+                    )
+            plans.replace_current(result, today)
+        return True
+
+
+class PlanAdherence:
+    """Planned against done, day by day."""
+
+    def __init__(
+        self,
+        plans: PlanStore,
+        overview: Callable[[], ProfileOverview],
+        today: Callable[[], date],
+    ) -> None:
+        self._plans = plans
+        self._overview = overview
+        self._today = today
+
+    def __call__(self, first: date, last: date) -> tuple[DayAdherence, ...]:
+        """For each planned day from `first` to `last` (not beyond today) the load planned and the
+        load done, by ascending day. A day nobody planned is not there, even if something was
+        done. Past days use what was planned at the time; only the days after the last frozen one
+        use the current plan. A frozen day that cannot be read back is there with
+        `plan_unreadable` (its plan is lost; the current plan never stands in for it).
+
+        Raises:
+            OverviewCancelledError: the overview was cancelled.
+            LoadStoreError, PlanStoreError: a store could not be read.
+        """
+        last = min(last, self._today())
+        if last < first:
+            return ()
+        planned = {f.day.day: f.day for f in self._plans.past_days(first, last)}
+        unreadable = set(self._plans.unreadable_past_days(first, last))
+        last_frozen = max([*planned, *unreadable], default=None)
+        stored = self._plans.current()
+        current = stored.state if isinstance(stored, StoredPlan) else None
+        if isinstance(current, Plan):
+            for day in current.days:
+                if first <= day.day <= last and (last_frozen is None or day.day > last_frozen):
+                    planned.setdefault(day.day, day)
+        actual = _daily_loads(self._overview())
+        return tuple(
+            DayAdherence(d, 0.0, actual.get(d, 0.0), plan_unreadable=True)
+            if d in unreadable
+            else DayAdherence(d, planned[d].load, actual.get(d, 0.0))
+            for d in sorted([*planned, *unreadable])
+        )

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Caso d'uso "importa attività" con sorgente, archivio e indice in memoria.
+"""Use case "import activities" with in-memory source, archive and index.
 
-T-IMP-01 (esiti per file), T-IMP-03 (idempotenza), T-GPX-02 (stessa attività in FIT e GPX).
+T-IMP-01 (outcomes per file), T-IMP-03 (idempotence), T-GPX-02 (same activity in FIT and GPX).
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import pytest
 
 from ponos_coach.activities import use_cases
 from ponos_coach.activities.decoding import decode_activity_file
-from ponos_coach.activities.domain import ActivityOrigin, FileFormat, FitIdentity, GpxIdentity
+from ponos_coach.activities.domain import ActivityOrigin, FileFormat
 from ponos_coach.activities.ports import (
     ArchiveWriteError,
     DuplicateActivityError,
@@ -43,15 +43,14 @@ from tests.activities.import_fakes import (
 from tests.builders import IMPORTED_AT
 from tests.fakes.archive import InMemoryActivityArchive
 from tests.fixtures.generators import fit_writer as fw
-from tests.fixtures.generators import gpx_writer as gw
 from tests.fixtures.generators import import_files as imp
 
 DATA = Path(__file__).resolve().parents[1] / "fixtures" / "data"
-ARCHIVE_PATH = re.compile(r"\d{4}/[0-9a-f]{64}\.(fit|gpx)")
+ARCHIVE_PATH = re.compile(r"\d{4}/[0-9a-f]{64}\.fit")
 
 
 class Setup:
-    """Archivio e indice finti con l'orologio fermo, più il comando d'import."""
+    """Fake archive and index with a frozen clock, plus the import command."""
 
     def __init__(self) -> None:
         self.archive = InMemoryActivityArchive()
@@ -73,17 +72,16 @@ def statuses(summary: ImportSummary) -> dict[str, ImportStatus]:
 
 def test_t_imp_01_each_file_gets_its_outcome() -> None:
     fit_bad_crc = imp.fit_run(3)[:-1] + b"\x00"
-    no_times = gw.build_gpx(gw.GpxSpec([[gw.GpxPoint(1.0, 1.0), gw.GpxPoint(1.0, 1.1)]]))
+    gpx = b'<?xml version="1.0"?><gpx version="1.1"><trk/></gpx>'
     tcx = b'<?xml version="1.0"?><TrainingCenterDatabase xmlns="urn:x"/>'
     files = {
         "a_run.fit": imp.fit_run(1),
-        "b_run.gpx": imp.gpx_run(2),
+        "b_walk.gpx": gpx,
         "c_copy.fit": imp.fit_run(1),  # stessa attività di a_run.fit
         "d_broken.fit": fit_bad_crc,
-        "e_no_times.gpx": no_times,
-        "f_garmin.tcx": tcx,
-        "g_wrong.gpx": imp.fit_run(4),  # un FIT chiamato .gpx
-        "h_empty.fit": b"",
+        "e_garmin.tcx": tcx,
+        "f_gpx_named_fit.fit": gpx,
+        "g_empty.fit": b"",
     }
     setup = Setup()
 
@@ -91,40 +89,36 @@ def test_t_imp_01_each_file_gets_its_outcome() -> None:
 
     assert [(r.name, r.status, r.issue) for r in summary.results] == [
         ("a_run.fit", ImportStatus.IMPORTED, None),
-        ("b_run.gpx", ImportStatus.IMPORTED, None),
+        ("b_walk.gpx", ImportStatus.FAILED, ImportIssue.UNSUPPORTED_FORMAT),
         ("c_copy.fit", ImportStatus.ALREADY_PRESENT, None),
         ("d_broken.fit", ImportStatus.FAILED, ImportIssue.CORRUPT),
-        ("e_no_times.gpx", ImportStatus.IGNORED, ImportIssue.NOT_AN_ACTIVITY),
-        ("f_garmin.tcx", ImportStatus.FAILED, ImportIssue.UNSUPPORTED_FORMAT),
-        ("g_wrong.gpx", ImportStatus.FAILED, ImportIssue.EXTENSION_MISMATCH),
-        ("h_empty.fit", ImportStatus.FAILED, ImportIssue.EMPTY),
+        ("e_garmin.tcx", ImportStatus.FAILED, ImportIssue.UNSUPPORTED_FORMAT),
+        ("f_gpx_named_fit.fit", ImportStatus.FAILED, ImportIssue.CORRUPT),
+        ("g_empty.fit", ImportStatus.FAILED, ImportIssue.EMPTY),
     ]
     assert not summary.cancelled
-    assert summary.count(ImportStatus.IMPORTED) == 2
-    assert len(setup.index.list_by_start()) == 2
+    assert summary.count(ImportStatus.IMPORTED) == 1
+    assert len(setup.index.list_by_start()) == 1
 
 
 def test_records_and_archive_hold_what_was_imported() -> None:
-    fit, gpx = imp.fit_run(1), imp.gpx_run(2)
+    fit = imp.fit_run(1)
     setup = Setup()
 
-    setup.run(InMemoryImportSource({"x.fit": fit, "y.gpx": gpx}))
+    setup.run(InMemoryImportSource({"x.fit": fit}))
 
-    fit_record, gpx_record = setup.index.list_by_start()
+    (fit_record,) = setup.index.list_by_start()
     assert fit_record.file_format is FileFormat.FIT
-    assert gpx_record.file_format is FileFormat.GPX
-    assert isinstance(gpx_record.identity, GpxIdentity)
     assert fit_record.origin is ActivityOrigin.IMPORT
     assert fit_record.imported_at == IMPORTED_AT
     assert fit_record.start == decode_activity_file(fit, "x.fit").start
     # Nell'archivio finisce il file originale, con un nome generato dal programma.
     assert setup.archive.read(fit_record.archived, 10**9) == fit
-    assert setup.archive.read(gpx_record.archived, 10**9) == gpx
     assert all(ARCHIVE_PATH.fullmatch(name) for name in map(str, setup.archive.files))
 
 
 def test_t_imp_03_importing_again_changes_nothing() -> None:
-    files = {"a.fit": imp.fit_run(1), "b.gpx": imp.gpx_run(2), "c.fit": imp.fit_run(3)}
+    files = {"a.fit": imp.fit_run(1), "b.fit": imp.fit_run(2), "c.fit": imp.fit_run(3)}
     setup = Setup()
     setup.run(InMemoryImportSource(files))
     records, stored = setup.index.list_by_start(), dict(setup.archive.files)
@@ -152,33 +146,6 @@ def test_same_file_under_two_names_in_one_run_is_imported_once() -> None:
     assert len(setup.archive.files) == 1
 
 
-@pytest.mark.parametrize("fit_first", [True, False])
-def test_t_gpx_02_same_activity_as_fit_and_gpx_is_a_duplicate_in_any_order(
-    fit_first: bool,
-) -> None:
-    fit, gpx = imp.same_run_as_fit_and_gpx(5)
-    first, second = (
-        (("a.fit", fit), ("b.gpx", gpx)) if fit_first else (("a.gpx", gpx), ("b.fit", fit))
-    )
-    setup = Setup()
-
-    summary = setup.run(InMemoryImportSource(dict([first, second])))
-
-    kept, dropped = summary.results
-    assert kept.status is ImportStatus.IMPORTED
-    assert dropped.status is ImportStatus.DUPLICATE_OF_OTHER_FORMAT
-    (record,) = setup.index.list_by_start()
-    assert dropped.matches == record.identity  # si tiene la prima arrivata
-    assert isinstance(record.identity, FitIdentity if fit_first else GpxIdentity)
-    assert len(setup.archive.files) == 1
-
-    again = setup.run(InMemoryImportSource(dict([first, second])))  # e resta tale al rilancio
-    assert [r.status for r in again.results] == [
-        ImportStatus.ALREADY_PRESENT,
-        ImportStatus.DUPLICATE_OF_OTHER_FORMAT,
-    ]
-
-
 def test_two_different_activities_in_the_same_format_at_the_same_time_are_both_kept() -> None:
     start = imp.run_start(1)
     samples = [fw.Sample(fw.datetime_to_fit(start) + i, 140) for i in range(60)]
@@ -195,16 +162,8 @@ def test_two_different_activities_in_the_same_format_at_the_same_time_are_both_k
     assert [r.status for r in summary.results] == [ImportStatus.IMPORTED, ImportStatus.IMPORTED]
 
 
-def test_a_gpx_of_a_different_time_is_not_a_duplicate_of_the_fit() -> None:
-    setup = Setup()
-
-    summary = setup.run(InMemoryImportSource({"a.fit": imp.fit_run(1), "b.gpx": imp.gpx_run(2)}))
-
-    assert [r.status for r in summary.results] == [ImportStatus.IMPORTED, ImportStatus.IMPORTED]
-
-
 def test_a_broken_file_does_not_stop_the_others() -> None:
-    files = {"a.fit": b"garbage", "b.fit": imp.fit_run(1), "c.gpx": b"<not-xml"}
+    files = {"a.fit": b"garbage", "b.fit": imp.fit_run(1), "c.fit": b"<not-xml"}
     setup = Setup()
 
     summary = setup.run(InMemoryImportSource(files))
@@ -212,7 +171,7 @@ def test_a_broken_file_does_not_stop_the_others() -> None:
     assert statuses(summary) == {
         "a.fit": ImportStatus.FAILED,
         "b.fit": ImportStatus.IMPORTED,
-        "c.gpx": ImportStatus.FAILED,
+        "c.fit": ImportStatus.FAILED,
     }
 
 
@@ -235,14 +194,14 @@ def test_files_skipped_by_the_source_are_reported_first_with_their_reason() -> N
 def test_a_file_that_cannot_be_read_is_an_error_with_the_sources_reason() -> None:
     source = InMemoryImportSource(
         {"a.fit": imp.fit_run(1), "b.fit": imp.fit_run(2)},
-        failing={"a.fit": ImportIssue.ARCHIVE_INVALID},
+        failing={"a.fit": ImportIssue.UNREADABLE},
     )
     setup = Setup()
 
     summary = setup.run(source)
 
     assert [(r.status, r.issue) for r in summary.results] == [
-        (ImportStatus.FAILED, ImportIssue.ARCHIVE_INVALID),
+        (ImportStatus.FAILED, ImportIssue.UNREADABLE),
         (ImportStatus.IMPORTED, None),
     ]
 
@@ -300,7 +259,7 @@ def test_when_the_record_cannot_be_added_the_transaction_rolls_back() -> None:
         FixedClock(),
     )
 
-    # Un'attività comparsa nel frattempo (altro processo) è "già presente", non un errore.
+    # An activity that appeared in the meantime (other process) is "already present", not an error.
     assert summary.results[0].status is ImportStatus.ALREADY_PRESENT
     assert log.events[-1] == "rollback"
     assert not index.list_by_start()
@@ -361,11 +320,11 @@ def test_empty_source_gives_an_empty_summary() -> None:
 
 
 def test_result_rejects_incoherent_combinations() -> None:
-    with pytest.raises(ValueError, match="coerenti"):
+    with pytest.raises(ValueError, match="inconsistent"):
         FileImportResult("a.fit", ImportStatus.FAILED)
-    with pytest.raises(ValueError, match="coerenti"):
+    with pytest.raises(ValueError, match="inconsistent"):
         FileImportResult("a.fit", ImportStatus.IMPORTED, ImportIssue.CORRUPT)
-    with pytest.raises(ValueError, match="coerenti"):
+    with pytest.raises(ValueError, match="inconsistent"):
         FileImportResult("a.fit", ImportStatus.ALREADY_PRESENT)
 
 
@@ -399,7 +358,7 @@ def test_imported_at_is_truncated_to_the_millisecond() -> None:
     )
 
 
-# --- Riparazione dell'archivio (D-F1-03) ------------------------------------------------------
+# --- Archive repair (D-F1-03) ------------------------------------------------------
 
 
 def _flip_first_byte(archive: InMemoryActivityArchive) -> None:
@@ -427,8 +386,8 @@ def test_importing_the_original_again_repairs_a_missing_or_altered_archived_file
     [result] = again.results
     assert result.status is ImportStatus.REPAIRED
     assert result.matches == record.identity
-    setup.archive.verify(record.archived)  # l'archivio è tornato integro
-    assert setup.index.list_by_start() == [record]  # e l'indice è lo stesso
+    setup.archive.verify(record.archived)  # the archive is intact again
+    assert setup.index.list_by_start() == [record]  # and the index is the same
 
 
 def test_a_sound_archived_file_is_never_rewritten_by_a_second_import() -> None:
@@ -444,15 +403,15 @@ def test_a_sound_archived_file_is_never_rewritten_by_a_second_import() -> None:
 
 
 def test_a_repaired_result_needs_the_identity_it_matches() -> None:
-    with pytest.raises(ValueError, match="coerenti"):
+    with pytest.raises(ValueError, match="inconsistent"):
         FileImportResult("a.fit", ImportStatus.REPAIRED)
 
 
-# --- Errori imprevisti su un solo file (R1) ---------------------------------------------------
+# --- Unexpected errors on a single file (R1) ---------------------------------------------------
 
 
 class _Exploding(InMemoryImportSource):
-    """Sorgente che solleva un errore imprevisto leggendo un file."""
+    """Source that raises an unexpected error while reading a file."""
 
     def read(self, entry: ImportEntry, max_bytes: int) -> bytes:
         if self._names[entry.entry_id] == "b.fit":
@@ -475,7 +434,7 @@ def test_an_unexpected_error_reading_one_file_fails_only_that_file(
         "c.fit": ImportStatus.IMPORTED,
     }
     assert summary.results[1].issue is ImportIssue.UNREADABLE
-    [record] = caplog.records  # registrato una volta, col solo tipo dell'eccezione
+    [record] = caplog.records  # logged once, with only the exception type
     assert "RuntimeError" in record.getMessage()
     assert "segreto" not in caplog.text
 
@@ -503,7 +462,7 @@ def test_an_unexpected_error_decoding_one_file_fails_only_that_file(
     ]
     assert summary.results[1].issue is ImportIssue.CORRUPT
     assert [r.getMessage() for r in caplog.records].count(
-        "import: errore imprevisto su un file (OverflowError)"
+        "import: unexpected error on a file (OverflowError)"
     ) == 1
 
 
@@ -524,7 +483,7 @@ def test_an_unexpected_error_storing_one_file_fails_only_that_file() -> None:
     assert log.events == ["store", "store"]
 
 
-# --- Annullamento dell'esame (R6) ----------------------------------------------------------
+# --- Cancelling the scan (R6) ----------------------------------------------------------
 
 
 def test_the_cancellation_check_reaches_the_scan() -> None:

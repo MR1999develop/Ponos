@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Chiamate Win32 (via ctypes) con interfaccia sicura: cartelle private e tipo di unità.
+"""Win32 calls (via ctypes) with a safe interface: private folders and drive type.
 
-Perché ctypes: serve un descrittore di sicurezza esplicito alla creazione della cartella (la
-DACL di default contiene il SID della sessione di accesso, effimero, e le ereditate possono
-aprire la cartella ad altri utenti) e la libreria standard non lo permette. Tutta la memoria
-che Windows alloca (SID in stringa, descrittore) è liberata qui con `LocalFree`; fuori da
-questo modulo non esistono puntatori né handle.
+Why ctypes: an explicit security descriptor is needed when creating the folder (the
+default DACL contains the SID of the logon session, ephemeral, and inherited ones may
+open the folder to other users) and the standard library does not allow it. All the memory
+that Windows allocates (SID string, descriptor) is freed here with `LocalFree`; outside
+this module there are no pointers or handles.
 
-Su sistemi diversi da Windows le funzioni sollevano `NotImplementedError`.
+On systems other than Windows the functions raise `NotImplementedError`.
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ DRIVE_UNKNOWN = 0
 DRIVE_NO_ROOT_DIR = 1
 DRIVE_REMOTE = 4
 
-# Solo l'utente corrente e SYSTEM, accesso completo, ereditabile da file e cartelle; la `P`
-# rende la DACL protetta (non eredita dal padre).
+# Only the current user and SYSTEM, full access, inheritable by files and folders; the `P`
+# makes the DACL protected (it does not inherit from the parent).
 _SDDL_TEMPLATE = "D:P(A;OICI;FA;;;{user_sid})(A;OICI;FA;;;SY)"
 
 if sys.platform == "win32":
@@ -134,7 +134,7 @@ if sys.platform == "win32":
         raise ctypes.WinError(ctypes.get_last_error())
 
     def _token_user_sid(token: wintypes.HANDLE) -> str:
-        """SID dell'utente del token in forma di stringa (`S-1-5-21-...`)."""
+        """SID of the token's user as a string (`S-1-5-21-...`)."""
         needed = wintypes.DWORD(0)
         _advapi32.GetTokenInformation(token, _TOKEN_USER, None, 0, ctypes.byref(needed))
         if ctypes.get_last_error() != _ERROR_INSUFFICIENT_BUFFER:
@@ -144,21 +144,21 @@ if sys.platform == "win32":
             token, _TOKEN_USER, buffer, needed.value, ctypes.byref(needed)
         ):
             _raise_last_error()
-        # TOKEN_USER inizia con SID_AND_ATTRIBUTES, il cui primo campo è il puntatore al SID,
-        # dentro `buffer`, che resta vivo fino alla fine della funzione.
+        # TOKEN_USER starts with SID_AND_ATTRIBUTES, whose first field is the pointer to the SID,
+        # inside `buffer`, which stays alive until the end of the function.
         sid_pointer = ctypes.c_void_p.from_buffer(buffer).value
         text_pointer = ctypes.c_void_p()
         if not _advapi32.ConvertSidToStringSidW(sid_pointer, ctypes.byref(text_pointer)):
             _raise_last_error()
         try:
             if text_pointer.value is None:
-                raise OSError("SID in forma di testo non disponibile")
+                raise OSError("SID in text form not available")
             return ctypes.wstring_at(text_pointer.value)
         finally:
             _kernel32.LocalFree(text_pointer)
 
     def current_user_sid() -> str:
-        """SID dell'utente che esegue il processo, in forma di stringa."""
+        """SID of the user running the process, as a string."""
         token = wintypes.HANDLE()
         if not _advapi32.OpenProcessToken(
             _kernel32.GetCurrentProcess(), _TOKEN_QUERY, ctypes.byref(token)
@@ -171,7 +171,7 @@ if sys.platform == "win32":
 
     @contextlib.contextmanager
     def _private_descriptor() -> Iterator[ctypes.c_void_p]:
-        """Descrittore (utente corrente + SYSTEM, DACL protetta); liberato all'uscita."""
+        """Descriptor (current user + SYSTEM, protected DACL); freed on exit."""
         sddl = _SDDL_TEMPLATE.format(user_sid=current_user_sid())
         descriptor = ctypes.c_void_p()
         if not _advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
@@ -184,14 +184,14 @@ if sys.platform == "win32":
             _kernel32.LocalFree(descriptor)
 
     def create_private_directory(path: Path) -> None:
-        """Crea una cartella (un solo livello) accessibile solo all'utente e a SYSTEM.
+        """Creates a folder (a single level) accessible only to the user and SYSTEM.
 
-        Il descrittore è applicato dalla creazione stessa: non c'è nessun istante in cui la
-        cartella ha permessi più larghi.
+        The descriptor is applied by the creation itself: there is no instant at which the
+        folder has wider permissions.
 
         Raises:
-            FileExistsError: la cartella esiste già.
-            OSError: creazione non riuscita.
+            FileExistsError: the folder already exists.
+            OSError: creation failed.
         """
         with _private_descriptor() as descriptor:
             attributes = _SecurityAttributes(ctypes.sizeof(_SecurityAttributes), descriptor, False)
@@ -199,10 +199,10 @@ if sys.platform == "win32":
                 _raise_last_error()
 
     def restrict_to_current_user(path: Path) -> None:
-        """Sostituisce la DACL di una cartella esistente con quella privata, protetta.
+        """Replaces the DACL of an existing folder with the private, protected one.
 
         Raises:
-            OSError: permessi non applicati.
+            OSError: permissions not applied.
         """
         with _private_descriptor() as descriptor:
             present = wintypes.BOOL()
@@ -212,7 +212,7 @@ if sys.platform == "win32":
                 descriptor, ctypes.byref(present), ctypes.byref(dacl), ctypes.byref(defaulted)
             ):
                 _raise_last_error()
-            # `dacl` punta dentro `descriptor`, vivo per tutto il blocco `with`.
+            # `dacl` points inside `descriptor`, alive for the whole `with` block.
             code = _advapi32.SetNamedSecurityInfoW(
                 str(path),
                 _SE_FILE_OBJECT,
@@ -226,11 +226,12 @@ if sys.platform == "win32":
                 raise ctypes.WinError(code)
 
     def drive_type(root: str) -> int:
-        """Tipo dell'unità (`GetDriveTypeW`): 4 = di rete, 0 o 1 = sconosciuta."""
+        """Drive type (`GetDriveTypeW`): 4 = network, 0 or 1 = unknown."""
         return int(_kernel32.GetDriveTypeW(root))
 
     def _blob_of(data: bytes) -> tuple[_DataBlob, ctypes.Array[ctypes.c_char]]:
-        """Blob su una copia di `data`; il buffer va tenuto vivo finché serve il blob."""
+        """Blob over a copy of `data`; the buffer must be kept alive as long as the blob is
+        needed."""
         buffer = ctypes.create_string_buffer(data, max(len(data), 1))
         return _DataBlob(len(data), ctypes.cast(buffer, ctypes.c_void_p)), buffer
 
@@ -239,7 +240,7 @@ if sys.platform == "win32":
         extra, extra_buffer = _blob_of(entropy)
         result = _DataBlob()
         function = _crypt32.CryptProtectData if protect else _crypt32.CryptUnprotectData
-        # Stessa forma di argomenti per le due funzioni (la descrizione è None e non serve).
+        # Same argument shape for the two functions (the description is None and not needed).
         if not function(
             ctypes.byref(source),
             None,
@@ -250,52 +251,52 @@ if sys.platform == "win32":
             ctypes.byref(result),
         ):
             _raise_last_error()
-        del source_buffer, extra_buffer  # vivi fino alla fine della chiamata
+        del source_buffer, extra_buffer  # alive until the end of the call
         try:
             return ctypes.string_at(result.pbData, result.cbData) if result.pbData else b""
         finally:
-            if not protect and result.pbData:  # il buffer di sistema ha il testo in chiaro
+            if not protect and result.pbData:  # the system buffer holds the plaintext
                 ctypes.memset(result.pbData, 0, result.cbData)
             _kernel32.LocalFree(result.pbData)
 
     def protect_data(data: bytes, entropy: bytes) -> bytes:
-        """Cifra `data` con DPAPI (ambito utente) e un'entropia aggiuntiva.
+        """Encrypts `data` with DPAPI (user scope) and an additional entropy.
 
         Raises:
-            OSError: cifratura non riuscita.
+            OSError: encryption failed.
         """
         return _crypt(data, entropy, protect=True)
 
     def unprotect_data(blob: bytes, entropy: bytes) -> bytes:
-        """Decifra un blob di `protect_data` (stesso utente, stessa entropia).
+        """Decrypts a blob from `protect_data` (same user, same entropy).
 
         Raises:
-            OSError: blob alterato, di un altro utente o con un'altra entropia.
+            OSError: blob altered, from another user or with another entropy.
         """
         return _crypt(blob, entropy, protect=False)
 
 else:
 
     def protect_data(data: bytes, entropy: bytes) -> bytes:
-        """Solo Windows."""
+        """Windows only."""
         raise NotImplementedError
 
     def unprotect_data(blob: bytes, entropy: bytes) -> bytes:
-        """Solo Windows."""
+        """Windows only."""
         raise NotImplementedError
 
     def current_user_sid() -> str:
-        """Solo Windows."""
+        """Windows only."""
         raise NotImplementedError
 
     def create_private_directory(path: Path) -> None:
-        """Solo Windows."""
+        """Windows only."""
         raise NotImplementedError
 
     def restrict_to_current_user(path: Path) -> None:
-        """Solo Windows."""
+        """Windows only."""
         raise NotImplementedError
 
     def drive_type(root: str) -> int:
-        """Solo Windows."""
+        """Windows only."""
         raise NotImplementedError

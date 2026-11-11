@@ -1,42 +1,41 @@
-# Sicurezza
+# Security
 
-## Come segnalare una vulnerabilità
+## How to report a vulnerability
 
-Non aprire una issue pubblica.
+Do not open a public issue.
 
-1. Usa "Report a vulnerability" nella scheda Security del repository GitHub
+1. Use "Report a vulnerability" in the Security tab of the GitHub repository
    (private vulnerability reporting).
-2. Se non è disponibile, scrivi a `MR1999develop@users.noreply.github.com`.
+2. If it is not available, write to `5869547+MR1999develop@users.noreply.github.com`.
 
-Indica la versione, i passi per riprodurre il problema e l'effetto. Non
-allegare dati di salute reali, password o token: se servono, usa dati di
-prova. Non è previsto un canale cifrato.
+State the version, the steps to reproduce the problem and the effect. Do not
+attach real health data, passwords or tokens: if needed, use test data. There
+is no encrypted channel.
 
-## Cosa è nel perimetro
+## What is in scope
 
-- Lettore di file FIT e import da cartella.
-- Login Garmin e gestione dei token nel portachiavi del sistema.
-- Elaborazione delle risposte JSON di Garmin.
-- Pagina web dei grafici (`QWebEngineView`).
-- Cartella del profilo e database.
-- Pacchetti distribuiti e processo di rilascio.
+- FIT file reader and folder import.
+- Garmin login and token handling in the system keychain.
+- Processing of Garmin JSON responses.
+- Charts web page (`QWebEngineView`).
+- Profile folder and database.
+- Distributed packages and release process.
 
-Fuori perimetro: vulnerabilità di Garmin Connect, di Qt o di altre
-dipendenze (vanno segnalate ai rispettivi progetti; segnalaci però se
-l'app le rende sfruttabili), macchine già compromesse.
+Out of scope: vulnerabilities of Garmin Connect, of Qt or of other
+dependencies (report them to their projects; do tell us, though, if the app
+makes them exploitable), machines that are already compromised.
 
-## Tempi indicativi
+## Indicative times
 
-Sono tempi di un progetto personale, non impegni contrattuali.
+These are the times of a personal project, not contractual commitments.
 
-- Conferma di ricezione: entro 7 giorni.
-- Prima valutazione: entro 30 giorni.
-- Correzione: dipende dalla gravità; le corruzioni di memoria e le fughe di
-  credenziali hanno la precedenza.
+- Acknowledgement of receipt: within 7 days.
+- First assessment: within 30 days.
+- Fix: depends on severity; memory corruption and credential leaks come
+  first.
 
-La correzione viene pubblicata prima del dettaglio della vulnerabilità.
+The fix is published before the details of the vulnerability.
 
-## Ricompense
+## Rewards
 
-Non c'è nessuna ricompensa. Chi lo desidera può essere citato nelle note di
-rilascio.
+There is no reward. Whoever wishes can be credited in the release notes.

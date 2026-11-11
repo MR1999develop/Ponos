@@ -1,0 +1,210 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 MR
+"""T-SEC-15 (proxy side) and T-MAP-10: the tile service that answers the page, off the UI thread."""
+
+from __future__ import annotations
+
+import gc
+import threading
+import time
+import weakref
+from datetime import UTC, datetime
+
+from pytestqt.qtbot import QtBot
+
+from ponos_coach.maps.domain import CYCLOSM, OPENSTREETMAP, OPENTOPOMAP
+from ponos_coach.maps.ports import (
+    NO_VALIDATORS,
+    TileImage,
+    TileProblem,
+    TileResult,
+    TileUnavailable,
+)
+from ponos_coach.maps.use_cases import TileProxy
+from ponos_coach.ui.tile_service import MAX_PENDING, TileService
+from tests.fakes.tiles import FakeTileSource, InMemoryTileCache, make_png, serving
+from tests.ui.workspace_support import WAIT_MS
+
+
+def service_with(
+    script: list[TileResult] | None = None,
+) -> tuple[TileService, FakeTileSource, TileProxy]:
+    source = FakeTileSource(script)
+    proxy = TileProxy(
+        serving(source), InMemoryTileCache(), lambda: datetime.now(UTC), time.monotonic
+    )
+    return TileService(proxy), source, proxy
+
+
+def ask(qtbot: QtBot, service: TileService, path: str) -> list[bytes | None]:
+    answers: list[bytes | None] = []
+    assert service.request(path, answers.append)
+    qtbot.waitUntil(lambda: bool(answers), timeout=WAIT_MS)
+    return answers
+
+
+def test_a_tile_comes_back_on_the_ui_thread(qtbot: QtBot) -> None:
+    service, source, _proxy = service_with()
+    thread_of_answer: list[bool] = []
+
+    def done(png: bytes | None) -> None:
+        thread_of_answer.append(threading.current_thread() is threading.main_thread())
+        assert png is not None
+
+    service.request("/openstreetmap/3/4/5", done)
+    qtbot.waitUntil(lambda: bool(thread_of_answer), timeout=WAIT_MS)
+
+    assert thread_of_answer == [True]
+    assert source.calls == [(3, 4, 5, NO_VALIDATORS)]
+    service.shutdown()
+
+
+def test_a_path_that_is_not_a_tile_is_refused_without_asking_the_provider(
+    qtbot: QtBot,
+) -> None:
+    service, source, _proxy = service_with()
+
+    for path in (
+        "/99/0/0",
+        "/3/8/0",
+        "/3/-1/0",
+        "/a/b/c",
+        "/3/4",
+        "/../../etc/passwd",
+        "/3/4/5/6",
+        "",
+    ):
+        assert ask(qtbot, service, path) == [None]
+
+    assert source.calls == []
+    service.shutdown()
+
+
+def test_the_problem_of_the_server_is_reported_once_and_cleared_by_a_good_tile(
+    qtbot: QtBot,
+) -> None:
+    refused = TileUnavailable(TileProblem.REFUSED)
+    service, _source, _proxy = service_with([refused, refused, TileImage(make_png(), 3600)])
+    problems: list[tuple[object, object]] = []
+    service.problem_changed.connect(lambda b, p: problems.append((b, p)))
+
+    assert ask(qtbot, service, "/openstreetmap/2/1/1") == [None]
+    assert ask(qtbot, service, "/openstreetmap/2/1/2") == [None]
+    assert problems == [(OPENSTREETMAP, TileProblem.REFUSED)]  # told once, not once per tile
+
+    service.shutdown()
+
+
+def test_a_good_tile_after_a_problem_clears_it(qtbot: QtBot) -> None:
+    source = FakeTileSource([TileUnavailable(TileProblem.NETWORK_UNAVAILABLE)])
+    now = [datetime(2026, 11, 8, tzinfo=UTC)]
+    clock = [0.0]
+    proxy = TileProxy(serving(source), InMemoryTileCache(), lambda: now[0], lambda: clock[0])
+    service = TileService(proxy)
+    problems: list[tuple[object, object]] = []
+    service.problem_changed.connect(lambda b, p: problems.append((b, p)))
+    assert ask(qtbot, service, "/openstreetmap/2/1/1") == [None]
+    source._script = [TileImage(make_png(), 3600)]
+    clock[0] += 60.0  # the cool-down of the network problem is over
+
+    assert ask(qtbot, service, "/openstreetmap/2/1/3")[0] is not None
+
+    assert problems == [(OPENSTREETMAP, TileProblem.NETWORK_UNAVAILABLE), (OPENSTREETMAP, None)]
+    assert service.problem_of(OPENSTREETMAP) is None
+    service.shutdown()
+
+
+def test_the_problem_of_one_background_is_kept_apart_from_the_others(qtbot: QtBot) -> None:
+    refused = TileUnavailable(TileProblem.REFUSED)
+    source = FakeTileSource([refused])
+    other = FakeTileSource()
+    proxy = TileProxy(
+        {OPENSTREETMAP: source, OPENTOPOMAP: other, CYCLOSM: other},
+        InMemoryTileCache(),
+        lambda: datetime.now(UTC),
+        time.monotonic,
+    )
+    service = TileService(proxy)
+
+    assert ask(qtbot, service, "/openstreetmap/2/1/1") == [None]
+    assert ask(qtbot, service, "/opentopomap/2/1/1")[0] is not None
+
+    assert service.problem_of(OPENSTREETMAP) is TileProblem.REFUSED
+    assert service.problem_of(OPENTOPOMAP) is None
+    service.shutdown()
+
+
+def test_a_path_of_an_unknown_source_is_refused_without_asking_anybody(qtbot: QtBot) -> None:
+    service, source, _proxy = service_with()
+
+    for path in ("/google/1/0/0", "/opentopomap/18/0/0", "/1/0/0", "/cyclosm/21/0/0"):
+        assert ask(qtbot, service, path) == [None]
+
+    assert source.calls == []
+    service.shutdown()
+
+
+def test_a_service_that_was_shut_down_takes_no_more_requests(qtbot: QtBot) -> None:
+    service, source, _proxy = service_with()
+    service.shutdown()
+    service.shutdown()  # idempotent
+
+    assert not service.request("/openstreetmap/1/0/0", lambda _png: None)
+    assert source.calls == []
+
+
+def test_a_worker_still_busy_after_shutdown_keeps_no_reference_to_the_service(
+    qtbot: QtBot,
+) -> None:
+    # The QObject lives on the UI thread: if a worker dropped the last reference, the object
+    # would be destroyed off that thread while the UI thread delivers its events (a crash on
+    # Ubuntu in CI). So once shut down and released, the service must be gone at once.
+    gate = threading.Event()
+    started = threading.Event()
+
+    class Blocked(FakeTileSource):
+        def fetch(self, *_args: object) -> TileResult:
+            started.set()
+            gate.wait(timeout=30)
+            return TileImage(make_png(), 3600)
+
+    proxy = TileProxy(
+        serving(Blocked()), InMemoryTileCache(), lambda: datetime.now(UTC), time.monotonic
+    )
+    service = TileService(proxy)
+    try:
+        assert service.request("/openstreetmap/5/1/1", lambda _png: None)
+        assert started.wait(timeout=WAIT_MS / 1000)
+        service.shutdown()
+        released = weakref.ref(service)
+        del service
+        gc.collect()
+
+        assert released() is None
+    finally:
+        gate.set()
+
+
+def test_the_requests_that_wait_are_limited(qtbot: QtBot) -> None:
+    gate = threading.Event()
+
+    class Blocked(FakeTileSource):
+        def fetch(self, *_args: object) -> TileResult:
+            gate.wait(timeout=30)
+            return TileImage(make_png(), 3600)
+
+    proxy = TileProxy(
+        serving(Blocked()), InMemoryTileCache(), lambda: datetime.now(UTC), time.monotonic
+    )
+    service = TileService(proxy)
+    try:
+        accepted = [
+            service.request("/openstreetmap/5/1/1", lambda _png: None)
+            for _ in range(MAX_PENDING + 20)
+        ]
+    finally:
+        gate.set()
+        service.shutdown()
+
+    assert accepted.count(True) == MAX_PENDING
+    assert accepted.count(False) == 20

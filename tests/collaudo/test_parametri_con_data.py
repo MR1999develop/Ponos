@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-CALC-05 sulla pila reale: parametri con data di validita, attivita a cavallo, ricalcolo.
+"""T-CALC-05 on the real stack: parameters with a validity date, straddling activities,
+recalculation.
 
-Indice, cache dei carichi e archivio sono SQLite e file veri; i file si ricostruiscono da zero in
-un secondo profilo per confrontare il ricalcolo incrementale con il calcolo da zero. Le date
-critiche sono a cavallo della mezzanotte locale (Europa/Roma, UTC+1 in febbraio) del giorno in
-cui cambiano i parametri.
+Index, load cache and archive are real SQLite and files; the files are rebuilt from scratch in
+a second profile to compare the incremental recalculation with the calculation from scratch. The
+critical
+dates straddle local midnight (Europe/Rome, UTC+1 in February) of the day on
+which the parameters change.
 """
 
 from __future__ import annotations
@@ -19,14 +21,14 @@ import pytest
 
 from ponos_coach.activities.decoding import decode_stored_activity
 from ponos_coach.activities.domain import Activity, FileFormat, Sport
-from ponos_coach.load.domain import compute_activity_load, default_weight
+from ponos_coach.load.domain import compute_activity_load
 from ponos_coach.load.use_cases import ProfileOverview
 from tests.builders import physiology_entry
 from tests.collaudo.support import RealProfile, create_profile, open_profile_from_folder
 from tests.fixtures.generators import fit_writer as fw
 
 FIRST_DAY = date(2026, 1, 1)
-CHANGE_DAY = date(2026, 2, 1)  # i nuovi parametri valgono dal 1 febbraio locale
+CHANGE_DAY = date(2026, 2, 1)  # the new parameters hold from 1 February local time
 OLD_THRESHOLD, NEW_THRESHOLD = 170, 160
 MINUTES = 30
 
@@ -51,9 +53,9 @@ class CountingDecoder:
 
 # Inizi in UTC: l'ora locale (UTC+1) e a fianco.
 STARTS = {
-    "prima": datetime(2026, 1, 31, 22, 30, tzinfo=UTC),  # 23:30 del 31 gennaio
-    "dopo": datetime(2026, 1, 31, 23, 30, tzinfo=UTC),  # 00:30 del 1 febbraio
-    "a_cavallo": datetime(2026, 1, 31, 22, 50, tzinfo=UTC),  # 23:50, finisce dopo mezzanotte
+    "prima": datetime(2026, 1, 31, 22, 30, tzinfo=UTC),  # 23:30 on 31 January
+    "dopo": datetime(2026, 1, 31, 23, 30, tzinfo=UTC),  # 00:30 on 1 February
+    "a_cavallo": datetime(2026, 1, 31, 22, 50, tzinfo=UTC),  # 23:50, ends after midnight
     "lontana": datetime(2026, 2, 10, 7, 0, tzinfo=UTC),
 }
 
@@ -79,12 +81,11 @@ def expected_load(threshold: int, start: datetime) -> float:
         activity.timer_s,
         activity.heart_rate,
         physiology_entry(FIRST_DAY, threshold).physiology,
-        default_weight(Sport.RUNNING),
-    ).load
+    ).trimp_eq
 
 
 def by_start(overview: ProfileOverview) -> dict[datetime, float]:
-    return {a.start: a.load.load for a in overview.activities}
+    return {a.start: a.load.trimp_eq for a in overview.activities}
 
 
 def same(first: ProfileOverview, second: ProfileOverview) -> None:
@@ -113,9 +114,9 @@ def test_t_calc_05_activities_around_the_change_use_the_parameters_of_their_loca
     old = {name: expected_load(OLD_THRESHOLD, STARTS[name]) for name in STARTS}
     new = {name: expected_load(NEW_THRESHOLD, STARTS[name]) for name in STARTS}
     assert old["prima"] != new["prima"]
-    assert loads[STARTS["prima"]] == pytest.approx(old["prima"])  # 23:30 del 31 gennaio
-    assert loads[STARTS["a_cavallo"]] == pytest.approx(old["a_cavallo"])  # conta il giorno d'inizio
-    assert loads[STARTS["dopo"]] == pytest.approx(new["dopo"])  # 00:30 del 1 febbraio
+    assert loads[STARTS["prima"]] == pytest.approx(old["prima"])  # 23:30 on 31 January
+    assert loads[STARTS["a_cavallo"]] == pytest.approx(old["a_cavallo"])  # the start day counts
+    assert loads[STARTS["dopo"]] == pytest.approx(new["dopo"])  # 00:30 on 1 February
     assert loads[STARTS["lontana"]] == pytest.approx(new["lontana"])
 
 
@@ -135,13 +136,13 @@ def test_t_calc_05_recalculation_after_a_change_equals_the_calculation_from_scra
     tmp_path: Path, profile: RealProfile
 ) -> None:
     profile.session.physiology.put(physiology_entry(FIRST_DAY, OLD_THRESHOLD))
-    profile.overview()  # tutte le attivita in cache con i vecchi parametri
+    profile.overview()  # all the activities in cache with the old parameters
     profile.session.physiology.put(physiology_entry(CHANGE_DAY, NEW_THRESHOLD))
     decoder = CountingDecoder()
 
     incremental = profile.overview(decoder)
 
-    assert decoder.calls == 2  # solo le due attivita dal 1 febbraio locale si rileggono
+    assert decoder.calls == 2  # only the two activities from 1 February local time are read again
     fresh = create_profile(tmp_path / "da-zero")
     try:
         fill(fresh, tmp_path, "file-da-zero")
@@ -163,7 +164,7 @@ def test_t_calc_05_a_change_in_the_middle_of_the_history_touches_only_later_acti
 
     after = profile.overview(decoder)
 
-    assert decoder.calls == len(STARTS)  # tutte dal 31 gennaio in poi
+    assert decoder.calls == len(STARTS)  # all from 31 January onwards
     assert by_start(after) != by_start(before)
     profile.session.load_cache.clear()
     same(after, profile.overview())
@@ -188,7 +189,7 @@ def test_t_calc_05_replacing_the_parameters_of_the_same_date_is_a_change_too(
 ) -> None:
     set_parameters(profile)
     first = by_start(profile.overview())
-    set_parameters(profile, new_threshold=150)  # stessa data di validita, altro valore
+    set_parameters(profile, new_threshold=150)  # same validity date, other value
     decoder = CountingDecoder()
 
     second = by_start(profile.overview(decoder))
@@ -212,7 +213,7 @@ def test_t_calc_05_the_cache_survives_closing_and_reopening_the_profile(
         decoder = CountingDecoder()
         after = reopened.overview(decoder)
 
-        assert decoder.calls == 0  # nessun file riletto: i carichi vengono dal database
+        assert decoder.calls == 0  # no file read again: the loads come from the database
         same(before, after)
     finally:
         reopened.close()
@@ -225,5 +226,5 @@ def test_t_calc_05_the_day_before_the_first_parameters_uses_the_first_ones(
 
     loads = by_start(profile.overview())
 
-    for start in STARTS.values():  # tutte con gli stessi parametri, i primi noti
+    for start in STARTS.values():  # all with the same parameters, the first known
         assert loads[start] == pytest.approx(expected_load(NEW_THRESHOLD, start))

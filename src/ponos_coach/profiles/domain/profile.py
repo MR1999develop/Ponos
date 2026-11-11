@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Tipi di dominio dei profili: id, nome, tipo di cartella, voce del registro, informazioni."""
+"""Domain types of the profiles: id, name, folder kind, registry entry, information."""
 
 from __future__ import annotations
 
@@ -12,41 +12,41 @@ from enum import Enum
 from pathlib import Path
 
 NAME_MAX_CHARS = 60
-_NAME_MAX_INPUT_CHARS = 1000  # tetto prima di normalizzare: la lunghezza si controlla subito
+_NAME_MAX_INPUT_CHARS = 1000  # cap before normalizing: the length is checked right away
 _UUID_VERSION = 4
 _TIMEZONE_MAX_CHARS = 64
 
 
 class InvalidProfileNameError(ValueError):
-    """Il testo non è un nome di profilo valido."""
+    """The text is not a valid profile name."""
 
 
 @dataclass(frozen=True, slots=True)
 class ProfileId:
-    """Identificativo di un profilo: un UUID casuale (versione 4).
+    """Identifier of a profile: a random UUID (version 4).
 
-    Si genera fuori dal dominio (`ProfileId(uuid.uuid4())`) o si legge da testo con `parse`.
+    It is generated outside the domain (`ProfileId(uuid.uuid4())`) or read from text with `parse`.
     """
 
     value: uuid.UUID
 
     def __post_init__(self) -> None:
         if self.value.version != _UUID_VERSION or self.value.variant != uuid.RFC_4122:
-            raise ValueError("l'id del profilo deve essere un UUID versione 4")
+            raise ValueError("the profile id must be a version 4 UUID")
 
     @classmethod
     def parse(cls, text: str) -> ProfileId:
-        """Id da testo nella forma canonica (36 caratteri, minuscole, con trattini).
+        """Id from text in canonical form (36 characters, lowercase, with hyphens).
 
         Raises:
-            ValueError: testo di un'altra forma o UUID di un'altra versione.
+            ValueError: text of another form or UUID of another version.
         """
         try:
             parsed = uuid.UUID(text)
         except ValueError as exc:
-            raise ValueError("id del profilo non valido") from exc
+            raise ValueError("invalid profile id") from exc
         if str(parsed) != text:
-            raise ValueError("id del profilo non in forma canonica")
+            raise ValueError("profile id not in canonical form")
         return cls(parsed)
 
     def __str__(self) -> str:
@@ -55,11 +55,11 @@ class ProfileId:
 
 @dataclass(frozen=True, slots=True)
 class ProfileName:
-    """Nome di un profilo: 1-60 caratteri, Unicode NFC, senza spazi esterni né caratteri di
-    controllo o di formato.
+    """Name of a profile: 1-60 characters, Unicode NFC, without outer spaces or
+    control or format characters.
 
-    Il costruttore accetta solo testo già normalizzato; `parse` normalizza il testo
-    dell'utente (NFC, spazi esterni tolti) e poi lo valida.
+    The constructor accepts only already normalized text; `parse` normalizes the user's
+    text (NFC, outer spaces removed) and then validates it.
     """
 
     value: str
@@ -69,22 +69,24 @@ class ProfileName:
             unicodedata.normalize("NFC", self.value) != self.value
             or self.value != self.value.strip()
         ):
-            raise InvalidProfileNameError("il nome non è normalizzato (NFC, senza spazi esterni)")
+            raise InvalidProfileNameError("the name is not normalized (NFC, no outer spaces)")
         if not 1 <= len(self.value) <= NAME_MAX_CHARS:
-            raise InvalidProfileNameError(f"il nome deve avere da 1 a {NAME_MAX_CHARS} caratteri")
+            raise InvalidProfileNameError(
+                f"the name must have from 1 to {NAME_MAX_CHARS} characters"
+            )
         if any(unicodedata.category(char).startswith(("C", "Zl", "Zp")) for char in self.value):
-            raise InvalidProfileNameError("il nome contiene caratteri di controllo")
+            raise InvalidProfileNameError("the name contains control characters")
 
     @classmethod
     def parse(cls, text: str) -> ProfileName:
-        """Nome dal testo inserito dall'utente.
+        """Name from the text entered by the user.
 
         Raises:
-            InvalidProfileNameError: vuoto dopo aver tolto gli spazi esterni, più lungo di 60
-                caratteri (dopo NFC) o con caratteri di controllo.
+            InvalidProfileNameError: empty after removing outer spaces, longer than 60
+                characters (after NFC) or with control characters.
         """
         if len(text) > _NAME_MAX_INPUT_CHARS:
-            raise InvalidProfileNameError("il nome è troppo lungo")
+            raise InvalidProfileNameError("the name is too long")
         return cls(unicodedata.normalize("NFC", text).strip())
 
     def __str__(self) -> str:
@@ -92,8 +94,8 @@ class ProfileName:
 
 
 class FolderKind(Enum):
-    """Dove sta una cartella: decide se avvisare l'utente (rete e sincronizzazione sono rischi
-    per SQLite)."""
+    """Where a folder is: decides whether to warn the user (network and synchronization are risks
+    for SQLite)."""
 
     LOCAL = "local"
     NETWORK = "network"
@@ -102,7 +104,7 @@ class FolderKind(Enum):
 
 
 class FolderState(Enum):
-    """Stato di una cartella scelta per un profilo."""
+    """State of a folder chosen for a profile."""
 
     MISSING = "missing"
     EMPTY = "empty"
@@ -111,8 +113,8 @@ class FolderState(Enum):
 
 @dataclass(frozen=True, slots=True)
 class FolderInspection:
-    """Esito dell'ispezione di una cartella: stato, tipo (per una cartella mancante, il tipo
-    del posto in cui verrebbe creata) e se contiene il database di un profilo."""
+    """Outcome of inspecting a folder: state, kind (for a missing folder, the kind
+    of the place where it would be created) and whether it contains a profile's database."""
 
     state: FolderState
     kind: FolderKind
@@ -121,10 +123,10 @@ class FolderInspection:
 
 @dataclass(frozen=True, slots=True)
 class RegistryEntry:
-    """Voce dell'elenco dei profili nella configurazione dell'app.
+    """Entry of the profile list in the app's configuration.
 
-    `folder` è assoluta; `cached_name` è l'ultimo nome noto (la fonte di verità è il database
-    del profilo); `last_used_utc` è l'ultimo uso, in UTC.
+    `folder` is absolute; `cached_name` is the last known name (the source of truth is the database
+    of the profile); `last_used_utc` is the last use, in UTC.
     """
 
     profile_id: ProfileId
@@ -134,18 +136,21 @@ class RegistryEntry:
 
     def __post_init__(self) -> None:
         if not self.folder.is_absolute():
-            raise ValueError("la cartella del profilo deve essere un percorso assoluto")
+            raise ValueError("the profile folder must be an absolute path")
         if self.last_used_utc.utcoffset() != timedelta(0):
-            raise ValueError("l'ultimo uso deve essere un istante UTC con fuso")
+            raise ValueError("the last use must be a UTC instant with time zone")
 
 
 @dataclass(frozen=True, slots=True)
 class ProfileInfo:
-    """Ciò che il database dichiara del profilo: id, nome, fuso orario e versione del formato.
+    """What the database declares about the profile: id, name, time zone and format version.
 
-    `timezone_name` è un nome IANA (es. `Europe/Rome`) di al più 64 caratteri: che esista davvero
-    lo verificano i confini (`profiles.timezones`), perché cercarlo richiede di leggere i dati
-    dei fusi e il dominio resta senza I/O. `format_version` è la versione dello schema, 1 o più.
+    `timezone_name` is an IANA name (e.g. `Europe/Rome`) of at most 64 characters: that it really
+    exists
+    is verified by the boundaries (`profiles.timezones`), because looking it up requires reading
+    the data
+    of the time zones and the domain stays free of I/O. `format_version` is the schema version, 1
+    or more.
     """
 
     profile_id: ProfileId
@@ -155,19 +160,19 @@ class ProfileInfo:
 
     def __post_init__(self) -> None:
         if not 0 < len(self.timezone_name) <= _TIMEZONE_MAX_CHARS:
-            raise ValueError("nome del fuso orario vuoto o troppo lungo")
+            raise ValueError("time zone name empty or too long")
         if self.format_version < 1:
-            raise ValueError("la versione del formato parte da 1")
+            raise ValueError("the format version starts at 1")
 
 
 @dataclass(frozen=True, slots=True)
 class ProfilePeek:
-    """Sguardo in sola lettura a un profilo, senza aprirlo né migrarlo: informazioni e numero
-    di attività."""
+    """Read-only glimpse of a profile, without opening or migrating it: information and number
+    of activities."""
 
     info: ProfileInfo
     activity_count: int
 
     def __post_init__(self) -> None:
         if self.activity_count < 0:
-            raise ValueError("il numero di attività non può essere negativo")
+            raise ValueError("the number of activities cannot be negative")

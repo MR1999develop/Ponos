@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Vista dell'account Garmin nella finestra principale: menu, barra di stato e dialoghi.
+"""View of the Garmin account in the main window: menu, status bar, dialogs and the account section
+of Settings > Garmin account.
 
-Vista umile: le decisioni (quali comandi sono disponibili, che cosa dice il riepilogo, se serve
-una finestra) stanno in `sync_model` e `sync_text`; qui ci sono solo widget e comandi.
+Humble view: the decisions (which commands are available, what the summary says, whether a
+window is needed) live in `sync_model` and `sync_text`; here there are only widgets and commands.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
+    QMenu,
     QMenuBar,
     QMessageBox,
     QProgressBar,
@@ -22,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from ponos_coach.activities.sync import SyncMode, SyncPhase, SyncProgress
+from ponos_coach.ui.garmin_account_section import GarminAccountSection
 from ponos_coach.ui.garmin_dialogs import GarminLoginDialog, MfaCodeDialog
 from ponos_coach.ui.sync_controller import SyncController
 from ponos_coach.ui.sync_model import (
@@ -34,6 +37,7 @@ from ponos_coach.ui.sync_model import (
     needs_reconnect,
 )
 from ponos_coach.ui.sync_text import (
+    account_status_text,
     disabled_reason_text,
     headline_text,
     login_failure_text,
@@ -47,7 +51,7 @@ _STATUS_MESSAGE_MS = 8000
 
 
 class GarminUi(QObject):
-    """Il menu "Garmin", l'avanzamento nella barra di stato e i dialoghi dell'account."""
+    """The "Garmin" menu, the progress in the status bar and the account dialogs."""
 
     def __init__(
         self,
@@ -65,6 +69,9 @@ class GarminUi(QObject):
         self._mfa: MfaCodeDialog | None = None
         self._build_actions()
         self._build_status_widgets()
+        self._section = GarminAccountSection(
+            self._connect_action, self._disconnect_action, self._auto_action
+        )
         controller.state_changed.connect(self.refresh)
         controller.account_changed.connect(self.refresh)
         controller.progress_changed.connect(self._on_progress)
@@ -76,18 +83,19 @@ class GarminUi(QObject):
 
     # --- Costruzione -----
 
-    def _action(self, text: str, shortcut: str, slot: Callable[[], object]) -> QAction:
+    def _action(self, text: str, shortcut: str | None, slot: Callable[[], object]) -> QAction:
         action = QAction(text, self._window)
-        action.setShortcut(QKeySequence(shortcut))
-        action.triggered.connect(slot)
+        if shortcut is not None:
+            action.setShortcut(QKeySequence(shortcut))
+        action.triggered.connect(lambda _checked=False, run=slot: run())  # never the flag
         return action
 
     def _build_actions(self) -> None:
         self._connect_action = self._action(
-            self.tr("Connect Garmin account..."), "Ctrl+G", self.connect_account
+            self.tr("Connect Garmin account..."), None, self.connect_account
         )
         self._disconnect_action = self._action(
-            self.tr("Disconnect Garmin account"), "Ctrl+Shift+G", self.confirm_disconnect
+            self.tr("Disconnect Garmin account"), None, self.confirm_disconnect
         )
         self._sync_action = self._action(
             self.tr("Synchronise"), "F5", lambda: self._controller.start_sync(SyncMode.SYNC)
@@ -102,11 +110,12 @@ class GarminUi(QObject):
         )
         self._auto_action = self._action(
             self.tr("Synchronise when a profile opens"),
-            "Ctrl+Shift+A",
+            None,
             lambda: None,
         )
         self._auto_action.setCheckable(True)
-        # `triggered` porta lo stato scelto dall'utente; `setChecked` del programma non lo emette.
+        # `triggered` carries the state chosen by the user; the program's `setChecked` does not
+        # emit it.
         self._auto_action.triggered.connect(self._on_auto_sync_toggled)
         self._actions: tuple[tuple[QAction, Callable[[], Availability]], ...] = (
             (self._connect_action, lambda: self._controller.commands.connect),
@@ -117,20 +126,18 @@ class GarminUi(QObject):
             (self._auto_action, lambda: self._controller.commands.auto_sync),
         )
 
-    def build_menu(self, menu_bar: QMenuBar) -> None:
-        """Aggiunge il menu "Garmin" alla barra dei menu."""
+    def build_menu(self, menu_bar: QMenuBar) -> QMenu:
+        """Add the "Garmin" menu to the menu bar and return it. Connecting and disconnecting the
+        account and the preference to synchronise when a profile opens are settings: they live in
+        Settings > Garmin account, not in this menu of actions."""
         menu = menu_bar.addMenu(self.tr("Garmin"))
-        menu.addAction(self._connect_action)
-        menu.addAction(self._disconnect_action)
-        menu.addSeparator()
         menu.addAction(self._sync_action)
         menu.addAction(self._verify_action)
         menu.addAction(self._stop_action)
-        menu.addSeparator()
-        menu.addAction(self._auto_action)
         self._verify_action.setStatusTip(
             self.tr("List the whole Garmin history to find activities uploaded late.")
         )
+        return menu
 
     def _build_status_widgets(self) -> None:
         window = self._window
@@ -151,62 +158,67 @@ class GarminUi(QObject):
             status_bar.addPermanentWidget(widget)
             widget.setVisible(False)
 
-    # --- Accessori per i test -----
+    @property
+    def account_section(self) -> GarminAccountSection:
+        """The content of Settings > Garmin account."""
+        return self._section
+
+    # --- Test accessors -----
 
     @property
     def connect_action(self) -> QAction:
-        """Azione "Collega account Garmin..."."""
+        """Action "Connect Garmin account..."."""
         return self._connect_action
 
     @property
     def disconnect_action(self) -> QAction:
-        """Azione "Scollega account Garmin"."""
+        """Action "Disconnect Garmin account"."""
         return self._disconnect_action
 
     @property
     def sync_action(self) -> QAction:
-        """Azione "Sincronizza" (F5)."""
+        """Action "Synchronise" (F5)."""
         return self._sync_action
 
     @property
     def verify_action(self) -> QAction:
-        """Azione "Verifica completa"."""
+        """Action "Full check"."""
         return self._verify_action
 
     @property
     def stop_action(self) -> QAction:
-        """Azione "Interrompi la sincronizzazione"."""
+        """Action "Stop synchronisation"."""
         return self._stop_action
 
     @property
     def auto_sync_action(self) -> QAction:
-        """Interruttore "Sincronizza all'apertura del profilo"."""
+        """Toggle "Synchronise when a profile opens"."""
         return self._auto_action
 
     @property
     def stop_button(self) -> QPushButton:
-        """Il bottone "Interrompi" della barra di stato."""
+        """The "Stop sync" button in the status bar."""
         return self._stop_button
 
     @property
     def status_text(self) -> str:
-        """Il testo dell'avanzamento nella barra di stato (vuoto se non si sincronizza)."""
+        """The progress text in the status bar (empty if not synchronising)."""
         return "" if self._label.isHidden() else self._label.text()
 
     @property
     def login_dialog(self) -> GarminLoginDialog | None:
-        """Il dialogo di accesso aperto, se c'è."""
+        """The open login dialog, if any."""
         return self._login
 
     @property
     def mfa_dialog(self) -> MfaCodeDialog | None:
-        """Il dialogo del codice MFA aperto, se c'è."""
+        """The open MFA code dialog, if any."""
         return self._mfa
 
-    # --- Stato dei comandi -----
+    # --- Command state -----
 
     def refresh(self) -> None:
-        """Allinea comandi e barra di stato a ciò che dice il controller."""
+        """Align commands and status bar with what the controller says."""
         for action, availability in self._actions:
             current = availability()
             action.setEnabled(current.enabled)
@@ -215,6 +227,8 @@ class GarminUi(QObject):
             )
         self._stop_button.setEnabled(self._controller.commands.stop.enabled)
         self._auto_action.setChecked(self._controller.auto_sync_enabled)
+        self._section.set_status(account_status_text(self._controller.account_status))
+        self._section.refresh()
         syncing = self._controller.is_syncing
         for widget in self._widgets:
             widget.setVisible(syncing)
@@ -238,12 +252,12 @@ class GarminUi(QObject):
             self._bar.setRange(0, progress.total)
             self._bar.setValue(min(progress.done, progress.total))
         elif progress.phase is SyncPhase.LISTING:
-            self._bar.setRange(0, 0)  # lunghezza ignota
+            self._bar.setRange(0, 0)  # unknown length
 
     # --- Collegamento -----
 
     def connect_account(self) -> None:
-        """Apre il dialogo di accesso (nessun effetto se il comando non è disponibile)."""
+        """Open the login dialog (no effect if the command is not available)."""
         if self._login is not None or not self._controller.commands.connect.enabled:
             return
         dialog = GarminLoginDialog(self._theme(), self._window)
@@ -299,7 +313,7 @@ class GarminUi(QObject):
     # --- Scollegamento -----
 
     def confirm_disconnect(self) -> None:
-        """Chiede conferma (con il verbo sul bottone) e scollega l'account."""
+        """Ask for confirmation (with the verb on the button) and disconnect the account."""
         if not self._controller.commands.disconnect.enabled:
             return
         box = QMessageBox(self._window)

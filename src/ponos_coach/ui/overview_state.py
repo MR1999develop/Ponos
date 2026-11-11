@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Stato di presentazione della panoramica: testabile senza finestra.
+"""Presentation state of the overview: testable without a window.
 
-Gli stati sono un'unione di dataclass congelate; `page_of` decide quale pagina mostrare,
-`primary_action_of` quale comando offre il bottone della pagina e `summary_of` i numeri della
-barra di stato. La vista non decide nulla.
+The states are a union of frozen dataclasses; `page_of` decides which page to show,
+`primary_action_of` which command the page button offers and `summary_of` the numbers of the
+status bar. The view decides nothing.
 """
 
 from __future__ import annotations
@@ -18,12 +18,12 @@ from ponos_coach.ui.errors import ErrorMessage
 
 @dataclass(frozen=True, slots=True)
 class Idle:
-    """Nessun profilo aperto."""
+    """No profile open."""
 
 
 @dataclass(frozen=True, slots=True)
 class Loading:
-    """Profilo in apertura o calcolo in corso; `total` è 0 finché non è noto."""
+    """Profile opening or computation in progress; `total` is 0 until known."""
 
     done: int
     total: int
@@ -31,19 +31,19 @@ class Loading:
 
 @dataclass(frozen=True, slots=True)
 class Ready:
-    """Calcolo concluso."""
+    """Computation finished."""
 
     overview: ProfileOverview
 
 
 @dataclass(frozen=True, slots=True)
 class Cancelled:
-    """Calcolo annullato dall'utente."""
+    """Computation cancelled by the user."""
 
 
 @dataclass(frozen=True, slots=True)
 class Failed:
-    """Calcolo fallito, con il messaggio per l'utente."""
+    """Computation failed, with the user message."""
 
     message: ErrorMessage
 
@@ -52,7 +52,7 @@ type OverviewState = Idle | Loading | Ready | Cancelled | Failed
 
 
 class Page(Enum):
-    """Pagina della panoramica da mostrare."""
+    """Overview page to show."""
 
     START = "start"
     LOADING = "loading"
@@ -63,7 +63,7 @@ class Page(Enum):
 
 
 class PrimaryAction(Enum):
-    """Comando del bottone di una pagina di stato."""
+    """Command of a state page's button."""
 
     NEW_PROFILE = "new_profile"
     IMPORT_FILES = "import_files"
@@ -71,7 +71,7 @@ class PrimaryAction(Enum):
 
 
 def page_of(state: OverviewState) -> Page:
-    """Pagina da mostrare per lo stato."""
+    """Page to show for the state."""
     match state:
         case Idle():
             return Page.START
@@ -86,7 +86,7 @@ def page_of(state: OverviewState) -> Page:
 
 
 def primary_action_of(page: Page) -> PrimaryAction | None:
-    """Comando offerto dal bottone della pagina (nessuno per grafico e avanzamento)."""
+    """Command offered by the page's button (none for chart and progress)."""
     match page:
         case Page.START:
             return PrimaryAction.NEW_PROFILE
@@ -100,7 +100,7 @@ def primary_action_of(page: Page) -> PrimaryAction | None:
 
 @dataclass(frozen=True, slots=True)
 class OverviewSummary:
-    """Numeri della barra di stato."""
+    """Status bar numbers."""
 
     activities: int
     excluded: int
@@ -108,7 +108,7 @@ class OverviewSummary:
 
 
 def summary_of(state: OverviewState) -> OverviewSummary | None:
-    """I numeri di un calcolo concluso; `None` negli altri stati."""
+    """The numbers of a finished computation; `None` in the other states."""
     if isinstance(state, Ready):
         overview = state.overview
         return OverviewSummary(len(overview.activities), len(overview.excluded), len(overview.pmc))

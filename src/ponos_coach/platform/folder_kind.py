@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Riconosce se una cartella sta su una rete o in una cartella sincronizzata col cloud.
+"""Recognizes whether a folder is on a network or in a cloud-synchronized folder.
 
-SQLite su rete o su una cartella sincronizzata rischia di corrompersi: l'app avvisa, non
-blocca. Nel dubbio il tipo è `UNKNOWN`, mai `LOCAL` a caso.
+SQLite on a network or on a synchronized folder risks corruption: the app warns, it does not
+block. When in doubt the kind is `UNKNOWN`, never `LOCAL` by chance.
 
-La logica è in funzioni pure su testo e percorsi (provate su qualunque sistema); le sonde che
-toccano il sistema (tipo di unità, attributi, file `info.json` di Dropbox) si passano da fuori.
+The logic is in pure functions on text and paths (tested on any system); the probes that
+touch the system (drive type, attributes, Dropbox `info.json` file) are passed in from outside.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from ponos_coach.platform import windows_api
 from ponos_coach.platform.atomic_file import FileTooLargeError, read_limited
 from ponos_coach.profiles.domain import FolderKind
 
-_IS_WINDOWS: bool = sys.platform == "win32"  # bool, non Literal: mypy non scarta un ramo
+_IS_WINDOWS: bool = sys.platform == "win32"  # bool, not Literal: mypy does not drop a branch
 _MOUNTINFO_PATH = Path("/proc/self/mountinfo")
 _MOUNTINFO_MAX_BYTES = 4 * 1024 * 1024
 _DROPBOX_INFO_MAX_BYTES = 64 * 1024
@@ -45,7 +45,7 @@ _CLOUD_PLACEHOLDER_ATTRIBUTES = (
 
 
 def _unescape_mount_field(field: str) -> str:
-    """`\\040` e simili (spazio, tab, a capo, backslash) nei campi di mountinfo."""
+    """`\\040` and the like (space, tab, newline, backslash) in the mountinfo fields."""
     out: list[str] = []
     index = 0
     while index < len(field):
@@ -59,9 +59,9 @@ def _unescape_mount_field(field: str) -> str:
 
 
 def parse_mountinfo(text: str) -> list[tuple[str, str]]:
-    """Coppie (punto di mount, tipo di file system) da `/proc/self/mountinfo`.
+    """Pairs (mount point, file system type) from `/proc/self/mountinfo`.
 
-    Le righe di forma inattesa si saltano: il tipo resta ignoto e vale il genitore.
+    Lines of unexpected shape are skipped: the type stays unknown and the parent's applies.
     """
     mounts: list[tuple[str, str]] = []
     for line in text.splitlines():
@@ -75,7 +75,7 @@ def parse_mountinfo(text: str) -> list[tuple[str, str]]:
 
 
 def kind_from_mounts(path: PurePosixPath, mounts: Sequence[tuple[str, str]]) -> FolderKind:
-    """Tipo della cartella dal mount più specifico che la contiene."""
+    """Kind of the folder from the most specific mount that contains it."""
     best_length = -1
     best_type: str | None = None
     for mount_point, filesystem in mounts:
@@ -100,8 +100,8 @@ def _is_network_path(path: PureWindowsPath) -> bool:
 
 
 def cloud_roots(env: Mapping[str, str], dropbox_info: str | None) -> list[PureWindowsPath]:
-    """Radici delle cartelle sincronizzate note: variabili d'ambiente di OneDrive e
-    `info.json` di Dropbox (già letto, o None)."""
+    """Roots of the known synchronized folders: OneDrive environment variables and
+    Dropbox `info.json` (already read, or None)."""
     lowered = {key.casefold(): value for key, value in env.items()}
     roots = [PureWindowsPath(lowered[n]) for n in _ONEDRIVE_ENV_NAMES if lowered.get(n)]
     roots.extend(_dropbox_roots(dropbox_info))
@@ -124,7 +124,7 @@ def _dropbox_roots(info_text: str | None) -> list[PureWindowsPath]:
 
 
 def _has_cloud_name(names: Sequence[str]) -> bool:
-    """Vero se un componente del percorso ha il nome tipico di una cartella sincronizzata."""
+    """True if a component of the path has the typical name of a synchronized folder."""
     lowered = [name.casefold() for name in names]
     return any(n in _CLOUD_FOLDER_NAMES or n.startswith(_ONEDRIVE_NAME_PREFIX) for n in lowered)
 
@@ -141,11 +141,11 @@ def windows_kind(
     drive_type_of: Callable[[str], int],
     attributes_of: Callable[[PureWindowsPath], int],
 ) -> FolderKind:
-    """Tipo di una cartella esistente (o del suo antenato esistente) su Windows.
+    """Kind of an existing folder (or of its existing ancestor) on Windows.
 
-    Rete: percorso UNC o unità remota. Sincronizzata: sotto una radice nota, con un nome
-    tipico (OneDrive, Dropbox, Google Drive…) o con attributi di segnaposto cloud sulla
-    cartella o su un antenato. Unità sconosciuta: `UNKNOWN`.
+    Network: UNC path or remote drive. Synchronized: under a known root, with a typical
+    name (OneDrive, Dropbox, Google Drive…) or with cloud placeholder attributes on the
+    folder or on an ancestor. Unknown drive: `UNKNOWN`.
     """
     if _is_network_path(path):
         return FolderKind.NETWORK
@@ -183,11 +183,11 @@ def _read_dropbox_info(env: Mapping[str, str]) -> str | None:
     return None
 
 
-# --- Punto d'ingresso ------------------------------------------------------------------------
+# --- Entry point -----------------------------------------------------------------------
 
 
 def nearest_existing(path: Path) -> Path:
-    """Il percorso stesso se esiste, altrimenti il suo antenato più vicino che esiste."""
+    """The path itself if it exists, otherwise its nearest existing ancestor."""
     for candidate in (path, *path.parents):
         if candidate.exists():
             return candidate
@@ -195,17 +195,18 @@ def nearest_existing(path: Path) -> Path:
 
 
 class SystemFolderKindDetector:
-    """Rivelatore usato in produzione: `detector(folder) -> FolderKind`.
+    """Detector used in production: `detector(folder) -> FolderKind`.
 
-    Per una cartella mancante riporta il tipo del posto in cui verrebbe creata. Non solleva
-    eccezioni: un'informazione non ottenibile dà `UNKNOWN`.
+    For a missing folder it reports the kind of the place where it would be created. It does not
+    raise
+    exceptions: information that cannot be obtained gives `UNKNOWN`.
     """
 
     def __init__(self, env: Mapping[str, str]) -> None:
         self._env = env
 
     def __call__(self, folder: Path) -> FolderKind:
-        """Tipo della cartella o del suo antenato esistente più vicino."""
+        """Kind of the folder or of its nearest existing ancestor."""
         try:
             existing = nearest_existing(folder.absolute())
             if _IS_WINDOWS:

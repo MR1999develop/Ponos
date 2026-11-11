@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Lettura con tetto e scrittura atomica."""
+"""Capped reading and atomic writing."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def test_a_failed_replace_leaves_no_temporary_and_the_destination_untouched(
     tmp_path: Path,
 ) -> None:
     target = tmp_path / "dati"
-    target.mkdir()  # una cartella non si sostituisce con un file: la rinomina fallisce
+    target.mkdir()  # a folder is not replaced by a file: the rename fails
     (target / "dentro.txt").write_bytes(b"x")
 
     with pytest.raises(OSError):

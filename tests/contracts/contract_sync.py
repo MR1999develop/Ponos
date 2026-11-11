@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Contratti del giornale della sincronizzazione e dei collegamenti all'id Garmin dell'indice.
+"""Contracts of the sync journal and of the links to the index's Garmin id.
 
-Come gli altri contratti di archiviazione, si provano attraverso un profilo creato dal
-`ProfileStorage` della fixture `harness`.
+Like the other storage contracts, they are tried through a profile created by the
+`ProfileStorage` of the `harness` fixture.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from ponos_coach.activities.domain import (
     mark_downloaded,
     mark_failed,
     mark_matched,
+    mark_unanswered,
     pending_entry,
     rearm_exhausted,
 )
@@ -52,7 +53,7 @@ def _id(number: int) -> GarminActivityId:
 
 
 class ActivityIndexGarminIdContract:
-    """Cercare un'attività per id Garmin e collegarglielo (abbinamento a un import da file)."""
+    """Find an activity by Garmin id and link it (matching with a file import)."""
 
     def test_activity_is_found_by_its_garmin_id(self, harness: StorageHarness) -> None:
         record = make_record(origin=ActivityOrigin.GARMIN, garmin_activity_id=77)
@@ -140,7 +141,7 @@ class ActivityIndexGarminIdContract:
 
 
 class SyncJournalContract:
-    """Il giornale della sincronizzazione: cursori, voci e transizioni di stato."""
+    """The sync journal: cursors, entries and state transitions."""
 
     def test_new_journal_is_empty(self, harness: StorageHarness) -> None:
         with closing(create(harness)) as profile:
@@ -306,6 +307,7 @@ class SyncJournalContract:
                 SyncStatus.MATCHED: 1,
                 SyncStatus.RETRYABLE: 0,
                 SyncStatus.FAILED: 0,
+                SyncStatus.SKIPPED: 0,
             }
 
     def test_known_ids_include_every_status_and_ignore_the_unknown(
@@ -332,7 +334,7 @@ class SyncJournalContract:
             assert journal.known_ids(asked) == frozenset(r.garmin_id for r in remotes)
 
     def test_next_to_process_needs_a_positive_limit(self, harness: StorageHarness) -> None:
-        with closing(create(harness)) as profile, pytest.raises(ValueError, match="limite"):
+        with closing(create(harness)) as profile, pytest.raises(ValueError, match="limit"):
             profile.sync_journal.next_to_process(0)
 
     def test_exhausted_entries_are_listed_newest_first_and_rearmed_to_pending(
@@ -364,8 +366,37 @@ class SyncJournalContract:
             assert [e.garmin_id for e in journal.next_exhausted(10)] == [_id(2)]
             assert [e.garmin_id for e in journal.next_exhausted(1)] == [_id(2)]
 
+    def test_unanswered_rounds_are_kept_and_the_entry_that_garmin_does_not_provide_is_rearmed(
+        self, harness: StorageHarness
+    ) -> None:
+        with closing(create(harness)) as profile:
+            journal = profile.sync_journal
+            journal.add_pending([remote_activity(1), remote_activity(2)], IMPORTED_AT)
+            first = journal.get(_id(1))
+            assert first is not None
+            first = mark_unanswered(first, IMPORTED_AT, 3)
+            journal.update(first)
+            assert journal.get(_id(1)) == first
+            assert (first.failed_attempts, first.unanswered_rounds) == (0, 1)
+            for _ in range(2):
+                first = mark_unanswered(first, IMPORTED_AT, 3)
+                journal.update(first)
+            second = journal.get(_id(2))
+            assert second is not None
+            journal.update(mark_downloaded(mark_unanswered(second, IMPORTED_AT, 3), LATER))
+
+            stuck = journal.next_exhausted(10)
+
+            assert [e.garmin_id for e in stuck] == [_id(1)]
+            assert stuck[0].failure is FailureReason.REMOTE_NOT_PROVIDED
+            done = journal.get(_id(2))
+            assert done is not None
+            assert (done.status, done.unanswered_rounds) == (SyncStatus.DOWNLOADED, 0)
+            journal.update(rearm_exhausted(stuck[0], LATER))
+            assert journal.get(_id(1)) == pending_entry(stuck[0].remote, LATER)
+
     def test_next_exhausted_needs_a_positive_limit(self, harness: StorageHarness) -> None:
-        with closing(create(harness)) as profile, pytest.raises(ValueError, match="limite"):
+        with closing(create(harness)) as profile, pytest.raises(ValueError, match="limit"):
             profile.sync_journal.next_exhausted(0)
 
     def test_last_completed_instant_is_kept_and_replaced(self, harness: StorageHarness) -> None:

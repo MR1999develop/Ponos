@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Test di `shape_of` dello spike Garmin: struttura senza valori."""
+"""Tests of `shape_of` of the Garmin spike: structure without values."""
 
 from __future__ import annotations
 

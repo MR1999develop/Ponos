@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Riconoscimento di cartelle di rete e sincronizzate (logica pura, provata su ogni sistema)."""
+"""Recognition of network and synced folders (pure logic, tried on every system)."""
 
 from __future__ import annotations
 

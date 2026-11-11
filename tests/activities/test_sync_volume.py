@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-SYNC-01 sul database vero: uno storico di 5.000 attività, completa e poi incrementale.
+"""T-SYNC-01 on the real database: a history of 5,000 activities, full then incremental.
 
-L'indice e il giornale sono quelli SQLite (le transazioni in memoria copiano tutto a ogni
-transazione, troppo per questo volume); Garmin è finto, l'archivio è in memoria e i "file"
-scaricati sono minuscoli (`run:<n>`) con una decodifica veloce: si prova la sincronizzazione, non
-il lettore FIT. Orologio e attesa non dormono.
+The index and journal are the SQLite ones (in-memory transactions copy everything at each
+transaction, too much for this volume); Garmin is fake, the archive is in memory and the "files"
+downloaded are tiny (`run:<n>`) with fast decoding: the sync is tested, not
+the FIT reader. Clock and wait do not sleep.
 """
 
 from __future__ import annotations
@@ -61,6 +61,7 @@ def rig(tmp_path: Path) -> Iterator[SyncRig]:
             fake,
             fake,
             profile.activities,
+            profile.deleted_activities,
             profile.sync_journal,
             memory,
             memory,
@@ -80,15 +81,15 @@ def test_t_sync_01_five_thousand_activities_full_then_incremental(rig: SyncRig) 
     assert full.completed
     assert (full.new_entries, full.downloaded, full.matched) == (HISTORY, HISTORY, 0)
     assert full.status_counts[SyncStatus.DOWNLOADED] == HISTORY
-    # una pagina vuota chiude l'elenco: il totale dichiarato non lo ferma (D-F2-04)
+    # an empty page closes the listing: the declared total does not stop it (D-F2-04)
     assert rig.fake.call_count(Call.LIST_PAGE) == HISTORY // PAGE_SIZE + 1
     assert rig.fake.call_count(Call.DOWNLOAD) == HISTORY
-    assert len(set(rig.fake.downloads)) == HISTORY  # nessun download ripetuto
+    assert len(set(rig.fake.downloads)) == HISTORY  # no repeated download
     assert rig.journal.load_cursor(ListingKind.FULL) == ListingCursor(HISTORY, HISTORY, True)
     assert len(rig.records()) == HISTORY
     assert len(rig.memory.files) == HISTORY
 
-    for number in range(HISTORY, HISTORY + 7):  # poche nuove
+    for number in range(HISTORY, HISTORY + 7):  # few new ones
         rig.fake.add_activity(
             RemoteActivity(remote_id(number), run_start(number), float(RUN_SECONDS), "running")
         )
@@ -100,11 +101,11 @@ def test_t_sync_01_five_thousand_activities_full_then_incremental(rig: SyncRig) 
 
     assert incremental.kind is ListingKind.INCREMENTAL
     assert (incremental.new_entries, incremental.downloaded) == (7, 7)
-    assert rig.fake.call_count(Call.LIST_PAGE) - lists_before == 2  # la seconda pagina è nota
+    assert rig.fake.call_count(Call.LIST_PAGE) - lists_before == 2  # the second page is known
     assert rig.fake.call_count(Call.DOWNLOAD) - downloads_before == 7
     assert len(rig.records()) == HISTORY + 7
 
-    verify = rig.run(SyncMode.VERIFY)  # rielenca tutto, senza riscaricare nulla
+    verify = rig.run(SyncMode.VERIFY)  # lists everything again, without downloading anything
     assert verify.kind is ListingKind.VERIFY
     assert (verify.new_entries, verify.downloaded) == (0, 0)
     assert rig.fake.call_count(Call.DOWNLOAD) - downloads_before == 7

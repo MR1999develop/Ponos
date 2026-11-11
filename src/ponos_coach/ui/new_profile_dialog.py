@@ -1,15 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dialogo "Nuovo profilo": vista umile sul modello `NewProfileForm`.
+"""Dialog "New profile": humble view on the `NewProfileForm` model.
 
-Il primo errore compare all'invio, poi i messaggi si aggiornano mentre si scrive. La cartella
-si esamina nel thread dei dati (mai nel thread della UI) e l'esito arriva con `show_folder_check`.
+The first error appears on submit, then messages update while typing. The folder
+is examined on the data thread (never on the UI thread) and the outcome arrives via
+`show_folder_check`.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import date
+from itertools import pairwise
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
@@ -17,6 +19,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -32,12 +35,23 @@ from ponos_coach.profiles.domain import FolderKind
 from ponos_coach.profiles.use_cases import NewProfileRequest
 from ponos_coach.ui.birth_date_edit import BirthDateEdit
 from ponos_coach.ui.body_input import body_problem_text
-from ponos_coach.ui.form_rows import add_field_row
+from ponos_coach.ui.form_rows import (
+    FieldKind,
+    add_field_row,
+    add_group_heading,
+    optional_threshold_edit,
+    size_field,
+    threshold_pace_edit,
+)
 from ponos_coach.ui.heart_rate_rules import (
     MAX_ALLOWED_BPM,
     MIN_ALLOWED_BPM,
     MIN_THRESHOLD_BPM,
     heart_rate_problem_text,
+    lt1_default_placeholder,
+    lt1_tooltip,
+    lt2_tooltip,
+    other_default_placeholder,
 )
 from ponos_coach.ui.new_profile_form import (
     Field,
@@ -51,7 +65,7 @@ from ponos_coach.ui.workspace import FolderCheck
 
 
 class NewProfileDialog(QDialog):
-    """Raccoglie nome, cartella, corpo, FC e sesso, e emette la richiesta di creazione."""
+    """Collect name, folder, body data, HR and sex, and emit the creation request."""
 
     create_requested = Signal(object)  # NewProfileRequest
 
@@ -108,6 +122,7 @@ class NewProfileDialog(QDialog):
         self._weight.textEdited.connect(self._on_weight_edited)
         self._birth = BirthDateEdit(self._today, self)
         self._birth.selection_changed.connect(self._on_birth_changed)
+        size_field(self._birth, FieldKind.DATE)
 
         self._min = self._bpm_box(MIN_ALLOWED_BPM, "minHeartRate")
         self._max = self._bpm_box(MIN_ALLOWED_BPM, "maxHeartRate")
@@ -116,6 +131,20 @@ class NewProfileDialog(QDialog):
         self._max.valueChanged.connect(self._on_max_changed)
         self._threshold.valueChanged.connect(self._on_threshold_changed)
         self._threshold_note = self._note_label()
+        self._run_lt1 = optional_threshold_edit(self, "runLt1HeartRate")
+        self._run_lt1.textEdited.connect(self._on_run_lt1_edited)
+        self._other = optional_threshold_edit(self, "otherThresholdHeartRate")
+        self._other.textEdited.connect(self._on_other_edited)
+        self._other_lt1 = optional_threshold_edit(self, "otherLt1HeartRate")
+        self._other_lt1.textEdited.connect(self._on_other_lt1_edited)
+        for lt1 in (self._run_lt1, self._other_lt1):
+            lt1.setToolTip(lt1_tooltip())
+        for lt2 in (self._threshold, self._other):
+            lt2.setToolTip(lt2_tooltip())
+        self._pace = threshold_pace_edit(
+            self, "thresholdPace", self.tr("Threshold pace (min/km)"), self.tr("m:ss")
+        )
+        self._pace.textEdited.connect(self._on_pace_edited)
 
         self._male = QRadioButton(self.tr("Male"), self)
         self._female = QRadioButton(self.tr("Female"), self)
@@ -150,14 +179,7 @@ class NewProfileDialog(QDialog):
         )
         for text, widget, field in rows:
             add_field_row(layout, text, widget, self._with_error(widget, field))
-        threshold_box = QWidget(self)
-        threshold_column = QVBoxLayout(threshold_box)
-        threshold_column.setContentsMargins(0, 0, 0, 0)
-        threshold_column.setSpacing(SPACE_1)
-        threshold_column.addWidget(self._threshold)
-        threshold_column.addWidget(self._threshold_note)
-        threshold_column.addWidget(self._errors[Field.THRESHOLD])
-        add_field_row(layout, self.tr("Threshold heart rate"), self._threshold, threshold_box)
+        layout.addRow(self._thresholds_group())
         sex_box = QWidget(self)
         sex_row = QHBoxLayout(sex_box)
         sex_row.setContentsMargins(0, 0, 0, 0)
@@ -175,7 +197,7 @@ class NewProfileDialog(QDialog):
         )
         self._create.setDefault(True)
         self._update_create_button()
-        self._buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        self._cancel = self._buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
         self._buttons.accepted.connect(self._on_create)
         self._buttons.rejected.connect(self.reject)
 
@@ -183,11 +205,80 @@ class NewProfileDialog(QDialog):
         outer.setSpacing(SPACE_4)
         outer.addLayout(layout)
         outer.addWidget(self._buttons)
+        self._set_tab_order()
+
+    def _thresholds_group(self) -> QGroupBox:
+        """Running threshold plus the optional ones, together: the note says they can wait."""
+        group = QGroupBox(self.tr("Thresholds"), self)
+        form = QFormLayout(group)
+        form.setVerticalSpacing(SPACE_2)
+        threshold_box = QWidget(group)
+        threshold_column = QVBoxLayout(threshold_box)
+        threshold_column.setContentsMargins(0, 0, 0, 0)
+        threshold_column.setSpacing(SPACE_1)
+        threshold_column.addWidget(self._threshold)
+        threshold_column.addWidget(self._threshold_note)
+        threshold_column.addWidget(self._errors[Field.THRESHOLD])
+        add_group_heading(form, self.tr("Running and trail"), self)
+        self._run_lt1.setAccessibleName(self.tr("Running and trail: LT1 (aerobic threshold)"))
+        add_field_row(
+            form,
+            self.tr("LT1 (aerobic threshold)"),
+            self._run_lt1,
+            self._with_error(self._run_lt1, Field.RUN_LT1),
+        )
+        self._threshold.setAccessibleName(self.tr("Running and trail: LT2 (lactate threshold)"))
+        add_field_row(form, self.tr("LT2 (lactate threshold)"), self._threshold, threshold_box)
+        add_group_heading(form, self.tr("Other sports"), self)
+        self._other_lt1.setAccessibleName(self.tr("Other sports: LT1 (aerobic threshold)"))
+        self._other.setAccessibleName(self.tr("Other sports: LT2 (lactate threshold)"))
+        rows = (
+            (self.tr("LT1 (aerobic threshold)"), self._other_lt1, Field.OTHER_LT1),
+            (self.tr("LT2 (lactate threshold)"), self._other, Field.OTHER_THRESHOLD),
+            (self.tr("Threshold pace (min/km)"), self._pace, Field.THRESHOLD_PACE),
+        )
+        for text, widget, field in rows:
+            add_field_row(form, text, widget, self._with_error(widget, field))
+        optional = self._note_label()
+        optional.setText(
+            self.tr(
+                "LT1, the other sports and pace are optional: leave them empty and change "
+                "them later in Edit profile."
+            )
+        )
+        optional.setVisible(True)
+        form.addRow(optional)
+        return group
+
+    def _set_tab_order(self) -> None:
+        """Tab follows the visual order, top to bottom."""
+        order: list[QWidget] = [
+            self._name,
+            self._folder,
+            self._browse,
+            self._height,
+            self._weight,
+            self._birth,
+            self._min,
+            self._max,
+            self._run_lt1,
+            self._threshold,
+            self._other_lt1,
+            self._other,
+            self._pace,
+            self._male,
+            self._female,
+            self._create,
+            self._cancel,
+        ]
+        for first, second in pairwise(order):
+            QWidget.setTabOrder(first, second)
 
     def _text_field(self, name: str, accessible_name: str) -> QLineEdit:
         field = QLineEdit(self)
         field.setObjectName(name)
         field.setAccessibleName(accessible_name)
+        size_field(field, FieldKind.SHORT)
         return field
 
     def _bpm_box(self, low: int, name: str) -> QSpinBox:
@@ -195,6 +286,7 @@ class NewProfileDialog(QDialog):
         box.setObjectName(name)
         box.setRange(low, MAX_ALLOWED_BPM)
         box.setSuffix(self.tr(" bpm"))
+        size_field(box, FieldKind.SHORT)
         return box
 
     def _note_label(self) -> QLabel:
@@ -221,63 +313,88 @@ class NewProfileDialog(QDialog):
         column.addWidget(self._errors[field])
         return box
 
-    # --- Accessori per i test ---------------------------------------------------------
+    # --- Test accessors ---------------------------------------------------------
 
     @property
     def form(self) -> NewProfileForm:
-        """Il modello del modulo."""
+        """The form model."""
         return self._form
 
     @property
     def name_edit(self) -> QLineEdit:
-        """Campo del nome."""
+        """Name field."""
         return self._name
 
     @property
     def folder_edit(self) -> QLineEdit:
-        """Campo della cartella."""
+        """Folder field."""
         return self._folder
 
     @property
     def browse_button(self) -> QPushButton:
-        """Bottone "Sfoglia..."."""
+        """Button "Browse..."."""
         return self._browse
 
     @property
     def height_edit(self) -> QLineEdit:
-        """Campo dell'altezza."""
+        """Height field."""
         return self._height
 
     @property
     def weight_edit(self) -> QLineEdit:
-        """Campo del peso."""
+        """Weight field."""
         return self._weight
 
     @property
     def birth_edit(self) -> BirthDateEdit:
-        """Selettore della data di nascita."""
+        """Birth date picker."""
         return self._birth
 
     @property
+    def threshold_spin(self) -> QSpinBox:
+        """Running threshold heart rate."""
+        return self._threshold
+
+    @property
+    def run_lt1_edit(self) -> QLineEdit:
+        """LT1 of running and trail (empty: the default, shown as the placeholder)."""
+        return self._run_lt1
+
+    @property
+    def other_lt1_edit(self) -> QLineEdit:
+        """LT1 of the other sports (empty: the default, shown as the placeholder)."""
+        return self._other_lt1
+
+    @property
+    def other_edit(self) -> QLineEdit:
+        """LT2 of the other sports (empty: the default, shown as the placeholder)."""
+        return self._other
+
+    @property
+    def pace_edit(self) -> QLineEdit:
+        """Threshold pace field (`m:ss`; empty: no pace)."""
+        return self._pace
+
+    @property
     def destination_text(self) -> str:
-        """Riga "I dati andranno in: ..." (vuota se non è mostrata)."""
+        """Row "Data will go in: ..." (empty if not shown)."""
         return self._destination_note.text() if self._destination_note.isVisible() else ""
 
     @property
     def create_button(self) -> QPushButton:
-        """Bottone "Crea profilo"."""
+        """Button "Create profile"."""
         return self._create
 
     @property
     def threshold_note_text(self) -> str:
-        """Nota sulla soglia stimata (vuota se la soglia è stata fissata)."""
+        """Note on the estimated threshold (empty if the threshold was set)."""
         return self._threshold_note.text()
 
     def error_text(self, field: Field) -> str:
-        """Messaggio d'errore mostrato sotto un campo (vuoto se non c'è)."""
+        """Error message shown under a field (empty if there is none)."""
         return self._errors[field].text()
 
-    # --- Dal modello alla vista -------------------------------------------------------
+    # --- From the model to the view -------------------------------------------------------
 
     def _load_from_form(self) -> None:
         form = self._form
@@ -290,6 +407,10 @@ class NewProfileDialog(QDialog):
         self._min.setValue(form.min_bpm)
         self._max.setValue(form.max_bpm)
         self._sync_threshold()
+        self._run_lt1.setText(form.run_lt1_text)
+        self._other.setText(form.other_text)
+        self._other_lt1.setText(form.other_lt1_text)
+        self._pace.setText(form.pace_text)
         (self._male if form.sex is Sex.MALE else self._female).setChecked(True)
 
     def _sync_threshold(self) -> None:
@@ -306,6 +427,20 @@ class NewProfileDialog(QDialog):
         else:
             self._threshold_note.setText("")
         self._threshold_note.setVisible(self._form.threshold_is_estimate)
+        self._refresh_placeholders()
+
+    def _refresh_placeholders(self) -> None:
+        """The default of each optional threshold, for the heart rates now entered."""
+        form = self._form
+        self._run_lt1.setPlaceholderText(
+            lt1_default_placeholder(form.threshold_default(Field.RUN_LT1))
+        )
+        self._other.setPlaceholderText(
+            other_default_placeholder(form.threshold_default(Field.OTHER_THRESHOLD))
+        )
+        self._other_lt1.setPlaceholderText(
+            lt1_default_placeholder(form.threshold_default(Field.OTHER_LT1))
+        )
 
     def _refresh_errors(self) -> None:
         problems = self._form.problems(self._today) if self._show_errors else ()
@@ -334,7 +469,7 @@ class NewProfileDialog(QDialog):
         }
         return texts[problem]
 
-    # --- Dalla vista al modello -------------------------------------------------------
+    # --- From the view to the model -------------------------------------------------------
 
     def _on_name_edited(self, text: str) -> None:
         self._form.name = text
@@ -356,7 +491,7 @@ class NewProfileDialog(QDialog):
             self._request_inspection()
 
     def _refresh_destination(self) -> None:
-        """Dice dove andranno i dati quando la cartella scelta contiene già altro."""
+        """Say where the data will go when the chosen folder already contains something else."""
         destination = self._form.destination if self._form.uses_subfolder else ""
         self._destination_note.setText(
             self.tr("Data will go in: {folder}").format(folder=destination)
@@ -364,7 +499,8 @@ class NewProfileDialog(QDialog):
         self._destination_note.setVisible(bool(destination))
 
     def _update_create_button(self) -> None:
-        """ "Crea profilo" resta disabilitato, con il motivo nel tooltip, senza cartella valida."""
+        """ "Create profile" stays disabled, with the reason in the tooltip, without a valid
+        folder."""
         problem = self._form.folder_problem()
         self._create.setEnabled(problem is None)
         self._create.setToolTip("" if problem is None else self._problem_text(problem))
@@ -383,6 +519,7 @@ class NewProfileDialog(QDialog):
 
     def _on_min_changed(self, value: int) -> None:
         self._form.min_bpm = value
+        self._refresh_placeholders()
         self._refresh_errors()
 
     def _on_max_changed(self, value: int) -> None:
@@ -395,6 +532,23 @@ class NewProfileDialog(QDialog):
         self._sync_threshold()
         self._refresh_errors()
 
+    def _on_run_lt1_edited(self, text: str) -> None:
+        self._form.run_lt1_text = text
+        self._refresh_errors()
+
+    def _on_other_lt1_edited(self, text: str) -> None:
+        self._form.other_lt1_text = text
+        self._refresh_errors()
+
+    def _on_other_edited(self, text: str) -> None:
+        self._form.other_text = text
+        self._refresh_placeholders()  # the default LT1 of the other sports follows their LT2
+        self._refresh_errors()
+
+    def _on_pace_edited(self, text: str) -> None:
+        self._form.pace_text = text
+        self._refresh_errors()
+
     def _on_sex_changed(self, male: bool) -> None:
         self._form.sex = Sex.MALE if male else Sex.FEMALE
 
@@ -404,7 +558,7 @@ class NewProfileDialog(QDialog):
             self._inspect_folder(Path(text))
 
     def show_folder_check(self, check: FolderCheck) -> None:
-        """Esito dell'esame di una cartella; si ignora se non è più quella scritta."""
+        """Outcome of examining a folder; ignored if it is no longer the one typed."""
         if str(check.folder) != self._form.folder_text.strip():
             return
         if check.inspection is None:
@@ -450,5 +604,9 @@ class NewProfileDialog(QDialog):
             Field.MIN_BPM: self._min,
             Field.MAX_BPM: self._max,
             Field.THRESHOLD: self._threshold,
+            Field.RUN_LT1: self._run_lt1,
+            Field.OTHER_THRESHOLD: self._other,
+            Field.OTHER_LT1: self._other_lt1,
+            Field.THRESHOLD_PACE: self._pace,
         }[field]
         target.setFocus()

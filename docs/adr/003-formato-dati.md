@@ -1,64 +1,64 @@
-# 003. Formato dei dati su disco
+# 003. On-disk data format
 
-- Stato: Accettato; percorso dell'archivio e identità dei GPX sostituiti
-  dall'ADR 005
-- Data: 2026-11-05
+- Status: Accepted; archive path and GPX identity replaced by ADR 005; GPX and ZIP
+  import removed by ADR 014
+- Date: 2026-11-05
 
-## Contesto
+## Context
 
-I dati dell'utente (attività, parametri, obiettivi, piani, infortuni) devono
-sopravvivere a crash e spostamenti. Ogni profilo ha una cartella scelta
-dall'utente. Il formato salvato è difficile da cambiare dopo il rilascio.
-Le attività arrivano da Garmin, da file importati a mano e da cartelle: la
-stessa attività non deve entrare due volte.
+The user's data (activities, parameters, goals, plans, injuries) must survive
+crashes and moves. Each profile has a folder chosen by the user. The saved
+format is hard to change after release. Activities come from Garmin, from
+files imported by hand and from folders: the same activity must not enter
+twice.
 
-## Opzioni
+## Options
 
-1. **FIT originali come fonte di verità e SQLite come indice e dati utente,
-   in una cartella per profilo.**
-   - Pro: il dato originale non si perde e i valori derivati (carichi, PMC) si
-     rigenerano; i file si possono aprire con altri strumenti; il database
-     resta piccolo.
-   - Contro: due archivi da tenere coerenti (ordine di scrittura rigoroso);
-     più file nella cartella.
-2. **Solo SQLite, con i FIT come BLOB.**
-   - Pro: un solo file, una sola transazione.
-   - Contro: database grande (anni di attività); una corruzione colpisce tutto;
-     backup e verifica di integrità dei singoli FIT più scomodi.
-3. **Un file JSON per attività.**
-   - Pro: semplice da leggere.
-   - Contro: perde il dato originale o lo duplica; nessuna query né
-     transazione; consistenza fra file difficile.
+1. **Original FIT files as the source of truth and SQLite as index and user
+   data, in one folder per profile.**
+   - Pro: the original data is not lost and the derived values (loads, PMC) are
+     regenerated; the files can be opened with other tools; the database stays
+     small.
+   - Con: two stores to keep consistent (strict write order); more files in the
+     folder.
+2. **SQLite only, with the FIT files as BLOBs.**
+   - Pro: a single file, a single transaction.
+   - Con: large database (years of activities); a corruption hits everything;
+     backup and integrity check of the single FIT files are more awkward.
+3. **One JSON file per activity.**
+   - Pro: simple to read.
+   - Con: loses the original data or duplicates it; no queries or
+     transactions; consistency between files is hard.
 
-## Decisione
+## Decision
 
-Opzione 1. Nella cartella del profilo: `ponos.sqlite3` (WAL, chiavi esterne,
-`user_version` e migrazioni), `fit/<anno>/<id_attività>.fit`, `backup/`,
-`ponos.lock`. Ogni FIT ha un SHA-256 registrato. Un FIT si scrive su file
-temporaneo, con flush e rinomina; il record in SQLite si scrive dopo il file.
+Option 1. In the profile folder: `ponos.sqlite3` (WAL, foreign keys,
+`user_version` and migrations), `fit/<year>/<activity_id>.fit`, `backup/`,
+`ponos.lock`. Each FIT has a recorded SHA-256. A FIT is written to a temporary
+file, with flush and rename; the SQLite record is written after the file.
 
-L'identità di un'attività è il `file_id` del FIT (produttore, numero di serie,
-ora di creazione): è uguale per lo stesso file scaricato da Garmin o copiato
-dall'orologio. L'id Garmin si aggiunge quando è noto.
+The identity of an activity is the `file_id` of the FIT (manufacturer, serial
+number, creation time): it is the same for the same file downloaded from
+Garmin or copied from the watch. The Garmin id is added when known.
 
-I token Garmin non stanno mai nella cartella: stanno nel portachiavi del
-sistema, legati all'id del profilo. I carichi e il PMC sono derivati.
+The Garmin tokens are never in the folder: they are in the system keychain,
+tied to the profile id. Loads and the PMC are derived.
 
-## Conseguenze
+## Consequences
 
-- La cartella è autosufficiente e si sposta o si apre da un altro PC.
-- Contiene dati di salute in chiaro (vedi rischi accettati in
+- The folder is self-sufficient and can be moved or opened from another PC.
+- It contains health data in plain text (see accepted risks in
   `docs/threat-model.md`).
-- Al riavvio si riconciliano archivio e database: nessun record senza file,
-  nessun temporaneo orfano.
-- Cambiare il formato richiede una migrazione versionata (expand-contract) e
-  un nuovo ADR se la struttura della cartella cambia.
-- Cartelle su disco di rete o sincronizzato sono a rischio: avviso e lock.
+- At restart archive and database are reconciled: no record without a file,
+  no orphan temporary file.
+- Changing the format requires a versioned migration (expand-contract) and a
+  new ADR if the folder structure changes.
+- Folders on a network or synchronised disk are at risk: warning and lock.
 
-## Come se ne verifica il rispetto
+## How compliance is verified
 
-- T-DATI-01 (migrazioni), T-DATI-02 (interruzione in ogni punto della
-  scrittura), T-DATI-03 (FIT alterato), T-DATI-04 (lock), T-DATI-05 (backup e
-  ripristino), T-IMP-03 (idempotenza).
-- T-SEC-07: il token non compare nella cartella del profilo.
-- T-SEC-04: nessun dato esterno nei nomi dei file dell'archivio.
+- T-DATI-01 (migrations), T-DATI-02 (interruption at every point of the
+  write), T-DATI-03 (altered FIT), T-DATI-04 (lock), T-DATI-05 (backup and
+  restore), T-IMP-03 (idempotence).
+- T-SEC-07: the token does not appear in the profile folder.
+- T-SEC-04: no external data in the names of the archive files.

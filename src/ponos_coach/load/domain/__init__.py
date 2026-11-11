@@ -3,10 +3,15 @@
 """Pure domain of the load feature (no I/O, Qt, network or logging)."""
 
 from ponos_coach.load.domain.activity_load import (
+    MAX_GAP_S,
     ActivityLoad,
     LoadSource,
+    ZoneLoad,
     compute_activity_load,
+    domain_seconds,
+    load_per_zone,
     out_of_limits,
+    sample_validity_s,
 )
 from ponos_coach.load.domain.aggregation import (
     DayLoad,
@@ -16,13 +21,26 @@ from ponos_coach.load.domain.aggregation import (
     weekly_load_by_sport,
     weekly_zone_seconds,
 )
+from ponos_coach.load.domain.banister import (
+    equivalence_factor,
+    equivalent_reserve_ratio,
+    reference_hour_weight,
+    threshold_reserve_ratio,
+    trimp_per_minute,
+)
 from ponos_coach.load.domain.heart_rate import (
+    DEFAULT_LT1_PERCENT,
     HeartRateLimits,
     Physiology,
     Sex,
+    SportGroup,
     ThresholdHeartRate,
+    default_lt1,
+    lt1_for_sport,
+    sport_group,
     threshold_for_sport,
 )
+from ponos_coach.load.domain.lactate_domains import DomainSeconds, seconds_per_domain
 from ponos_coach.load.domain.parameters import (
     LOAD_MODEL_VERSION,
     LoadFingerprint,
@@ -31,30 +49,33 @@ from ponos_coach.load.domain.parameters import (
     load_fingerprint,
     physiology_for_day,
 )
-from ponos_coach.load.domain.pmc import PmcSeries, compute_pmc
-from ponos_coach.load.domain.sport import (
-    SportWeight,
-    customised_weights,
-    default_weight,
-    effective_weight,
-    effective_weights,
-    typical_intensity,
+from ponos_coach.load.domain.pmc import (
+    PEAK_WINDOW_DAYS,
+    PmcSeries,
+    compute_pmc,
+    ctl_share_of_recent_peak,
 )
+from ponos_coach.load.domain.sport import typical_intensity
 from ponos_coach.load.domain.zones import (
     ZONE_COUNT,
     ZONE_STARTS_PERCENT,
     ZoneSeconds,
     seconds_per_zone,
+    zone_bpm_ranges,
     zone_indices,
     zone_starts_bpm,
 )
 
 __all__ = [
+    "DEFAULT_LT1_PERCENT",
     "LOAD_MODEL_VERSION",
+    "MAX_GAP_S",
+    "PEAK_WINDOW_DAYS",
     "ZONE_COUNT",
     "ZONE_STARTS_PERCENT",
     "ActivityLoad",
     "DayLoad",
+    "DomainSeconds",
     "HeartRateLimits",
     "LoadFingerprint",
     "LoadSource",
@@ -63,26 +84,37 @@ __all__ = [
     "PhysiologyEntry",
     "PmcSeries",
     "Sex",
-    "SportWeight",
+    "SportGroup",
     "ThresholdHeartRate",
     "WeeklyLoad",
     "WeeklyZones",
+    "ZoneLoad",
     "ZoneSeconds",
     "compute_activity_load",
     "compute_pmc",
-    "customised_weights",
-    "default_weight",
-    "effective_weight",
-    "effective_weights",
+    "ctl_share_of_recent_peak",
+    "default_lt1",
+    "domain_seconds",
+    "equivalence_factor",
+    "equivalent_reserve_ratio",
     "iso_week_start",
     "load_fingerprint",
+    "load_per_zone",
+    "lt1_for_sport",
     "out_of_limits",
     "physiology_for_day",
+    "reference_hour_weight",
+    "sample_validity_s",
+    "seconds_per_domain",
     "seconds_per_zone",
+    "sport_group",
     "threshold_for_sport",
+    "threshold_reserve_ratio",
+    "trimp_per_minute",
     "typical_intensity",
     "weekly_load_by_sport",
     "weekly_zone_seconds",
+    "zone_bpm_ranges",
     "zone_indices",
     "zone_starts_bpm",
 ]

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-UI-04 (parte pura): le figure del carico settimanale e del tempo nelle zone."""
+"""T-UI-04 (pure part): the weekly load and time-in-zones figures."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from ponos_coach.load.domain import (
     weekly_load_by_sport,
     weekly_zone_seconds,
 )
+from ponos_coach.ui.chart_payload import HOVER_FONT_SIZE, HOVER_OPACITY
 from ponos_coach.ui.load_figures import (
     CHART_WEEKS,
     SPORT_COLOR_SLOT,
@@ -35,16 +36,16 @@ from ponos_coach.ui.load_figures import (
 from ponos_coach.ui.tokens import Theme, tokens_for
 from tests.ui.helpers import CHROME
 
-MONDAY = date(2025, 9, 1)  # un lunedì
-RED_ORANGE_END = 50.0  # gradi di tinta: da 0 a qui sono rossi, arancio e ambra
-RED_START = 335.0  # da qui a 360 il rosso
+MONDAY = date(2025, 9, 1)  # a Monday
+RED_ORANGE_END = 50.0  # degrees of hue: from 0 to here are reds, oranges and ambers
+RED_START = 335.0  # from here to 360 the red
 SPORT_NAMES = {sport: f"Sport {sport.value}" for sport in Sport}
 LOAD_LABELS = WeeklyLoadLabels("Week", "Load", SPORT_NAMES, CHROME)
 ZONES_LABELS = WeeklyZonesLabels("Week", "Time in zone", "Zone", CHROME)
 
 
 def long_history(weeks: int = 40) -> list[DayLoad]:
-    """Una corsa e (a settimane alterne) una pedalata a settimana, per `weeks` settimane."""
+    """A run and (in alternate weeks) one ride per week, for `weeks` weeks."""
     items: list[DayLoad] = []
     for index in range(weeks):
         monday = MONDAY + timedelta(weeks=index)
@@ -71,15 +72,30 @@ def test_weekly_load_has_one_stacked_bar_series_per_sport_in_sport_order() -> No
     assert figure.layout.barmode == "stack"
 
 
-def test_weekly_load_shows_only_the_last_26_weeks() -> None:
+def test_weekly_load_keeps_the_whole_history_and_opens_on_the_last_26_weeks() -> None:
     weekly = weekly_load_by_sport(long_history(40), through_of(40))
 
     figure = build_weekly_load_figure(weekly, LOAD_LABELS, tokens_for(Theme.LIGHT))
 
     running = figure.data[0]
-    assert len(running.x) == CHART_WEEKS == 26
-    assert running.x[-1] == through_of(40) - timedelta(days=3)  # il lunedì di questa settimana
-    assert list(running.y) == [50.0 + i for i in range(14, 40)]
+    this_monday = through_of(40) - timedelta(days=3)
+    assert len(running.x) == 40  # zooming out shows the older weeks
+    assert running.x[-1] == this_monday
+    assert list(running.y) == [50.0 + i for i in range(40)]
+    first_shown = this_monday - timedelta(weeks=CHART_WEEKS - 1)
+    assert CHART_WEEKS == 26
+    assert list(figure.layout.xaxis.range) == [
+        first_shown - timedelta(days=4),
+        this_monday + timedelta(days=4),
+    ]
+
+
+def test_a_short_history_opens_on_all_its_weeks() -> None:
+    weekly = weekly_load_by_sport(long_history(10), through_of(10))
+
+    figure = build_weekly_load_figure(weekly, LOAD_LABELS, tokens_for(Theme.LIGHT))
+
+    assert figure.layout.xaxis.range is None
 
 
 def test_weekly_load_values_are_the_weekly_sums_per_sport() -> None:
@@ -96,14 +112,15 @@ def test_weekly_load_values_are_the_weekly_sums_per_sport() -> None:
     assert by_name == {"Sport running": [65.0], "Sport trail": [10.0]}
 
 
-def test_a_sport_without_load_in_the_window_has_no_legend_entry() -> None:
+def test_a_sport_with_load_only_long_ago_keeps_its_series() -> None:
     old = [DayLoad(MONDAY, Sport.HIKING, 20.0)]
     recent = [DayLoad(MONDAY + timedelta(weeks=40 + i), Sport.RUNNING, 30.0) for i in range(3)]
     weekly = weekly_load_by_sport(old + recent, MONDAY + timedelta(weeks=42))
 
     figure = build_weekly_load_figure(weekly, LOAD_LABELS, tokens_for(Theme.LIGHT))
 
-    assert [trace.name for trace in figure.data] == ["Sport running"]
+    # the old sport stays: zooming out reaches its week
+    assert [trace.name for trace in figure.data] == ["Sport running", "Sport hiking"]
 
 
 def test_weekly_load_axes_have_names_and_units_and_bars_start_at_zero() -> None:
@@ -113,7 +130,7 @@ def test_weekly_load_axes_have_names_and_units_and_bars_start_at_zero() -> None:
 
     assert layout.xaxis.title.text == "Week"
     assert layout.xaxis.type == "date"
-    assert layout.yaxis.title.text == "Load (hrTSS per week)"
+    assert layout.yaxis.title.text == "Load (TRIMPeq per week)"
     assert layout.yaxis.rangemode == "tozero"
 
 
@@ -143,20 +160,20 @@ def test_zones_figure_has_five_stacked_series_z1_to_z5_with_their_boundaries() -
     figure = build_weekly_zones_figure(weekly, ZONES_LABELS, tokens_for(Theme.LIGHT))
 
     assert [t.name for t in figure.data] == [
-        "Z1 <85%",
-        "Z2 85\u201389%",
-        "Z3 90\u201394%",
-        "Z4 95\u201399%",
-        "Z5 \u2265100%",
+        "Z1 <72%",
+        "Z2 72\u201384%",
+        "Z3 85\u201394%",
+        "Z4 95\u2013102%",
+        "Z5 \u2265103%",
     ]
     assert figure.layout.barmode == "stack"
     assert figure.layout.legend.title.text == "Zone"
 
 
 def test_zone_labels_follow_the_single_source_of_the_boundaries() -> None:
-    assert ZONE_STARTS_PERCENT == (85, 90, 95, 100)
-    assert zone_label(0).endswith("<85%")
-    assert zone_label(ZONE_COUNT - 1).endswith("\u2265100%")
+    assert ZONE_STARTS_PERCENT == (72, 85, 95, 103)
+    assert zone_label(0).endswith("<72%")
+    assert zone_label(ZONE_COUNT - 1).endswith("\u2265103%")
     with_boundaries = [zone_label(i) for i in range(1, ZONE_COUNT - 1)]
     for label, start, end in zip(
         with_boundaries, ZONE_STARTS_PERCENT[:-1], ZONE_STARTS_PERCENT[1:], strict=True
@@ -169,9 +186,11 @@ def test_zones_are_in_hours_per_week_and_the_axes_say_so() -> None:
 
     figure = build_weekly_zones_figure(weekly, ZONES_LABELS, tokens_for(Theme.LIGHT))
 
-    # la prima settimana ha due attività (corsa e pedalata), ciascuna con 600 s in Z1 e 1200 s in Z2
+    # the first week has two activities (run and ride), each with 600 s in Z1 and 1200 s in Z2
     first_week_hours = [float(trace.y[0]) for trace in figure.data]
-    assert first_week_hours == pytest.approx([1200 / 3600, 2400 / 3600, 0, 0, 0])
+    assert first_week_hours[:2] == pytest.approx([1200 / 3600, 2400 / 3600])
+    # A zone without time is a gap: it draws nothing and the box under the pointer omits it.
+    assert all(np.isnan(hours) for hours in first_week_hours[2:])
     assert figure.layout.yaxis.title.text == "Time in zone (hours per week)"
     assert figure.layout.yaxis.rangemode == "tozero"
     assert figure.layout.xaxis.title.text == "Week"
@@ -195,10 +214,10 @@ def test_the_prepared_chart_carries_one_json_argument_and_an_ascii_script() -> N
 
     prefix, suffix = "ponosRender(", ");"
     assert prepared.script.startswith(prefix)
-    assert prepared.script.isascii()  # le virgolette e i simboli passano come escape JSON
+    assert prepared.script.isascii()  # quotes and symbols pass as JSON escapes
     payload = json.loads(prepared.script[len(prefix) : -len(suffix)])
     assert payload["filename"] == "ponos-coach-zones"
-    assert payload["figure"]["data"][0]["name"] == "Z1 <85%"
+    assert payload["figure"]["data"][0]["name"] == "Z1 <72%"
     assert prepared.background == tokens.background
 
 
@@ -224,14 +243,15 @@ def test_no_value_is_negative() -> None:
 
     figure = build_weekly_zones_figure(weekly, ZONES_LABELS, tokens_for(Theme.LIGHT))
 
-    assert all(np.all(np.asarray(trace.y) >= 0) for trace in figure.data)
+    values = [np.asarray(trace.y, dtype=float) for trace in figure.data]
+    assert all(np.all(v[~np.isnan(v)] > 0) for v in values)  # a value, or a gap for zero
 
 
-# --- Serie degli sport, colori, unità ed etichette delle zone -----------------------------------
+# --- Sport series, colours, units and zone labels -----------------------------------
 
 
 def every_sport_week(loads: dict[Sport, float]) -> list[DayLoad]:
-    """Un'attività per sport nella stessa settimana, con il carico dato."""
+    """One activity per sport in the same week, with the given load."""
     return [DayLoad(MONDAY, sport, load, ZoneSeconds.ZERO) for sport, load in loads.items()]
 
 
@@ -241,24 +261,14 @@ def traces_of(items: list[DayLoad]) -> dict[str, float]:
     return {str(trace.name): float(np.sum(trace.y)) for trace in figure.data}
 
 
-def test_up_to_five_sports_each_get_their_own_series() -> None:
-    loads = {
-        Sport.RUNNING: 50.0,
-        Sport.CYCLING: 40.0,
-        Sport.STRENGTH: 30.0,
-        Sport.HIKING: 20.0,
-        Sport.OTHER: 10.0,
-    }
-
-    assert traces_of(every_sport_week(loads)) == {SPORT_NAMES[s]: v for s, v in loads.items()}
-
-
-def test_with_more_than_five_sports_the_least_loaded_are_grouped_in_other() -> None:
+def test_every_sport_gets_its_own_series_strength_is_never_merged_into_other() -> None:
+    # The user's request of 2026-11-09: "Strength" instead of "Other" in the weekly load. With
+    # seven sports and seven colours there is no grouping: a light sport keeps its name.
     loads = {
         Sport.RUNNING: 70.0,
         Sport.TRAIL: 5.0,
         Sport.CYCLING: 60.0,
-        Sport.STRENGTH: 50.0,
+        Sport.STRENGTH: 3.0,
         Sport.HIKING: 40.0,
         Sport.WALKING: 8.0,
         Sport.OTHER: 2.0,
@@ -266,18 +276,16 @@ def test_with_more_than_five_sports_the_least_loaded_are_grouped_in_other() -> N
 
     series = traces_of(every_sport_week(loads))
 
-    assert len(series) == 5
-    assert series == {
-        SPORT_NAMES[Sport.RUNNING]: 70.0,
-        SPORT_NAMES[Sport.CYCLING]: 60.0,
-        SPORT_NAMES[Sport.STRENGTH]: 50.0,
-        SPORT_NAMES[Sport.HIKING]: 40.0,
-        SPORT_NAMES[Sport.OTHER]: 15.0,  # trail + walking + other
-    }
-    assert sum(series.values()) == sum(loads.values())  # il carico totale non cambia
+    assert series == {SPORT_NAMES[s]: v for s, v in loads.items()}
 
 
-def test_the_grouping_keeps_the_sport_order_other_last_and_the_color_of_each_sport() -> None:
+def test_only_sports_with_load_are_drawn() -> None:
+    loads = {Sport.RUNNING: 50.0, Sport.STRENGTH: 30.0}
+
+    assert traces_of(every_sport_week(loads)) == {SPORT_NAMES[s]: v for s, v in loads.items()}
+
+
+def test_the_series_keep_the_sport_order_and_the_color_of_each_sport() -> None:
     weekly = weekly_load_by_sport(
         every_sport_week({sport: float(10 + number) for number, sport in enumerate(Sport)}),
         MONDAY + timedelta(days=3),
@@ -287,24 +295,8 @@ def test_the_grouping_keeps_the_sport_order_other_last_and_the_color_of_each_spo
     figure = build_weekly_load_figure(weekly, LOAD_LABELS, tokens)
 
     names = [str(trace.name) for trace in figure.data]
-    assert names[-1] == SPORT_NAMES[Sport.OTHER]
-    order = [next(s for s, n in SPORT_NAMES.items() if n == name) for name in names]
-    assert order == sorted(order, key=list(Sport).index)
-    assert [trace.marker.color for trace in figure.data] == [sport_color(s, tokens) for s in order]
-
-
-def test_a_tie_in_the_load_is_broken_by_the_order_of_the_sports() -> None:
-    loads = dict.fromkeys(Sport, 10.0)
-
-    series = traces_of(every_sport_week(loads))
-
-    assert set(series) == {
-        SPORT_NAMES[Sport.RUNNING],
-        SPORT_NAMES[Sport.TRAIL],
-        SPORT_NAMES[Sport.CYCLING],
-        SPORT_NAMES[Sport.STRENGTH],
-        SPORT_NAMES[Sport.OTHER],
-    }
+    assert names == [SPORT_NAMES[s] for s in Sport]
+    assert [trace.marker.color for trace in figure.data] == [sport_color(s, tokens) for s in Sport]
 
 
 @pytest.mark.parametrize("theme", list(Theme))
@@ -316,12 +308,12 @@ def test_no_sport_color_is_red_or_orange(theme: Theme) -> None:
         hue, saturation, _ = colorsys.rgb_to_hsv(red / 255, green / 255, blue / 255)
         degrees = hue * 360
         warm = degrees < RED_ORANGE_END or degrees > RED_START
-        assert not (warm and saturation > 0.25), (sport, degrees)  # grigi e neri non contano
+        assert not (warm and saturation > 0.25), (sport, degrees)  # greys and blacks do not count
 
 
 def test_the_units_of_the_axes_and_tooltips_come_from_the_labels() -> None:
     weekly = weekly_load_by_sport(long_history(4), through_of(4))
-    load_labels = WeeklyLoadLabels("W", "L", SPORT_NAMES, CHROME, unit="hrTSS a settimana")
+    load_labels = WeeklyLoadLabels("W", "L", SPORT_NAMES, CHROME, unit="TRIMPeq a settimana")
     zones_labels = WeeklyZonesLabels("W", "T", "Z", CHROME, unit="ore a settimana")
 
     load = build_weekly_load_figure(weekly, load_labels, tokens_for(Theme.LIGHT))
@@ -329,8 +321,8 @@ def test_the_units_of_the_axes_and_tooltips_come_from_the_labels() -> None:
         weekly_zone_seconds(long_history(4), through_of(4)), zones_labels, tokens_for(Theme.LIGHT)
     )
 
-    assert load.layout.yaxis.title.text == "L (hrTSS a settimana)"
-    assert "hrTSS a settimana" in load.data[0].hovertemplate
+    assert load.layout.yaxis.title.text == "L (TRIMPeq a settimana)"
+    assert "TRIMPeq a settimana" in load.data[0].hovertemplate
     assert zones.layout.yaxis.title.text == "T (ore a settimana)"
 
 
@@ -349,5 +341,20 @@ def test_zone_labels_with_non_integer_boundaries_say_less_than_the_next_boundary
 
 
 def test_zone_labels_with_whole_boundaries_end_one_point_before_the_next() -> None:
-    assert zone_label(1, (85.0, 90.0, 95.0, 100.0)) == "Z2 85\u201389%"
-    assert zone_label(1) == "Z2 85\u201389%"
+    assert zone_label(1, (72.0, 85.0, 95.0, 103.0)) == "Z2 72\u201384%"
+    assert zone_label(1) == "Z2 72\u201384%"
+
+
+def test_the_box_under_the_pointer_is_small_and_see_through() -> None:
+    # The user's request of 2026-11-10: the information that opens under the pointer was too
+    # intrusive.
+    tokens = tokens_for(Theme.LIGHT)
+    weekly = weekly_zone_seconds(long_history(4), through_of(4))
+
+    label = build_weekly_zones_figure(weekly, ZONES_LABELS, tokens).layout.hoverlabel
+
+    assert label.font.size == HOVER_FONT_SIZE < 13
+    assert str(label.bgcolor).startswith("rgba(") and str(label.bgcolor).endswith(
+        f", {HOVER_OPACITY})"
+    )
+    assert label.bordercolor == tokens.grid

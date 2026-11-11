@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""`GarminConnectAccount`: login con MFA, ripresa dai token, segreti (T-SEC-07)."""
+"""`GarminConnectAccount`: login with MFA, resume from tokens, secrets (T-SEC-07)."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def account_with(factory: ScriptedFactory, **options: int) -> GarminConnectAccou
 
 
 def no_code() -> str | None:
-    raise AssertionError("non doveva chiedere il codice MFA")
+    raise AssertionError("it must not ask for the MFA code")
 
 
 class TestLogin:
@@ -213,7 +213,7 @@ class TestResume:
 
 
 class TestSecrets:
-    """T-SEC-07: password, email e token non compaiono in messaggi, rappresentazioni e log."""
+    """T-SEC-07: password, email and tokens do not appear in messages, representations and logs."""
 
     def test_errors_and_sessions_do_not_leak_the_secrets_even_if_the_library_does(
         self, caplog: pytest.LogCaptureFixture

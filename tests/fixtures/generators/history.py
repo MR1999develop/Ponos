@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Storico sintetico di attività miste, scritto in una cartella a scelta.
+"""Synthetic history of mixed activities, written in a folder of choice.
 
-Serve ai test e allo scheletro dell'app; nessun file storico è versionato.
+Serves the tests and the app skeleton; no history file is versioned.
 """
 
 from __future__ import annotations
@@ -14,9 +14,9 @@ from pathlib import Path
 from . import fit_writer as fw
 from .tracks import Track, add_noise, drift, ramp, to_samples
 
-_STEP_S = 10  # un campione ogni 10 s: file piccoli
+_STEP_S = 10  # one sample every 10 s: small files
 
-# (sport, sub_sport, FC media, durata minima e massima in minuti, peso nella scelta)
+# (sport, sub_sport, average HR, minimum and maximum duration in minutes, weight in the choice)
 _KINDS: list[tuple[fw.Sport, fw.SubSport, int, int, int, int]] = [
     (fw.Sport.RUNNING, fw.SubSport.ROAD, 152, 30, 75, 5),
     (fw.Sport.CYCLING, fw.SubSport.ROAD, 138, 45, 120, 3),
@@ -26,7 +26,7 @@ _KINDS: list[tuple[fw.Sport, fw.SubSport, int, int, int, int]] = [
 
 
 def _track(avg_bpm: int, minutes: int, rng: random.Random) -> Track:
-    """Riscaldamento, tratto centrale con deriva, defaticamento."""
+    """Warm-up, central stretch with drift, cool-down."""
     total = minutes * 60 // _STEP_S
     warm = max(1, total // 8)
     cool = max(1, total // 10)
@@ -40,7 +40,7 @@ def _track(avg_bpm: int, minutes: int, rng: random.Random) -> Track:
 
 
 def _activity_days(days: int, rng: random.Random) -> list[int]:
-    """Indici dei giorni con attività: 4-6 per ogni settimana (anche parziale)."""
+    """Indices of the days with activities: 4-6 for each week (even partial)."""
     chosen: list[int] = []
     for week_start in range(0, days, 7):
         week = list(range(week_start, min(week_start + 7, days)))
@@ -50,14 +50,14 @@ def _activity_days(days: int, rng: random.Random) -> list[int]:
 
 
 def generate_history(out_dir: Path, days: int, seed: int, start_date: date) -> list[Path]:
-    """Scrive in `out_dir` lo storico di `days` giorni da `start_date`.
+    """Writes in `out_dir` the history of `days` days from `start_date`.
 
-    Ritorna i percorsi in ordine di data.
+    Returns the paths in date order.
 
-    Stesso seme e stessi argomenti, stessi byte. I file sono `YYYY-MM-DD_NN_sport.fit`.
+    Same seed and same arguments, same bytes. The files are `YYYY-MM-DD_NN_sport.fit`.
     """
     if days < 0:
-        raise ValueError("days deve essere >= 0")
+        raise ValueError("days must be >= 0")
     rng = random.Random(seed)
     out_dir.mkdir(parents=True, exist_ok=True)
     weights = [kind[5] for kind in _KINDS]

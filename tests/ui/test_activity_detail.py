@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dettaglio di un'attività: righe delle zone e messaggi dei file non disponibili."""
+"""Activity detail: zone rows and messages for unavailable files."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 import numpy as np
 import pytest
+from PySide6.QtCore import Qt
 
 from ponos_coach.activities.domain import (
     ActivitySummary,
@@ -19,36 +20,56 @@ from ponos_coach.activities.domain import (
 from ponos_coach.load.activity_detail import ActivityDetail, HeartRateTrace
 from ponos_coach.load.domain import (
     ActivityLoad,
+    DomainSeconds,
     HeartRateLimits,
     LoadSource,
     ZoneSeconds,
     zone_starts_bpm,
 )
 from ponos_coach.load.use_cases import ExclusionReason
-from ponos_coach.ui.activity_detail import zone_rows
+from ponos_coach.ui.activity_detail import (
+    PACE_SPORTS,
+    DomainKind,
+    average_pace_s_per_km,
+    domain_rows,
+    zone_rows,
+)
+from ponos_coach.ui.activity_detail_dialog import DomainTableModel, ZoneTableModel
+from ponos_coach.ui.activity_text import pace_text
 from ponos_coach.ui.errors import unavailable_detail_message
 
+DASH = "–"  # noqa: RUF001 - the separator itself
 START = datetime(2026, 5, 1, 7, 0, tzinfo=UTC)
 
 
-def detail_with(zones: ZoneSeconds) -> ActivityDetail:
+def detail_with(
+    zones: ZoneSeconds,
+    domains: DomainSeconds | None = None,
+    lt1: int = 142,
+    *,
+    sport: Sport = Sport.RUNNING,
+    distance_m: float | None = None,
+    timer_s: float = 20.0,
+) -> ActivityDetail:
     series = HeartRateSeries(np.array([0.0, 10.0]), np.array([120.0, 130.0]))
     limits = HeartRateLimits(50, 190)
-    load = ActivityLoad(10.0, 10.0, 10.0, 2, 0, 0.0, LoadSource.HEART_RATE, zones)
+    load = ActivityLoad(10.0, 2, 0, 0.0, LoadSource.HEART_RATE, zones)
     return ActivityDetail(
         identity=FitIdentity(FileId(1, 1, 1, START)),
-        sport=Sport.RUNNING,
+        sport=sport,
         start=START,
         local_day=START.date(),
-        elapsed_s=20.0,
-        timer_s=20.0,
-        summary=ActivitySummary(),
+        elapsed_s=timer_s,
+        timer_s=timer_s,
+        summary=ActivitySummary(distance_m=distance_m),
         load=load,
         trace=HeartRateTrace.of(series, limits),
         limits=limits,
         threshold_bpm=171,
+        lt1_bpm=lt1,
         zone_starts_bpm=zone_starts_bpm(171),
         unordered_hr_samples=0,
+        domain_seconds=domains,
     )
 
 
@@ -59,6 +80,33 @@ def test_one_row_per_zone_with_the_share_of_the_time_in_zones() -> None:
     assert [row.seconds for row in rows] == [300.0, 100.0, 0.0, 0.0, 100.0]
     assert [row.share for row in rows] == pytest.approx([0.6, 0.2, 0.0, 0.0, 0.2])
     assert sum(row.share for row in rows) == pytest.approx(1.0)
+
+
+def test_each_zone_row_has_its_whole_bpm_range_of_the_day() -> None:
+    rows = zone_rows(detail_with(ZoneSeconds.ZERO))  # threshold 171, limits 50 to 190
+
+    assert [row.bpm for row in rows] == [
+        (50, 123),
+        (124, 145),
+        (146, 162),
+        (163, 176),
+        (177, 190),
+    ]
+
+
+def test_the_zone_table_shows_the_bpm_range_next_to_the_zone(qtbot: object) -> None:
+    del qtbot  # the model needs the application, which pytest-qt creates
+    model = ZoneTableModel()
+    model.set_rows(zone_rows(detail_with(ZoneSeconds((300.0, 100.0, 0.0, 0.0, 100.0)))))
+
+    assert model.columnCount() == 5
+    assert model.headerData(0, Qt.Orientation.Horizontal) == "Zone (% of threshold)"
+    assert model.headerData(1, Qt.Orientation.Horizontal) == "Heart rate (bpm)"
+    assert model.data(model.index(0, 1)) == f"50{chr(0x2013)}123"
+    assert model.data(model.index(4, 1)) == f"177{chr(0x2013)}190"
+    assert model.data(model.index(1, 1), Qt.ItemDataRole.TextAlignmentRole) == int(
+        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+    )
 
 
 def test_without_time_in_zones_every_share_is_zero_not_a_division_error() -> None:
@@ -87,3 +135,101 @@ def test_the_messages_do_not_depend_on_a_path_or_a_file_name() -> None:
     }
 
     assert not any("\\" in text or "/" in text or ".fit" in text for text in texts)
+
+
+# --- The three domains ---------------------------------------------------------------------
+
+
+def test_one_row_per_domain_with_the_share_of_the_time() -> None:
+    rows = domain_rows(detail_with(ZoneSeconds.ZERO, DomainSeconds(300.0, 100.0, 100.0)))
+
+    assert [row.kind for row in rows] == [
+        DomainKind.BELOW_LT1,
+        DomainKind.BETWEEN,
+        DomainKind.ABOVE_LT2,
+    ]
+    assert [row.seconds for row in rows] == [300.0, 100.0, 100.0]
+    assert [row.share for row in rows] == pytest.approx([0.6, 0.2, 0.2])
+
+
+def test_each_domain_row_has_its_whole_bpm_range_of_the_day() -> None:
+    rows = domain_rows(detail_with(ZoneSeconds.ZERO, DomainSeconds(1.0, 1.0, 1.0)))
+
+    # limits 50 to 190, LT1 142, LT2 171: below up to 141, between 142 to 170, above 171 up
+    assert [row.bpm for row in rows] == [(50, 141), (142, 170), (171, 190)]
+
+
+def test_a_domain_with_no_whole_bpm_inside_the_limits_has_no_range() -> None:
+    rows = domain_rows(detail_with(ZoneSeconds.ZERO, DomainSeconds(1.0, 1.0, 1.0), lt1=50))
+
+    assert rows[0].bpm is None  # nothing below an LT1 equal to the resting rate
+
+
+def test_without_heart_rate_the_domains_are_empty() -> None:
+    rows = domain_rows(detail_with(ZoneSeconds.ZERO, None))
+
+    assert [row.seconds for row in rows] == [0.0, 0.0, 0.0]
+    assert [row.share for row in rows] == [0.0, 0.0, 0.0]
+
+
+def test_the_domain_model_shows_name_range_time_and_share() -> None:
+    model = DomainTableModel()
+    model.set_rows(domain_rows(detail_with(ZoneSeconds.ZERO, DomainSeconds(300.0, 100.0, 100.0))))
+
+    cells = [
+        [model.data(model.index(row, column)) for column in range(model.columnCount())]
+        for row in range(model.rowCount())
+    ]
+
+    assert cells == [
+        ["Below LT1", f"50{DASH}141", "0:05:00", "60"],
+        ["Between LT1 and LT2", f"142{DASH}170", "0:01:40", "20"],
+        ["Above LT2", f"171{DASH}190", "0:01:40", "20"],
+    ]
+
+
+NO_ZONES = ZoneSeconds((0.0, 0.0, 0.0, 0.0, 0.0))
+
+
+def test_running_trail_and_hiking_are_the_sports_measured_by_pace() -> None:
+    assert frozenset({Sport.RUNNING, Sport.TRAIL, Sport.HIKING}) == PACE_SPORTS
+
+
+@pytest.mark.parametrize("sport", [Sport.RUNNING, Sport.TRAIL, Sport.HIKING])
+def test_the_average_pace_is_the_moving_time_per_kilometre(sport: Sport) -> None:
+    detail = detail_with(NO_ZONES, sport=sport, distance_m=10_000.0, timer_s=3_000.0)
+
+    assert average_pace_s_per_km(detail) == pytest.approx(300.0)
+
+
+@pytest.mark.parametrize(
+    ("sport", "distance_m", "timer_s"),
+    [
+        (Sport.CYCLING, 10_000.0, 3_000.0),  # not measured by pace
+        (Sport.WALKING, 10_000.0, 3_000.0),
+        (Sport.RUNNING, None, 3_000.0),  # indoor: no distance
+        (Sport.RUNNING, 0.0, 3_000.0),
+        (Sport.RUNNING, 10_000.0, 0.0),
+    ],
+)
+def test_there_is_no_pace_for_other_sports_or_without_distance_and_time(
+    sport: Sport, distance_m: float | None, timer_s: float
+) -> None:
+    detail = detail_with(NO_ZONES, sport=sport, distance_m=distance_m, timer_s=timer_s)
+
+    assert average_pace_s_per_km(detail) is None
+
+
+@pytest.mark.parametrize(
+    ("s_per_km", "text"),
+    [
+        (300.0, "5:00"),
+        (332.4, "5:32"),
+        (359.6, "6:00"),
+        (59.0, "0:59"),
+        (4_000.0, "66:40"),
+        (None, ""),
+    ],
+)
+def test_the_pace_is_minutes_and_seconds_per_kilometre(s_per_km: float | None, text: str) -> None:
+    assert pace_text(s_per_km) == text

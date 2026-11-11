@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Il contratto di `ActivitySource` sul fake e sull'adattatore Garmin con il client finto."""
+"""The `ActivitySource` contract on the fake and on the Garmin adapter with the fake client."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ class _FakeHarness:
 def _port_error(failure: Failure) -> Exception:
     return {
         Failure.RATE_LIMITED: RateLimitedError(RETRY_AFTER_S),
-        Failure.TRANSIENT: TransientSourceError("guasto"),
+        Failure.TRANSIENT: TransientSourceError("failure"),
         Failure.AUTHENTICATION: AuthenticationRequiredError("token"),
         Failure.DEFINITIVE: DefinitiveSourceError("rifiutato"),
     }[failure]

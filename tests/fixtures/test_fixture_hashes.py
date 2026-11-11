@@ -1,17 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Le fixture versionate non cambiano byte: i test degli altri pacchetti ne dipendono."""
+"""The versioned fixtures do not change byte for byte: the tests of other packages depend on them."""
 
 from __future__ import annotations
 
 import hashlib
 from pathlib import Path
 
-import pytest
-
 DATA = Path(__file__).resolve().parent / "data"
 
-# SHA-256 delle fixture della fase 0. Le fixture nuove si aggiungono; queste non si toccano.
+# SHA-256 of the phase 0 fixtures. New fixtures are added; these are not touched.
 FROZEN = {
     "fit-ostili/bad_file_crc.fit": "35fced8cc32012fa29da972f30a21bc5eecea5725257b5ae169a0294e8b58cb0",
     "fit-ostili/bad_header_crc.fit": "a95d1be0e16fa25c39aeebe7e3db4125f6f36fd472872f573e68401a3e871ac6",
@@ -34,11 +32,20 @@ FROZEN = {
     "fit/run_hr_out_of_range.fit": "a2047e1c7ebf0b3cac0a7c1cc77f9ecfe7570c8c27c4a304c3c312064ea909ca",
     "fit/run_intervals.fit": "c5c0066e5b806a0e9edd27c440cb7b849f34d4ffeadcfe22020873719d35751a",
     "fit/run_one_second.fit": "c94bc3410ceb53e34a231425fb4749db3043503fd16b46675d0a0251e2f532f5",
+    "fit/run_threshold_no_distance.fit": "13f6ad0f56136c9443c3fd286b9a7698dc8e50cf0317838aba910ce6942d8e17",
+    "fit/run_threshold_paused.fit": "4d964e05da78beecc4c9fe893c8548e945e9a275ad811b63ee470eb7ba4e0216",
+    "fit/run_threshold_speed_only.fit": "2d39729036cac92a6aacdebb1a67e964702ca7ca6d5c4716fa2ea94c0e3821d2",
+    "fit/run_threshold_test.fit": "b62f559ad3daf74c3bce2d80a3091931e3b70239bd54c6385c759aa78bddeee2",
     "fit/strength_low_hr.fit": "637ad55500694e34e640f682ac11880a91ab1ad232668eda619b2b932b090988",
     "fit/walk_no_hr.fit": "b8f625697a099fd7a0d8f5a5674a73222e7138cb2bcb1e947595ab87f0699485",
 }
 
 
-@pytest.mark.parametrize("name", sorted(FROZEN))
-def test_existing_fixture_bytes_are_unchanged(name: str) -> None:
-    assert hashlib.sha256((DATA / name).read_bytes()).hexdigest() == FROZEN[name]
+def test_existing_fixture_bytes_are_unchanged() -> None:
+    changed = [
+        name
+        for name, digest in sorted(FROZEN.items())
+        if hashlib.sha256((DATA / name).read_bytes()).hexdigest() != digest
+    ]
+
+    assert not changed, f"frozen fixtures changed: {', '.join(changed)}"

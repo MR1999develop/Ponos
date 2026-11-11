@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Impalcatura del collaudo della fase 1: pila reale (SQLite, archivio su disco, sorgenti vere).
+"""Scaffolding for the phase 1 acceptance campaign: real stack (SQLite, on-disk archive, real
+sources).
 
-I test di collaudo non usano i fake in memoria: provano il comportamento osservabile della
-pila che l'utente riceve. Qui stanno i costruttori comuni, i controlli di coerenza tra indice
-e archivio e la cattura dei log.
+The campaign tests do not use in-memory fakes: they exercise the observable behaviour of the
+stack the user receives. Here are the shared builders, the consistency checks between index
+and archive, and the log capture.
 """
 
 from __future__ import annotations
@@ -47,7 +48,7 @@ TEMP_PREFIX = ".tmp-"
 
 
 def real_ports(config_dir: Path) -> ProfilePorts:
-    """Registro JSON, cartelle locali e SQLite veri (tipo di cartella fisso: locale)."""
+    """Real JSON registry, local folders and SQLite (fixed folder kind: local)."""
     return ProfilePorts(
         JsonProfileRegistry(config_dir),
         LocalProfileFolders(lambda _folder: FolderKind.LOCAL),
@@ -65,7 +66,7 @@ def new_id() -> ProfileId:
 
 @dataclass(slots=True)
 class RealProfile:
-    """Un profilo aperto sulla pila reale, con l'archivio dei suoi originali."""
+    """A profile opened on the real stack, with the archive of its originals."""
 
     session: ProfileSession
     ports: ProfilePorts
@@ -79,7 +80,7 @@ class RealProfile:
         return FileArchive.in_profile_folder(self.session.folder)
 
     def import_source(self, source: ImportSource) -> ImportSummary:
-        """Importa da una sorgente (chiusa alla fine) con l'orologio fermo."""
+        """Imports from a source (closed at the end) with the clock stopped."""
         try:
             return import_activities(source, self.archive, self.session.activities, FixedClock(NOW))
         finally:
@@ -97,14 +98,13 @@ class RealProfile:
         return self.session.activities.list_by_start()
 
     def overview(self, decode: Decoder = decode_stored_activity) -> ProfileOverview:
-        """Panoramica calcolata come fa l'app (cache dei carichi compresa)."""
+        """Overview computed the way the app does it (load cache included)."""
         return ComputeProfileOverview(
             self.session.activities,
             self.archive,
             self.session.physiology,
             self.session.load_cache,
             decode,
-            sport_weights=self.session.sport_weights,
             timezone=ZoneInfo("Europe/Rome"),
             today=lambda: TODAY,
         ).execute()
@@ -116,7 +116,8 @@ class RealProfile:
 def create_profile(
     base: Path, name: str = PROFILE_NAME, *, folder_name: str = "profilo"
 ) -> RealProfile:
-    """Crea un profilo vero in `base / folder_name`; la configurazione sta in `base / config`."""
+    """Creates a real profile in `base / folder_name`; the configuration lives in `base /
+    config`."""
     ports = real_ports(base / "config")
     create = CreateProfile(ports, fixed_now, new_id)
     request = NewProfileRequest(
@@ -138,7 +139,7 @@ def archive_dir(profile_folder: Path) -> Path:
 
 
 def stored_files(profile_folder: Path) -> list[Path]:
-    """File finali dell'archivio (non i temporanei), ordinati."""
+    """Final files of the archive (not the temporary ones), sorted."""
     root = archive_dir(profile_folder)
     if not root.exists():
         return []
@@ -153,19 +154,19 @@ def temporaries(profile_folder: Path) -> list[Path]:
 
 
 def outcomes(summary: ImportSummary) -> dict[str, tuple[ImportStatus, ImportIssue | None]]:
-    """Esito per nome di file (i nomi sono unici nei test)."""
+    """Outcome by file name (names are unique in the tests)."""
     return {r.name: (r.status, r.issue) for r in summary.results}
 
 
 def assert_index_matches_archive(
     archive: ActivityArchive, records: Iterable[ActivityRecord]
 ) -> None:
-    """Ogni record punta a un file che c'è, con SHA-256 e dimensione registrati."""
+    """Every record points to an existing file, with SHA-256 and size recorded."""
     for record in records:
         archive.verify(record.archived)
 
 
 def format_logs(records: Iterable[logging.LogRecord]) -> str:
-    """Tutto ciò che i log mostrerebbero: messaggio, eccezione e traceback compresi."""
+    """Everything the logs would show: message, exception and traceback included."""
     formatter = logging.Formatter("%(levelname)s %(name)s %(message)s")
     return "\n".join(formatter.format(record) for record in records)

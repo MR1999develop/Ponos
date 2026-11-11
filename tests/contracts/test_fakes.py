@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""I test di contratto applicati ai fake in memoria (verificano i fake, non la produzione).
+"""The contract tests applied to the in-memory fakes (they verify the fakes, not production).
 
-Gli adattatori reali (SQLite, disco, portachiavi) ereditano le stesse classi `*Contract`.
+The real adapters (SQLite, disk, keyring) inherit the same `*Contract` classes.
 """
 
 from __future__ import annotations
@@ -22,6 +22,28 @@ from ponos_coach.profiles.ports import (
 )
 from tests.builders import absolute_path
 from tests.contracts.contract_archive import ActivityArchiveContract
+from tests.contracts.contract_assessment import (
+    PhysiologyRemovalContract,
+    ThresholdTestStoreContract,
+)
+from tests.contracts.contract_deleted import (
+    ActivityIndexRemovalContract,
+    DeletedActivitiesContract,
+)
+from tests.contracts.contract_injury import InjuryStoreContract
+from tests.contracts.contract_nutrition import (
+    ActivityCaloriesContract,
+    ActivityLevelStoreContract,
+    GoalPeriodStoreContract,
+    LeanMassStoreContract,
+    MealTimesStoreContract,
+)
+from tests.contracts.contract_planning import (
+    AvailabilityStoreContract,
+    GoalStoreContract,
+    PlanStoreContract,
+    SessionChoicesStoreContract,
+)
 from tests.contracts.contract_profiles import ProfileFoldersContract, ProfileRegistryContract
 from tests.contracts.contract_storage import (
     NAME,
@@ -29,14 +51,15 @@ from tests.contracts.contract_storage import (
     ActivityIndexContract,
     FixedDataStoreContract,
     LoadCacheContract,
+    LoadCacheHeartRateContract,
     LoadCacheZonesContract,
     PhysiologyStoreContract,
     ProfileStorageContract,
-    SportWeightStoreContract,
     WeightStoreContract,
 )
 from tests.contracts.contract_sync import ActivityIndexGarminIdContract, SyncJournalContract
 from tests.contracts.contract_tokens import TokenStoreContract
+from tests.contracts.contract_track_boxes import TrackBoxIndexContract
 from tests.contracts.harness import (
     ArchiveHarness,
     FoldersHarness,
@@ -79,7 +102,7 @@ class _FakeRegistryHarness:
         return self._registry
 
     def reopen(self) -> ProfileRegistry:
-        return self._registry  # il supporto è la memoria dello stesso oggetto
+        return self._registry  # the medium is the memory of the same object
 
 
 class _FakeFoldersHarness:
@@ -159,6 +182,18 @@ class TestFakeActivityIndexGarminIds(_FakeStorageFixture, ActivityIndexGarminIdC
     pass
 
 
+class TestFakeDeletedActivities(_FakeStorageFixture, DeletedActivitiesContract):
+    pass
+
+
+class TestFakeActivityIndexRemoval(_FakeStorageFixture, ActivityIndexRemovalContract):
+    pass
+
+
+class TestFakeTrackBoxIndex(_FakeStorageFixture, TrackBoxIndexContract):
+    pass
+
+
 class TestFakeSyncJournal(_FakeStorageFixture, SyncJournalContract):
     pass
 
@@ -172,7 +207,7 @@ class _FakeTokenStoreHarness:
         return self._store
 
     def reopen(self) -> TokenStore:
-        return self._store  # il supporto è la memoria dello stesso oggetto
+        return self._store  # the medium is the memory of the same object
 
     def corrupt(self, profile_id: ProfileId) -> None:
         self._store.corrupt(profile_id)
@@ -196,6 +231,10 @@ class TestFakeLoadCacheZones(_FakeStorageFixture, LoadCacheZonesContract):
     pass
 
 
+class TestFakeLoadCacheHeartRate(_FakeStorageFixture, LoadCacheHeartRateContract):
+    pass
+
+
 class TestFakeWeightStore(_FakeStorageFixture, WeightStoreContract):
     pass
 
@@ -204,12 +243,8 @@ class TestFakeFixedDataStore(_FakeStorageFixture, FixedDataStoreContract):
     pass
 
 
-class TestFakeSportWeightStore(_FakeStorageFixture, SportWeightStoreContract):
-    pass
-
-
 def test_fake_folders_and_storage_share_one_disk_for_delete() -> None:
-    """Il fake delle cartelle riconosce un profilo creato dal fake del database."""
+    """The folders fake recognizes a profile created by the database fake."""
     storage = InMemoryProfileStorage()
     folders = InMemoryProfileFolders(storage.disk)
     folder = absolute_path("shared")
@@ -220,3 +255,51 @@ def test_fake_folders_and_storage_share_one_disk_for_delete() -> None:
 
     assert folder not in storage.disk.databases
     assert folder not in storage.disk.folders
+
+
+class TestFakeActivityCalories(_FakeStorageFixture, ActivityCaloriesContract):
+    pass
+
+
+class TestFakeActivityLevelStore(_FakeStorageFixture, ActivityLevelStoreContract):
+    pass
+
+
+class TestFakeLeanMassStore(_FakeStorageFixture, LeanMassStoreContract):
+    pass
+
+
+class TestFakeMealTimesStore(_FakeStorageFixture, MealTimesStoreContract):
+    pass
+
+
+class TestFakeGoalPeriodStore(_FakeStorageFixture, GoalPeriodStoreContract):
+    pass
+
+
+class TestFakeThresholdTestStore(_FakeStorageFixture, ThresholdTestStoreContract):
+    pass
+
+
+class TestFakePhysiologyRemoval(_FakeStorageFixture, PhysiologyRemovalContract):
+    pass
+
+
+class TestFakeGoalStore(_FakeStorageFixture, GoalStoreContract):
+    pass
+
+
+class TestFakeAvailabilityStore(_FakeStorageFixture, AvailabilityStoreContract):
+    pass
+
+
+class TestFakeSessionChoicesStore(_FakeStorageFixture, SessionChoicesStoreContract):
+    pass
+
+
+class TestFakePlanStore(_FakeStorageFixture, PlanStoreContract):
+    pass
+
+
+class TestFakeInjuryStore(_FakeStorageFixture, InjuryStoreContract):
+    pass

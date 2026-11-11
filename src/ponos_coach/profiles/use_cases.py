@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Casi d'uso dei profili: crea, apri (da cartella o dall'elenco), elenca, guarda (`peek`),
-rimuovi dall'elenco, cancella la cartella.
+"""Profile use cases: create, open (from a folder or from the list), list, peek (`peek`),
+remove from the list, delete the folder.
 
-È l'API che usa l'interfaccia. Ogni caso d'uso riceve le porte (`ProfilePorts`) e, se serve,
-l'orologio nel costruttore; non fa I/O diretto. Un profilo aperto è una `ProfileSession`: tiene
-il database e il lock finché non si chiama `close()`.
+This is the API the interface uses. Each use case receives the ports (`ProfilePorts`) and, if
+needed,
+the clock in the constructor; it does no direct I/O. An open profile is a `ProfileSession`: it holds
+the database and the lock until `close()` is called.
 
-Le operazioni che toccano più cose (crea, apri) o riescono o lasciano le cose come prima: se
-un passo fallisce, quelli già fatti si annullano, e un annullamento che a sua volta fallisce si
-aggiunge come nota all'errore originale (che resta quello sollevato).
+Operations that touch several things (create, open) either succeed or leave things as before: if
+a step fails, those already done are undone, and an undo that itself fails is
+added as a note to the original error (which remains the one raised).
 """
 
 from __future__ import annotations
@@ -22,9 +23,25 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
-from ponos_coach.activities.ports import ActivityIndex, SyncJournal
+from ponos_coach.activities.ports import (
+    ActivityIndex,
+    DeletedActivities,
+    SyncJournal,
+    TrackBoxIndex,
+)
+from ponos_coach.assessment.ports import ThresholdTestStore
+from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
+from ponos_coach.injury.ports import InjuryStore
 from ponos_coach.load.domain import Physiology, PhysiologyEntry
-from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
+from ponos_coach.load.ports import LoadCache, PhysiologyStore
+from ponos_coach.nutrition.ports import (
+    ActivityLevelStore,
+    GoalPeriodStore,
+    LeanMassStore,
+    MealTimesStore,
+)
+from ponos_coach.planning.ports import PlanStore
+from ponos_coach.planning.workout_calendar import WorkoutBackupStore
 from ponos_coach.profiles.domain import (
     FixedProfileData,
     FolderKind,
@@ -34,6 +51,8 @@ from ponos_coach.profiles.domain import (
     ProfileName,
     ProfilePeek,
     RegistryEntry,
+    ThresholdPace,
+    ThresholdPaceEntry,
     Weight,
     WeightEntry,
 )
@@ -48,26 +67,28 @@ from ponos_coach.profiles.ports import (
     ProfileNotFoundError,
     ProfileNotRegisteredError,
     ProfileRegistry,
+    ProfileRegistryError,
     ProfileStorage,
+    ThresholdPaceStore,
     WeightStore,
 )
 from ponos_coach.profiles.timezones import require_known_timezone
 
 
 class FolderWarning(Enum):
-    """Avviso non bloccante sulla cartella di un profilo: SQLite rischia su questi posti."""
+    """Non-blocking warning about a profile's folder: SQLite is at risk in these places."""
 
     NETWORK = "network"
     CLOUD_SYNCED = "cloud_synced"
 
 
 class ProfileMismatchError(Exception):
-    """La cartella registrata contiene il database di un altro profilo."""
+    """The registered folder contains the database of another profile."""
 
 
 @dataclass(frozen=True, slots=True)
 class ProfilePorts:
-    """Le tre porte che i casi d'uso dei profili usano."""
+    """The three ports that the profile use cases use."""
 
     registry: ProfileRegistry
     folders: ProfileFolders
@@ -75,7 +96,7 @@ class ProfilePorts:
 
 
 def warnings_for(kind: FolderKind) -> tuple[FolderWarning, ...]:
-    """Avvisi per il tipo di cartella (nessuno per locale o ignoto)."""
+    """Warnings for the folder kind (none for local or unknown)."""
     if kind is FolderKind.NETWORK:
         return (FolderWarning.NETWORK,)
     if kind is FolderKind.CLOUD_SYNCED:
@@ -84,10 +105,10 @@ def warnings_for(kind: FolderKind) -> tuple[FolderWarning, ...]:
 
 
 class ProfileSession:
-    """Un profilo aperto: informazioni, store del database e lock sulla cartella.
+    """An open profile: information, database stores and lock on the folder.
 
-    `close()` chiude il database e poi rilascia il lock (sempre, anche se la chiusura del
-    database fallisce); ripeterlo non ha effetti. Si usa anche come context manager.
+    `close()` closes the database and then releases the lock (always, even if closing the
+    database fails); repeating it has no effect. It is also used as a context manager.
     """
 
     def __init__(
@@ -105,46 +126,120 @@ class ProfileSession:
 
     @property
     def info(self) -> ProfileInfo:
-        """Informazioni del profilo lette dal database."""
+        """Profile information read from the database."""
         return self._opened.info
 
     @property
+    def removed_unsupported_activities(self) -> int:
+        """GPX activities removed by the migration done at open time (0 if none)."""
+        return self._opened.removed_unsupported_activities
+
+    @property
     def activities(self) -> ActivityIndex:
-        """Indice delle attività (valido finché il profilo è aperto)."""
+        """Activity index (valid while the profile is open)."""
         return self._opened.activities
 
     @property
+    def deleted_activities(self) -> DeletedActivities:
+        """The activities the user deleted (same connection and transaction as the index)."""
+        return self._opened.deleted_activities
+
+    @property
+    def track_boxes(self) -> TrackBoxIndex:
+        """Track boxes of the index (for the map and its resumable fill)."""
+        return self._opened.track_boxes
+
+    @property
     def sync_journal(self) -> SyncJournal:
-        """Giornale della sincronizzazione (stessa connessione e transazione dell'indice)."""
+        """Synchronization journal (same connection and transaction as the index)."""
         return self._opened.sync_journal
 
     @property
     def physiology(self) -> PhysiologyStore:
-        """Parametri fisiologici con data di validità."""
+        """Physiological parameters with validity date."""
         return self._opened.physiology
 
     @property
     def weights(self) -> WeightStore:
-        """Serie del peso con data di validità."""
+        """Weight series with validity date."""
         return self._opened.weights
 
     @property
+    def threshold_paces(self) -> ThresholdPaceStore:
+        """Threshold pace series with validity date."""
+        return self._opened.threshold_paces
+
+    @property
     def fixed_data(self) -> FixedDataStore:
-        """Altezza e data di nascita (fisse)."""
+        """Fixed height and date of birth."""
         return self._opened.fixed_data
 
     @property
-    def sport_weights(self) -> SportWeightStore:
-        """Pesi degli sport scelti dall'utente."""
-        return self._opened.sport_weights
-
-    @property
     def load_cache(self) -> LoadCache:
-        """Cache dei carichi."""
+        """Load cache."""
         return self._opened.load_cache
 
+    @property
+    def activity_levels(self) -> ActivityLevelStore:
+        """Activity level outside sport with validity date."""
+        return self._opened.activity_levels
+
+    @property
+    def lean_masses(self) -> LeanMassStore:
+        """Measured lean mass series (optional)."""
+        return self._opened.lean_masses
+
+    @property
+    def meal_times(self) -> MealTimesStore:
+        """Typical breakfast, lunch and dinner times."""
+        return self._opened.meal_times
+
+    @property
+    def goal_periods(self) -> GoalPeriodStore:
+        """Nutrition goal periods."""
+        return self._opened.goal_periods
+
+    @property
+    def threshold_tests(self) -> ThresholdTestStore:
+        """History of the applied threshold tests."""
+        return self._opened.threshold_tests
+
+    @property
+    def goals(self) -> GoalStore:
+        """The goals (races and form goals)."""
+        return self._opened.goals
+
+    @property
+    def availability(self) -> AvailabilityStore:
+        """The weekly availability."""
+        return self._opened.availability
+
+    @property
+    def session_choices(self) -> SessionChoicesStore:
+        """The session types chosen for each sport."""
+        return self._opened.session_choices
+
+    @property
+    def plans(self) -> PlanStore:
+        """The current plan and the days of the past as they were planned."""
+        return self._opened.plans
+
+    @property
+    def workout_backups(self) -> WorkoutBackupStore:
+        """The local copy of the workouts deleted from the Garmin calendar."""
+        return self._opened.workout_backups
+
+    @property
+    def injuries(self) -> InjuryStore:
+        """The injuries and illnesses, with their check-ins."""
+        return self._opened.injuries
+
+    def rename(self, name: ProfileName) -> None:
+        """Writes the new name to the profile database (see `OpenProfile.rename`)."""
+        self._opened.rename(name)
+
     def close(self) -> None:
-        """Chiude il database e rilascia il lock."""
+        """Closes the database and releases the lock."""
         if self._closed:
             return
         self._closed = True
@@ -166,7 +261,7 @@ class ProfileSession:
 
 
 class _Undo:
-    """Passi di annullamento, eseguiti dall'ultimo al primo se l'operazione fallisce."""
+    """Undo steps, executed from last to first if the operation fails."""
 
     def __init__(self) -> None:
         self._steps: list[Callable[[], None]] = []
@@ -179,26 +274,29 @@ class _Undo:
             try:
                 step()
             except Exception as exc:
-                failure.add_note(f"annullamento non riuscito: {type(exc).__name__}")
+                failure.add_note(f"undo failed: {type(exc).__name__}")
 
 
 def _require_absolute(folder: Path) -> None:
     if not folder.is_absolute():
-        raise FolderUnavailableError("la cartella del profilo deve essere un percorso assoluto")
+        raise FolderUnavailableError("the profile folder must be an absolute path")
 
 
-# --- Crea ----------------------------------------------------------------------------------
+# --- Create --------------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class NewProfileRequest:
-    """Dati per creare un profilo.
+    """Data to create a profile.
 
-    `folder` assoluta, mancante o vuota; `timezone_name` un nome IANA; `physiology` e `weight`
-    valgono dal giorno `today` (data di oggi nel fuso del profilo, decisa da chi chiama).
-    `fixed` (altezza e data di nascita) e `weight` sono dati personali che l'interfaccia chiede
-    sempre alla creazione; `None` lascia il profilo senza, da completare più tardi (serve a chi
-    crea profili solo per il calcolo del carico).
+    `folder` absolute, missing or empty; `timezone_name` an IANA name; `physiology` and `weight`
+    hold from the day `today` (today's date in the profile's time zone, decided by the caller).
+    `threshold_pace` (optional) enters the pace series with the same date; without it running
+    sessions stay heart-rate only until a pace or a test exists.
+    `fixed` (height and date of birth) and `weight` are personal data that the interface always
+    asks for at creation; `None` leaves the profile without them, to be completed later (used by
+    whoever
+    creates profiles only for the load computation).
     """
 
     name: ProfileName
@@ -208,22 +306,24 @@ class NewProfileRequest:
     today: date
     fixed: FixedProfileData | None = None
     weight: Weight | None = None
+    threshold_pace: ThresholdPace | None = None
 
     def __post_init__(self) -> None:
         if not self.folder.is_absolute():
-            raise ValueError("la cartella del profilo deve essere un percorso assoluto")
+            raise ValueError("the profile folder must be an absolute path")
 
 
 class CreateProfile:
-    """Crea un profilo: cartella privata, lock, database, misure iniziali (parametri fisiologici,
-    peso, altezza e data di nascita), voce nell'elenco.
+    """Creates a profile: private folder, lock, database, initial measurements (physiological
+    parameters,
+    weight, height and date of birth), list entry.
 
-    Se un passo fallisce non resta nessuna voce nell'elenco, il lock è rilasciato e si annulla
-    solo ciò che ha fatto questa operazione. Se ha creato il database (la creazione è
-    esclusiva: chi la perde non lo ha creato), si cancella la cartella con tutto il contenuto;
-    altrimenti si toglie la cartella solo se è vuota a parte il file di lock. Un database o
-    una cartella messi lì nel frattempo da un'altra istanza non si toccano mai. I genitori
-    creati lungo il percorso restano.
+    If a step fails no entry remains in the list, the lock is released and only what this
+    operation did is undone. If it created the database (creation is
+    exclusive: whoever loses did not create it), the folder is deleted with all its content;
+    otherwise the folder is removed only if it is empty apart from the lock file. A database or
+    a folder put there in the meantime by another instance is never touched. Parents
+    created along the path remain.
     """
 
     def __init__(
@@ -237,17 +337,17 @@ class CreateProfile:
         self._new_profile_id = new_profile_id
 
     def __call__(self, request: NewProfileRequest) -> ProfileSession:
-        """Crea il profilo e lo restituisce aperto.
+        """Creates the profile and returns it open.
 
         Raises:
-            FolderNotEmptyError: la cartella esiste e non è vuota; nulla è stato creato.
-            FolderUnavailableError: cartella non creabile o non scrivibile.
-            ProfileInUseError: lock non ottenuto.
-            ProfileAlreadyExistsError: un'altra istanza ha messo un database nella cartella
-                prima di noi; il suo profilo non si tocca.
-            ProfileStorageError: database non creato.
-            ProfileRegistryError: elenco dei profili non scrivibile.
-            ValueError: fuso orario sconosciuto (prima di toccare il disco).
+            FolderNotEmptyError: the folder exists and is not empty; nothing was created.
+            FolderUnavailableError: folder cannot be created or is not writable.
+            ProfileInUseError: lock not obtained.
+            ProfileAlreadyExistsError: another instance put a database in the folder
+                before us; its profile is not touched.
+            ProfileStorageError: database not created.
+            ProfileRegistryError: profile list not writable.
+            ValueError: unknown time zone (before touching the disk).
         """
         require_known_timezone(request.timezone_name)
         ports = self._ports
@@ -275,10 +375,16 @@ class CreateProfile:
         opened = ports.storage.create(folder, profile_id, request.name, request.timezone_name)
         trace.opened = opened
         trace.database_created = True
-        with opened.activities.transaction():  # parametri, peso e dati fissi: tutti o nessuno
+        with (
+            opened.activities.transaction()
+        ):  # parameters, weight, pace and fixed data: all or none
             opened.physiology.put(PhysiologyEntry(request.today, request.physiology))
             if request.weight is not None:
                 opened.weights.put(WeightEntry(request.today, request.weight))
+            if request.threshold_pace is not None:
+                opened.threshold_paces.put(
+                    ThresholdPaceEntry(request.today, request.threshold_pace)
+                )
             if request.fixed is not None:
                 opened.fixed_data.set_once(request.fixed)
         ports.registry.add(RegistryEntry(profile_id, folder, request.name, self._now_utc()))
@@ -286,7 +392,7 @@ class CreateProfile:
 
 
 class _CreationTrace:
-    """Ciò che `CreateProfile` ha fatto finora, per annullare solo quello se qualcosa fallisce."""
+    """What `CreateProfile` has done so far, to undo only that if something fails."""
 
     def __init__(self, folders: ProfileFolders, folder: Path) -> None:
         self._folders = folders
@@ -297,13 +403,13 @@ class _CreationTrace:
         self.database_created = False
 
     def roll_back(self, failure: BaseException) -> None:
-        """Annulla in ordine inverso: chiude il database, rilascia il lock, poi toglie la
-        cartella. Un annullamento che fallisce si aggiunge come nota a `failure`."""
+        """Undoes in reverse order: closes the database, releases the lock, then removes the
+        folder. An undo that fails is added as a note to `failure`."""
         steps: list[Callable[[], object]] = []
         if self.opened is not None:
             steps.append(self.opened.close)
         if self.lock is not None:
-            steps.append(self.lock.release)  # prima della cancellazione, che prende il suo lock
+            steps.append(self.lock.release)  # before deletion, which takes its own lock
         if self.database_created:
             steps.append(lambda: self._folders.delete_folder(self._folder))
         elif self.folder_made:
@@ -312,18 +418,18 @@ class _CreationTrace:
             try:
                 step()
             except Exception as exc:
-                failure.add_note(f"annullamento non riuscito: {type(exc).__name__}")
+                failure.add_note(f"undo failed: {type(exc).__name__}")
 
 
-# --- Apri ----------------------------------------------------------------------------------
+# --- Open ----------------------------------------------------------------------------------
 
 
 class OpenProfileFromFolder:
-    """Apre il profilo che sta in una cartella e lo mette (o lo aggiorna) nell'elenco.
+    """Opens the profile that lives in a folder and puts it (or updates it) in the list.
 
-    L'elenco prende il nome letto dal database, che è la fonte di verità; un profilo già
-    elencato con un'altra cartella (spostato) o una cartella già elencata con un altro profilo
-    (sostituita) si riallineano.
+    The list takes the name read from the database, which is the source of truth; a profile already
+    listed with another folder (moved) or a folder already listed with another profile
+    (replaced) are realigned.
     """
 
     def __init__(self, ports: ProfilePorts, now_utc: Callable[[], datetime]) -> None:
@@ -331,36 +437,36 @@ class OpenProfileFromFolder:
         self._now_utc = now_utc
 
     def __call__(self, folder: Path) -> ProfileSession:
-        """Apre il profilo in `folder`.
+        """Opens the profile in `folder`.
 
         Raises:
-            ProfileNotFoundError: la cartella manca o è vuota.
-            NotAProfileFolderError: la cartella ha dei file ma non il database di un profilo
-                (il lock non viene preso).
-            ProfileInUseError: il profilo è aperto da un'altra istanza.
-            FolderUnavailableError: cartella non leggibile.
-            ProfileFormatTooNewError, ProfileCorruptError: database non apribile.
-            ProfileRegistryError: elenco dei profili non aggiornabile.
+            ProfileNotFoundError: the folder is missing or empty.
+            NotAProfileFolderError: the folder has files but not a profile's database
+                (the lock is not taken).
+            ProfileInUseError: the profile is open in another instance.
+            FolderUnavailableError: folder not readable.
+            ProfileFormatTooNewError, ProfileCorruptError: database cannot be opened.
+            ProfileRegistryError: profile list cannot be updated.
         """
         return _open_session(self._ports, self._now_utc, folder, expected_id=None)
 
 
 class OpenRegisteredProfile:
-    """Apre un profilo dell'elenco, controllando che la cartella contenga proprio quel profilo."""
+    """Opens a profile from the list, checking that the folder really contains that profile."""
 
     def __init__(self, ports: ProfilePorts, now_utc: Callable[[], datetime]) -> None:
         self._ports = ports
         self._now_utc = now_utc
 
     def __call__(self, profile_id: ProfileId) -> ProfileSession:
-        """Apre il profilo `profile_id` dalla sua cartella registrata.
+        """Opens the profile `profile_id` from its registered folder.
 
         Raises:
-            ProfileNotRegisteredError: id assente dall'elenco.
-            ProfileMismatchError: la cartella contiene un altro profilo (nulla cambia).
+            ProfileNotRegisteredError: id not in the list.
+            ProfileMismatchError: the folder contains another profile (nothing changes).
             ProfileNotFoundError, NotAProfileFolderError, ProfileInUseError,
             FolderUnavailableError,
-            ProfileFormatTooNewError, ProfileCorruptError, ProfileRegistryError: come
+            ProfileFormatTooNewError, ProfileCorruptError, ProfileRegistryError: as
             `OpenProfileFromFolder`.
         """
         for entry in self._ports.registry.list_entries():
@@ -380,9 +486,9 @@ def _open_session(
     _require_absolute(folder)
     inspection = ports.folders.inspect(folder)
     if inspection.state is not FolderState.NOT_EMPTY:
-        raise ProfileNotFoundError(folder.name)  # niente lock in una cartella vuota o mancante
+        raise ProfileNotFoundError(folder.name)  # no lock in an empty or missing folder
     if not inspection.has_profile_database:
-        raise NotAProfileFolderError(folder.name)  # né in una che non ha il database
+        raise NotAProfileFolderError(folder.name)  # nor in one that lacks the database
     undo = _Undo()
     try:
         lock = ports.folders.acquire_lock(folder)
@@ -399,41 +505,87 @@ def _open_session(
 
 def _check_expected(info: ProfileInfo, expected_id: ProfileId | None) -> None:
     if expected_id is not None and info.profile_id != expected_id:
-        raise ProfileMismatchError("la cartella contiene un altro profilo")
+        raise ProfileMismatchError("the folder contains another profile")
 
 
 def _register_opened(
     registry: ProfileRegistry, info: ProfileInfo, folder: Path, now: datetime
 ) -> None:
-    """Porta l'elenco allo stato "questo profilo sta in questa cartella, usato adesso", con il
-    nome letto dal database, in una sola scrittura (un profilo spostato o una cartella
-    sostituita si riallineano insieme)."""
+    """Brings the list to the state "this profile is in this folder, used now", with the
+    name read from the database, in a single write (a moved profile or a replaced
+    folder are realigned together)."""
     registry.upsert(RegistryEntry(info.profile_id, folder, info.name, now))
 
 
-# --- Elenco, rimozione, cancellazione ------------------------------------------------------
+# --- Rename --------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class RenamedProfile:
+    """Outcome of `RenameProfile`: the name now in force and whether the profile list took it.
+
+    With `registry_updated` false the database already has the new name and the list realigns
+    at the next opening of the profile.
+    """
+
+    name: ProfileName
+    registry_updated: bool
+
+
+class RenameProfile:
+    """Renames the open profile: the database first (source of truth), then the list."""
+
+    def __init__(self, registry: ProfileRegistry, now_utc: Callable[[], datetime]) -> None:
+        self._registry = registry
+        self._now_utc = now_utc
+
+    def __call__(self, session: ProfileSession, text: str) -> RenamedProfile:
+        """Gives the profile the name `text` (NFC-normalised, no outer spaces).
+
+        A name equal to the current one writes nothing. A list failure after the database
+        write is not an error: `registry_updated` says so.
+
+        Raises:
+            InvalidProfileNameError: empty, too long or with control characters; nothing was
+                written.
+            ProfileStorageError: the database write failed; the name stays as it was.
+        """
+        name = ProfileName.parse(text)
+        if name == session.info.name:
+            return RenamedProfile(name, registry_updated=True)
+        session.rename(name)
+        try:
+            self._registry.upsert(
+                RegistryEntry(session.info.profile_id, session.folder, name, self._now_utc())
+            )
+        except ProfileRegistryError:
+            return RenamedProfile(name, registry_updated=False)
+        return RenamedProfile(name, registry_updated=True)
+
+
+# --- List, removal, deletion ---------------------------------------------------------------
 
 
 class ListProfiles:
-    """Elenca i profili noti, dal più recentemente usato."""
+    """Lists the known profiles, from the most recently used."""
 
     def __init__(self, ports: ProfilePorts) -> None:
         self._registry = ports.registry
 
     def __call__(self) -> Sequence[RegistryEntry]:
-        """Voci dell'elenco (nome in cache, cartella, ultimo uso).
+        """List entries (cached name, folder, last use).
 
         Raises:
-            ProfileRegistryError: elenco illeggibile o di una versione futura.
+            ProfileRegistryError: list unreadable or of a future version.
         """
         return self._registry.list_entries()
 
 
 class PeekProfile:
-    """Legge in sola lettura le informazioni e il numero di attività di un profilo dell'elenco.
+    """Reads, read-only, the information and the number of activities of a profile in the list.
 
-    Serve all'elenco dei profili: non apre il profilo, non prende il lock, non migra e non
-    scrive nulla (nemmeno l'ultimo uso), quindi funziona anche se il profilo è aperto altrove.
+    Used by the profile list: it does not open the profile, take the lock, migrate or
+    write anything (not even the last use), so it works even if the profile is open elsewhere.
     """
 
     def __init__(self, ports: ProfilePorts) -> None:
@@ -441,13 +593,13 @@ class PeekProfile:
         self._storage = ports.storage
 
     def __call__(self, profile_id: ProfileId) -> ProfilePeek:
-        """Informazioni del profilo `profile_id` e numero delle sue attività.
+        """Information of the profile `profile_id` and number of its activities.
 
         Raises:
-            ProfileNotRegisteredError: id assente dall'elenco.
-            ProfileNotFoundError: la cartella registrata non ha più il database.
-            ProfileFormatTooNewError, ProfileCorruptError, ProfileStorageError: database non
-                leggibile.
+            ProfileNotRegisteredError: id not in the list.
+            ProfileNotFoundError: the registered folder no longer has the database.
+            ProfileFormatTooNewError, ProfileCorruptError, ProfileStorageError: database not
+                readable.
         """
         for entry in self._registry.list_entries():
             if entry.profile_id == profile_id:
@@ -456,40 +608,41 @@ class PeekProfile:
 
 
 class RemoveProfileFromList:
-    """Toglie un profilo dall'elenco senza toccare la sua cartella né i suoi dati."""
+    """Removes a profile from the list without touching its folder or its data."""
 
     def __init__(self, ports: ProfilePorts) -> None:
         self._registry = ports.registry
 
     def __call__(self, profile_id: ProfileId) -> None:
-        """Rimuove la voce.
+        """Removes the entry.
 
         Raises:
-            ProfileNotRegisteredError: id assente.
+            ProfileNotRegisteredError: id not present.
         """
         self._registry.remove(profile_id)
 
 
 class DeleteProfileFolder:
-    """Cancella la cartella di un profilo dell'elenco, con tutti i suoi dati, e la voce."""
+    """Deletes a profile's folder from the list, with all its data, and the entry."""
 
     def __init__(self, ports: ProfilePorts) -> None:
         self._registry = ports.registry
         self._folders = ports.folders
 
     def __call__(self, profile_id: ProfileId) -> None:
-        """Cancella la cartella del profilo e lo toglie dall'elenco.
+        """Deletes the profile folder and removes it from the list.
 
-        La conferma con cartella e contenuto la chiede l'interfaccia prima di chiamare.
+        The confirmation with folder and content is asked by the interface before calling.
 
         Raises:
-            ProfileNotRegisteredError: id assente.
-            ProfileInUseError: il profilo è aperto (anche da questa istanza): chiudilo prima.
-            NotAProfileFolderError: la cartella non ha il database di un profilo; la voce
-                resta (si può togliere dall'elenco).
-            FolderHasOtherContentError: nella cartella c'è altro oltre ai dati del profilo;
-                non si cancella nulla e la voce resta.
-            FolderUnavailableError: cancellazione non riuscita o link nella cartella.
+            ProfileNotRegisteredError: id not present.
+            ProfileInUseError: the profile is open (even by this instance): close it first.
+            NotAProfileFolderError: the folder does not have a profile's database; the entry
+                remains (it can be removed from the list).
+            FolderHasOtherContentError: there is something else in the folder besides the profile's
+            data;
+                nothing is deleted and the entry remains.
+            FolderUnavailableError: deletion failed or link in the folder.
         """
         entry = next((e for e in self._registry.list_entries() if e.profile_id == profile_id), None)
         if entry is None:

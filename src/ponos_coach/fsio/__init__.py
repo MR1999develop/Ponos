@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Primitive di basso livello per scritture durevoli su file, senza dipendenze dal progetto.
+"""Low-level primitives for durable file writes, with no dependencies on the project.
 
-Le usano sia `storage` (archivio, copie di sicurezza) sia `platform` (elenco dei profili), che
-restano indipendenti tra loro: la regola di scrittura durevole sta in questo solo posto.
+Used by both `storage` (archive, backups) and `platform` (profile list), which
+stay independent of each other: the durable-write rule lives in this one place.
 """
 
 from ponos_coach.fsio.durable import (

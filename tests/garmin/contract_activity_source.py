@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Contratto di `ActivitySource`: lo stesso comportamento per il fake e per l'adattatore Garmin.
+"""Contract of `ActivitySource`: the same behavior for the fake and for the Garmin adapter.
 
-Ogni implementazione offre una `SourceHarness` (la porta più i modi per guastarla: un originale
-diverso, una voce malformata, un guasto alla prossima chiamata). Così la stessa suite gira sul
-fake di `tests/fakes/garmin.py` e sull'adattatore con il client finto. Ciò che i due possono
-fare diversamente (il totale dichiarato, a quali pagine) sta fuori dal contratto.
+Each implementation offers a `SourceHarness` (the port plus the ways to break it: a different
+original, a malformed entry, a failure on the next call). This way the same suite runs on the
+fake in `tests/fakes/garmin.py` and on the adapter with the fake client. What the two may
+do differently (the declared total, at which pages) is outside the contract.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ RETRY_AFTER_S = 30.0
 
 
 class Failure(Enum):
-    """Guasti che una chiamata può avere, nelle categorie in cui cambia la reazione."""
+    """Failures a call can have, in the categories where the reaction changes."""
 
     RATE_LIMITED = "rate_limited"
     TRANSIENT = "transient"
@@ -52,27 +52,27 @@ EXPECTED_ERROR: dict[Failure, type[Exception]] = {
 
 
 class SourceHarness(Protocol):
-    """Una `ActivitySource` sulle attività date e i modi per guastarla."""
+    """An `ActivitySource` on the given activities and the ways to break it."""
 
     @property
     def source(self) -> ActivitySource:
-        """La porta sotto prova."""
+        """The port under test."""
         ...
 
     def set_original(self, activity_id: GarminActivityId, content: bytes) -> None:
-        """Ciò che si scarica per quell'attività."""
+        """What gets downloaded for that activity."""
         ...
 
     def mark_malformed(self, ids: Sequence[GarminActivityId]) -> None:
-        """Queste voci arrivano nell'elenco ma sono malformate: l'adattatore le scarta."""
+        """These entries arrive in the listing but are malformed: the adapter discards them."""
         ...
 
     def fail_next_list(self, failure: Failure) -> None:
-        """La prossima `list_page` fallisce in quel modo."""
+        """The next `list_page` fails in that way."""
         ...
 
     def fail_next_download(self, failure: Failure) -> None:
-        """Il prossimo `download_original` fallisce in quel modo."""
+        """The next `download_original` fails in that way."""
         ...
 
 
@@ -80,13 +80,13 @@ HarnessFactory = Callable[[Sequence[RemoteActivity]], SourceHarness]
 
 
 def history_ids(count: int) -> list[GarminActivityId]:
-    """Gli id di `make_remote_history(count)`, dal più recente."""
+    """The ids of `make_remote_history(count)`, most recent first."""
     return [GarminActivityId(FIRST_ACTIVITY_ID + n) for n in reversed(range(count))]
 
 
 class ActivitySourceContract:
-    """Partizioni: pagine (prima, centrale, ultima, oltre la fine, vuota), voci malformate,
-    originali (normale, troppo grande, assente), guasti per categoria, argomenti non validi."""
+    """Partitions: pages (first, middle, last, past the end, empty), malformed entries,
+    originals (normal, too large, missing), failures by category, invalid arguments."""
 
     @pytest.fixture
     def make_harness(self) -> HarnessFactory:
@@ -157,7 +157,7 @@ class ActivitySourceContract:
     ) -> None:
         source = make_harness(make_remote_history(2)).source
 
-        with pytest.raises(ValueError, match="non validi"):
+        with pytest.raises(ValueError, match="invalid"):
             source.list_page(offset, limit)
 
     def test_original_is_returned_as_given(self, make_harness: HarnessFactory) -> None:

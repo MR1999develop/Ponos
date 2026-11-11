@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Modulo "Modifica profilo": valori, campi cambiati e problemi, senza finestra."""
+"""Form "Edit profile": values, changed fields and problems, without a window."""
 
 from __future__ import annotations
 
@@ -15,7 +15,17 @@ from ponos_coach.load.domain import (
     Sex,
     ThresholdHeartRate,
 )
-from ponos_coach.profiles.domain import BirthDate, FixedProfileData, Height, Weight, WeightEntry
+from ponos_coach.profiles.domain import (
+    BirthDate,
+    FixedProfileData,
+    Height,
+    PaceSource,
+    ProfileName,
+    ThresholdPace,
+    ThresholdPaceEntry,
+    Weight,
+    WeightEntry,
+)
 from ponos_coach.profiles.measurements import (
     MeasurementHistory,
     MeasurementProblem,
@@ -30,6 +40,7 @@ from ponos_coach.ui.measurements_form import (
     MeasurementSeries,
     MeasurementsForm,
     MeasurementsRequest,
+    NameProblem,
     PendingPeriod,
     issue_for_rejection,
     weight_in_force,
@@ -62,12 +73,12 @@ def make_form(*, fixed: FixedProfileData | None = FIXED) -> MeasurementsForm:
 
 
 def changed(form: MeasurementsForm) -> bool:
-    """`has_changes` letto da una funzione: il tipo non si restringe tra una modifica e l'altra."""
+    """`has_changes` read through a function: the type is not narrowed between changes."""
     return form.has_changes
 
 
 def edited_weight(form: MeasurementsForm) -> str | None:
-    """Il peso scritto, letto da una funzione: il tipo non si restringe tra due modifiche."""
+    """The written weight, read through a function: the type is not narrowed between two changes."""
     return form.edited_weight_text
 
 
@@ -102,8 +113,8 @@ def test_untouched_fields_follow_the_chosen_day_and_touched_ones_stay() -> None:
 
     form.edit_threshold_bpm(160)
     form.set_valid_from(date(2026, 4, 1))
-    assert form.threshold_bpm == 160  # toccato: resta
-    assert form.min_bpm == 52  # non toccato: segue il giorno
+    assert form.threshold_bpm == 160  # touched: stays
+    assert form.min_bpm == 52  # untouched: follows the day
 
 
 def test_only_the_changed_fields_are_saved() -> None:
@@ -147,15 +158,15 @@ def test_a_blank_weight_means_unchanged_and_an_invalid_one_is_reported_on_the_fi
     assert not changed(form)
 
     form.edit_weight("70,55")
-    assert changed(form)  # c'è qualcosa da correggere: "Salva" si abilita e dice cosa
+    assert changed(form)  # there is something to fix: "Save" gets enabled and says what
     assert form.build() == (EditIssue(EditField.WEIGHT, BodyProblem.WEIGHT_INVALID),)
 
 
 @pytest.mark.parametrize(
     ("requested", "expected"),
     [
-        (date(2026, 7, 1), TODAY),  # off point: domani
-        (TODAY, TODAY),  # on point: oggi
+        (date(2026, 7, 1), TODAY),  # off point: tomorrow
+        (TODAY, TODAY),  # on point: today
         (date(1900, 1, 1), date(1900, 1, 1)),  # on point
         (date(1899, 12, 31), date(1900, 1, 1)),  # off point
     ],
@@ -193,27 +204,27 @@ def test_a_profile_without_fixed_data_asks_to_complete_both_values_once() -> Non
 
     form.birth_date = date(1990, 5, 1)
     request = request_of(form)
-    assert request.update is None  # nessuna misura cambiata: solo i dati fissi
+    assert request.update is None  # no measurement changed: only the fixed data
     assert request.fixed == FixedProfileData(Height(170), BirthDate(date(1990, 5, 1)))
 
 
 def test_the_fixed_data_limits_are_the_ones_of_the_domain() -> None:
     form = make_form(fixed=None)
     form.height_text = "251"
-    form.birth_date = date(2021, 7, 1)  # off point: un giorno dopo il limite
+    form.birth_date = date(2021, 7, 1)  # off point: one day past the limit
 
     assert form.issues() == (
         EditIssue(EditField.HEIGHT, BodyProblem.HEIGHT_INVALID),
         EditIssue(EditField.BIRTH_DATE, BodyProblem.BIRTH_INVALID),
     )
     form.height_text = "250"
-    form.birth_date = date(2021, 6, 30)  # on point: esattamente cinque anni fa
+    form.birth_date = date(2021, 6, 30)  # on point: exactly five years ago
     assert form.issues() == ()
 
 
 def test_fixed_data_already_set_are_never_part_of_a_request() -> None:
     form = make_form()
-    form.height_text = "180"  # ignorato: i dati fissi non si cambiano
+    form.height_text = "180"  # ignored: the fixed data are not changed
     form.edit_threshold_bpm(175)
 
     assert request_of(form).fixed is None
@@ -243,7 +254,7 @@ def test_a_history_without_physiology_falls_back_to_the_defaults_instead_of_fail
     assert form.baseline_weight is None
 
 
-# --- Cosa cambia e per quanto vale (R6) ---------------------------------------------------------
+# --- What changes and how long it applies (R6) ----------------------------------------------------
 
 
 def test_the_changes_say_what_was_in_force_on_the_chosen_day() -> None:
@@ -266,8 +277,8 @@ def test_changing_the_day_after_an_edit_recalculates_the_base_and_keeps_the_edit
 
     form.set_valid_from(date(2026, 5, 1))
 
-    assert form.threshold_bpm == 160  # il valore scritto resta
-    assert form.changes() == (FieldChange(EditField.THRESHOLD, 170),)  # contro la nuova base
+    assert form.threshold_bpm == 160  # the written value stays
+    assert form.changes() == (FieldChange(EditField.THRESHOLD, 170),)  # against the new base
     update = request_of(form).update
     assert update is not None
     assert (update.valid_from, update.threshold_bpm) == (date(2026, 5, 1), 160)
@@ -276,14 +287,14 @@ def test_changing_the_day_after_an_edit_recalculates_the_base_and_keeps_the_edit
 def test_a_value_written_back_to_the_one_in_force_is_untouched_and_follows_the_day() -> None:
     form = make_form()
     form.set_valid_from(date(2026, 2, 1))
-    form.edit_min_bpm(50)  # il valore in vigore quel giorno: non è una modifica
+    form.edit_min_bpm(50)  # the value in force that day: not a change
     form.edit_weight("70,0")
     assert form.changes() == ()
     assert not changed(form)
 
     form.set_valid_from(date(2026, 5, 1))
 
-    assert form.min_bpm == 52  # segue il nuovo giorno invece di diventare una modifica a 50
+    assert form.min_bpm == 52  # follows the new day instead of becoming a change to 50
     assert form.baseline_weight == Weight(690)
     assert edited_weight(form) is None
     assert not changed(form)
@@ -322,7 +333,7 @@ def test_the_new_values_last_until_the_day_before_the_next_entry_of_their_series
 def test_the_series_are_independent_and_an_open_period_has_no_end() -> None:
     history = MeasurementHistory(
         FIXED,
-        (WeightEntry(date(2026, 1, 1), Weight(700)),),  # nessun peso dopo
+        (WeightEntry(date(2026, 1, 1), Weight(700)),),  # no weight afterwards
         (
             PhysiologyEntry(date(2026, 1, 1), physiology(50, 190, 171)),
             PhysiologyEntry(date(2026, 3, 1), physiology(52, 188, 170)),
@@ -352,3 +363,205 @@ def test_the_same_day_as_an_existing_entry_replaces_it_and_is_not_superseded_by_
 
 def test_an_untouched_form_has_no_pending_period() -> None:
     assert make_form().pending_periods() == ()
+
+
+# --- Nome del profilo ----------------------------------------------------------------------------
+
+
+def named_form(name: str = "Atleta di prova") -> MeasurementsForm:
+    return MeasurementsForm(make_history(), TODAY, name)
+
+
+def test_the_name_shown_is_the_current_one_until_it_is_edited() -> None:
+    form = named_form()
+
+    assert form.name_text == "Atleta di prova"
+    assert not changed(form)
+    form.edit_name("Altro")
+    assert form.name_text == "Altro"
+    assert changed(form)
+
+
+def test_a_name_equal_to_the_current_one_is_not_a_change() -> None:
+    form = named_form()
+
+    form.edit_name("  Atleta di prova ")
+
+    assert not changed(form)
+    assert form.build() == (EditIssue(EditField.GENERAL, MeasurementProblem.NOTHING_TO_UPDATE),)
+
+
+def test_a_new_name_is_saved_alone_normalised() -> None:
+    form = named_form()
+
+    form.edit_name("  Nuovo nome ")
+
+    assert request_of(form) == MeasurementsRequest(None, None, ProfileName("Nuovo nome"))
+
+
+def test_a_new_name_travels_with_the_measurements() -> None:
+    form = named_form()
+    form.edit_name("Nuovo nome")
+    form.edit_weight("70,0")
+
+    result = request_of(form)
+
+    assert result.new_name == ProfileName("Nuovo nome")
+    assert result.update is not None
+
+
+@pytest.mark.parametrize(
+    ("text", "problem"),
+    [("", NameProblem.EMPTY), ("   ", NameProblem.EMPTY), ("due\nrighe", NameProblem.INVALID)],
+)
+def test_an_invalid_name_is_an_issue_on_the_name_field_and_blocks_the_save(
+    text: str, problem: NameProblem
+) -> None:
+    form = named_form()
+
+    form.edit_name(text)
+
+    assert changed(form)  # "Salva" è attivo: l'errore si mostra al clic
+    assert form.build() == (EditIssue(EditField.NAME, problem),)
+
+
+# --- Threshold pace --------------------------------------------------------------------------
+def pace_history(
+    manual: tuple[ThresholdPaceEntry, ...] = (), tests: tuple[ThresholdPaceEntry, ...] = ()
+) -> MeasurementHistory:
+    base = make_history()
+    return MeasurementHistory(base.fixed, base.weights, base.physiology, manual, tests)
+
+
+def pace_entry(day: date, seconds: int) -> ThresholdPaceEntry:
+    return ThresholdPaceEntry(day, ThresholdPace(seconds))
+
+
+def test_a_profile_without_a_pace_has_none_in_force_and_a_typed_pace_is_a_change() -> None:
+    form = make_form()
+    assert form.baseline_pace is None
+    assert not changed(form)
+
+    form.edit_threshold_pace("5:30")
+
+    assert changed(form)
+    request = request_of(form)
+    assert request.update is not None
+    assert request.update.threshold_pace == ThresholdPace(330)
+    assert request.update.weight is None
+    assert not request.update.changes_heart_rate
+
+
+@pytest.mark.parametrize("text", ["5:30", "5.30", "5,30", "5'30", " 5:30 "])
+def test_the_separators_the_user_may_type_all_give_the_same_pace(text: str) -> None:
+    form = make_form()
+
+    form.edit_threshold_pace(text)
+
+    update = request_of(form).update
+    assert update is not None
+    assert update.threshold_pace == ThresholdPace(330)
+
+
+def test_whole_minutes_are_accepted() -> None:
+    form = make_form()
+
+    form.edit_threshold_pace("6")
+
+    update = request_of(form).update
+    assert update is not None
+    assert update.threshold_pace == ThresholdPace(360)
+
+
+@pytest.mark.parametrize("text", ["abc", "60:01"])
+def test_an_unreadable_or_out_of_range_pace_is_a_problem_on_its_field_and_not_saved(
+    text: str,
+) -> None:
+    form = make_form()
+
+    form.edit_threshold_pace(text)
+
+    assert changed(form)  # a value to correct enables "Save"
+    assert form.build() == (EditIssue(EditField.THRESHOLD_PACE, BodyProblem.PACE_INVALID),)
+
+
+def test_an_empty_pace_is_untouched() -> None:
+    form = make_form()
+    form.edit_threshold_pace("5:30")
+
+    form.edit_threshold_pace("  ")
+
+    assert form.edited_pace_text is None
+    assert not changed(form)
+
+
+def test_the_pace_in_force_is_shown_and_typing_the_same_value_is_not_a_change() -> None:
+    history = pace_history(manual=(pace_entry(date(2026, 2, 1), 330),))
+    form = MeasurementsForm(history, TODAY)
+    assert form.baseline_pace is not None
+    assert form.baseline_pace.pace == ThresholdPace(330)
+
+    form.edit_threshold_pace("5.30")
+
+    assert form.edited_pace_text is None
+    assert not changed(form)
+
+
+def test_a_pace_from_a_test_is_the_baseline_and_says_so() -> None:
+    history = pace_history(tests=(pace_entry(date(2026, 5, 1), 300),))
+    form = MeasurementsForm(history, TODAY)
+
+    assert form.baseline_pace is not None
+    assert (form.baseline_pace.pace, form.baseline_pace.source) == (
+        ThresholdPace(300),
+        PaceSource.TEST,
+    )
+    form.edit_threshold_pace("5:10")
+    assert form.changes() == (FieldChange(EditField.THRESHOLD_PACE, form.baseline_pace),)
+
+
+def test_the_baseline_pace_follows_the_chosen_day() -> None:
+    history = pace_history(
+        manual=(pace_entry(date(2026, 2, 1), 330),),
+        tests=(pace_entry(date(2026, 4, 1), 300),),
+    )
+    form = MeasurementsForm(history, TODAY)
+
+    form.set_valid_from(date(2026, 3, 1))
+    on_march = form.baseline_pace
+    form.set_valid_from(date(2026, 1, 1))
+
+    assert on_march is not None
+    assert on_march.pace == ThresholdPace(330)
+    assert form.baseline_pace is None
+
+
+def test_the_pace_period_ends_the_day_before_the_next_manual_entry() -> None:
+    history = pace_history(manual=(pace_entry(date(2026, 6, 1), 330),))
+    form = MeasurementsForm(history, TODAY)
+    form.set_valid_from(date(2026, 5, 1))
+
+    form.edit_threshold_pace("5:20")
+
+    assert form.pending_periods() == (
+        PendingPeriod(
+            MeasurementSeries.THRESHOLD_PACE,
+            ValidityPeriod(date(2026, 5, 1), date(2026, 5, 31)),
+        ),
+    )
+
+
+def test_pace_together_with_weight_and_heart_rate_is_one_update() -> None:
+    form = make_form()
+    form.edit_weight("68,0")
+    form.edit_threshold_bpm(165)
+    form.edit_threshold_pace("5:15")
+
+    update = request_of(form).update
+
+    assert update is not None
+    assert (update.weight, update.threshold_bpm, update.threshold_pace) == (
+        Weight(680),
+        165,
+        ThresholdPace(315),
+    )

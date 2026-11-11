@@ -2,7 +2,7 @@
 
 **Quando leggerlo:** scrivendo o rivedendo `storage`, `profiles`, `garmin`,
 `activities` (import e sincronizzazione), `platform`, i test `T-DATI`, `T-SYNC`,
-`T-IMP`, `T-GPX`. Sezione 5 di `SKILL.md`. ADR: `docs/adr/003-formato-dati.md`
+`T-IMP` (i `T-GPX` sono tolti in fase 8). Sezione 5 di `SKILL.md`. ADR: `docs/adr/003-formato-dati.md`
 e `docs/adr/005-schema-sqlite-e-archivio.md` (schema, archivio e identità:
 qui non si ripetono) e `docs/adr/006-token-e-sincronizzazione.md` (perché i
 token, il thread, il giornale e la politica sono fatti così: qui ci sono le
@@ -16,7 +16,7 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
 ```
 <cartella del profilo>/
   ponos.sqlite3     database (WAL: anche -wal e -shm)
-  archivio/<anno>/<sha256>.fit|.gpx
+  archivio/<anno>/<sha256>.fit
   backup/           ponos-v{da}-v{a}.sqlite3: copia prima di ogni migrazione
   ponos.lock        lock del sistema operativo sul file aperto
 ```
@@ -77,7 +77,7 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
 - Tempi in millisecondi UTC interi; durate misurate in secondi.
 - Contiene l'indice delle attività, i parametri fisiologici, la cache dei
   carichi, (dalla v2) il giornale della sincronizzazione e (dalla v3) i dati
-  personali, il peso e i pesi degli sport; obiettivi, piani, infortuni e
+  personali, il peso (e fino al 2026-11-10 i pesi degli sport, ora non usati); obiettivi, piani, infortuni e
   impostazioni arrivano con le loro fasi, con nuove migrazioni.
   Carichi e PMC sono derivati e rigenerabili.
 - **Schema v2** (`sync_journal`, `sync_cursor`, `sync_state`, tutte `STRICT`,
@@ -99,28 +99,210 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
     prima del 1900-01-01) e `tenths_kg` intero
     (200-3000: nessun float binario). Si aggiunge con `UpdateMeasurements`;
     la stessa data sostituisce.
-  - `sport_weights`: solo i pesi diversi dal default (`REAL` tra 0 e 5);
-    `SetSportWeights` sostituisce l'insieme in una transazione.
+  - `sport_weights`: solo i pesi diversi dal default (`REAL` tra 0 e 5).
+    **Dal 2026-11-10 la tabella resta ma non è né letta né scritta** (il
+    carico è il TRIMPeq, senza pesi): niente più `SetSportWeights` né
+    `SportWeightStore`; la toglierà una migrazione futura (expand-contract).
   - `load_cache` guadagna `zone1_s ... zone5_s` (secondi in zona, `>= 0`).
     La cache è derivata: la migrazione la svuota, così nessun carico resta
-    senza zone (`LOAD_MODEL_VERSION` 2 lo garantisce anche per le impronte).
+    senza zone (`LOAD_MODEL_VERSION` lo garantisce anche per le impronte; 3 dal
+    TRIMPeq). Dal TRIMPeq la colonna `hr_tss` riceve 0, mentre `trimp` e `load`
+    ricevono il TRIMPeq; l'impronta `load_fingerprint(physiology)` non ha pesi.
   - La migrazione v2 → v3 passa da `backup/ponos-v2-v3.sqlite3`. T-DATI-01:
     `tests/collaudo/test_fase3_migrazione.py` ha la v3 congelata e un
     database v2 scritto a mano, dati intatti, copia coerente, migrazione
     interrotta a metà, limiti dei CHECK e trigger.
-  - `OpenProfile` espone anche `weights` (`WeightStore`), `fixed_data`
-    (`FixedDataStore`) e `sport_weights` (`SportWeightStore`): stessa
+  - `OpenProfile` espone anche `weights` (`WeightStore`) e `fixed_data`
+    (`FixedDataStore`): stessa
     connessione e stessa transazione di `activities.transaction()`.
   - Altezza, peso e data di nascita sono dati di salute: mai nei log né nei
     messaggi d'errore (i tipi di dominio e gli store non ripetono i valori).
     Motivazioni e alternative: `docs/adr/007-dati-del-profilo-e-zone.md`.
+- **Schema v4** (alimentazione, tutte `STRICT`; formule e soglie in
+  `references/alimentazione.md`):
+  - `activities.calories_kcal`: totale dichiarato dal dispositivo (FIT
+    `session.total_calories`), NULL se manca (CHECK > 0 e <= 50000); le righe
+    precedenti restano NULL.
+  - `activity_level`: livello fuori dallo sport con data di validità (stessa
+    regola del peso), insieme chiuso `sedentary`, `light`, `active`,
+    `very_active`.
+  - `meal_times`: una riga (`id = 1`), minuti dalla mezzanotte in ordine e ad
+    almeno 120 minuti l'uno dall'altro; assente = orari di default.
+  - `nutrition_goal`: periodi (`start_date` chiave, `end_date` NULL = senza
+    fine), `kind` `weight_loss`/`maintenance`/`performance`, `weekly_loss_g`
+    (100-1000) solo per il dimagrimento; un trigger `BEFORE INSERT` rifiuta i
+    periodi che si sovrappongono.
+  - Migrazione v3 → v4 con copia in `backup/ponos-v3-v4.sqlite3`. T-DATI-01:
+    `tests/collaudo/test_fase4b_migrazione.py` (v3 congelata, uccisione a ogni
+    istruzione, limiti dei CHECK e del trigger).
+  - `OpenProfile` espone anche `activity_levels`, `meal_times` e
+    `goal_periods`, sulla stessa connessione e transazione.
+- **Schema v5** (test di soglia, `STRICT`; regole in `references/test-soglia.md`):
+  - `threshold_test`: storico dei test applicati, una riga per attività
+    (`activity_key` chiave, l'`identity_key` dell'attività, prefisso `fit:` o
+    `gpx:`), `test_date` (giorno locale, data esistente non prima del
+    1900-01-01), `segment_start_ms` (inizio del segmento, millisecondi UTC),
+    `threshold_bpm` (40-250), `pace_s_per_km` (90-3600, NULL senza distanza),
+    `method_version` (>= 1). Nessuna chiave esterna verso `activities`: l'indice
+    è derivato e rigenerabile, lo storico dei test deve sopravvivere alla sua
+    ricostruzione.
+  - Migrazione v4 → v5 con copia in `backup/ponos-v4-v5.sqlite3`. T-DATI-01:
+    `tests/collaudo/test_fase4_migrazione.py` (v4 congelata, uccisione a ogni
+    istruzione, limiti dei CHECK). La copia porta il nome `ponos-v<da>-v<a>` con
+    la versione di destinazione dell'app: una v3 aperta oggi lascia
+    `ponos-v3-v5.sqlite3`.
+  - `OpenProfile` espone anche `threshold_tests` (porta `ThresholdTestStore` in
+    `assessment/ports.py`), sulla stessa connessione e transazione; la porta
+    `PhysiologyStore` ha `remove(valid_from)` per annullare un test.
+- **Schema v6** (obiettivi, disponibilità, tipologie e piano, `STRICT`; regole in
+  `references/piano.md` sezione 13):
+  - `goal`: gare e obiettivi di forma in una tabella (`kind` `race` o `fitness`).
+    `goal_id` (1-64 caratteri `A-Za-z0-9_-`, scelto da chi chiama), `goal_date`
+    (data esistente non prima del 1900-01-01), per la gara `priority` (A, B, C),
+    `sport`, `distance_m` (400-500000) e `target_time_s` facoltativo (60-604800),
+    dallo schema v16 `ascent_m` (0-30000, 0 = piana),
+    per l'obiettivo di forma `ctl` (0-200); i CHECK tengono separate le due
+    forme. Un indice univoco parziale (`WHERE kind = 'race'`) ammette una sola
+    gara per giorno, anche con una scrittura diretta; gli obiettivi di forma
+    possono dividere il giorno.
+  - `weekly_availability`: una sola riga (`id = 1`). Dallo schema v12 (ADR 016) ha
+    `days_mask` (0-127, bit i = giorno i disponibile, lunedì = bit 0), `sessions_per_week`
+    (0-7, al massimo i giorni), `long_day` (0-6, un giorno disponibile), `max_week_min`
+    (0-6000); tutto a zero = non impostata. In v6-v11 erano `day0_min` (lunedì) ...
+    `day6_min` (0-720). Assente = non impostata.
+  - `session_choice`: una riga per sport e tipologia scelti (insiemi chiusi).
+  - `plan_state`: una sola riga (`id = 1`) con l'ultimo esito di `build_plan`:
+    piano (`kind = 'plan'`: `method_version`, `plan_json` canonico fino a
+    16 MiB, `plan_sha256`; versione, parametri e ingressi stanno nel JSON) o
+    rifiuto (`kind = 'refusal'`: `refusal_reason` su insieme chiuso,
+    `refusal_goal_ids` separati da virgola). Derivato e sostituibile.
+  - `plan_past_day`: il passato com'era pianificato, una riga per giorno
+    (`day`, `planned_on` sempre prima del giorno, `day_json` fino a 64 KiB,
+    `day_sha256`). Due trigger rifiutano ogni `UPDATE` e `DELETE`: un giorno
+    congelato non cambia mai.
+  - Migrazione v5 → v6 con copia in `backup/ponos-v5-v6.sqlite3`. T-DATI-01:
+    `tests/collaudo/test_fase5_migrazione.py` (v5 congelata, uccisione a ogni
+    istruzione, limiti dei CHECK, trigger, JSON del piano manomesso).
+  - `OpenProfile` espone anche `goals`, `availability`, `session_choices` (porte
+    in `goals/ports.py`) e `plans` (`planning/ports.py`), sulla stessa
+    connessione e transazione. Il JSON letto dal database è input
+    (`planning/plan_codec.py`): dimensione, checksum, sintassi e forma dei tipi;
+    ciò che non regge è `UnreadablePlan` (il piano è derivato, il ricalcolo lo
+    sostituisce) o, per un giorno del passato, un giorno omesso.
+- **Schema v7** (protocollo del test di soglia e massa magra misurata, `STRICT`; regole in
+  `references/test-soglia.md` sezione 1 e `references/alimentazione.md` sezione 7):
+  - `threshold_test.protocol`: colonna aggiunta in fondo (`ALTER TABLE ... ADD COLUMN`),
+    insieme chiuso `thirty_minutes` / `twenty_minutes`, `NOT NULL DEFAULT 'thirty_minutes'`:
+    i test salvati prima erano tutti di 30'. `method_version` non si riscrive. Le
+    `INSERT` dirette nella tabella nominano le colonne.
+  - `lean_mass`: `valid_from` (data esistente non prima del 1900-01-01, chiave primaria) e
+    `tenths_kg` (150-2000). La plausibilità col peso del giorno è una regola del caso d'uso
+    (`profiles/lean_mass.py`) e di `PlanDayNutrition`, non dello schema.
+  - Migrazione v6 → v7 con copia in `backup/ponos-v6-v7.sqlite3` (da v5: una sola copia
+    `ponos-v5-v7.sqlite3`, le due migrazioni nella stessa transazione). T-DATI-01:
+    `tests/collaudo/test_fase5_migrazione_v7.py` (v6 congelata, v7 invariata dopo il rilascio,
+    uccisione a ogni istruzione, limiti dei CHECK).
+  - `OpenProfile` espone anche `lean_masses` (porta `LeanMassStore` in `nutrition/ports.py`),
+    sulla stessa connessione e transazione; fake e contract test accanto ai
+    livelli di attività.
+- **Schema v8** (riquadro della traccia per la mappa; ADR 010):
+  - `activities.track_south`, `track_west`, `track_north`, `track_east`: quattro colonne `REAL`
+    aggiunte in fondo (`ALTER TABLE ... ADD COLUMN`), tutte NULL o tutte presenti (CHECK
+    sull'ultima colonna: intervalli, `south <= north`, tutto o niente). `west > east` = il
+    riquadro attraversa l'antimeridiano. NULL = attività senza posizione, oppure riga non ancora
+    riempita. Derivato e rigenerabile.
+  - Il riquadro è quello di **partenza + polyline semplificata** della stessa riga
+    (`track_box_of`, dominio): non rilegge mai il file archiviato. Può essere più piccolo di quello
+    della traccia piena al massimo della tolleranza dell'indice (`TRACK_TOLERANCE_M`, 10 m). Lo
+    scrive `SqliteActivityIndex.add` (quindi import e sincronizzazione senza altre modifiche); una
+    polyline illeggibile dà "nessun riquadro" e la riga resta da riempire.
+  - Le attività indicizzate prima della v8 restano senza riquadro finché non gira
+    `backfill_track_boxes(index, batch_size, report, is_cancelled)` (`activities/map_queries.py`):
+    lotti da 500 righe, ciascuno una transazione propria (riprendibile: ciò che è fatto resta),
+    `is_cancelled()` prima di ogni lotto, `report(fatte, totale)`; usa solo l'indice. Una polyline
+    rovinata ripiega sul solo punto di partenza; senza nemmeno quello la riga conta come
+    `unresolved` e la passata successiva la ritrova. Sul thread dei dati come l'import
+    (`DataThread`, un job annullabile).
+  - Porta `TrackBoxIndex` (`activities/ports.py`; `OpenProfile.track_boxes`, stessa connessione
+    e transazione): `revision()`, `list_by_start()` (record + riquadro), `count_without_box()`,
+    `candidates_without_box(after_row_id, limit)`, `store_boxes({row_id: GeoBox})` (non
+    sovrascrive un riquadro già presente). Fake e contract test in
+    `tests/contracts/contract_track_boxes.py`.
+  - Migrazione v7 → v8 con copia in `backup/ponos-v7-v8.sqlite3`. T-DATI-01:
+    `tests/collaudo/test_fase5b_migrazione_v8.py` (v7 congelata scritta a mano, v8 invariata dopo
+    il rilascio, uccisione a ogni istruzione, limiti dei CHECK, riempimento riprendibile). Gli
+    altri test congelati leggono `activities` con l'helper `rows()` che nasconde le colonne
+    aggiunte dopo (`LATER_COLUMNS`).
+- **Schema v12** (giorni e sedute a settimana al posto dei minuti per giorno; ADR 016):
+  - `weekly_availability` ricostruita (SQLite non toglie colonne con CHECK) nella stessa
+    transazione: i giorni sono quelli che avevano minuti, le sedute tante quanti i giorni, il
+    giorno del lungo si aggiunge ai giorni se non lo era, il massimo settimanale resta; una riga
+    senza minuti diventa la disponibilità vuota (tutto a zero). I minuti di ogni giorno si
+    perdono; restano nella copia in `backup/` fatta prima della migrazione.
+  - `METHOD_VERSION` del piano era 6 (oggi 8, vedi schema v16). Il piano salvato è derivato: un piano con `method_version`
+    più bassa resta finché il ricalcolo (dopo ogni panoramica) non lo sostituisce; il codice non
+    confronta la versione.
+- **Schema v13** (voci che Garmin non fornisce): `sync_journal` ricostruita (SQLite non
+  cambia i CHECK sul posto) con la colonna `unanswered_rounds` e la causa
+  `remote_not_provided`; indice `sync_journal_to_do` ricreato; copia in
+  `backup/ponos-v12-v13.sqlite3` (da un v12 il nome dice la versione d'arrivo, oggi
+  `ponos-v12-v14`). T-DATI-01: `tests/collaudo/test_fase8_migrazione_v13.py`.
+- **Schema v14** (passo soglia impostato a mano): tabella `threshold_pace(valid_from PK,
+  s_per_km 90-3600)`, `STRICT`, serie datata a sé come `weight`; non tocca `load_cache`.
+  Migrazione `THRESHOLD_PACE_MIGRATION` in `storage/schema_threshold_pace.py`; test in
+  `tests/storage/test_threshold_pace_store.py` (trovata per identità, non per numero).
+  Il passo in vigore per il piano è `threshold_pace_in_force` (`profiles/domain`): il più
+  recente per data fra l'ultima misura manuale e l'ultimo test con passo, a pari giorno
+  la manuale.
+- **Schema v15** (soglie FC per sport): colonne nullable `bike_threshold_bpm` e
+  `other_threshold_bpm` in `physiology`, `CHECK (>= 40 AND > min_bpm AND <= max_bpm)`,
+  NULL = default; `ALTER TABLE ... ADD COLUMN`, `load_cache` non svuotata; migrazione
+  `SPORT_THRESHOLDS_MIGRATION` in `storage/schema_sport_thresholds.py`, copia
+  `backup/ponos-v14-v15.sqlite3`; test in `tests/storage/test_sport_thresholds*.py`.
+- **Schema v16** (dislivello della gara; ADR 017): colonna `goal.ascent_m INTEGER NOT NULL
+  DEFAULT 0 CHECK (ascent_m BETWEEN 0 AND 30000)`, aggiunta con `ALTER TABLE ... ADD COLUMN`;
+  le gare già salvate hanno 0 (piane), l'obiettivo di forma ha 0 (lo scrive il dominio). Limiti
+  congelati nella migrazione (`RACE_ASCENT_MIGRATION` in `storage/schema_race_ascent.py`, come
+  `MAX_ASCENT_M` di `goals/domain/goal.py`); copia in `backup/ponos-v15-v16.sqlite3`. Gli
+  `INSERT` e gli `UPDATE` di `sqlite_goals.py` nominano la colonna. Test in
+  `tests/storage/test_race_ascent_store.py` (migrazione trovata per identità, non per numero;
+  migrazione congelata, copia, limiti dei CHECK, lettura e sostituzione); i test congelati delle
+  migrazioni precedenti ignorano la colonna (`tidy:` 80c0dde).
+  - Piano serializzato (`METHOD_VERSION` 8): campi nuovi `PlannedSession.ascent_m` (D+ indicativo
+    in m, 0 = seduta piana o nessuna salita) e `PlannedRace.ascent_m` (D+ della gara), tutti e due
+    con default 0 alla lettura: un piano o un giorno congelato salvato prima si rilegge, con
+    `ascent_m` 0. `Shape.slope_m_per_km` non si salva (serve solo al motore). Il piano salvato è
+    derivato: lo sostituisce il ricalcolo.
+- **Schema v17** (FC dell'attività): `load_cache` svuotata (derivata) con le colonne
+  `avg_bpm` e `max_bpm` (INTEGER 20-250, NULL senza FC), dai campioni usati per il carico
+  (media pesata sul tempo, arrotondata); `LOAD_MODEL_VERSION` 4, quindi tutti i carichi si
+  ricalcolano una volta. Migrazione `LOAD_HEART_RATE_MIGRATION`
+  (`storage/schema_load_heart_rate.py`); test `tests/storage/test_load_heart_rate_store.py`.
+- **Schema v18** (LT1 per gruppo di sport): colonne nullable `run_lt1_bpm` e `other_lt1_bpm`
+  in `physiology`, `CHECK (NULL OR (> min_bpm AND < LT2))`, con LT2 = `threshold_bpm` (per
+  `other_lt1_bpm`: `COALESCE(other_threshold_bpm, threshold_bpm)`); `ALTER TABLE ... ADD
+  COLUMN`, `load_cache` non svuotata (l'impronta cambia da sola: `LOAD_MODEL_VERSION` 5,
+  perché la bici non è più corsa − 4). Dal 2026-11-10 `bike_threshold_bpm` (v15) **non si
+  legge né si scrive più**: resta nella tabella (expand-contract), la toglierà una migrazione
+  futura; `other_threshold_bpm` è ora la LT2 di tutti gli sport che non sono corsa o trail.
+  Migrazione `LT1_MIGRATION` (`storage/schema_lt1.py`); test `tests/storage/test_lt1_store.py`.
+- **Schema v19** (attività eliminate; ADR 018): tabella `deleted_activity` (la "tomba"), `STRICT`,
+  con `identity_key` PK, id Garmin `UNIQUE` facoltativo, sport, inizio, tempo trascorso,
+  distanza, riferimento al file in archivio (percorso, SHA-256, dimensione), origine e istante
+  d'import dell'attività; nessuna posizione né FC. Due trigger tengono un'identità o in
+  `activities` o in `deleted_activity`, mai in entrambe (un `INSERT` in `activities` di
+  un'identità eliminata si interrompe: chi dimentica di guardare le tombe fallisce, non
+  resuscita l'attività). `sync_journal` ricostruita con lo stato `skipped`, indice
+  `sync_journal_to_do` ricreato. Una migrazione che ricostruisse `activities` deve ricreare il
+  trigger. Migrazione `DELETED_ACTIVITY_MIGRATION` (`storage/schema_deleted_activity.py`);
+  test `tests/storage/test_deleted_activity_store.py`.
 - Campi sconosciuti di `meta` conservati al risalvataggio.
 - Connessione: `foreign_keys = ON`, `trusted_schema = OFF`, WAL,
   `synchronous = FULL`; `quick_check` e `foreign_key_check` all'apertura.
 
 ## 3. Archivio dei file originali
 
-- I file originali (FIT, GPX) sono la fonte di verità delle attività; la porta
+- I file originali (FIT) sono la fonte di verità delle attività; la porta
   è `ActivityArchive` (`activities/ports.py`), l'adattatore `FileArchive`.
 - Ogni file ha il suo SHA-256 e la sua dimensione registrati
   (`ArchivedFile`: percorso relativo, SHA-256, byte). Il percorso è generato
@@ -150,7 +332,7 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   silenzio: l'attività resta fuori dalla panoramica con il suo motivo, finché
   non si reimporta l'originale.
 - Limiti prima della lettura (default del progetto, costanti in
-  `activities/domain/limits.py`, `FitLimits` e `GpxLimits`): dimensione
+  `activities/domain/limits.py`, `FitLimits`): dimensione
   massima 50 MB, un milione di record o punti, durata massima 7 giorni.
   Finestra degli orari plausibili: [1990-01-01, 2100-01-01) UTC
   (`MIN_ACTIVITY_INSTANT` e `MAX_ACTIVITY_INSTANT` in `limits.py`,
@@ -174,7 +356,7 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
 ### Riepilogo ricavato dal file (`ActivitySummary`)
 
 - Distanza (`total_distance` della sessione, m), dislivello positivo
-  (`total_ascent`, m; per un GPX la soglia di 3 m), punto di partenza e
+  (`total_ascent`, m), punto di partenza e
   traccia semplificata; ogni voce può mancare (bici indoor: solo distanza).
   Somma sulle sessioni che le dichiarano; valori non validi (0xFFFFFFFF,
   0xFFFF) ignorati, mai riparati.
@@ -194,23 +376,157 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
 - Le posizioni sono dati personali sensibili: solo nell'indice locale, mai nei
   log. Costanti in `activities/domain/limits.py`.
 
+### Traccia completa e quota (`ActivityTrack`, fase 5b)
+
+- La traccia completa **non** sta nell'indice né nella cache dei carichi: si
+  rilegge dal file archiviato con `decode_stored_track(data, formato)`
+  (`None` se il file non ha posizioni). Non tocca `Activity`, la serie di FC,
+  il carico né la sua impronta: sono due letture indipendenti dello stesso
+  file, con gli stessi limiti di byte, record e punti.
+- `ActivityTrack` = tuple di `TrackSegment` (almeno uno, al più 1.000.000
+  punti in tutto). Un tratto ha colonne `seconds`, `lat_deg`, `lon_deg` e
+  `altitude_m` (facoltativa, `NaN` dove manca); secondi **dal primo record
+  (FIT) o dal primo punto (GPX), come la serie di FC**, strettamente
+  crescenti; coordinate finite e dentro i limiti.
+- Buchi: un record FIT senza posizione valida, un `trkseg` diverso in un GPX
+  o una pausa di posizione oltre 30 s (`TRACK_GAP_S`, anche uguale a 30 s non
+  spezza) chiudono il tratto. Un punto con secondi non maggiori di tutti i
+  precedenti si scarta (vale il primo), come per la FC.
+- Quota FIT: `enhanced_altitude`, altrimenti `altitude` del record; GPX:
+  `ele`.
+- Semplificazione per zoom: `simplify_for_zoom(traccia, zoom)` usa la
+  tolleranza di un pixel (`zoom_tolerance_m`: `2πR·cos(lat)/(256·2^zoom)`,
+  zoom 0-22, latitudine limitata a 85°), tiene primo e ultimo punto di ogni
+  tratto, omette i tratti di un solo punto e resta entro `MAX_TRACK_POINTS`
+  (raddoppia la tolleranza fino a 24 volte, poi tiene i tratti più lunghi).
+  Codifica compatta: `encode_segments`/`decode_segments`, un polyline per
+  tratto separati da uno spazio (fuori dall'alfabeto ASCII 63-126).
+- Riquadro: `GeoBox(south, west, north, east)`; `west > east` attraversa
+  l'antimeridiano; 180 e -180 sono lo stesso meridiano; `GeoBox.of_points`
+  sceglie il lato corto; `GeoBox.from_view` accetta l'area di una mappa che
+  esce dal globo (360° o più = tutto il globo).
+
+### Filtri e ricerca per area (`activities/domain/filters.py`, `area_query.py`)
+
+- `ActivityFilter` (data da-a in giorni inclusi nel fuso passato, durata =
+  tempo in movimento, distanza, dislivello positivo, insieme di sport; vuoto =
+  tutto). `NumericRange.of(a, b)` scambia gli estremi invertiti. Un valore
+  ignoto (indoor senza distanza) non passa un filtro che lo limita.
+- Parser tolleranti (`parse_duration`, `parse_distance_km`, `parse_amount`):
+  virgola o punto, "90" = minuti, "1:30" = ore e minuti, "1:30:15"; vuoto =
+  nessun limite; negativi, non numerici e oltre 10^9 → `FilterInputError` con
+  un `FilterInputReason` (l'input non si ripete nel messaggio). Nessun
+  separatore delle migliaia (il punto è sempre decimale).
+- `StartIndex(attività)` tiene le partenze in colonne; `.in_area(GeoBox)`
+  dà `AreaResult` (attività nell'area in ordine d'ingresso, `AreaTotals`
+  con numero, km, dislivello, ore, e le attività senza posizione contate a
+  parte, indipendenti dall'area). `track_touches_area` decide su una
+  polyline per le attività vicine al bordo. `StartIndex` espone anche `located`,
+  `lat_deg`, `lon_deg` (colonne delle sole attività con partenza).
+- `GeoBox.intersects(altro)` e `intersects_many(south, west, north, east)` (vettoriale,
+  antimeridiano compreso; il contatto esatto sulla linea ±180 non si vede).
+
+### Casi d'uso della mappa (`activities/map_queries.py`, `load/activity_profile.py`)
+
+Tutti sul thread dei dati (la connessione è di un solo thread), nessun log (posizioni).
+
+- `ActivitySnapshots(track_boxes, fuso)` legge l'indice **una volta per revisione**
+  (`TrackBoxIndex.revision()`: conteggio, ultimo id, riquadri riempiti: una query leggera) e
+  tiene l'ultima selezione per filtro; nuove attività o riquadri riempiti si notano da soli.
+- `SearchActivities(snapshots)(filtro) -> SearchResult`: `activities` (per partenza crescente),
+  `totals` (`AreaTotals`), `without_position`, e le colonne `start_indices`, `start_lat_deg`,
+  `start_lon_deg` (sola lettura) per i cerchi numerati: nessun oggetto per partenza.
+- `ActivitiesInArea(snapshots, archivio, decode_track)(filtro, GeoBox, zoom) -> AreaView`:
+  `in_area` (`AreaResult`: attività filtrate con partenza nell'area, totali, senza posizione),
+  `tracks` e `tracks_omitted`. Lo zoom si limita a 0-22. Sotto lo zoom 11
+  (`TRACK_MIN_ZOOM`) nessuna traccia. Da 11: le attività filtrate la cui partenza **o** il cui
+  riquadro tocca l'area, le più recenti, **al massimo 300** (`MAX_MAP_TRACKS`), ciascuna di al
+  massimo 2000 punti. Sorgente della traccia: se la tolleranza di un pixel a quello zoom e
+  latitudine è almeno quella dell'indice (10 m) si usa la polyline dell'indice (un solo tratto);
+  se è più fine si rilegge il file (`archive.read` con hash e tetto di byte,
+  `decode_stored_track`, `simplify_for_zoom`: i buchi del GPS spezzano la linea) con una cache
+  LRU di 600 tracce per (identità, zoom); un file inutilizzabile ripiega sulla polyline. In
+  ogni caso una linea si taglia dove salta l'antimeridiano.
+- `GetActivityProfile(index, archivio, physiology, decode, decode_track, timezone)(identità)`:
+  `ActivityProfileData` | `NoTrack` | `ExcludedActivity`. Colonne (al massimo 2000 punti, primo
+  e ultimo inclusi): `segment` (cambia dove c'è un buco), `distance_m` (serie del dispositivo
+  interpolata, altrimenti lungo la traccia), `lat_deg`, `lon_deg`, `altitude_m` (`None` se il
+  file non ha quota: profilo assente), `zone` (0-4 o `NO_ZONE` = -1; il tratto che parte dal punto
+  i prende `zone[i]`) e `zone_absence` (`NO_HEART_RATE`, `NO_PARAMETERS`) quando `zone` è `None`,
+  `threshold_bpm` e `zone_starts_bpm` del giorno locale dell'attività. La zona di un istante è
+  quella del campione di FC in vigore (fino al successivo) **se il carico lo conta** (dentro i
+  limiti di FC, intervallo al massimo `MAX_GAP_S`): `zones_at`; i test confrontano i secondi per
+  zona con `compute_activity_load`.
+
+### Sfondo della mappa (`maps/`, `platform/tile_*.py`)
+
+Fonti (dal 2026-11-10, ADR 010 emendato due volte): tre sfondi a scelta, elenco chiuso
+`BACKGROUNDS` in `maps/domain.py` (`MapBackground`: chiave stabile, nome, host con `{s}` e
+sottodomini, prefisso del percorso, zoom massimo, attribuzione): `openstreetmap` (default,
+`tile.openstreetmap.org`, zoom 19), `opentopomap` (`{a,b,c}.tile.opentopomap.org`, zoom 17) e
+`cyclosm` (`{a,b,c}.tile-cyclosm.openstreetmap.fr/cyclosm/`, zoom 20). Senza chiave (dal
+2026-11-09; prima Tracestrack con chiave nel portachiavi: tutto ciò che la riguardava è stato
+tolto). Nessun URL arriva da fuori: la sorgente si cerca per chiave nell'elenco.
+
+- `maps/domain.py`: `TileAddress(z, x, y, background=OPENSTREETMAP)` (z da 0 allo zoom massimo
+  della sorgente, x e y in `[0, 2^z)`), `parse_tile_path` (`/sorgente/z/x/y` o
+  `sorgente/z/x/y.png`, lunghezza prima, solo cifre, sorgente cercata con `background_by_key`), `CacheLimit` (64 MiB - 64 GiB, default
+  4 GiB), `parse_cache_limit_gib` ("4", "0,5"). Niente stile, niente chiave.
+- `maps/ports.py`: `TileSource.fetch(z, x, y, validatori) -> TileImage | TileNotModified |
+  TileUnavailable` (un solo tentativo, mai eccezioni per rete o fornitore; `TileAddressError` per
+  coordinate non valide), `TileProblem` (`REFUSED` = 403/429, `NETWORK_UNAVAILABLE`,
+  `INVALID_RESPONSE`), `TileValidators(etag, last_modified)` (valori opachi, ASCII stampabile,
+  già controllati dall'adattatore), `TileCache` (`get`, `put`, `renew`).
+- `maps/use_cases.py`: `TileProxy(sources: Mapping[MapBackground, TileSource], cache, now_utc,
+  monotonic)` (una sorgente e una pausa per sfondo): `serve(percorso)` /
+  `tile(indirizzo) -> TileAnswer(png, problem)`; prima la cache (fresca), poi il server; una tile
+  scaduta si richiede con i validatori salvati (richiesta condizionale) e un 304 la rinnova
+  (`renew`). Dopo un problema non richiede per un po' (`COOLDOWN_S`: `REFUSED` 300 s, rete e
+  risposta non valida 15 s; `INVALID_RESPONSE` solo per quella tile); una tile scaduta si serve
+  comunque con il problema se il server non risponde. Mai prefetch né scaricamenti in blocco.
+- `platform/tile_http.py`: `HttpTileSource` su `http.client` (nessun reindirizzamento seguito,
+  nessun proxy di sistema, nessun ritentativo). `HttpTileSource(background, user_agent=...)`:
+  host e percorso dallo sfondo, sempre HTTPS, sottodominio fisso per tile (`(x + y) % 3`); nell'app
+  `create_tile_sources(user_agent)` ne crea una per sfondo; un endpoint `http` solo su loopback
+  (`endpoint=`, nei test). `User-Agent` `PonosCoach/<versione> (+<URL del repository>)`, composto
+  in `__main__.py`, ASCII stampabile, al massimo 128 caratteri. Timeout per operazione (8 s) e
+  scadenza totale (20 s); risposta: stato, `Content-Length` ed `image/png`, al massimo 1 MiB, PNG
+  completo con IHDR di lato 1-1024. Scadenza da `Cache-Control` (`max-age`; `no-store`/`no-cache`
+  = non tenere), poi `Expires`, altrimenti 7 giorni (`DEFAULT_TTL_S`), mai oltre 30 giorni.
+  `ETag` e `Last-Modified` si tengono solo se ASCII stampabile di 1-256 caratteri, e tornano come
+  `If-None-Match` / `If-Modified-Since`. 403 e 429 sono `REFUSED`. Mai l'indirizzo della tile nei
+  log.
+- `platform/tile_cache.py`: `DiskTileCache(cartella, limite)` su un file SQLite
+  (`tiles.sqlite3`, WAL) nella cartella cache dell'app (non nel profilo; cartella privata).
+  Schema 3 (`user_version`): una riga per `(source, z, x, y)` con `expires_ms`, `etag`,
+  `modified`; i file v1 (colonna dello stile) e v2 (senza sorgente) si ricostruiscono vuoti, come
+  ogni file illeggibile o di altra versione; un solo tetto per tutti gli sfondi. Tetto sul **conteggio per pagine** (`accounted_bytes`: byte +
+  160 di riga, arrotondati a 4096): il file non supera il tetto più poche decine di KiB;
+  rimozione LRU per contatore d'uso (non per orologio); `clear()` cancella e ricrea il file.
+  Thread-safe (un lock).
+- Attribuzione dello sfondo in uso (campo `attribution` dello sfondo), sempre visibile sulla
+  mappa; scelta in `ui/map_background.py` (`BackgroundChoice`, `QSettings` `map/background`),
+  menu Mappa → Sfondo e controllo nella pagina (`backgroundChosen(chiave)`, convalidata), la
+  pagina cambia layer con `setBackground`.
+- Pagina della mappa: chiede `ponos://tiles/{sorgente}/{z}/{x}/{y}`; il gestore dello schema chiama
+  `TileProxy.serve(percorso, lingua)` (fuori dal thread GUI), risponde 200 con il PNG, 400 per
+  `TileAddressError`, 204/404 senza PNG; `problem` va all'avviso della vista (non nell'URL).
+
 ## 4. Identità dell'attività
 
-- Unione di due casi (`ActivityIdentity`): `FitIdentity(FileId)` con il
-  `file_id` del FIT (produttore, prodotto, numero di serie, ora di creazione
-  UTC), uguale per lo stesso file scaricato da Garmin o copiato
-  dall'orologio; `GpxIdentity(sha256_hex)` con lo SHA-256 dei byte del GPX,
-  che non ha un `file_id`.
+- `ActivityIdentity` è `FitIdentity(FileId)` con il `file_id` del FIT (produttore,
+  prodotto, numero di serie, ora di creazione UTC), uguale per lo stesso file
+  scaricato da Garmin o copiato dall'orologio. Dalla fase 8 (ADR 014) non
+  esiste più `GpxIdentity`: `FileFormat` ha il solo valore `fit`.
 - Chiave testuale stabile per i dati salvati (`identity_key` /
-  `identity_from_key`): `fit:<produttore>:<prodotto>:<serie>:<ora ISO UTC>`
-  oppure `gpx:<sha256>`.
+  `identity_from_key`): `fit:<produttore>:<prodotto>:<serie>:<ora ISO UTC>`.
 - L'id Garmin (facoltativo) si aggiunge quando è noto; con origine `GARMIN`
   c'è sempre. Un'identità e un id Garmin sono unici nell'indice.
-- La stessa attività arrivata come FIT e come GPX non ha la stessa identità:
-  si riconosce come possibile duplicato con `is_possible_duplicate` (inizi a
-  non più di 60 s, tempi trascorsi che differiscono al più del 5% del
-  maggiore, confronto in millisecondi interi, simmetrico); si tiene la prima
-  arrivata. `ActivityIndex.find_possible_duplicates` applica quella funzione.
+- `is_possible_duplicate` (inizi a non più di 60 s, tempi trascorsi che
+  differiscono al più del 5% del maggiore, confronto in millisecondi interi,
+  simmetrico) serve solo ad abbinare una voce di Garmin a un'attività già
+  importata da file (`find_matching_import`); `ActivityIndex.find_possible_duplicates`
+  applica quella funzione.
 
 ## 5. Sincronizzazione riprendibile
 
@@ -226,7 +542,8 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
    solo all'avanzamento.
 4. "Verifica completa": rielenca tutto lo storico senza riscaricare, per
    trovare attività con date vecchie caricate in ritardo; riarma anche le voci
-   fallite per `ATTEMPTS_EXHAUSTED` (`rearm_exhausted`: tornano `PENDING`).
+   fallite per `ATTEMPTS_EXHAUSTED` o `REMOTE_NOT_PROVIDED` (`REARMABLE_REASONS`,
+   `rearm_exhausted`: tornano `PENDING` con i contatori a zero).
 5. Per ogni voce: download del FIT originale (zip), controlli dei limiti,
    scrittura durevole, lettura, calcolo del carico; una transazione segna la
    voce completata.
@@ -301,27 +618,48 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
   (`GarminActivityId.parse`, `RemoteActivity`, `ActivityPage`); una voce
   malformata si scarta e conta in `raw_count`.
 - Stati (`SyncStatus`): `PENDING` (da scaricare), `DOWNLOADED`, `MATCHED`,
-  `RETRYABLE` (fallita per una causa transitoria), `FAILED` (definitiva). Non
+  `RETRYABLE` (fallita per una causa transitoria), `FAILED` (definitiva), `SKIPPED` (schema
+  v19: l'utente ha eliminato l'attività; scelta, non errore: finale, senza causa, non si scarica
+  e non resta da fare; `mark_skipped`). Non
   c'è uno stato "in corso": download, archivio e conferma stanno in una sola
   transazione, quindi un'interruzione lascia la voce `PENDING`. Da `PENDING` e
   `RETRYABLE` si va in tutti gli altri (anche `RETRYABLE` → `RETRYABLE`);
-  `DOWNLOADED` e `MATCHED` non si muovono, `FAILED` solo verso `PENDING` e solo
+  `DOWNLOADED`, `MATCHED` e `SKIPPED` non si muovono, `FAILED` solo verso `PENDING` e solo
   per `rearm_exhausted` (`can_transition`, `InvalidTransitionError`),
   e il database rifiuta le combinazioni incoerenti con i CHECK.
 - Cause (`FailureReason`): ritentabili `TRANSIENT_ERROR` e `RATE_LIMITED`;
   definitive `UNSUPPORTED_FORMAT` (per esempio un TCX), `CORRUPT_FILE`,
   `FILE_TOO_LARGE`, `NOT_AN_ACTIVITY`, `ARCHIVE_INVALID`, `REMOTE_REJECTED`
-  (originale assente o rifiutato) e `ATTEMPTS_EXHAUSTED`. `mark_failed`:
+  (originale assente o rifiutato), `ATTEMPTS_EXHAUSTED` e `REMOTE_NOT_PROVIDED`. `mark_failed`:
   causa definitiva → `FAILED`; causa ritentabile → `RETRYABLE` fino al terzo
   fallimento (`max_syncs_per_activity`), poi `FAILED` con
   `ATTEMPTS_EXHAUSTED`. Un errore di scrittura locale (disco pieno) non è
   della voce: ferma la sincronizzazione, non si registra sulla voce. Neppure
   un giro fermato da limite di frequenza o servizio irraggiungibile consuma
-  tentativi: i fallimenti di rete si scrivono solo se Garmin risponde per una
-  voce successiva. Il file scaricato deve coincidere con la voce (inizio e
+  tentativi.
+- Due contatori per voce: `failed_attempts` (fallimenti della voce) e
+  `unanswered_rounds` (schema v13: giri in cui il download della voce non ha avuto
+  risposta utile, 5xx o silenzio, mentre Garmin rispondeva ad altro). La voce senza
+  risposta è trattenuta e non scritta; il giro conta per lei (`mark_unanswered`:
+  `RETRYABLE`/`TRANSIENT_ERROR`, senza toccare `failed_attempts`) solo se Garmin
+  risponde a un download successivo o a una sonda (la prima pagina dell'elenco, chiesta
+  quando il giro si ferma dopo 3 voci senza risposta di fila o finisce con voci
+  trattenute; anche un rifiuto vale come risposta). Senza risposta alla sonda è la
+  rete: nulla si scrive e il giro si ferma. Al terzo giro
+  (`SyncPolicy.max_unanswered_rounds`) la voce diventa `FAILED` con
+  `REMOTE_NOT_PROVIDED` e non ferma più i giri; un download riuscito azzera il
+  contatore. Invariante: `PENDING` ha i due contatori a zero, `RETRYABLE` e `FAILED`
+  ne hanno almeno uno positivo. Il file scaricato deve coincidere con la voce (inizio e
   durata, regola dei duplicati); se no `REMOTE_REJECTED`, mai registrato.
   `SyncOutcome.downloaded` conta solo le attività nuove, `matched` i gemelli
-  in un altro formato, `already_present` i file già nel profilo.
+  in un altro formato, `already_present` i file già nel profilo, `skipped_deleted` le
+  attività che l'utente aveva eliminato.
+- Attività eliminate (`DeletedActivities`, porta sulla stessa connessione dell'indice): prima di
+  abbinare o scaricare, `_skip_if_deleted` cerca una tomba con lo stesso id Garmin o, se senza id
+  (importata da file), con stesso sport e `is_possible_duplicate` (`find_matching_deleted`): la
+  voce diventa `SKIPPED`, senza download. Dopo il download, un file la cui identità è eliminata
+  non si archivia né si registra (la verifica si ripete nella transazione che scrive) e la voce è
+  `SKIPPED`. `SyncPorts.deleted` è obbligatorio.
 - Lavoro: `next_to_process(limit)` dà `PENDING` e `RETRYABLE` dalla più
   recente (a parità, id decrescente); `add_pending` è idempotente per id e non
   tocca le voci esistenti.
@@ -339,16 +677,17 @@ Scelta dall'utente alla creazione; autosufficiente. Nomi in
 - Stima del tempo restante: media mobile delle ultime 20 durate per voce
   (pause comprese) per le voci rimaste (`estimate_remaining_s`).
 
-## 6. Import di file, cartelle e ZIP
+## 6. Import di file FIT e di cartelle
 
 Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
 `FolderImportSource` in `storage/import_scan.py`; caso d'uso
 `import_activities` in `activities/use_cases.py`; tetti in
 `activities/import_limits.py`.
 
-1. **Esame** (`scan`): solo nomi, dimensioni e directory degli ZIP, mai i
-   contenuti. File `.fit`, `.gpx` e `.zip`, sottocartelle comprese per una
-   cartella. Solo file regolari dentro la cartella scelta; collegamenti,
+1. **Esame** (`scan`): solo nomi e dimensioni, mai i contenuti. Solo file
+   `.fit` (senza badare alle maiuscole), sottocartelle comprese per una
+   cartella; gli altri file (GPX, ZIP, TCX...) in una cartella si ignorano
+   senza segnalarli, scelti a mano sono `UNSUPPORTED_FORMAT`. Solo file regolari dentro la cartella scelta; collegamenti,
    giunzioni, reparse point, FIFO e dispositivi si saltano e si segnalano;
    nomi riservati di Windows e percorsi lunghi si saltano; il tipo si
    ricontrolla sull'handle aperto.
@@ -356,32 +695,31 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
 
    | Tetto | Valore |
    |---|---|
-   | File di attività (FIT e GPX, voci degli ZIP comprese) | 50.000 |
-   | Voci esaminate (file e cartelle di ogni tipo, voci degli ZIP comprese) | 500.000 |
+   | File di attività (`.fit`) | 50.000 |
+   | Voci esaminate (file e cartelle di ogni tipo) | 500.000 |
    | Livelli di sottocartelle | 32 |
-   | Dimensione di un file o di una voce | 50 MB |
-   | Voci di un solo ZIP | 50.000 |
-   | Dimensioni dichiarate di uno ZIP | 5 GB |
-   | Compressione di una voce | 100:1 |
-   | Directory centrale di uno ZIP | 32 MiB |
+   | Dimensione di un file | 50 MB |
    | Percorso mostrato | 2048 caratteri |
 
 3. Se si supera uno dei primi tre, l'esame si ferma, non si importa nulla e
    l'app chiede una sottocartella: niente import parziali. I file oltre 50 MB
    sono segnalati e saltati.
-4. **ZIP:** si leggono solo le voci `.fit` e `.gpx`. Prima di estrarre si
-   controllano directory centrale, numero di voci (dichiarato e contato),
-   somma e rapporto delle dimensioni; durante l'estrazione la dimensione reale
-   e il CRC. Nomi delle voci mai usati come percorsi; rifiutati `..`,
-   percorsi assoluti, unità, controlli, nomi riservati, nomi duplicati (anche
-   per maiuscole), voci cifrate e ZIP annidati. Nell'archivio va il file
-   estratto, non lo ZIP.
-5. **Lettura di un file:** `decode_activity_file` riconosce il formato dal
-   contenuto, controlla che coincida con l'estensione (altri XML, come il
-   TCX, sono `UNSUPPORTED_FORMAT`) e lo decodifica con il lettore FIT o GPX.
-   Un solo errore, `ActivityFileError`, con un motivo enumerato.
+4. **ZIP:** non si importano (fase 8). Lo ZIP si legge ancora per l'originale
+   che Garmin manda nella sincronizzazione (`zipread.read_activity_entry`:
+   l'unica voce `.fit`; un solo GPX o TCX è `NO_ACTIVITY`, cioè
+   `UNSUPPORTED_FORMAT`, e più voci `.fit` sono `MULTIPLE_ACTIVITIES`) e per il
+   backup del profilo, con le stesse difese (directory centrale, numero di
+   voci, somma e rapporto delle dimensioni, CRC, nomi mai usati come
+   percorsi, voci cifrate e ZIP annidati rifiutati).
+5. **Lettura di un file:** `decode_activity_file` controlla l'estensione
+   (`.fit`, altrimenti `UNSUPPORTED_FORMAT`) e decodifica con il lettore FIT,
+   che verifica firma, CRC e struttura. Un solo errore, `ActivityFileError`,
+   con un motivo enumerato.
 6. **Esiti per file** (`ImportStatus`): importata; già presente (stessa
-   identità); duplicato di un altro formato; ignorata (il file non è
+   identità); eliminata dall'utente (ADR 018: `LEFT_OUT` per una cartella, con la politica
+   `DeletedPolicy.LEAVE_OUT`, che non riporta l'attività; `BROUGHT_BACK` per i file scelti a mano,
+   `BRING_BACK`, che toglie la tomba e rimette l'attività com'era; il riepilogo li conta a
+   parte, non come problemi); ignorata (il file non è
    un'attività); fallita, con il motivo (`ImportIssue`); riparata (`REPAIRED`):
    l'attività c'è già ma il suo file in archivio manca o è alterato, e la
    reimportazione dello stesso originale lo rimette a posto (il riepilogo la
@@ -394,6 +732,14 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
    parziale (`cancelled`) si riprende rilanciando. Alla fine un riepilogo:
    conteggi per esito e, per ogni file non importato, nome e motivo.
 9. Nessun log: nomi e posizioni sono dati personali.
+10. Eliminare e ripristinare (`activities/deletion.py`, ADR 018): `DeleteActivities(index,
+    deleted, clock)(identità…)` toglie la riga dall'indice (con carico in cache, riquadro e
+    polilinea, derivati) e scrive la tomba in una sola transazione, tutto o niente; il file in
+    archivio non si tocca. `RestoreActivities(index, deleted, archive, decode)(identità…)`
+    rilegge il file archiviato con il decodificatore dell'import, fuori dalla transazione, e poi
+    in una transazione toglie la tomba e rimette l'attività com'era (origine, istante d'import e
+    id Garmin della tomba, `DeletedActivity.to_record`); file mancante o alterato → resta
+    eliminata (`RestoreStatus`). Entrambe idempotenti per identità.
 
 ## 7. Lock
 
@@ -411,7 +757,7 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
 
 ## 8. Test attesi
 
-`T-DATI-01…06`, `T-SYNC-01…06`, `T-IMP-01…04`, `T-GPX-01…02`, `T-SEC-02`,
+`T-DATI-01…06`, `T-SYNC-01…06`, `T-IMP-01…04`, `T-SEC-02`,
 `T-SEC-04`, `T-SEC-09` in `PLAN.md` sezione 7.
 
 ## 9. Porte della fase 1 e test di contratto
@@ -433,12 +779,12 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
   lenta, `FakeGarminAccount`) e `tests/fakes/tokens.py`; contratti in
   `tests/contracts/contract_sync.py` e `contract_tokens.py`.
 - Porte: `ActivityArchive` e `ActivityIndex` (`activities/ports.py`),
-  `PhysiologyStore`, `SportWeightStore` e `LoadCache` (`load/ports.py`),
+  `PhysiologyStore` e `LoadCache` (`load/ports.py`),
   `WeightStore` e `FixedDataStore` (`profiles/ports.py`), `ProfileRegistry`,
   `ProfileFolders` e `ProfileStorage` (`profiles/ports.py`). `ProfileStorage`
   apre un `OpenProfile` i cui store condividono una connessione:
-  `activities.transaction()` copre anche parametri, peso, dati fissi, pesi
-  degli sport e cache.
+  `activities.transaction()` copre anche parametri, peso, dati fissi
+  e cache.
 - Una transazione per volta (annidare è `TransactionStateError`); fuori da
   una transazione ogni operazione è atomica da sola.
 - Il lock del profilo (`ProfileFolders.acquire_lock`) è separato dal database:
@@ -446,3 +792,73 @@ Porta `ImportSource` (`activities/ports.py`); adattatori `FilesImportSource` e
 - I fake in memoria stanno in `tests/fakes/`; i contratti in
   `tests/contracts/` (classi `*Contract` con la fixture `harness`): ogni
   adattatore reale li eredita con la propria impalcatura.
+
+## 10. Calendario Garmin (fase 7)
+
+Decisioni in `docs/adr/013-calendario-garmin.md`; che cosa offre `garminconnect` 0.3.20 e le forme
+JSON (non verificate dal vivo, le controlla `T-MAN-01`) in `experiments/garmin_workouts.md`.
+
+- **Dominio** (`planning/domain/workouts.py`): `workout_from_session(PlannedSession) ->
+  WorkoutSpec`; passi piatti (`WorkoutStep`: tipo, secondi, FC bassa e alta in bpm, ritmo lento e
+  veloce in s/km se noto). Obiettivi di un passo nell'allenamento Garmin (ADR 013 emendato il
+  2026-11-09): se il passo di corsa ha un intervallo di ritmo, il **ritmo è l'obiettivo
+  principale** e l'intervallo di FC il secondario (in intervalli la FC è in ritardo e guida male
+  lo sforzo); senza intervallo di ritmo la FC resta l'obiettivo principale. L'app elenca il
+  ritmo prima della FC. Le ripetizioni di una seduta a intervalli sono scritte una per una
+  (lavoro, recupero, lavoro, ..., lavoro); i blocchi a ritmo gara puntano al ritmo gara ±5 s/km. Il
+  nome è `"Ponos · " + tipo + minuti` (`WORKOUT_PREFIX`): da qui l'app riconosce i suoi
+  allenamenti (`ScheduledWorkout.is_app_created`). Massimo 40 passi.
+- **Porta** (`planning/workout_calendar.py`): `WorkoutCalendar` con `create_and_schedule`,
+  `list_scheduled(first, last)`, `export_definition(workout_id)`, `create_from_definition`,
+  `remove(item, delete_workout=)`; errori della sorgente Garmin più `CalendarUnsupportedError`
+  (adattatore incompleto). `WorkoutBackupStore` (`add`, `pending`, `mark_restored`): copia locale
+  di ciò che si elimina, tabella `workout_backup` (v9 provvisoria in
+  `storage/schema_workout_backup.py`), al massimo 1000 copie in attesa, le ripristinate si
+  dimenticano dopo 30 giorni.
+- **Casi d'uso** (`planning/calendar_use_cases.py`, tutti con `CalendarPorts`):
+  `SendPlanToGarmin(plan, scope, today, is_cancelled)` con `WholePlan | WeekOfPlan |
+  SessionOfDay`; `ListScheduledWorkouts(first, last)`; `DeleteScheduledWorkouts(items, today)`;
+  `RecreateDeletedWorkouts(today, only=)` e `.pending()`. Non sollevano per gli errori di Garmin:
+  l'esito ha `stop` (`StopReason`) e i fallimenti per voce (`Failure`, `FailureReason`).
+- **Regole comuni**: pausa con jitter prima di ogni richiesta e backoff come la sincronizzazione
+  (`SyncPolicy`); 429 e transitori ritentati fino ai tentativi della politica, poi la corsa si
+  ferma; sessione scaduta, annullamento, operazione non supportata e copia non salvabile fermano
+  la corsa; un rifiuto di Garmin fa fallire solo quella voce. Tetti: 60 allenamenti per invio (i
+  primi per data, il resto in `deferred`), 100 per eliminazione, 60 per ricreazione.
+- **Idempotenza**: prima si legge il calendario; stesso nome e stesso giorno = già presente, non si
+  ricrea; dopo un errore transitorio si cerca l'allenamento prima di crearlo di nuovo.
+- **Eliminazione** (T-SEC-10): solo le voci date (la lista confermata dall'utente), solo da oggi in
+  poi; per ognuna: legge la definizione, salva la copia, `remove` (rilegge la voce e rifiuta se non
+  è più quella scelta), toglie dal calendario; dalla libreria Garmin solo se ha il prefisso
+  dell'app. Senza copia non si elimina.
+- **Adattatore** (`garmin/`): `workout_client.py` (le sette chiamate alla libreria),
+  `workout_json.py` (costruzione e lettura dei JSON, voci illeggibili scartate mai riparate),
+  `workouts.py` (`GarminWorkoutCalendar`), `connect.py` (`ConnectClient` fa anche da
+  `GarminWorkoutClient`), `GarminConnectSession.calendar` (None se il client non sa fare
+  allenamenti).
+- **Test**: fake in `tests/fakes/workout_calendar.py` e `tests/garmin/workout_fakes.py`; contratti
+  in `tests/contracts/test_workout_contracts.py`; fixture JSON sintetiche in
+  `tests/fixtures/garmin/`.
+
+## 7. Profili con attività GPX (migrazione v11, ADR 014)
+
+Un profilo v1-v10 con attività importate da GPX si migra all'apertura
+(`storage/sqlite_database.py`, `sqlite_schema.py`, `archive_cleanup.py`):
+
+1. copia coerente del database in `backup/ponos-v<da>-v11.sqlite3` (la fa il
+   meccanismo di ogni migrazione; senza copia non si migra);
+2. si leggono prima i percorsi d'archivio delle attività non FIT;
+3. una sola transazione (`MIGRATIONS[10]`): le voci del giornale che puntano a
+   un'attività GPX tornano `pending`; la cache dei carichi si svuota;
+   `activities` e `threshold_test` si ricostruiscono (copia delle sole righe
+   `fit`; i CHECK ammettono solo `fit`) e si rinominano; l'indice si ricrea;
+4. dopo la conferma, `remove_gpx_files` toglie i file GPX dall'archivio, solo
+   se il percorso ha la forma esatta `<anno>/<sha256>.gpx` e il file è
+   regolare (mai un collegamento); un file rimasto è un orfano innocuo;
+5. `OpenProfile.removed_unsupported_activities` dà il numero di attività
+   tolte (0 senza migrazione): la finestra mostra l'avviso una volta
+   (`ProfileView.removed_unsupported`). Il numero non si salva.
+
+Il formato del backup (`.ponosbackup`) accetta ancora voci `.gpx`, per poter
+ripristinare un backup fatto prima: il profilo ripristinato si migra aprendolo.
+Test: `tests/collaudo/test_fase8_solo_fit.py`.

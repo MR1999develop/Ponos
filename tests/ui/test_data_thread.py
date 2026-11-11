@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Thread dei dati: ordine dei lavori, esiti, annullamento e chiusura nello stesso thread."""
+"""Data thread: job order, outcomes, cancellation and closing in the same thread."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ WAIT_MS = 20_000
 
 
 class Recorder:
-    """Raccoglie gli esiti in ordine di arrivo."""
+    """Collect the outcomes in order of arrival."""
 
     def __init__(self, thread: DataThread) -> None:
         self.outcomes: dict[int, JobOutcome] = {}
@@ -119,7 +119,7 @@ def test_progress_always_reports_the_first_and_last_step(qtbot: QtBot) -> None:
     steps = [done for _id, done, _total in recorder.progress]
     assert steps[0] == 0
     assert steps[-1] == 100
-    assert len(steps) < 101  # limitato nel tempo: non uno per passo
+    assert len(steps) < 101  # limited in time: not one per step
     assert thread.shutdown()
 
 
@@ -133,7 +133,7 @@ def test_shutdown_runs_the_exit_hook_in_the_data_thread(qtbot: QtBot) -> None:
 
     assert thread.shutdown()
 
-    assert exit_threads == job_threads  # il profilo si chiude dove si è aperto
+    assert exit_threads == job_threads  # the profile closes where it was opened
 
 
 def test_shutdown_of_a_thread_never_started_is_harmless() -> None:
@@ -150,13 +150,13 @@ def test_after_a_shutdown_request_no_job_is_accepted_and_the_thread_stops_by_its
     qtbot.waitUntil(lambda: first.job_id in recorder.outcomes, timeout=WAIT_MS)
 
     thread.request_shutdown()
-    thread.request_shutdown()  # ripetibile
+    thread.request_shutdown()  # repeatable
 
     assert thread.is_closing
     with pytest.raises(DataThreadClosedError):
         thread.submit(lambda _c: "late")
-    qtbot.waitUntil(lambda: thread.has_stopped, timeout=WAIT_MS)  # senza attendere nessuno
-    assert exits == [1]  # il profilo si chiude una volta sola
+    qtbot.waitUntil(lambda: thread.has_stopped, timeout=WAIT_MS)  # without waiting for anyone
+    assert exits == [1]  # the profile closes only once
 
 
 def test_a_shutdown_request_cancels_queued_jobs_without_blocking_the_caller(qtbot: QtBot) -> None:
@@ -176,7 +176,7 @@ def test_a_shutdown_request_cancels_queued_jobs_without_blocking_the_caller(qtbo
     queued = thread.submit(lambda _c: "never")
     assert started.wait(timeout=20)
 
-    thread.request_shutdown()  # ritorna subito anche se il lavoro e ancora in corso
+    thread.request_shutdown()  # returns immediately even if the job is still running
 
     assert not thread.has_stopped
     release.set()

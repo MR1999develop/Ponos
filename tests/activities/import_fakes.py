@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Fake in memoria per i test dell'import: sorgente, orologio, indice e archivio osservabili."""
+"""In-memory fakes for the import tests: observable source, clock, index and archive."""
 
 from __future__ import annotations
 
@@ -33,11 +33,11 @@ from tests.fakes.profile_storage import InMemoryProfileStorage
 
 
 class InMemoryImportSource:
-    """Sorgente di `ImportSource` con file in un dizionario.
+    """`ImportSource` source with files in a dictionary.
 
-    `failing` associa il nome di un file all'errore di lettura; `skipped` sono i file che la
-    sorgente dichiara saltati; `scan_error` fa fallire l'esame (tetto superato); `cancel_scan` lo
-    fa annullare.
+    `failing` maps a file name to its read error; `skipped` are the files the
+    source declares skipped; `scan_error` makes the scan fail (cap exceeded); `cancel_scan`
+    makes it cancel.
     """
 
     def __init__(
@@ -60,7 +60,7 @@ class InMemoryImportSource:
         self.closed = False
 
     def scan(self, is_cancelled: Callable[[], bool] | None = None) -> ImportScan:
-        self.scan_cancellation = is_cancelled  # per vedere che il caso d'uso lo passa
+        self.scan_cancellation = is_cancelled  # to check that the use case passes it
         if self._cancel_scan:
             raise ImportScanCancelledError
         if self._scan_error is not None:
@@ -85,7 +85,7 @@ class InMemoryImportSource:
 
 
 class FixedClock:
-    """Orologio fermo."""
+    """Frozen clock."""
 
     def __init__(self, moment: datetime = IMPORTED_AT) -> None:
         self._moment = moment
@@ -95,7 +95,7 @@ class FixedClock:
 
 
 def new_index() -> ActivityIndex:
-    """Indice delle attività di un profilo finto, vuoto."""
+    """Index of the activities of a fake, empty profile."""
     profile = InMemoryProfileStorage().create(
         Path("profilo-di-prova"),
         ProfileId.parse("00000000-0000-4000-8000-000000000001"),
@@ -106,14 +106,14 @@ def new_index() -> ActivityIndex:
 
 
 class OrderLog:
-    """Registro condiviso delle operazioni di scrittura, nell'ordine in cui avvengono."""
+    """Shared log of write operations, in the order they happen."""
 
     def __init__(self) -> None:
         self.events: list[str] = []
 
 
 class ObservedArchive:
-    """Archivio che registra `store` e, a richiesta, fallisce (errore a scelta)."""
+    """Archive that records `store` and, on request, fails (error of choice)."""
 
     def __init__(
         self, inner: InMemoryActivityArchive, log: OrderLog, fail_with: Exception | None = None
@@ -142,7 +142,7 @@ class ObservedArchive:
 
 
 class ObservedIndex:
-    """Indice che registra `add` e il contesto della transazione; `add` può fallire."""
+    """Index that records `add` and the transaction context; `add` may fail."""
 
     def __init__(
         self, inner: ActivityIndex, log: OrderLog, fail_add_with: Exception | None = None
@@ -174,8 +174,17 @@ class ObservedIndex:
     def list_by_start(self) -> Sequence[ActivityRecord]:
         return self._inner.list_by_start()
 
+    def list_started_between(self, first: datetime, last: datetime) -> Sequence[ActivityRecord]:
+        return self._inner.list_started_between(first, last)
+
+    def first_start_at_or_after(self, instant: datetime) -> datetime | None:
+        return self._inner.first_start_at_or_after(instant)
+
     def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
         return self._inner.find_by_garmin_id(garmin_id)
+
+    def remove(self, identity: ActivityIdentity) -> None:
+        self._inner.remove(identity)
 
     def link_garmin_id(self, identity: ActivityIdentity, garmin_id: GarminActivityId) -> None:
         self._inner.link_garmin_id(identity, garmin_id)
@@ -197,5 +206,5 @@ class _Logged(AbstractContextManager[None]):
 
 
 def archived_names(archive: InMemoryActivityArchive) -> Iterator[str]:
-    """Percorsi dell'archivio finto, come testo."""
+    """Paths of the fake archive, as text."""
     return (str(path) for path in sorted(archive.files))

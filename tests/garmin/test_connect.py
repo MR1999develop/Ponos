@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""La classe sottile che usa davvero `garminconnect`, provata senza rete.
+"""The thin class that really uses `garminconnect`, tried without network.
 
-Nessun login e nessuna chiamata a Garmin: si prova solo ciò che la libreria decide in locale
-(token senza nulla di utilizzabile) e la configurazione dei log.
+No login and no call to Garmin: only what the library decides locally is tried
+(tokens with nothing usable) and the log configuration.
 """
 
 from __future__ import annotations

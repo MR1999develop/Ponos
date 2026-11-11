@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Struttura anonima di una risposta JSON, per scrivere fixture realistiche.
+"""Anonymous structure of a JSON response, to write realistic fixtures.
 
-`shape_of(value)` restituisce una descrizione che contiene solo: nomi delle
-chiavi, tipo JSON di ogni valore, lunghezza di stringhe e array, ordine di
-grandezza dei numeri. Nessun valore originale. Funzione pura: niente I/O.
+`shape_of(value)` returns a description that contains only: key names,
+JSON type of each value, length of strings and arrays, order of
+magnitude of numbers. No original value. Pure function: no I/O.
 """
 
 from __future__ import annotations
@@ -17,14 +17,14 @@ MAX_DEPTH = 12
 MAX_KEYS = 300
 MAX_KEY_LENGTH = 48
 
-# Una chiave "dinamica" (email, id, data, esadecimale lungo) puo' contenere dati reali.
+# A "dynamic" key (email, id, date, long hexadecimal) may contain real data.
 _EMAIL_KEY = re.compile(r"@")
 _DIGITS_KEY = re.compile(r"\d{4,}")
 _HEX_KEY = re.compile(r"[0-9a-fA-F-]{16,}")
 
 
 def _key_placeholder(key: str) -> str | None:
-    """Segnaposto per una chiave che potrebbe contenere un dato reale, o None."""
+    """Placeholder for a key that might contain real data, or None."""
     if _EMAIL_KEY.search(key):
         return "email-key"
     if _DIGITS_KEY.search(key) or _HEX_KEY.fullmatch(key):
@@ -35,7 +35,7 @@ def _key_placeholder(key: str) -> str | None:
 
 
 def _magnitude(number: float) -> str:
-    """Ordine di grandezza (`10^k`) del valore assoluto; `0` per lo zero."""
+    """Order of magnitude (`10^k`) of the absolute value; `0` for zero."""
     if number == 0:
         return "0"
     if not math.isfinite(number):
@@ -60,7 +60,7 @@ def _shape_of_object(value: dict[Any, Any], depth: int) -> dict[str, Any]:
 
 
 def _shape_of_scalar(value: object) -> dict[str, Any] | None:
-    """Forma di null, booleani, numeri e stringhe; None se non e' uno scalare."""
+    """Shape of null, booleans, numbers and strings; None if it is not a scalar."""
     if value is None:
         return {"type": "null"}
     if isinstance(value, bool):
@@ -77,12 +77,12 @@ def _shape_of_scalar(value: object) -> dict[str, Any] | None:
 
 
 def shape_of(value: object, depth: int = 0) -> dict[str, Any]:
-    """Descrive la struttura di `value` senza mai riportarne i valori.
+    """Describes the structure of `value` without ever reporting its values.
 
-    Oggetto: `{"type": "object", "keys": {nome: forma}}`; array: tipo,
-    lunghezza e forma del primo elemento; stringa: lunghezza; numero: ordine
-    di grandezza (e `negative` se negativo); chiavi dinamiche sostituite da
-    segnaposto; oltre `MAX_DEPTH` livelli `{"type": "truncated"}`.
+    Object: `{"type": "object", "keys": {name: shape}}`; array: type,
+    length and shape of the first element; string: length; number: order
+    of magnitude (and `negative` if negative); dynamic keys replaced by
+    placeholders; beyond `MAX_DEPTH` levels `{"type": "truncated"}`.
     """
     if depth > MAX_DEPTH:
         return {"type": "truncated"}

@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dialoghi dell'account Garmin: email e password, e codice di verifica (MFA).
+"""Garmin account dialogs: email and password, and verification code (MFA).
 
-Viste umili: raccolgono il testo e lo consegnano con un segnale. La password e il codice non si
-conservano: il campo si svuota appena il testo è stato letto, e `Credentials` non li mostra
-nemmeno in `repr`. Il login vero gira in un thread (`SyncController`); il dialogo resta aperto
-e occupato finché Garmin non risponde, così un errore compare dove l'utente sta guardando.
+Humble views: they collect the text and hand it over with a signal. The password and the code are
+not
+kept: the field is cleared as soon as the text has been read, and `Credentials` does not show them
+even in `repr`. The real login runs on a thread (`SyncController`); the dialog stays open
+and busy until Garmin answers, so an error appears where the user is looking.
 """
 
 from __future__ import annotations
@@ -35,10 +36,10 @@ _SECRET_HINTS = (
 
 
 class GarminLoginDialog(QDialog):
-    """Email e password dell'account Garmin; "Connect" è disponibile solo con entrambi."""
+    """Garmin account email and password; "Connect" is available only with both."""
 
     submitted = Signal(object)  # Credentials
-    cancel_requested = Signal()  # chiuso mentre l'accesso è in corso
+    cancel_requested = Signal()  # closed while the login is in progress
 
     def __init__(self, theme: Theme, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -107,31 +108,31 @@ class GarminLoginDialog(QDialog):
         layout.addWidget(self._progress)
         layout.addWidget(self._buttons)
 
-    # --- Accessori per i test e per la vista -------------------------------------------------
+    # --- Accessors for tests and for the view -------------------------------------------------
 
     @property
     def email_edit(self) -> QLineEdit:
-        """Il campo dell'email."""
+        """The email field."""
         return self._email
 
     @property
     def password_edit(self) -> QLineEdit:
-        """Il campo della password (nascosto)."""
+        """The password field (hidden)."""
         return self._password
 
     @property
     def connect_button(self) -> QPushButton:
-        """Il bottone "Connect"."""
+        """The "Connect" button."""
         return self._connect
 
     @property
     def message_text(self) -> str:
-        """L'errore mostrato (vuoto se non ce n'è)."""
+        """The error shown (empty if there is none)."""
         return "" if self._message.isHidden() else self._message.text()
 
     @property
     def is_busy(self) -> bool:
-        """Vero mentre Garmin risponde."""
+        """True while Garmin answers."""
         return self._busy
 
     # --- Comportamento ------------------------------------------------------------------------
@@ -147,12 +148,12 @@ class GarminLoginDialog(QDialog):
         if not self._connect.isEnabled():
             return
         credentials = Credentials(self._email.text().strip(), self._password.text())
-        self._password.clear()  # la password non resta nel dialogo
+        self._password.clear()  # the password does not stay in the dialog
         self.set_busy(True)
         self.submitted.emit(credentials)
 
     def set_busy(self, busy: bool) -> None:
-        """Occupato: i campi e "Connect" sono spenti, compare l'avanzamento."""
+        """Busy: the fields and "Connect" are disabled, progress appears."""
         self._busy = busy
         for widget in (self._email, self._password):
             widget.setEnabled(not busy)
@@ -163,14 +164,14 @@ class GarminLoginDialog(QDialog):
         self._update_buttons()
 
     def show_failure(self, text: str) -> None:
-        """Un errore accanto ai campi; si può riprovare subito."""
+        """An error next to the fields; one can retry right away."""
         self.set_busy(False)
         self._message.setText(text)
         self._message.setVisible(True)
         self._password.setFocus()
 
     def reject(self) -> None:
-        """Chiude; se l'accesso è in corso chiede di annullarlo."""
+        """Close; if the login is in progress, ask to cancel it."""
         self._password.clear()
         if self._busy:
             self.cancel_requested.emit()
@@ -178,7 +179,7 @@ class GarminLoginDialog(QDialog):
 
 
 class MfaCodeDialog(QDialog):
-    """Il codice di verifica che Garmin ha mandato; "Verify" o Annulla rispondono al login."""
+    """The verification code Garmin sent; "Verify" or Cancel answer the login."""
 
     answered = Signal(object)  # str | None
 
@@ -214,12 +215,12 @@ class MfaCodeDialog(QDialog):
 
     @property
     def code_edit(self) -> QLineEdit:
-        """Il campo del codice."""
+        """The code field."""
         return self._code
 
     @property
     def verify_button(self) -> QPushButton:
-        """Il bottone "Verify"."""
+        """The "Verify" button."""
         return self._verify
 
     def _update_buttons(self) -> None:
@@ -230,11 +231,11 @@ class MfaCodeDialog(QDialog):
     def _answer(self, code: str | None) -> None:
         if not self._done:
             self._done = True
-            self._code.clear()  # il codice non resta nel dialogo
+            self._code.clear()  # the code does not stay in the dialog
             self.answered.emit(code)
 
     def accept(self) -> None:
-        """Consegna il codice (se c'è) e chiude."""
+        """Deliver the code (if there is one) and close."""
         code = self._code.text().strip()
         if not code:
             return
@@ -242,6 +243,6 @@ class MfaCodeDialog(QDialog):
         super().accept()
 
     def reject(self) -> None:
-        """Annulla: il login finisce senza salvare nulla."""
+        """Cancel: the login ends without saving anything."""
         self._answer(None)
         super().reject()

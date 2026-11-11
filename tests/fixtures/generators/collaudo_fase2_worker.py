@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Processo di prova dei segreti: `python -I collaudo_fase2_worker.py <base> <punto>`.
+"""Secrets test process: `python -I collaudo_fase2_worker.py <base> <point>`.
 
-Crea un profilo vero in `<base>/profilo`, collega l'account (login con MFA su un client finto,
-token segnaposto nel portachiavi vero della piattaforma sotto `<base>/dati`) e sincronizza; il
-punto dice dove il processo muore senza pulizia (`os._exit`):
+Creates a real profile in `<base>/profilo`, links the account (MFA login on a fake client,
+placeholder tokens in the platform's real keyring under `<base>/dati`) and synchronises; the
+point says where the process dies without cleanup (`os._exit`):
 
-- `download:<n>`: al n-esimo download;
-- `login`: subito dopo il collegamento, prima di sincronizzare;
-- `none`: non muore (il rapporto `finished` arriva su stdout).
+- `download:<n>`: at the n-th download;
+- `login`: right after linking, before synchronising;
+- `none`: does not die (the `finished` report arrives on stdout).
 
-Nessuna rete: il client e finto.
+No network: the client is fake.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import sys
 import threading
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # la radice, per `tests.*`
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # the root, for `tests.*`
 
 from keyring.backend import KeyringBackend
 from keyring.errors import PasswordDeleteError
@@ -33,7 +33,7 @@ from tests.garmin.scripted import ScriptedClient
 
 
 class _MemoryKeyring(KeyringBackend):
-    """Portachiavi in memoria del processo: lo usa il worker dove manca il Secret Service."""
+    """In-memory keyring of the process: the worker uses it where the Secret Service is missing."""
 
     priority = 1
 
@@ -53,10 +53,10 @@ class _MemoryKeyring(KeyringBackend):
 
 
 def _token_store(base: Path) -> TokenStore:
-    """L'archivio reale (DPAPI su Windows, Secret Service su Linux) se il sistema lo offre.
+    """The real store (DPAPI on Windows, Secret Service on Linux) if the system offers it.
 
-    Sui runner senza Secret Service (CI su Ubuntu) un portachiavi in memoria: il test
-    verifica comunque che nessun segreto finisca su disco.
+    On runners without a Secret Service (CI on Ubuntu) an in-memory keyring: the test
+    still verifies that no secret ends up on disk.
     """
     try:
         return create_token_store(base)
@@ -92,7 +92,7 @@ def main(argv: list[str]) -> int:
     if point == "login":
         os._exit(9)
     stack.sync()
-    print("finished", flush=True)  # noqa: T201 - il dialogo col test e su stdout
+    print("finished", flush=True)  # noqa: T201 - the dialogue with the test is on stdout
     stack.close()
     return 0
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-UI-04 (parte pura): la figura del PMC ha le serie, gli assi e i temi attesi."""
+"""T-UI-04 (pure part): the PMC figure has the expected series, axes and themes."""
 
 from __future__ import annotations
 
@@ -12,7 +12,12 @@ import numpy as np
 import pytest
 
 from ponos_coach.load.domain import PmcSeries
-from ponos_coach.ui.chart_payload import PLOTLY_LOCALE_NAME, PLOTLY_MODEBAR_KEYS, render_script
+from ponos_coach.ui.chart_payload import (
+    PLOTLY_LOCALE_NAME,
+    PLOTLY_MODEBAR_KEYS,
+    Y_MARGIN_FRACTION,
+    render_script,
+)
 from ponos_coach.ui.pmc_figure import EXPORT_FILE_STEM, build_pmc_figure, daily_load_of
 from ponos_coach.ui.tokens import Theme, tokens_for
 from tests.ui.helpers import FIRST_DAY, LABELS, entry, small_history
@@ -27,7 +32,7 @@ def test_series_are_ctl_atl_tsb_lines_then_daily_load_bars_in_legend_order() -> 
         ("Fitness (CTL)", "scatter"),
         ("Fatigue (ATL)", "scatter"),
         ("Form (TSB)", "scatter"),
-        ("Daily load", "bar"),
+        ("Daily load", "scatter"),
     ]
     assert figure.layout.legend.traceorder == "normal"
 
@@ -45,15 +50,18 @@ def test_line_values_are_the_pmc_series_and_bars_the_daily_loads() -> None:
     assert list(ctl.x) == list(pmc.days)
 
 
-def test_axes_have_names_with_units_and_bars_start_at_zero() -> None:
+def test_one_panel_holds_load_and_form_with_zero_marked() -> None:
+    # The user's request of 2026-11-09: the form in the same chart as the load.
     pmc, entries = small_history()
 
-    layout = build_pmc_figure(pmc, entries, LABELS, tokens_for(Theme.LIGHT)).layout
+    figure = build_pmc_figure(pmc, entries, LABELS, tokens_for(Theme.LIGHT))
+    layout = figure.layout
 
-    assert layout.xaxis2.title.text == "Date"
-    assert layout.yaxis.title.text == "Load (hrTSS per day)"
-    assert layout.yaxis2.title.text == "Form (hrTSS per day)"
-    assert layout.yaxis.rangemode == "tozero"
+    assert {trace.yaxis or "y" for trace in figure.data} == {"y"}
+    assert "xaxis2" not in layout  # no second panel
+    assert layout.xaxis.title.text == "Date"
+    assert layout.yaxis.title.text == "Load / Form (TRIMPeq per day)"
+    assert layout.yaxis.zeroline is True  # the form goes below zero
 
 
 def test_series_use_okabe_ito_colors_and_themes_change_the_surface() -> None:
@@ -69,7 +77,8 @@ def test_series_use_okabe_ito_colors_and_themes_change_the_surface() -> None:
         line_colors = {trace.line.color for trace in figure.data[:3]}
         assert line_colors <= okabe_ito
         assert len(line_colors) == 3
-        assert figure.data[3].marker.color not in line_colors  # le barre sono neutre
+        assert figure.data[3].line.color not in line_colors  # the daily load is neutral
+        assert figure.data[3].fill == "tozeroy"
 
 
 def test_daily_load_sums_activities_of_the_same_day() -> None:
@@ -101,7 +110,8 @@ def test_render_script_passes_data_as_a_single_json_argument() -> None:
     assert script.startswith(prefix)
     assert script.endswith(suffix)
     payload = json.loads(script[len(prefix) : -len(suffix)])
-    assert set(payload) == {"figure", "labels", "locale", "filename"}
+    assert set(payload) == {"figure", "labels", "locale", "filename", "yMargin"}
+    assert payload["yMargin"] == Y_MARGIN_FRACTION  # the margin Python uses, one value
     assert payload["figure"]["data"][0]["name"] == "Fitness (CTL)"
     assert payload["labels"] == {"png": "Save as PNG", "svg": "Save as SVG"}
     assert payload["locale"]["name"] == PLOTLY_LOCALE_NAME
@@ -152,7 +162,7 @@ def _contrast(a: str, b: str) -> float:
     return (high + 0.05) / (low + 0.05)
 
 
-# --- CTL e ATL distinguibili anche senza il colore ---------------------------------------------
+# --- CTL and ATL distinguishable even without colour ---------------------------------------------
 
 
 def test_atl_is_dashed_and_ctl_solid_with_the_same_width() -> None:
@@ -179,7 +189,7 @@ def test_each_line_carries_its_name_next_to_its_last_point_in_the_text_colour() 
         assert names[text].y == pytest.approx(value)
         assert names[text].font.color == tokens.text
     higher, lower = sorted(names.values(), key=lambda a: a.y, reverse=True)
-    assert (higher.yanchor, lower.yanchor) == ("bottom", "top")  # i nomi non si sovrappongono
+    assert (higher.yanchor, lower.yanchor) == ("bottom", "top")  # the names do not overlap
 
 
 def test_an_empty_series_has_no_end_labels() -> None:
@@ -190,10 +200,21 @@ def test_an_empty_series_has_no_end_labels() -> None:
 
 def test_the_load_unit_comes_from_the_labels_for_axes_and_tooltips() -> None:
     pmc, entries = small_history()
-    labels = replace(LABELS, load_unit="hrTSS al giorno")
+    labels = replace(LABELS, load_unit="TRIMPeq al giorno")
 
     figure = build_pmc_figure(pmc, entries, labels, tokens_for(Theme.LIGHT))
 
-    assert figure.layout.yaxis.title.text == "Load (hrTSS al giorno)"
-    assert figure.layout.yaxis2.title.text == "Form (hrTSS al giorno)"
-    assert "hrTSS al giorno" in figure.data[0].hovertemplate
+    assert figure.layout.yaxis.title.text == "Load / Form (TRIMPeq al giorno)"
+    assert "TRIMPeq al giorno" in figure.data[0].hovertemplate
+
+
+def test_the_fitness_hint_gives_the_share_of_the_recent_best() -> None:
+    pmc, entries = small_history()
+
+    ctl = build_pmc_figure(pmc, entries, LABELS, tokens_for(Theme.LIGHT)).data[0]
+
+    assert ctl.name == "Fitness (CTL)"
+    assert "% of your best of the last two years" in ctl.hovertemplate
+    assert "%{customdata:.0f}" in ctl.hovertemplate
+    assert max(ctl.customdata) == 100  # the highest day of the series is its own best
+    assert all(0 <= share <= 100 for share in ctl.customdata)

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Client e fabbrica finti per provare gli adattatori Garmin senza rete né libreria.
+"""Fake client and factory to try the Garmin adapters without network or library.
 
-`ScriptedClient` implementa `GarminClient` con risposte JSON date dal test; gli errori sono
-quelli veri della libreria (eccezioni semplici: costruirle non è un mock). Nessun dato reale.
+`ScriptedClient` implements `GarminClient` with JSON responses given by the test; the errors are
+the library's real ones (plain exceptions: building them is not a mock). No real data.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ SECRET_MARKERS = (
 
 @dataclass(frozen=True, slots=True)
 class FakeResponse:
-    """Quanto basta di una risposta HTTP: codice e intestazioni."""
+    """Just enough of an HTTP response: status code and headers."""
 
     status_code: int
     headers: Mapping[str, str] = field(default_factory=dict)
@@ -41,7 +41,7 @@ class FakeResponse:
 def http_error(
     status: int, headers: Mapping[str, str] | None = None
 ) -> GarminConnectConnectionError:
-    """L'errore che la libreria solleva per una risposta HTTP `status`."""
+    """The error the library raises for an HTTP response `status`."""
     error: GarminConnectConnectionError
     if status == 404:
         error = GarminConnectNotFoundError(f"API Error {status}")
@@ -52,7 +52,7 @@ def http_error(
 
 
 def rate_limit_error(retry_after: str | None = None) -> GarminConnectTooManyRequestsError:
-    """Il 429 come lo dà la libreria: l'errore proprio, con quello HTTP come causa."""
+    """The 429 as the library gives it: its own error, with the HTTP one as cause."""
     headers = {} if retry_after is None else {"Retry-After": retry_after}
     error = GarminConnectTooManyRequestsError("Rate limit exceeded")
     error.__cause__ = http_error(429, headers)
@@ -60,19 +60,19 @@ def rate_limit_error(retry_after: str | None = None) -> GarminConnectTooManyRequ
 
 
 def auth_error() -> GarminConnectAuthenticationError:
-    """L'autenticazione rifiutata (401) come la dà la libreria."""
+    """Rejected authentication (401) as the library gives it."""
     error = GarminConnectAuthenticationError("Authentication failed")
     error.__cause__ = http_error(401)
     return error
 
 
 def not_found_error() -> GarminConnectNotFoundError:
-    """Una risorsa assente (404)."""
+    """A missing resource (404)."""
     return GarminConnectNotFoundError("API Error 404")
 
 
 def entry_for(activity: RemoteActivity) -> dict[str, object]:
-    """La voce dell'elenco di Garmin che `parse_entry` legge come `activity`."""
+    """The Garmin listing entry that `parse_entry` reads as `activity`."""
     milliseconds = activity.start.microsecond // 1000
     entry: dict[str, object] = {
         "activityId": activity.garmin_id.value,
@@ -86,16 +86,16 @@ def entry_for(activity: RemoteActivity) -> dict[str, object]:
 
 
 def newest_first(activities: Sequence[RemoteActivity]) -> list[RemoteActivity]:
-    """Lo stesso ordine dell'elenco di Garmin e del fake: inizio decrescente, poi id."""
+    """The same order as the Garmin listing and the fake: decreasing start, then id."""
     return sorted(activities, key=lambda a: (a.start, a.garmin_id.value), reverse=True)
 
 
 class ScriptedClient:
-    """`GarminClient` con un elenco di voci, download e guasti decisi dal test.
+    """`GarminClient` with a list of entries, downloads and failures decided by the test.
 
-    `list_activities` serve la finestra `[offset, offset + limit)` di `entries` come Garmin
-    (oltre la fine, lista vuota) oppure, se `listing` è dato, sempre quel valore. I guasti
-    messi in coda si consumano uno per chiamata.
+    `list_activities` serves the window `[offset, offset + limit)` of `entries` like Garmin
+    (past the end, empty list) or, if `listing` is given, always that value. Queued
+    failures are consumed one per call.
     """
 
     def __init__(
@@ -120,11 +120,11 @@ class ScriptedClient:
         self.downloaded: list[int] = []
 
     def replace_entry(self, index: int, entry: object) -> None:
-        """Cambia la voce in posizione `index` (per renderla malformata)."""
+        """Change the entry at position `index` (to make it malformed)."""
         self._entries[index] = entry
 
     def set_download(self, activity_id: int, content: bytes) -> None:
-        """Ciò che si scarica per quell'id."""
+        """What gets downloaded for that id."""
         self._downloads[activity_id] = content
 
     # --- GarminClient ------------------------------------------------------------------------
@@ -156,11 +156,11 @@ class ScriptedClient:
 
 
 class ScriptedFactory:
-    """`GarminClientFactory` finta: dà `client` o solleva `login_error` / `resume_error`.
+    """Fake `GarminClientFactory`: gives `client` or raises `login_error` / `resume_error`.
 
-    `mfa_codes_expected` è la lista dei codici MFA che il login accetta in sequenza: la fabbrica
-    li chiede uno alla volta e, se il codice è diverso, solleva l'autenticazione rifiutata come
-    la libreria. Registra le chiamate; non conserva la password.
+    `mfa_codes_expected` is the list of MFA codes the login accepts in sequence: the factory
+    asks for them one at a time and, if the code differs, raises the rejected authentication like
+    the library. It records the calls; it does not keep the password.
     """
 
     def __init__(self, client: GarminClient | None = None) -> None:

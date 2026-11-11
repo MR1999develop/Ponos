@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Caso d'uso "importa attività": file scelti, cartelle e archivi ZIP nel profilo aperto.
+"""Use case "import activities": chosen FIT files and folders into the open profile.
 
-Il guscio (interfaccia, worker) crea la sorgente e la chiude; qui, per ogni file elencato, si
-legge, si decodifica, si controlla che l'attività non ci sia già e si salva: il file originale
-nell'archivio prima, il record nell'indice poi, nella stessa transazione. L'import è
-idempotente (stessi file, stesso profilo: tutti "già presenti") e annullabile tra un file e
-l'altro. Nessun log: nomi e posizioni sono dati personali.
+The shell (interface, worker) creates the source and closes it; here, for each listed file, the
+file is
+read, decoded, checked that the activity is not already there or deleted by the user (ADR 018),
+and saved: the original file
+in the archive first, the record in the index after, in the same transaction. The import is
+idempotent (same files, same profile: all "already present") and cancellable between one file and
+the other. No log: names and positions are personal data.
 """
 
 from __future__ import annotations
@@ -35,6 +37,7 @@ from ponos_coach.activities.ports import (
     ArchiveIntegrityError,
     ArchiveTooLargeError,
     Clock,
+    DeletedActivities,
     DuplicateActivityError,
     ImportEntry,
     ImportEntryError,
@@ -47,21 +50,39 @@ _LOG = logging.getLogger(__name__)
 
 
 class ImportStatus(Enum):
-    """Esito dell'import di un file."""
+    """Outcome of importing a file."""
 
     IMPORTED = "imported"
-    ALREADY_PRESENT = "already_present"  # stessa identità già nell'indice
-    REPAIRED = "repaired"  # già nell'indice, ma il suo file in archivio mancava o era alterato
-    DUPLICATE_OF_OTHER_FORMAT = "duplicate_of_other_format"  # stessa attività, altro formato
-    IGNORED = "ignored"  # il file non è un'attività (per esempio un FIT di impostazioni)
-    FAILED = "failed"  # illeggibile, rifiutato o non salvato: `issue` dice perché
+    ALREADY_PRESENT = "already_present"  # same identity already in the index
+    REPAIRED = (
+        "repaired"  # already in the index, but its file in the archive was missing or altered
+    )
+    BROUGHT_BACK = "brought_back"  # the user had deleted it; chosen by hand, it is back
+    LEFT_OUT = "left_out"  # the user had deleted it; a folder import does not bring it back
+    IGNORED = "ignored"  # the file is not an activity (e.g. a settings FIT)
+    FAILED = "failed"  # unreadable, rejected or not saved: `issue` says why
+
+
+class DeletedPolicy(Enum):
+    """What an import does with a file whose activity the user deleted."""
+
+    LEAVE_OUT = "leave_out"  # skip it (a folder: the user did not choose that file)
+    BRING_BACK = "bring_back"  # the user chose this very file: the activity comes back
+
+
+@dataclass(frozen=True, slots=True)
+class DeletedHandling:
+    """The tombstones of the profile (same connection as the index) and what to do with them."""
+
+    store: DeletedActivities
+    policy: DeletedPolicy
 
 
 @dataclass(frozen=True, slots=True)
 class FileImportResult:
-    """Esito per file. `issue` c'è se e solo se l'esito è IGNORED o FAILED; `matches` è
-    l'identità dell'attività già presente per ALREADY_PRESENT, REPAIRED e
-    DUPLICATE_OF_OTHER_FORMAT."""
+    """Per-file outcome. `issue` is present if and only if the outcome is IGNORED or FAILED;
+    `matches` is the identity of the activity already present for ALREADY_PRESENT and REPAIRED,
+    and of the deleted one for LEFT_OUT."""
 
     name: str
     status: ImportStatus
@@ -73,43 +94,35 @@ class FileImportResult:
         has_match = self.status in (
             ImportStatus.ALREADY_PRESENT,
             ImportStatus.REPAIRED,
-            ImportStatus.DUPLICATE_OF_OTHER_FORMAT,
+            ImportStatus.LEFT_OUT,
         )
         if has_issue != (self.issue is not None) or has_match != (self.matches is not None):
-            raise ValueError("motivo e attività corrispondente non coerenti con l'esito")
+            raise ValueError("reason and matching activity inconsistent with the outcome")
 
 
 @dataclass(frozen=True, slots=True)
 class ImportSummary:
-    """Riepilogo finale: un esito per file (prima i saltati dalla sorgente, poi gli altri, in
-    ordine di nome). Con `cancelled` mancano i file non ancora trattati."""
+    """Final summary: one outcome per file (first those skipped by the source, then the others, in
+    name order). With `cancelled` the files not yet processed are missing."""
 
     results: tuple[FileImportResult, ...]
     cancelled: bool
 
     def count(self, status: ImportStatus) -> int:
-        """Quanti file hanno questo esito."""
+        """How many files have this outcome."""
         return sum(1 for result in self.results if result.status is status)
 
     def named(self, status: ImportStatus) -> tuple[FileImportResult, ...]:
-        """Gli esiti con questo stato, nello stesso ordine del riepilogo."""
+        """The outcomes with this status, in the same order as the summary."""
         return tuple(result for result in self.results if result.status is status)
 
 
 def _ignore_progress(_done: int, _total: int) -> None:
-    """Avanzamento non richiesto."""
+    """Progress not requested."""
 
 
 def _never_cancelled() -> bool:
     return False
-
-
-def _other_format_twin(index: ActivityIndex, activity: Activity) -> ActivityIdentity | None:
-    """Identità di un'attività già presente, di un altro formato, con stesso inizio e durata."""
-    for record in index.find_possible_duplicates(activity.start, activity.elapsed_s):
-        if record.file_format is not activity.file_format:
-            return record.identity
-    return None
 
 
 def _is_the_archived_content(archived: ArchivedFile, data: bytes) -> bool:
@@ -121,11 +134,12 @@ def _is_the_archived_content(archived: ArchivedFile, data: bytes) -> bool:
 def _check_archived_file(
     record: ActivityRecord, data: bytes, name: str, archive: ActivityArchive
 ) -> FileImportResult:
-    """Attività già nell'indice: il suo file in archivio deve esserci ed essere integro.
+    """Activity already in the index: its file in the archive must be there and intact.
 
-    Se manca o è alterato e il file importato ha proprio i byte registrati (stesso SHA-256 e
-    stessa dimensione), lo si rimette in archivio: esito `REPAIRED`. Se i byte sono altri (la
-    stessa identità, un contenuto diverso) non si ripara nulla: `ALREADY_PRESENT`.
+    If it is missing or altered and the imported file has exactly the recorded bytes (same SHA-256
+    and
+    same size), it is put back in the archive: outcome `REPAIRED`. If the bytes are different (the
+    same identity, different content) nothing is repaired: `ALREADY_PRESENT`.
     """
     try:
         archive.verify(record.archived)
@@ -136,72 +150,64 @@ def _check_archived_file(
     return FileImportResult(name, ImportStatus.ALREADY_PRESENT, matches=record.identity)
 
 
-def _add_if_new(
-    activity: Activity,
-    data: bytes,
-    name: str,
-    archive: ActivityArchive,
-    index: ActivityIndex,
-    clock: Clock,
-) -> FileImportResult:
-    existing = index.get(activity.identity)
+@dataclass(frozen=True, slots=True)
+class _Ports:
+    """The ports of one import (`deleted` is None only for callers without tombstones)."""
+
+    archive: ActivityArchive
+    index: ActivityIndex
+    deleted: DeletedHandling | None
+    clock: Clock
+
+
+def _add_if_new(activity: Activity, data: bytes, name: str, ports: _Ports) -> FileImportResult:
+    existing = ports.index.get(activity.identity)
     if existing is not None:
-        return _check_archived_file(existing, data, name, archive)
-    twin = _other_format_twin(index, activity)
-    if twin is not None:
-        return FileImportResult(name, ImportStatus.DUPLICATE_OF_OTHER_FORMAT, matches=twin)
-    archived = archive.store(data, activity.file_format, activity.start)
-    record = ActivityRecord.from_activity(
-        activity,
-        archived,
-        ActivityOrigin.IMPORT,
-        truncate_to_millisecond(clock.now()),
-    )
-    index.add(record)
+        return _check_archived_file(existing, data, name, ports.archive)
+    handling = ports.deleted
+    tombstone = None if handling is None else handling.store.get(activity.identity)
+    if handling is not None and tombstone is not None:
+        if handling.policy is DeletedPolicy.LEAVE_OUT:
+            return FileImportResult(name, ImportStatus.LEFT_OUT, matches=activity.identity)
+        # The user chose this file: the activity is back as it was.
+        archived = ports.archive.store(data, activity.file_format, activity.start)
+        handling.store.remove(activity.identity)
+        ports.index.add(tombstone.to_record(activity, archived))
+        return FileImportResult(name, ImportStatus.BROUGHT_BACK)
+    archived = ports.archive.store(data, activity.file_format, activity.start)
+    now = truncate_to_millisecond(ports.clock.now())
+    ports.index.add(ActivityRecord.from_activity(activity, archived, ActivityOrigin.IMPORT, now))
     return FileImportResult(name, ImportStatus.IMPORTED)
 
 
-def _store(
-    activity: Activity,
-    data: bytes,
-    name: str,
-    archive: ActivityArchive,
-    index: ActivityIndex,
-    clock: Clock,
-) -> FileImportResult:
-    """Controlla i duplicati, archivia il file e scrive il record in un'unica transazione."""
+def _store(activity: Activity, data: bytes, name: str, ports: _Ports) -> FileImportResult:
+    """Checks duplicates, archives the file and writes the record in a single transaction."""
     try:
-        with index.transaction():
-            return _add_if_new(activity, data, name, archive, index, clock)
+        with ports.index.transaction():
+            return _add_if_new(activity, data, name, ports)
     except DuplicateActivityError:
         return FileImportResult(name, ImportStatus.ALREADY_PRESENT, matches=activity.identity)
     except ArchiveTooLargeError:
         return FileImportResult(name, ImportStatus.FAILED, ImportIssue.TOO_LARGE)
     except ArchiveError:
         return FileImportResult(name, ImportStatus.FAILED, ImportIssue.STORAGE_FAILED)
-    except Exception as error:  # guasto imprevisto: questo file fallisce, gli altri vanno avanti
+    except Exception as error:  # unexpected failure: this file fails, the others go on
         _log_unexpected(error)
         return FileImportResult(name, ImportStatus.FAILED, ImportIssue.STORAGE_FAILED)
 
 
 def _log_unexpected(error: Exception) -> None:
-    """Un solo record per errore imprevisto, col solo tipo: il messaggio può contenere nomi,
-    percorsi o dati personali."""
-    _LOG.error("import: errore imprevisto su un file (%s)", type(error).__name__)
+    """One single record per unexpected error, with the type only: the message may contain names,
+    paths or personal data."""
+    _LOG.error("import: unexpected error on a file (%s)", type(error).__name__)
 
 
-def _import_entry(
-    entry: ImportEntry,
-    source: ImportSource,
-    archive: ActivityArchive,
-    index: ActivityIndex,
-    clock: Clock,
-) -> FileImportResult:
+def _import_entry(entry: ImportEntry, source: ImportSource, ports: _Ports) -> FileImportResult:
     try:
         data = source.read(entry, MAX_ACTIVITY_FILE_BYTES)
     except ImportEntryError as error:
         return FileImportResult(entry.name, ImportStatus.FAILED, error.issue)
-    except Exception as error:  # guasto imprevisto: questo file fallisce, gli altri vanno avanti
+    except Exception as error:  # unexpected failure: this file fails, the others go on
         _log_unexpected(error)
         return FileImportResult(entry.name, ImportStatus.FAILED, ImportIssue.UNREADABLE)
     try:
@@ -212,46 +218,56 @@ def _import_entry(
             ImportStatus.IGNORED if issue is ImportIssue.NOT_AN_ACTIVITY else ImportStatus.FAILED
         )
         return FileImportResult(entry.name, status, issue)
-    except Exception as error:  # un lettore che non dovrebbe sollevare altro: il file è rifiutato
+    except Exception as error:  # a reader that should not raise anything else: the file is rejected
         _log_unexpected(error)
         return FileImportResult(entry.name, ImportStatus.FAILED, ImportIssue.CORRUPT)
-    return _store(activity, data, entry.name, archive, index, clock)
+    return _store(activity, data, entry.name, ports)
 
 
-def import_activities(
+def import_activities(  # noqa: PLR0913 - the ports of one import, then three options
     source: ImportSource,
     archive: ActivityArchive,
     index: ActivityIndex,
     clock: Clock,
     *,
+    deleted: DeletedHandling | None = None,
     report: Callable[[int, int], None] = _ignore_progress,
     is_cancelled: Callable[[], bool] = _never_cancelled,
 ) -> ImportSummary:
-    """Importa nel profilo i file di attività della sorgente.
+    """Imports the activity files of the source into the profile.
 
-    Prima esamina la sorgente (`source.scan()`): se supera un tetto non si importa nulla. Poi,
-    per ogni file in ordine di nome, salva il file originale nell'archivio e il record
-    nell'indice in una transazione; un'attività già presente (stessa identità) o già arrivata
-    in un altro formato (stesso inizio e durata) non si salva due volte. Un file con errore non
-    ferma gli altri. `report(fatti, totale)` si chiama prima del primo file e dopo ciascuno;
-    `is_cancelled()` si controlla prima di ogni file e, se vero, il riepilogo è parziale
-    (`cancelled`) e rilanciare l'import riprende senza duplicati.
+    First it examines the source (`source.scan()`): if it exceeds a cap nothing is imported. Then,
+    for each file in name order, it saves the original file in the archive and the record
+    in the index in one transaction; an activity already present (same identity) or already arrived
+    in another format (same start and duration) is not saved twice. A file with an error does not
+    stop the others. `report(done, total)` is called before the first file and after each one;
+    `is_cancelled()` is checked before every file and, if true, the summary is partial
+    (`cancelled`) and running the import again resumes without duplicates.
 
-    Anche l'esame della sorgente si può annullare: il riepilogo è allora vuoto e `cancelled`.
-    Un errore imprevisto su un singolo file diventa l'esito FAILED di quel file (registrato una
-    volta, col solo tipo dell'eccezione) e l'import continua. Un file già presente il cui
-    originale in archivio manca o è alterato si ripara (esito REPAIRED) se il file importato ha i
-    byte registrati.
+    The examination of the source can also be cancelled: the summary is then empty and `cancelled`.
+    An unexpected error on a single file becomes the FAILED outcome of that file (recorded
+    once, with the exception type only) and the import continues. A file already present whose
+    original in the archive is missing or altered is repaired (outcome REPAIRED) if the imported
+    file has the
+    recorded bytes.
+
+    `deleted` gives the tombstones of the profile (the same connection as `index`) and the policy: a
+    file whose activity the user deleted is left out (`LEFT_OUT`) with `LEAVE_OUT`, what a folder
+    import does; with `BRING_BACK` (files the user chose by hand) the tombstone is removed and the
+    activity comes back as it was (`BROUGHT_BACK`). Without `deleted` no activity is deleted; the
+    database refuses to record one that is, so a caller that forgets it gets a `STORAGE_FAILED` for
+    that file instead of bringing a deleted activity back.
 
     Raises:
-        ImportLimitExceededError: la sorgente supera un tetto (file di attività, voci esaminate
-            o livelli): nulla è stato importato.
-        ImportSourceUnreadableError: la sorgente non si può leggere.
+        ImportLimitExceededError: the source exceeds a cap (activity files, examined entries
+            or levels): nothing was imported.
+        ImportSourceUnreadableError: the source cannot be read.
     """
     try:
         scan = source.scan(is_cancelled)
     except ImportScanCancelledError:
         return ImportSummary((), cancelled=True)
+    ports = _Ports(archive, index, deleted, clock)
     results = [
         FileImportResult(item.name, ImportStatus.FAILED, item.issue) for item in scan.skipped
     ]
@@ -260,6 +276,6 @@ def import_activities(
     for done, entry in enumerate(scan.entries):
         if is_cancelled():
             return ImportSummary(tuple(results), cancelled=True)
-        results.append(_import_entry(entry, source, archive, index, clock))
+        results.append(_import_entry(entry, source, ports))
         report(done + 1, total)
     return ImportSummary(tuple(results), cancelled=False)

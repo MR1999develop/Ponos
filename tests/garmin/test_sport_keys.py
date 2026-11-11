@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Le chiavi di sport che `garminconnect` nomina (genitori di Garmin) e la mappa del dominio.
+"""The sport keys `garminconnect` names (Garmin parents) and the domain map.
 
-La libreria elenca solo le categorie generiche (`get_activities_by_date`: cycling, running,
-swimming, multi_sport, fitness_equipment, hiking, walking, other) e `strength_training` nei
-suoi allenamenti; le chiavi delle sottocategorie vengono dal sito di Garmin e andranno
-confermate con le risposte reali dello spike. Questi test fissano che il dominio le gestisce.
+The library lists only the generic categories (`get_activities_by_date`: cycling, running,
+swimming, multi_sport, fitness_equipment, hiking, walking, other) and `strength_training` in
+its workouts; the subcategory keys come from the Garmin site and will have to be
+confirmed with the real responses of the spike. These tests pin down that the domain handles them.
 """
 
 from __future__ import annotations

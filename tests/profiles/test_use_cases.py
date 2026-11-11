@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Casi d'uso dei profili, con i fake in memoria di `tests/fakes/`."""
+"""Profile use cases, with the in-memory fakes of `tests/fakes/`."""
 
 from __future__ import annotations
 
@@ -12,9 +12,25 @@ from pathlib import Path
 
 import pytest
 
-from ponos_coach.activities.ports import ActivityIndex, SyncJournal
+from ponos_coach.activities.ports import (
+    ActivityIndex,
+    DeletedActivities,
+    SyncJournal,
+    TrackBoxIndex,
+)
+from ponos_coach.assessment.ports import ThresholdTestStore
+from ponos_coach.goals.ports import AvailabilityStore, GoalStore, SessionChoicesStore
+from ponos_coach.injury.ports import InjuryStore
 from ponos_coach.load.domain import PhysiologyEntry
-from ponos_coach.load.ports import LoadCache, PhysiologyStore, SportWeightStore
+from ponos_coach.load.ports import LoadCache, PhysiologyStore
+from ponos_coach.nutrition.ports import (
+    ActivityLevelStore,
+    GoalPeriodStore,
+    LeanMassStore,
+    MealTimesStore,
+)
+from ponos_coach.planning.ports import PlanStore
+from ponos_coach.planning.workout_calendar import WorkoutBackupStore
 from ponos_coach.profiles.domain import (
     PROFILE_DATABASE_NAME,
     FolderKind,
@@ -35,6 +51,7 @@ from ponos_coach.profiles.ports import (
     ProfileNotRegisteredError,
     ProfileRegistryError,
     ProfileStorageError,
+    ThresholdPaceStore,
     WeightStore,
 )
 from ponos_coach.profiles.use_cases import (
@@ -61,7 +78,7 @@ NAME = ProfileName.parse("Atleta di prova")
 
 
 class _FailingRegistry(InMemoryProfileRegistry):
-    """Elenco che non riesce a scrivere nuove voci."""
+    """List that cannot write new entries."""
 
     def add(self, entry: RegistryEntry) -> None:  # noqa: ARG002
         raise ProfileRegistryError("disco pieno")
@@ -71,7 +88,7 @@ class _FailingRegistry(InMemoryProfileRegistry):
 
 
 class _FailingStorage(InMemoryProfileStorage):
-    """Database che non si riesce a creare."""
+    """Database that cannot be created."""
 
     def create(
         self,
@@ -85,7 +102,7 @@ class _FailingStorage(InMemoryProfileStorage):
 
 
 class _CountingStorage(InMemoryProfileStorage):
-    """Database che conta le chiusure, per provare che i casi d'uso non le dimenticano."""
+    """Database that counts closes, to prove the use cases do not forget them."""
 
     def __init__(self, disk: InMemoryDisk) -> None:
         super().__init__(disk)
@@ -115,8 +132,20 @@ class _CountingProfile:
         return self._inner.info
 
     @property
+    def removed_unsupported_activities(self) -> int:
+        return self._inner.removed_unsupported_activities
+
+    @property
     def activities(self) -> ActivityIndex:
         return self._inner.activities
+
+    @property
+    def deleted_activities(self) -> DeletedActivities:
+        return self._inner.deleted_activities
+
+    @property
+    def track_boxes(self) -> TrackBoxIndex:
+        return self._inner.track_boxes
 
     @property
     def sync_journal(self) -> SyncJournal:
@@ -131,16 +160,63 @@ class _CountingProfile:
         return self._inner.weights
 
     @property
+    def threshold_paces(self) -> ThresholdPaceStore:
+        return self._inner.threshold_paces
+
+    @property
     def fixed_data(self) -> FixedDataStore:
         return self._inner.fixed_data
 
     @property
-    def sport_weights(self) -> SportWeightStore:
-        return self._inner.sport_weights
-
-    @property
     def load_cache(self) -> LoadCache:
         return self._inner.load_cache
+
+    @property
+    def activity_levels(self) -> ActivityLevelStore:
+        return self._inner.activity_levels
+
+    @property
+    def lean_masses(self) -> LeanMassStore:
+        return self._inner.lean_masses
+
+    @property
+    def meal_times(self) -> MealTimesStore:
+        return self._inner.meal_times
+
+    @property
+    def goal_periods(self) -> GoalPeriodStore:
+        return self._inner.goal_periods
+
+    @property
+    def threshold_tests(self) -> ThresholdTestStore:
+        return self._inner.threshold_tests
+
+    @property
+    def goals(self) -> GoalStore:
+        return self._inner.goals
+
+    @property
+    def availability(self) -> AvailabilityStore:
+        return self._inner.availability
+
+    @property
+    def session_choices(self) -> SessionChoicesStore:
+        return self._inner.session_choices
+
+    @property
+    def plans(self) -> PlanStore:
+        return self._inner.plans
+
+    @property
+    def workout_backups(self) -> WorkoutBackupStore:
+        return self._inner.workout_backups
+
+    @property
+    def injuries(self) -> InjuryStore:
+        return self._inner.injuries
+
+    def rename(self, name: ProfileName) -> None:
+        self._inner.rename(name)
 
     def close(self) -> None:
         self._owner.closed += 1
@@ -149,7 +225,7 @@ class _CountingProfile:
 
 @dataclass
 class World:
-    """Fake, casi d'uso già costruiti e utilità per le verifiche."""
+    """Fakes, ready-built use cases and helpers for the checks."""
 
     disk: InMemoryDisk = field(default_factory=InMemoryDisk)
     registry: InMemoryProfileRegistry = field(default_factory=InMemoryProfileRegistry)
@@ -185,7 +261,7 @@ def request(folder: Path | None = None, name: str = "Atleta di prova") -> NewPro
     )
 
 
-# --- Crea ----------------------------------------------------------------------------------
+# --- Create ----------------------------------------------------------------------------------
 
 
 def test_create_makes_folder_database_parameters_and_registry_entry(world: World) -> None:
@@ -286,7 +362,7 @@ def test_create_failing_on_the_database_leaves_no_entry_and_no_lock(world: World
 
     assert world.registry.list_entries() == []
     assert folder not in world.disk.locks
-    assert folder not in world.disk.folders  # anche la cartella vuota creata prima è tolta
+    assert folder not in world.disk.folders  # the empty folder created earlier is removed too
 
 
 def test_create_with_an_unknown_timezone_is_refused_before_touching_the_disk(
@@ -295,7 +371,7 @@ def test_create_with_an_unknown_timezone_is_refused_before_touching_the_disk(
     folder = absolute_path("profili", "atleta")
     bad = NewProfileRequest(NAME, folder, "Marte/Olympus", physiology(), TODAY)
 
-    with pytest.raises(ValueError, match="fuso"):
+    with pytest.raises(ValueError, match="time zone"):
         world.create()(bad)
 
     assert world.registry.list_entries() == []
@@ -303,7 +379,7 @@ def test_create_with_an_unknown_timezone_is_refused_before_touching_the_disk(
 
 
 class _LosingTheRace(InMemoryProfileStorage):
-    """Un'altra istanza mette il suo database nella cartella un attimo prima del nostro."""
+    """Another instance puts its database in the folder just before ours."""
 
     def create(
         self, folder: Path, profile_id: ProfileId, name: ProfileName, timezone_name: str
@@ -320,14 +396,14 @@ def test_losing_the_creation_race_never_deletes_the_winners_database(world: Worl
     with pytest.raises(ProfileAlreadyExistsError):
         world.create(world.ports(_LosingTheRace(world.disk)))(request(folder))
 
-    assert folder in world.disk.databases  # il profilo del vincitore e salvo
+    assert folder in world.disk.databases  # the winner's profile is safe
     assert PROFILE_DATABASE_NAME in world.disk.folders[folder]
     assert world.registry.list_entries() == []
     assert folder not in world.disk.locks
 
 
 def test_a_request_needs_an_absolute_folder() -> None:
-    with pytest.raises(ValueError, match="assoluto"):
+    with pytest.raises(ValueError, match="absolute"):
         NewProfileRequest(NAME, Path("relativa"), "UTC", physiology(), TODAY)
 
 
@@ -342,7 +418,7 @@ def test_closing_a_session_twice_is_harmless_and_releases_the_lock_once(world: W
 
 class _BrokenClose(_CountingProfile):
     def close(self) -> None:
-        raise ProfileStorageError("flush non riuscito")
+        raise ProfileStorageError("flush failed")
 
 
 class _RecordingLock:
@@ -366,12 +442,12 @@ def test_closing_a_session_releases_the_lock_even_when_the_database_fails_to_clo
 
     with pytest.raises(ProfileStorageError):
         broken.close()
-    broken.close()  # già chiuso: nessun secondo tentativo
+    broken.close()  # already closed: no second attempt
 
     assert lock.released == 1
 
 
-# --- Apri ----------------------------------------------------------------------------------
+# --- Open ----------------------------------------------------------------------------------
 
 
 def _created(world: World, folder: Path | None = None, name: str = "Atleta di prova") -> ProfileId:
@@ -393,7 +469,7 @@ def test_open_from_folder_registers_an_unknown_profile_with_the_name_in_its_data
 ) -> None:
     folder = absolute_path("profili", "atleta")
     profile_id = _created(world, folder)
-    world.registry.remove(profile_id)  # come un profilo copiato da un altro PC
+    world.registry.remove(profile_id)  # like a profile copied from another PC
 
     with _open_from_folder(world)(folder) as session:
         assert session.info.profile_id == profile_id
@@ -483,7 +559,7 @@ def test_open_from_a_folder_without_a_profile_fails_without_taking_the_lock(
 
 
 class _LockCountingFolders(InMemoryProfileFolders):
-    """Cartelle che contano i lock presi."""
+    """Folders that count the locks taken."""
 
     locks_taken = 0
 
@@ -606,7 +682,7 @@ def test_open_registered_of_a_vanished_folder_fails(world: World) -> None:
     assert world.registry.list_entries() == [entry]
 
 
-# --- Elenco, rimozione, cancellazione ------------------------------------------------------
+# --- List, removal, deletion ------------------------------------------------------
 
 
 def test_list_profiles_starts_from_the_most_recently_used(world: World) -> None:
@@ -673,7 +749,7 @@ def test_delete_folder_that_is_not_a_profile_keeps_the_entry_and_the_files(world
     assert world.registry.list_entries() == [entry]
 
 
-# --- Guarda (sola lettura) -----------------------------------------------------------------
+# --- Peek (read-only) -----------------------------------------------------------------
 
 
 def test_peek_reports_the_info_and_the_count_without_locking_or_marking_use(world: World) -> None:

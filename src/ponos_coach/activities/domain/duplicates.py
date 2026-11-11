@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Regola dei possibili duplicati tra formati: stesso inizio e stessa durata (PLAN.md 4.3).
+"""Possible-duplicate rule across formats: same start and same duration (PLAN.md 4.3).
 
-Una sola definizione: indici, fake e casi d'uso la usano; un adattatore può prefiltrare con
-un intervallo più largo ma poi applica questa funzione.
+One single definition: indexes, fakes and use cases use it; an adapter may prefilter with
+a wider interval but then applies this function.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-DUPLICATE_START_TOLERANCE = timedelta(seconds=60)  # default del progetto
-DUPLICATE_DURATION_TOLERANCE_PERCENT = 5  # default del progetto
+DUPLICATE_START_TOLERANCE = timedelta(seconds=60)  # project default
+DUPLICATE_DURATION_TOLERANCE_PERCENT = 5  # project default
 _MS_PER_S = 1000
 _PERCENT = 100
 
@@ -19,11 +19,11 @@ _PERCENT = 100
 def is_possible_duplicate(
     start_a: datetime, elapsed_a_s: float, start_b: datetime, elapsed_b_s: float
 ) -> bool:
-    """Vero se due attività potrebbero essere la stessa registrata in due formati.
+    """True if two activities could be the same one recorded in two formats.
 
-    Gli inizi distano al più 60 s e i tempi trascorsi differiscono al più del 5% del maggiore
-    (confronto in millisecondi interi, estremi inclusi). Simmetrica: l'ordine di arrivo non
-    conta.
+    Starts are at most 60 s apart and elapsed times differ by at most 5% of the larger
+    (comparison in whole milliseconds, endpoints included). Symmetric: arrival order does not
+    matter.
     """
     if abs(start_a - start_b) > DUPLICATE_START_TOLERANCE:
         return False

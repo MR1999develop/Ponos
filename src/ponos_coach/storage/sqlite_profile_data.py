@@ -1,25 +1,23 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Store SQLite dei dati personali del profilo: dati fissi, serie del peso, pesi degli sport.
+"""SQLite store of the profile's personal data: fixed data and weight series.
 
-Stessa connessione degli altri store: la transazione dell'indice copre anche questi. Solo
-parametri `?`. Altezza, peso e data di nascita sono dati di salute: mai nei messaggi d'errore.
+Same connection as the other stores: the index transaction covers these too. Only
+`?` parameters. Height, weight and date of birth are health data: never in error messages.
 """
 
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from datetime import date
-from types import MappingProxyType
 
-from ponos_coach.activities.domain import Sport
-from ponos_coach.load.domain import SportWeight
-from ponos_coach.load.ports import LoadStoreError
 from ponos_coach.profiles.domain import (
     BirthDate,
     FixedProfileData,
     Height,
+    ThresholdPace,
+    ThresholdPaceEntry,
     Weight,
     WeightEntry,
 )
@@ -28,28 +26,28 @@ from ponos_coach.storage.sqlite_database import SqliteDatabase
 
 
 class SqliteFixedDataStore:
-    """Altezza e data di nascita (porta `FixedDataStore`): una riga, scritta una volta sola."""
+    """Height and date of birth (`FixedDataStore` port): one row, written only once."""
 
     def __init__(self, database: SqliteDatabase) -> None:
         self._db = database
 
     def get(self) -> FixedProfileData | None:
-        """I dati fissi, o None se il profilo non li ha."""
+        """The fixed data, or None if the profile does not have them."""
         try:
             row = self._db.connection.execute(
                 "SELECT height_cm, birth_date FROM profile_body WHERE id = 1"
             ).fetchone()
         except sqlite3.Error as exc:
-            raise ProfileDataError("lettura dei dati del profilo non riuscita") from exc
+            raise ProfileDataError("reading the profile data failed") from exc
         if row is None:
             return None
         try:
             return FixedProfileData(Height(row[0]), BirthDate(date.fromisoformat(row[1])))
-        except ValueError:  # il testo letto (una data) non si conserva nella catena delle cause
-            raise ProfileDataError("dati del profilo non validi") from None
+        except ValueError:  # the text read (a date) is not kept in the chain of causes
+            raise ProfileDataError("invalid profile data") from None
 
     def set_once(self, data: FixedProfileData) -> None:
-        """Imposta i dati fissi; se ci sono già, `FixedDataAlreadySetError`."""
+        """Sets the fixed data; if they are already there, `FixedDataAlreadySetError`."""
         try:
             self._db.connection.execute(
                 "INSERT INTO profile_body (id, height_cm, birth_date) VALUES (1, ?, ?)",
@@ -60,22 +58,20 @@ class SqliteFixedDataStore:
                 sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY,
                 sqlite3.SQLITE_CONSTRAINT_UNIQUE,
             ):
-                raise FixedDataAlreadySetError(
-                    "altezza e data di nascita sono già impostate"
-                ) from exc
-            raise ProfileDataError("scrittura dei dati del profilo non riuscita") from exc
+                raise FixedDataAlreadySetError("height and date of birth are already set") from exc
+            raise ProfileDataError("writing the profile data failed") from exc
         except sqlite3.Error as exc:
-            raise ProfileDataError("scrittura dei dati del profilo non riuscita") from exc
+            raise ProfileDataError("writing the profile data failed") from exc
 
 
 class SqliteWeightStore:
-    """Serie del peso (porta `WeightStore`) su SQLite, in decimi di chilogrammo interi."""
+    """Weight series (`WeightStore` port) on SQLite, in whole tenths of a kilogram."""
 
     def __init__(self, database: SqliteDatabase) -> None:
         self._db = database
 
     def put(self, entry: WeightEntry) -> None:
-        """Salva il peso valido da `entry.valid_from`, sostituendo la stessa data."""
+        """Saves the weight valid from `entry.valid_from`, replacing the same date."""
         try:
             self._db.connection.execute(
                 "INSERT INTO weight (valid_from, tenths_kg) VALUES (?, ?) "
@@ -83,49 +79,48 @@ class SqliteWeightStore:
                 (entry.valid_from.isoformat(), entry.weight.tenths_kg),
             )
         except sqlite3.Error as exc:
-            raise ProfileDataError("scrittura del peso non riuscita") from exc
+            raise ProfileDataError("writing the weight failed") from exc
 
     def list_entries(self) -> Sequence[WeightEntry]:
-        """Tutte le voci per data crescente."""
+        """All the entries by ascending date."""
         try:
             rows = self._db.connection.execute(
                 "SELECT valid_from, tenths_kg FROM weight ORDER BY valid_from"
             ).fetchall()
         except sqlite3.Error as exc:
-            raise ProfileDataError("lettura del peso non riuscita") from exc
+            raise ProfileDataError("reading the weight failed") from exc
         try:
             return [WeightEntry(date.fromisoformat(r[0]), Weight(r[1])) for r in rows]
-        except ValueError:  # il testo letto (una data) non si conserva nella catena delle cause
-            raise ProfileDataError("peso salvato non valido") from None
+        except ValueError:  # the text read (a date) is not kept in the chain of causes
+            raise ProfileDataError("saved weight invalid") from None
 
 
-class SqliteSportWeightStore:
-    """Pesi degli sport scelti dall'utente (porta `SportWeightStore`), solo i non-default."""
+class SqliteThresholdPaceStore:
+    """Threshold pace series (`ThresholdPaceStore` port) on SQLite, in whole seconds per km."""
 
     def __init__(self, database: SqliteDatabase) -> None:
         self._db = database
 
-    def load(self) -> Mapping[Sport, SportWeight]:
-        """I pesi salvati."""
+    def put(self, entry: ThresholdPaceEntry) -> None:
+        """Saves the pace valid from `entry.valid_from`, replacing the same date."""
+        try:
+            self._db.connection.execute(
+                "INSERT INTO threshold_pace (valid_from, s_per_km) VALUES (?, ?) "
+                "ON CONFLICT (valid_from) DO UPDATE SET s_per_km = excluded.s_per_km",
+                (entry.valid_from.isoformat(), entry.pace.s_per_km),
+            )
+        except sqlite3.Error as exc:
+            raise ProfileDataError("writing the threshold pace failed") from exc
+
+    def list_entries(self) -> Sequence[ThresholdPaceEntry]:
+        """All the entries by ascending date."""
         try:
             rows = self._db.connection.execute(
-                "SELECT sport, weight FROM sport_weights ORDER BY sport"
+                "SELECT valid_from, s_per_km FROM threshold_pace ORDER BY valid_from"
             ).fetchall()
         except sqlite3.Error as exc:
-            raise LoadStoreError("lettura dei pesi degli sport non riuscita") from exc
+            raise ProfileDataError("reading the threshold pace failed") from exc
         try:
-            return MappingProxyType({Sport(r[0]): SportWeight(r[1]) for r in rows})
-        except ValueError as exc:
-            raise LoadStoreError("pesi degli sport non validi") from exc
-
-    def replace(self, weights: Mapping[Sport, SportWeight]) -> None:
-        """Sostituisce tutti i pesi salvati, tutto o niente (anche fuori da una transazione)."""
-        try:
-            with self._db.atomic():
-                self._db.connection.execute("DELETE FROM sport_weights")
-                self._db.connection.executemany(
-                    "INSERT INTO sport_weights (sport, weight) VALUES (?, ?)",
-                    sorted((sport.value, weight.value) for sport, weight in weights.items()),
-                )
-        except sqlite3.Error as exc:
-            raise LoadStoreError("scrittura dei pesi degli sport non riuscita") from exc
+            return [ThresholdPaceEntry(date.fromisoformat(r[0]), ThresholdPace(r[1])) for r in rows]
+        except ValueError:  # the text read (a date) is not kept in the chain of causes
+            raise ProfileDataError("saved threshold pace invalid") from None

@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Attività dell'elenco remoto di Garmin, pagine dell'elenco e abbinamento a un import da file.
+"""Activity from the remote Garmin list, list pages and matching with a file import.
 
-Tutto è già validato: l'adattatore trasforma la risposta JSON in questi tipi al confine, o
-scarta la voce. Nessun testo libero di Garmin (nomi, descrizioni) entra qui.
+Everything is already validated: the adapter turns the JSON response into these types at the
+boundary, or
+discards the entry. No free text from Garmin (names, descriptions) enters here.
 """
 
 from __future__ import annotations
@@ -22,14 +23,14 @@ from ponos_coach.activities.domain.record import ActivityRecord
 from ponos_coach.activities.domain.sport import Sport
 from ponos_coach.activities.domain.timing import check_utc, is_plausible_span
 
-MAX_PAGE_SIZE: Final = 1000  # voci per pagina: oltre, la risposta è sospetta
-DEFAULT_PAGE_SIZE: Final = 100  # voci per pagina chieste a Garmin (default del progetto)
+MAX_PAGE_SIZE: Final = 1000  # entries per page: beyond this, the response is suspicious
+DEFAULT_PAGE_SIZE: Final = 100  # entries per page requested from Garmin (project default)
 _SPORT_KEY: Final = re.compile(r"[a-z][a-z0-9_]{0,63}")
 
-# Chiavi di tipo dell'attività di Garmin (`typeKey`) -> sport dell'app. Il resto è `OTHER`.
+# Garmin activity type keys (`typeKey`) -> app sport. The rest is `OTHER`.
 _SPORT_BY_KEY: Final[dict[str, Sport]] = {
-    # Sottochiavi note di Garmin: default del progetto, da confermare con la struttura
-    # reale delle risposte (spike); le chiavi ignote finiscono in OTHER.
+    # Known Garmin subkeys: project default, to be confirmed with the real structure
+    # of the responses (spike); unknown keys end up in OTHER.
     "running": Sport.RUNNING,
     "street_running": Sport.RUNNING,
     "treadmill_running": Sport.RUNNING,
@@ -62,17 +63,17 @@ _SPORT_BY_KEY: Final[dict[str, Sport]] = {
 
 
 def sport_from_garmin_key(sport_key: str) -> Sport:
-    """Sport dell'app per la chiave di Garmin; `Sport.OTHER` se non la conosce."""
+    """App sport for the Garmin key; `Sport.OTHER` if it does not know it."""
     return _SPORT_BY_KEY.get(sport_key, Sport.OTHER)
 
 
 @dataclass(frozen=True, slots=True)
 class RemoteActivity:
-    """Riepilogo di un'attività dell'elenco remoto: ciò che basta per decidere se scaricarla.
+    """Summary of an activity in the remote list: what is enough to decide whether to download it.
 
-    `start` è UTC al millisecondo e `start` + `duration_s` sta nella finestra degli orari
-    ammessi; `duration_s` è finita e positiva; `sport_key` è la chiave di Garmin in minuscolo
-    (`[a-z][a-z0-9_]{0,63}`); `has_heart_rate` è None se l'elenco non lo dice.
+    `start` is UTC to the millisecond and `start` + `duration_s` lies in the window of allowed
+    times; `duration_s` is finite and positive; `sport_key` is the Garmin key in lowercase
+    (`[a-z][a-z0-9_]{0,63}`); `has_heart_rate` is None if the list does not say.
     """
 
     garmin_id: GarminActivityId
@@ -84,28 +85,28 @@ class RemoteActivity:
     def __post_init__(self) -> None:
         check_utc(self.start)
         if self.start.microsecond % 1000:
-            raise ValueError("l'inizio deve essere al millisecondo")
+            raise ValueError("the start must be at millisecond precision")
         if not math.isfinite(self.duration_s) or self.duration_s <= 0:
-            raise ValueError("la durata deve essere finita e positiva")
+            raise ValueError("the duration must be finite and positive")
         if not is_plausible_span(self.start, self.duration_s):
-            raise ValueError("inizio o fine fuori dalla finestra degli orari ammessi")
+            raise ValueError("start or end outside the window of allowed times")
         if not _SPORT_KEY.fullmatch(self.sport_key):
-            raise ValueError("chiave dello sport non valida")
+            raise ValueError("invalid sport key")
 
     @property
     def sport(self) -> Sport:
-        """Lo sport dell'app corrispondente alla chiave di Garmin."""
+        """The app sport corresponding to the Garmin key."""
         return sport_from_garmin_key(self.sport_key)
 
 
 @dataclass(frozen=True, slots=True)
 class ActivityPage:
-    """Una pagina dell'elenco remoto, dalla più recente.
+    """A page of the remote list, most recent first.
 
-    `offset` è la posizione richiesta; `raw_count` quante voci Garmin ha restituito, comprese
-    quelle che l'adattatore ha scartato perché malformate (`items` ne ha di meno o altrettante):
-    la posizione successiva è `offset + raw_count`. `declared_total` è il totale dichiarato da
-    Garmin, se lo dice. Gli id di `items` sono distinti.
+    `offset` is the requested position; `raw_count` how many entries Garmin returned, including
+    those the adapter discarded as malformed (`items` has fewer or as many):
+    the next position is `offset + raw_count`. `declared_total` is the total declared by
+    Garmin, if it says so. The ids in `items` are distinct.
     """
 
     offset: int
@@ -115,27 +116,27 @@ class ActivityPage:
 
     def __post_init__(self) -> None:
         if self.offset < 0 or not len(self.items) <= self.raw_count <= MAX_PAGE_SIZE:
-            raise ValueError("pagina incoerente: posizione o conteggi fuori intervallo")
+            raise ValueError("inconsistent page: position or counts out of range")
         if self.declared_total is not None and self.declared_total < 0:
-            raise ValueError("il totale dichiarato non può essere negativo")
+            raise ValueError("the declared total cannot be negative")
         if len({item.garmin_id for item in self.items}) != len(self.items):
-            raise ValueError("id ripetuti nella pagina")
+            raise ValueError("repeated ids in the page")
 
     @property
     def skipped_count(self) -> int:
-        """Voci restituite da Garmin ma scartate come malformate."""
+        """Entries returned by Garmin but discarded as malformed."""
         return self.raw_count - len(self.items)
 
 
 def find_matching_import(
     remote: RemoteActivity, candidates: Sequence[ActivityRecord]
 ) -> ActivityRecord | None:
-    """L'attività già importata da file che coincide con quella remota, o None.
+    """The activity already imported from file that matches the remote one, or None.
 
-    Coincide se non ha ancora un id Garmin, ha lo stesso sport e `is_possible_duplicate`
-    (inizi a non più di 60 s, durate entro il 5%). Con più candidati vince il più vicino
-    nell'inizio, poi la chiave d'identità più piccola: la scelta è deterministica.
-    `candidates` sono di solito i risultati di `ActivityIndex.find_possible_duplicates`.
+    It matches if it has no Garmin id yet, has the same sport and `is_possible_duplicate`
+    (starts within 60 s, durations within 5%). With several candidates the closest wins
+    in start, then the smallest identity key: the choice is deterministic.
+    `candidates` are usually the results of `ActivityIndex.find_possible_duplicates`.
     """
     matching = [
         record
@@ -150,9 +151,9 @@ def find_matching_import(
 
 
 def original_matches_listing(remote: RemoteActivity, start: datetime, elapsed_s: float) -> bool:
-    """Vero se un file scaricato (inizio `start`, tempo trascorso `elapsed_s`) è l'attività
-    dell'elenco: stessa regola dei duplicati (inizi a non più di 60 s, durate entro il 5%).
+    """True if a downloaded file (start `start`, elapsed time `elapsed_s`) is the activity
+    in the list: same rule as duplicates (starts within 60 s, durations within 5%).
 
-    Un file che non coincide è di un'altra attività: non si registra per quell'id.
+    A file that does not match belongs to another activity: it is not recorded for that id.
     """
     return is_possible_duplicate(remote.start, remote.duration_s, start, elapsed_s)

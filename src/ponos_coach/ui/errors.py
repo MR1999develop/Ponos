@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Messaggi per l'utente: l'unico punto in cui un'eccezione o un motivo diventa testo.
+"""User messages: the only place where an exception or a reason becomes text.
 
-Mai il testo dell'eccezione né un percorso: solo cosa è successo e come rimediare, in
-linguaggio comune.
+Never the exception's text nor a path: only what happened and how to fix it, in
+plain language.
 """
 
 from __future__ import annotations
@@ -21,8 +21,31 @@ from ponos_coach.activities.ports import (
     ImportLimitExceededError,
     ImportSourceUnreadableError,
 )
+from ponos_coach.assessment.ports import (
+    ThresholdTestAlreadyStoredError,
+    ThresholdTestNotFoundError,
+)
+from ponos_coach.goals.ports import (
+    GoalAlreadyExistsError,
+    GoalNotFoundError,
+    RaceDayTakenError,
+)
 from ponos_coach.load.domain import MissingPhysiologyError
 from ponos_coach.load.use_cases import ExclusionReason
+from ponos_coach.nutrition.domain import defaults as nutrition_defaults
+from ponos_coach.nutrition.ports import (
+    GoalPeriodNotFoundError,
+    GoalPeriodOverlapError,
+    LeanMassNotFoundError,
+)
+from ponos_coach.nutrition.use_cases import LevelDateInFutureError
+from ponos_coach.profiles.lean_mass import (
+    LeanMassChangedError,
+    LeanMassDateInFutureError,
+    LeanMassImplausibleError,
+    LeanMassNeedsWeightError,
+)
+from ponos_coach.profiles.measurements import InvalidMeasurementsError, MeasurementProblem
 from ponos_coach.profiles.ports import (
     FolderHasOtherContentError,
     FolderNotEmptyError,
@@ -34,15 +57,18 @@ from ponos_coach.profiles.ports import (
     ProfileNotFoundError,
     ProfileRegistryError,
 )
+from ponos_coach.profiles.threshold_tests import ThresholdTestChangedError
 from ponos_coach.profiles.use_cases import ProfileMismatchError
 
-# Contesti "Errors", "ImportIssues" e "Exclusions": lupdate trova solo contesto e testo scritti
-# come letterali, quindi niente alias di `QCoreApplication.translate`.
+_PERCENT = 100
+
+# Contexts "Errors", "ImportIssues" and "Exclusions": lupdate only finds context and text written
+# as literals, so no aliases of `QCoreApplication.translate`.
 
 
 @dataclass(frozen=True, slots=True)
 class ErrorMessage:
-    """Cosa è successo e come rimediare, in linguaggio comune."""
+    """What happened and how to fix it, in plain language."""
 
     title: str
     what: str
@@ -50,7 +76,7 @@ class ErrorMessage:
 
 
 class RegistryProblem(Enum):
-    """Come è fallito l'elenco dei profili, se il Composition Root sa distinguerlo."""
+    """How the profile list failed, if the Composition Root can tell."""
 
     TOO_NEW = "too_new"
     BUSY = "busy"
@@ -59,11 +85,11 @@ class RegistryProblem(Enum):
 
 @dataclass(frozen=True, slots=True)
 class ErrorContext:
-    """Ciò che il testo di un errore chiede al Composition Root.
+    """What an error text asks of the Composition Root.
 
-    `registry_problem` riconosce le tre cause di un elenco dei profili inutilizzabile: i loro
-    tipi stanno nell'adattatore, che la ui non può importare. `config_folder` è dove sta il file
-    dell'elenco (una cartella dell'app, non un dato dell'utente).
+    `registry_problem` recognises the three causes of an unusable profile list: their
+    types live in the adapter, which the ui cannot import. `config_folder` is where the file
+    of the list lives (an app folder, not user data).
     """
 
     registry_problem: Callable[[BaseException], RegistryProblem | None] = lambda _error: None
@@ -219,7 +245,7 @@ _REGISTRY_BUILDERS: dict[RegistryProblem, Callable[[ErrorContext], ErrorMessage]
 
 
 def unexpected_error_message() -> ErrorMessage:
-    """Messaggio generico del gestore di ultima istanza (il dettaglio è nel log)."""
+    """Generic message of the last-resort handler (the detail is in the log)."""
     return ErrorMessage(
         QCoreApplication.translate("Errors", "Something unexpected happened"),
         QCoreApplication.translate(
@@ -285,6 +311,182 @@ def _missing_physiology(_error: BaseException) -> ErrorMessage:
     )
 
 
+def _period_overlap(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The goal periods overlap"),
+        QCoreApplication.translate(
+            "Errors", "The period shares at least one day with another goal period."
+        ),
+        QCoreApplication.translate("Errors", "Choose dates that no other period uses."),
+    )
+
+
+def _period_missing(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The goal period no longer exists"),
+        QCoreApplication.translate("Errors", "The period was changed or removed meanwhile."),
+        QCoreApplication.translate("Errors", "Look at the table again and repeat the change."),
+    )
+
+
+def _race_day_taken(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "Another race is already on that day"),
+        QCoreApplication.translate(
+            "Errors", "The plan cannot have two races on one day, so the goal was not saved."
+        ),
+        QCoreApplication.translate("Errors", "Choose another day, or change the other race first."),
+    )
+
+
+def _goal_missing(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The goal is no longer saved"),
+        QCoreApplication.translate("Errors", "The goal was changed or removed meanwhile."),
+        QCoreApplication.translate("Errors", "Open the Goals section to see what is saved."),
+    )
+
+
+def _goal_exists(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "This goal is already saved"),
+        QCoreApplication.translate("Errors", "A goal with the same identity was added before."),
+        QCoreApplication.translate("Errors", "Open the Goals section to see what is saved."),
+    )
+
+
+def _level_in_future(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The date is in the future"),
+        QCoreApplication.translate(
+            "Errors", "An activity level can only hold from today or from a past day."
+        ),
+        QCoreApplication.translate("Errors", "Choose today or an earlier day."),
+    )
+
+
+def _lean_mass_in_future(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The date is in the future"),
+        QCoreApplication.translate(
+            "Errors", "A lean mass can only hold from today or from a past day."
+        ),
+        QCoreApplication.translate("Errors", "Choose today or an earlier day."),
+    )
+
+
+def _lean_mass_needs_weight(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "A weight is needed first"),
+        QCoreApplication.translate(
+            "Errors",
+            "The lean mass is checked against your weight, and none is saved for that day.",
+        ),
+        QCoreApplication.translate(
+            "Errors", "Enter your weight with Profile > Edit profile, then set the lean mass."
+        ),
+    )
+
+
+def _lean_mass_implausible(_error: BaseException) -> ErrorMessage:
+    # {low} and {high}: the share of the weight the lean mass has to be between, as percentages.
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The lean mass does not fit your weight"),
+        QCoreApplication.translate(
+            "Errors", "The lean mass must be between {low}% and {high}% of your weight on that day."
+        ).format(
+            low=round(nutrition_defaults.MIN_LEAN_MASS_FRACTION * _PERCENT),
+            high=round(nutrition_defaults.MAX_LEAN_MASS_FRACTION * _PERCENT),
+        ),
+        QCoreApplication.translate(
+            "Errors", "Check the value, or the weight in Profile > Edit profile."
+        ),
+    )
+
+
+def _lean_mass_changed(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The lean mass cannot be taken back"),
+        QCoreApplication.translate(
+            "Errors", "It was changed after you set it, so it was left as it is."
+        ),
+        QCoreApplication.translate("Errors", "Nothing changed. Set the value you want again."),
+    )
+
+
+def _lean_mass_not_found(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The measurement is no longer saved"),
+        QCoreApplication.translate("Errors", "It was already removed."),
+        QCoreApplication.translate("Errors", "Open Settings > Nutrition to see what is saved."),
+    )
+
+
+def _threshold_changed(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The threshold test cannot be taken back"),
+        QCoreApplication.translate(
+            "Errors", "The threshold was changed after the test, so it was left as it is."
+        ),
+        QCoreApplication.translate(
+            "Errors", "Nothing changed. To correct the threshold, use Profile > Edit profile."
+        ),
+    )
+
+
+def _threshold_already_stored(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "This activity is already a threshold test"),
+        QCoreApplication.translate("Errors", "The test of this activity was applied before."),
+        QCoreApplication.translate(
+            "Errors", "Choose another activity, or open Settings > Training plan to see the tests."
+        ),
+    )
+
+
+def _threshold_not_found(_error: BaseException) -> ErrorMessage:
+    return ErrorMessage(
+        QCoreApplication.translate("Errors", "The threshold test is no longer saved"),
+        QCoreApplication.translate("Errors", "The test was already taken back."),
+        QCoreApplication.translate("Errors", "Open Settings > Training plan to see what is saved."),
+    )
+
+
+def _measurements_rejected(error: BaseException) -> ErrorMessage:
+    """A threshold that cannot be saved as a measurement (applying a test)."""
+    problem = error.problem if isinstance(error, InvalidMeasurementsError) else None
+    if problem is MeasurementProblem.DATE_IN_FUTURE:
+        return ErrorMessage(
+            QCoreApplication.translate("Errors", "The test day is in the future"),
+            QCoreApplication.translate(
+                "Errors", "A threshold can only hold from today or from a past day."
+            ),
+            QCoreApplication.translate("Errors", "Check the date of the activity."),
+        )
+    if problem is MeasurementProblem.DATE_TOO_OLD:
+        return ErrorMessage(
+            QCoreApplication.translate("Errors", "The test is too old"),
+            QCoreApplication.translate(
+                "Errors", "The activity is older than the oldest day the profile accepts."
+            ),
+            QCoreApplication.translate("Errors", "Choose a more recent activity."),
+        )
+    if problem is MeasurementProblem.INVALID_HEART_RATE:
+        return ErrorMessage(
+            QCoreApplication.translate("Errors", "The threshold does not fit your limits"),
+            QCoreApplication.translate(
+                "Errors",
+                "The threshold of the test is not between the minimum and the maximum heart "
+                "rate in force on that day.",
+            ),
+            QCoreApplication.translate(
+                "Errors",
+                "Correct the limits with Profile > Edit profile, then apply the test again.",
+            ),
+        )
+    return _generic(error)
+
+
 def _generic(_error: BaseException) -> ErrorMessage:
     return ErrorMessage(
         QCoreApplication.translate("Errors", "Something went wrong"),
@@ -295,11 +497,11 @@ def _generic(_error: BaseException) -> ErrorMessage:
     )
 
 
-# Dal più specifico al più generale: vale la prima corrispondenza.
+# From most specific to most general: the first match wins.
 _BUILDERS: tuple[tuple[type[BaseException], Callable[[BaseException], ErrorMessage]], ...] = (
     (ProfileInUseError, _in_use),
     (FolderNotEmptyError, _not_empty),
-    (FolderHasOtherContentError, _other_content),  # prima della sua classe madre
+    (FolderHasOtherContentError, _other_content),  # before its parent class
     (FolderUnavailableError, _unavailable),
     (NotAProfileFolderError, _not_a_profile),
     (ProfileNotFoundError, _not_a_profile),
@@ -309,11 +511,26 @@ _BUILDERS: tuple[tuple[type[BaseException], Callable[[BaseException], ErrorMessa
     (ProfileRegistryError, _registry),
     (ImportSourceUnreadableError, _import_unreadable),
     (MissingPhysiologyError, _missing_physiology),
+    (GoalPeriodOverlapError, _period_overlap),
+    (GoalPeriodNotFoundError, _period_missing),
+    (RaceDayTakenError, _race_day_taken),
+    (GoalNotFoundError, _goal_missing),
+    (GoalAlreadyExistsError, _goal_exists),
+    (LevelDateInFutureError, _level_in_future),
+    (LeanMassDateInFutureError, _lean_mass_in_future),
+    (LeanMassNeedsWeightError, _lean_mass_needs_weight),
+    (LeanMassImplausibleError, _lean_mass_implausible),
+    (LeanMassChangedError, _lean_mass_changed),
+    (LeanMassNotFoundError, _lean_mass_not_found),
+    (ThresholdTestChangedError, _threshold_changed),
+    (ThresholdTestAlreadyStoredError, _threshold_already_stored),
+    (ThresholdTestNotFoundError, _threshold_not_found),
+    (InvalidMeasurementsError, _measurements_rejected),
 )
 
 
 def describe_error(error: BaseException, context: ErrorContext | None = None) -> ErrorMessage:
-    """Messaggio per l'utente di un'eccezione; mai il testo dell'eccezione."""
+    """User message for an exception; never the exception's text."""
     if isinstance(error, ImportLimitExceededError):
         return _import_limit(error)
     context = context or ErrorContext()
@@ -327,7 +544,7 @@ def describe_error(error: BaseException, context: ErrorContext | None = None) ->
 
 
 def import_issue_text(issue: ImportIssue) -> str:
-    """Perché un file non è stato importato, in una frase breve in parole comuni."""
+    """Why a file was not imported, in one short sentence in plain words."""
     texts = {
         ImportIssue.EMPTY: QCoreApplication.translate("ImportIssues", "The file is empty."),
         ImportIssue.TOO_LARGE: QCoreApplication.translate("ImportIssues", "The file is too large."),
@@ -339,9 +556,6 @@ def import_issue_text(issue: ImportIssue) -> str:
         ),
         ImportIssue.UNSUPPORTED_FORMAT: QCoreApplication.translate(
             "ImportIssues", "This file format is not supported."
-        ),
-        ImportIssue.EXTENSION_MISMATCH: QCoreApplication.translate(
-            "ImportIssues", "The file content does not match its extension."
         ),
         ImportIssue.TOO_MANY_RECORDS: QCoreApplication.translate(
             "ImportIssues", "The activity has too many data points."
@@ -361,21 +575,6 @@ def import_issue_text(issue: ImportIssue) -> str:
         ImportIssue.PATH_TOO_LONG: QCoreApplication.translate(
             "ImportIssues", "The file path is too long."
         ),
-        ImportIssue.UNSAFE_NAME: QCoreApplication.translate(
-            "ImportIssues", "The name inside the archive is not safe."
-        ),
-        ImportIssue.ARCHIVE_INVALID: QCoreApplication.translate(
-            "ImportIssues", "The ZIP archive is damaged."
-        ),
-        ImportIssue.ARCHIVE_LIMIT: QCoreApplication.translate(
-            "ImportIssues", "The ZIP archive is too large or too full."
-        ),
-        ImportIssue.ENCRYPTED: QCoreApplication.translate(
-            "ImportIssues", "The file is protected by a password."
-        ),
-        ImportIssue.NESTED_ARCHIVE: QCoreApplication.translate(
-            "ImportIssues", "A ZIP archive inside a ZIP archive."
-        ),
         ImportIssue.STORAGE_FAILED: QCoreApplication.translate(
             "ImportIssues", "The file could not be saved in the profile folder."
         ),
@@ -384,7 +583,7 @@ def import_issue_text(issue: ImportIssue) -> str:
 
 
 def unavailable_detail_message(reason: ExclusionReason) -> ErrorMessage:
-    """Perché il dettaglio di un'attività non si può mostrare e che cosa fare."""
+    """Why an activity's detail cannot be shown and what to do."""
     reimport = QCoreApplication.translate(
         "Exclusions", "Import the original file again to see its detail."
     )
@@ -432,7 +631,7 @@ def unavailable_detail_message(reason: ExclusionReason) -> ErrorMessage:
 
 
 def exclusion_reason_text(reason: ExclusionReason) -> str:
-    """Perché un'attività non è nella panoramica, in una frase breve."""
+    """Why an activity is not in the overview, in one short sentence."""
     texts = {
         ExclusionReason.FILE_MISSING: QCoreApplication.translate(
             "Exclusions", "file missing from the archive"

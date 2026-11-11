@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Altezza, peso e data di nascita scritti dall'utente: lettura e messaggi dei moduli.
+"""Height, weight and birth date typed by the user: reading and form messages.
 
-Altezza, peso e data di nascita sono dati di salute: il valore scritto non compare mai in un
-messaggio, in un log né in un'eccezione. Il dominio decide cosa è valido (`Height`, `Weight`,
-`BirthDate.on`); qui si traduce il testo in quei tipi, o in una categoria di problema.
+Height, weight and birth date are health data: the typed value never appears in a
+message, a log or an exception. The domain decides what is valid (`Height`, `Weight`,
+`BirthDate.on`); here the text is turned into those types, or into a problem category.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from enum import Enum
 
 from PySide6.QtCore import QCoreApplication
 
+from ponos_coach.assessment.domain.defaults import MAX_PACE_S_PER_KM, MIN_PACE_S_PER_KM
 from ponos_coach.profiles.domain import (
     HEIGHT_MAX_CM,
     HEIGHT_MIN_CM,
@@ -23,15 +24,17 @@ from ponos_coach.profiles.domain import (
     WEIGHT_MIN_TENTHS_KG,
     BirthDate,
     Height,
+    ThresholdPace,
     Weight,
 )
 
-_HEIGHT_TEXT_MAX_CHARS = 3  # la lunghezza si controlla prima di leggere il numero
+_HEIGHT_TEXT_MAX_CHARS = 3  # the length is checked before reading the number
 _TENTHS_PER_KG = 10
+_SECONDS_PER_MINUTE = 60
 
 
 class BodyProblem(Enum):
-    """Che cosa non va in un valore del corpo scritto dall'utente."""
+    """What is wrong with a body value typed by the user."""
 
     HEIGHT_EMPTY = "height_empty"
     HEIGHT_INVALID = "height_invalid"
@@ -39,10 +42,12 @@ class BodyProblem(Enum):
     WEIGHT_INVALID = "weight_invalid"
     BIRTH_EMPTY = "birth_empty"
     BIRTH_INVALID = "birth_invalid"
+    PACE_EMPTY = "pace_empty"
+    PACE_INVALID = "pace_invalid"
 
 
 def read_height(text: str) -> Height | BodyProblem:
-    """Altezza da un testo di cifre (centimetri interi); mai un valore a metà."""
+    """Height from a text of digits (whole centimetres); never a half value."""
     stripped = text.strip()
     if not stripped:
         return BodyProblem.HEIGHT_EMPTY
@@ -55,7 +60,7 @@ def read_height(text: str) -> Height | BodyProblem:
 
 
 def read_weight(text: str) -> Weight | BodyProblem:
-    """Peso da un testo con virgola o punto decimale."""
+    """Weight from a text with a comma or a decimal point."""
     if not text.strip():
         return BodyProblem.WEIGHT_EMPTY
     try:
@@ -64,8 +69,18 @@ def read_weight(text: str) -> Weight | BodyProblem:
         return BodyProblem.WEIGHT_INVALID
 
 
+def read_threshold_pace(text: str) -> ThresholdPace | BodyProblem:
+    """Threshold pace from `m:ss` (also with `.`, `,` or `'`, or whole minutes)."""
+    if not text.strip():
+        return BodyProblem.PACE_EMPTY
+    try:
+        return ThresholdPace.parse(text)
+    except ValueError:
+        return BodyProblem.PACE_INVALID
+
+
 def read_birth_date(value: date | None, today: date) -> BirthDate | BodyProblem:
-    """Data di nascita inserita oggi (almeno cinque anni fa, non prima del 1900)."""
+    """Birth date entered today (at least five years ago, not before 1900)."""
     if value is None:
         return BodyProblem.BIRTH_EMPTY
     try:
@@ -75,12 +90,17 @@ def read_birth_date(value: date | None, today: date) -> BirthDate | BodyProblem:
 
 
 def latest_birth_date(today: date) -> date:
-    """L'ultima data di nascita ammessa oggi, secondo il dominio (per il limite del selettore)."""
+    """The latest birth date allowed today, per the domain (for the picker limit)."""
     return BirthDate.latest(today)
 
 
+def _pace_limit(seconds: int) -> str:
+    minutes, rest = divmod(seconds, _SECONDS_PER_MINUTE)
+    return f"{minutes}:{rest:02d}"
+
+
 def body_problem_text(problem: BodyProblem) -> str:
-    """Messaggio sotto il campo: cosa scrivere, senza ripetere ciò che era scritto."""
+    """Message under the field: what to type, without repeating what was typed."""
     texts = {
         BodyProblem.HEIGHT_EMPTY: QCoreApplication.translate(
             "BodyInput", "Enter the height in centimetres."
@@ -98,6 +118,14 @@ def body_problem_text(problem: BodyProblem) -> str:
         ).format(
             low=WEIGHT_MIN_TENTHS_KG // _TENTHS_PER_KG, high=WEIGHT_MAX_TENTHS_KG // _TENTHS_PER_KG
         ),
+        BodyProblem.PACE_EMPTY: QCoreApplication.translate(
+            "BodyInput", "Enter the threshold pace as minutes and seconds per kilometre."
+        ),
+        BodyProblem.PACE_INVALID: QCoreApplication.translate(
+            "BodyInput",
+            "Enter the pace as minutes and seconds per kilometre, like 5:30, from {fast} to "
+            "{slow}.",
+        ).format(fast=_pace_limit(MIN_PACE_S_PER_KM), slow=_pace_limit(MAX_PACE_S_PER_KM)),
         BodyProblem.BIRTH_EMPTY: QCoreApplication.translate(
             "BodyInput", "Enter the date of birth."
         ),

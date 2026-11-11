@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Impalcatura dei test di sincronizzazione: orologio e attesa finti, estrattore dello ZIP e
-decodifica veloce per i volumi, e un "rig" che mette insieme le porte.
+"""Scaffolding of the synchronisation tests: fake clock and wait, ZIP extractor and
+fast decoding for the volumes, and a "rig" that puts the ports together.
 
-Nessun `sleep` reale: l'attesa fa avanzare l'orologio finto e si ricorda quanto è durata. Solo
-libreria standard più i tipi del progetto; l'estrattore ZIP qui è minimo e serve ai test (nel
-prodotto lo fornisce il Composition Root con l'adattatore ZIP).
+No real `sleep`: the wait advances the fake clock and remembers how long it lasted. Standard
+library plus the project types only; the ZIP extractor here is minimal and serves the tests (in the
+product the Composition Root provides it with the ZIP adapter).
 """
 
 from __future__ import annotations
@@ -37,6 +37,7 @@ from ponos_coach.activities.ports import (
     ActivityArchive,
     ActivityIndex,
     ActivitySource,
+    DeletedActivities,
     SyncJournal,
 )
 from ponos_coach.activities.sync import (
@@ -60,7 +61,7 @@ CLOCK_START = datetime(2026, 7, 1, 8, 0, tzinfo=UTC)
 
 
 class FakeSyncClock:
-    """Orologio finto: `advance` fa avanzare insieme l'istante e il tempo monotono."""
+    """Fake clock: `advance` advances the instant and the monotonic time together."""
 
     def __init__(self) -> None:
         self._moment = CLOCK_START
@@ -78,9 +79,9 @@ class FakeSyncClock:
 
 
 class FakeWait:
-    """Attesa interrompibile finta: registra la durata, avanza l'orologio, non dorme.
+    """Fake interruptible wait: records the duration, advances the clock, does not sleep.
 
-    `cancel_on_wait(n)`: la n-esima attesa (da 1) risulta interrotta dall'annullamento.
+    `cancel_on_wait(n)`: the n-th wait (from 1) turns out to be interrupted by the cancellation.
     """
 
     def __init__(self, clock: FakeSyncClock) -> None:
@@ -102,14 +103,14 @@ class FakeWait:
 
 
 class MidpointRandom:
-    """Sorgente casuale deterministica: il punto di mezzo (il jitter è metà del massimo)."""
+    """Deterministic random source: the midpoint (the jitter is half of the maximum)."""
 
     def uniform(self, low: float, high: float) -> float:
         return (low + high) / 2.0
 
 
 def extract_original(zipped: bytes) -> ExtractedOriginal:
-    """Estrae il primo `.fit` o `.gpx` di uno ZIP (minimo, per i test)."""
+    """Extracts the first `.fit` of a ZIP (minimal, for the tests)."""
     others = 0
     try:
         with zipfile.ZipFile(io.BytesIO(zipped)) as archive:
@@ -117,8 +118,6 @@ def extract_original(zipped: bytes) -> ExtractedOriginal:
                 name = info.filename.lower()
                 if name.endswith(".fit"):
                     return ExtractedOriginal(archive.read(info), FileFormat.FIT)
-                if name.endswith(".gpx"):
-                    return ExtractedOriginal(archive.read(info), FileFormat.GPX)
                 others += 1
     except (zipfile.BadZipFile, zlib.error, EOFError):
         raise OriginalExtractionError(FailureReason.ARCHIVE_INVALID) from None
@@ -128,12 +127,12 @@ def extract_original(zipped: bytes) -> ExtractedOriginal:
 
 
 def passthrough_extract(zipped: bytes) -> ExtractedOriginal:
-    """Per i test di volume: i byte "scaricati" sono già il file (un FIT finto)."""
+    """For the volume tests: the "downloaded" bytes already are the file (a fake FIT)."""
     return ExtractedOriginal(zipped, FileFormat.FIT)
 
 
 def fast_decode(content: bytes, file_format: FileFormat) -> Activity:
-    """Per i test di volume: il "file" è `run:<n>`; dà la corsa `n` senza leggere un FIT vero."""
+    """For the volume tests: the "file" is `run:<n>`; gives run `n` without reading a real FIT."""
     number = int(content.removeprefix(b"run:"))
     return Activity(
         FitIdentity(FileId(255, 1, number, run_start(0))),
@@ -148,26 +147,27 @@ def fast_decode(content: bytes, file_format: FileFormat) -> Activity:
 
 
 def run_file(number: int) -> bytes:
-    """Il "file" finto di `fast_decode` per la corsa `number`."""
+    """The fake "file" of `fast_decode` for run `number`."""
     return f"run:{number}".encode()
 
 
 def remote_id(number: int) -> GarminActivityId:
-    """L'id Garmin della corsa `number` di `make_remote_history`."""
+    """The Garmin id of run `number` of `make_remote_history`."""
     return GarminActivityId(FIRST_ACTIVITY_ID + number)
 
 
 @dataclass(slots=True)
 class SyncRig:
-    """Le porte di una sincronizzazione di prova, tutte osservabili.
+    """The ports of a test synchronisation, all observable.
 
-    `source`, `archive`, `index` e `journal` si possono sostituire (con un decoratore che
-    registra o fa fallire) prima di chiamare `run`; `memory` resta l'archivio vero in memoria.
+    `source`, `archive`, `index` and `journal` can be replaced (with a decorator that
+    records or makes them fail) before calling `run`; `memory` remains the real in-memory archive.
     """
 
     fake: FakeActivitySource
     source: ActivitySource
     index: ActivityIndex
+    deleted: DeletedActivities
     journal: SyncJournal
     archive: ActivityArchive
     memory: InMemoryActivityArchive
@@ -184,6 +184,7 @@ class SyncRig:
         return SyncPorts(
             self.source,
             self.index,
+            self.deleted,
             self.journal,
             self.archive,
             self.extract,
@@ -213,14 +214,14 @@ class SyncRig:
 
     def status_of(self, number: int) -> SyncStatus:
         entry = self.journal.get(remote_id(number))
-        assert entry is not None, f"la corsa {number} non è nel giornale"
+        assert entry is not None, f"run {number} is not in the journal"
         return entry.status
 
 
 def make_source(
     count: int, *, clock: FakeSyncClock | None = None, latency_s: float = 0.0, **options: object
 ) -> FakeActivitySource:
-    """Garmin finto con `count` corse; con `latency_s` ogni chiamata fa avanzare l'orologio."""
+    """Fake Garmin with `count` runs; with `latency_s` every call advances the clock."""
     activities: list[RemoteActivity] = make_remote_history(count, **options)  # type: ignore[arg-type]
     return FakeActivitySource(
         activities,
@@ -236,7 +237,7 @@ def in_memory_rig(
     latency_s: float = 0.0,
     **source_options: object,
 ) -> SyncRig:
-    """Rig con profilo, archivio e Garmin finti in memoria; `count` corse sul finto Garmin."""
+    """Rig with fake profile, archive and Garmin in memory; `count` runs on the fake Garmin."""
     clock = FakeSyncClock()
     profile = InMemoryProfileStorage().create(
         Path("profilo-di-prova"),
@@ -250,6 +251,7 @@ def in_memory_rig(
         fake,
         fake,
         profile.activities,
+        profile.deleted_activities,
         profile.sync_journal,
         memory,
         memory,

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Tabella dello storico delle misure: righe per data, allineamento, ordinamento e celle vuote."""
+"""Measurement history table: rows by date, alignment, sorting and empty cells."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from ponos_coach.load.domain import (
     Sex,
     ThresholdHeartRate,
 )
-from ponos_coach.profiles.domain import Weight, WeightEntry
+from ponos_coach.profiles.domain import ThresholdPace, ThresholdPaceEntry, Weight, WeightEntry
 from ponos_coach.profiles.measurements import MeasurementHistory
 from ponos_coach.ui.measurement_history_model import (
     Column,
@@ -87,7 +87,11 @@ def test_headers_carry_the_units() -> None:
         "Weight (kg)",
         "Resting HR (bpm)",
         "Maximum HR (bpm)",
-        "Threshold HR (bpm)",
+        "Running LT1 (bpm)",
+        "Running LT2 (bpm)",
+        "Other sports LT1 (bpm)",
+        "Other sports LT2 (bpm)",
+        "Threshold pace (min/km)",
     ]
 
 
@@ -102,12 +106,12 @@ def test_the_view_orders_by_date_most_recent_first_and_by_any_column(qtbot: QtBo
             for row in range(proxy.rowCount())
         ]
 
-    assert days() == ["165", "", "171"]  # 10 maggio, 1 marzo, 1 gennaio
+    assert days() == ["165", "", "171"]  # 10 May, 1 March, 1 January
 
     proxy.sort(Column.DATE, Qt.SortOrder.AscendingOrder)
     assert days() == ["171", "", "165"]
     proxy.sort(Column.THRESHOLD, Qt.SortOrder.AscendingOrder)
-    assert days() == ["", "165", "171"]  # la cella vuota viene prima
+    assert days() == ["", "165", "171"]  # the empty cell comes first
 
 
 def test_an_empty_history_has_no_rows_and_no_child_rows() -> None:
@@ -117,3 +121,30 @@ def test_an_empty_history_has_no_rows_and_no_child_rows() -> None:
     assert model.rowCount() == 0
     assert model.columnCount() == len(Column)
     assert model.data(model.index(0, 0)) is None
+
+
+def test_the_pace_series_has_its_own_dates_and_cells_in_minutes_and_seconds(qtbot: QtBot) -> None:
+    history = MeasurementHistory(
+        None,
+        (WeightEntry(date(2026, 3, 1), Weight(690)),),
+        (),
+        (
+            ThresholdPaceEntry(date(2026, 3, 1), ThresholdPace(335)),
+            ThresholdPaceEntry(date(2026, 4, 2), ThresholdPace(300)),
+        ),
+    )
+    model = MeasurementHistoryModel()
+    model.set_history(history)
+    proxy = sorted_history_model(model)
+
+    def paces() -> list[object]:
+        return [
+            proxy.data(proxy.index(row, Column.THRESHOLD_PACE), Qt.ItemDataRole.DisplayRole)
+            for row in range(proxy.rowCount())
+        ]
+
+    assert paces() == ["5:00", "5:35"]  # 2 April, 1 March
+    proxy.sort(Column.THRESHOLD_PACE, Qt.SortOrder.AscendingOrder)
+    assert paces() == ["5:00", "5:35"]
+    proxy.sort(Column.THRESHOLD_PACE, Qt.SortOrder.DescendingOrder)
+    assert paces() == ["5:35", "5:00"]

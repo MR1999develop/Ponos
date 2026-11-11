@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Tabella dello storico delle misure: una riga per data, in sola lettura.
+"""Measurement history table: one row per date, read-only.
 
-Peso e parametri di FC hanno date proprie: una cella è vuota se quel giorno quella misura non è
-stata registrata. I numeri stanno a destra, le unità nell'intestazione; l'ordinamento per colonna
-usa chiavi numeriche. Peso e FC sono dati di salute, solo in locale.
+Weight, HR parameters and threshold pace have their own dates: a cell is empty if that
+measurement was not recorded that day. The cycling and other-activities threshold HR are optional
+parts of the HR entry: their cell is empty when the entry leaves them at the default. Numbers sit
+on the right, units are in the header;
+per-column sorting uses numeric keys. Weight and HR are health data, local only.
 """
 
 from __future__ import annotations
@@ -25,57 +27,72 @@ from PySide6.QtCore import (
 )
 
 from ponos_coach.load.domain import Physiology
-from ponos_coach.profiles.domain import Weight
+from ponos_coach.profiles.domain import ThresholdPace, Weight
 from ponos_coach.profiles.measurements import MeasurementHistory
 
 SORT_ROLE = Qt.ItemDataRole.UserRole
 _ALIGN_RIGHT = int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 _ALIGN_LEFT = int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-_MISSING_SORT_KEY = -1.0  # una cella vuota viene prima di ogni valore, in ordine crescente
+_MISSING_SORT_KEY = -1.0  # an empty cell comes before every value, in ascending order
 _WEIGHT_DECIMALS = 1
+_SECONDS_PER_MINUTE = 60
 
 
 class Column(IntEnum):
-    """Colonne della tabella, nell'ordine in cui compaiono."""
+    """Table columns, in display order."""
 
     DATE = 0
     WEIGHT = 1
     MIN_BPM = 2
     MAX_BPM = 3
-    THRESHOLD = 4
+    RUN_LT1 = 4
+    THRESHOLD = 5  # the running LT2
+    OTHER_LT1 = 6
+    OTHER_THRESHOLD = 7  # the other-sports LT2
+    THRESHOLD_PACE = 8
 
 
 @dataclass(frozen=True, slots=True)
 class HistoryRow:
-    """Le misure registrate in un giorno; `None` dove quel giorno non c'è una voce."""
+    """The measurements recorded on a day; `None` where that day has no entry."""
 
     day: date
     weight: Weight | None
     physiology: Physiology | None
+    pace: ThresholdPace | None = None
 
 
 def history_rows(history: MeasurementHistory) -> tuple[HistoryRow, ...]:
-    """Una riga per data in cui c'è almeno una voce, per data crescente."""
+    """One row per date that has at least one entry, in ascending date order."""
     weights = {entry.valid_from: entry.weight for entry in history.weights}
     physiology = {entry.valid_from: entry.physiology for entry in history.physiology}
-    days = sorted(weights.keys() | physiology.keys())
-    return tuple(HistoryRow(day, weights.get(day), physiology.get(day)) for day in days)
+    paces = {entry.valid_from: entry.pace for entry in history.threshold_paces}
+    days = sorted(weights.keys() | physiology.keys() | paces.keys())
+    return tuple(
+        HistoryRow(day, weights.get(day), physiology.get(day), paces.get(day)) for day in days
+    )
+
+
+def pace_text(pace: ThresholdPace) -> str:
+    """The pace as `m:ss` (per kilometre)."""
+    minutes, seconds = divmod(pace.s_per_km, _SECONDS_PER_MINUTE)
+    return f"{minutes}:{seconds:02d}"
 
 
 def weight_text(weight: Weight) -> str:
-    """Il peso come testo nel formato del luogo, con una cifra decimale."""
+    """The weight as text in the locale's format, with one decimal digit."""
     return QLocale().toString(float(weight.kg), "f", _WEIGHT_DECIMALS)
 
 
 class MeasurementHistoryModel(QAbstractTableModel):
-    """Le righe dello storico di un profilo."""
+    """The rows of a profile's history."""
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._rows: tuple[HistoryRow, ...] = ()
 
     def set_history(self, history: MeasurementHistory) -> None:
-        """Sostituisce le righe."""
+        """Replace the rows."""
         self.beginResetModel()
         self._rows = history_rows(history)
         self.endResetModel()
@@ -83,7 +100,7 @@ class MeasurementHistoryModel(QAbstractTableModel):
     def rowCount(  # noqa: N802 - Qt
         self, parent: QModelIndex | QPersistentModelIndex | None = None
     ) -> int:
-        """Numero di date."""
+        """Number of dates."""
         if parent is not None and parent.isValid():
             return 0
         return len(self._rows)
@@ -91,7 +108,7 @@ class MeasurementHistoryModel(QAbstractTableModel):
     def columnCount(  # noqa: N802 - Qt
         self, parent: QModelIndex | QPersistentModelIndex | None = None
     ) -> int:
-        """Numero di colonne."""
+        """Number of columns."""
         if parent is not None and parent.isValid():
             return 0
         return len(Column)
@@ -102,7 +119,7 @@ class MeasurementHistoryModel(QAbstractTableModel):
         orientation: Qt.Orientation,
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> object:
-        """Intestazioni, con l'unità di misura."""
+        """Headers, with the unit of measure."""
         if orientation != Qt.Orientation.Horizontal or not 0 <= section < len(Column):
             return None
         if role == Qt.ItemDataRole.DisplayRole:
@@ -116,7 +133,7 @@ class MeasurementHistoryModel(QAbstractTableModel):
         index: QModelIndex | QPersistentModelIndex,
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> object:
-        """Testo, allineamento e chiave di ordinamento di una cella."""
+        """Text, alignment and sort key of a cell."""
         if not index.isValid() or not 0 <= index.row() < len(self._rows):
             return None
         column = Column(index.column())
@@ -135,7 +152,11 @@ class MeasurementHistoryModel(QAbstractTableModel):
             Column.WEIGHT: self.tr("Weight (kg)"),
             Column.MIN_BPM: self.tr("Resting HR (bpm)"),
             Column.MAX_BPM: self.tr("Maximum HR (bpm)"),
-            Column.THRESHOLD: self.tr("Threshold HR (bpm)"),
+            Column.RUN_LT1: self.tr("Running LT1 (bpm)"),
+            Column.THRESHOLD: self.tr("Running LT2 (bpm)"),
+            Column.OTHER_LT1: self.tr("Other sports LT1 (bpm)"),
+            Column.OTHER_THRESHOLD: self.tr("Other sports LT2 (bpm)"),
+            Column.THRESHOLD_PACE: self.tr("Threshold pace (min/km)"),
         }
         return headers[column]
 
@@ -147,7 +168,14 @@ def _bpm_of(row: HistoryRow, column: Column) -> int | None:
         return row.physiology.limits.min_bpm
     if column is Column.MAX_BPM:
         return row.physiology.limits.max_bpm
-    return row.physiology.threshold.bpm
+    if column is Column.THRESHOLD:
+        return row.physiology.threshold.bpm
+    entered = {
+        Column.RUN_LT1: row.physiology.run_lt1,
+        Column.OTHER_LT1: row.physiology.other_lt1,
+        Column.OTHER_THRESHOLD: row.physiology.other_threshold,
+    }[column]
+    return None if entered is None else entered.bpm
 
 
 def _text(row: HistoryRow, column: Column) -> str:
@@ -157,6 +185,8 @@ def _text(row: HistoryRow, column: Column) -> str:
         )
     if column is Column.WEIGHT:
         return "" if row.weight is None else weight_text(row.weight)
+    if column is Column.THRESHOLD_PACE:
+        return "" if row.pace is None else pace_text(row.pace)
     bpm = _bpm_of(row, column)
     return "" if bpm is None else QLocale().toString(bpm)
 
@@ -166,6 +196,8 @@ def _sort_key(row: HistoryRow, column: Column) -> float:
         return float(row.day.toordinal())
     if column is Column.WEIGHT:
         return _MISSING_SORT_KEY if row.weight is None else float(row.weight.kg)
+    if column is Column.THRESHOLD_PACE:
+        return _MISSING_SORT_KEY if row.pace is None else float(row.pace.s_per_km)
     bpm = _bpm_of(row, column)
     return _MISSING_SORT_KEY if bpm is None else float(bpm)
 
@@ -173,7 +205,7 @@ def _sort_key(row: HistoryRow, column: Column) -> float:
 def sorted_history_model(
     model: MeasurementHistoryModel, parent: QObject | None = None
 ) -> QSortFilterProxyModel:
-    """Proxy che ordina per colonna con le chiavi del modello (date più recenti prima)."""
+    """Proxy that sorts by column using the model's keys (most recent dates first)."""
     proxy = QSortFilterProxyModel(parent)
     proxy.setSourceModel(model)
     proxy.setSortRole(SORT_ROLE)

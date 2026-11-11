@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Composizione dell'estrattore dello ZIP scaricato: ogni causa di `zipread` diventa una causa
-definitiva della voce del giornale."""
+"""Composition of the downloaded ZIP extractor: each `zipread` cause becomes a definitive
+cause of the journal entry."""
 
 from __future__ import annotations
 
@@ -29,20 +29,20 @@ def test_every_zip_reason_maps_to_a_definitive_failure(reason: ZipReason) -> Non
 
     assert failure not in RETRYABLE_REASONS
     assert failure is not FailureReason.ATTEMPTS_EXHAUSTED
+    assert failure is not FailureReason.REMOTE_NOT_PROVIDED
 
 
-def test_a_garmin_download_with_a_fit_or_a_gpx_gives_the_file_and_its_format() -> None:
+def test_a_garmin_download_with_a_fit_gives_the_file_and_its_format() -> None:
     fit = extract_original_activity(original_zip(1, OriginalKind.FIT))
-    gpx = extract_original_activity(original_zip(1, OriginalKind.GPX))
 
     assert fit.file_format is FileFormat.FIT
-    assert gpx.file_format is FileFormat.GPX
-    assert fit.content and gpx.content
+    assert fit.content
 
 
 @pytest.mark.parametrize(
     ("kind", "reason"),
     [
+        (OriginalKind.GPX, FailureReason.UNSUPPORTED_FORMAT),  # il solo GPX non si usa più
         (OriginalKind.TCX, FailureReason.UNSUPPORTED_FORMAT),
         (OriginalKind.EMPTY_ZIP, FailureReason.UNSUPPORTED_FORMAT),
         (OriginalKind.TRUNCATED_ZIP, FailureReason.ARCHIVE_INVALID),
@@ -81,6 +81,7 @@ with tempfile.TemporaryDirectory() as folder:
         log_dir=base / "logs",
         data_dir=base / "data",
         notifier=Quiet(),
+        map_cache_dir=base / "map-cache",
     )
     window.start()
     app.processEvents()
@@ -97,7 +98,7 @@ with tempfile.TemporaryDirectory() as folder:
 def test_starting_the_app_does_not_import_the_garmin_libraries() -> None:
     env = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
 
-    run = subprocess.run(  # noqa: S603 - interprete corrente, script fisso
+    run = subprocess.run(  # noqa: S603 - current interpreter, fixed script
         [sys.executable, "-c", _STARTUP_SCRIPT],
         capture_output=True,
         text=True,

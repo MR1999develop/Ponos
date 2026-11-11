@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Zone di FC sulla soglia (Friel): confini, secondi per zona e regole del carico."""
+"""HR zones on threshold (user's choice of 2026-11-10): boundaries, seconds, load rules."""
 
 from __future__ import annotations
+
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -14,15 +16,20 @@ from ponos_coach.load.domain import (
     ZONE_COUNT,
     ZONE_STARTS_PERCENT,
     LoadSource,
+    ThresholdHeartRate,
     ZoneSeconds,
     compute_activity_load,
+    load_fingerprint,
     seconds_per_zone,
+    zone_bpm_ranges,
     zone_indices,
     zone_starts_bpm,
 )
-from tests.load.helpers import PHYSIOLOGY, WEIGHT_ONE
+from ponos_coach.load.domain import parameters as parameters_module
+from ponos_coach.load.domain import zones as zones_module
+from tests.load.helpers import PHYSIOLOGY
 
-# FCmin 50, FCmax 190, soglia 170: confini al 85%, 90%, 95% e 100% = 144,5 - 153 - 161,5 - 170.
+# FCmin 50, FCmax 190, threshold 170: boundaries at 72, 85, 95, 103% = 122.4, 144.5, 161.5, 175.1.
 
 
 def series_at_1_hz(*bpm: float) -> HeartRateSeries:
@@ -33,21 +40,24 @@ def zones_of(*bpm: float, threshold: int = 170) -> list[int]:
     return [int(i) for i in zone_indices(np.array(bpm, dtype=np.float64), threshold)]
 
 
-def test_the_project_default_percentages_are_friels_five_zones() -> None:
-    assert ZONE_STARTS_PERCENT == (85, 90, 95, 100)
+def test_the_default_percentages_are_the_five_zones_chosen_by_the_user() -> None:
+    assert ZONE_STARTS_PERCENT == (72, 85, 95, 103)
     assert ZONE_COUNT == 5
 
 
 def test_zone_starts_in_bpm_for_a_threshold_of_170() -> None:
-    assert zone_starts_bpm(170) == (144.5, 153.0, 161.5, 170.0)
+    assert zone_starts_bpm(170) == pytest.approx((122.4, 144.5, 161.5, 175.1))
 
 
 def test_each_boundary_belongs_to_the_higher_zone_on_point_and_off_point() -> None:
-    # Z1 < 85% | Z2 85-89% | Z3 90-94% | Z4 95-99% | Z5 >= 100% della soglia (170)
-    assert zones_of(144, 145) == [0, 1]  # 144,5 è il confine: 144 sotto, 145 sopra
-    assert zones_of(152, 153) == [1, 2]  # 153 è esattamente il 90%: Z3
-    assert zones_of(161, 162) == [2, 3]  # 161,5 è il confine
-    assert zones_of(169, 170) == [3, 4]  # 170 è esattamente il 100%: Z5
+    # Z1 < 72% | Z2 72-84% | Z3 85-94% | Z4 95-102% | Z5 >= 103% of threshold (170)
+    assert zones_of(122, 123) == [0, 1]  # 122.4 is the boundary: 122 below, 123 above
+    assert zones_of(144, 145) == [1, 2]  # 144.5 is the boundary
+    assert zones_of(161, 162) == [2, 3]  # 161.5 is the boundary
+    assert zones_of(175, 176) == [3, 4]  # 175.1 is the boundary
+    assert zones_of(1, 175, threshold=170) == [0, 3]  # 175 is 102.9%: still Z4
+    # a whole threshold: the boundaries 72, 85, 95, 103 are exact
+    assert zones_of(71, 72, 84, 85, 94, 95, 102, 103, threshold=100) == [0, 1, 1, 2, 2, 3, 3, 4]
 
 
 def test_extremes_fall_in_the_first_and_last_zone() -> None:
@@ -55,15 +65,16 @@ def test_extremes_fall_in_the_first_and_last_zone() -> None:
 
 
 def test_boundary_with_a_fractional_threshold_percentage_is_exact() -> None:
-    # soglia 166 (bici di una soglia corsa 170): 85% = 141,1; 90% = 149,4; 95% = 157,7
-    assert zones_of(141, 142, threshold=166) == [0, 1]
-    assert zones_of(149, 150, threshold=166) == [1, 2]
+    # threshold 166 (a fractional share of it):
+    # 72% = 119.52; 85% = 141.1; 95% = 157.7; 103% = 170.98
+    assert zones_of(119, 120, threshold=166) == [0, 1]
+    assert zones_of(141, 142, threshold=166) == [1, 2]
     assert zones_of(157, 158, threshold=166) == [2, 3]
-    assert zones_of(165, 166, threshold=166) == [3, 4]
+    assert zones_of(170, 171, threshold=166) == [3, 4]
 
 
 def test_seconds_per_zone_sums_the_seconds_of_each_zone() -> None:
-    bpm = np.array([100.0, 144.0, 145.0, 152.0, 153.0, 161.0, 162.0, 169.0, 170.0, 190.0])
+    bpm = np.array([100.0, 122.0, 123.0, 144.0, 145.0, 161.0, 162.0, 175.0, 176.0, 190.0])
     seconds = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0])
 
     assert seconds_per_zone(bpm, seconds, 170).values == (3.0, 7.0, 11.0, 15.0, 19.0)
@@ -76,10 +87,10 @@ def test_no_samples_give_zero_seconds_in_every_zone() -> None:
 
 
 def test_activity_load_zone_seconds_by_hand() -> None:
-    """Dieci campioni a 1 Hz, uno per zona più i due estremi: ogni campione vale 1 s."""
-    series = series_at_1_hz(100, 144, 145, 152, 153, 161, 162, 169, 170, 190)
+    """Ten samples at 1 Hz, one per zone plus the two extremes: each sample is worth 1 s."""
+    series = series_at_1_hz(100, 122, 123, 144, 145, 161, 162, 175, 176, 190)
 
-    result = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY, WEIGHT_ONE)
+    result = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY)
 
     assert result.source is LoadSource.HEART_RATE
     assert result.zone_seconds.values == (2.0, 2.0, 2.0, 2.0, 2.0)
@@ -87,73 +98,74 @@ def test_activity_load_zone_seconds_by_hand() -> None:
 
 
 def test_zones_use_the_same_samples_as_the_load_discarded_ones_are_in_no_zone() -> None:
-    # 200 bpm è sopra la massima (190) e 40 sotto la minima (50): scartati e fuori da ogni zona
+    # 200 bpm is above the maximum (190) and 40 below the minimum (50): discarded, in no zone
     series = series_at_1_hz(150, 200, 150, 40, 150, 150, 150, 150, 150, 150)
 
-    result = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY, WEIGHT_ONE)
+    result = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY)
 
     assert result.discarded_samples == 2
-    assert result.zone_seconds.values == (0.0, 8.0, 0.0, 0.0, 0.0)  # 150 bpm = 88% di 170: Z2
+    assert result.zone_seconds.values == (0.0, 0.0, 8.0, 0.0, 0.0)  # 150 bpm = 88% of 170: Z3
     assert result.zone_seconds.total == result.used_samples
 
 
-def test_150_bpm_with_threshold_170_is_zone_two() -> None:
-    result = compute_activity_load(
-        Sport.RUNNING, 3.0, series_at_1_hz(150, 150, 150), PHYSIOLOGY, WEIGHT_ONE
-    )
+def test_150_bpm_with_threshold_170_is_zone_three() -> None:
+    result = compute_activity_load(Sport.RUNNING, 3.0, series_at_1_hz(150, 150, 150), PHYSIOLOGY)
 
-    assert result.zone_seconds.values == (0.0, 3.0, 0.0, 0.0, 0.0)
+    assert result.zone_seconds.values == (0.0, 0.0, 3.0, 0.0, 0.0)
 
 
 def test_gaps_over_ten_seconds_are_in_no_zone() -> None:
     seconds = np.array([0.0, 1.0, 2.0, 30.0, 31.0, 32.0, 33.0, 34.0, 35.0, 36.0])
-    series = HeartRateSeries(seconds, np.full(10, 175.0))
+    series = HeartRateSeries(seconds, np.full(10, 180.0))
 
-    result = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY, WEIGHT_ONE)
+    result = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY)
 
-    # il campione a 2 s vale fino a 30 s (28 s): intervallo escluso dal carico e dalle zone
+    # the sample at 2 s is worth up to 30 s (28 s): interval excluded from load and zones
     assert result.excluded_seconds == 28.0
     assert result.zone_seconds.values == (0.0, 0.0, 0.0, 0.0, 9.0)
 
 
-def test_the_cycling_zones_use_the_bike_threshold_four_bpm_lower() -> None:
-    """T-CALC-06: in bici la soglia è la soglia della corsa meno 4 bpm anche per le zone."""
-    series = series_at_1_hz(*[166.0] * 10)  # 166 bpm = soglia in bici
+def test_the_cycling_zones_use_the_other_sports_lt2_like_every_non_running_sport() -> None:
+    """T-CALC-06: the bike has no threshold of its own: the other-sports LT2, else the running."""
+    series = series_at_1_hz(*[172.0] * 10)  # 103.6% of 166, 101.2% of 170
+    other_166 = replace(PHYSIOLOGY, other_threshold=ThresholdHeartRate(166))
 
-    bike = compute_activity_load(Sport.CYCLING, 10.0, series, PHYSIOLOGY, WEIGHT_ONE)
-    run = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY, WEIGHT_ONE)
+    bike = compute_activity_load(Sport.CYCLING, 10.0, series, other_166)
+    run = compute_activity_load(Sport.RUNNING, 10.0, series, other_166)
+    bike_default = compute_activity_load(Sport.CYCLING, 10.0, series, PHYSIOLOGY)
 
-    assert bike.zone_seconds.values == (0.0, 0.0, 0.0, 0.0, 10.0)  # Z5 sulla soglia della bici
-    assert run.zone_seconds.values == (0.0, 0.0, 0.0, 10.0, 0.0)  # 166/170 = 97,6%: Z4
+    assert bike.zone_seconds.values == (0.0, 0.0, 0.0, 0.0, 10.0)  # Z5: from 103% of its LT2 166
+    assert run.zone_seconds.values == (0.0, 0.0, 0.0, 10.0, 0.0)  # 172/170 = 101.2%: Z4
+    assert bike_default.zone_seconds == run.zone_seconds  # no value entered: the running LT2
 
 
 def test_an_activity_without_heart_rate_has_no_zone_seconds() -> None:
-    result = compute_activity_load(Sport.RUNNING, 3600.0, None, PHYSIOLOGY, WEIGHT_ONE)
+    result = compute_activity_load(Sport.RUNNING, 3600.0, None, PHYSIOLOGY)
 
     assert result.source is LoadSource.ESTIMATE
     assert result.zone_seconds == ZoneSeconds.ZERO
 
 
 def test_an_estimate_from_mostly_missing_samples_keeps_the_measured_zone_seconds() -> None:
-    series = series_at_1_hz(150, 150, 150)  # 3 s misurati su 100 s in movimento
+    series = series_at_1_hz(150, 150, 150)  # 3 s measured out of 100 s moving
 
-    result = compute_activity_load(Sport.RUNNING, 100.0, series, PHYSIOLOGY, WEIGHT_ONE)
+    result = compute_activity_load(Sport.RUNNING, 100.0, series, PHYSIOLOGY)
 
     assert result.source is LoadSource.ESTIMATE
-    assert result.zone_seconds.values == (0.0, 3.0, 0.0, 0.0, 0.0)
+    assert result.zone_seconds.values == (0.0, 0.0, 3.0, 0.0, 0.0)
 
 
 def test_zone_seconds_must_be_five_finite_non_negative_numbers() -> None:
-    with pytest.raises(ValueError, match="servono"):
+    with pytest.raises(ValueError, match="needed"):
         ZoneSeconds((1.0, 2.0))  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="non negativi"):
+    with pytest.raises(ValueError, match="non-negative"):
         ZoneSeconds((1.0, -0.5, 0.0, 0.0, 0.0))
-    with pytest.raises(ValueError, match="finiti"):
+    with pytest.raises(ValueError, match="finite"):
         ZoneSeconds((1.0, float("nan"), 0.0, 0.0, 0.0))
 
 
 def _naive_zone(bpm: int, threshold: int) -> int:
-    """Una zona alla volta con soli interi: la prima percentuale superata dal campione."""
+    """One zone at a time with integers only: the first percentage exceeded by the sample."""
     zone = 0
     for percent in ZONE_STARTS_PERCENT:
         if bpm * 100 >= percent * threshold:
@@ -199,6 +211,78 @@ def test_seconds_per_zone_equal_the_naive_sum_and_add_up_to_the_total(
 def test_zone_seconds_of_a_load_always_add_up_to_the_counted_seconds(bpm: list[int]) -> None:
     series = series_at_1_hz(*[float(v) for v in bpm])
 
-    result = compute_activity_load(Sport.RUNNING, float(len(bpm)), series, PHYSIOLOGY, WEIGHT_ONE)
+    result = compute_activity_load(Sport.RUNNING, float(len(bpm)), series, PHYSIOLOGY)
 
     assert result.zone_seconds.total == pytest.approx(result.used_samples)
+
+
+def test_new_zone_percentages_change_the_seconds_and_the_fingerprint_but_not_the_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The zones only classify the seconds: the TRIMPeq stays as it was, while the
+    fingerprint of the saved loads changes, so the cache recomputes the seconds per zone."""
+    series = series_at_1_hz(100, 122, 123, 144, 145, 161, 162, 175, 176, 190)
+    current = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY)
+    current_print = load_fingerprint(PHYSIOLOGY)
+
+    old_percent = (85, 90, 95, 100)
+    monkeypatch.setattr(zones_module, "ZONE_STARTS_PERCENT", old_percent)
+    monkeypatch.setattr(parameters_module, "ZONE_STARTS_PERCENT", old_percent)
+    previous = compute_activity_load(Sport.RUNNING, 10.0, series, PHYSIOLOGY)
+    previous_print = load_fingerprint(PHYSIOLOGY)
+
+    assert current.trimp_eq == previous.trimp_eq
+    assert current.zone_seconds != previous.zone_seconds
+    assert current_print != previous_print
+
+
+# --- bpm of each zone ---------------------------------------------------------------------
+
+
+def test_the_bpm_of_each_zone_start_at_the_whole_bpm_that_reaches_the_boundary() -> None:
+    # Boundaries 122.4, 144.5, 161.5, 175.1: Z2 starts at 123, not at 122 (122 is still Z1).
+    assert zone_bpm_ranges(170, 50, 190) == (
+        (50, 122),
+        (123, 144),
+        (145, 161),
+        (162, 175),
+        (176, 190),
+    )
+
+
+def test_a_boundary_that_is_a_whole_bpm_belongs_to_the_higher_zone() -> None:
+    # Threshold 150: Z2 starts at exactly 108, Z3 at 127.5 -> 128, Z4 at 142.5 -> 143, Z5 at 155.
+    ranges = zone_bpm_ranges(150, 45, 185)
+
+    assert ranges[1] is not None
+    assert ranges[1][0] == 108
+    assert zones_of(107, 108, threshold=150) == [0, 1]
+    assert ranges[2] == (128, 142)
+    assert ranges[3] == (143, 154)
+
+
+def test_z1_starts_at_the_minimum_and_z5_ends_at_the_maximum() -> None:
+    ranges = zone_bpm_ranges(160, 42, 181)
+
+    assert ranges[0] is not None
+    assert ranges[0][0] == 42
+    assert ranges[4] is not None
+    assert ranges[4][1] == 181
+
+
+def test_the_ranges_agree_with_the_zone_of_every_whole_bpm() -> None:
+    for threshold in (120, 151, 170, 199):
+        ranges = zone_bpm_ranges(threshold, 40, 220)
+        for bpm in range(40, 221):
+            zone = zones_of(float(bpm), threshold=threshold)[0]
+            span = ranges[zone]
+            assert span is not None
+            assert span[0] <= bpm <= span[1]
+
+
+def test_a_zone_with_no_whole_bpm_inside_the_limits_is_none() -> None:
+    # A threshold above the maximum HR leaves Z5 (and part of Z4) out of reach.
+    ranges = zone_bpm_ranges(240, 50, 190)
+
+    assert ranges[4] is None
+    assert ranges[0] == (50, 172)

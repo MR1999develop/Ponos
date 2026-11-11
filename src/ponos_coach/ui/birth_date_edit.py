@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Selettore della data di nascita: limiti del dominio e nessuna data inventata.
+"""Birth date picker: domain limits and no invented date.
 
-Il minimo del controllo è un giorno prima del primo giorno ammesso e vale "non ancora scelta"
-(testo speciale): l'utente vede un invito, non una data finta. Il massimo viene dal dominio
-(`latest_birth_date`). Quando il calendario si apre su una data non scelta, parte da qualche anno
-fa invece che dal valore speciale (dicembre 1899).
+The control's minimum is one day before the first allowed day and means "not yet chosen"
+(special text): the user sees a prompt, not a fake date. The maximum comes from the domain
+(`latest_birth_date`). When the calendar opens on an unchosen date, it starts a few years
+ago rather than at the special value (December 1899).
 """
 
 from __future__ import annotations
@@ -18,18 +18,23 @@ from PySide6.QtWidgets import QDateEdit, QWidget
 from ponos_coach.profiles.domain import MIN_BIRTH_DATE
 from ponos_coach.ui.body_input import latest_birth_date
 
-NOT_SET_DATE = QDate(MIN_BIRTH_DATE.year - 1, 12, 31)  # il valore speciale: "non scelta"
-_CALENDAR_START_YEARS = 30  # anni fa della pagina del calendario quando la data non c'è ancora
+NOT_SET_DATE = QDate(MIN_BIRTH_DATE.year - 1, 12, 31)  # the special value: "not chosen"
+_CALENDAR_START_YEARS = 30  # years ago of the calendar page when there is no date yet
 _DAYS_PER_YEAR = 365
 
 
 def to_qdate(value: date) -> QDate:
-    """La stessa data come `QDate`."""
+    """The same date as a `QDate`."""
     return QDate(value.year, value.month, value.day)
 
 
+def from_qdate(value: QDate) -> date:
+    """The same date as a `date` (the `QDate` must be valid)."""
+    return date(value.year(), value.month(), value.day())
+
+
 class _CalendarStartPage(QObject):
-    """Alla comparsa del calendario, se la data non c'è ancora, ne sceglie la pagina."""
+    """When the calendar appears and there is no date yet, choose its page."""
 
     def __init__(self, edit: QDateEdit, page: QDate) -> None:
         super().__init__(edit)
@@ -37,15 +42,15 @@ class _CalendarStartPage(QObject):
         self._page = page
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt
-        """Imposta la pagina del calendario quando compare e la data non è scelta."""
+        """Set the calendar page when it appears and the date is not chosen."""
         if event.type() == QEvent.Type.Show and self._edit.date() == NOT_SET_DATE:
             self._edit.calendarWidget().setCurrentPage(self._page.year(), self._page.month())
         return super().eventFilter(watched, event)
 
 
 class BirthDateEdit(QDateEdit):
-    """Data di nascita, vuota finché l'utente non la sceglie. `selection_changed` porta la data
-    scelta o `None`."""
+    """Birth date, empty until the user chooses it. `selection_changed` carries the date
+    chosen, or `None`."""
 
     selection_changed = Signal(object)  # date | None
 
@@ -64,12 +69,12 @@ class BirthDateEdit(QDateEdit):
         self.dateChanged.connect(self._on_date_changed)
 
     def selected_date(self) -> date | None:
-        """La data scelta, o `None` se non ancora."""
+        """The chosen date, or `None` if not yet."""
         value = self.date()
         return None if value == NOT_SET_DATE else date(value.year(), value.month(), value.day())
 
     def select(self, value: date | None) -> None:
-        """Mostra una data (o "non scelta") senza che l'utente l'abbia toccata."""
+        """Show a date (or "not chosen") without the user having touched it."""
         self.setDate(NOT_SET_DATE if value is None else to_qdate(value))
 
     def _on_date_changed(self, _value: QDate) -> None:

@@ -1,18 +1,23 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Processi di prova del collaudo, da avviare con `python -I collaudo_workers.py <comando> ...`.
+"""Test processes of the campaign, to be started with `python -I collaudo_workers.py <command> ...`.
 
-Servono ai test che uccidono davvero un processo o ne fanno correre due insieme. Parlano con
-il test per righe di testo: `ready <pid>` quando sono pronti, poi (dove serve) attendono una
-riga sullo standard input come segnale di partenza.
+They serve the tests that really kill a process or run two at once. They talk to
+the test with text lines: `ready <pid>` when they are ready, then (where needed) they wait for a
+line on standard input as the start signal.
 
-- `import <cartella-profilo> <cartella-sorgente> <punto>`: apre il profilo, prende il lock e
-  importa la cartella con l'archivio vero. `<punto>` dice dove fermarsi e attendere la morte:
-  `none` (mai: stampa `progress <n>` dopo ogni file e `finished`), `op:<n>` (prima della n-esima
-  operazione di scrittura dell'archivio), `before_add:<n>` (dopo l'archivio, prima del record
-  della n-esima attivita), `after_add:<n>` (record scritto ma transazione non confermata).
-- `create <config> <genitore> <prefisso> <quanti>`: crea `quanti` profili sotto `genitore`.
-- `race <config> <cartella>`: tenta di creare un profilo proprio nella cartella indicata.
+- `import <profile-folder> <source-folder> <point>`: opens the profile, takes the lock and
+  imports the folder with the real archive. `<point>` says where to stop and wait for death:
+  `none` (never: prints `progress <n>` after each file and `finished`), `op:<n>` (before the n-th
+  write operation of the archive), `before_add:<n>` (after the archive, before the record
+  of the n-th activity), `after_add:<n>` (record written but transaction not committed).
+- `create <config> <parent> <prefix> <how-many>`: creates `how-many` profiles under `parent`.
+- `race <config> <folder>`: tries to create a profile of its own in the given folder.
+- `delete <profile-folder> <point> <identity-key>...`: deletes the activities and stops at `<point>`
+  (`after_remove`: row gone, tombstone not yet written; `before_commit`: both done, transaction
+  still open; `after_commit`; `none`: never stops, prints `finished`).
+- `restore <profile-folder> <point> <identity-key>...`: restores deleted activities and stops at
+  `<point>` (`after_tombstone_removed`, `before_commit`, `after_commit`, `none`).
 """
 
 from __future__ import annotations
@@ -20,13 +25,21 @@ from __future__ import annotations
 import os
 import sys
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any, cast
 
-from ponos_coach.activities.domain import ActivityIdentity, ActivityRecord, GarminActivityId
-from ponos_coach.activities.ports import ActivityIndex
+from ponos_coach.activities.decoding import decode_stored_activity
+from ponos_coach.activities.deletion import DeleteActivities, RestoreActivities
+from ponos_coach.activities.domain import (
+    ActivityIdentity,
+    ActivityRecord,
+    GarminActivityId,
+    identity_from_key,
+)
+from ponos_coach.activities.ports import ActivityIndex, DeletedActivities
 from ponos_coach.activities.use_cases import import_activities
 from ponos_coach.load.domain import HeartRateLimits, Physiology, Sex, ThresholdHeartRate
 from ponos_coach.platform.profile_folders import LocalProfileFolders
@@ -42,17 +55,17 @@ _FIXED_NOW = datetime(2026, 7, 1, 8, 0, tzinfo=UTC)
 
 
 def _say(*words: object) -> None:
-    print(*words, flush=True)  # noqa: T201 - il dialogo col test e su stdout
+    print(*words, flush=True)  # noqa: T201 - the dialogue with the test is on stdout
 
 
 def _wait_for_death() -> None:
-    """Resta fermo finche il test non uccide il processo; se il test chiude, esce comunque."""
+    """Stays still until the test kills the process; if the test closes, it exits anyway."""
     sys.stdin.read()
     os._exit(3)
 
 
 class _Point:
-    """Dove fermarsi: `tipo:n` oppure `none`."""
+    """Where to stop: `kind:n` or `none`."""
 
     def __init__(self, spec: str) -> None:
         kind, _, number = spec.partition(":")
@@ -61,7 +74,7 @@ class _Point:
 
 
 class _CountingOps(OsWriteOps):
-    """Scritture vere, ma ferme prima della n-esima."""
+    """Real writes, but stopped before the n-th."""
 
     def __init__(self, point: _Point) -> None:
         self._point = point
@@ -103,7 +116,7 @@ class _CountingOps(OsWriteOps):
 
 
 class _BlockingIndex:
-    """Indice vero che si ferma attorno alla n-esima aggiunta."""
+    """Real index that stops around the n-th addition."""
 
     def __init__(self, inner: ActivityIndex, point: _Point) -> None:
         self._inner = inner
@@ -138,8 +151,17 @@ class _BlockingIndex:
     def list_by_start(self) -> Sequence[ActivityRecord]:
         return self._inner.list_by_start()
 
+    def list_started_between(self, first: datetime, last: datetime) -> Sequence[ActivityRecord]:
+        return self._inner.list_started_between(first, last)
+
+    def first_start_at_or_after(self, instant: datetime) -> datetime | None:
+        return self._inner.first_start_at_or_after(instant)
+
     def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
         return self._inner.find_by_garmin_id(garmin_id)
+
+    def remove(self, identity: ActivityIdentity) -> None:
+        self._inner.remove(identity)
 
     def link_garmin_id(self, identity: ActivityIdentity, garmin_id: GarminActivityId) -> None:
         self._inner.link_garmin_id(identity, garmin_id)
@@ -174,6 +196,101 @@ def _import(profile_folder: str, source_folder: str, spec: str) -> None:
     lock.release()
 
 
+class _Stopper:
+    """Forwards everything to `inner`, but stops (and waits for death) at the chosen moments.
+
+    `after` maps a method name to the point at which the process stops once that method returned;
+    `commit_point` is the point at which it stops just before the transaction commits (the exit of
+    `transaction()` without an error) and `committed_point` just after it committed.
+    """
+
+    def __init__(
+        self,
+        inner: object,
+        wanted: str,
+        after: dict[str, str],
+        commit_point: str,
+        committed_point: str,
+    ) -> None:
+        self._inner = inner
+        self._wanted = wanted
+        self._after = after
+        self._commit_point = commit_point
+        self._committed_point = committed_point
+
+    def _stop(self, point: str) -> None:
+        if point == self._wanted:
+            _say("blocked", point)
+            _wait_for_death()
+
+    def transaction(self) -> AbstractContextManager[None]:
+        outer = self
+
+        class _Tx:
+            def __init__(self) -> None:
+                self._real = cast(Any, outer._inner).transaction()
+
+            def __enter__(self) -> None:
+                self._real.__enter__()
+
+            def __exit__(self, *exc: object) -> bool | None:
+                if exc[0] is None:
+                    outer._stop(outer._commit_point)
+                result = self._real.__exit__(*exc)
+                if exc[0] is None:
+                    outer._stop(outer._committed_point)
+                return cast("bool | None", result)
+
+        return _Tx()
+
+    def __getattr__(self, name: str) -> Callable[..., object]:
+        real = getattr(self._inner, name)
+        point = self._after.get(name)
+        if point is None:
+            return cast("Callable[..., object]", real)
+
+        def wrapped(*args: object, **kwargs: object) -> object:
+            result = real(*args, **kwargs)
+            self._stop(point)
+            return result
+
+        return wrapped
+
+
+def _deletion(profile_folder: str, spec: str, keys: Sequence[str], *, restoring: bool) -> None:
+    folder = Path(profile_folder)
+    lock = LocalProfileFolders(lambda _folder: FolderKind.LOCAL).acquire_lock(folder)
+    opened = SqliteProfileStorage().open(folder)
+    identities = [identity_from_key(key) for key in keys]
+    if restoring:
+        index = _Stopper(opened.activities, spec, {}, "before_commit", "after_commit")
+        deleted = _Stopper(
+            opened.deleted_activities, spec, {"remove": "after_tombstone_removed"}, "", ""
+        )
+        archive = FileArchive.in_profile_folder(folder)
+        restore = RestoreActivities(
+            cast(ActivityIndex, index),
+            cast(DeletedActivities, deleted),
+            archive,
+            decode_stored_activity,
+        )
+        _say("ready", os.getpid())
+        restore(identities)
+    else:
+        index = _Stopper(
+            opened.activities, spec, {"remove": "after_remove"}, "before_commit", "after_commit"
+        )
+        deleted = _Stopper(opened.deleted_activities, spec, {}, "", "")
+        delete = DeleteActivities(
+            cast(ActivityIndex, index), cast(DeletedActivities, deleted), _Clock()
+        )
+        _say("ready", os.getpid())
+        delete(identities)
+    _say("finished")
+    opened.close()
+    lock.release()
+
+
 def _ports(config: str) -> ProfilePorts:
     return ProfilePorts(
         JsonProfileRegistry(Path(config)),
@@ -196,7 +313,7 @@ def _request(folder: Path, name: str) -> NewProfileRequest:
 def _try_create(create: CreateProfile, request: NewProfileRequest) -> str:
     try:
         create(request).close()
-    except Exception as error:  # confine del processo di prova: l'esito va al test
+    except Exception as error:  # boundary of the test process: the outcome goes to the test
         return f"error {type(error).__name__}"
     return "ok"
 
@@ -204,7 +321,7 @@ def _try_create(create: CreateProfile, request: NewProfileRequest) -> str:
 def _create_many(config: str, parent: str, prefix: str, count: int) -> None:
     create = _creator(config)
     _say("ready", os.getpid())
-    sys.stdin.readline()  # segnale di partenza
+    sys.stdin.readline()  # start signal
     for number in range(count):
         folder = Path(parent) / "nuovi" / f"{prefix}-{number}"
         _say(_try_create(create, _request(folder, f"Atleta {prefix} {number}")))
@@ -214,7 +331,7 @@ def _create_many(config: str, parent: str, prefix: str, count: int) -> None:
 def _race(config: str, folder: str) -> None:
     create = _creator(config)
     _say("ready", os.getpid())
-    sys.stdin.readline()  # segnale di partenza
+    sys.stdin.readline()  # start signal
     _say(_try_create(create, _request(Path(folder), f"Atleta {os.getpid()}")))
     _say("finished")
 
@@ -227,6 +344,8 @@ def main(argv: Sequence[str]) -> int:
         _create_many(args[0], args[1], args[2], int(args[3]))
     elif command == "race":
         _race(args[0], args[1])
+    elif command in ("delete", "restore"):
+        _deletion(args[0], args[1], args[2:], restoring=command == "restore")
     else:
         print(f"collaudo_workers: comando sconosciuto: {command}", file=sys.stderr)  # noqa: T201
         return 2

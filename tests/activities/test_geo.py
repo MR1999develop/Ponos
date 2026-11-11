@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""GeoPoint, semplificazione della traccia (RDP) e polyline codificati."""
+"""GeoPoint, track simplification (RDP) and encoded polylines."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from ponos_coach.activities import gpx_decoder
+from ponos_coach.activities import fit_decoder
 from ponos_coach.activities.domain import (
     MAX_POLYLINE_CHARS,
     MAX_TRACK_POINTS,
@@ -56,15 +56,15 @@ def test_valid_points_are_accepted(lat: float, lon: float) -> None:
     ],
 )
 def test_points_outside_the_globe_are_refused(lat: float, lon: float) -> None:
-    with pytest.raises(ValueError, match=r"latitudine|longitudine|finite"):
+    with pytest.raises(ValueError, match=r"latitude|longitude|finite"):
         GeoPoint(lat, lon)
 
 
-# --- Semplificazione ------------------------------------------------------------------------
+# --- Simplification -------------------------------------------------------------------------
 
 
 def naive_rdp(x: list[float], y: list[float], first: int, last: int, tol: float) -> set[int]:
-    """Ramer-Douglas-Peucker ricorsivo e ingenuo, come riferimento."""
+    """Recursive, naive Ramer-Douglas-Peucker, as a reference."""
     if last - first < 2:
         return {first, last}
     sx, sy = x[last] - x[first], y[last] - y[first]
@@ -100,14 +100,14 @@ def test_a_straight_line_collapses_to_its_ends() -> None:
 
 
 def test_a_corner_beyond_the_tolerance_is_kept() -> None:
-    corner = GeoPoint(10.0, 20.001)  # 110 m a est dell'inizio
+    corner = GeoPoint(10.0, 20.001)  # 110 m east of the start
     track = (GeoPoint(10.0, 20.0), corner, GeoPoint(10.001, 20.001))
 
     assert simplify_track(track) == track
 
 
 def test_tolerance_boundary_on_and_off_point() -> None:
-    # Punto centrale a 10 m esatti dal segmento (a nord della retta est-ovest).
+    # Middle point exactly 10 m from the segment (north of the east-west line).
     offset_deg = 10.0 / METERS_PER_DEGREE
     start, end = GeoPoint(0.0, 0.0), GeoPoint(0.0, 0.002)
     middle = GeoPoint(offset_deg, 0.001)
@@ -142,7 +142,7 @@ def test_the_cap_limits_the_points_and_keeps_the_ends() -> None:
 
 
 def test_cap_keeps_the_most_significant_points() -> None:
-    # Un picco da 500 m in mezzo a rumore da pochi metri: con tetto 3 resta il picco.
+    # A 500 m spike amid noise of a few metres: with cap 3 the spike stays.
     rng = random.Random(3)
     track = [GeoPoint(rng.uniform(0, 0.00002), i * 0.0001) for i in range(101)]
     peak = GeoPoint(0.0045, 50 * 0.0001)
@@ -183,12 +183,12 @@ def test_simplification_is_deterministic() -> None:
     ("tolerance", "max_points"), [(-1.0, 10), (math.nan, 10), (math.inf, 10), (5.0, 1), (5.0, 0)]
 )
 def test_invalid_parameters_are_refused(tolerance: float, max_points: int) -> None:
-    with pytest.raises(ValueError, match="tolleranza"):
+    with pytest.raises(ValueError, match="tolerance"):
         simplify_indices([0.0, 1.0, 2.0], [0.0, 1.0, 2.0], tolerance, max_points)
 
 
 def test_mismatched_or_non_finite_columns_are_refused() -> None:
-    with pytest.raises(ValueError, match="stessa lunghezza"):
+    with pytest.raises(ValueError, match="same length"):
         simplify_indices([0.0, 1.0], [0.0])
     with pytest.raises(ValueError, match="finite"):
         simplify_indices([0.0, math.nan, 2.0], [0.0, 1.0, 2.0])
@@ -271,12 +271,12 @@ def test_extreme_corners_round_trip() -> None:
 
 
 def test_too_many_points_are_refused_when_encoding() -> None:
-    with pytest.raises(ValueError, match="troppi"):
+    with pytest.raises(ValueError, match="too many"):
         encode_polyline([GeoPoint(0.0, 0.0)] * (MAX_TRACK_POINTS + 1))
 
 
 def encode_raw(values: list[int]) -> str:
-    """Codifica di interi già scalati (riferimento per costruire polyline ostili)."""
+    """Encoding of already scaled integers (reference to build hostile polylines)."""
     out = []
     for value in values:
         rest = ~(value << 1) if value < 0 else value << 1
@@ -290,16 +290,16 @@ def encode_raw(values: list[int]) -> str:
 @pytest.mark.parametrize(
     ("hostile", "message"),
     [
-        ("_p~i F", "carattere"),  # spazio
-        ("_p~iF\x7f", "carattere"),  # DEL
-        ("_p~iF\n", "carattere"),
-        ("_p~iFè", "carattere"),
-        ("_", "incompleto"),  # valore con continuazione e poi la fine
-        ("_p~iF", "incompleto"),  # una sola coordinata
-        ("a" * (MAX_POLYLINE_CHARS + 1), "lungo"),
-        ("_" * 8, "troppo grande"),
-        (encode_raw([9_100_000, 0]), "latitudine"),
-        (encode_raw([0, 18_100_000]), "longitudine"),
+        ("_p~i F", "character"),  # space
+        ("_p~iF\x7f", "character"),  # DEL
+        ("_p~iF\n", "character"),
+        ("_p~iFè", "character"),
+        ("_", "incomplete"),  # value with continuation and then the end
+        ("_p~iF", "incomplete"),  # a single coordinate
+        ("a" * (MAX_POLYLINE_CHARS + 1), "too long"),
+        ("_" * 8, "too large"),
+        (encode_raw([9_100_000, 0]), "latitude"),
+        (encode_raw([0, 18_100_000]), "longitude"),
     ],
 )
 def test_hostile_polylines_are_refused(hostile: str, message: str) -> None:
@@ -315,4 +315,4 @@ def test_arbitrary_text_never_crashes_the_decoder(text: str) -> None:
 
 def test_earth_radius_is_defined_once_in_geo() -> None:
     assert geo.EARTH_RADIUS_M == 6_371_008.8
-    assert "6_371_008" not in inspect.getsource(gpx_decoder)
+    assert "6_371_008" not in inspect.getsource(fit_decoder)

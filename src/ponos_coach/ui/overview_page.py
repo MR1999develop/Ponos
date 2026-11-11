@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Pagina "Panoramica": vista umile che mostra lo stato deciso da `overview_state`.
+"""Page "Overview": humble view that shows the state decided by `overview_state`.
 
-Quando il calcolo è pronto mostra tre grafici uno sotto l'altro: PMC, carico settimanale per
-sport e tempo nelle zone. Le tre figure (e i loro JSON) si costruiscono insieme fuori dal thread
-della UI.
+When the computation is ready it shows three charts one below the other: PMC, weekly load per
+sport and time in zones. They share the dates: the wheel zooms and a left drag pans one chart,
+and the other two follow. The three figures (and their JSON) are built together off the
+UI thread.
 """
 
 from __future__ import annotations
@@ -12,15 +13,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, timedelta
+from functools import partial
 from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QLocale, Qt, QTime, Signal
 from PySide6.QtWidgets import (
+    QHBoxLayout,
     QLabel,
     QProgressBar,
     QPushButton,
-    QSplitter,
+    QSizePolicy,
     QStackedWidget,
+    QTabBar,
     QVBoxLayout,
     QWidget,
 )
@@ -31,7 +35,7 @@ from ponos_coach.load.use_cases import ProfileActivity
 from ponos_coach.ui.activity_text import sport_text
 from ponos_coach.ui.chart_payload import ChartChrome, PreparedChart
 from ponos_coach.ui.chart_texts import chart_chrome
-from ponos_coach.ui.chart_view import ChartEngine, ChartView
+from ponos_coach.ui.chart_view import ChartEngine, ChartView, DateRange
 from ponos_coach.ui.errors import ErrorMessage
 from ponos_coach.ui.load_figures import (
     WeeklyLoadLabels,
@@ -50,7 +54,7 @@ from ponos_coach.ui.overview_state import (
     page_of,
     primary_action_of,
 )
-from ponos_coach.ui.pmc_figure import ChartActivity, PmcChartLabels, prepare_chart
+from ponos_coach.ui.pmc_figure import ChartActivity, PmcChartLabels, PmcProjection, prepare_chart
 from ponos_coach.ui.state_page import StatePage
 from ponos_coach.ui.tokens import (
     SPACE_2,
@@ -64,16 +68,12 @@ from ponos_coach.ui.tokens import (
 type ChartScheduler = Callable[
     [Callable[[], object], Callable[[object], None], Callable[[ErrorMessage], None]], bool
 ]
-"""Esegue un lavoro fuori dal thread della UI e ne consegna l'esito nel thread della UI."""
-
-
-# Altezze relative dei tre grafici: il PMC ha due pannelli, gli altri uno.
-_CHART_STRETCH = (4, 3, 3)
+"""Run a job off the UI thread and deliver its outcome on the UI thread."""
 
 
 @dataclass(frozen=True, slots=True)
 class OverviewCharts:
-    """I tre grafici della panoramica, pronti da mostrare."""
+    """The overview's three charts, ready to show."""
 
     pmc: PreparedChart
     weekly_load: PreparedChart
@@ -81,21 +81,21 @@ class OverviewCharts:
 
 
 def last_day_of(pmc: PmcSeries) -> date:
-    """L'ultimo giorno della serie PMC (di norma oggi); il primo se è vuota."""
+    """The last day of the PMC series (normally today); the first if it is empty."""
     return pmc.first_day + timedelta(days=max(len(pmc) - 1, 0))
 
 
 def chart_activity_of(activity: ProfileActivity, zone: ZoneInfo) -> ChartActivity:
-    """Attività per il grafico: sport e ora locale come nome nel suggerimento di una barra."""
+    """Activities for the chart: sport and local time as the name in a bar's hint."""
     local = activity.start.astimezone(zone)
     time_text = QLocale().toString(QTime(local.hour, local.minute), QLocale.FormatType.ShortFormat)
     return ChartActivity(
-        activity.local_day, activity.load.load, f"{sport_text(activity.sport)} {time_text}"
+        activity.local_day, activity.load.trimp_eq, f"{sport_text(activity.sport)} {time_text}"
     )
 
 
 class LoadingPage(QWidget):
-    """Avanzamento del calcolo, con Annulla."""
+    """Progress of the computation, with Cancel."""
 
     cancel_requested = Signal()
 
@@ -123,7 +123,7 @@ class LoadingPage(QWidget):
         outer.addStretch(2)
 
     def show_progress(self, done: int, total: int) -> None:
-        """Aggiorna testo e barra; con totale ignoto la barra è indeterminata."""
+        """Update text and bar; with unknown total the bar is indeterminate."""
         if total <= 0:
             self._label.setText(self.tr("Getting ready..."))
             self._bar.setRange(0, 0)
@@ -137,7 +137,7 @@ class LoadingPage(QWidget):
 
 
 class OverviewPage(QWidget):
-    """Stack delle pagine della panoramica."""
+    """Stack of the overview pages."""
 
     action_requested = Signal(object)  # PrimaryAction
     cancel_requested = Signal()
@@ -150,7 +150,9 @@ class OverviewPage(QWidget):
     ) -> None:
         super().__init__(parent)
         self._schedule_chart = schedule_chart
-        self._chart_request = 0  # un esito di una richiesta superata si ignora
+        self._chart_request = 0  # an outcome of a superseded request is ignored
+        self._projection: PmcProjection | None = None  # the plan's part of the PMC, if any
+        self._shown: tuple[Ready, Theme, ZoneInfo] | None = None  # what the charts show now
         self._page_action: PrimaryAction | None = None
         self._state_page = StatePage(self)
         self._state_page.action_requested.connect(self._on_state_action)
@@ -159,11 +161,49 @@ class OverviewPage(QWidget):
         self._chart = ChartView(engine, self.tr("Fitness and fatigue chart"), self)
         self._load_chart = ChartView(engine, self.tr("Weekly load chart"), self)
         self._zones_chart = ChartView(engine, self.tr("Time in zones chart"), self)
-        self._charts = QSplitter(Qt.Orientation.Vertical, self)
-        self._charts.setChildrenCollapsible(False)
-        for index, view in enumerate((self._chart, self._load_chart, self._zones_chart)):
-            self._charts.addWidget(view)
-            self._charts.setStretchFactor(index, _CHART_STRETCH[index])
+        # One page at a time, chosen with two vertical tabs on the chart's left edge (user's
+        # requests of 2026-11-09 and 2026-11-10): the PMC alone, or the weekly load above the
+        # time in zones. The dates stay in step anyway.
+        self._chart_tabs = QTabBar(self)
+        self._chart_tabs.setObjectName("overviewCharts")
+        self._chart_tabs.setAccessibleName(self.tr("Overview charts"))
+        self._chart_tabs.setShape(QTabBar.Shape.RoundedWest)
+        self._chart_tabs.setExpanding(False)
+        self._chart_tabs.setDrawBase(False)
+        # The column must not set the pane's minimum height: in a short pane the tabs scroll.
+        self._chart_tabs.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Ignored)
+        self._chart_tabs.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        # The selected tab is the accent (the system's highlight) and also bold, with a bar on
+        # the side of the chart: never the colour alone.
+        self._chart_tabs.setStyleSheet(
+            f"QTabBar::tab {{ padding: {SPACE_4}px {SPACE_2}px; border-right: 3px solid"
+            " transparent; }"
+            f" QTabBar::tab:selected {{ font-weight: 600; color: palette(highlight);"
+            " border-right: 3px solid palette(highlight); }"
+            " QTabBar::tab:focus { border-right: 3px solid palette(text); }"
+        )
+        self._chart_stack = QStackedWidget(self)
+        weeks = QWidget(self)
+        column = QVBoxLayout(weeks)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(SPACE_2)
+        column.addWidget(self._load_chart, stretch=1)
+        column.addWidget(self._zones_chart, stretch=1)
+        names = (self.tr("Fitness and fatigue"), self.tr("Weekly load and time in zones"))
+        for name, page in zip(names, (self._chart, weeks), strict=True):
+            self._chart_tabs.addTab(name)
+            self._chart_tabs.setTabToolTip(self._chart_tabs.count() - 1, name)
+            self._chart_stack.addWidget(page)
+        for view in self._views():
+            view.x_range_changed.connect(partial(self._follow_dates, view))
+        self._chart_tabs.currentChanged.connect(self._chart_stack.setCurrentIndex)
+        self._chart_tabs.setCurrentIndex(0)
+        self._charts = QWidget(self)
+        row = QHBoxLayout(self._charts)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(SPACE_2)
+        row.addWidget(self._chart_tabs, alignment=Qt.AlignmentFlag.AlignTop)
+        row.addWidget(self._chart_stack, stretch=1)
         self._stack = QStackedWidget(self)
         for widget in (self._state_page, self._loading_page, self._charts):
             self._stack.addWidget(widget)
@@ -173,60 +213,85 @@ class OverviewPage(QWidget):
 
     @property
     def chart(self) -> ChartView:
-        """Vista del grafico PMC."""
+        """The PMC chart view."""
         return self._chart
 
     @property
     def load_chart(self) -> ChartView:
-        """Vista del carico settimanale per sport."""
+        """The weekly load per sport view."""
         return self._load_chart
 
     @property
     def zones_chart(self) -> ChartView:
-        """Vista del tempo nelle zone di FC."""
+        """The time in HR zones view."""
         return self._zones_chart
 
     @property
+    def chart_tabs(self) -> QTabBar:
+        """The vertical tabs on the chart's left that choose the page shown."""
+        return self._chart_tabs
+
+    @property
     def charts_widget(self) -> QWidget:
-        """Il pannello con i tre grafici (la pagina mostrata a calcolo pronto)."""
+        """The panel with the three charts (the page shown when the computation is ready)."""
         return self._charts
 
     def start_engines(self) -> None:
-        """Avvia le pagine web dei tre grafici (dopo il primo `show()` della finestra)."""
+        """Start the three charts' web pages (after the window's first `show()`)."""
         for view in self._views():
             view.start_engine()
 
     def _views(self) -> tuple[ChartView, ChartView, ChartView]:
         return (self._chart, self._load_chart, self._zones_chart)
 
+    def _follow_dates(self, source: ChartView, shown: DateRange | None) -> None:
+        """The user zoomed or panned one chart: the other two show the same dates."""
+        for view in self._views():
+            if view is not source:
+                view.set_x_range(shown)
+
     @property
     def state_page(self) -> StatePage:
-        """Pagina di stato (nessun profilo, vuoto, annullato, errore)."""
+        """State page (no profile, empty, cancelled, error)."""
         return self._state_page
 
     def current_widget(self) -> QWidget | None:
-        """Widget attualmente visibile nello stack."""
+        """Widget currently visible in the stack."""
         return self._stack.currentWidget()
 
     def apply_state(self, state: OverviewState, theme: Theme, zone: ZoneInfo) -> None:
-        """Mostra la pagina decisa da `page_of` per lo stato; `zone` è il fuso del profilo.
+        """Show the page decided by `page_of` for the state; `zone` is the profile's time zone.
 
-        La figura del grafico si costruisce fuori dal thread della UI: finché non è pronta resta
-        la pagina di prima (di solito l'avanzamento).
+        The chart figure is built off the UI thread: until it is ready the previous
+        page stays (usually the progress).
         """
         self._chart_request += 1
         page = page_of(state)
         self._page_action = primary_action_of(page)
         if page is Page.LOADING and isinstance(state, Loading):
+            self._shown = None
             self._loading_page.show_progress(state.done, state.total)
             self._stack.setCurrentWidget(self._loading_page)
         elif page is Page.CHART and isinstance(state, Ready):
+            self._shown = (state, theme, zone)
             self._request_chart(state, theme, zone)
         else:
+            self._shown = None
             self._show_state_page(state)
             self._stack.setCurrentWidget(self._state_page)
 
+    def set_projection(self, projection: PmcProjection | None) -> None:
+        """Show the plan's part of the PMC (dotted, with the races as markers); `None` takes it
+        away. The charts are drawn again only if the projection is not the one already shown."""
+        if projection == self._projection:
+            return
+        self._projection = projection
+        if self._shown is not None:
+            self._chart_request += 1
+            self._request_chart(*self._shown)
+
     def _request_chart(self, state: Ready, theme: Theme, zone: ZoneInfo) -> None:
+        projection = self._projection
         tokens = tokens_for(theme)
         chrome = self._chrome()
         labels = self._chart_labels(chrome)
@@ -240,7 +305,7 @@ class OverviewPage(QWidget):
         def build() -> object:
             through = last_day_of(pmc)
             return OverviewCharts(
-                prepare_chart(pmc, activities, labels, tokens),
+                prepare_chart(pmc, activities, labels, tokens, projection),
                 prepare_weekly_load_chart(overview.weekly_load(through), load_labels, tokens),
                 prepare_weekly_zones_chart(overview.weekly_zones(through), zones_labels, tokens),
             )
@@ -259,7 +324,7 @@ class OverviewPage(QWidget):
                 self._stack.setCurrentWidget(self._state_page)
 
         if not self._schedule_chart(build, show, failed):
-            self._chart_request += 1  # si sta chiudendo: nessun disegno
+            self._chart_request += 1  # closing: no drawing
 
     def _on_state_action(self) -> None:
         if self._page_action is not None:
@@ -282,7 +347,7 @@ class OverviewPage(QWidget):
             case Ready():
                 self._state_page.set_content(
                     self.tr("No activities yet"),
-                    self.tr("To get started, import FIT, GPX or ZIP files."),
+                    self.tr("To get started, import FIT files."),
                     self.tr("Import files..."),
                 )
             case _:
@@ -305,7 +370,17 @@ class OverviewPage(QWidget):
             tsb=self.tr("Form (TSB)"),
             daily_load=self.tr("Daily load"),
             chrome=chrome,
-            load_unit=self.tr("hrTSS per day"),
+            load_unit=self.tr("TRIMPeq per day"),
+            ctl_plan=self.tr("Fitness (CTL), plan"),
+            atl_plan=self.tr("Fatigue (ATL), plan"),
+            tsb_plan=self.tr("Form (TSB), plan"),
+            races=self.tr("Races"),
+            # {priority}: A, B or C; {name}: the race, for example the distance.
+            race_hint=self.tr("Race {priority}: {name}"),
+            today=self.tr("Today"),
+            # {share}: the day's fitness as a percentage of the user's highest fitness of the
+            # last two years (a whole number).
+            peak_share=self.tr("{share}% of your best of the last two years"),
         )
 
     def _load_labels(self, chrome: ChartChrome) -> WeeklyLoadLabels:
@@ -314,7 +389,7 @@ class OverviewPage(QWidget):
             y_axis=self.tr("Load"),
             sports={sport: sport_text(sport) for sport in Sport},
             chrome=chrome,
-            unit=self.tr("hrTSS per week"),
+            unit=self.tr("TRIMPeq per week"),
         )
 
     def _zones_labels(self, chrome: ChartChrome) -> WeeklyZonesLabels:

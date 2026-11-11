@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Caso d'uso `ComputeProfileOverview`: cache, cambio di parametri, escluse, annullamento."""
+"""`ComputeProfileOverview` use case: cache, parameter change, excluded, cancellation."""
 
 from __future__ import annotations
 
@@ -17,14 +17,11 @@ from ponos_coach.activities.domain import (
     ActivityRecord,
     ArchivedFile,
     FileFormat,
-    Sport,
 )
 from ponos_coach.activities.fit_decoder import FitLimits, decode_activity
 from ponos_coach.load.domain import (
     MissingPhysiologyError,
-    SportWeight,
     compute_activity_load,
-    default_weight,
 )
 from ponos_coach.load.use_cases import (
     ComputeProfileOverview,
@@ -32,7 +29,6 @@ from ponos_coach.load.use_cases import (
     ExclusionReason,
     OverviewCancelledError,
     ProfileOverview,
-    SetSportWeights,
 )
 from ponos_coach.profiles.domain import ProfileId, ProfileName
 from ponos_coach.profiles.ports import OpenProfile
@@ -48,7 +44,7 @@ CHANGE_DAY = date(2026, 2, 1)
 
 
 class CountingArchive(InMemoryActivityArchive):
-    """Archivio in memoria che conta le letture."""
+    """In-memory archive that counts the reads."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -74,7 +70,7 @@ def run_bytes(start: datetime, serial: int, bpm: int = 150, minutes: int = 30) -
 
 
 class World:
-    """Un profilo in memoria con il suo archivio e il caso d'uso da avviare."""
+    """An in-memory profile with its archive and the use case to start."""
 
     def __init__(self) -> None:
         self.archive = CountingArchive()
@@ -98,14 +94,11 @@ class World:
     def overview(
         self,
         *,
-        weights: dict[Sport, SportWeight] | None = None,
         cancel_after: int | None = None,
         progress: list[tuple[int, int]] | None = None,
         max_file_bytes: int = 50_000_000,
         decode: Decoder = decode_fit,
     ) -> ProfileOverview:
-        if weights is not None:
-            SetSportWeights(self.profile.activities, self.profile.sport_weights)(weights)
         checks = 0
 
         def is_cancelled() -> bool:
@@ -119,7 +112,6 @@ class World:
             self.profile.physiology,
             self.profile.load_cache,
             decode,
-            sport_weights=self.profile.sport_weights,
             timezone=ROME,
             today=lambda: TODAY,
             max_file_bytes=max_file_bytes,
@@ -131,7 +123,7 @@ class World:
 
 
 def two_runs(world: World) -> tuple[ActivityRecord, ActivityRecord]:
-    """Una corsa prima e una dopo il cambio di parametri del 1 febbraio."""
+    """One run before and one after the parameter change of 1 February."""
     before = world.add_run(datetime(2026, 1, 15, 7, 0, tzinfo=UTC), serial=1)
     after = world.add_run(datetime(2026, 2, 10, 7, 0, tzinfo=UTC), serial=2)
     return before, after
@@ -161,7 +153,7 @@ def test_load_summary_and_local_day_of_each_activity() -> None:
     result = world.overview()
 
     (entry,) = result.activities
-    assert entry.local_day == date(2026, 1, 16)  # 00:30 a Roma
+    assert entry.local_day == date(2026, 1, 16)  # 00:30 in Rome
     assert entry.summary == record.summary
     assert entry.timer_s == record.timer_s
     assert result.pmc.first_day == date(2026, 1, 16)
@@ -194,20 +186,8 @@ def test_changed_parameters_invalidate_the_cache() -> None:
     assert world.archive.reads == 4
 
 
-def test_changed_sport_weights_invalidate_the_cache() -> None:
-    world = World()
-    world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY))
-    two_runs(world)
-    plain = world.overview()
-
-    heavier = world.overview(weights={Sport.RUNNING: SportWeight(1.2)})
-
-    assert world.archive.reads == 4
-    assert heavier.activities[0].load.load == pytest.approx(plain.activities[0].load.load * 1.2)
-
-
 def test_parameter_change_on_a_date_applies_to_later_activities_only() -> None:
-    """T-CALC-05: prima del cambio valgono i vecchi parametri, dopo i nuovi."""
+    """T-CALC-05: before the change the old parameters apply, after it the new ones."""
     world = World()
     world.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
     world.profile.physiology.put(physiology_entry(CHANGE_DAY, 160))
@@ -218,11 +198,7 @@ def test_parameter_change_on_a_date_applies_to_later_activities_only() -> None:
     for record, threshold in ((before, 170), (after, 160)):
         activity = decode_fit(world.archive.read(record.archived, 50_000_000), FileFormat.FIT)
         expected = compute_activity_load(
-            activity.sport,
-            activity.timer_s,
-            activity.heart_rate,
-            physiology(threshold),
-            default_weight(activity.sport),
+            activity.sport, activity.timer_s, activity.heart_rate, physiology(threshold)
         )
         (found,) = [a for a in result.activities if a.identity == record.identity]
         assert found.load == expected
@@ -230,13 +206,13 @@ def test_parameter_change_on_a_date_applies_to_later_activities_only() -> None:
 
 
 def test_full_recalculation_equals_calculation_from_scratch_after_a_change() -> None:
-    """T-CALC-05: dopo il cambio, cache parziale e ricalcolo completo danno lo stesso esito."""
+    """T-CALC-05: after the change, partial cache and full recomputation give the same result."""
     incremental = World()
     incremental.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
     two_runs(incremental)
     incremental.overview()
     incremental.profile.physiology.put(physiology_entry(CHANGE_DAY, 160))
-    after_change = incremental.overview()  # la prima attività resta in cache
+    after_change = incremental.overview()  # the first activity stays in cache
 
     from_scratch = World()
     from_scratch.profile.physiology.put(physiology_entry(FIRST_PARAMS_DAY, 170))
@@ -249,6 +225,7 @@ def test_full_recalculation_equals_calculation_from_scratch_after_a_change() -> 
 
     assert after_change.activities == expected.activities
     assert full.activities == expected.activities
+    assert all(a.load.avg_bpm is not None for a in full.activities)  # HR values travel via cache
     assert np.array_equal(full.pmc.ctl, expected.pmc.ctl)
     assert np.array_equal(after_change.pmc.atl, expected.pmc.atl)
 
@@ -338,7 +315,7 @@ def test_cancellation_raises_and_keeps_the_loads_already_computed() -> None:
 
     result = world.overview()
 
-    assert world.archive.reads == 2  # solo la seconda attività, la prima è in cache
+    assert world.archive.reads == 2  # only the second activity, the first is in cache
     assert len(result.activities) == 2
 
 

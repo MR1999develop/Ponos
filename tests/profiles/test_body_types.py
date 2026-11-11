@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Tipi dei dati personali (altezza, peso, data di nascita): limiti con on e off point."""
+"""Types of personal data (height, weight, date of birth): limits with on and off points."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def test_height_accepts_the_limits_and_the_values_between(cm: int) -> None:
 
 @pytest.mark.parametrize("cm", [-1, 0, 99, 251, 10_000])
 def test_height_refuses_values_outside_100_to_250_cm(cm: int) -> None:
-    with pytest.raises(ValueError, match="altezza"):
+    with pytest.raises(ValueError, match="height"):
         Height(cm)
 
 
@@ -34,7 +34,7 @@ def test_weight_accepts_the_limits_and_the_values_between(tenths: int) -> None:
 
 @pytest.mark.parametrize("tenths", [-1, 0, 199, 3001])
 def test_weight_refuses_values_outside_20_to_300_kg(tenths: int) -> None:
-    with pytest.raises(ValueError, match="peso"):
+    with pytest.raises(ValueError, match="weight"):
         Weight(tenths)
 
 
@@ -44,7 +44,7 @@ def test_weight_refuses_values_outside_20_to_300_kg(tenths: int) -> None:
         (Decimal("20"), 200),
         (Decimal("20.0"), 200),
         (Decimal("70.5"), 705),
-        (Decimal("70.50"), 705),  # zeri finali: stessa quantità
+        (Decimal("70.50"), 705),  # trailing zeros: same quantity
         (Decimal("300"), 3000),
     ],
 )
@@ -55,17 +55,17 @@ def test_weight_from_decimal_kg(kg: Decimal, tenths: int) -> None:
 @pytest.mark.parametrize(
     "kg",
     [
-        Decimal("19.9"),  # off point sotto il minimo
-        Decimal("300.1"),  # off point sopra il massimo
-        Decimal("70.55"),  # due cifre decimali
+        Decimal("19.9"),  # off point below the minimum
+        Decimal("300.1"),  # off point above the maximum
+        Decimal("70.55"),  # two decimal places
         Decimal("70.01"),
         Decimal("NaN"),
         Decimal("Infinity"),
-        Decimal("1E+999999999"),  # esponente enorme: rifiutato senza costruire l'intero
+        Decimal("1E+999999999"),  # huge exponent: rejected without building the integer
     ],
 )
 def test_weight_from_decimal_refuses_what_is_not_a_tenth_in_range(kg: Decimal) -> None:
-    with pytest.raises(ValueError, match="peso"):
+    with pytest.raises(ValueError, match="weight"):
         Weight.from_kg(kg)
 
 
@@ -79,7 +79,7 @@ def test_weight_parse_accepts_comma_and_point(text: str, tenths: int) -> None:
 
 @pytest.mark.parametrize("text", ["", "abc", "70,5,1", "70.55", "19,9", "300,1", "1e3", "x" * 100])
 def test_weight_parse_refuses_non_numbers_and_out_of_range(text: str) -> None:
-    with pytest.raises(ValueError, match="peso"):
+    with pytest.raises(ValueError, match="weight"):
         Weight.parse(text)
 
 
@@ -103,7 +103,7 @@ def test_weight_kg_round_trips_through_text(tenths: int) -> None:
     assert Weight.from_kg(weight.kg) == weight
 
 
-# --- Data di nascita --------------------------------------------------------------------------
+# --- Date of birth --------------------------------------------------------------------------
 
 
 def test_birth_date_on_point_is_five_years_before_today() -> None:
@@ -111,7 +111,7 @@ def test_birth_date_on_point_is_five_years_before_today() -> None:
 
 
 def test_birth_date_off_point_the_day_after_is_refused() -> None:
-    with pytest.raises(ValueError, match="almeno 5 anni"):
+    with pytest.raises(ValueError, match="at least 5 years"):
         BirthDate.on(date(2021, 11, 7), TODAY)
 
 
@@ -124,7 +124,7 @@ def test_birth_date_lower_limit_is_the_first_of_january_1900() -> None:
 
 
 def test_birth_date_in_the_future_is_refused() -> None:
-    with pytest.raises(ValueError, match="almeno 5 anni"):
+    with pytest.raises(ValueError, match="at least 5 years"):
         BirthDate.on(date(2027, 1, 1), TODAY)
 
 
@@ -132,7 +132,7 @@ def test_birth_date_upper_limit_on_a_leap_day_today() -> None:
     leap_day = date(2028, 2, 29)
 
     assert BirthDate.on(date(2023, 2, 28), leap_day).value == date(2023, 2, 28)
-    with pytest.raises(ValueError, match="almeno 5 anni"):
+    with pytest.raises(ValueError, match="at least 5 years"):
         BirthDate.on(date(2023, 3, 1), leap_day)
 
 
@@ -150,7 +150,7 @@ def test_any_date_from_1900_to_five_years_ago_is_valid(day: date) -> None:
 
 @given(st.dates(min_value=date(2021, 11, 7), max_value=date(2100, 1, 1)))
 def test_any_date_less_than_five_years_ago_is_refused(day: date) -> None:
-    with pytest.raises(ValueError, match="almeno 5 anni"):
+    with pytest.raises(ValueError, match="at least 5 years"):
         BirthDate.on(day, TODAY)
 
 
@@ -164,7 +164,7 @@ def test_fixed_data_holds_height_and_birth_date() -> None:
     ("today", "latest"),
     [
         (date(2026, 7, 1), date(2021, 7, 1)),
-        (date(2028, 2, 29), date(2023, 2, 28)),  # il 29 febbraio diventa il 28
+        (date(2028, 2, 29), date(2023, 2, 28)),  # 29 February becomes 28
         (date(2026, 3, 1), date(2021, 3, 1)),
         (date(2005, 1, 1), date(2000, 1, 1)),
     ],
@@ -174,5 +174,5 @@ def test_the_latest_birth_date_is_five_years_before_today_and_is_the_one_birth_d
 ) -> None:
     assert BirthDate.latest(today) == latest
     assert BirthDate.on(latest, today).value == latest
-    with pytest.raises(ValueError, match="data di nascita"):
+    with pytest.raises(ValueError, match="date of birth"):
         BirthDate.on(latest + timedelta(days=1), today)

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Estrazione sicura di una voce di attività da uno ZIP dato come byte (T-SEC-02, T-IMP-04)."""
+"""Safe extraction of an activity entry from a ZIP given as bytes (T-SEC-02, T-IMP-04)."""
 
 from __future__ import annotations
 
@@ -37,10 +37,10 @@ class TestValidArchives:
 
         assert (result.suffix, result.content) == (".fit", PAYLOAD)
 
-    def test_single_gpx_entry_in_a_subfolder_with_upper_case_suffix(self) -> None:
-        result = read_activity_entry(zw.build_zip([("cartella/Corsa.GPX", PAYLOAD)]))
+    def test_single_fit_entry_in_a_subfolder_with_upper_case_suffix(self) -> None:
+        result = read_activity_entry(zw.build_zip([("cartella/Corsa.FIT", PAYLOAD)]))
 
-        assert (result.suffix, result.content) == (".gpx", PAYLOAD)
+        assert (result.suffix, result.content) == (".fit", PAYLOAD)
 
     def test_stored_entries_and_other_files_are_accepted_and_ignored(self) -> None:
         archive = zw.build_zip(
@@ -76,8 +76,12 @@ class TestRejectedArchives:
     def test_zip_without_activity_entry(self) -> None:
         assert reason_of(zw.build_zip([("a.tcx", PAYLOAD)])) is ZipReason.NO_ACTIVITY
 
+    def test_zip_with_only_a_gpx_has_no_activity_entry(self) -> None:
+        # Il solo GPX non si usa più: per la sincronizzazione è "formato non supportato".
+        assert reason_of(zw.build_zip([("a.gpx", PAYLOAD)])) is ZipReason.NO_ACTIVITY
+
     def test_two_activity_entries(self) -> None:
-        archive = zw.build_zip([("a.fit", PAYLOAD), ("b.gpx", PAYLOAD)])
+        archive = zw.build_zip([("a.fit", PAYLOAD), ("b.fit", PAYLOAD)])
 
         assert reason_of(archive) is ZipReason.MULTIPLE_ACTIVITIES
 

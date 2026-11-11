@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Test dello scheletro: pacchetto importabile e punto d'ingresso presente."""
+"""Skeleton test: package importable and entry point present."""
 
 import importlib
 import importlib.metadata

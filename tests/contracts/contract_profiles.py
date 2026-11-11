@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Contratti di `ProfileRegistry` e `ProfileFolders`."""
+"""Contracts of `ProfileRegistry` and `ProfileFolders`."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from tests.contracts.harness import FoldersHarness, RegistryHarness
 
 
 class ProfileRegistryContract:
-    """L'elenco dei profili e l'ultimo usato."""
+    """The list of profiles and the last one used."""
 
     def test_new_registry_is_empty(self, harness: RegistryHarness) -> None:
         assert harness.registry.list_entries() == []
@@ -135,7 +135,7 @@ class ProfileRegistryContract:
 
 
 class ProfileFoldersContract:
-    """Cartelle dei profili: ispezione, creazione, lock esclusivo, cancellazione."""
+    """Profile folders: inspection, creation, exclusive lock, deletion."""
 
     def test_missing_folder_is_reported_missing_with_the_kind_of_its_place(
         self, harness: FoldersHarness
@@ -246,7 +246,7 @@ class ProfileFoldersContract:
 
         state = harness.folders.inspect(folder)
         assert state.state is FolderState.NOT_EMPTY
-        assert state.has_profile_database  # nulla è stato cancellato, nemmeno il database
+        assert state.has_profile_database  # nothing was deleted, not even the database
 
     def test_delete_refuses_a_folder_that_is_not_a_profile(self, harness: FoldersHarness) -> None:
         folder = harness.root / "documenti"

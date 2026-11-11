@@ -1,28 +1,41 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Controller dell'area di lavoro: profili, import e panoramica, tutto nel thread dei dati.
+"""Workspace controller: profiles, import and overview, all on the data thread.
 
-Il controller vive nel thread della UI e tiene lo stato di presentazione; ogni lavoro sul
-profilo (apertura, creazione, import, panoramica, cambio, chiusura) è un `Job` eseguito dal
-`DataThread`, che possiede la connessione SQLite. Gli esiti tornano come segnali. Un esito
-"vecchio" (di una panoramica già sostituita) si ignora. La sincronizzazione con Garmin è del
-`SyncController`, con un thread e una connessione propri; da qui si decidono solo le
-conseguenze (profilo bloccato mentre scarica, panoramica ricalcolata alla fine).
+The controller lives on the UI thread and holds the presentation state; each job on the
+profile (open, create, import, overview, switch, close) is a `Job` run by the
+`DataThread`, which owns the SQLite connection. Outcomes come back as signals. An
+"old" outcome (of an already replaced overview) is ignored. Garmin synchronisation belongs to
+`SyncController`, with its own thread and connection; from here only the
+consequences are decided (profile locked while downloading, overview recomputed at the end).
+
+The plan follows the overview: every time an overview is computed (after opening, an import, a
+synchronisation, a change of measurements) a second job on the data thread rebuilds the
+plan from the loads just computed (`profiles.RebuildPlan`) and saves it if it changed. It never
+blocks the interface and never fails the operation that caused it: if it fails, the data thread
+logs the error once (types only, no health data) and the plan stays as it was.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QObject, Signal, Slot
 
+from ponos_coach.activities.map_queries import TrackDecoder
 from ponos_coach.activities.ports import ActivityArchive, ArchiveError, Clock, ImportSource
-from ponos_coach.activities.use_cases import ImportSummary, import_activities
+from ponos_coach.activities.use_cases import (
+    DeletedHandling,
+    DeletedPolicy,
+    ImportSummary,
+    import_activities,
+)
+from ponos_coach.assessment.domain import DEFAULT_PROTOCOL, ThresholdProtocol
 from ponos_coach.load.use_cases import (
     ComputeProfileOverview,
     Decoder,
@@ -34,6 +47,13 @@ from ponos_coach.profiles.ports import (
     ProfileFolderError,
     ProfileRegistryError,
     ProfileStorageError,
+)
+from ponos_coach.profiles.rebuild_plan import (
+    PlanBuilt,
+    PlanNotBuilt,
+    PlanRefused,
+    RebuildPlan,
+    plan_sources_of,
 )
 from ponos_coach.profiles.use_cases import (
     CreateProfile,
@@ -47,6 +67,8 @@ from ponos_coach.profiles.use_cases import (
     ProfilePorts,
     ProfileSession,
     RemoveProfileFromList,
+    RenamedProfile,
+    RenameProfile,
 )
 from ponos_coach.ui.data_thread import (
     DataThread,
@@ -81,12 +103,12 @@ __all__ = [
 ]
 
 
-# --- Dipendenze composte dal Composition Root ----------------------------------------------
+# --- Dependencies composed by the Composition Root ----------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class ImportSources:
-    """Come si crea la sorgente di un import: da file scelti o da una cartella."""
+    """How to create an import's source: from chosen files or from a folder."""
 
     files: Callable[[Sequence[Path]], ImportSource]
     folder: Callable[[Path], ImportSource]
@@ -94,7 +116,7 @@ class ImportSources:
 
 @dataclass(frozen=True, slots=True)
 class ProfileUseCases:
-    """I casi d'uso dei profili che la UI chiama."""
+    """The profile use cases that the UI calls."""
 
     create: CreateProfile
     open_from_folder: OpenProfileFromFolder
@@ -103,45 +125,48 @@ class ProfileUseCases:
     remove: RemoveProfileFromList
     delete: DeleteProfileFolder
     peek: PeekProfile
+    rename: RenameProfile
 
 
 @dataclass(frozen=True, slots=True)
 class WorkspaceServices:
-    """Tutto ciò che il controller riceve dal Composition Root."""
+    """Everything the controller receives from the Composition Root."""
 
     ports: ProfilePorts
     profiles: ProfileUseCases
     archive_for: Callable[[Path], ActivityArchive]
     import_sources: ImportSources
     decode: Decoder
+    decode_track: TrackDecoder
     clock: Clock
     today: Callable[[ZoneInfo], date]
     sync: SyncServices
     errors: ErrorContext = field(default_factory=ErrorContext)
 
 
-# --- Valori che la UI riceve ----------------------------------------------------------------
+# --- Values the UI receives ----------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class ProfileView:
-    """Il profilo aperto, come lo vede la UI."""
+    """The open profile, as the UI sees it."""
 
     profile_id: ProfileId
     name: ProfileName
     folder: Path
     timezone_name: str
     warnings: tuple[FolderWarning, ...]
+    removed_unsupported: int = 0  # GPX activities removed on opening (notice shown once)
 
     @property
     def zone(self) -> ZoneInfo:
-        """Fuso del profilo (il nome è già stato validato dal dominio)."""
+        """The profile's time zone (the name has already been validated by the domain)."""
         return ZoneInfo(self.timezone_name)
 
 
 @dataclass(frozen=True, slots=True)
 class ImportProgress:
-    """Avanzamento di un import; `total` è 0 finché l'esame della sorgente non è finito."""
+    """Progress of an import; `total` is 0 until the source examination has finished."""
 
     done: int
     total: int
@@ -149,7 +174,7 @@ class ImportProgress:
 
 @dataclass(frozen=True, slots=True)
 class FolderCheck:
-    """Esito dell'esame di una cartella; `inspection` è `None` se non si è potuta leggere."""
+    """Outcome of examining a folder; `inspection` is `None` if it could not be read."""
 
     folder: Path
     inspection: FolderInspection | None
@@ -157,7 +182,7 @@ class FolderCheck:
 
 @dataclass(frozen=True, slots=True)
 class DeletionPreview:
-    """Ciò che la conferma di cancellazione mostra; `activities` è `None` se non contabili."""
+    """What the deletion confirmation shows; `activities` is `None` if they cannot be counted."""
 
     entry: RegistryEntry
     activities: int | None
@@ -165,24 +190,29 @@ class DeletionPreview:
 
 @dataclass(frozen=True, slots=True)
 class ProfileAccess:
-    """Il profilo aperto, per i lavori che girano nel thread dei dati (`run_on_profile`).
+    """The open profile, for jobs that run on the data thread (`run_on_profile`).
 
-    Non lasciare mai la sessione al thread della UI: serve solo dentro il lavoro. `today` è la
-    data di oggi nel fuso del profilo.
+    Never leave the session to the UI thread: it is needed only inside the job. `today` is
+    today's date in the profile's time zone; `context` lets a long job notice that the user (or
+    the closing app) asked to stop.
     """
 
     session: ProfileSession
     archive: ActivityArchive
     zone: ZoneInfo
     decode: Decoder
+    decode_track: TrackDecoder
     today: Callable[[], date]
+    context: JobContext
+    rename: Callable[[str], RenamedProfile]
+    clock: Clock
 
 
-# --- Stato che vive solo nel thread dei dati ------------------------------------------------
+# --- State that lives only on the data thread ------------------------------------------------
 
 
 class NoProfileOpenError(Exception):
-    """Un lavoro sul profilo è partito senza un profilo aperto."""
+    """A job on the profile started without an open profile."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,7 +223,7 @@ class _OpenProfile:
 
 
 class _DataState:
-    """Il profilo aperto. Si tocca solo da lavori del thread dei dati (e dalla sua chiusura)."""
+    """The open profile. Touched only by jobs on the data thread (and by its closing)."""
 
     def __init__(self) -> None:
         self._current: _OpenProfile | None = None
@@ -204,7 +234,7 @@ class _DataState:
         return self._current
 
     def replace(self, new: _OpenProfile) -> None:
-        """Mette il nuovo profilo e chiude il vecchio (un guasto nella chiusura si registra)."""
+        """Set the new profile and close the old one (a failure while closing is logged)."""
         old, self._current = self._current, new
         if old is not None:
             _close_quietly(old)
@@ -218,14 +248,14 @@ class _DataState:
 def _close_quietly(profile: _OpenProfile) -> None:
     try:
         profile.session.close()
-    except Exception as error:  # il profilo vecchio non deve bloccare quello nuovo
+    except Exception as error:  # the old profile must not block the new one
         _LOG.error("Closing the previous profile failed: %s", exception_chain(error))
 
 
 def _remove_orphan_temporaries(archive: ActivityArchive) -> None:
-    """Toglie i temporanei lasciati da una scrittura interrotta; si registra solo il numero.
+    """Remove the temporaries left by an interrupted write; only the count is logged.
 
-    Un guasto qui non impedisce di aprire il profilo: i temporanei restano per la prossima volta.
+    A failure here does not prevent opening the profile: the temporaries stay for next time.
     """
     try:
         removed = archive.remove_orphan_temporaries()
@@ -243,10 +273,11 @@ class _Opened:
 
 
 def _count_activities(peek: PeekProfile, profile_id: ProfileId) -> int | None:
-    """Quante attività ha il profilo (sola lettura, senza aprirlo né migrarlo), o `None`."""
+    """How many activities the profile has (read-only, without opening or migrating it), or
+    `None`."""
     try:
         return peek(profile_id).activity_count
-    except (ProfileStorageError, ProfileRegistryError):  # illeggibile: la conferma lo dice
+    except (ProfileStorageError, ProfileRegistryError):  # unreadable: the confirmation says so
         return None
 
 
@@ -263,11 +294,12 @@ class _Pending:
 
 
 class WorkspaceController(QObject):
-    """Stato dell'area di lavoro e avvio dei lavori nel thread dei dati."""
+    """Workspace state and start of the jobs on the data thread."""
 
-    profiles_changed = Signal(object)  # tuple[RegistryEntry, ...], dal più recente
+    profiles_changed = Signal(object)  # tuple[RegistryEntry, ...], most recent first
     profile_changed = Signal(object)  # ProfileView
     overview_changed = Signal(object)  # OverviewState
+    plan_rebuilt = Signal(object)  # RebuildResult: after each overview; `saved` says if it changed
     import_progress_changed = Signal(object)  # ImportProgress | None
     import_finished = Signal(object)  # ImportReport
     operation_failed = Signal(object)  # ErrorMessage
@@ -280,7 +312,7 @@ class WorkspaceController(QObject):
         super().__init__(parent)
         self._services = services
         self._data = _DataState()
-        self._thread = DataThread(self._data.close)  # senza genitore: vedi `DataThread`
+        self._thread = DataThread(self._data.close)  # no parent: see `DataThread`
         self._thread.progressed.connect(self._on_progress)
         self._thread.completed.connect(self._on_completed)
         self._sync = SyncController(
@@ -295,83 +327,85 @@ class WorkspaceController(QObject):
         self._opening = False
         self._closing = False
         self._overview_stale = False
+        self._test_protocol = DEFAULT_PROTOCOL
         self._import_progress: ImportProgress | None = None
         self._overview_handle: JobHandle | None = None
+        self._plan_handle: JobHandle | None = None
         self._import_handle: JobHandle | None = None
 
     # --- Stato ------------------------------------------------------------------------
 
     @property
     def profile(self) -> ProfileView | None:
-        """Il profilo aperto, se c'è."""
+        """The open profile, if any."""
         return self._profile
 
     @property
     def profiles(self) -> tuple[RegistryEntry, ...]:
-        """I profili dell'elenco, dal più recente."""
+        """The profiles in the list, most recent first."""
         return self._entries
 
     @property
     def sync(self) -> SyncController:
-        """L'account Garmin e la sincronizzazione del profilo aperto."""
+        """The Garmin account and synchronisation of the open profile."""
         return self._sync
 
     @property
     def overview_state(self) -> OverviewState:
-        """Stato della panoramica."""
+        """Overview state."""
         return self._overview_state
 
     @property
     def import_progress(self) -> ImportProgress | None:
-        """Avanzamento dell'import in corso, o `None`."""
+        """Progress of the import in progress, or `None`."""
         return self._import_progress
 
     @property
     def is_opening_profile(self) -> bool:
-        """Vero mentre un profilo si apre, si crea o si cambia."""
+        """True while a profile is opening, being created or being switched."""
         return self._opening
 
     @property
     def is_closing(self) -> bool:
-        """Vero dopo `begin_shutdown`: nessun nuovo lavoro parte più."""
+        """True after `begin_shutdown`: no new job starts any more."""
         return self._closing
 
     @property
     def has_stopped(self) -> bool:
-        """Vero se il thread dei dati e quello dell'account hanno finito (profilo chiuso)."""
+        """True if the data thread and the account thread have finished (profile closed)."""
         return self._thread.has_stopped and self._sync.has_stopped
 
     @property
     def can_change_profile(self) -> bool:
-        """Si può creare, aprire, cambiare, rimuovere o cancellare un profilo (non mentre si
-        importa né mentre si sincronizza: il profilo è in uso)."""
+        """A profile can be created, opened, switched, removed or deleted (not while
+        importing or synchronising: the profile is in use)."""
         return self.can_import_now and not self._sync.is_syncing
 
     @property
     def can_import_now(self) -> bool:
-        """Nessuna apertura, import o chiusura in corso (una sincronizzazione non conta)."""
+        """No opening, import or closing in progress (a synchronisation does not count)."""
         return not self._closing and not self._opening and self._import_progress is None
 
     @property
     def can_import(self) -> bool:
-        """Si può avviare un import, anche mentre si sincronizza (connessioni separate)."""
+        """An import can be started, even while synchronising (separate connections)."""
         return self._profile is not None and self.can_import_now
 
     @property
     def can_edit_profile(self) -> bool:
-        """Si possono cambiare misure e pesi: profilo aperto e nessuna apertura, import, chiusura
-        né calcolo della panoramica in corso (il lavoro aspetterebbe in coda)."""
+        """Measurements can be changed: profile open and no opening, import, closing
+        or overview computation in progress (the job would wait in the queue)."""
         return self._profile is not None and self.can_import_now and self._overview_handle is None
 
     @property
     def can_stop(self) -> bool:
-        """C'è qualcosa da fermare: un import o il calcolo della panoramica."""
+        """There is something to stop: an import or the overview computation."""
         return self._import_progress is not None or self._overview_handle is not None
 
     # --- Comandi ----------------------------------------------------------------------
 
     def start(self) -> None:
-        """Apre l'ultimo profilo usato; senza profili chiede il primo avvio guidato."""
+        """Open the last used profile; without profiles ask for the guided first start."""
         if self._closing:
             return
         self._set_opening(True)
@@ -379,23 +413,23 @@ class WorkspaceController(QObject):
         self._submit(self._list_job(), self._after_startup_list)
 
     def create_profile(self, request: NewProfileRequest) -> bool:
-        """Crea e apre un profilo. Falso (nulla accade) se ora non si può."""
+        """Create and open a profile. False (nothing happens) if it cannot be done now."""
         return self._begin_open(lambda: self._services.profiles.create(request))
 
     def open_profile_folder(self, folder: Path) -> bool:
-        """Apre il profilo che sta in una cartella."""
+        """Open the profile that is in a folder."""
         if self._profile is not None and folder == self._profile.folder:
             return False
         return self._begin_open(lambda: self._services.profiles.open_from_folder(folder))
 
     def switch_profile(self, profile_id: ProfileId) -> bool:
-        """Apre un profilo dell'elenco."""
+        """Open a profile from the list."""
         if self._profile is not None and profile_id == self._profile.profile_id:
             return False
         return self._begin_open(lambda: self._services.profiles.open_registered(profile_id))
 
     def remove_profile(self, profile_id: ProfileId) -> bool:
-        """Toglie un profilo dall'elenco (la cartella e i dati restano)."""
+        """Remove a profile from the list (the folder and the data stay)."""
         if not self.can_change_profile:
             return False
 
@@ -407,7 +441,7 @@ class WorkspaceController(QObject):
         return True
 
     def request_deletion(self, profile_id: ProfileId) -> bool:
-        """Prepara la conferma di cancellazione (nome, cartella, numero di attività)."""
+        """Prepare the deletion confirmation (name, folder, number of activities)."""
         if not self.can_change_profile:
             return False
         services = self._services
@@ -424,7 +458,7 @@ class WorkspaceController(QObject):
         return True
 
     def delete_profile_folder(self, profile_id: ProfileId) -> bool:
-        """Cancella la cartella di un profilo non aperto e lo toglie dall'elenco."""
+        """Delete the folder of a profile that is not open and remove it from the list."""
         if not self.can_change_profile:
             return False
 
@@ -436,7 +470,7 @@ class WorkspaceController(QObject):
         return True
 
     def inspect_folder(self, folder: Path) -> None:
-        """Esamina una cartella (nuova, vuota, piena; locale o di rete) senza bloccare la UI."""
+        """Examine a folder (new, empty, full; local or network) without blocking the UI."""
         if self._closing:
             return
 
@@ -453,25 +487,46 @@ class WorkspaceController(QObject):
         self._submit(job, done)
 
     def import_files(self, paths: Sequence[Path]) -> bool:
-        """Importa file scelti (FIT, GPX, ZIP) nel profilo aperto."""
+        """Import chosen FIT files into the open profile."""
         chosen = tuple(paths)
-        return self._begin_import(lambda: self._services.import_sources.files(chosen))
+        return self._begin_import(
+            lambda: self._services.import_sources.files(chosen), DeletedPolicy.BRING_BACK
+        )
 
     def import_folder(self, folder: Path) -> bool:
-        """Importa una cartella con le sue sottocartelle nel profilo aperto."""
-        return self._begin_import(lambda: self._services.import_sources.folder(folder))
+        """Import a folder with its subfolders into the open profile (activities the user deleted
+        stay deleted: the user did not choose those files)."""
+        return self._begin_import(
+            lambda: self._services.import_sources.folder(folder), DeletedPolicy.LEAVE_OUT
+        )
+
+    @property
+    def test_protocol(self) -> ThresholdProtocol:
+        """The protocol of the threshold test that the plan schedules (the user's choice)."""
+        return self._test_protocol
+
+    def set_test_protocol(self, protocol: ThresholdProtocol) -> None:
+        """The user chose another test protocol: the plan is rebuilt with it from the overview
+        already computed (nothing else is recalculated), like for any other setting of the plan.
+        Without a ready overview the next one will carry it."""
+        if protocol is self._test_protocol:
+            return
+        self._test_protocol = protocol
+        state = self._overview_state
+        if isinstance(state, Ready):
+            self._start_plan(state.overview)
 
     def recalculate_overview(self) -> bool:
-        """Ricalcola la panoramica del profilo aperto."""
+        """Recompute the open profile's overview."""
         if self._profile is None or not self.can_change_profile:
             return False
         self._start_overview()
         return True
 
     def request_overview_refresh(self) -> None:
-        """Ricalcola la panoramica dopo un cambio di misure o di pesi.
+        """Recompute the overview after a change of measurements.
 
-        Se ora non si può (sincronizzazione in corso) lo si fa alla fine del giro.
+        If it cannot be done now (synchronisation in progress) it is done at the end of the round.
         """
         if self._profile is None or self._closing:
             return
@@ -485,24 +540,28 @@ class WorkspaceController(QObject):
         work: Callable[[ProfileAccess], object],
         on_done: Callable[[JobOutcome], None],
     ) -> bool:
-        """Esegue `work` nel thread dei dati sul profilo aperto; l'esito arriva nel thread UI.
+        """Run `work` on the data thread on the open profile; the outcome arrives on the UI thread.
 
-        Falso (nulla parte) se non c'è un profilo aperto o l'app si sta chiudendo. Chi chiama
-        decide cosa fare dell'esito, compreso l'errore.
+        False (nothing starts) if there is no open profile or the app is closing. Whoever calls
+        decides what to do with the outcome, including the error.
         """
         if self._profile is None:
             return False
         services = self._services
         data = self._data
 
-        def job(_context: JobContext) -> object:
+        def job(context: JobContext) -> object:
             current = data.require()
             access = ProfileAccess(
                 current.session,
                 current.archive,
                 current.zone,
                 services.decode,
+                services.decode_track,
                 lambda: services.today(current.zone),
+                context,
+                lambda text: services.profiles.rename(current.session, text),
+                services.clock,
             )
             return work(access)
 
@@ -511,23 +570,40 @@ class WorkspaceController(QObject):
 
         return self._submit(job, done) is not None
 
+    def profile_renamed(self, name: ProfileName) -> None:
+        """Il profilo aperto ha un nome nuovo, già scritto: titolo e menu si aggiornano."""
+        current = self._profile
+        if current is None or current.name == name:
+            return
+        self._profile = replace(current, name=name)
+        self._set_entries(
+            tuple(
+                replace(entry, cached_name=name)
+                if entry.profile_id == current.profile_id
+                else entry
+                for entry in self._entries
+            )
+        )
+        self.profile_changed.emit(self._profile)
+
     def describe_failure(self, error: BaseException) -> ErrorMessage:
-        """Il messaggio per l'utente di un errore, con i dati del Composition Root."""
+        """The user message of an error, with the Composition Root's data."""
         return describe_error(error, self._services.errors)
 
     def cancel_current(self) -> None:
-        """Ferma l'import in corso o, se non c'è, il calcolo della panoramica."""
+        """Stop the import in progress or, if there is none, the overview computation."""
         if self._import_handle is not None:
             self._import_handle.cancel()
         elif self._overview_handle is not None:
             self._overview_handle.cancel()
 
     def begin_shutdown(self) -> None:
-        """Primo tempo della chiusura: annulla i lavori e chiede al thread dei dati di chiudere
-        il profilo. Non attende: chi chiude controlla `has_stopped`. Da qui nessun lavoro parte
-        più; si può ripetere."""
+        """First step of closing: cancel the jobs and ask the data thread to close
+        the profile. It does not wait: whoever closes checks `has_stopped`. From here no job starts
+        any more; can be repeated."""
         self._closing = True
         self._cancel_overview()
+        self._cancel_plan()
         if self._import_handle is not None:
             self._import_handle.cancel()
         self._sync.begin_shutdown()
@@ -540,10 +616,10 @@ class WorkspaceController(QObject):
         on_done: Callable[[object], None],
         on_failed: Callable[[ErrorMessage], None],
     ) -> bool:
-        """Esegue `work` nel thread dei dati e consegna il risultato nel thread della UI.
+        """Run `work` on the data thread and deliver the result on the UI thread.
 
-        Per lavori puri e pesanti che non toccano il profilo (la figura del grafico). Falso se
-        l'app si sta chiudendo. Un lavoro annullato non consegna nulla.
+        For pure, heavy jobs that do not touch the profile (the chart figure). False if
+        the app is closing. A cancelled job delivers nothing.
         """
 
         def job(_context: JobContext) -> object:
@@ -565,7 +641,7 @@ class WorkspaceController(QObject):
         on_done: _DoneHandler,
         on_progress: _ProgressHandler | None = None,
     ) -> JobHandle | None:
-        """Accoda un lavoro; `None` se l'app si sta chiudendo."""
+        """Queue a job; `None` if the app is closing."""
         if self._closing:
             return None
         try:
@@ -602,7 +678,12 @@ class WorkspaceController(QObject):
             try:
                 info = session.info
                 view = ProfileView(
-                    info.profile_id, info.name, session.folder, info.timezone_name, session.warnings
+                    info.profile_id,
+                    info.name,
+                    session.folder,
+                    info.timezone_name,
+                    session.warnings,
+                    session.removed_unsupported_activities,
                 )
                 archive = services.archive_for(session.folder)
                 _remove_orphan_temporaries(archive)
@@ -628,7 +709,6 @@ class WorkspaceController(QObject):
                 session.physiology,
                 session.load_cache,
                 services.decode,
-                sport_weights=session.sport_weights,
                 timezone=current.zone,
                 today=lambda: services.today(current.zone),
                 is_cancelled=context.is_cancelled,
@@ -642,7 +722,7 @@ class WorkspaceController(QObject):
         return job
 
     def _import_job(
-        self, make_source: Callable[[], ImportSource]
+        self, make_source: Callable[[], ImportSource], on_deleted: DeletedPolicy
     ) -> Callable[[JobContext], object]:
         services = self._services
         data = self._data
@@ -656,6 +736,7 @@ class WorkspaceController(QObject):
                     current.archive,
                     current.session.activities,
                     services.clock,
+                    deleted=DeletedHandling(current.session.deleted_activities, on_deleted),
                     report=context.report,
                     is_cancelled=context.is_cancelled,
                 )
@@ -664,7 +745,7 @@ class WorkspaceController(QObject):
 
         return job
 
-    # --- Profili: avvio e apertura ----------------------------------------------------
+    # --- Profiles: start and opening ----------------------------------------------------
 
     def _after_startup_list(self, _job_id: int, outcome: JobOutcome) -> None:
         if not isinstance(outcome, JobSucceeded) or not isinstance(outcome.value, tuple):
@@ -710,7 +791,7 @@ class WorkspaceController(QObject):
         if self._profile is None:
             self._set_overview(Idle())
         else:
-            self._start_overview()  # il profilo di prima resta aperto: riprende la panoramica
+            self._start_overview()  # the previous profile stays open: resume the overview
 
     def _after_list_changed(self, _job_id: int, outcome: JobOutcome) -> None:
         if isinstance(outcome, JobSucceeded) and isinstance(outcome.value, tuple):
@@ -730,19 +811,21 @@ class WorkspaceController(QObject):
         if self._closing:
             return
         self._cancel_overview()
+        self._cancel_plan()
         self._overview_stale = False
         self._set_overview(Loading(0, 0))
         self._overview_handle = self._submit(
             self._overview_job(), self._after_overview, self._on_overview_progress
         )
-        # `_set_overview` ha già avvisato, ma prima che il lavoro fosse registrato: senza questo
-        # i comandi che dipendono dal calcolo in corso (Modifica profilo, Pesi) restano attivi.
+        # `_set_overview` has already notified, but before the job was registered: without this
+        # the commands that depend on the computation in progress (Edit profile) stay
+        # active.
         self.busy_changed.emit()
 
     def _cancel_overview(self) -> None:
         if self._overview_handle is not None:
             self._overview_handle.cancel()
-            self._overview_handle = None  # il suo esito, quando arriva, è "vecchio"
+            self._overview_handle = None  # its outcome, when it arrives, is "old"
 
     def _on_overview_progress(self, job_id: int, done: int, total: int) -> None:
         if self._is_current_overview(job_id) and isinstance(self._overview_state, Loading):
@@ -755,23 +838,70 @@ class WorkspaceController(QObject):
         match outcome:
             case JobSucceeded(ProfileOverview() as overview):
                 self._set_overview(Ready(overview))
+                self._start_plan(overview)
             case JobFailed(error):
                 self._set_overview(Failed(describe_error(error)))
             case _:
                 self._set_overview(Cancelled())
+
+    # --- Piano ------------------------------------------------------------------------
+
+    def _plan_job(
+        self, overview: ProfileOverview, profile_id: ProfileId, protocol: ThresholdProtocol
+    ) -> Callable[[JobContext], object]:
+        services = self._services
+        data = self._data
+
+        def job(context: JobContext) -> object:
+            current = data.require()
+            if current.session.info.profile_id != profile_id or context.is_cancelled():
+                raise JobCancelledError  # another profile is open now, or a newer overview began
+            rebuild = RebuildPlan(
+                plan_sources_of(current.session), lambda: overview, test_protocol=protocol
+            )
+            return rebuild(services.today(current.zone))
+
+        return job
+
+    def _start_plan(self, overview: ProfileOverview) -> None:
+        """Rebuild the plan from this overview, on the data thread, after it."""
+        if self._closing or self._profile is None:
+            return
+        self._cancel_plan()
+        self._plan_handle = self._submit(
+            self._plan_job(overview, self._profile.profile_id, self._test_protocol),
+            self._after_plan,
+        )
+
+    def _cancel_plan(self) -> None:
+        if self._plan_handle is not None:
+            self._plan_handle.cancel()
+            self._plan_handle = None  # its outcome, when it arrives, is "old"
+
+    def _after_plan(self, job_id: int, outcome: JobOutcome) -> None:
+        if self._plan_handle is None or self._plan_handle.job_id != job_id:
+            return
+        self._plan_handle = None
+        # A failure was logged once by the data thread; the plan stays as it was.
+        if isinstance(outcome, JobSucceeded) and isinstance(
+            outcome.value, PlanBuilt | PlanRefused | PlanNotBuilt
+        ):
+            self.plan_rebuilt.emit(outcome.value)
 
     def _is_current_overview(self, job_id: int) -> bool:
         return self._overview_handle is not None and self._overview_handle.job_id == job_id
 
     # --- Import -----------------------------------------------------------------------
 
-    def _begin_import(self, make_source: Callable[[], ImportSource]) -> bool:
+    def _begin_import(
+        self, make_source: Callable[[], ImportSource], on_deleted: DeletedPolicy
+    ) -> bool:
         if not self.can_import:
             return False
-        self._cancel_overview()  # si ricalcola a import finito
+        self._cancel_overview()  # recompute when the import is done
         self._set_import_progress(ImportProgress(0, 0))
         self._import_handle = self._submit(
-            self._import_job(make_source), self._after_import, self._on_import_progress
+            self._import_job(make_source, on_deleted), self._after_import, self._on_import_progress
         )
         return self._import_handle is not None
 
@@ -794,8 +924,8 @@ class WorkspaceController(QObject):
     # --- Sincronizzazione -------------------------------------------------------------
 
     def _after_sync(self, result: SyncResult) -> None:
-        """Alla fine di un giro con attività nuove la panoramica si ricalcola (nel thread dei
-        dati); se un import è in corso lo farà lui alla sua fine."""
+        """At the end of a round with new activities the overview is recomputed (on the data
+        thread); if an import is in progress it will do so at its end."""
         if self._closing or self._profile is None or self._import_progress is not None:
             return
         if new_activity_count(result) > 0 or self._overview_stale:
@@ -823,7 +953,7 @@ class WorkspaceController(QObject):
 
 
 def _entries_or_empty(services: WorkspaceServices) -> tuple[RegistryEntry, ...]:
-    """Elenco dei profili dopo un'apertura; se non si legge, l'apertura vale lo stesso."""
+    """List of profiles after an opening; if it cannot be read, the opening is still valid."""
     try:
         return tuple(services.profiles.list_all())
     except ProfileRegistryError as error:

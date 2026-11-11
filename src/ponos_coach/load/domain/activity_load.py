@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Carico di una singola attività: TRIMP di Banister, hrTSS e carico pesato.
+"""Load of a single activity: TRIMPeq, the only measure of load.
 
-Formule in `PLAN.md` sezione 4.5. Il calcolo è vettoriale (NumPy), senza cicli per campione.
+TRIMPeq is Banister on the running-equivalent intensity, 100 = one hour at the threshold of the
+sport (see `banister`).
+
+Formulas in `PLAN.md` section 4.5. The computation is vectorized (NumPy), with no per-sample loops.
 """
 
 from __future__ import annotations
@@ -15,21 +18,32 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ponos_coach.activities.domain import HeartRateSeries, Sport
-from ponos_coach.load.domain.heart_rate import HeartRateLimits, Physiology, threshold_for_sport
-from ponos_coach.load.domain.sport import SportWeight, typical_intensity
-from ponos_coach.load.domain.zones import ZoneSeconds, seconds_per_zone
+from ponos_coach.load.domain.banister import (
+    BANISTER_COEFFICIENT,
+    POINTS_PER_THRESHOLD_HOUR,
+    equivalent_reserve_ratio,
+    reference_hour_weight,
+)
+from ponos_coach.load.domain.heart_rate import (
+    HeartRateLimits,
+    Physiology,
+    lt1_for_sport,
+    threshold_for_sport,
+)
+from ponos_coach.load.domain.lactate_domains import DomainSeconds, seconds_per_domain
+from ponos_coach.load.domain.sport import typical_intensity
+from ponos_coach.load.domain.zones import ZONE_COUNT, ZoneSeconds, seconds_per_zone, zone_indices
 
-MAX_GAP_S = 10.0  # default del progetto: oltre questo intervallo tra campioni, non si conta
-MAX_BAD_FRACTION = 0.30  # default del progetto: oltre, il carico è una stima
-_SINGLE_SAMPLE_S = 1.0  # validità di un campione unico (nessun intervallo da cui dedurla)
-_BANISTER_COEFFICIENT = 0.64
+MAX_GAP_S = 10.0  # project default: beyond this interval between samples, it is not counted
+MAX_BAD_FRACTION = 0.30  # project default: beyond this, the load is an estimate
+_SINGLE_SAMPLE_S = 1.0  # validity of a single sample (no interval to infer it from)
 _MS_PER_S = 1000
 _PERCENT_DENOMINATOR = 100
 _GOOD_PERCENT = round((1.0 - MAX_BAD_FRACTION) * _PERCENT_DENOMINATOR)  # 70
 
 
 class LoadSource(Enum):
-    """Da dove viene il carico: dalla FC misurata o stimato dalla durata."""
+    """Where the load comes from: measured HR or estimated from the duration."""
 
     HEART_RATE = "heart_rate"
     ESTIMATE = "estimate"
@@ -37,41 +51,32 @@ class LoadSource(Enum):
 
 @dataclass(frozen=True, slots=True)
 class ActivityLoad:
-    """Esito del calcolo del carico di un'attività.
+    """Outcome of the load computation of an activity.
 
-    `used_samples` sono i campioni contati (0 per una stima); `discarded_samples` quelli con
-    FC fuori da `[min, max]`; `excluded_seconds` i secondi di intervalli oltre 10 s non contati.
-    `zone_seconds` sono i secondi dei campioni contati in ciascuna zona di FC (sulla soglia dello
-    sport): gli stessi campioni del carico, quindi senza scarti né buchi; tutti zero se non c'è
-    una serie di FC (anche per una stima fatta con pochi campioni validi i secondi in zona sono
-    quelli misurati).
+    `trimp_eq` is the load, in TRIMPeq (an estimate: see `LoadSource`).
+    `used_samples` are the samples counted (0 for an estimate); `discarded_samples` those with
+    HR outside `[min, max]`; `excluded_seconds` the seconds of intervals over 10 s not counted.
+    `zone_seconds` are the seconds of the counted samples in each HR zone (on the sport's
+    threshold): the same samples as the load, hence with no discards or gaps; all zero if there is
+    no
+    HR series (even for an estimate made with few valid samples the seconds in zone are
+    the measured ones).
+    `avg_bpm` (time-weighted mean, whole bpm) and `max_bpm` are over those same counted samples,
+    also for an estimate; `None` when no sample was counted (no HR series, or all discarded).
     """
 
-    trimp: float
-    hr_tss: float
-    load: float
+    trimp_eq: float
     used_samples: int
     discarded_samples: int
     excluded_seconds: float
     source: LoadSource
     zone_seconds: ZoneSeconds = ZoneSeconds.ZERO
+    avg_bpm: int | None = None
+    max_bpm: int | None = None
 
 
-def trimp_per_minute(hrr: float, k: float) -> float:
-    """TRIMP di un minuto alla riserva cardiaca relativa `hrr` (tra 0 e 1)."""
-    return hrr * _BANISTER_COEFFICIENT * math.exp(k * hrr)
-
-
-def hour_at_threshold_trimp(sport: Sport, physiology: Physiology) -> float:
-    """TRIMP di un'ora alla FC di soglia dello sport (in bici: vedi `threshold_for_sport`)."""
-    limits = physiology.limits
-    threshold = threshold_for_sport(physiology, sport)
-    hrr = (threshold - limits.min_bpm) / limits.reserve_bpm
-    return 60.0 * trimp_per_minute(hrr, physiology.sex.banister_k)
-
-
-def _sample_validity_s(seconds: NDArray[np.float64]) -> NDArray[np.float64]:
-    """Secondi di validità di ogni campione: fino al successivo; l'ultimo vale la mediana."""
+def sample_validity_s(seconds: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Validity seconds of each sample: until the next; the last one takes the median."""
     if seconds.size == 1:
         return np.array([_SINGLE_SAMPLE_S])
     gaps = np.diff(seconds)
@@ -79,7 +84,7 @@ def _sample_validity_s(seconds: NDArray[np.float64]) -> NDArray[np.float64]:
 
 
 def out_of_limits(series: HeartRateSeries, limits: HeartRateLimits) -> NDArray[np.bool_]:
-    """Maschera dei campioni con FC fuori da `[min, max]`: sono quelli scartati dal carico."""
+    """Mask of the samples with HR outside `[min, max]`: those discarded by the load."""
     return ~_in_range(series, limits)
 
 
@@ -87,25 +92,38 @@ def _in_range(series: HeartRateSeries, limits: HeartRateLimits) -> NDArray[np.bo
     return (series.bpm >= limits.min_bpm) & (series.bpm <= limits.max_bpm)
 
 
-def _estimated(  # noqa: PLR0913 - i dati dell'esito, tutti necessari
+def _estimated(
     sport: Sport,
     moving_time_s: float,
-    physiology: Physiology,
-    weight: SportWeight,
     *,
     discarded: int,
     excluded_s: float,
     zones: ZoneSeconds,
+    heart_rate: tuple[int, int] | None = None,
 ) -> ActivityLoad:
-    hr_tss = moving_time_s / 3600.0 * 100.0 * typical_intensity(sport) ** 2
-    trimp = hr_tss / 100.0 * hour_at_threshold_trimp(sport, physiology)
+    """Duration times the typical intensity of the sport: `duration_h * 100 * IF^2`, already in
+    the scale where 100 is one hour at the threshold."""
+    trimp_eq = moving_time_s / 3600.0 * POINTS_PER_THRESHOLD_HOUR * typical_intensity(sport) ** 2
+    avg_bpm, max_bpm = heart_rate if heart_rate is not None else (None, None)
     return ActivityLoad(
-        trimp, hr_tss, hr_tss * weight.value, 0, discarded, excluded_s, LoadSource.ESTIMATE, zones
+        trimp_eq, 0, discarded, excluded_s, LoadSource.ESTIMATE, zones, avg_bpm, max_bpm
     )
 
 
+def _average_and_max_bpm(
+    bpm: NDArray[np.float64], validity_s: NDArray[np.float64]
+) -> tuple[int, int] | None:
+    """Time-weighted mean (rounded to whole bpm) and maximum of the counted samples; `None` if
+    there are none. Zero total weight (repeated timestamps) falls back to the plain mean."""
+    if bpm.size == 0:
+        return None
+    total = float(validity_s.sum())
+    mean = float(np.dot(bpm, validity_s)) / total if total > 0 else float(bpm.mean())
+    return round(mean), round(float(bpm.max()))
+
+
 def _is_mostly_missing(counted_s: float, moving_time_s: float) -> bool:
-    """Vero se i secondi contati sono meno del 70% del tempo in movimento (millisecondi interi)."""
+    """True if the counted seconds are less than 70% of the moving time (whole milliseconds)."""
     counted_ms = round(counted_s * _MS_PER_S)
     moving_ms = round(moving_time_s * _MS_PER_S)
     return counted_ms * _PERCENT_DENOMINATOR < _GOOD_PERCENT * moving_ms
@@ -116,36 +134,34 @@ def compute_activity_load(
     moving_time_s: float,
     series: HeartRateSeries | None,
     physiology: Physiology,
-    weight: SportWeight,
 ) -> ActivityLoad:
-    """Calcola TRIMP, hrTSS e carico pesato di un'attività.
+    """Computes the TRIMPeq of an activity (its load).
 
-    Ogni campione vale fino al successivo (l'ultimo, la mediana degli intervalli); i campioni
-    con FC fuori dai limiti si scartano e si contano; gli intervalli oltre 10 s non si contano.
-    `moving_time_s` è il tempo in movimento (timer dell'attività), non il tempo trascorso, che
-    include le pause. Se i secondi contati sono meno del 70% del tempo in movimento (cioè oltre
-    il 30% scartato o mancante) o non c'è FC, il carico è la stima `durata_h * 100 * IF^2` con
-    l'intensità tipica dello sport, marcata `LoadSource.ESTIMATE`. Il confronto col 70% è in
-    millisecondi interi, senza virgola mobile al limite. Funzione pura e deterministica.
+    Each sample is valid until the next (the last, the median of the intervals); samples
+    with HR out of limits are discarded and counted; intervals over 10 s are not counted.
+    `moving_time_s` is the moving time (activity timer), not the elapsed time, which
+    includes pauses. If the counted seconds are less than 70% of the moving time (i.e. over
+    30% discarded or missing) or there is no HR, the load is the estimate: duration times the
+    typical intensity of the sport (`duration_h * 100 * IF^2`), marked `LoadSource.ESTIMATE`.
+    The comparison with 70% is in whole milliseconds, with no floating point at the boundary.
+    Pure and deterministic function.
 
     Raises:
-        ValueError: se `moving_time_s` non è finito e positivo.
+        ValueError: if `moving_time_s` is not finite and positive.
     """
     if not math.isfinite(moving_time_s) or moving_time_s <= 0:
-        raise ValueError("la durata deve essere finita e positiva")
+        raise ValueError("the duration must be finite and positive")
     if series is None:
         return _estimated(
             sport,
             moving_time_s,
-            physiology,
-            weight,
             discarded=0,
             excluded_s=0.0,
             zones=ZoneSeconds.ZERO,
         )
 
     limits = physiology.limits
-    validity = _sample_validity_s(series.seconds)
+    validity = sample_validity_s(series.seconds)
     in_range = _in_range(series, limits)
     counted = in_range & (validity <= MAX_GAP_S)
     discarded = int(np.count_nonzero(~in_range))
@@ -154,28 +170,91 @@ def compute_activity_load(
     zones = seconds_per_zone(
         series.bpm[counted], validity[counted], threshold_for_sport(physiology, sport)
     )
+    heart_rate = _average_and_max_bpm(series.bpm[counted], validity[counted])
     if _is_mostly_missing(counted_s, moving_time_s):
         return _estimated(
             sport,
             moving_time_s,
-            physiology,
-            weight,
             discarded=discarded,
             excluded_s=excluded_s,
             zones=zones,
+            heart_rate=heart_rate,
         )
 
-    hrr = (series.bpm[counted] - limits.min_bpm) / limits.reserve_bpm
-    per_minute = hrr * _BANISTER_COEFFICIENT * np.exp(physiology.sex.banister_k * hrr)
-    trimp = float(np.sum(validity[counted] / 60.0 * per_minute))
-    hr_tss = 100.0 * trimp / hour_at_threshold_trimp(sport, physiology)
+    samples = _sample_load(series.bpm[counted], validity[counted], physiology, sport)
     return ActivityLoad(
-        trimp,
-        hr_tss,
-        hr_tss * weight.value,
+        float(np.sum(samples)),
         int(np.count_nonzero(counted)),
         discarded,
         excluded_s,
         LoadSource.HEART_RATE,
         zones,
+        *(heart_rate if heart_rate is not None else (None, None)),
+    )
+
+
+def _sample_load(
+    bpm: NDArray[np.float64],
+    validity_s: NDArray[np.float64],
+    physiology: Physiology,
+    sport: Sport,
+) -> NDArray[np.float64]:
+    """TRIMPeq of each counted sample, over its validity seconds: Banister weight of the
+    running-equivalent intensity, 100 = one hour at the threshold of the sport."""
+    limits = physiology.limits
+    hrr = (bpm - limits.min_bpm) / limits.reserve_bpm
+    eq = equivalent_reserve_ratio(hrr, physiology, sport)
+    weight = eq * BANISTER_COEFFICIENT * np.exp(physiology.sex.banister_k * eq)
+    return (
+        POINTS_PER_THRESHOLD_HOUR * (validity_s / 60.0) * weight / reference_hour_weight(physiology)
+    )
+
+
+type ZoneLoad = tuple[float, float, float, float, float]
+"""Part of an activity's load earned in each HR zone (Z1 ... Z5), in TRIMPeq."""
+
+
+def load_per_zone(
+    sport: Sport,
+    series: HeartRateSeries | None,
+    physiology: Physiology,
+    load: ActivityLoad,
+) -> ZoneLoad | None:
+    """How the TRIMPeq of an activity splits among the HR zones.
+
+    Each counted sample (the same as `compute_activity_load`) brings its TRIMPeq to its zone, so the
+    five parts add up to `load.trimp_eq`. None if the load is an estimate (it does not come from the
+    HR) or nothing was counted. Pure and deterministic.
+    """
+    if series is None or load.source is not LoadSource.HEART_RATE:
+        return None
+    validity = sample_validity_s(series.seconds)
+    counted = _in_range(series, physiology.limits) & (validity <= MAX_GAP_S)
+    trimp = _sample_load(series.bpm[counted], validity[counted], physiology, sport)
+    zones = zone_indices(series.bpm[counted], threshold_for_sport(physiology, sport))
+    per_zone = np.bincount(zones, weights=trimp, minlength=ZONE_COUNT)
+    total = float(per_zone.sum())
+    if not total > 0:
+        return None
+    z1, z2, z3, z4, z5 = (float(value) * load.trimp_eq / total for value in per_zone)
+    return (z1, z2, z3, z4, z5)
+
+
+def domain_seconds(
+    sport: Sport, series: HeartRateSeries | None, physiology: Physiology
+) -> DomainSeconds | None:
+    """Seconds below LT1, between LT1 and LT2 and above LT2 on the counted samples.
+
+    The same samples as the load and the zones (in limits, interval up to `MAX_GAP_S`), with the
+    LT1 and LT2 of the sport's group. None if there is no HR series.
+    """
+    if series is None:
+        return None
+    validity = sample_validity_s(series.seconds)
+    counted = _in_range(series, physiology.limits) & (validity <= MAX_GAP_S)
+    return seconds_per_domain(
+        series.bpm[counted],
+        validity[counted],
+        lt1_for_sport(physiology, sport),
+        threshold_for_sport(physiology, sport),
     )

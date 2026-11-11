@@ -20,14 +20,18 @@ Solo ciò che è specifico di questo progetto. Le decisioni e le fasi stanno in
 ## Comandi
 
 - `uv run --locked nox`: tutti i controlli obbligatori (ruff format e lint,
-  `mypy --strict`, `lint-imports`, pytest con pytest-qt, test delle
-  traduzioni, `pip-audit`). La CI esegue esattamente questo.
+  `mypy --strict`, `lint-imports`, pytest con pytest-qt dei test unitari e
+  d'integrazione, test delle traduzioni, `pip-audit`). La CI esegue
+  esattamente questo. I test di proprietà usano 30 esempi; `tests/collaudo`
+  non è compreso (richiesta dell'utente del 2026-11-10: meno test a ogni
+  controllo).
 - `uv run --locked nox -s i18n`: controlla che `ponos_it.ts` sia completo e
   coerente con i sorgenti e genera i `.qm` (già nei controlli di default).
 - `uv run --locked nox -s i18n_update`: aggiorna `ponos_it.ts` dai sorgenti
   (lo usa il traduttore).
-- `uv run --locked nox -s collaudo`: campagna lunga della sezione 7 di `PLAN.md`
-  (fuzzing esteso, mutazione, prestazioni, test di durata).
+- `uv run --locked nox -s collaudo`: tutti i test di `tests/collaudo` e poi la
+  campagna lunga della sezione 7 di `PLAN.md` (fuzzing esteso, mutazione,
+  prestazioni, test di durata); una volta per fase e prima del rilascio.
 - `uv run --locked nox -s dist`: eseguibile PyInstaller, smoke test, `SHA256SUMS`.
 - `uv run ponos-coach`: avvia l'app.
 
@@ -97,6 +101,21 @@ La sessione principale fa domande, piano, orchestrazione e revisione finale
 di ogni fase. In parallelo solo su file che non si sovrappongono, ogni lavoro
 parallelo sul codice nel suo worktree.
 
+Ritmo di lavoro (regola dell'utente del 2026-11-07, per accelerare):
+
+- Gli agenti eseguono solo i controlli del loro perimetro (ruff e mypy sui
+  file toccati, `pytest` delle cartelle toccate); `uv run --locked nox` e
+  `nox -s collaudo` li esegue la sessione principale una volta per fase,
+  prima del commit finale.
+- Ambito congelato: una richiesta nuova durante una fase va in coda alla
+  fase successiva (voce in `PLAN.md`), salvo correzioni di difetti.
+- Più lavoro in parallelo: il nucleo della fase successiva parte in un
+  worktree mentre gira l'interfaccia della fase corrente; i conflitti sui
+  file comuni (finestra principale, schema) li risolve la sessione
+  principale all'unione.
+- Collaudo (`collaudatore`) e revisione (`revisore-codice`) ogni due fasi,
+  sul diff di entrambe.
+
 ## Git
 
 - Autore e committer già nella configurazione del repository; nessuno script
@@ -128,3 +147,30 @@ parallelo sul codice nel suo worktree.
    - Motivo: progetto personale senza certificato di firma del codice.
    - Compensazione: `SHA256SUMS` accanto ai pacchetti; il README spiega
      l'avviso di SmartScreen e la verifica dell'hash.
+3. **Comandi del calendario solo nel menu del giorno** (permanente, richiesta
+   dell'utente del 2026-11-09: "in alto togliere menu calendario"). La regola
+   generale vuole ogni comando nei menu della barra in alto.
+   - Motivo: la barra dei menu resta corta; il calendario è sempre visibile
+     nel suo riquadro e i comandi agiscono sul giorno sotto il mouse.
+   - Compensazione: tutti i comandi stanno nel menu del tasto destro del
+     giorno, con la scorciatoia accanto, e le scorciatoie valgono senza menu
+     (test in `tests/ui/test_main_panes.py` e `tests/ui/test_goals_window.py`).
+4. **Niente menu View** (permanente, richiesta dell'utente del 2026-11-10:
+   "elimina il menu Vista"). La regola generale vuole ogni comando nei menu
+   della barra in alto.
+   - Motivo: i quattro riquadri sono sempre visibili; i comandi "Go to …"
+     spostano solo il fuoco della tastiera e non meritano un menu.
+   - Compensazione: Ctrl+1..4 valgono da tutta la finestra (Panoramica,
+     Calendario, Attività, Mappa), descritti in specifica e README; test in
+     `tests/ui/test_main_panes.py`.
+5. **CI e rilascio solo su Windows** (temporanea, richiesta dell'utente del
+   2026-11-11: "per ora abbandona ubuntu"). La regola generale vuole la CI su
+   Windows e Ubuntu.
+   - Motivo: sul runner Ubuntu di GitHub l'installazione dei pacchetti di
+     sistema per Qt falliva per errori di rete (DNS dei mirror Ubuntu), e
+     bloccava CI e rilascio.
+   - Compensazione: il codice per Linux resta (Secret Service, step `apt`
+     saltati dove `runner.os` non è Linux); per riprendere Ubuntu basta
+     rimettere `ubuntu-latest` nelle matrici di `ci.yml` e `release.yml` e
+     togliere questa eccezione. Finché vale, il README non promette il
+     pacchetto Ubuntu.

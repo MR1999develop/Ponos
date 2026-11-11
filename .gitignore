@@ -28,3 +28,8 @@ CLAUDE.local.md
 
 # Dati dello spike: mai versionati (possono contenere dati personali)
 experiments/spike-data/
+
+# Prototipo della mappa: librerie scaricate da npm e dati sintetici generati
+experiments/map_prototype/vendor/
+experiments/map_prototype/data.js
+experiments/map_prototype/results-*.json

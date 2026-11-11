@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Lettura sicura di ZIP non fidati: modulo di basso livello che non importa il progetto."""
+"""Safe reading of untrusted ZIPs: low-level module that does not import the project."""
 
 from ponos_coach.zipread.archive import (
     ACTIVITY_SUFFIXES,

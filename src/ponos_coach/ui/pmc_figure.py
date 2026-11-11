@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Figura Plotly del PMC: funzione pura da `PmcSeries` e attivita a `go.Figure`.
+"""Plotly PMC figure: pure function from `PmcSeries` and activities to `go.Figure`.
 
-Due pannelli con lo stesso asse delle date: in alto CTL, ATL e carico giornaliero (barre da
-zero), in basso la forma (TSB), che puo essere negativa. La legenda segue l'ordine delle serie.
-CTL e ATL si distinguono anche senza il colore: ATL e tratteggiata e ogni linea porta il suo nome
-accanto all'ultimo punto.
-Il payload per la pagina e un JSON prodotto da `json.dumps` (`render_script`).
+One panel (the user's request of 2026-11-09): CTL, ATL, the form (TSB, which can be negative,
+so zero is marked) and the daily load (from zero, drawn as one stepped area: a bar per day costs
+the browser a shape each, and with years of days zooming lagged). The legend follows the series
+order.
+CTL and ATL are told apart even without colour: ATL is dashed and each line carries its name
+next to the last point.
+The page payload is a JSON produced by `json.dumps` (`render_script`).
 """
 
 from __future__ import annotations
@@ -15,34 +17,41 @@ import html
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
+import numpy as np
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
-from ponos_coach.load.domain import PmcSeries
+from ponos_coach.goals.domain import Priority
+from ponos_coach.load.domain import PmcSeries, ctl_share_of_recent_peak
+from ponos_coach.planning.domain import PmcPoint
 from ponos_coach.ui.chart_payload import (
     LEGEND_Y,
     ChartChrome,
     PreparedChart,
+    XNavigation,
     axis_style,
     base_layout,
     prepare_figure,
 )
 from ponos_coach.ui.tokens import ThemeTokens
 
-LOAD_UNIT = "hrTSS per day"  # unita del carico giornaliero e delle sue medie (CTL, ATL, TSB)
-MAX_NAMES_PER_DAY = 5  # nomi di attivita mostrati nel suggerimento di una barra
+LOAD_UNIT = "TRIMPeq per day"  # unit of the daily load and its averages (CTL, ATL, TSB)
+MAX_NAMES_PER_DAY = 5  # activity names shown in a bar's hint
 _LINE_WIDTH = 2
-_ATL_DASH = "dash"  # ATL e tratteggiata: CTL e ATL differiscono anche senza il colore
-_END_LABEL_SHIFT = 4  # pixel tra l'ultimo punto e il nome della linea
-_TOP_ROW_SHARE = 0.68
+_ATL_DASH = "dash"  # ATL is dashed: CTL and ATL differ even without colour
+_TSB_DASH = "dashdot"  # the form shares the panel: it differs from CTL even without colour
+_END_LABEL_SHIFT = 4  # pixels between the last point and the line's name
+_PROJECTION_DASH = "dot"  # the plan's part: dotted; the real part is solid (CTL, TSB) or dashed
+_PAST_DAYS_SHOWN = 90  # with a projection the chart opens on the last three months and the plan
+_MARKER_SIZE = 11
+_PERCENT = 100
 EXPORT_FILE_STEM = "ponos-coach-pmc"
 
 
 @dataclass(frozen=True, slots=True)
 class ChartActivity:
-    """Ciò che il grafico sa di un'attività: giorno locale, carico e nome da mostrare."""
+    """What the chart knows about an activity: local day, load and name to show."""
 
     local_day: date
     load: float
@@ -51,7 +60,7 @@ class ChartActivity:
 
 @dataclass(frozen=True, slots=True)
 class PmcChartLabels:
-    """Testi del grafico, già tradotti dalla vista."""
+    """Chart texts, already translated by the view."""
 
     x_axis: str
     load_axis: str
@@ -61,11 +70,44 @@ class PmcChartLabels:
     tsb: str
     daily_load: str
     chrome: ChartChrome
-    load_unit: str = LOAD_UNIT  # "hrTSS per day", tradotto come frase intera
+    load_unit: str = LOAD_UNIT  # "TRIMPeq per day", translated as a whole sentence
+    # Texts of the projection (used only with one): whole names, translated by the view.
+    ctl_plan: str = "Fitness (CTL), plan"
+    atl_plan: str = "Fatigue (ATL), plan"
+    tsb_plan: str = "Form (TSB), plan"
+    races: str = "Races"
+    race_hint: str = "Race {priority}: {name}"  # {priority}: A, B or C; {name}: the race
+    today: str = "Today"
+    # {share}: the CTL of the day as a percentage of the user's highest CTL of the last two years.
+    peak_share: str = "{share}% of your best of the last two years"
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectedRace:
+    """A race of the plan, as a marker on the projection: day, priority and a name to show."""
+
+    day: date
+    priority: Priority
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class PmcProjection:
+    """The future part of the PMC: the plan's points (CTL and ATL at the end of each day, TSB of
+    the morning) and the races on them."""
+
+    points: tuple[PmcPoint, ...]
+    races: tuple[ProjectedRace, ...] = ()
+
+
+def _with_opacity(color: str, opacity: float) -> str:
+    """A `#rrggbb` colour with an opacity, as CSS `rgba()`."""
+    red, green, blue = (int(color[i : i + 2], 16) for i in (1, 3, 5))
+    return f"rgba({red},{green},{blue},{opacity})"
 
 
 def daily_load_of(activities: Sequence[ChartActivity], days: Sequence[date]) -> list[float]:
-    """Carico (pesato) di ogni giorno della serie: somma delle attivita di quel giorno locale."""
+    """Load (TRIMPeq) of each day of the series: sum of that local day's activities."""
     totals: dict[date, float] = defaultdict(float)
     for entry in activities:
         totals[entry.local_day] += entry.load
@@ -73,7 +115,7 @@ def daily_load_of(activities: Sequence[ChartActivity], days: Sequence[date]) -> 
 
 
 def _day_hover_text(activities: Sequence[ChartActivity], days: Sequence[date]) -> list[str]:
-    """Nomi dei file di ogni giorno come testo: le entita HTML neutralizzano `<` e `&`."""
+    """File names of each day as text: HTML entities neutralise `<` and `&`."""
     names: dict[date, list[str]] = defaultdict(list)
     for entry in activities:
         names[entry.local_day].append(html.escape(entry.name, quote=True))
@@ -91,16 +133,12 @@ def build_pmc_figure(
     activities: Sequence[ChartActivity],
     labels: PmcChartLabels,
     tokens: ThemeTokens,
+    projection: PmcProjection | None = None,
 ) -> go.Figure:
-    """Figura del PMC. Serie, in quest'ordine: CTL, ATL, TSB (linee), carico giornaliero (barre)."""
+    """PMC figure. Series, in this order: CTL, ATL, TSB (lines), daily load (bars); with a
+    projection then the plan's CTL, ATL and TSB (dotted, named "plan") and the races."""
     days = pmc.days
-    figure = make_subplots(
-        rows=2,
-        cols=1,
-        shared_xaxes=True,
-        row_heights=[_TOP_ROW_SHARE, 1 - _TOP_ROW_SHARE],
-        vertical_spacing=0.06,
-    )
+    figure = go.Figure()
     unit = labels.load_unit
     hover = f"%{{x|%Y-%m-%d}}<br>%{{y:.1f}} {unit}<extra>%{{fullData.name}}</extra>"
 
@@ -114,31 +152,34 @@ def build_pmc_figure(
             hovertemplate=hover,
         )
 
-    figure.add_trace(line(labels.ctl, pmc.ctl, tokens.ctl), row=1, col=1)
-    figure.add_trace(line(labels.atl, pmc.atl, tokens.atl, _ATL_DASH), row=1, col=1)
-    figure.add_trace(line(labels.tsb, pmc.tsb, tokens.tsb), row=2, col=1)
+    ctl_line = line(labels.ctl, pmc.ctl, tokens.ctl)
+    ctl_line.customdata = np.round(ctl_share_of_recent_peak(pmc) * _PERCENT)
+    # the share of the recent best: the absolute CTL depends on parameters and sports
+    share_text = html.escape(labels.peak_share).replace("{share}", "%{customdata:.0f}")
+    ctl_line.hovertemplate = hover.replace("<extra>", f" ({share_text})<extra>")
+    figure.add_trace(ctl_line)
+    figure.add_trace(line(labels.atl, pmc.atl, tokens.atl, _ATL_DASH))
+    figure.add_trace(line(labels.tsb, pmc.tsb, tokens.tsb, _TSB_DASH))
     figure.add_trace(
-        go.Bar(
+        go.Scatter(
             x=days,
             y=daily_load_of(activities, days),
             name=labels.daily_load,
-            marker={"color": tokens.daily_load, "opacity": tokens.daily_load_opacity},
+            mode="lines",
+            line={"color": tokens.daily_load, "width": 0, "shape": "hv"},
+            fill="tozeroy",  # from zero, like the bars it replaces
+            fillcolor=_with_opacity(tokens.daily_load, tokens.daily_load_opacity),
             customdata=_day_hover_text(activities, days),
             hovertemplate=hover.replace("<extra>", "<br>%{customdata}<extra>"),
         ),
-        row=1,
-        col=1,
     )
-    figure.update_xaxes(axis_style(tokens, ""))
-    figure.update_xaxes(axis_style(tokens, labels.x_axis), type="date", row=2, col=1)
+    has_projection = projection is not None and len(projection.points) > 0
+    if projection is not None and has_projection:
+        _add_projection(figure, pmc, projection, labels, tokens, hover)
+    figure.update_xaxes(axis_style(tokens, labels.x_axis), type="date")
     figure.update_yaxes(
-        axis_style(tokens, f"{labels.load_axis} ({unit})"),
-        rangemode="tozero",  # le barre partono da zero
-        row=1,
-        col=1,
-    )
-    figure.update_yaxes(
-        axis_style(tokens, f"{labels.form_axis} ({unit})"), zeroline=True, row=2, col=1
+        axis_style(tokens, f"{labels.load_axis} / {labels.form_axis} ({unit})"),
+        zeroline=True,  # the form goes below zero; the load starts from it
     )
     figure.update_layout(
         **base_layout(tokens),
@@ -148,14 +189,120 @@ def build_pmc_figure(
         hovermode="x unified",
         annotations=_end_labels(pmc, labels, tokens),
     )
+    if projection is not None and has_projection:
+        _frame_projection(figure, pmc, projection, labels, tokens)
     return figure
+
+
+def _add_projection(
+    figure: go.Figure,
+    pmc: PmcSeries,
+    projection: PmcProjection,
+    labels: PmcChartLabels,
+    tokens: ThemeTokens,
+    hover: str,
+) -> None:
+    """The plan's CTL, ATL and TSB after the last real day (joined to it, so the line does not
+    break), dotted and named "plan"; and the races as markers on the CTL line."""
+    points = projection.points
+    days = ([pmc.days[-1]] if len(pmc) else []) + [point.day for point in points]
+
+    def series(name: str, joined: list[float], color: str) -> None:
+        figure.add_trace(
+            go.Scatter(
+                x=days,
+                y=joined,
+                name=name,
+                mode="lines",
+                line={"color": color, "width": _LINE_WIDTH, "dash": _PROJECTION_DASH},
+                hovertemplate=hover,
+            ),
+        )
+
+    ends = [(float(pmc.ctl[-1]), float(pmc.atl[-1]), float(pmc.tsb[-1]))] if len(pmc) else []
+    series(labels.ctl_plan, [end[0] for end in ends] + [p.ctl for p in points], tokens.ctl)
+    series(labels.atl_plan, [end[1] for end in ends] + [p.atl for p in points], tokens.atl)
+    series(labels.tsb_plan, [end[2] for end in ends] + [p.tsb for p in points], tokens.tsb)
+    _add_race_markers(figure, projection, labels, tokens)
+
+
+def _add_race_markers(
+    figure: go.Figure,
+    projection: PmcProjection,
+    labels: PmcChartLabels,
+    tokens: ThemeTokens,
+) -> None:
+    """A marker with the priority letter on the projected CTL of each race day."""
+    ctl_of_day = {point.day: point.ctl for point in projection.points}
+    races = [race for race in projection.races if race.day in ctl_of_day]
+    if not races:
+        return
+    figure.add_trace(
+        go.Scatter(
+            x=[race.day for race in races],
+            y=[ctl_of_day[race.day] for race in races],
+            name=labels.races,
+            mode="markers+text",
+            text=[race.priority.value for race in races],
+            textposition="top center",
+            textfont={"color": tokens.text},
+            marker={
+                "symbol": "diamond",
+                "size": _MARKER_SIZE,
+                "color": tokens.categories[0],
+                "line": {"color": tokens.text, "width": 1},
+            },
+            customdata=[
+                labels.race_hint.format(priority=race.priority.value, name=html.escape(race.name))
+                for race in races
+            ],
+            hovertemplate="%{x|%Y-%m-%d}<br>%{customdata}<extra></extra>",
+        ),
+    )
+
+
+def _frame_projection(
+    figure: go.Figure,
+    pmc: PmcSeries,
+    projection: PmcProjection,
+    labels: PmcChartLabels,
+    tokens: ThemeTokens,
+) -> None:
+    """Open the chart on the last three months and the plan; a dotted line marks where the real
+    data ends and the plan begins."""
+    if len(pmc) == 0:
+        return
+    last_real = pmc.days[-1]
+    first_shown = max(pmc.days[0], last_real - timedelta(days=_PAST_DAYS_SHOWN))
+    figure.update_xaxes(range=[first_shown, projection.points[-1].day])
+    figure.add_shape(
+        type="line",
+        xref="x",
+        yref="paper",
+        x0=last_real,
+        x1=last_real,
+        y0=0,
+        y1=1,
+        line={"color": tokens.axis_line, "width": 1, "dash": _PROJECTION_DASH},
+    )
+    figure.add_annotation(
+        xref="x",
+        yref="paper",
+        x=last_real,
+        y=1,
+        text=labels.today,
+        showarrow=False,
+        xanchor="right",
+        yanchor="bottom",
+        font={"color": tokens.text_muted},
+    )
 
 
 def _end_labels(
     pmc: PmcSeries, labels: PmcChartLabels, tokens: ThemeTokens
 ) -> list[dict[str, object]]:
-    """Il nome di CTL e di ATL accanto all'ultimo punto: la linea più alta ha il nome sopra, l'altra
-    sotto, così i due nomi non si sovrappongono; il colore del testo è quello del tema."""
+    """The name of CTL and ATL next to the last point: the higher line has its name above, the other
+    below, so the two names do not overlap; the text colour is the theme's."""
     if len(pmc) == 0:
         return []
     last_day = pmc.days[-1]
@@ -183,8 +330,11 @@ def prepare_chart(
     activities: Sequence[ChartActivity],
     labels: PmcChartLabels,
     tokens: ThemeTokens,
+    projection: PmcProjection | None = None,
 ) -> PreparedChart:
-    """Costruisce figura e JSON: lavoro puro e pesante (circa 100 ms al primo grafico), adatto
-    a un thread che non è quello della UI."""
-    figure = build_pmc_figure(pmc, activities, labels, tokens)
-    return prepare_figure(figure, labels.chrome, EXPORT_FILE_STEM, tokens)
+    """Build figure and JSON: pure, heavy work (about 100 ms for the first chart), suited
+    to a thread other than the UI."""
+    figure = build_pmc_figure(pmc, activities, labels, tokens, projection)
+    return prepare_figure(
+        figure, labels.chrome, EXPORT_FILE_STEM, tokens, navigation=XNavigation.LINKED
+    )

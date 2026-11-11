@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Riepilogo dell'import per la vista: conteggi per esito e file non importati col motivo.
+"""Import summary for the view: counts per outcome and files not imported with the reason.
 
-Funzione pura dal riepilogo del caso d'uso: i testi li sceglie la vista.
+Pure function from the use case summary: the view chooses the texts.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from ponos_coach.activities.use_cases import ImportStatus, ImportSummary
 
 @dataclass(frozen=True, slots=True)
 class NotImported:
-    """Un file che non è diventato un'attività, e perché."""
+    """A file that did not become an activity, and why."""
 
     name: str
     issue: ImportIssue
@@ -23,12 +23,14 @@ class NotImported:
 
 @dataclass(frozen=True, slots=True)
 class ImportReport:
-    """Conteggi per esito e file non importati, nell'ordine del riepilogo.
+    """Counts per outcome and files not imported, in summary order.
 
-    `already_present` conta anche le attività già arrivate in un altro formato (stessa
-    attività, non importata due volte). `cancelled` dice che l'import si è fermato prima della
-    fine: i file non trattati non compaiono. `repaired` conta le attività già presenti il cui
-    file in archivio mancava o era alterato e che l'originale importato ha riparato.
+    `already_present` also counts activities that already arrived in another format (same
+    activity, not imported twice). `cancelled` says the import stopped before the
+    end: unprocessed files do not appear. `repaired` counts already present activities whose
+    archived file was missing or altered and which the imported original repaired. `brought_back`
+    counts the activities the user had deleted and that came back because the user chose their
+    file; `left_out` those a folder import skipped because the user had deleted them.
     """
 
     imported: int
@@ -38,15 +40,25 @@ class ImportReport:
     cancelled: bool
     not_imported: tuple[NotImported, ...]
     repaired: int = 0
+    brought_back: int = 0
+    left_out: int = 0
 
     @property
     def examined(self) -> int:
-        """File trattati in tutto."""
-        return self.imported + self.already_present + self.repaired + self.ignored + self.failed
+        """Files processed in all."""
+        return (
+            self.imported
+            + self.already_present
+            + self.repaired
+            + self.brought_back
+            + self.left_out
+            + self.ignored
+            + self.failed
+        )
 
     @classmethod
     def from_summary(cls, summary: ImportSummary) -> ImportReport:
-        """Riepilogo per la vista."""
+        """Summary for the view."""
         problems = tuple(
             NotImported(result.name, result.issue)
             for result in summary.results
@@ -54,11 +66,12 @@ class ImportReport:
         )
         return cls(
             imported=summary.count(ImportStatus.IMPORTED),
-            already_present=summary.count(ImportStatus.ALREADY_PRESENT)
-            + summary.count(ImportStatus.DUPLICATE_OF_OTHER_FORMAT),
+            already_present=summary.count(ImportStatus.ALREADY_PRESENT),
             ignored=summary.count(ImportStatus.IGNORED),
             failed=summary.count(ImportStatus.FAILED),
             cancelled=summary.cancelled,
             not_imported=problems,
             repaired=summary.count(ImportStatus.REPAIRED),
+            brought_back=summary.count(ImportStatus.BROUGHT_BACK),
+            left_out=summary.count(ImportStatus.LEFT_OUT),
         )

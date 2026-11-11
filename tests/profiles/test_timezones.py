@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""La verifica dei fusi orari sta fuori dal dominio puro: qui i suoi casi."""
+"""Time zone validation lives outside the pure domain: its cases are here."""
 
 from __future__ import annotations
 
@@ -18,5 +18,5 @@ def test_known_zones_are_accepted(zone: str) -> None:
     "zone", ["", "Mars/Olympus", "../etc/localtime", "x" * 65, "Europe/Rome\x00", "/etc/passwd"]
 )
 def test_unknown_or_hostile_zones_are_refused(zone: str) -> None:
-    with pytest.raises(ValueError, match="fuso"):
+    with pytest.raises(ValueError, match="time zone"):
         require_known_timezone(zone)

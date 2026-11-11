@@ -1,34 +1,34 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Impalcatura del collaudo della fase 3: attività miste, profili "da zero" e confronti.
+"""Scaffolding for the phase 3 acceptance campaign: mixed activities, "from scratch" profiles and
+comparisons.
 
-Le attività sono FIT sintetici (corsa, trail, bici, forza, escursione senza FC) con segmenti di
-FC che toccano tutte e cinque le zone. Un profilo "da zero" riceve gli stessi file e gli stessi
-parametri e pesi finali di un profilo che li ha cambiati passo passo: la sua panoramica, calcolata
-con la cache vuota, è l'oracolo del ricalcolo incrementale.
+The activities are synthetic FIT files (run, trail, bike, strength, hike without HR) with HR
+segments that touch all five zones. A "from scratch" profile receives the same files and the same
+final parameters as a profile that changed them step by step: its overview, computed
+with an empty cache, is the oracle of the incremental recomputation.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 
 import numpy as np
 
-from ponos_coach.activities.domain import Sport
-from ponos_coach.load.domain import PhysiologyEntry, SportWeight
+from ponos_coach.load.domain import PhysiologyEntry
 from ponos_coach.load.use_cases import ProfileOverview
 from tests.collaudo.support import RealProfile, create_profile
 from tests.fixtures.generators import fit_writer as fw
 
-STEP_S = 2  # un campione ogni 2 s: file piccoli, intervalli ben sotto i 10 s
-TODAY = date(2026, 7, 1)  # lo stesso `TODAY` del collaudo (support.py)
+STEP_S = 2  # one sample every 2 s: small files, intervals well under 10 s
+TODAY = date(2026, 7, 1)  # the same `TODAY` as the campaign (support.py)
 
-type Segments = Sequence[tuple[int | None, int]]  # (bpm o None, secondi)
+type Segments = Sequence[tuple[int | None, int]]  # (bpm or None, seconds)
 
-# Soglia 170: Z1 sotto 144,5, Z2 fino a 153, Z3 fino a 161,5, Z4 fino a 170, Z5 da 170 in su.
+# Threshold 170: Z1 below 144.5, Z2 up to 153, Z3 up to 161.5, Z4 up to 170, Z5 from 170 up.
 EVERY_ZONE: Segments = ((120, 300), (150, 300), (158, 300), (165, 300), (172, 300), (185, 300))
 EASY: Segments = ((110, 1800),)
 NO_HEART_RATE: Segments = ((None, 1800),)
@@ -36,7 +36,7 @@ NO_HEART_RATE: Segments = ((None, 1800),)
 
 @dataclass(frozen=True, slots=True)
 class MixedActivity:
-    """Un'attività sintetica del collaudo."""
+    """A synthetic activity of the campaign."""
 
     name: str
     start: datetime
@@ -54,7 +54,7 @@ MIXED: tuple[MixedActivity, ...] = (
         "bici", datetime(2026, 1, 14, 16, 0, tzinfo=UTC), fw.Sport.CYCLING,
         fw.SubSport.ROAD, EVERY_ZONE,
     ),
-    MixedActivity(  # 23:30 del 31 gennaio, ora di Roma: giorno locale prima del cambio
+    MixedActivity(  # 23:30 on 31 January, Rome time: local day before the change
         "mezzanotte", datetime(2026, 1, 31, 22, 30, tzinfo=UTC), fw.Sport.RUNNING,
         fw.SubSport.GENERIC, EVERY_ZONE,
     ),
@@ -73,19 +73,19 @@ MIXED: tuple[MixedActivity, ...] = (
 )  # fmt: skip
 
 CHANGE_DAYS = (
-    date(2025, 12, 1),  # prima di ogni attività
-    date(2026, 1, 12),  # il giorno di un'attività
-    date(2026, 1, 31),  # il giorno dell'attività a cavallo
+    date(2025, 12, 1),  # before every activity
+    date(2026, 1, 12),  # the day of an activity
+    date(2026, 1, 31),  # the day of the straddling activity
     date(2026, 2, 1),
     date(2026, 2, 15),  # in mezzo
     date(2026, 3, 20),
-    date(2026, 6, 30),  # dopo ogni attività
-    TODAY,  # la data della voce iniziale: sostituisce
+    date(2026, 6, 30),  # after every activity
+    TODAY,  # the date of the initial entry: it replaces
 )
 
 
 def segmented_fit(serial: int, spec: MixedActivity) -> bytes:
-    """FIT di un'attività con la FC a segmenti (`None`: campione senza FC)."""
+    """FIT of an activity with HR in segments (`None`: sample without HR)."""
     first = fw.datetime_to_fit(spec.start)
     samples: list[fw.Sample] = []
     elapsed = 0
@@ -101,7 +101,7 @@ def segmented_fit(serial: int, spec: MixedActivity) -> bytes:
 
 
 def write_mixed(folder: Path, specs: Sequence[MixedActivity] = MIXED) -> Path:
-    """Scrive le attività in `folder` (una cartella nuova) e la restituisce."""
+    """Writes the activities in `folder` (a new folder) and returns it."""
     folder.mkdir(parents=True)
     for serial, spec in enumerate(specs, start=3_000_000):
         (folder / f"{spec.name}.fit").write_bytes(segmented_fit(serial, spec))
@@ -109,7 +109,7 @@ def write_mixed(folder: Path, specs: Sequence[MixedActivity] = MIXED) -> Path:
 
 
 def profile_with_mixed(base: Path, name: str = "primo") -> RealProfile:
-    """Profilo vero (`base/name`) con le attività miste già importate."""
+    """Real profile (`base/name`) with the mixed activities already imported."""
     profile = create_profile(base / name, folder_name="profilo")
     profile.import_folder(write_mixed(base / name / "file"))
     assert len(profile.records()) == len(MIXED)
@@ -120,22 +120,20 @@ def scratch_overview(
     base: Path,
     name: str,
     entries: Sequence[PhysiologyEntry],
-    sport_weights: Mapping[Sport, SportWeight],
 ) -> tuple[ProfileOverview, RealProfile]:
-    """Panoramica di un profilo nuovo con gli stessi file e i parametri e pesi finali dati.
+    """Overview of a new profile with the same files and the given final parameters.
 
-    La cache è vuota: ogni carico si calcola dal file. Il profilo resta aperto (lo chiude il
-    chiamante) per confronti ulteriori, per esempio sulla panoramica di una seconda lettura.
+    The cache is empty: every load is computed from the file. The profile stays open (the
+    caller closes it) for further comparisons, for example on the overview of a second read.
     """
     scratch = profile_with_mixed(base, name)
     for entry in entries:
         scratch.session.physiology.put(entry)
-    scratch.session.sport_weights.replace(dict(sport_weights))
     return scratch.overview(), scratch
 
 
 def assert_same_overview(first: ProfileOverview, second: ProfileOverview, today: date) -> None:
-    """Stesse attività, stesse escluse, stessa serie PMC e stesse aggregazioni, bit per bit."""
+    """Same activities, same exclusions, same PMC series and same aggregations, bit for bit."""
     assert first.activities == second.activities
     assert first.excluded == second.excluded
     assert first.pmc.first_day == second.pmc.first_day

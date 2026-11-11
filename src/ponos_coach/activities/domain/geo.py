@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Punti geografici, semplificazione di una traccia e polyline codificati.
+"""Geographic points, track simplification and encoded polylines.
 
-Le posizioni GPS sono dati personali sensibili: questo modulo non le registra né le stampa
-(il `repr` di `GeoPoint` le mostra, quindi i chiamanti non devono metterlo nei log).
+GPS positions are sensitive personal data: this module neither logs nor prints them
+(the `repr` of `GeoPoint` shows them, so callers must not put it in logs).
 """
 
 from __future__ import annotations
@@ -18,38 +18,38 @@ from numpy.typing import ArrayLike, NDArray
 
 from ponos_coach.activities.domain.limits import MAX_TRACK_POINTS, TRACK_TOLERANCE_M
 
-EARTH_RADIUS_M = 6_371_008.8  # raggio medio terrestre (IUGG), in metri
-_POLYLINE_SCALE = 1e5  # precisione standard dei polyline: 1e-5 gradi
+EARTH_RADIUS_M = 6_371_008.8  # mean Earth radius (IUGG), in meters
+_POLYLINE_SCALE = 1e5  # standard polyline precision: 1e-5 degrees
 _POLYLINE_FIRST_CHAR = 63  # '?'
 _POLYLINE_LAST_CHAR = 126  # '~'
 _CHUNK_BITS = 5
 _CHUNK_MASK = 0x1F
 _CONTINUATION = 0x20
-_MAX_CHUNKS_PER_VALUE = 7  # 35 bit: oltre ogni scarto di coordinate valido
-# Un valore occupa al massimo 6 caratteri per le coordinate valide (scarto fino a 360 gradi).
+_MAX_CHUNKS_PER_VALUE = 7  # 35 bits: beyond any valid coordinate delta
+# A value takes at most 6 characters for valid coordinates (delta up to 360 degrees).
 MAX_POLYLINE_CHARS = MAX_TRACK_POINTS * 2 * 6
 
 
 @dataclass(frozen=True, slots=True)
 class GeoPoint:
-    """Una posizione in gradi decimali: latitudine in [-90, 90], longitudine in [-180, 180]."""
+    """A position in decimal degrees: latitude in [-90, 90], longitude in [-180, 180]."""
 
     lat_deg: float
     lon_deg: float
 
     def __post_init__(self) -> None:
         if not (math.isfinite(self.lat_deg) and math.isfinite(self.lon_deg)):
-            raise ValueError("le coordinate devono essere finite")
+            raise ValueError("coordinates must be finite")
         if not -90.0 <= self.lat_deg <= 90.0:
-            raise ValueError("latitudine fuori da [-90, 90]")
+            raise ValueError("latitude outside [-90, 90]")
         if not -180.0 <= self.lon_deg <= 180.0:
-            raise ValueError("longitudine fuori da [-180, 180]")
+            raise ValueError("longitude outside [-180, 180]")
 
 
 def _farthest(
     x: NDArray[np.float64], y: NDArray[np.float64], first: int, last: int
 ) -> tuple[float, int]:
-    """Distanza (m) e indice del punto interno più lontano dal segmento first-last."""
+    """Distance (m) and index of the interior point farthest from the first-last segment."""
     px, py = x[first + 1 : last] - x[first], y[first + 1 : last] - y[first]
     sx, sy = x[last] - x[first], y[last] - y[first]
     length_sq = sx * sx + sy * sy
@@ -65,9 +65,9 @@ def _farthest(
 def _projected(
     lat_deg: NDArray[np.float64], lon_deg: NDArray[np.float64]
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """Coordinate piane in metri (equirettangolare attorno alla latitudine media)."""
+    """Planar coordinates in meters (equirectangular around the mean latitude)."""
     lat = np.radians(lat_deg)
-    lon = np.unwrap(np.radians(lon_deg))  # attraversa l'antimeridiano senza salti
+    lon = np.unwrap(np.radians(lon_deg))  # crosses the antimeridian without jumps
     scale = math.cos(float(lat.mean()))
     x = (lon - lon[0]) * scale * EARTH_RADIUS_M
     y = (lat - lat[0]) * EARTH_RADIUS_M
@@ -80,26 +80,26 @@ def _columns(
     lat = np.asarray(lat_deg, dtype=np.float64)
     lon = np.asarray(lon_deg, dtype=np.float64)
     if lat.ndim != 1 or lat.shape != lon.shape:
-        raise ValueError("servono due colonne monodimensionali della stessa lunghezza")
+        raise ValueError("two one-dimensional columns of the same length are required")
     if not (math.isfinite(tolerance_m) and tolerance_m >= 0.0) or max_points < 2:
-        raise ValueError("tolleranza non valida o meno di 2 punti ammessi")
+        raise ValueError("invalid tolerance or fewer than 2 points allowed")
     if not (np.isfinite(lat).all() and np.isfinite(lon).all()):
-        raise ValueError("le coordinate devono essere finite")
+        raise ValueError("coordinates must be finite")
     return lat, lon
 
 
 def _split_until(
     x: NDArray[np.float64], y: NDArray[np.float64], tolerance_m: float, max_points: int
 ) -> NDArray[np.bool_]:
-    """Maschera dei punti tenuti: si divide sempre il tratto con lo scostamento maggiore."""
+    """Mask of the points kept: the stretch with the largest deviation is always split."""
     keep = np.zeros(x.size, dtype=bool)
     keep[0] = keep[-1] = True
     kept = 2
-    # Heap di (-scostamento, primo, ultimo, indice): a parità vince il tratto più a sinistra.
+    # Heap of (-deviation, first, last, index): on ties the leftmost stretch wins.
     heap: list[tuple[float, int, int, int]] = []
 
     def push(first: int, last: int) -> None:
-        if last - first >= 2:  # serve almeno un punto interno
+        if last - first >= 2:  # at least one interior point is needed
             distance, index = _farthest(x, y, first, last)
             heapq.heappush(heap, (-distance, first, last, index))
 
@@ -121,17 +121,17 @@ def simplify_indices(
     tolerance_m: float = TRACK_TOLERANCE_M,
     max_points: int = MAX_TRACK_POINTS,
 ) -> NDArray[np.intp]:
-    """Indici (crescenti) dei punti tenuti da Ramer-Douglas-Peucker, in tempo vettoriale.
+    """Indexes (ascending) of the points kept by Ramer-Douglas-Peucker, in vectorized time.
 
-    Come `simplify_track` ma su colonne di coordinate, senza creare un oggetto per punto.
-    Primo e ultimo punto restano sempre. L'algoritmo è iterativo (nessuna ricorsione): divide
-    sempre il tratto con lo scostamento maggiore e si ferma quando questo non supera
-    `tolerance_m` oppure sono stati tenuti `max_points` punti; il tetto lascia quindi i punti
-    più significativi. Deterministico.
+    Like `simplify_track` but on coordinate columns, without creating an object per point.
+    First and last point always stay. The algorithm is iterative (no recursion): it always splits
+    the stretch with the largest deviation and stops when it does not exceed
+    `tolerance_m` or `max_points` points have been kept; the cap therefore keeps the
+    most significant points. Deterministic.
 
     Raises:
-        ValueError: colonne di lunghezza diversa o non unidimensionali, valori non finiti,
-            tolleranza negativa o non finita, `max_points` < 2.
+        ValueError: columns of different length or not one-dimensional, non-finite values,
+            negative or non-finite tolerance, `max_points` < 2.
     """
     lat, lon = _columns(lat_deg, lon_deg, tolerance_m, max_points)
     if lat.size <= 2:
@@ -145,15 +145,15 @@ def simplify_track(
     tolerance_m: float = TRACK_TOLERANCE_M,
     max_points: int = MAX_TRACK_POINTS,
 ) -> tuple[GeoPoint, ...]:
-    """Traccia semplificata con Ramer-Douglas-Peucker (iterativo) e un tetto ai punti.
+    """Track simplified with Ramer-Douglas-Peucker (iterative) and a cap on points.
 
-    Ogni punto scartato dista al più `tolerance_m` metri dal tratto che lo sostituisce, salvo
-    quando il tetto `max_points` (default del progetto: 2000) obbliga a scartare di più.
-    Primo e ultimo punto restano; l'ordine è conservato; una traccia già corta e senza punti
-    ridondanti torna invariata. Deterministica.
+    Each discarded point is at most `tolerance_m` meters from the stretch that replaces it, except
+    when the `max_points` cap (project default: 2000) forces discarding more.
+    First and last point stay; order is preserved; a track that is already short and without points
+    redundant is returned unchanged. Deterministic.
 
     Raises:
-        ValueError: tolleranza negativa o non finita, `max_points` < 2.
+        ValueError: negative or non-finite tolerance, `max_points` < 2.
     """
     indices = simplify_indices(
         [p.lat_deg for p in points], [p.lon_deg for p in points], tolerance_m, max_points
@@ -170,16 +170,16 @@ def _encode_value(value: int, out: list[str]) -> None:
 
 
 def encode_polyline(points: Sequence[GeoPoint]) -> str:
-    """Polyline codificato (algoritmo standard, precisione 1e-5 gradi, circa 1 m).
+    """Encoded polyline (standard algorithm, 1e-5 degree precision, about 1 m).
 
-    Ogni coordinata si arrotonda a 1e-5 gradi; decodificando si ritrova il punto entro
-    0,5e-5 gradi. Una sequenza vuota dà la stringa vuota.
+    Each coordinate is rounded to 1e-5 degrees; decoding recovers the point within
+    0.5e-5 degrees. An empty sequence gives the empty string.
 
     Raises:
-        ValueError: più di `MAX_TRACK_POINTS` punti (il risultato non sarebbe decodificabile).
+        ValueError: more than `MAX_TRACK_POINTS` points (the result could not be decoded).
     """
     if len(points) > MAX_TRACK_POINTS:
-        raise ValueError("troppi punti per un polyline")
+        raise ValueError("too many points for a polyline")
     scaled = np.rint(
         np.array([[p.lat_deg, p.lon_deg] for p in points], dtype=np.float64).reshape(-1, 2)
         * _POLYLINE_SCALE
@@ -192,39 +192,39 @@ def encode_polyline(points: Sequence[GeoPoint]) -> str:
 
 
 def _decode_values(encoded: str) -> list[int]:
-    """Valori interi (con segno) di un polyline, in ordine."""
+    """Integer values (signed) of a polyline, in order."""
     values: list[int] = []
     accumulated = shift = chunks = 0
     for char in encoded:
         code = ord(char) - _POLYLINE_FIRST_CHAR
         if not 0 <= code <= _POLYLINE_LAST_CHAR - _POLYLINE_FIRST_CHAR:
-            raise ValueError("carattere non valido in un polyline")
+            raise ValueError("invalid character in a polyline")
         chunks += 1
         if chunks > _MAX_CHUNKS_PER_VALUE:
-            raise ValueError("valore troppo grande in un polyline")
+            raise ValueError("value too large in a polyline")
         accumulated |= (code & _CHUNK_MASK) << shift
         shift += _CHUNK_BITS
         if code < _CONTINUATION:
             values.append(~(accumulated >> 1) if accumulated & 1 else accumulated >> 1)
             accumulated = shift = chunks = 0
     if chunks:
-        raise ValueError("polyline incompleto")
+        raise ValueError("incomplete polyline")
     return values
 
 
 def decode_polyline(encoded: str) -> tuple[GeoPoint, ...]:
-    """Punti di un polyline codificato con `encode_polyline`.
+    """Points of a polyline encoded with `encode_polyline`.
 
     Raises:
-        ValueError: stringa più lunga di `MAX_POLYLINE_CHARS`, caratteri fuori dall'intervallo
-            ASCII 63-126, valore o coppia incompleti, valori troppo grandi o coordinate fuori
-            intervallo.
+        ValueError: string longer than `MAX_POLYLINE_CHARS`, characters outside the
+            ASCII range 63-126, incomplete value or pair, values too large or coordinates outside
+            range.
     """
     if len(encoded) > MAX_POLYLINE_CHARS:
-        raise ValueError("polyline troppo lungo")
+        raise ValueError("polyline too long")
     values = _decode_values(encoded)
     if len(values) % 2:
-        raise ValueError("polyline incompleto")
+        raise ValueError("incomplete polyline")
     lat = lon = 0
     points: list[GeoPoint] = []
     for d_lat, d_lon in zip(values[0::2], values[1::2], strict=True):

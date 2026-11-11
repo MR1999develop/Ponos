@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Riepilogo dell'import: conteggi per esito e tabella dei file non importati col motivo."""
+"""Import summary: counts per outcome and table of files not imported with the reason."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from ponos_coach.ui.tokens import DIALOG_MIN_WIDTH, SPACE_2, SPACE_4
 
 
 class NotImportedModel(QAbstractTableModel):
-    """File non importati: nome e motivo in parole comuni."""
+    """Files not imported: name and reason in plain words."""
 
     def __init__(self, rows: tuple[NotImported, ...], parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -37,13 +37,13 @@ class NotImportedModel(QAbstractTableModel):
     def rowCount(  # noqa: N802 - Qt
         self, parent: QModelIndex | QPersistentModelIndex | None = None
     ) -> int:
-        """Numero di file."""
+        """Number of files."""
         return 0 if parent is not None and parent.isValid() else len(self._rows)
 
     def columnCount(  # noqa: N802 - Qt
         self, parent: QModelIndex | QPersistentModelIndex | None = None
     ) -> int:
-        """Due colonne: file e motivo."""
+        """Two columns: file and reason."""
         return 0 if parent is not None and parent.isValid() else 2
 
     def headerData(  # noqa: N802 - Qt
@@ -52,7 +52,7 @@ class NotImportedModel(QAbstractTableModel):
         orientation: Qt.Orientation,
         role: int = Qt.ItemDataRole.DisplayRole,
     ) -> object:
-        """Intestazioni."""
+        """Headers."""
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
             return self.tr("File") if section == 0 else self.tr("Reason")
         return None
@@ -60,7 +60,7 @@ class NotImportedModel(QAbstractTableModel):
     def data(
         self, index: QModelIndex | QPersistentModelIndex, role: int = Qt.ItemDataRole.DisplayRole
     ) -> object:
-        """Testo di una cella (i nomi sono sempre testo semplice)."""
+        """Text of a cell (names are always plain text)."""
         if not index.isValid() or role != Qt.ItemDataRole.DisplayRole:
             return None
         row = self._rows[index.row()]
@@ -68,7 +68,7 @@ class NotImportedModel(QAbstractTableModel):
 
 
 class ImportReportDialog(QDialog):
-    """Mostra l'esito di un import."""
+    """Show the outcome of an import."""
 
     def __init__(self, report: ImportReport, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -107,16 +107,16 @@ class ImportReportDialog(QDialog):
 
     @property
     def table(self) -> QTableView:
-        """La tabella dei file non importati."""
+        """The table of files not imported."""
         return self._table
 
     @property
     def summary_text(self) -> str:
-        """Il testo dei conteggi."""
+        """The counts text."""
         return self._summary.text()
 
     def summary_lines(self, report: ImportReport) -> list[str]:
-        """Una riga per ogni esito presente (l'importate sempre)."""
+        """One row for each outcome present (always the imported one)."""
         lines = [self.tr("Activities imported: %n", "", report.imported)]
         if report.already_present:
             lines.append(self.tr("Already in the profile: %n", "", report.already_present))
@@ -126,10 +126,31 @@ class ImportReportDialog(QDialog):
                     "Archived files repaired from the imported original: %n", "", report.repaired
                 )
             )
+        lines.extend(self._deleted_lines(report))
         if report.ignored:
             lines.append(self.tr("Files ignored (not an activity): %n", "", report.ignored))
         if report.failed:
             lines.append(self.tr("Files with an error: %n", "", report.failed))
         if report.cancelled:
             lines.append(self.tr("The import was stopped: run it again to continue."))
+        return lines
+
+    def _deleted_lines(self, report: ImportReport) -> list[str]:
+        """The rows about the activities the user had deleted."""
+        lines: list[str] = []
+        if report.brought_back:
+            lines.append(
+                self.tr(
+                    "Deleted activities brought back by their file: %n", "", report.brought_back
+                )
+            )
+        if report.left_out:
+            lines.append(
+                self.tr(
+                    "Left out because you deleted them: %n. To bring one back, choose its file "
+                    "with Import files.",
+                    "",
+                    report.left_out,
+                )
+            )
         return lines

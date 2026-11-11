@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Tracciati di frequenza cardiaca sintetici, un valore per campione.
+"""Synthetic heart-rate tracks, one value per sample.
 
-Un tracciato è una lista di `int | None` (None = FC assente). Il rumore usa
-solo un generatore con seme esplicito, così i byte sono ripetibili.
+A track is a list of `int | None` (None = HR absent). The noise uses
+only a generator with an explicit seed, so the bytes are repeatable.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ Track = list[int | None]
 
 
 def hold(bpm: int, count: int) -> Track:
-    """FC costante per `count` campioni."""
+    """Constant HR for `count` samples."""
     return [bpm] * count
 
 
@@ -29,21 +29,21 @@ def ramp(start_bpm: int, end_bpm: int, count: int) -> Track:
 
 
 def drift(bpm: int, count: int, extra_bpm: int) -> Track:
-    """Deriva cardiaca: FC che sale lentamente di `extra_bpm` nel tratto."""
+    """Cardiac drift: HR that rises slowly by `extra_bpm` over the stretch."""
     return ramp(bpm, bpm + extra_bpm, count)
 
 
 def add_noise(track: Track, rng: random.Random, amplitude: int = 1) -> Track:
-    """Rumore intero uniforme in [-amplitude, +amplitude]; i None restano None."""
+    """Uniform integer noise in [-amplitude, +amplitude]; Nones stay None."""
     return [None if v is None else v + rng.randint(-amplitude, amplitude) for v in track]
 
 
 def to_samples(first_timestamp: int, track: Track, step_s: int = 1) -> list[Sample]:
-    """Trasforma il tracciato in campioni a passo costante."""
+    """Turns the track into samples at a constant step."""
     return [Sample(first_timestamp + i * step_s, v) for i, v in enumerate(track)]
 
 
-# Coordinate inventate, in mare aperto (Atlantico meridionale): nessun luogo abitato.
+# Invented coordinates, in the open sea (South Atlantic): no inhabited place.
 SEA_LAT_DEG = -30.0
 SEA_LON_DEG = -20.0
 _METERS_PER_DEGREE_LAT = 111_195.0
@@ -52,9 +52,9 @@ _METERS_PER_DEGREE_LAT = 111_195.0
 def circle_positions(
     count: int, radius_m: float, speed_ms: float
 ) -> list[tuple[float, float, float]]:
-    """Giro su un cerchio attorno al punto in mare: (lat, lon, distanza cumulata in m).
+    """Lap on a circle around the point at sea: (lat, lon, cumulative distance in m).
 
-    Un campione al secondo a velocità costante; il primo punto è a est del centro.
+    One sample per second at constant speed; the first point is east of the centre.
     """
     out: list[tuple[float, float, float]] = []
     meters_per_degree_lon = _METERS_PER_DEGREE_LAT * math.cos(math.radians(SEA_LAT_DEG))
@@ -72,7 +72,7 @@ def circle_positions(
 
 
 def straight_positions(count: int, speed_ms: float) -> list[tuple[float, float, float]]:
-    """Linea verso est dal punto in mare: (lat, lon, distanza cumulata in m), 1 campione/s."""
+    """Line east from the point at sea: (lat, lon, cumulative distance in m), 1 sample/s."""
     meters_per_degree_lon = _METERS_PER_DEGREE_LAT * math.cos(math.radians(SEA_LAT_DEG))
     return [
         (SEA_LAT_DEG, SEA_LON_DEG + i * speed_ms / meters_per_degree_lon, i * speed_ms)

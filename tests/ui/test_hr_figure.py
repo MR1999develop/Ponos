@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-UI-04 (parte pura): la figura della FC di un'attività con le bande delle zone."""
+"""T-UI-04 (pure part): the HR figure of an activity with the zone bands."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import json
 import numpy as np
 import plotly.graph_objects as go
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from ponos_coach.activities.domain import HeartRateSeries
 from ponos_coach.load.activity_detail import HeartRateTrace
@@ -52,7 +54,7 @@ def test_the_curve_is_in_minutes_and_bpm() -> None:
     np.testing.assert_allclose(curve.y, trace.bpm)
     assert figure.layout.xaxis.title.text == "Time (min)"
     assert figure.layout.yaxis.title.text == "Heart rate (bpm)"
-    assert len(figure.data) == 1  # nessuno scarto: nessuna seconda serie
+    assert len(figure.data) == 1  # no discards: no second series
 
 
 def test_discarded_samples_are_marked_with_a_cross_in_a_second_series() -> None:
@@ -63,7 +65,7 @@ def test_discarded_samples_are_marked_with_a_cross_in_a_second_series() -> None:
     marks = figure.data[1]
     assert marks.name == "Samples outside your limits"
     assert marks.mode == "markers"
-    assert marks.marker.symbol == "x"  # non solo il colore
+    assert marks.marker.symbol == "x"  # not just the colour
     assert list(marks.y) == [255.0, 10.0]
     assert marks.marker.color == tokens_for(Theme.LIGHT).error
 
@@ -78,11 +80,11 @@ def test_one_band_per_zone_behind_the_curve_with_the_zone_name_on_the_edge() -> 
     tokens = tokens_for(Theme.LIGHT)
     assert [shape.fillcolor for shape in figure.layout.shapes] == list(tokens.zones)
     assert [a.text for a in figure.layout.annotations] == [
-        "Z1 <85%",
-        "Z2 85\u201389%",
-        "Z3 90\u201394%",
-        "Z4 95\u201399%",
-        "Z5 \u2265100%",
+        "Z1 <72%",
+        "Z2 72\u201384%",
+        "Z3 85\u201394%",
+        "Z4 95\u2013102%",
+        "Z5 \u2265103%",
     ]
 
 
@@ -111,32 +113,69 @@ def test_zones_outside_the_axis_range_have_no_band() -> None:
     bands = zone_bands((144.0, 153.0, 162.0, 171.0), low=100.0, high=150.0)
 
     assert [zone for zone, _, _ in bands] == [0, 1]
-    assert bands[-1][2] == 150.0  # la banda taglia al bordo dell'asse
+    assert bands[-1][2] == 150.0  # the band is clipped at the axis edge
 
 
 def test_a_long_curve_is_thinned_but_every_discarded_sample_is_kept() -> None:
     count = 20_000
     bpm = np.full(count, 140.0)
-    bpm[[7, 9_999, 19_999]] = 255.0  # tre scarti
+    bpm[[7, 9_999, 19_999]] = 255.0  # three discards
     series = HeartRateSeries(np.arange(count, dtype=np.float64), bpm)
     trace = HeartRateTrace.of(series, LIMITS)
 
     figure = figure_of(trace)
 
     assert len(figure.data[0].x) <= MAX_TRACE_POINTS + 3
-    assert len(figure.data[0].x) >= MAX_TRACE_POINTS
+    assert len(figure.data[0].x) >= MAX_TRACE_POINTS // 4
     assert list(figure.data[1].y) == [255.0, 255.0, 255.0]
 
 
 def test_thinning_a_short_series_changes_nothing_and_caps_the_flags() -> None:
     keep = np.zeros(10, dtype=np.bool_)
-    assert list(thinned_indices(10, keep)) == list(range(10))
+    assert list(thinned_indices(np.arange(10.0), keep)) == list(range(10))
+    limit = np.zeros(MAX_TRACE_POINTS)
+    assert list(thinned_indices(limit, np.zeros(limit.size, dtype=np.bool_))) == list(
+        range(MAX_TRACE_POINTS)
+    )
 
     count = MAX_TRACE_POINTS * 4
     everything = np.ones(count, dtype=np.bool_)
-    chosen = thinned_indices(count, everything)
-    assert len(chosen) <= 2 * MAX_TRACE_POINTS  # anche con tutti gli scarti il tetto regge
+    chosen = thinned_indices(np.zeros(count), everything)
+    assert len(chosen) <= 3 * MAX_TRACE_POINTS  # even with all discards the cap holds
     assert list(chosen) == sorted(set(chosen))
+
+
+def test_thinning_keeps_the_borders_the_minimum_and_the_maximum() -> None:
+    count = 50_001  # not a multiple of the stretches
+    seconds = np.arange(count, dtype=np.float64)
+    bpm = 140.0 + 20.0 * np.sin(seconds / 700.0) + (seconds % 7)
+    bpm[12_345] = 199.0  # a lone peak
+    bpm[40_001] = 61.0  # a lone valley
+    keep = np.zeros(count, dtype=np.bool_)
+
+    chosen = thinned_indices(bpm, keep)
+
+    assert len(chosen) <= MAX_TRACE_POINTS + 2
+    assert chosen[0] == 0
+    assert chosen[-1] == count - 1
+    assert bpm[chosen].max() == bpm.max() == 199.0
+    assert bpm[chosen].min() == bpm.min() == 61.0
+    assert list(chosen) == sorted(set(chosen))
+
+
+@given(
+    values=st.lists(st.floats(30, 230), min_size=1, max_size=9_000),
+)
+def test_thinning_never_loses_an_extreme_and_stays_sorted(values: list[float]) -> None:
+    bpm = np.array(values)
+
+    chosen = thinned_indices(bpm, np.zeros(bpm.size, dtype=np.bool_))
+
+    assert list(chosen) == sorted(set(chosen))
+    assert chosen[0] == 0
+    assert chosen[-1] == bpm.size - 1
+    assert bpm[chosen].max() == bpm.max()
+    assert bpm[chosen].min() == bpm.min()
 
 
 def test_the_dark_theme_changes_surface_and_band_opacity_not_the_data() -> None:
@@ -161,3 +200,19 @@ def test_the_prepared_chart_is_one_ascii_json_argument_with_its_file_name() -> N
     payload = json.loads(prepared.script[len(prefix) : -len(suffix)])
     assert payload["filename"] == "ponos-coach-heart-rate"
     assert payload["figure"]["data"][0]["name"] == "Heart rate"
+
+
+def test_the_wheel_zooms_and_a_left_drag_pans_the_time_axis_only_in_step_with_the_speed_chart() -> (
+    None
+):
+    prepared = prepare_heart_rate_chart(
+        trace_of([120.0, 140.0, 160.0]), LIMITS, STARTS, LABELS, tokens_for(Theme.LIGHT)
+    )
+
+    payload = json.loads(prepared.script[len("ponosRender(") : -2])
+    assert payload["zoom"] is True  # the page turns on the wheel zoom
+    assert payload["linkedX"] is True  # the speed chart under it follows the zoom and the pan
+    assert "fixedY" not in payload  # the bpm axis follows the stretch in view
+    assert payload["linkedHover"] is True  # the pointer shows its minute on the speed chart too
+    assert prepared.figure.layout.dragmode == "pan"
+    assert prepared.figure.layout.yaxis.fixedrange is True  # bpm stay as drawn

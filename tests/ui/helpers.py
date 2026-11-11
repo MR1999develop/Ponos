@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Valori e costruttori comuni ai test dell'interfaccia."""
+"""Values and builders common to the interface tests."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ FIRST_DAY = date(2026, 3, 2)
 
 
 def entry(day: date, load: float, name: str = "a.fit") -> ChartActivity:
-    """Un'attivita per il grafico, con il carico dato, il giorno dato."""
+    """An activity for the chart, with the given load, on the given day."""
     return ChartActivity(day, load, name)
 
 
@@ -46,9 +46,11 @@ def profile_activity(
     load: float = 80.0,
     source: LoadSource = LoadSource.HEART_RATE,
     serial: int = 1,
+    avg_bpm: int | None = 148,
+    max_bpm: int | None = 176,
 ) -> ProfileActivity:
-    """Un'attivita del profilo con i valori dati (giorno locale = giorno UTC)."""
-    activity_load = ActivityLoad(load, load, load, 100, 0, 0.0, source)
+    """A profile activity with the given values (local day = UTC day)."""
+    activity_load = ActivityLoad(load, 100, 0, 0.0, source, avg_bpm=avg_bpm, max_bpm=max_bpm)
     return ProfileActivity(
         FitIdentity(FileId(1, serial, 1, start)),
         sport,
@@ -62,7 +64,7 @@ def profile_activity(
 
 
 def small_history() -> tuple[PmcSeries, list[ChartActivity]]:
-    """Dieci giorni di PMC con tre attivita (due nello stesso giorno)."""
+    """Ten days of PMC with three activities (two on the same day)."""
     entries = [
         entry(FIRST_DAY, 50.0, "one.fit"),
         entry(FIRST_DAY, 30.0, "two.fit"),

@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dialogo "Modifica profilo": vista umile sul modello `MeasurementsForm`.
+"""Content of the Settings > Profile page: humble view on the `MeasurementsForm` model.
 
-In alto i dati fissi in sola lettura (o da completare, una volta sola, per un profilo vecchio);
-sotto le misure aggiornabili, che valgono da un giorno scelto (oggi per default); in fondo lo
-storico. Il dialogo modifica una copia: "Annulla" non cambia nulla. Il salvataggio parte con
-`save_requested`; l'esito (ok o misure rifiutate) lo comunica la finestra.
+At the top the editable name and the fixed data, read-only (or to complete, once only, for an
+old profile); below the updatable measurements, which apply from a chosen day (today by
+default); at the bottom the history. The page edits a copy: nothing changes until the window's
+"Save changes".
+Saving starts with `save_requested`; the outcome (ok or rejected measurements) is reported by the
+coordinator, which builds the page again from what was saved.
 """
 
 from __future__ import annotations
@@ -14,11 +16,8 @@ from datetime import date
 from itertools import pairwise
 
 from PySide6.QtCore import QDate, QLocale, Qt, Signal
-from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QDateEdit,
-    QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QGroupBox,
     QHeaderView,
@@ -31,38 +30,61 @@ from PySide6.QtWidgets import (
 )
 
 from ponos_coach.load.domain import Sex
-from ponos_coach.profiles.domain import MIN_MEASUREMENT_DATE
+from ponos_coach.profiles.domain import MIN_MEASUREMENT_DATE, NAME_MAX_CHARS
 from ponos_coach.profiles.measurements import MeasurementHistory, MeasurementProblem
 from ponos_coach.ui.birth_date_edit import BirthDateEdit, to_qdate
 from ponos_coach.ui.body_input import BodyProblem, body_problem_text
-from ponos_coach.ui.form_rows import add_field_row
+from ponos_coach.ui.form_rows import (
+    FieldKind,
+    add_field_row,
+    add_group_heading,
+    optional_threshold_edit,
+    size_field,
+    threshold_pace_edit,
+)
 from ponos_coach.ui.heart_rate_rules import (
     MAX_ALLOWED_BPM,
     MIN_ALLOWED_BPM,
     MIN_THRESHOLD_BPM,
     HeartRateProblem,
     heart_rate_problem_text,
+    lt1_default_placeholder,
+    lt1_tooltip,
+    lt2_tooltip,
+    other_default_placeholder,
 )
 from ponos_coach.ui.measurement_history_model import (
     MeasurementHistoryModel,
+    pace_text,
     sorted_history_model,
     weight_text,
 )
-from ponos_coach.ui.measurement_texts import in_force_text, superseded_text
+from ponos_coach.ui.measurement_texts import in_force_text, pace_source_text, superseded_text
 from ponos_coach.ui.measurements_form import (
     EditField,
     EditIssue,
     MeasurementsForm,
     MeasurementsRequest,
+    NameProblem,
 )
-from ponos_coach.ui.tokens import DIALOG_MIN_WIDTH, SPACE_1, SPACE_2, SPACE_4, Theme, tokens_for
+from ponos_coach.ui.settings_form import SettingsForm
+from ponos_coach.ui.tokens import SPACE_1, SPACE_2, SPACE_4, Theme, tokens_for
 
 _TABLE_MIN_HEIGHT = 140
-_NOTE_FIELDS = (EditField.WEIGHT, EditField.MIN_BPM, EditField.MAX_BPM, EditField.THRESHOLD)
+_NOTE_FIELDS = (
+    EditField.WEIGHT,
+    EditField.MIN_BPM,
+    EditField.MAX_BPM,
+    EditField.THRESHOLD,
+    EditField.RUN_LT1,
+    EditField.OTHER_THRESHOLD,
+    EditField.OTHER_LT1,
+    EditField.THRESHOLD_PACE,
+)
 
 
-class ProfileEditDialog(QDialog):
-    """Dati fissi in sola lettura, misure datate da aggiornare e storico."""
+class ProfileEditDialog(SettingsForm):
+    """Read-only fixed data, dated measurements to update and history."""
 
     save_requested = Signal(object)  # MeasurementsRequest
 
@@ -70,22 +92,18 @@ class ProfileEditDialog(QDialog):
         self,
         form: MeasurementsForm,
         history: MeasurementHistory,
-        profile_name: str,
         theme: Theme,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._form = form
-        self._profile_name = profile_name
         self._tokens = tokens_for(theme)
+        self._saving = False
         self._show_errors = False
         self._errors = {field: self._error_label() for field in EditField}
         self._notes = {field: self._note_label() for field in _NOTE_FIELDS}
         self._validity_notice = self._note_label()
         self._history_model = MeasurementHistoryModel(self)
-        self.setWindowTitle(self.tr("Edit profile"))
-        self.setMinimumWidth(DIALOG_MIN_WIDTH)
-        self.setWindowModality(Qt.WindowModality.WindowModal)
         self._build()
         self.set_history(history)
         self._load_from_form()
@@ -102,21 +120,39 @@ class ProfileEditDialog(QDialog):
         self._valid_from.setMinimumDate(to_qdate(MIN_MEASUREMENT_DATE))
         self._valid_from.setMaximumDate(to_qdate(self._form.today))
         self._valid_from.dateChanged.connect(self._on_valid_from_changed)
+        size_field(self._valid_from, FieldKind.DATE)
 
         self._weight = QLineEdit(self)
         self._weight.setObjectName("measurementsWeight")
         self._weight.setAccessibleName(self.tr("Weight (kg)"))
         self._weight.textEdited.connect(self._on_weight_edited)
+        size_field(self._weight, FieldKind.SHORT)
         self._min = self._bpm_box(MIN_ALLOWED_BPM, "measurementsMinHeartRate")
         self._max = self._bpm_box(MIN_ALLOWED_BPM, "measurementsMaxHeartRate")
         self._threshold = self._bpm_box(MIN_THRESHOLD_BPM, "measurementsThresholdHeartRate")
         self._min.valueChanged.connect(self._on_min_changed)
         self._max.valueChanged.connect(self._on_max_changed)
         self._threshold.valueChanged.connect(self._on_threshold_changed)
+        self._run_lt1 = optional_threshold_edit(self, "measurementsRunLt1HeartRate")
+        self._run_lt1.textEdited.connect(self._on_run_lt1_edited)
+        self._other = optional_threshold_edit(self, "measurementsOtherThresholdHeartRate")
+        self._other.textEdited.connect(self._on_other_edited)
+        self._other_lt1 = optional_threshold_edit(self, "measurementsOtherLt1HeartRate")
+        self._other_lt1.textEdited.connect(self._on_other_lt1_edited)
+        for lt1 in (self._run_lt1, self._other_lt1):
+            lt1.setToolTip(lt1_tooltip())
+        for lt2 in (self._threshold, self._other):
+            lt2.setToolTip(lt2_tooltip())
+        self._pace = threshold_pace_edit(
+            self,
+            "measurementsThresholdPace",
+            self.tr("Threshold pace (min/km)"),
+            self.tr("m:ss"),
+        )
+        self._pace.textEdited.connect(self._on_pace_edited)
 
         self._build_fixed_fields()
         self._build_history_table()
-        self._build_buttons()
         self._set_tab_order()
         outer = QVBoxLayout(self)
         outer.setSpacing(SPACE_4)
@@ -125,15 +161,21 @@ class ProfileEditDialog(QDialog):
         outer.addWidget(QLabel(self.tr("History"), self))
         outer.addWidget(self._table, stretch=1)
         outer.addWidget(self._errors[EditField.GENERAL])
-        outer.addWidget(self._buttons)
 
     def _build_fixed_fields(self) -> None:
+        self._name = QLineEdit(self)
+        self._name.setObjectName("profileName")
+        self._name.setAccessibleName(self.tr("Name"))
+        self._name.setMaxLength(NAME_MAX_CHARS)
+        self._name.textEdited.connect(self._on_name_edited)
         self._height = QLineEdit(self)
         self._height.setObjectName("fixedHeight")
         self._height.setAccessibleName(self.tr("Height (cm)"))
         self._height.textEdited.connect(self._on_height_edited)
+        size_field(self._height, FieldKind.SHORT)
         self._birth = BirthDateEdit(self._form.today, self)
         self._birth.selection_changed.connect(self._on_birth_changed)
+        size_field(self._birth, FieldKind.DATE)
 
     def _build_history_table(self) -> None:
         self._table = QTableView(self)
@@ -142,7 +184,7 @@ class ProfileEditDialog(QDialog):
         proxy = sorted_history_model(self._history_model, self)
         self._table.setModel(proxy)
         self._table.setSortingEnabled(True)
-        self._table.setShowGrid(False)  # niente linee verticali né orizzontali
+        self._table.setShowGrid(False)  # no vertical or horizontal lines
         self._table.setAlternatingRowColors(True)
         self._table.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
@@ -150,30 +192,22 @@ class ProfileEditDialog(QDialog):
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._table.setMinimumHeight(_TABLE_MIN_HEIGHT)
 
-    def _build_buttons(self) -> None:
-        self._buttons = QDialogButtonBox(self)
-        self._save = self._buttons.addButton(
-            self.tr("Save changes"), QDialogButtonBox.ButtonRole.AcceptRole
-        )
-        self._save.setDefault(True)
-        self._buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
-        self._buttons.accepted.connect(self._on_save)
-        self._buttons.rejected.connect(self.reject)
-
     def _set_tab_order(self) -> None:
-        """Il Tab segue l'ordine visivo, dall'alto in basso: prima i dati fissi da completare."""
-        cancel = self._buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        """Tab follows the visual order, top to bottom: first the fixed data to complete."""
         order = [
+            self._name,
             self._height,
             self._birth,
             self._valid_from,
             self._weight,
             self._min,
             self._max,
+            self._run_lt1,
             self._threshold,
+            self._other_lt1,
+            self._other,
+            self._pace,
             self._table,
-            self._save,
-            cancel,
         ]
         for first, second in pairwise(order):
             QWidget.setTabOrder(first, second)
@@ -182,7 +216,9 @@ class ProfileEditDialog(QDialog):
         box = QGroupBox(self.tr("Profile data"), self)
         layout = QFormLayout(box)
         layout.setVerticalSpacing(SPACE_2)
-        layout.addRow(self.tr("Name"), self._read_only(self._profile_name, "fixedName"))
+        add_field_row(
+            layout, self.tr("Name"), self._name, self._with_error(self._name, EditField.NAME)
+        )
         sex_text = self.tr("Male") if self._form.sex is Sex.MALE else self.tr("Female")
         fixed = self._form.fixed
         if fixed is None:
@@ -214,7 +250,7 @@ class ProfileEditDialog(QDialog):
                 to_qdate(fixed.birth_date.value), QLocale.FormatType.ShortFormat
             )
             layout.addRow(self.tr("Date of birth"), self._read_only(born, "fixedBirthDate"))
-            self._height.hide()  # niente da completare: i campi restano fuori dal modulo
+            self._height.hide()  # nothing to complete: the fields stay out of the form
             self._birth.hide()
         layout.addRow(self.tr("Sex"), self._read_only(sex_text, "fixedSex"))
         return box
@@ -232,17 +268,52 @@ class ProfileEditDialog(QDialog):
         )
         hint.setWordWrap(True)
         layout.addRow(hint)
-        rows = (
-            (self.tr("Valid from"), self._valid_from, EditField.VALID_FROM),
-            (self.tr("Weight (kg)"), self._weight, EditField.WEIGHT),
-            (self.tr("Resting heart rate"), self._min, EditField.MIN_BPM),
-            (self.tr("Maximum heart rate"), self._max, EditField.MAX_BPM),
-            (self.tr("Threshold heart rate"), self._threshold, EditField.THRESHOLD),
+        self._add_rows(
+            layout,
+            (
+                (self.tr("Valid from"), self._valid_from, EditField.VALID_FROM),
+                (self.tr("Weight (kg)"), self._weight, EditField.WEIGHT),
+                (self.tr("Resting heart rate"), self._min, EditField.MIN_BPM),
+                (self.tr("Maximum heart rate"), self._max, EditField.MAX_BPM),
+            ),
         )
-        for text, widget, field in rows:
-            add_field_row(layout, text, widget, self._with_error(widget, field))
+        add_group_heading(layout, self.tr("Running and trail"), self)
+        self._add_rows(
+            layout,
+            (
+                (self.tr("LT1 (aerobic threshold)"), self._run_lt1, EditField.RUN_LT1),
+                (self.tr("LT2 (lactate threshold)"), self._threshold, EditField.THRESHOLD),
+            ),
+            accessible_prefix=self.tr("Running and trail"),
+        )
+        add_group_heading(layout, self.tr("Other sports"), self)
+        self._add_rows(
+            layout,
+            (
+                (self.tr("LT1 (aerobic threshold)"), self._other_lt1, EditField.OTHER_LT1),
+                (self.tr("LT2 (lactate threshold)"), self._other, EditField.OTHER_THRESHOLD),
+            ),
+            accessible_prefix=self.tr("Other sports"),
+        )
+        self._add_rows(
+            layout,
+            ((self.tr("Threshold pace (min/km)"), self._pace, EditField.THRESHOLD_PACE),),
+        )
         layout.addRow(self._validity_notice)
         return box
+
+    def _add_rows(
+        self,
+        layout: QFormLayout,
+        rows: tuple[tuple[str, QWidget, EditField], ...],
+        accessible_prefix: str = "",
+    ) -> None:
+        """Rows of label, field and error; fields of a group get the group in their accessible
+        name, so two fields with the same label are told apart."""
+        for text, widget, field in rows:
+            if accessible_prefix:
+                widget.setAccessibleName(f"{accessible_prefix}: {text}")
+            add_field_row(layout, text, widget, self._with_error(widget, field))
 
     def _read_only(self, text: str, name: str) -> QLabel:
         label = QLabel(text, self)
@@ -256,6 +327,7 @@ class ProfileEditDialog(QDialog):
         box.setObjectName(name)
         box.setRange(low, MAX_ALLOWED_BPM)
         box.setSuffix(self.tr(" bpm"))
+        size_field(box, FieldKind.SHORT)
         return box
 
     def _error_label(self) -> QLabel:
@@ -267,7 +339,7 @@ class ProfileEditDialog(QDialog):
         return label
 
     def _note_label(self) -> QLabel:
-        """Riga di spiegazione sotto un campo (testo attenuato, con contrasto sufficiente)."""
+        """Explanation row under a field (muted text, with sufficient contrast)."""
         label = QLabel(self)
         label.setTextFormat(Qt.TextFormat.PlainText)
         label.setWordWrap(True)
@@ -287,87 +359,128 @@ class ProfileEditDialog(QDialog):
         column.addWidget(self._errors[field])
         return box
 
-    # --- Accessori per i test ---------------------------------------------------------
+    # --- Test accessors ---------------------------------------------------------
 
     @property
     def form(self) -> MeasurementsForm:
-        """Il modello del modulo."""
+        """The form model."""
         return self._form
 
     @property
     def valid_from_edit(self) -> QDateEdit:
-        """Selettore del giorno di validità."""
+        """Validity day picker."""
         return self._valid_from
 
     @property
+    def name_edit(self) -> QLineEdit:
+        """Campo del nome del profilo."""
+        return self._name
+
+    @property
     def weight_edit(self) -> QLineEdit:
-        """Campo del peso."""
+        """Weight field."""
         return self._weight
 
     @property
     def min_box(self) -> QSpinBox:
-        """FC minima."""
+        """Minimum HR."""
         return self._min
 
     @property
     def max_box(self) -> QSpinBox:
-        """FC massima."""
+        """Maximum HR."""
         return self._max
 
     @property
     def threshold_box(self) -> QSpinBox:
-        """Soglia."""
+        """Threshold."""
         return self._threshold
 
     @property
+    def run_lt1_edit(self) -> QLineEdit:
+        """LT1 of running and trail (empty: the default, shown as the placeholder)."""
+        return self._run_lt1
+
+    @property
+    def other_lt1_edit(self) -> QLineEdit:
+        """LT1 of the other sports (empty: the default, shown as the placeholder)."""
+        return self._other_lt1
+
+    @property
+    def other_edit(self) -> QLineEdit:
+        """LT2 of the other sports (empty: the default, shown as the placeholder)."""
+        return self._other
+
+    @property
+    def pace_edit(self) -> QLineEdit:
+        """Threshold pace field (`m:ss`)."""
+        return self._pace
+
+    @property
     def height_edit(self) -> QLineEdit:
-        """Altezza da completare (nascosta se il profilo ha già i dati fissi)."""
+        """Height to complete (hidden if the profile already has the fixed data)."""
         return self._height
 
     @property
     def birth_edit(self) -> BirthDateEdit:
-        """Data di nascita da completare (nascosta se il profilo ha già i dati fissi)."""
+        """Birth date to complete (hidden if the profile already has the fixed data)."""
         return self._birth
 
     @property
-    def save_button(self) -> QWidget:
-        """Bottone "Salva modifiche"."""
-        return self._save
-
-    @property
     def history_table(self) -> QTableView:
-        """La tabella dello storico."""
+        """The history table."""
         return self._table
 
     def error_text(self, field: EditField) -> str:
-        """Messaggio mostrato sotto un campo (vuoto se non c'è)."""
+        """Message shown under a field (empty if there is none)."""
         return self._errors[field].text()
 
     def note_text(self, field: EditField) -> str:
-        """Ciò che vale quel giorno per un campo cambiato (vuoto se il campo non è cambiato)."""
+        """What applied that day for a changed field (empty if the field is unchanged)."""
         label = self._notes[field]
         return label.text() if label.isVisibleTo(self) else ""
 
     @property
     def validity_notice_text(self) -> str:
-        """Avviso che una misura successiva sostituisce la nuova (vuoto se non c'è)."""
+        """Notice that a later measurement replaces the new one (empty if there is none)."""
         label = self._validity_notice
         return label.text() if label.isVisibleTo(self) else ""
 
-    # --- Dal modello alla vista -------------------------------------------------------
+    def has_unsaved_changes(self) -> bool:
+        """True while something typed differs from what the profile holds, or a day other than
+        today was chosen: a re-read of the saved values must not put today back under the user's
+        eyes (the threshold would then be saved from today)."""
+        return self._form.has_changes or self._form.valid_from != self._form.today
+
+    def can_save(self) -> bool:
+        """True with at least one changed value, and not while a save is in progress."""
+        return self._form.has_changes and not self._saving
+
+    def save_blocked_reason(self) -> str:
+        """Why nothing can be saved now."""
+        if self._saving:
+            return self.tr("The changes are being saved.")
+        return self.tr("Change at least one value first.")
+
+    def request_save(self) -> None:
+        """Save what is typed (the window's "Save changes" button)."""
+        self._on_save()
+
+    # --- From the model to the view -------------------------------------------------------
 
     def set_history(self, history: MeasurementHistory) -> None:
-        """Mostra lo storico delle misure."""
+        """Show the measurement history."""
         self._history_model.set_history(history)
 
     def _load_from_form(self) -> None:
         self._valid_from.blockSignals(True)
         self._valid_from.setDate(to_qdate(self._form.valid_from))
         self._valid_from.blockSignals(False)
+        self._name.setText(self._form.current_name)
         self._refresh_values()
 
     def _refresh_values(self) -> None:
-        """Mostra i valori del modello: i campi non toccati seguono il giorno scelto."""
+        """Show the model's values: untouched fields follow the chosen day."""
         form = self._form
         for box, value in (
             (self._min, form.min_bpm),
@@ -377,9 +490,33 @@ class ProfileEditDialog(QDialog):
             box.blockSignals(True)
             box.setValue(value)
             box.blockSignals(False)
+        for edit, field in (
+            (self._run_lt1, EditField.RUN_LT1),
+            (self._other, EditField.OTHER_THRESHOLD),
+            (self._other_lt1, EditField.OTHER_LT1),
+        ):
+            edit.setText(form.threshold_text(field))
+        self._refresh_placeholders()
         if form.edited_weight_text is None:
             baseline = form.baseline_weight
             self._weight.setText("" if baseline is None else weight_text(baseline))
+        if form.edited_pace_text is None:
+            in_force = form.baseline_pace
+            self._pace.setText("" if in_force is None else pace_text(in_force.pace))
+            self._pace.setToolTip("" if in_force is None else pace_source_text(in_force))
+
+    def _refresh_placeholders(self) -> None:
+        """The default of each optional threshold, for the heart rates now shown."""
+        form = self._form
+        self._run_lt1.setPlaceholderText(
+            lt1_default_placeholder(form.threshold_default(EditField.RUN_LT1))
+        )
+        self._other.setPlaceholderText(
+            other_default_placeholder(form.threshold_default(EditField.OTHER_THRESHOLD))
+        )
+        self._other_lt1.setPlaceholderText(
+            lt1_default_placeholder(form.threshold_default(EditField.OTHER_LT1))
+        )
 
     def _refresh_errors(self, extra: tuple[EditIssue, ...] = ()) -> None:
         issues = (*self._form.issues(), *extra) if self._show_errors else extra
@@ -394,6 +531,8 @@ class ProfileEditDialog(QDialog):
             return body_problem_text(kind)
         if isinstance(kind, HeartRateProblem):
             return heart_rate_problem_text(kind)
+        if isinstance(kind, NameProblem):
+            return self._name_problem_text(kind)
         texts = {
             MeasurementProblem.NOTHING_TO_UPDATE: self.tr(
                 "Nothing has changed: change at least one value."
@@ -409,22 +548,27 @@ class ProfileEditDialog(QDialog):
         }
         return texts[kind]
 
-    def _update_save_button(self) -> None:
-        """ "Salva modifiche" resta disabilitato, con il motivo nel tooltip, senza modifiche."""
-        has_changes = self._form.has_changes
-        self._save.setEnabled(has_changes)
-        self._save.setToolTip("" if has_changes else self.tr("Change at least one value first."))
+    def _name_problem_text(self, problem: NameProblem) -> str:
+        if problem is NameProblem.EMPTY:
+            return self.tr("Enter a name for the profile.")
+        return self.tr("The name contains characters that are not allowed.")
 
-    # --- Dalla vista al modello -------------------------------------------------------
+    def _update_save_button(self) -> None:
+        """Tell the window that whether the page can be saved may have changed."""
+        self.edited.emit()
+
+    # --- From the view to the model -------------------------------------------------------
 
     def _after_edit(self) -> None:
+        self._refresh_placeholders()
         self._update_save_button()
         self._refresh_notes()
         self._refresh_errors()
 
     def _refresh_notes(self) -> None:
-        """Cosa cambia rispetto al giorno scelto e per quanto varrebbe: si ricalcola a ogni modifica
-        e a ogni cambio di giorno, così le note non restano quelle di un altro giorno."""
+        """What changes relative to the chosen day and for how long it would apply: recomputed at
+        every edit
+        and every day change, so the notes never belong to another day."""
         changes = {change.field: change for change in self._form.changes()}
         for field, label in self._notes.items():
             change = changes.get(field)
@@ -443,6 +587,10 @@ class ProfileEditDialog(QDialog):
         self._refresh_values()
         self._after_edit()
 
+    def _on_name_edited(self, text: str) -> None:
+        self._form.edit_name(text)
+        self._after_edit()
+
     def _on_weight_edited(self, text: str) -> None:
         self._form.edit_weight(text)
         self._after_edit()
@@ -457,6 +605,23 @@ class ProfileEditDialog(QDialog):
 
     def _on_threshold_changed(self, value: int) -> None:
         self._form.edit_threshold_bpm(value)
+        self._after_edit()
+
+    def _on_run_lt1_edited(self, text: str) -> None:
+        self._form.edit_run_lt1(text)
+        self._after_edit()
+
+    def _on_other_edited(self, text: str) -> None:
+        self._form.edit_other_threshold(text)
+        self._refresh_placeholders()  # the default LT1 of the other sports follows their LT2
+        self._after_edit()
+
+    def _on_other_lt1_edited(self, text: str) -> None:
+        self._form.edit_other_lt1(text)
+        self._after_edit()
+
+    def _on_pace_edited(self, text: str) -> None:
+        self._form.edit_threshold_pace(text)
         self._after_edit()
 
     def _on_height_edited(self, text: str) -> None:
@@ -477,14 +642,20 @@ class ProfileEditDialog(QDialog):
             return
         self._refresh_errors()
         self._focus_first(result[0].field)
+        self.save_failed.emit()
 
     def _focus_first(self, field: EditField) -> None:
         targets: dict[EditField, QWidget] = {
+            EditField.NAME: self._name,
             EditField.VALID_FROM: self._valid_from,
             EditField.WEIGHT: self._weight,
             EditField.MIN_BPM: self._min,
             EditField.MAX_BPM: self._max,
             EditField.THRESHOLD: self._threshold,
+            EditField.RUN_LT1: self._run_lt1,
+            EditField.OTHER_THRESHOLD: self._other,
+            EditField.OTHER_LT1: self._other_lt1,
+            EditField.THRESHOLD_PACE: self._pace,
             EditField.HEIGHT: self._height,
             EditField.BIRTH_DATE: self._birth,
         }
@@ -492,30 +663,37 @@ class ProfileEditDialog(QDialog):
         if target is not None:
             target.setFocus()
 
-    # --- Esito del salvataggio --------------------------------------------------------
+    # --- Save outcome --------------------------------------------------------
 
     def set_busy(self, busy: bool) -> None:
-        """Mentre il salvataggio è in corso il dialogo non accetta altre modifiche."""
-        self._save.setEnabled(not busy and self._form.has_changes)
+        """While saving is in progress the page accepts no other edits. Unlocking a page that was
+        saving means the save did not complete (`save_failed`); unlocking one that was not (a
+        failed read) says nothing about a save, so a close the Settings window is waiting for
+        is not cancelled."""
+        was_saving = self._saving
+        self._saving = busy
         for widget in (
+            self._name,
             self._valid_from,
             self._weight,
             self._min,
             self._max,
             self._threshold,
+            self._run_lt1,
+            self._other,
+            self._other_lt1,
+            self._pace,
             self._height,
             self._birth,
         ):
             widget.setEnabled(not busy)
+        self.edited.emit()
+        if was_saving and not busy:
+            self.save_failed.emit()
 
     def show_rejection(self, issue: EditIssue) -> None:
-        """Le misure rifiutate dal caso d'uso: il problema compare sul campo giusto."""
+        """Measurements rejected by the use case: the problem appears on the right field."""
         self.set_busy(False)
         self._show_errors = True
         self._refresh_errors((issue,))
         self._focus_first(issue.field)
-
-    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - Qt
-        """Il primo campo da scrivere ha il fuoco: il peso, o l'altezza se va completata."""
-        super().showEvent(event)
-        (self._height if self._form.needs_fixed_data else self._weight).setFocus()

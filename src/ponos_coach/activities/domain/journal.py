@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Giornale della sincronizzazione: stato di ogni attività remota, cursore dell'elenco.
+"""Synchronization journal: state of each remote activity, list cursor.
 
-Il giornale rende la sincronizzazione riprendibile (PLAN.md 4.4): ogni id remoto è una voce con
-uno stato. Le transizioni ammesse sono funzioni pure; non esiste uno stato "in corso", perché
-download, archivio e conferma stanno in una sola transazione: un'interruzione lascia la voce
-com'era.
+The journal makes synchronization resumable (PLAN.md 4.4): each remote id is an entry with
+a state. The allowed transitions are pure functions; there is no "in progress" state, because
+download, archive and confirmation are in a single transaction: an interruption leaves the entry
+as it was.
 """
 
 from __future__ import annotations
@@ -22,69 +22,93 @@ from ponos_coach.activities.domain.timing import check_utc
 
 
 class SyncStatus(Enum):
-    """Stato di una voce del giornale. Il valore è stabile (dati salvati)."""
+    """State of a journal entry. The value is stable (saved data)."""
 
-    PENDING = "pending"  # da scaricare
-    DOWNLOADED = "downloaded"  # scaricata, archiviata e indicizzata
-    MATCHED = "matched"  # abbinata a un'attività già importata da file: nessun download
-    RETRYABLE = "retryable"  # fallita per una causa transitoria: si ritenta alla prossima volta
-    FAILED = "failed"  # fallita in modo definitivo: non si ritenta
+    PENDING = "pending"  # to download
+    DOWNLOADED = "downloaded"  # downloaded, archived and indexed
+    MATCHED = "matched"  # matched to an activity already imported from file: no download
+    RETRYABLE = "retryable"  # failed for a transient cause: retried next time
+    FAILED = "failed"  # failed definitively: not retried
+    SKIPPED = "skipped"  # the user deleted this activity: it is never downloaded
 
 
 class FailureReason(Enum):
-    """Perché una voce è fallita. Il valore è stabile (dati salvati)."""
+    """Why an entry failed. The value is stable (saved data)."""
 
-    # Ritentabili: la causa può passare.
+    # Retryable: the cause may pass.
     TRANSIENT_ERROR = "transient_error"
     RATE_LIMITED = "rate_limited"
-    # Definitive: ritentare darebbe lo stesso esito.
-    UNSUPPORTED_FORMAT = "unsupported_format"  # per esempio un TCX
+    # Final: retrying would give the same outcome.
+    UNSUPPORTED_FORMAT = "unsupported_format"  # e.g. a TCX
     CORRUPT_FILE = "corrupt_file"
     FILE_TOO_LARGE = "file_too_large"
     NOT_AN_ACTIVITY = "not_an_activity"
-    ARCHIVE_INVALID = "archive_invalid"  # lo ZIP scaricato non è valido o è ostile
-    REMOTE_REJECTED = "remote_rejected"  # Garmin dice che l'originale non c'è o non si dà
-    ATTEMPTS_EXHAUSTED = "attempts_exhausted"  # troppe sincronizzazioni fallite
+    ARCHIVE_INVALID = "archive_invalid"  # the downloaded ZIP is invalid or hostile
+    REMOTE_REJECTED = "remote_rejected"  # Garmin says the original does not exist or is not given
+    ATTEMPTS_EXHAUSTED = "attempts_exhausted"  # too many failed synchronizations
+    # Garmin lists the activity but never serves its download (5xx or no response, round after
+    # round, while it answers other requests). Not ATTEMPTS_EXHAUSTED: that one counts failures
+    # of the entry, this one counts silence of Garmin, and the user is told so.
+    REMOTE_NOT_PROVIDED = "remote_not_provided"
 
 
+# The causes that the "Full check" rearms: they may pass (the activity may be served again).
+REARMABLE_REASONS: Final = frozenset(
+    {FailureReason.ATTEMPTS_EXHAUSTED, FailureReason.REMOTE_NOT_PROVIDED}
+)
 RETRYABLE_REASONS: Final = frozenset({FailureReason.TRANSIENT_ERROR, FailureReason.RATE_LIMITED})
 
 WORKABLE_STATUSES: Final = frozenset({SyncStatus.PENDING, SyncStatus.RETRYABLE})
 _FAILURE_STATUSES: Final = frozenset({SyncStatus.RETRYABLE, SyncStatus.FAILED})
 
-# Da -> verso. Le voci da lavorare vanno in uno qualsiasi degli altri stati (RETRYABLE incluso,
-# se fallisce ancora); DOWNLOADED e MATCHED non si muovono; FAILED torna solo a PENDING e solo
-# per `rearm_exhausted` (la "Verifica completa" riarma i tentativi esauriti).
+# From -> to. Entries to process go to any of the other states (RETRYABLE included,
+# if it fails again); DOWNLOADED, MATCHED and SKIPPED do not move; FAILED goes back only to PENDING
+# and only for `rearm_exhausted` (the "Full check" rearms the causes in `REARMABLE_REASONS`).
 ALLOWED_TRANSITIONS: Final[Mapping[SyncStatus, frozenset[SyncStatus]]] = {
     SyncStatus.PENDING: frozenset(
-        {SyncStatus.DOWNLOADED, SyncStatus.MATCHED, SyncStatus.RETRYABLE, SyncStatus.FAILED}
+        {
+            SyncStatus.DOWNLOADED,
+            SyncStatus.MATCHED,
+            SyncStatus.SKIPPED,
+            SyncStatus.RETRYABLE,
+            SyncStatus.FAILED,
+        }
     ),
     SyncStatus.RETRYABLE: frozenset(
-        {SyncStatus.DOWNLOADED, SyncStatus.MATCHED, SyncStatus.RETRYABLE, SyncStatus.FAILED}
+        {
+            SyncStatus.DOWNLOADED,
+            SyncStatus.MATCHED,
+            SyncStatus.SKIPPED,
+            SyncStatus.RETRYABLE,
+            SyncStatus.FAILED,
+        }
     ),
     SyncStatus.DOWNLOADED: frozenset(),
     SyncStatus.MATCHED: frozenset(),
+    SyncStatus.SKIPPED: frozenset(),
     SyncStatus.FAILED: frozenset({SyncStatus.PENDING}),
 }
 
 
 class InvalidTransitionError(ValueError):
-    """La transizione di stato non è ammessa (la voce è già in uno stato finale)."""
+    """The state transition is not allowed (the entry is already in a final state)."""
 
 
 def can_transition(old: SyncStatus, new: SyncStatus) -> bool:
-    """Vero se una voce nello stato `old` può passare a `new`."""
+    """True if an entry in state `old` can move to `new`."""
     return new in ALLOWED_TRANSITIONS[old]
 
 
 @dataclass(frozen=True, slots=True)
 class JournalEntry:
-    """Una voce del giornale: l'attività remota e a che punto è.
+    """A journal entry: the remote activity and where it stands.
 
-    Invarianti: `RETRYABLE` ha una causa ritentabile e `FAILED` una definitiva, ogni altro
-    stato nessuna; `PENDING` non ha tentativi falliti, `RETRYABLE` e `FAILED` ne hanno almeno
-    uno; `updated_at` è UTC al millisecondo. `failed_attempts` conta le sincronizzazioni in cui
-    la voce è fallita.
+    Invariants: `RETRYABLE` has a retryable cause and `FAILED` a final one, every other
+    state none; `PENDING` has no failed attempts and no unanswered rounds, `RETRYABLE` and
+    `FAILED` have at least one of the two; `updated_at` is UTC to the millisecond.
+    `failed_attempts` counts the synchronizations in which the entry failed; `unanswered_rounds`
+    the rounds in which its download had no useful answer while Garmin answered other requests
+    (it does not use up the failed attempts); a successful download resets it to zero.
     """
 
     remote: RemoteActivity
@@ -92,32 +116,36 @@ class JournalEntry:
     updated_at: datetime
     failed_attempts: int = 0
     failure: FailureReason | None = None
+    unanswered_rounds: int = 0
 
     def __post_init__(self) -> None:
         check_utc(self.updated_at)
         if self.updated_at.microsecond % 1000:
-            raise ValueError("l'istante deve essere al millisecondo")
-        if self.failed_attempts < 0:
-            raise ValueError("i tentativi falliti non possono essere negativi")
+            raise ValueError("the instant must be at millisecond precision")
+        self._check_counters()
         if (self.status in _FAILURE_STATUSES) != (self.failure is not None):
-            raise ValueError("solo gli stati di fallimento hanno una causa")
+            raise ValueError("only failure states have a cause")
         if self.failure is not None and (self.failure in RETRYABLE_REASONS) != (
             self.status is SyncStatus.RETRYABLE
         ):
-            raise ValueError("causa e stato non coerenti: ritentabile solo se RETRYABLE")
-        if self.status is SyncStatus.PENDING and self.failed_attempts:
-            raise ValueError("una voce da scaricare non ha tentativi falliti")
-        if self.status in _FAILURE_STATUSES and self.failed_attempts < 1:
-            raise ValueError("una voce fallita ha almeno un tentativo fallito")
+            raise ValueError("cause and state inconsistent: retryable only if RETRYABLE")
+
+    def _check_counters(self) -> None:
+        if self.failed_attempts < 0 or self.unanswered_rounds < 0:
+            raise ValueError("attempts and unanswered rounds cannot be negative")
+        if self.status is SyncStatus.PENDING and (self.failed_attempts or self.unanswered_rounds):
+            raise ValueError("an entry to download has no failed attempts or unanswered rounds")
+        if self.status in _FAILURE_STATUSES and self.failed_attempts + self.unanswered_rounds < 1:
+            raise ValueError("a failed entry has at least one failed attempt or unanswered round")
 
     @property
     def garmin_id(self) -> GarminActivityId:
-        """L'id Garmin della voce."""
+        """The Garmin id of the entry."""
         return self.remote.garmin_id
 
 
 def pending_entry(remote: RemoteActivity, now: datetime) -> JournalEntry:
-    """Voce nuova, da scaricare."""
+    """New entry, to download."""
     return JournalEntry(remote, SyncStatus.PENDING, now)
 
 
@@ -127,40 +155,52 @@ def _check_move(entry: JournalEntry, new: SyncStatus) -> None:
 
 
 def mark_downloaded(entry: JournalEntry, now: datetime) -> JournalEntry:
-    """La voce è scaricata, archiviata e indicizzata (conserva i tentativi falliti).
+    """The entry is downloaded, archived and indexed (keeps the failed attempts; the count of
+    unanswered rounds goes back to zero: Garmin did serve it).
 
     Raises:
-        InvalidTransitionError: la voce è già in uno stato finale.
+        InvalidTransitionError: the entry is already in a final state.
     """
     _check_move(entry, SyncStatus.DOWNLOADED)
     return JournalEntry(entry.remote, SyncStatus.DOWNLOADED, now, entry.failed_attempts)
 
 
 def mark_matched(entry: JournalEntry, now: datetime) -> JournalEntry:
-    """La voce è abbinata a un'attività già importata da file: nessun download.
+    """The entry is matched to an activity already imported from file: no download.
 
     Raises:
-        InvalidTransitionError: la voce è già in uno stato finale.
+        InvalidTransitionError: the entry is already in a final state.
     """
     _check_move(entry, SyncStatus.MATCHED)
     return JournalEntry(entry.remote, SyncStatus.MATCHED, now, entry.failed_attempts)
 
 
+def mark_skipped(entry: JournalEntry, now: datetime) -> JournalEntry:
+    """The user deleted the activity of this entry: it is not downloaded, and it neither fails nor
+    stays to do (it is a choice, not a problem).
+
+    Raises:
+        InvalidTransitionError: the entry is already in a final state.
+    """
+    _check_move(entry, SyncStatus.SKIPPED)
+    return JournalEntry(entry.remote, SyncStatus.SKIPPED, now, entry.failed_attempts)
+
+
 def mark_failed(
     entry: JournalEntry, reason: FailureReason, now: datetime, max_attempts: int
 ) -> JournalEntry:
-    """La voce è fallita in questa sincronizzazione.
+    """The entry failed in this synchronization.
 
-    Una causa definitiva dà `FAILED`. Una causa ritentabile dà `RETRYABLE`, finché i tentativi
-    falliti (questo compreso) non arrivano a `max_attempts`: allora `FAILED` con
+    A final cause gives `FAILED`. A retryable cause gives `RETRYABLE`, until the failed attempts
+    (this one included) reach `max_attempts`: then `FAILED` with
     `ATTEMPTS_EXHAUSTED`.
 
     Raises:
-        InvalidTransitionError: la voce è già in uno stato finale.
-        ValueError: `max_attempts` minore di 1.
+        InvalidTransitionError: the entry is already in a final state.
+        ValueError: `max_attempts` less than 1.
     """
     if max_attempts < 1:
-        raise ValueError("serve almeno un tentativo")
+        raise ValueError("at least one attempt is required")
     attempts = entry.failed_attempts + 1
     if reason not in RETRYABLE_REASONS:
         status, cause = SyncStatus.FAILED, reason
@@ -169,45 +209,67 @@ def mark_failed(
     else:
         status, cause = SyncStatus.FAILED, FailureReason.ATTEMPTS_EXHAUSTED
     _check_move(entry, status)
-    return JournalEntry(entry.remote, status, now, attempts, cause)
+    return JournalEntry(entry.remote, status, now, attempts, cause, entry.unanswered_rounds)
+
+
+def mark_unanswered(entry: JournalEntry, now: datetime, max_rounds: int) -> JournalEntry:
+    """The download of the entry had no useful answer in a round in which Garmin answered
+    other requests (the list or other downloads).
+
+    The count of unanswered rounds goes up by one and the failed attempts are left alone. Below
+    `max_rounds` the entry is `RETRYABLE` with `TRANSIENT_ERROR`; at `max_rounds` it is `FAILED`
+    with `REMOTE_NOT_PROVIDED`, so it stops holding up the next rounds. A real failure of Garmin
+    (nothing answers, no network, 429) must not reach this function.
+
+    Raises:
+        InvalidTransitionError: the entry is already in a final state.
+        ValueError: `max_rounds` less than 1.
+    """
+    if max_rounds < 1:
+        raise ValueError("at least one unanswered round is required")
+    rounds = entry.unanswered_rounds + 1
+    if rounds < max_rounds:
+        status, cause = SyncStatus.RETRYABLE, FailureReason.TRANSIENT_ERROR
+    else:
+        status, cause = SyncStatus.FAILED, FailureReason.REMOTE_NOT_PROVIDED
+    _check_move(entry, status)
+    return JournalEntry(entry.remote, status, now, entry.failed_attempts, cause, rounds)
 
 
 def rearm_exhausted(entry: JournalEntry, now: datetime) -> JournalEntry:
-    """Riarma una voce fallita per tentativi esauriti: torna da scaricare, senza tentativi.
+    """Rearms an entry that failed for exhausted attempts or because Garmin does not provide it:
+    back to download, with no attempts and no unanswered rounds.
 
-    Serve alla "Verifica completa": i tentativi consumati prima (anche per colpa della rete)
-    non condannano per sempre un'attività valida. Le altre cause definitive (formato non
-    supportato, file corrotto...) restano tali.
+    Used by the "Full check": attempts consumed earlier (even because of the network), or a
+    Garmin that did not serve the file for a while, do not condemn a valid activity forever. The
+    other final causes (format not supported, corrupt file...) stay as they are.
 
     Raises:
-        InvalidTransitionError: la voce non è `FAILED` con `ATTEMPTS_EXHAUSTED`.
+        InvalidTransitionError: the entry is not `FAILED` with a cause in `REARMABLE_REASONS`.
     """
-    if (
-        entry.status is not SyncStatus.FAILED
-        or entry.failure is not FailureReason.ATTEMPTS_EXHAUSTED
-    ):
+    if entry.status is not SyncStatus.FAILED or entry.failure not in REARMABLE_REASONS:
         raise InvalidTransitionError(f"{entry.status.value} -> {SyncStatus.PENDING.value}")
     return JournalEntry(entry.remote, SyncStatus.PENDING, now)
 
 
-# --- Cursore dell'elenco -----------------------------------------------------------------------
+# --- List cursor -------------------------------------------------------------------------
 
 
 class ListingKind(Enum):
-    """Quale elenco remoto sta percorrendo un cursore. Il valore è stabile (dati salvati)."""
+    """Which remote list a cursor is walking. The value is stable (saved data)."""
 
-    FULL = "full"  # prima sincronizzazione: tutto lo storico
-    VERIFY = "verify"  # "Verifica completa": rielenca tutto, senza riscaricare
-    INCREMENTAL = "incremental"  # sincronizzazioni successive: dalle più recenti
+    FULL = "full"  # first synchronization: the whole history
+    VERIFY = "verify"  # "Full check": lists everything again, without re-downloading
+    INCREMENTAL = "incremental"  # later synchronizations: from the most recent
 
 
 @dataclass(frozen=True, slots=True)
 class ListingCursor:
-    """Punto raggiunto in un elenco remoto: la prossima posizione e il totale dichiarato.
+    """Point reached in a remote list: the next position and the declared total.
 
-    Il totale serve solo all'avanzamento (può essere vecchio: Garmin riceve attività nuove
-    mentre si elenca); non decide quando l'elenco finisce. `completed` dice che l'elenco è
-    finito: non si avanza più, per ripartire si usa `ListingCursor.start()`.
+    The total is only for progress (it may be old: Garmin receives new activities
+    while listing); it does not decide when the list ends. `completed` says the list is
+    finished: it no longer advances, to restart use `ListingCursor.start()`.
     """
 
     next_offset: int
@@ -216,20 +278,20 @@ class ListingCursor:
 
     def __post_init__(self) -> None:
         if self.next_offset < 0 or (self.declared_total is not None and self.declared_total < 0):
-            raise ValueError("posizione o totale negativi")
+            raise ValueError("negative position or total")
 
     @classmethod
     def start(cls) -> ListingCursor:
-        """Cursore all'inizio dell'elenco."""
+        """Cursor at the start of the list."""
         return cls(0, None, False)
 
 
 def is_known_page(page: ActivityPage, known_ids: Set[GarminActivityId]) -> bool:
-    """Regola d'arresto dell'elenco incrementale: una pagina intera di id già noti.
+    """Stop rule of the incremental list: a whole page of already known ids.
 
-    Vera se la pagina ha almeno una voce valida e tutte sono in `known_ids`. Una pagina senza
-    voci valide non è "nota": o l'elenco è finito (lo dice `raw_count`) o erano tutte
-    malformate.
+    True if the page has at least one valid entry and all are in `known_ids`. A page without
+    valid entries is not "known": either the list is finished (`raw_count` says so) or they were all
+    malformed.
     """
     return bool(page.items) and all(item.garmin_id in known_ids for item in page.items)
 
@@ -240,25 +302,26 @@ def advance_cursor(
     limit: int,
     known_ids: Set[GarminActivityId] | None = None,
 ) -> ListingCursor:
-    """Cursore dopo aver elaborato `page`, chiesta con `limit` voci.
+    """Cursor after processing `page`, requested with `limit` entries.
 
-    L'elenco è finito se Garmin ha restituito meno di `limit` voci (nessuna compresa) oppure,
-    solo se `known_ids` è dato (elenco incrementale), la pagina è tutta di id già noti
-    (`is_known_page`). Il totale dichiarato **non** lo ferma: si fissa alla prima pagina e, se
-    Garmin riceve un'attività nuova durante l'elenco, la più vecchia scivolerebbe oltre; basta
-    una pagina corta o vuota (al più una richiesta in più quando il totale è un multiplo
-    esatto di `limit`). Il tetto alle pagine è `MAX_LISTED_ACTIVITIES` del caso d'uso.
+    The list is finished if Garmin returned fewer than `limit` entries (none included) or,
+    only if `known_ids` is given (incremental list), the page is entirely of already known ids
+    (`is_known_page`). The declared total does **not** stop it: it is fixed at the first page and,
+    if
+    Garmin receives a new activity during listing, the oldest would slip past; a short
+    or empty page is enough (at most one extra request when the total is an exact
+    multiple of `limit`). The cap on pages is `MAX_LISTED_ACTIVITIES` of the use case.
 
     Raises:
-        ValueError: cursore già completato, pagina non alla posizione del cursore, `limit`
-            fuori da 1..`MAX_PAGE_SIZE` o pagina più grande di `limit`.
+        ValueError: cursor already completed, page not at the cursor position, `limit`
+            outside 1..`MAX_PAGE_SIZE` or page larger than `limit`.
     """
     if cursor.completed:
-        raise ValueError("elenco già completato")
+        raise ValueError("list already completed")
     if page.offset != cursor.next_offset:
-        raise ValueError("la pagina non è alla posizione del cursore")
+        raise ValueError("the page is not at the cursor position")
     if not 1 <= limit <= MAX_PAGE_SIZE or page.raw_count > limit:
-        raise ValueError("limite di pagina non valido o superato")
+        raise ValueError("invalid or exceeded page limit")
     total = page.declared_total if page.declared_total is not None else cursor.declared_total
     next_offset = cursor.next_offset + page.raw_count
     done = page.raw_count < limit or (known_ids is not None and is_known_page(page, known_ids))

@@ -1,20 +1,21 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Dagli errori di `garminconnect` a quelli delle porte, senza perdere la catena delle cause.
+"""From `garminconnect` errors to those of the ports, without losing the chain of causes.
 
-La libreria avvolge quasi tutto in poche eccezioni (`GarminConnectConnectionError` per ogni
-fallimento di rete o HTTP, `GarminConnectAuthenticationError` anche quando il vero guasto è la
-rete): qui si guarda la catena `__cause__`/`__context__` per il codice HTTP e per i guasti di
-rete, e si decide come reagisce chi chiama.
+The library wraps almost everything in a few exceptions (`GarminConnectConnectionError` for every
+network or HTTP failure, `GarminConnectAuthenticationError` even when the real fault is the
+network): here the `__cause__`/`__context__` chain is inspected for the HTTP code and for network
+failures, and it is decided how the caller reacts.
 
-- 429 (e 427 del login) -> limite di frequenza, con `Retry-After` se Garmin lo dice;
-- 401 o autenticazione rifiutata -> autenticazione richiesta (al login: credenziali rifiutate);
-- rete, timeout, risposta non JSON, 5xx e 408 -> transitorio;
-- 404, altri 4xx e tutto il resto -> definitivo.
+- 429 (and 427 of the login) -> rate limit, with `Retry-After` if Garmin gives it;
+- 401 or authentication rejected -> authentication required (at login: credentials rejected);
+- network, timeout, non-JSON response, 5xx and 408 -> transient;
+- 404, other 4xx and everything else -> final.
 
-Nessun messaggio contiene testi della libreria o di Garmin (potrebbero avere percorsi con id,
-nomi o frammenti di risposta): la causa resta nella catena per chi la vuole ispezionare, e chi
-la registra deve scrivere il tipo, non il testo.
+No message contains texts from the library or from Garmin (they might have paths with ids,
+names or response fragments): the cause stays in the chain for whoever wants to inspect it, and
+whoever
+logs it must write the type, not the text.
 """
 
 from __future__ import annotations
@@ -40,16 +41,16 @@ from ponos_coach.activities.ports import (
     TransientSourceError,
 )
 
-MAX_RETRY_AFTER_S: Final = 3600.0  # oltre un'ora l'attesa suggerita non si prende sul serio
-_MAX_CHAIN: Final = 8  # profondità massima della catena delle cause che si esamina
-_RATE_LIMIT_STATUSES: Final = frozenset({427, 429})  # 427: blocco del login di Garmin
+MAX_RETRY_AFTER_S: Final = 3600.0  # beyond one hour the suggested wait is not taken seriously
+_MAX_CHAIN: Final = 8  # maximum depth of the chain of causes that is examined
+_RATE_LIMIT_STATUSES: Final = frozenset({427, 429})  # 427: Garmin login block
 _TRANSIENT_STATUSES: Final = frozenset({408, 425})
-_RETRY_AFTER: Final = re.compile(r"[0-9]{1,20}(?:\.[0-9]{1,6})?")  # solo cifre ASCII
+_RETRY_AFTER: Final = re.compile(r"[0-9]{1,20}(?:\.[0-9]{1,6})?")  # ASCII digits only
 _NETWORK_MODULES: Final = ("requests", "urllib3", "curl_cffi", "http", "ssl", "socket")
 
 
 class _Outcome(Enum):
-    """Come deve reagire chi chiama."""
+    """How the caller must react."""
 
     RATE_LIMITED = "rate_limited"
     AUTHENTICATION = "authentication"
@@ -58,7 +59,7 @@ class _Outcome(Enum):
 
 
 def _chain(exc: BaseException) -> list[BaseException]:
-    """`exc` e le sue cause, in ordine, senza cicli e al più `_MAX_CHAIN` elementi."""
+    """`exc` and its causes, in order, without cycles and at most `_MAX_CHAIN` elements."""
     found: list[BaseException] = []
     seen: set[int] = set()
     current: BaseException | None = exc
@@ -74,7 +75,7 @@ def _response_of(exc: BaseException) -> object:
 
 
 def _status_of(exc: BaseException) -> int | None:
-    """Codice HTTP dichiarato dall'eccezione o dalla sua risposta, se è un intero."""
+    """HTTP code declared by the exception or its response, if it is an integer."""
     for holder in (exc, _response_of(exc)):
         status = getattr(holder, "status_code", None)
         if type(status) is int:
@@ -87,22 +88,22 @@ def _first_status(chain: list[BaseException]) -> int | None:
 
 
 def _is_network_failure(exc: BaseException) -> bool:
-    """Guasto di trasporto: errore di I/O (anche di `requests` e `curl_cffi`, che lo sono)
-    senza una risposta HTTP. Un `HTTPError` con la sua risposta non è un guasto di rete."""
+    """Transport failure: I/O error (also from `requests` and `curl_cffi`, which are)
+    without an HTTP response. An `HTTPError` with its response is not a network failure."""
     module = type(exc).__module__.partition(".")[0]
     is_io = isinstance(exc, OSError) or module in _NETWORK_MODULES
     return is_io and _status_of(exc) is None
 
 
 def _retry_after_s(chain: list[BaseException]) -> float | None:
-    """`Retry-After` in secondi (cifre ASCII, intere o decimali), se Garmin lo dice in modo
-    sensato; altrimenti None. Non solleva mai: l'intestazione è un input non fidato."""
+    """`Retry-After` in seconds (ASCII digits, integer or decimal), if Garmin gives it in a
+    sensible way; otherwise None. Never raises: the header is untrusted input."""
     for exc in chain:
         headers = getattr(_response_of(exc), "headers", None)
         getter = getattr(headers, "get", None)
         raw = getter("Retry-After") if callable(getter) else None
         if not isinstance(raw, str) or _RETRY_AFTER.fullmatch(raw.strip()) is None:
-            continue  # non ASCII, con segno o altro: nessuna attesa suggerita
+            continue  # non-ASCII, signed or other: no suggested wait
         value = float(raw)
         if math.isfinite(value) and value > 0:
             return min(value, MAX_RETRY_AFTER_S)
@@ -110,7 +111,7 @@ def _retry_after_s(chain: list[BaseException]) -> float | None:
 
 
 def _classify(exc: BaseException) -> tuple[_Outcome, float | None]:
-    """Esito e, per il limite di frequenza, l'attesa suggerita."""
+    """Outcome and, for the rate limit, the suggested wait."""
     chain = _chain(exc)
     status = _first_status(chain)
     if status in _RATE_LIMIT_STATUSES or any(
@@ -125,49 +126,58 @@ def _classify(exc: BaseException) -> tuple[_Outcome, float | None]:
         transient = status >= 500 or status in _TRANSIENT_STATUSES
         return (_Outcome.TRANSIENT if transient else _Outcome.DEFINITIVE), None
     if any(_is_network_failure(item) for item in chain):
-        return _Outcome.TRANSIENT, None  # anche un'autenticazione "fallita" per la rete
+        return _Outcome.TRANSIENT, None  # even an authentication "failed" because of the network
     is_auth = isinstance(exc, GarminConnectAuthenticationError)
     return (_Outcome.AUTHENTICATION if is_auth else _Outcome.DEFINITIVE), None
 
 
 def translate_source_error(exc: Exception) -> ActivitySourceError:
-    """L'errore di una chiamata di elenco o di download, nel tipo della porta `ActivitySource`.
+    """The error of a list or download call, in the type of the `ActivitySource` port.
 
-    Chi solleva lo fa con `raise translate_source_error(exc) from exc`.
+    Whoever raises does so with `raise translate_source_error(exc) from exc`.
     """
     outcome, retry_after = _classify(exc)
     if outcome is _Outcome.RATE_LIMITED:
         return RateLimitedError(retry_after)
     if outcome is _Outcome.AUTHENTICATION:
-        return AuthenticationRequiredError("autenticazione richiesta")
+        return AuthenticationRequiredError("authentication required")
     if outcome is _Outcome.TRANSIENT:
-        return TransientSourceError("errore transitorio di Garmin")
-    return DefinitiveSourceError("richiesta rifiutata o risposta non interpretabile")
+        return TransientSourceError("transient Garmin error")
+    return DefinitiveSourceError("request rejected or response not interpretable")
+
+
+def is_not_found(exc: BaseException) -> bool:
+    """True if the failure is Garmin saying the thing is not there (404)."""
+    chain = _chain(exc)
+    return any(isinstance(item, GarminConnectNotFoundError) for item in chain) or (
+        _first_status(chain) == 404
+    )
 
 
 def translate_login_error(exc: Exception) -> ActivitySourceError:
-    """L'errore del login con credenziali, nel tipo della porta `GarminAccount.login`.
+    """The error of login with credentials, in the type of the `GarminAccount.login` port.
 
-    Ogni guasto che non è credenziali rifiutate o limite di frequenza vale "Garmin non
-    risponde" (anche un blocco 403 del sito): ritentare più tardi è l'unica reazione utile.
+    Every failure that is not rejected credentials or a rate limit counts as "Garmin does not
+    respond" (even a 403 block from the site): retrying later is the only useful reaction.
     """
     outcome, retry_after = _classify(exc)
     if outcome is _Outcome.RATE_LIMITED:
         return RateLimitedError(retry_after)
     if outcome is _Outcome.AUTHENTICATION:
-        return InvalidCredentialsError("credenziali rifiutate")
-    return ServiceUnavailableError("Garmin non risponde")
+        return InvalidCredentialsError("credentials rejected")
+    return ServiceUnavailableError("Garmin does not respond")
 
 
 def translate_resume_error(exc: Exception) -> ActivitySourceError:
-    """L'errore della ripresa dai token, nel tipo della porta `GarminAccount.resume`.
+    """The error of resumption from tokens, in the type of the `GarminAccount.resume` port.
 
-    Un'autenticazione rifiutata vale "token scaduti o revocati"; la libreria dà lo stesso errore
-    quando la rete manca durante la verifica dei token, e qui si riconosce dalla catena.
+    A rejected authentication counts as "tokens expired or revoked"; the library gives the same
+    error
+    when the network is missing during token verification, and here it is recognized from the chain.
     """
     outcome, retry_after = _classify(exc)
     if outcome is _Outcome.RATE_LIMITED:
         return RateLimitedError(retry_after)
     if outcome is _Outcome.AUTHENTICATION:
-        return AuthenticationRequiredError("token scaduti o revocati")
-    return ServiceUnavailableError("Garmin non risponde")
+        return AuthenticationRequiredError("tokens expired or revoked")
+    return ServiceUnavailableError("Garmin does not respond")

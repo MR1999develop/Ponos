@@ -1,21 +1,21 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Processo di prova della sincronizzazione, da avviare con `python -I collaudo_sync_worker.py ...`.
+"""Synchronisation test process, to be started with `python -I collaudo_sync_worker.py ...`.
 
-`sync <cartella-profilo> <quante> <pagina> <punto>`: apre il profilo (lock, SQLite e archivio
-veri), sincronizza con un Garmin finto di `quante` corse (pagine da `pagina` voci, FIT veri in
-ZIP) e si ferma dove dice `<punto>`, in attesa di essere ucciso dal test:
+`sync <profile-folder> <how-many> <page> <point>`: opens the profile (real lock, SQLite and
+archive), synchronises with a fake Garmin of `how-many` runs (pages of `page` entries, real FIT in
+ZIP) and stops where `<point>` says, waiting to be killed by the test:
 
-- `none`: mai (stampa `progress <n>` dopo ogni voce lavorata e `finished <scaricate>`);
-- `list:<n>`: prima di rispondere alla n-esima richiesta di una pagina dell'elenco;
-- `cursor:<n>`: nella n-esima scrittura del cursore, con le voci della pagina già aggiunte ma la
-  transazione non confermata;
-- `download:<n>`: prima di rispondere al n-esimo download;
-- `before_add:<n>`: dopo l'archivio, prima del record della n-esima attività;
-- `after_add:<n>`: record scritto ma transazione non confermata;
-- `update:<n>`: nel n-esimo cambio di stato di una voce, dentro la transazione.
+- `none`: never (prints `progress <n>` after each entry processed and `finished <downloaded>`);
+- `list:<n>`: before answering the n-th request for a list page;
+- `cursor:<n>`: in the n-th cursor write, with the page entries already added but the
+  transaction not committed;
+- `download:<n>`: before answering the n-th download;
+- `before_add:<n>`: after the archive, before the record of the n-th activity;
+- `after_add:<n>`: record written but transaction not committed;
+- `update:<n>`: in the n-th state change of an entry, inside the transaction.
 
-Parla con il test per righe: `ready <pid>`, `blocked <punto>`, `progress <n>`, `finished <n>`.
+Talks to the test line by line: `ready <pid>`, `blocked <point>`, `progress <n>`, `finished <n>`.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from contextlib import AbstractContextManager
 from datetime import UTC, datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # la radice, per `tests.*`
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # the root, for `tests.*`
 
 from ponos_coach.activities.decoding import decode_stored_activity
 from ponos_coach.activities.domain import (
@@ -61,17 +61,17 @@ _FIXED_NOW = datetime(2026, 7, 1, 8, 0, tzinfo=UTC)
 
 
 def _say(*words: object) -> None:
-    print(*words, flush=True)  # noqa: T201 - il dialogo col test e su stdout
+    print(*words, flush=True)  # noqa: T201 - the dialogue with the test is on stdout
 
 
 def _wait_for_death() -> None:
-    """Resta fermo finche il test non uccide il processo; se il test chiude, esce comunque."""
+    """Stays still until the test kills the process; if the test closes, it exits anyway."""
     sys.stdin.read()
     os._exit(3)
 
 
 class _Point:
-    """Dove fermarsi: `tipo:n` oppure `none`."""
+    """Where to stop: `kind:n` or `none`."""
 
     def __init__(self, spec: str) -> None:
         self.kind, _, number = spec.partition(":")
@@ -79,7 +79,7 @@ class _Point:
         self._seen: dict[str, int] = {}
 
     def reached(self, kind: str) -> bool:
-        """Conta un passaggio per `kind`; vero (e si ferma) se e quello scelto."""
+        """Counts one pass per `kind`; true (and stops) if it is the chosen one."""
         self._seen[kind] = self._seen.get(kind, 0) + 1
         return kind == self.kind and self._seen[kind] == self.number
 
@@ -130,8 +130,17 @@ class _BlockingIndex:
     def list_by_start(self) -> Sequence[ActivityRecord]:
         return self._inner.list_by_start()
 
+    def list_started_between(self, first: datetime, last: datetime) -> Sequence[ActivityRecord]:
+        return self._inner.list_started_between(first, last)
+
+    def first_start_at_or_after(self, instant: datetime) -> datetime | None:
+        return self._inner.first_start_at_or_after(instant)
+
     def find_by_garmin_id(self, garmin_id: GarminActivityId) -> ActivityRecord | None:
         return self._inner.find_by_garmin_id(garmin_id)
+
+    def remove(self, identity: ActivityIdentity) -> None:
+        self._inner.remove(identity)
 
     def link_garmin_id(self, identity: ActivityIdentity, garmin_id: GarminActivityId) -> None:
         self._inner.link_garmin_id(identity, garmin_id)
@@ -187,7 +196,7 @@ class _Clock:
 
 
 def _no_wait(_seconds: float) -> bool:
-    """Nessuna attesa vera: il test non dorme."""
+    """No real waiting: the test does not sleep."""
     return False
 
 
@@ -200,6 +209,7 @@ def _sync(profile_folder: str, count: int, page_size: int, spec: str) -> None:
     ports = SyncPorts(
         source,
         _BlockingIndex(opened.activities, point),
+        opened.deleted_activities,
         _BlockingJournal(opened.sync_journal, point),
         FileArchive.in_profile_folder(folder),
         extract_original,

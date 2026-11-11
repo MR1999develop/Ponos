@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-PERF-01 (parziale), T-UI-02 sotto carico vero e T-IMP-02 ai tetti di default.
+"""T-PERF-01 (partial), T-UI-02 under real load and T-IMP-02 at the default caps.
 
-Test lunghi: solo nella sessione `collaudo`. Sono misure con distribuzione (p50, p95, massimo),
-stampate nel rapporto; le asserzioni sono ampie, sui budget del piano con un margine, perche il
-rumore della macchina rende instabile un confronto stretto. Dove una soglia e rigida lo dice il
-commento.
+Long tests: only in the `collaudo` session. They are measurements with distribution (p50, p95,
+maximum),
+printed in the report; the assertions are loose, on the plan's budgets with a margin, because
+machine noise makes a tight comparison unstable. Where a threshold is rigid the
+comment says so.
 """
 
 from __future__ import annotations
@@ -32,13 +33,13 @@ from tests.fixtures.generators.import_files import fit_run
 pytestmark = pytest.mark.collaudo
 
 FILES = 1000
-IMPORT_BUDGET_S = 120.0  # PLAN 7.8: import di 1.000 FIT in meno di 2 minuti
-OVERVIEW_BUDGET_S = 1.0  # PLAN 7.8: ricalcolo completo del PMC (carichi in cache) in meno di 1 s
-UI_EVENT_LIMIT_S = 0.1  # PLAN 7.6: un evento di input si elabora entro 100 ms
+IMPORT_BUDGET_S = 120.0  # PLAN 7.8: import of 1,000 FIT files in under 2 minutes
+OVERVIEW_BUDGET_S = 1.0  # PLAN 7.8: full PMC recalculation (loads in cache) in under 1 s
+UI_EVENT_LIMIT_S = 0.1  # PLAN 7.6: an input event is processed within 100 ms
 
 
 def report(line: str) -> None:
-    print(line)  # noqa: T201 - il rapporto delle misure e l'esito del test
+    print(line)  # noqa: T201 - the report of the measurements and the test outcome
 
 
 def percentiles(values: list[float]) -> str:
@@ -51,7 +52,7 @@ def percentiles(values: list[float]) -> str:
 def write_history(folder: Path, count: int) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     for number in range(count):
-        # Un'attivita ogni giorno per `count` giorni, sempre la stessa forma: file distinti.
+        # One activity per day for `count` days, always the same shape: distinct files.
         (folder / f"a{number:05d}.fit").write_bytes(fit_run(number))
 
 
@@ -98,9 +99,9 @@ def test_t_perf_01_partial_import_of_1000_fit_and_the_full_overview(
 
     with capsys.disabled():
         report(f"\nT-PERF-01 [{environment()}]")
-        report(f"  import {FILES} FIT: totale {import_s:.2f}s; per file {percentiles(per_file)}")
-        report(f"  panoramica a freddo (decodifica di tutti i file): {cold_s:.2f}s")
-        report(f"  panoramica a caldo (carichi in cache, PMC compreso): {percentiles(warm)}")
+        report(f"  import {FILES} FIT: total {import_s:.2f}s; per file {percentiles(per_file)}")
+        report(f"  cold overview (decoding of all the files): {cold_s:.2f}s")
+        report(f"  warm overview (loads in cache, PMC included): {percentiles(warm)}")
     assert summary.count(ImportStatus.IMPORTED) == FILES
     assert len(cold.activities) == FILES
     assert import_s < IMPORT_BUDGET_S
@@ -113,8 +114,8 @@ PROBE = Path(__file__).resolve().parents[1] / "fixtures" / "generators" / "colla
 def measure_event_gaps(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> dict[str, list[float]]:
-    """Intervalli tra gli scatti di un timer da 10 ms, per fase, in un processo nuovo che
-    importa 300 FIT veri dalla finestra dell'app (vedi `collaudo_ui_probe.py`)."""
+    """Intervals between ticks of a 10 ms timer, per phase, in a new process that
+    imports 300 real FIT files from the app window (see `collaudo_ui_probe.py`)."""
     result = subprocess.run(  # noqa: S603 - interprete e script fissi
         [sys.executable, "-I", str(PROBE), str(tmp_path), "300"],
         capture_output=True,
@@ -126,17 +127,17 @@ def measure_event_gaps(
     assert result.returncode == 0, result.stderr[-2000:]
     by_phase: dict[str, list[float]] = json.loads(result.stdout.strip().splitlines()[-1])
     with capsys.disabled():
-        report(f"\nT-UI-02 [{environment()}] intervalli tra scatti del timer da 10 ms")
+        report(f"\nT-UI-02 [{environment()}] intervals between 10 ms timer ticks")
         for name, values in by_phase.items():
-            report(f"  fase {name}: {percentiles(values)}")
+            report(f"  phase {name}: {percentiles(values)}")
     return by_phase
 
 
 def test_t_ui_02_the_event_loop_is_never_held_for_100_ms_during_import_and_calculation(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # Soglia del piano (100 ms per un evento). Le misure stanno attorno a 15-30 ms: il margine
-    # e grande, quindi la soglia resta rigida.
+    # Plan threshold (100 ms for an event). The measurements are around 15-30 ms: the margin
+    # is large, so the threshold stays rigid.
     by_phase = measure_event_gaps(tmp_path, capsys)
 
     assert max(by_phase["importazione"]) < UI_EVENT_LIMIT_S
@@ -146,23 +147,23 @@ def test_t_ui_02_the_event_loop_is_never_held_for_100_ms_during_import_and_calcu
 def test_d_f1_10_drawing_the_first_chart_does_not_hold_the_event_loop_for_100_ms(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # D-F1-10, corretto: la figura e il suo JSON si costruiscono nel thread dei dati e la
-    # tabella guarda un campione di righe per le larghezze (prima 180 ms, ora 25-35 ms). Resta
-    # l'avvio del motore web (Chromium, circa 180 ms): non si puo spostare fuori dal thread della
-    # UI, quindi la finestra lo fa subito dopo il primo `show()`, quando l'utente non ha ancora
-    # un'azione in corso. Il test misura la reattivita durante il primo disegno, non quella
-    # durata (che il rapporto stampa come fase `avvio_motore`).
+    # D-F1-10, fixed: the figure and its JSON are built in the data thread and the
+    # table looks at a sample of rows for the widths (before 180 ms, now 25-35 ms). What remains is
+    # the web engine start (Chromium, about 180 ms): it cannot be moved out of the
+    # UI thread, so the window does it right after the first `show()`, when the user has no
+    # action in progress yet. The test measures responsiveness during the first drawing, not that
+    # duration (which the report prints as the `avvio_motore` phase).
     by_phase = measure_event_gaps(tmp_path, capsys)
 
     assert max(by_phase["disegno"]) < UI_EVENT_LIMIT_S
-    assert max(by_phase["avvio_motore"]) < 1.0  # solo contro una regressione grossolana
+    assert max(by_phase["avvio_motore"]) < 1.0  # only against a gross regression
 
 
 def test_t_imp_02_default_cap_of_50000_activity_files_at_the_limit_and_one_over(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Sul disco vero: 50.000 file `.fit` (vuoti, solo i nomi contano all'esame) passano,
-    50.001 no, e nulla viene importato."""
+    """On the real disk: 50,000 `.fit` files (empty, only the names matter for the check) pass,
+    50,001 do not, and nothing is imported."""
     root = tmp_path / "tanti"
     created = time.perf_counter()
     for group in range(50):
@@ -180,8 +181,8 @@ def test_t_imp_02_default_cap_of_50000_activity_files_at_the_limit_and_one_over(
     with pytest.raises(ImportLimitExceededError) as raised:
         FolderImportSource(root, ImportLimits()).scan()
     with capsys.disabled():
-        report(f"\nT-IMP-02: creazione {creating_s:.1f}s, esame di 50.000 file {scan_s:.2f}s")
+        report(f"\nT-IMP-02: creation {creating_s:.1f}s, scan of 50,000 files {scan_s:.2f}s")
     assert len(scan.entries) == 50_000
-    assert scan.examined == 50_000 + 50  # file e sottocartelle
+    assert scan.examined == 50_000 + 50  # files and subfolders
     assert raised.value.limit is ImportLimit.ACTIVITY_FILES
     assert raised.value.maximum == 50_000

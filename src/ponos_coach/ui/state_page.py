@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Pagina di stato: titolo, una riga di spiegazione e il bottone del primo passo."""
+"""State page: title, one explanation line and the first-step button."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from ponos_coach.ui.tokens import SPACE_2, SPACE_4, SPACE_6, STATE_PAGE_MAX_WIDT
 
 
 class StatePage(QWidget):
-    """Pagina di stato: titolo, una riga di spiegazione e il bottone del primo passo."""
+    """State page: title, one explanation line and the first-step button."""
 
     action_requested = Signal()
 
@@ -39,9 +39,9 @@ class StatePage(QWidget):
         inner.addWidget(self._body)
         inner.addSpacing(SPACE_4)
         inner.addWidget(self._button, alignment=Qt.AlignmentFlag.AlignLeft)
-        # Centrata con due spaziatori, non con l'allineamento del layout: con l'allineamento Qt
-        # calcola l'altezza sulla larghezza ideale della colonna e le etichette a capo restano
-        # più basse del loro testo (righe tagliate).
+        # Centred with two spacers, not with the layout's alignment: with alignment Qt
+        # computes the height from the column's ideal width and wrapped labels stay
+        # shorter than their text (clipped lines).
         centered = QHBoxLayout()
         centered.addStretch(1)
         centered.addWidget(column)
@@ -52,22 +52,22 @@ class StatePage(QWidget):
         outer.addStretch(2)
 
     def set_content(self, title: str, body: str, button_text: str) -> None:
-        """Imposta i testi (sempre testo semplice, mai HTML)."""
+        """Set the texts (always plain text, never HTML)."""
         self._title.setText(title)
         self._body.setText(body)
         self._button.setText(button_text)
 
     @property
     def button(self) -> QPushButton:
-        """Il bottone del primo passo."""
+        """The first-step button."""
         return self._button
 
     @property
     def title_text(self) -> str:
-        """Il titolo mostrato."""
+        """The title shown."""
         return self._title.text()
 
     @property
     def body_text(self) -> str:
-        """La spiegazione mostrata."""
+        """The explanation shown."""
         return self._body.text()

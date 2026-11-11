@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-UI-05 (parte pura): contrasto e ordine delle tavolozze dei grafici nei due temi."""
+"""T-UI-05 (pure part): contrast and order of the chart palettes in the two themes."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def test_zone_scale_is_sequential_more_intense_is_further_from_the_background(
     distances = [contrast(color, tokens.background) for color in tokens.zones]
 
     assert distances == sorted(distances)
-    assert len(set(distances)) == 5  # cinque passi distinti, non un gradino ripetuto
+    assert len(set(distances)) == 5  # five distinct steps, not one repeated step
 
 
 def test_zone_scale_gets_lighter_on_dark_and_darker_on_light() -> None:
@@ -71,7 +71,7 @@ def test_every_color_is_a_valid_hex_and_categories_are_distinct() -> None:
 def test_oklch_extremes_and_gamut_clipping() -> None:
     assert oklch_to_hex(0.0, 0.0, 0.0) == "#000000"
     assert oklch_to_hex(1.0, 0.0, 0.0) == "#FFFFFF"
-    # una croce impossibile entra comunque nel gamut sRGB (si riduce la croce, non la luminosità)
+    # an impossible chroma still falls within the sRGB gamut (chroma is reduced, not lightness)
     clipped = oklch_to_hex(0.5, 0.5, 140.0)
     assert len(clipped) == 7
     assert 0.0 < luminance(clipped) < 1.0

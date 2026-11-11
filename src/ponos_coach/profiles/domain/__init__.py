@@ -15,6 +15,8 @@ from ponos_coach.profiles.domain.body import (
     Height,
     Weight,
     WeightEntry,
+    age_on,
+    weight_on,
 )
 from ponos_coach.profiles.domain.layout import (
     PROFILE_ARCHIVE_DIR,
@@ -34,6 +36,14 @@ from ponos_coach.profiles.domain.profile import (
     ProfileName,
     ProfilePeek,
     RegistryEntry,
+)
+from ponos_coach.profiles.domain.threshold_pace import (
+    PaceInForce,
+    PaceSource,
+    ThresholdPace,
+    ThresholdPaceEntry,
+    entries_of_tests,
+    threshold_pace_in_force,
 )
 
 __all__ = [
@@ -57,11 +67,19 @@ __all__ = [
     "FolderState",
     "Height",
     "InvalidProfileNameError",
+    "PaceInForce",
+    "PaceSource",
     "ProfileId",
     "ProfileInfo",
     "ProfileName",
     "ProfilePeek",
     "RegistryEntry",
+    "ThresholdPace",
+    "ThresholdPaceEntry",
     "Weight",
     "WeightEntry",
+    "age_on",
+    "entries_of_tests",
+    "threshold_pace_in_force",
+    "weight_on",
 ]

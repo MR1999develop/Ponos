@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Configurazione comune dei test: profili hypothesis e marker."""
+"""Common test configuration: hypothesis profiles and markers."""
 
+import gc
 import os
 from collections.abc import Iterator
 
 import pytest
 
-# Qt senza schermo e senza GPU: va deciso prima che Qt venga caricato.
+# Qt without screen and without GPU: must be decided before Qt is loaded.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--disable-gpu")
 
@@ -15,14 +16,16 @@ from hypothesis import HealthCheck, settings
 
 from ponos_coach.ui.bootstrap import prepare_qt
 from ponos_coach.ui.data_thread import DataThread
+from ponos_coach.ui.main_thread_gc import collect_due
 
-# Schema URL dell'app e attributi del motore web: prima della QApplication di pytest-qt.
+# App URL scheme and web engine attributes: before pytest-qt's QApplication.
 prepare_qt()
+_THRESHOLDS = gc.get_threshold()  # of the automatic collector, before any test changes them
 
-# Nessuna scadenza per esempio: i test devono essere deterministici in CI.
+# No per-example deadline: tests must be deterministic in CI.
 settings.register_profile(
     "ci",
-    max_examples=100,
+    max_examples=30,  # every check; the long campaign (`collaudo`) has 5000
     deadline=None,
     derandomize=True,
     suppress_health_check=[HealthCheck.too_slow],
@@ -33,11 +36,26 @@ settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "ci"))
 
 @pytest.fixture(autouse=True)
 def stop_data_threads() -> Iterator[None]:
-    """Nessun thread dei dati resta in esecuzione tra un test e l'altro né a fine processo.
+    """No data thread keeps running between one test and the next, nor at process end.
 
-    La finestra chiude in due tempi (senza attendere): `qtbot` chiude e distrugge le finestre
-    subito, quindi il thread può essere ancora a metà della chiusura del profilo. Distruggere un
-    `QThread` in esecuzione abortisce il processo.
+    The window closes in two phases (without waiting): `qtbot` closes and destroys the windows
+    immediately, so the thread may still be midway through closing the profile. Destroying a
+    running `QThread` aborts the process.
     """
     yield
-    assert DataThread.stop_all(30_000), "un thread dei dati non si è fermato"
+    assert DataThread.stop_all(30_000), "a data thread did not stop"
+
+
+@pytest.fixture(autouse=True)
+def collect_cycles_on_the_main_thread() -> Iterator[None]:
+    """As in the application, the automatic garbage collector is off and cycles are collected
+    on the main thread only (`ui/main_thread_gc.py`): a data thread that triggered a collection
+    could destroy there a Qt object of a closed window of an earlier test, and Qt aborts.
+
+    The tests do not always run the event loop long enough for the collector's timer, so after
+    each test what is due is collected here, on the main thread, with the usual thresholds
+    (a full collection after every test would double the time of the suite).
+    """
+    gc.disable()
+    yield
+    collect_due(_THRESHOLDS)

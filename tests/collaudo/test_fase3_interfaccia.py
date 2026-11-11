@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-UI-05 (tastiera e nomi accessibili), T-UI-06 (lingue) e T-UI-07 (impostazioni) della fase 3.
+"""T-UI-05 (keyboard and accessible names), T-UI-06 (languages) and T-UI-07 (settings) of phase 3.
 
-I dialoghi nuovi (Nuovo profilo, Modifica profilo, Pesi degli sport, Dettaglio attività) si
-provano da soli, senza la finestra: percorso del Tab, nome accessibile letto dall'interfaccia di
-accessibilità di Qt, testi in italiano dal catalogo vero e con un traduttore "pseudo" che allunga
-ogni testo di metà. Le impostazioni si provano con valori rovinati a mano.
+The new dialogs (New profile, Edit profile, Activity detail) are
+exercised on their own, without the window: Tab path, accessible name read from Qt's
+accessibility interface, texts in Italian from the real catalogue and with a "pseudo" translator
+that lengthens
+every text by half. The settings are exercised with values corrupted by hand.
 """
 
 from __future__ import annotations
@@ -24,19 +25,15 @@ from PySide6.QtWidgets import (
     QAbstractButton,
     QAbstractItemView,
     QAbstractSpinBox,
-    QDialog,
     QHeaderView,
     QLabel,
     QLineEdit,
-    QListWidget,
     QWidget,
 )
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.__main__ import parse_command_line, setup_translations
-from ponos_coach.activities.domain import Sport
 from ponos_coach.i18n.catalog import Message, MessageStatus, parse_catalog
-from ponos_coach.load.domain import default_weight
 from ponos_coach.load.use_cases import ExclusionReason
 from ponos_coach.ui.activity_detail import DetailUnavailable
 from ponos_coach.ui.activity_detail_dialog import ActivityDetailDialog
@@ -45,8 +42,6 @@ from ponos_coach.ui.measurements_form import MeasurementsForm
 from ponos_coach.ui.new_profile_dialog import NewProfileDialog
 from ponos_coach.ui.new_profile_form import NewProfileForm
 from ponos_coach.ui.profile_edit_dialog import ProfileEditDialog
-from ponos_coach.ui.sport_weights_dialog import SportWeightsDialog
-from ponos_coach.ui.sport_weights_form import SportWeightsForm
 from ponos_coach.ui.state_page import StatePage
 from ponos_coach.ui.tokens import Theme
 from ponos_coach.ui.translations import (
@@ -59,7 +54,7 @@ from ponos_coach.ui.translations import (
 )
 from tests.ui.test_measurements_form import TODAY, make_history
 from tests.ui.test_translations import build_real_catalog
-from tests.ui.workspace_support import close_window, compose, make_settings
+from tests.ui.workspace_support import close_window, compose, language_form, make_settings
 
 TS_FILE = Path(__file__).resolve().parents[2] / "src" / "ponos_coach" / "i18n" / "ponos_it.ts"
 
@@ -69,48 +64,45 @@ def settings(tmp_path: Path) -> QSettings:
     return make_settings(tmp_path)
 
 
-# --- I quattro dialoghi nuovi ------------------------------------------------------------------
+# --- The four new dialogs ----------------------------------------------------------------------
 
 
-def edit_dialog(*, fixed_missing: bool = False) -> QDialog:
+def edit_dialog(*, fixed_missing: bool = False) -> QWidget:
     history = make_history(fixed=None if fixed_missing else make_history().fixed)
     return ProfileEditDialog(
-        MeasurementsForm(history, TODAY), history, "Atleta di prova", Theme.LIGHT
+        MeasurementsForm(history, TODAY, "Atleta di prova"), history, Theme.LIGHT
     )
 
 
-def weights_dialog() -> QDialog:
-    return SportWeightsDialog(SportWeightsForm({s: default_weight(s) for s in Sport}))
-
-
-def new_profile_dialog() -> QDialog:
+def new_profile_dialog() -> QWidget:
     return NewProfileDialog(
         NewProfileForm("Europe/Rome"), date(2026, 6, 30), lambda _p: None, lambda: "", Theme.LIGHT
     )
 
 
-def detail_dialog() -> QDialog:
-    return ActivityDetailDialog(ChartEngine(lambda _name: None), ZoneInfo("Europe/Rome"))
+def detail_dialog() -> QWidget:
+    return ActivityDetailDialog(
+        ChartEngine(lambda _name: None), ZoneInfo("Europe/Rome"), theme=lambda: Theme.LIGHT
+    )
 
 
-DIALOGS: dict[str, Callable[[], QDialog]] = {
+DIALOGS: dict[str, Callable[[], QWidget]] = {
     "edit": edit_dialog,
     "edit_fixed_missing": lambda: edit_dialog(fixed_missing=True),
-    "weights": weights_dialog,
     "new_profile": new_profile_dialog,
     "detail": detail_dialog,
 }
 
 
-def shown(qtbot: QtBot, name: str) -> QDialog:
+def shown(qtbot: QtBot, name: str) -> QWidget:
     dialog = DIALOGS[name]()
     qtbot.addWidget(dialog)
     dialog.show()
     return dialog
 
 
-def interactive(dialog: QDialog) -> list[QWidget]:
-    """I controlli con cui l'utente agisce, visibili e abilitati (non gli interni di Qt)."""
+def interactive(dialog: QWidget) -> list[QWidget]:
+    """The controls the user acts with, visible and enabled (not Qt's internals)."""
     found: list[QWidget] = []
     for widget in dialog.findChildren(QWidget):
         if widget.objectName().startswith("qt_") or isinstance(widget, QHeaderView):
@@ -128,8 +120,8 @@ def accessible_name(widget: QWidget) -> str:
     return QAccessible.queryAccessibleInterface(widget).text(QAccessible.Text.Name)
 
 
-def tab_order(dialog: QDialog) -> list[QWidget]:
-    """I controlli nell'ordine in cui il Tab li visita (la catena del fuoco di Qt)."""
+def tab_order(dialog: QWidget) -> list[QWidget]:
+    """The controls in the order the Tab visits them (Qt's focus chain)."""
     allowed = {id(w) for w in interactive(dialog)}
     order: list[QWidget] = []
     seen: set[int] = set()
@@ -173,7 +165,7 @@ def test_t_ui_05_every_control_of_the_new_dialogs_has_an_accessible_name(
     assert unnamed == []
 
 
-@pytest.mark.parametrize("name", ["weights", "edit", "new_profile"])
+@pytest.mark.parametrize("name", ["edit", "new_profile"])
 def test_t_ui_05_the_accessible_names_of_a_dialog_are_distinct(qtbot: QtBot, name: str) -> None:
     dialog = shown(qtbot, name)
 
@@ -182,11 +174,11 @@ def test_t_ui_05_the_accessible_names_of_a_dialog_are_distinct(qtbot: QtBot, nam
     assert len(set(names)) == len(names), names
 
 
-def y_of(widget: QWidget, dialog: QDialog) -> int:
+def y_of(widget: QWidget, dialog: QWidget) -> int:
     return widget.mapTo(dialog, QPoint(0, 0)).y()
 
 
-@pytest.mark.parametrize("name", ["edit_fixed_missing", "edit", "weights", "new_profile"])
+@pytest.mark.parametrize("name", ["edit_fixed_missing", "edit", "new_profile"])
 def test_t_ui_05_the_tab_order_follows_the_visual_order_from_top_to_bottom(
     qtbot: QtBot, name: str
 ) -> None:
@@ -194,25 +186,23 @@ def test_t_ui_05_the_tab_order_follows_the_visual_order_from_top_to_bottom(
 
     positions = [y_of(w, dialog) for w in tab_order(dialog)]
 
-    tolerance = 12  # un bottone accanto a un campo può stare qualche pixel più in alto
+    tolerance = 12  # a button next to a field may sit a few pixels higher
     assert all(b >= a - tolerance for a, b in pairwise(positions)), positions
 
 
-def test_t_ui_05_the_save_button_is_off_with_a_reason_until_something_changes_and_then_reachable(
+def test_t_ui_05_the_page_cannot_be_saved_until_something_changes_and_says_why(
     qtbot: QtBot,
 ) -> None:
     dialog = shown(qtbot, "edit")
     assert isinstance(dialog, ProfileEditDialog)
 
-    assert not dialog.save_button.isEnabled()
-    assert dialog.save_button.toolTip()  # il motivo
-    assert dialog.save_button not in tab_order(dialog)  # un bottone spento non prende il fuoco
+    assert not dialog.can_save()
+    assert dialog.save_blocked_reason()  # the reason, for the tooltip of the window's button
     dialog.threshold_box.setValue(dialog.threshold_box.value() - 1)
-    assert dialog.save_button.isEnabled()
-    assert dialog.save_button in tab_order(dialog)
+    assert dialog.can_save()
 
 
-# --- Lingue ------------------------------------------------------------------------------------
+# --- Languages ------------------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -236,8 +226,8 @@ def catalog_messages() -> tuple[Message, ...]:
     )
 
 
-def texts_of(dialog: QDialog) -> set[str]:
-    """Ogni testo che l'utente vede o sente: etichette, bottoni, titoli, suggerimenti, nomi."""
+def texts_of(dialog: QWidget) -> set[str]:
+    """Every text the user sees or hears: labels, buttons, titles, hints, names."""
     texts = {dialog.windowTitle()}
     for widget in dialog.findChildren(QWidget):
         for value in (widget.toolTip(), widget.accessibleName()):
@@ -272,7 +262,7 @@ def test_t_ui_06_in_italian_the_standard_buttons_come_from_qt_and_are_translated
     qtbot: QtBot, italian: TranslationReport
 ) -> None:
     assert italian.qt_loaded
-    dialog = shown(qtbot, "weights")
+    dialog = shown(qtbot, "new_profile")
     buttons = {w.text() for w in dialog.findChildren(QAbstractButton)}
 
     assert "Annulla" in buttons
@@ -317,8 +307,8 @@ def test_t_ui_06_italian_plurals_carry_the_number_and_use_the_singular_only_for_
 
         assert str(count) in text, message.source
         assert "%n" not in text
-        assert not re.search(r"\(\w{1,3}\)", text), text  # nessun "(i)" / "(e)" lasciato
-        form = message.forms[0 if count == 1 else 1]  # italiano: singolare solo per uno
+        assert not re.search(r"\(\w{1,3}\)", text), text  # no "(i)" / "(e)" left
+        form = message.forms[0 if count == 1 else 1]  # Italian: singular only for one
         assert text == form.replace("%n", str(count)), message.source
 
 
@@ -334,7 +324,7 @@ def test_t_ui_06_english_plurals_do_not_use_the_optional_ending_form(count: int)
 
 
 class PseudoTranslator(QTranslator):
-    """Allunga ogni testo di metà con parole in coda (parole vere, per poter andare a capo)."""
+    """Lengthens every text by half with words at the end (real words, so it can wrap)."""
 
     def isEmpty(self) -> bool:  # noqa: N802 - Qt
         return False
@@ -357,7 +347,7 @@ def pseudo(qapp: QCoreApplication) -> Iterator[PseudoTranslator]:
 
 
 def inside_state_page(widget: QWidget) -> bool:
-    """Le pagine di messaggio hanno una prova a parte (D-F3-11)."""
+    """Message pages have a separate test (D-F3-11)."""
     parent = widget.parentWidget()
     while parent is not None:
         if isinstance(parent, StatePage):
@@ -366,9 +356,9 @@ def inside_state_page(widget: QWidget) -> bool:
     return False
 
 
-def clipped(dialog: QDialog) -> list[str]:
-    """Etichette e bottoni il cui testo non entra nello spazio che hanno."""
-    dialog.resize(dialog.sizeHint().expandedTo(dialog.size()))  # mai sotto la misura d'uso
+def clipped(dialog: QWidget) -> list[str]:
+    """Labels and buttons whose text does not fit in the space they have."""
+    dialog.resize(dialog.sizeHint().expandedTo(dialog.size()))  # never below the usable size
     QCoreApplication.processEvents()
     problems: list[str] = []
     for widget in dialog.findChildren(QWidget):
@@ -377,7 +367,7 @@ def clipped(dialog: QDialog) -> list[str]:
         if isinstance(widget, QLabel) and widget.text() and not inside_state_page(widget):
             if widget.wordWrap():
                 if widget.heightForWidth(widget.width()) > widget.height() + 1:
-                    problems.append(f"label tagliata in altezza: {widget.text()[:40]}")
+                    problems.append(f"label cut off in height: {widget.text()[:40]}")
             elif widget.fontMetrics().horizontalAdvance(widget.text()) > widget.width() + 1:
                 problems.append(f"label tagliata in larghezza: {widget.text()[:40]}")
         if isinstance(widget, QAbstractButton) and widget.text():
@@ -387,7 +377,7 @@ def clipped(dialog: QDialog) -> list[str]:
     return problems
 
 
-@pytest.mark.parametrize("name", ["edit", "edit_fixed_missing", "weights", "new_profile", "detail"])
+@pytest.mark.parametrize("name", ["edit", "edit_fixed_missing", "new_profile", "detail"])
 def test_t_ui_06_the_layout_holds_texts_half_as_long_again(
     qtbot: QtBot, pseudo: PseudoTranslator, name: str
 ) -> None:
@@ -395,11 +385,11 @@ def test_t_ui_06_the_layout_holds_texts_half_as_long_again(
 
     assert clipped(dialog) == []
     hint = dialog.sizeHint()
-    assert hint.width() <= 1280  # sta in uno schermo da portatile
+    assert hint.width() <= 1280  # fits in a laptop screen
     assert hint.height() <= 1000
 
 
-@pytest.mark.parametrize("name", ["edit", "edit_fixed_missing", "weights", "new_profile", "detail"])
+@pytest.mark.parametrize("name", ["edit", "edit_fixed_missing", "new_profile", "detail"])
 def test_t_ui_06_the_layout_holds_the_italian_texts(
     qtbot: QtBot, italian: TranslationReport, name: str
 ) -> None:
@@ -436,7 +426,7 @@ def test_t_ui_06_the_message_pages_of_the_detail_window_show_every_line_of_their
     assert cut == []
 
 
-# --- T-UI-07: impostazioni ricordate e rovinate -----------------------------------------------
+# --- T-UI-07: settings remembered and corrupted -----------------------------------------------
 
 HOSTILE_VALUES: list[object] = [
     "", " ", "abc", "-1", "0", "1.0", "1e3", "99999999999999999999", "9" * 5000, "\x00", "\u202e",
@@ -448,6 +438,7 @@ ALL_KEYS = (
     "language/code", "window/geometry", "window/section", "import/lastFolder",
     "import/lastFilesFolder", "profiles/lastOpenFolder", "overview/lastExportFolder",
     "garmin/autoSyncOnOpen/00000000-0000-4000-8000-000000000001",
+    "activities/splitter", "activities/visibleAreaOnly",
 )  # fmt: skip
 
 
@@ -469,12 +460,12 @@ def test_t_ui_07_a_window_starts_in_english_and_usable_whatever_every_setting_ho
 
     assert window.isVisible()
     assert saved_language(again) is None
-    assert window.language_actions[Language.ENGLISH].isChecked()
+    assert language_form(window).button(Language.ENGLISH).isChecked()
     assert window.windowTitle()
     close_window(qtbot, window)
 
 
-def test_t_ui_07_language_section_and_geometry_come_back_in_the_next_session(
+def test_t_ui_07_language_and_geometry_come_back_in_the_next_session(
     qtbot: QtBot, tmp_path: Path
 ) -> None:
     settings = QSettings(str(tmp_path / "ricordi.ini"), QSettings.Format.IniFormat)
@@ -483,12 +474,8 @@ def test_t_ui_07_language_section_and_geometry_come_back_in_the_next_session(
     window.start()
     window.show()
     window.resize(800, 711)
-    window.language_actions[Language.ITALIAN].trigger()
-    sidebar_row = 1
-    sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar is not None
-    sidebar.setCurrentRow(sidebar_row)
-    size_before = window.size()  # lo schermo senza display può limitare la dimensione chiesta
+    language_form(window).button(Language.ITALIAN).click()
+    size_before = window.size()  # the headless screen may limit the requested size
     close_window(qtbot, window)
 
     later = QSettings(str(tmp_path / "ricordi.ini"), QSettings.Format.IniFormat)
@@ -498,9 +485,6 @@ def test_t_ui_07_language_section_and_geometry_come_back_in_the_next_session(
     qtbot.addWidget(reopened)
     reopened.start()
     reopened.show()
-    sidebar_again = reopened.findChild(QListWidget, "sidebar")
-    assert sidebar_again is not None
-    assert sidebar_again.currentRow() == sidebar_row
     assert reopened.height() == size_before.height() == 711
     close_window(qtbot, reopened)
 

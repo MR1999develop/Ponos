@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Contratto di `ActivityArchive`: salvare, rileggere con verifica, guasti, temporanei."""
+"""Contract of `ActivityArchive`: store, read back with verification, failures, temporaries."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ CONTENT = b"contenuto originale di prova " * 10
 
 
 class ActivityArchiveContract:
-    """Test da ereditare in una classe `Test...` con la fixture `harness`."""
+    """Tests to inherit in a `Test...` class with the `harness` fixture."""
 
     def test_store_returns_generated_relative_path_hash_and_size(
         self, harness: ArchiveHarness
@@ -34,11 +34,6 @@ class ActivityArchiveContract:
         assert "2026" in archived.relative_path.parts
         assert archived.sha256_hex == hashlib.sha256(CONTENT).hexdigest()
         assert archived.size_bytes == len(CONTENT)
-
-    def test_gpx_files_get_the_gpx_extension(self, harness: ArchiveHarness) -> None:
-        archived = harness.archive.store(CONTENT, FileFormat.GPX, START)
-
-        assert archived.relative_path.suffix == ".gpx"
 
     def test_name_does_not_depend_on_anything_but_the_program(
         self, harness: ArchiveHarness

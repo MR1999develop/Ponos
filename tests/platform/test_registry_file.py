@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Il file JSON dell'elenco: campi sconosciuti conservati, file non valido mai sovrascritto."""
+"""The list's JSON file: unknown fields preserved, invalid file never overwritten."""
 
 from __future__ import annotations
 
@@ -96,7 +96,7 @@ def test_an_invalid_file_is_an_explicit_error_and_is_never_overwritten(
         registry.add(registry_entry(1))
 
     assert _config_file(tmp_path).read_bytes() == content
-    names = {p.name for p in tmp_path.iterdir()} - {REGISTRY_LOCK_NAME}  # il lock resta
+    names = {p.name for p in tmp_path.iterdir()} - {REGISTRY_LOCK_NAME}  # the lock stays
     assert names == {REGISTRY_FILE_NAME}
 
 
@@ -161,7 +161,7 @@ def test_an_entry_with_an_invalid_value_is_corruption(
 
 
 def test_an_unreadable_config_path_is_a_registry_error(tmp_path: Path) -> None:
-    _config_file(tmp_path).mkdir()  # una cartella al posto del file
+    _config_file(tmp_path).mkdir()  # a folder in place of the file
 
     with pytest.raises(ProfileRegistryError):
         JsonProfileRegistry(tmp_path).list_entries()
@@ -189,7 +189,7 @@ def test_upsert_keeps_the_unknown_fields_of_the_replaced_entry_and_writes_once(
     monkeypatch.setattr(profile_registry, "write_atomic", counting)
     moved = registry_entry(1, folder=registry_entry(2).folder)
 
-    registry.upsert(moved)  # stessa id di 1 e stessa cartella di 2: una scrittura sola
+    registry.upsert(moved)  # same id as 1 and same folder as 2: a single write
 
     assert len(writes) == 1
     saved_profiles = _document(config)["profiles"]
@@ -224,4 +224,4 @@ def test_orphan_temporaries_stay_when_another_instance_holds_the_lock(tmp_path: 
     with holder._exclusive():
         JsonProfileRegistry(config, lock_timeout_s=0.1)
 
-    assert orphan.exists()  # niente è stato tolto mentre qualcun altro scriveva
+    assert orphan.exists()  # nothing was removed while someone else was writing

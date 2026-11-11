@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Casi d'uso delle misure del profilo: peso, FC minima, FC massima e soglia con data di validità.
+"""Use cases for the profile measurements: weight, min HR, max HR, LT1 and LT2 (of running and of
+other sports) and threshold pace, each with a validity date.
 
-- `UpdateMeasurements`: il salvataggio di "Modifica profilo", in una sola transazione: dati fissi
-  da completare (altezza e data di nascita di un profilo che non le ha), peso e misure di FC
-  datati. Restituisce il periodo di validità effettivo di ciò che ha salvato.
-- `ReadMeasurementHistory`: dati fissi e storico per "Modifica profilo".
+- `UpdateMeasurements`: the saving of "Edit profile", in a single transaction: fixed data
+  to complete (height and date of birth of a profile that lacks them), weight and dated HR
+  measurements, and the threshold pace (a series of its own). Returns the effective validity
+  period of what it saved.
+- `ReadMeasurementHistory`: fixed data and history for "Edit profile".
 
-Sono dati di salute: mai nei log né nei messaggi d'errore.
+These are health data: never in logs or error messages.
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ from datetime import date, timedelta
 from enum import Enum
 
 from ponos_coach.activities.ports import ActivityIndex
+from ponos_coach.assessment.ports import ThresholdTestStore
 from ponos_coach.load.domain import (
     HeartRateLimits,
     Physiology,
@@ -29,23 +32,37 @@ from ponos_coach.load.ports import PhysiologyStore
 from ponos_coach.profiles.domain import (
     MIN_MEASUREMENT_DATE,
     FixedProfileData,
+    PaceInForce,
+    ThresholdPace,
+    ThresholdPaceEntry,
     Weight,
     WeightEntry,
+    entries_of_tests,
+    threshold_pace_in_force,
 )
-from ponos_coach.profiles.ports import FixedDataStore, WeightStore
+from ponos_coach.profiles.ports import FixedDataStore, ThresholdPaceStore, WeightStore
+
+
+class ThresholdReset(Enum):
+    """Change of an optional threshold HR (LT1s, other-sports LT2): back to the default."""
+
+    DEFAULT = "default"
+
+
+type OptionalThresholdChange = ThresholdHeartRate | ThresholdReset
 
 
 class MeasurementProblem(Enum):
-    """Perché un aggiornamento delle misure è rifiutato (decide il messaggio dell'interfaccia)."""
+    """Why a measurement update is rejected (decides the interface's message)."""
 
-    NOTHING_TO_UPDATE = "nothing_to_update"  # nessuna misura né dato fisso indicati
-    DATE_IN_FUTURE = "date_in_future"  # il giorno di validità è dopo oggi
-    DATE_TOO_OLD = "date_too_old"  # il giorno di validità è anteriore a MIN_MEASUREMENT_DATE
-    INVALID_HEART_RATE = "invalid_heart_rate"  # FC fuori intervallo o incoerente
+    NOTHING_TO_UPDATE = "nothing_to_update"  # no measurement or fixed data given
+    DATE_IN_FUTURE = "date_in_future"  # the validity day is after today
+    DATE_TOO_OLD = "date_too_old"  # the validity day is earlier than MIN_MEASUREMENT_DATE
+    INVALID_HEART_RATE = "invalid_heart_rate"  # HR out of range or inconsistent
 
 
 class InvalidMeasurementsError(ValueError):
-    """Aggiornamento delle misure rifiutato. `problem` dice perché; mai i valori nel messaggio."""
+    """Measurement update rejected. `problem` says why; never the values in the message."""
 
     def __init__(self, problem: MeasurementProblem) -> None:
         super().__init__(problem.value)
@@ -54,12 +71,16 @@ class InvalidMeasurementsError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class MeasurementUpdate:
-    """Nuove misure valide da un giorno: almeno una tra peso, FC minima, FC massima e soglia.
+    """New measurements valid from a day: at least one of weight, min HR, max HR, threshold HR and
+    threshold pace.
 
-    Una misura `None` non cambia: vale quella in vigore quel giorno. Il sesso non si cambia.
+    A `None` measurement does not change: the one in force that day applies. Sex is not changed.
+    `threshold_bpm` is the running LT2. `other_threshold` (other-sports LT2), `run_lt1` and
+    `other_lt1` are optional values: a `ThresholdHeartRate` sets one, `ThresholdReset.DEFAULT`
+    clears it (the default of `threshold_for_sport` / `lt1_for_sport` applies again).
 
     Raises:
-        InvalidMeasurementsError: nessuna misura indicata (`NOTHING_TO_UPDATE`).
+        InvalidMeasurementsError: no measurement given (`NOTHING_TO_UPDATE`).
     """
 
     valid_from: date
@@ -67,19 +88,39 @@ class MeasurementUpdate:
     min_bpm: int | None = None
     max_bpm: int | None = None
     threshold_bpm: int | None = None
+    threshold_pace: ThresholdPace | None = None
+    other_threshold: OptionalThresholdChange | None = None
+    run_lt1: OptionalThresholdChange | None = None
+    other_lt1: OptionalThresholdChange | None = None
 
     def __post_init__(self) -> None:
-        if self.weight is None and not self.changes_heart_rate:
+        if self.weight is None and self.threshold_pace is None and not self.changes_heart_rate:
             raise InvalidMeasurementsError(MeasurementProblem.NOTHING_TO_UPDATE)
 
     @property
     def changes_heart_rate(self) -> bool:
-        """Vero se l'aggiornamento tocca FC minima, massima o soglia."""
-        return not (self.min_bpm is None and self.max_bpm is None and self.threshold_bpm is None)
+        """True if the update touches min HR, max HR or any of the thresholds."""
+        return not (
+            self.min_bpm is None
+            and self.max_bpm is None
+            and self.threshold_bpm is None
+            and self.other_threshold is None
+            and self.run_lt1 is None
+            and self.other_lt1 is None
+        )
+
+
+def _optional_after(
+    base: ThresholdHeartRate | None, change: OptionalThresholdChange | None
+) -> ThresholdHeartRate | None:
+    """An optional threshold after a change: unchanged, set, or back to the default (`None`)."""
+    if change is None:
+        return base
+    return None if isinstance(change, ThresholdReset) else change
 
 
 def _physiology_after(base: Physiology, update: MeasurementUpdate) -> Physiology:
-    """I parametri `base` con le misure indicate; il risultato deve restare coerente."""
+    """The `base` parameters with the given measurements; the result must stay consistent."""
     try:
         return Physiology(
             HeartRateLimits(
@@ -90,6 +131,9 @@ def _physiology_after(base: Physiology, update: MeasurementUpdate) -> Physiology
                 base.threshold.bpm if update.threshold_bpm is None else update.threshold_bpm
             ),
             base.sex,
+            other_threshold=_optional_after(base.other_threshold, update.other_threshold),
+            run_lt1=_optional_after(base.run_lt1, update.run_lt1),
+            other_lt1=_optional_after(base.other_lt1, update.other_lt1),
         )
     except ValueError as exc:
         raise InvalidMeasurementsError(MeasurementProblem.INVALID_HEART_RATE) from exc
@@ -97,11 +141,11 @@ def _physiology_after(base: Physiology, update: MeasurementUpdate) -> Physiology
 
 @dataclass(frozen=True, slots=True)
 class ValidityPeriod:
-    """Da quando a quando vale una misura salvata.
+    """From when to when a saved measurement is valid.
 
-    `valid_from` è il primo giorno; `valid_to` l'ultimo giorno incluso, cioè il giorno prima della
-    voce successiva già esistente della stessa serie, o None se nessuna voce la segue (vale
-    fino alla prossima misura).
+    `valid_from` is the first day; `valid_to` the last day included, i.e. the day before the
+    next already existing entry of the same series, or None if no entry follows it (it holds
+    until the next measurement).
     """
 
     valid_from: date
@@ -110,39 +154,43 @@ class ValidityPeriod:
 
 @dataclass(frozen=True, slots=True)
 class SavedMeasurements:
-    """Che cosa ha salvato `UpdateMeasurements`.
+    """What `UpdateMeasurements` saved.
 
-    Il periodo di ogni serie toccata (None se non toccata: il peso e le misure di FC sono due
-    serie distinte) e se ha completato i dati fissi.
+    The period of each series touched (None if not touched: weight, HR measurements and threshold
+    pace are three distinct series) and whether it completed the fixed data.
     """
 
     weight: ValidityPeriod | None
     heart_rate: ValidityPeriod | None
     fixed_completed: bool
+    threshold_pace: ValidityPeriod | None = None
 
 
 def _period_in(valid_from: date, entry_days: Iterable[date]) -> ValidityPeriod:
-    """Il periodo di una voce di data `valid_from` tra le voci della serie (lei compresa)."""
+    """The period of an entry with date `valid_from` among the entries of the series (itself
+    included)."""
     following = min((day for day in entry_days if day > valid_from), default=None)
     return ValidityPeriod(valid_from, None if following is None else following - timedelta(days=1))
 
 
 class UpdateMeasurements:
-    """Salva i dati di "Modifica profilo" in una sola transazione: o tutto o niente.
+    """Saves the data of "Edit profile" in a single transaction: all or nothing.
 
-    Può completare i dati fissi (altezza e data di nascita di un profilo creato prima che
-    esistessero; una volta impostati non si cambiano più) e aggiungere misure datate: peso, FC
-    minima, FC massima, soglia. Se una parte fallisce (per esempio i dati fissi sono già
-    impostati) non resta scritto niente.
+    It can complete the fixed data (height and date of birth of a profile created before
+    they existed; once set they are no longer changed) and add dated measurements: weight, min
+    HR, max HR, threshold HR, threshold pace. If a part fails (for example the fixed data are
+    already set) nothing remains written.
 
-    Regola di validità: una misura vale dal suo giorno fino alla voce successiva già esistente
-    della stessa serie. Una misura con data passata quindi non cambia ciò che vale dopo una voce
-    più recente, e per lo stesso giorno la voce si sostituisce. Le misure non indicate restano
-    quelle in vigore quel giorno. Il vincolo `FC minima < soglia <= FC massima` si verifica sul
-    risultato. I carichi già calcolati con FC o soglia diverse si ricalcolano da soli alla
-    panoramica successiva (cambia l'impronta); il peso corporeo non entra nel carico.
+    Validity rule: a measurement holds from its day until the next already existing entry
+    of the same series. A measurement with a past date therefore does not change what holds after a
+    more
+    recent entry, and for the same day the entry is replaced. Measurements not given remain
+    those in force that day. The constraint `min HR < threshold <= max HR` is checked on the
+    result. Loads already computed with different HR or threshold are recomputed on their own at
+    the next
+    overview (the fingerprint changes); body weight and the threshold pace do not enter the load.
 
-    `today` (la data di oggi nel fuso del profilo) è iniettata dal Composition Root.
+    `today` (today's date in the profile's time zone) is injected by the Composition Root.
     """
 
     def __init__(
@@ -152,26 +200,47 @@ class UpdateMeasurements:
         weights: WeightStore,
         today: Callable[[], date],
         fixed_data: FixedDataStore,
+        threshold_paces: ThresholdPaceStore,
     ) -> None:
         self._activities = activities
         self._physiology = physiology
         self._weights = weights
         self._today = today
         self._fixed = fixed_data
+        self._paces = threshold_paces
 
     def __call__(
         self, update: MeasurementUpdate | None = None, fixed: FixedProfileData | None = None
     ) -> SavedMeasurements:
-        """Salva i dati fissi da completare (`fixed`) e/o le misure di `update`, e dice per
-        quali periodi valgono.
+        """Saves the fixed data to complete (`fixed`) and/or the measurements of `update`, and says
+        for
+        which periods apply.
 
         Raises:
-            InvalidMeasurementsError: nulla da salvare, giorno nel futuro o anteriore a
-                `MIN_MEASUREMENT_DATE`, oppure FC incoerenti; nulla è stato scritto.
-            FixedDataAlreadySetError: il profilo ha già altezza e data di nascita; nulla cambia.
-            MissingPhysiologyError: il profilo non ha parametri fisiologici su cui basarsi.
-            LoadStoreError, ProfileDataError: scrittura non riuscita; nulla cambia.
+            InvalidMeasurementsError: nothing to save, day in the future or earlier than
+                `MIN_MEASUREMENT_DATE`, or inconsistent HR; nothing was written.
+            FixedDataAlreadySetError: the profile already has height and date of birth; nothing
+            changes.
+            MissingPhysiologyError: the profile has no physiological parameters to rely on.
+            LoadStoreError, ProfileDataError: write failed; nothing changes.
         """
+        self._check(update, fixed)
+        with self._activities.transaction():
+            return self._write(update, fixed)
+
+    def save_in_open_transaction(
+        self, update: MeasurementUpdate | None = None, fixed: FixedProfileData | None = None
+    ) -> SavedMeasurements:
+        """The same as calling the use case, inside a transaction the caller has already opened.
+
+        For a use case that must save the measurements together with something else of its own,
+        all or nothing, with the same rules (it does not open or close the transaction: if the
+        caller's transaction fails, so do these writes). Same errors as the call.
+        """
+        self._check(update, fixed)
+        return self._write(update, fixed)
+
+    def _check(self, update: MeasurementUpdate | None, fixed: FixedProfileData | None) -> None:
         if update is None and fixed is None:
             raise InvalidMeasurementsError(MeasurementProblem.NOTHING_TO_UPDATE)
         if update is not None:
@@ -179,18 +248,22 @@ class UpdateMeasurements:
                 raise InvalidMeasurementsError(MeasurementProblem.DATE_IN_FUTURE)
             if update.valid_from < MIN_MEASUREMENT_DATE:
                 raise InvalidMeasurementsError(MeasurementProblem.DATE_TOO_OLD)
-        with self._activities.transaction():
-            if fixed is not None:
-                self._fixed.set_once(fixed)
-            weight_period, heart_rate_period = self._save(update)
-        return SavedMeasurements(weight_period, heart_rate_period, fixed is not None)
+
+    def _write(
+        self, update: MeasurementUpdate | None, fixed: FixedProfileData | None
+    ) -> SavedMeasurements:
+        if fixed is not None:
+            self._fixed.set_once(fixed)
+        weight_period, heart_rate_period, pace_period = self._save(update)
+        return SavedMeasurements(weight_period, heart_rate_period, fixed is not None, pace_period)
 
     def _save(
         self, update: MeasurementUpdate | None
-    ) -> tuple[ValidityPeriod | None, ValidityPeriod | None]:
-        """Scrive le misure e dà i periodi (peso, FC), dentro la transazione già aperta."""
+    ) -> tuple[ValidityPeriod | None, ValidityPeriod | None, ValidityPeriod | None]:
+        """Writes the measurements and gives the periods (weight, HR, pace), inside the already
+        open transaction."""
         if update is None:
-            return (None, None)
+            return (None, None, None)
         heart_rate_period = None
         if update.changes_heart_rate:
             base = physiology_for_day(self._physiology.list_entries(), update.valid_from)
@@ -206,37 +279,60 @@ class UpdateMeasurements:
             weight_period = _period_in(
                 update.valid_from, (e.valid_from for e in self._weights.list_entries())
             )
-        return (weight_period, heart_rate_period)
+        pace_period = None
+        if update.threshold_pace is not None:
+            self._paces.put(ThresholdPaceEntry(update.valid_from, update.threshold_pace))
+            pace_period = _period_in(
+                update.valid_from, (e.valid_from for e in self._paces.list_entries())
+            )
+        return (weight_period, heart_rate_period, pace_period)
 
 
 @dataclass(frozen=True, slots=True)
 class MeasurementHistory:
-    """Storico per "Modifica profilo": dati fissi (None se da completare), serie del peso e dei
-    parametri fisiologici, per data di validità crescente."""
+    """History for "Edit profile": fixed data (None if to complete), weight series, physiological
+    parameters and threshold pace series, by ascending validity date, and the paces measured by
+    the threshold tests (`test_paces`, dated on the test day)."""
 
     fixed: FixedProfileData | None
     weights: tuple[WeightEntry, ...]
     physiology: tuple[PhysiologyEntry, ...]
+    threshold_paces: tuple[ThresholdPaceEntry, ...] = ()
+    test_paces: tuple[ThresholdPaceEntry, ...] = ()
+
+    def pace_in_force(self, day: date) -> PaceInForce | None:
+        """The threshold pace the plan would use on `day`: the manual series and the paces of
+        the threshold tests, the most recent wins (the manual one on the same day)."""
+        return threshold_pace_in_force(self.threshold_paces, self.test_paces, day)
 
 
 class ReadMeasurementHistory:
-    """Legge i dati fissi e lo storico delle misure del profilo aperto."""
+    """Reads the fixed data and the measurement history of the open profile."""
 
     def __init__(
-        self, fixed: FixedDataStore, weights: WeightStore, physiology: PhysiologyStore
+        self,
+        fixed: FixedDataStore,
+        weights: WeightStore,
+        physiology: PhysiologyStore,
+        threshold_paces: ThresholdPaceStore,
+        threshold_tests: ThresholdTestStore,
     ) -> None:
         self._fixed = fixed
         self._weights = weights
         self._physiology = physiology
+        self._paces = threshold_paces
+        self._tests = threshold_tests
 
     def __call__(self) -> MeasurementHistory:
-        """Lo storico completo.
+        """The complete history.
 
         Raises:
-            LoadStoreError, ProfileDataError: dati illeggibili.
+            LoadStoreError, ProfileDataError, AssessmentStoreError: unreadable data.
         """
         return MeasurementHistory(
             self._fixed.get(),
             tuple(self._weights.list_entries()),
             tuple(self._physiology.list_entries()),
+            tuple(self._paces.list_entries()),
+            entries_of_tests(self._tests.list_tests()),
         )

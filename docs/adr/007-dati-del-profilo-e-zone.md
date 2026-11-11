@@ -1,236 +1,278 @@
-# 007. Dati del profilo, misure datate, pesi degli sport e zone di FC
+# 007. Profile data, dated measurements, sport weights and HR zones
 
-- Stato: Accettato
-- Data: 2026-11-06
+- Status: Accepted
+- Date: 2026-11-06
 
-## Contesto
+## Context
 
-La fase 3 aggiunge al profilo altezza, data di nascita e peso, rende datate
-anche FC minima, FC massima e soglia, lascia scegliere i pesi degli sport e
-calcola il tempo nelle zone di FC. Cinque scelte restano nei file dell'utente
-o nei numeri che vede, e sono difficili da cambiare dopo il rilascio: quali
-dati sono fissi e quali datati, per quanto tempo vale una misura, come si
-salva il peso, come si salvano i pesi degli sport e quando un carico va
-ricalcolato, come si definiscono le zone. Una sesta riguarda la lingua
-dell'interfaccia.
+Phase 3 adds height, date of birth and weight to the profile, makes minimum HR,
+maximum HR and threshold dated too, lets the user choose the sport weights and
+computes the time in HR zones. Five choices stay in the user's files or in the
+numbers they see, and are hard to change after release: which data is fixed and
+which is dated, how long a measurement is valid, how the weight is saved, how
+the sport weights are saved and when a load must be recalculated, how the zones
+are defined. A sixth concerns the interface language.
 
-Questo ADR aggiunge la versione v3 dello schema all'ADR 005 e precisa l'ADR
-004 (modello di carico). Il resto di entrambi resta valido.
+This ADR adds schema version v3 to ADR 005 and refines ADR 004 (load model).
+The rest of both remains valid.
 
-Vincoli:
+Constraints:
 
-- altezza, peso e data di nascita sono dati di salute: solo nel database del
-  profilo, mai in log, messaggi o catene d'errore;
-- un profilo creato prima della v3 resta valido e non perde nulla;
-- il database è un indice e i dati dell'utente; i carichi e le zone sono
-  derivati e si rigenerano dai file originali;
-- un cambio di parametri non deve lasciare carichi vecchi mescolati ai nuovi;
-- l'app non è un dispositivo medico: le zone sono un'indicazione di
-  allenamento.
+- height, weight and date of birth are health data: only in the profile
+  database, never in logs, messages or error chains;
+- a profile created before v3 stays valid and loses nothing;
+- the database is an index and the user's data; loads and zones are derived and
+  are regenerated from the original files;
+- a change of parameters must not leave old loads mixed with new ones;
+- the app is not a medical device: the zones are a training indication.
 
-## Opzioni
+## Options
 
-### Dati fissi e dati datati
+### Fixed data and dated data
 
-1. **Fissi: altezza e data di nascita. Datati: peso, FC minima, FC massima,
-   soglia.**
-   - Pro: ciò che non cambia nel tempo non ha storico; ciò che cambia lo ha,
-     e il carico di un'attività usa i valori del suo giorno. Un trigger
-     rende i dati fissi immutabili anche per un bug del codice.
-   - Contro: un errore di battitura in altezza o data di nascita non si
-     corregge dall'app; la distinzione va spiegata all'utente.
-2. **Tutto datato, anche altezza e data di nascita.**
-   - Pro: una regola sola; un errore si corregge con una nuova voce.
-   - Contro: storico senza senso per la data di nascita; più righe da
-     validare e da mostrare; la sua modifica cambierebbe l'età nel passato.
-3. **Una riga di profilo modificabile, senza storico.**
-   - Pro: schema minimo.
-   - Contro: un cambio di FC o soglia riscriverebbe il passato: il carico di
-     un'attività di tre anni fa verrebbe ricalcolato con i valori di oggi.
+1. **Fixed: height and date of birth. Dated: weight, minimum HR, maximum HR,
+   threshold.**
+   - Pro: what does not change over time has no history; what changes has one,
+     and the load of an activity uses the values of its day. A trigger makes
+     the fixed data immutable even against a bug in the code.
+   - Con: a typing error in height or date of birth cannot be corrected from
+     the app; the distinction must be explained to the user.
+2. **Everything dated, including height and date of birth.**
+   - Pro: a single rule; an error is corrected with a new entry.
+   - Con: a history that makes no sense for the date of birth; more rows to
+     validate and show; changing it would change the age in the past.
+3. **A modifiable profile row, without history.**
+   - Pro: minimal schema.
+   - Con: a change of HR or threshold would rewrite the past: the load of an
+     activity from three years ago would be recalculated with today's values.
 
-### Per quanto tempo vale una misura
+### How long a measurement is valid
 
-1. **Una misura vale dal suo giorno fino alla voce successiva della stessa
-   serie; il peso e i parametri di FC sono due serie. Stesso giorno: la voce
-   si sostituisce. I valori non indicati restano quelli in vigore quel
-   giorno.**
-   - Pro: inserire una misura passata non cambia ciò che vale dopo una voce
-     più recente; è la regola che chi guarda lo storico si aspetta; il caso
-     d'uso restituisce il periodo effettivo e l'interfaccia lo mostra.
-   - Contro: una misura con data passata può valere solo pochi giorni, e
-     l'utente che la inserisce può aspettarsi che valga "da allora in poi":
-     per questo "Modifica profilo" mostra il periodo effettivo e avvisa
-     quando finisce prima del presente.
-2. **Una misura vale da quel giorno in poi e sostituisce le voci successive.**
-   - Pro: l'effetto è quello che l'utente scrive.
-   - Contro: cancella dati veri senza dirlo; contro la regola "i dati
-     dell'utente non si sovrascrivono".
-3. **Vale solo l'ultima misura inserita, per tutta la storia.**
-   - Pro: nessun periodo da mostrare.
-   - Contro: come l'opzione 3 dei dati fissi e datati, riscrive il passato.
+1. **A measurement is valid from its day until the next entry of the same
+   series; weight and the HR parameters are two series. Same day: the entry is
+   replaced. Values not indicated stay those in force that day.**
+   - Pro: inserting a past measurement does not change what is valid after a
+     more recent entry; it is the rule that whoever looks at the history
+     expects; the use case returns the effective period and the interface shows
+     it.
+   - Con: a measurement with a past date may be valid only for a few days, and
+     the user who enters it may expect it to be valid "from then on": for this
+     reason "Edit profile" shows the effective period and warns when it ends
+     before the present.
+2. **A measurement is valid from that day on and replaces the later entries.**
+   - Pro: the effect is what the user writes.
+   - Con: it deletes real data without saying so; against the rule "the user's
+     data is not overwritten".
+3. **Only the last measurement entered is valid, for the whole history.**
+   - Pro: no period to show.
+   - Con: like option 3 of fixed and dated data, it rewrites the past.
 
-### Come si salva il peso
+### How the weight is saved
 
-1. **Intero in decimi di chilogrammo (`tenths_kg`), da 20,0 a 300,0 kg;
-   cifra decimale singola; testo letto con una grammatica stretta (cifre
-   ASCII, virgola o punto).**
-   - Pro: nessun confronto in virgola mobile binaria; il database lo limita
-     con un `CHECK` sugli interi; `70,5` e `70.5` sono lo stesso valore.
-   - Contro: una bilancia che dà due decimali non è accettata (`70,55`
-     è rifiutato, non arrotondato); la conversione sta in un solo punto.
-2. **`REAL` in chilogrammi.**
-   - Pro: nessuna conversione.
-   - Contro: `70,1` non è esatto in binario; confronti e uguaglianze di
-     voci diventano fragili.
-3. **Testo con il numero decimale (`Decimal`).**
-   - Pro: esatto.
-   - Contro: il database non può limitarlo con un `CHECK` numerico; un tipo
-     `STRICT` di testo accetta qualunque stringa.
+1. **Integer in tenths of a kilogram (`tenths_kg`), from 20.0 to 300.0 kg;
+   single decimal digit; text read with a strict grammar (ASCII digits, comma
+   or point).**
+   - Pro: no binary floating-point comparison; the database limits it with a
+     `CHECK` on integers; `70,5` and `70.5` are the same value.
+   - Con: a scale that gives two decimals is not accepted (`70,55` is rejected,
+     not rounded); the conversion is in a single place.
+2. **`REAL` in kilograms.**
+   - Pro: no conversion.
+   - Con: `70,1` is not exact in binary; comparisons and equality of entries
+     become fragile.
+3. **Text with the decimal number (`Decimal`).**
+   - Pro: exact.
+   - Con: the database cannot limit it with a numeric `CHECK`; a `STRICT` text
+     type accepts any string.
 
-### Pesi degli sport e quando si ricalcola un carico
+### Sport weights and when a load is recalculated
 
-1. **Tabella `sport_weights` con solo i pesi diversi dal default; l'impronta
-   del carico di un'attività comprende solo il peso del suo sport.**
-   - Pro: cambiare il default del progetto in una versione futura raggiunge
-     chi non l'ha mai toccato; cambiare il peso della bici non fa ricalcolare
-     le corse (un ricalcolo rilegge i file: con 5.000 attività è lavoro lungo).
-   - Contro: l'insieme salvato dipende dai default del codice: un default
-     cambiato cambia anche il carico, e `LOAD_MODEL_VERSION` va alzata quando
-     si vuole che tutti i carichi si ricalcolino.
-2. **Tabella con i pesi di tutti gli sport.**
-   - Pro: ciò che si usa è tutto nel database.
-   - Contro: i default diventano dati dell'utente: un default migliore non
-     arriva più a nessuno senza una migrazione.
-3. **Impronta unica con tutti i pesi.**
-   - Pro: più semplice da calcolare.
-   - Contro: cambiare un peso invalida ogni carico di ogni sport.
+1. **Table `sport_weights` with only the weights different from the default;
+   the fingerprint of the load of an activity includes only the weight of its
+   sport.**
+   - Pro: changing the project default in a future version reaches whoever
+     never touched it; changing the bike weight does not recalculate the runs (a
+     recalculation re-reads the files: with 5,000 activities it is long work).
+   - Con: the saved set depends on the defaults in the code: a changed default
+     also changes the load, and `LOAD_MODEL_VERSION` must be raised when all
+     loads are to be recalculated.
+2. **Table with the weights of all sports.**
+   - Pro: everything that is used is in the database.
+   - Con: the defaults become user data: a better default no longer reaches
+     anyone without a migration.
+3. **Single fingerprint with all the weights.**
+   - Pro: simpler to compute.
+   - Con: changing one weight invalidates every load of every sport.
 
-### Zone di FC
+### HR zones
 
-1. **Cinque zone sulla soglia dello sport, secondo Friel: Z1 sotto 85%, Z2
-   85-89%, Z3 90-94%, Z4 95-99%, Z5 dal 100%. Default del progetto, da
-   rivedere in fase 4 con il test di soglia. Le percentuali stanno solo in
-   `load/domain/zones.py`; i secondi in zona si salvano con il carico.**
-   - Pro: la soglia è già il parametro del carico (hrTSS); in bici vale la
-     soglia della bici; nessun dato in più da chiedere.
-   - Contro: la soglia inserita prima del test della fase 4 può essere una
-     stima (90% della massima alla creazione), e con essa le zone; le
-     percentuali sono di una sola fonte e non si adattano a chi ha un
-     profilo diverso.
-2. **Percentuali della FC di riserva (Karvonen).**
-   - Pro: tiene conto della FC a riposo.
-   - Contro: un secondo insieme di parametri da spiegare; non coincide con la
-     soglia usata dal carico.
-3. **Percentuali della FC massima.**
-   - Pro: nessuna soglia necessaria.
-   - Contro: la FC massima è il valore meno affidabile tra quelli inseriti;
-     le zone non seguirebbero il test di soglia.
-4. **Zone configurabili dall'utente.**
-   - Pro: adatte a chi ha già le proprie.
-   - Contro: più interfaccia e più casi di input da validare; rimandato a
-     quando serve (YAGNI).
+> **Amendment of 2026-11-11.** The Z1/Z2 boundary moves from 75% to 72% (user's
+> request): Z1 50-71%, Z2 72-84%; the other boundaries stay. `METHOD_VERSION` 11.
+>
+> **Amendment of 2026-11-10.** The percentages are the user's choice: Z1 below
+> 75% (50-74%, and everything lower), Z2 75-84%, Z3 85-94%, Z4 95-102%, Z5 from
+> 103% to the maximum HR (the 5th edition's 78/87/94/100 are superseded). Same
+> design: the percentages live only in `load/domain/zones.py`, the load
+> fingerprint includes them (the seconds in zone are recomputed, the TRIMPeq does
+> not change) and the plan is rebuilt (`METHOD_VERSION` 10). The text of option 1
+> below keeps the original numbers as history.
+
+1. **Five zones on the threshold of the sport, after Friel: Z1 below 85%, Z2
+   85-89%, Z3 90-94%, Z4 95-99%, Z5 from 100%. Project default, to be reviewed
+   in phase 4 with the threshold test. The percentages are only in
+   `load/domain/zones.py`; the seconds in zone are saved with the load.**
+   - Pro: the threshold is already the parameter of the load (hrTSS); on the
+     bike the bike threshold applies; no extra data to ask for.
+   - Con: the threshold entered before the phase 4 test may be an estimate (90%
+     of the maximum at creation), and so the zones; the percentages come from a
+     single source and do not adapt to people with a different profile.
+2. **Percentages of the reserve HR (Karvonen).**
+   - Pro: takes the resting HR into account.
+   - Con: a second set of parameters to explain; it does not match the
+     threshold used by the load.
+3. **Percentages of the maximum HR.**
+   - Pro: no threshold needed.
+   - Con: the maximum HR is the least reliable of the values entered; the zones
+     would not follow the threshold test.
+4. **Zones configurable by the user.**
+   - Pro: suitable for whoever already has their own.
+   - Con: more interface and more input cases to validate; postponed until
+     needed (YAGNI).
 
 ### Schema v3
 
-1. **Migrazione additiva: tabelle `profile_body`, `weight`, `sport_weights`;
-   cinque colonne `zone1_s ... zone5_s` in `load_cache`; la cache si svuota
-   nella stessa migrazione. Un trigger rifiuta ogni `UPDATE` e `DELETE` di
+1. **Additive migration: tables `profile_body`, `weight`, `sport_weights`; five
+   columns `zone1_s ... zone5_s` in `load_cache`; the cache is emptied in the
+   same migration. A trigger rejects every `UPDATE` and `DELETE` of
    `profile_body`.**
-   - Pro: la cache è derivata: svuotarla garantisce che nessun carico resti
-     senza zone e costa solo un ricalcolo; i vincoli `CHECK` stanno nel
-     database; la migrazione passa dalla copia di sicurezza come le altre.
-   - Contro: il primo avvio dopo l'aggiornamento ricalcola tutti i carichi
-     (con 5.000 attività circa 23 s con i FIT reali, stimati); il trigger
-     impedisce anche a un futuro codice di correggere i dati fissi, che
-     richiederebbe una nuova migrazione.
-2. **Valori di zona in una tabella separata.**
-   - Pro: `load_cache` non cambia.
-   - Contro: una tabella e una chiave esterna in più per un dato che nasce e
-     muore con il carico.
-3. **Zone calcolate al volo dai file.**
-   - Pro: nessun dato in più.
-   - Contro: il grafico del tempo nelle zone rileggerebbe tutti i file a ogni
-     apertura.
+   - Pro: the cache is derived: emptying it guarantees that no load is left
+     without zones and costs only a recalculation; the `CHECK` constraints are
+     in the database; the migration goes through the safety copy like the
+     others.
+   - Con: the first start after the update recalculates all the loads (with
+     5,000 activities about 23 s with real FIT files, estimated); the trigger
+     also prevents future code from correcting the fixed data, which would
+     require a new migration.
+2. **Zone values in a separate table.**
+   - Pro: `load_cache` does not change.
+   - Con: one more table and foreign key for data that is born and dies with
+     the load.
+3. **Zones computed on the fly from the files.**
+   - Pro: no extra data.
+   - Con: the time-in-zones chart would re-read all the files at every opening.
 
-### Lingua dell'interfaccia
+### Interface language
 
-1. **Inglese predefinito; l'italiano si sceglie dal menu Lingua e la scelta si
-   ricorda per il prossimo avvio; `--lang` ha la precedenza.**
-   - Pro: nessuna dipendenza dalla lingua del sistema, quindi stesso
-     comportamento ovunque e nei test; un testo sorgente inglese non richiede
-     catalogo.
-   - Contro: chi usa l'italiano deve scegliere la lingua una volta; il
-     cambio vale al riavvio.
-2. **Lingua del sistema.**
-   - Pro: nessuna scelta per l'utente.
-   - Contro: dipende dall'ambiente, difficile da provare; una lingua del
-     sistema non tradotta ripiega in modo poco chiaro.
+1. **English by default; Italian is chosen from the Language menu and the
+   choice is remembered for the next start; `--lang` takes precedence.**
+   - Pro: no dependence on the system language, so same behaviour everywhere and
+     in tests; an English source text does not need a catalogue.
+   - Con: whoever uses Italian must choose the language once; the change
+     applies at restart.
+2. **System language.**
+   - Pro: no choice for the user.
+   - Con: depends on the environment, hard to test; an untranslated system
+     language falls back in an unclear way.
 
-## Decisione
+## Decision
 
-- **Dati fissi:** altezza (intera, 100-250 cm) e data di nascita (dal
-  1900-01-01 a oggi meno 5 anni, limite superiore verificato quando la inserisce
-  l'utente). Si scrivono una volta (`FixedDataStore.set_once`); un profilo
-  creato prima della v3 li completa una volta in "Modifica profilo".
-- **Misure datate:** peso (decimi di chilo, 20,0-300,0 kg), FC minima, FC
-  massima, soglia. Un giorno di validità non nel futuro e non prima del
-  1900-01-01. Il vincolo `FC minima < soglia <= FC massima` si verifica sul
-  risultato. Una modifica di "Modifica profilo" è un solo caso d'uso e una
-  sola transazione, dati fissi compresi.
-- **Validità:** vale la regola dell'opzione 1; il caso d'uso restituisce il
-  periodo effettivo (`ValidityPeriod`) e l'interfaccia lo mostra e avvisa se la
-  data passata vale solo fino alla misura successiva. Il peso corporeo non
-  entra nel carico.
-- **Pesi degli sport:** da 0 a 5, due decimali; si salvano solo quelli
-  diversi dal default; l'impronta di un carico comprende il peso del solo
-  sport, le percentuali delle zone e `LOAD_MODEL_VERSION` (2 dalla fase 3).
-- **Zone:** opzione 1. I secondi in zona sono quelli dei campioni contati dal
-  carico (stessi scarti e stessi buchi). Un campione sul confine appartiene alla
-  zona più alta; il confronto è su interi.
-- **Schema v3:** opzione 1.
-- **Lingua:** opzione 1.
-- **Dati personali:** i tipi di dominio e gli store non ripetono i valori
-  rifiutati nei messaggi; nessuno di questi valori entra in un log.
+- **Fixed data:** height (integer, 100-250 cm) and date of birth (from
+  1900-01-01 to today minus 5 years, upper limit checked when the user enters
+  it). They are written once (`FixedDataStore.set_once`); a profile created
+  before v3 completes them once in "Edit profile".
+- **Dated measurements:** weight (tenths of a kilogram, 20.0-300.0 kg), minimum
+  HR, maximum HR, threshold. A validity day not in the future and not before
+  1900-01-01. The constraint `minimum HR < threshold <= maximum HR` is checked
+  on the result. A change from "Edit profile" is a single use case and a single
+  transaction, fixed data included.
+- **Validity:** the rule of option 1 applies; the use case returns the
+  effective period (`ValidityPeriod`) and the interface shows it and warns if
+  the past date is valid only until the next measurement. Body weight does not
+  enter the load.
+- **Sport weights:** from 0 to 5, two decimals; only those different from the
+  default are saved; the fingerprint of a load includes the weight of the sport
+  alone, the zone percentages and `LOAD_MODEL_VERSION` (2 since phase 3).
+- **Zones:** option 1. The seconds in zone are those of the samples counted by
+  the load (same discards and same gaps). A sample on the boundary belongs to
+  the higher zone; the comparison is on integers.
+- **Schema v3:** option 1.
+- **Language:** option 1.
+- **Personal data:** the domain types and the stores do not repeat rejected
+  values in messages; none of these values enters a log.
 
-## Conseguenze
+## Consequences
 
-- Un errore in altezza o data di nascita non si corregge dall'app. Se la
-  richiesta diventa frequente, si decide con un nuovo ADR (non si modifica
-  questo).
-- Le percentuali delle zone sono provvisorie: cambiarle in fase 4 richiede
-  una nuova versione del modello di carico, quindi un ricalcolo di tutti i
-  carichi, e un ADR che sostituisce la parte sulle zone.
-- Il primo avvio dopo l'aggiornamento a v3 ricalcola i carichi con
-  avanzamento e Interrompi.
-- I default dei pesi degli sport sono parte del comportamento visibile:
-  cambiarli senza alzare `LOAD_MODEL_VERSION` lascia carichi vecchi in cache.
-- Il peso corporeo ha uno storico ma nessun uso nei calcoli; è pronto per
-  fasi successive senza altre migrazioni.
-- Ogni cambio dell'insieme di dati fissi richiede una migrazione, una copia
-  di sicurezza e un test sul database della versione precedente (come per
-  ogni schema, ADR 005).
+- An error in height or date of birth cannot be corrected from the app. If the
+  request becomes frequent, a new ADR decides (this one is not modified).
+- The zone percentages are provisional: changing them in phase 4 requires a new
+  version of the load model, so a recalculation of all the loads, and an ADR
+  that replaces the part on zones.
+- The first start after the update to v3 recalculates the loads with progress
+  and Stop.
+- The defaults of the sport weights are part of the visible behaviour: changing
+  them without raising `LOAD_MODEL_VERSION` leaves old loads in the cache.
+- Body weight has a history but no use in the calculations; it is ready for
+  later phases without further migrations.
+- Every change of the set of fixed data requires a migration, a safety copy and
+  a test on the database of the previous version (as for every schema, ADR 005).
 
-## Come se ne verifica il rispetto
+## How compliance is verified
 
-- T-DATI-01: database v2 scritto a mano portato a v3 con dati intatti e
-  copia di sicurezza coerente; migrazione interrotta a ogni istruzione;
-  limiti dei `CHECK`, trigger dei dati fissi
+- T-DATI-01: v2 database written by hand brought to v3 with data intact and a
+  consistent safety copy; migration interrupted at every statement; limits of
+  the `CHECK`s, trigger of the fixed data
   (`tests/collaudo/test_fase3_migrazione.py`,
-  `tests/collaudo/test_fase3_dati_personali.py`); due istanze e doppio
-  completamento dei dati fissi con un solo vincitore.
-- T-QUAL-02: partizioni e confini di altezza, data di nascita, peso,
-  triple di FC, pesi degli sport e giorno di validità, anche attraverso il
-  caso d'uso e il database (`tests/collaudo/test_fase3_dati_personali.py`).
-- Periodi di validità per serie: `tests/profiles/test_measurements.py`.
-- T-CALC-01…07: confronto tra la panoramica incrementale dopo una serie di
-  modifiche e il calcolo da zero; l'impronta dipende da ogni ingresso del
-  carico e da nient'altro; zone con oracolo scritto a parte
-  (`tests/collaudo/test_fase3_carico.py`, `tests/load/test_parameters.py`,
-  `tests/load/test_sport_weights.py`).
-- T-SEC-08: nessun valore di altezza, peso, data di nascita o FC in log,
-  messaggi o catene d'errore (`tests/collaudo/test_fase3_log_salute.py`).
-- T-UI-06 e T-UI-07: stessi testi nelle due lingue, lingua ricordata
-  (`tests/ui/test_translations.py`, `tests/collaudo/test_fase3_interfaccia.py`).
-- T-PERF-01: panoramica con 5.000 attività, ricalcolo completo e grafici
-  entro i budget (`tests/collaudo/test_fase3_prestazioni.py`).
-- `import-linter` nella CI: il dominio resta puro.
+  `tests/collaudo/test_fase3_dati_personali.py`); two instances and double
+  completion of the fixed data with a single winner.
+- T-QUAL-02: partitions and boundaries of height, date of birth, weight, HR
+  triples, sport weights and validity day, also through the use case and the
+  database (`tests/collaudo/test_fase3_dati_personali.py`).
+- Validity periods per series: `tests/profiles/test_measurements.py`.
+- T-CALC-01…07: comparison between the incremental overview after a series of
+  changes and the calculation from scratch; the fingerprint depends on every
+  input of the load and on nothing else; zones with an oracle written
+  separately (`tests/collaudo/test_fase3_carico.py`,
+  `tests/load/test_parameters.py`, `tests/load/test_sport_weights.py`).
+- T-SEC-08: no height, weight, date of birth or HR value in logs, messages or
+  error chains (`tests/collaudo/test_fase3_log_salute.py`).
+- T-UI-06 and T-UI-07: same texts in the two languages, language remembered
+  (`tests/ui/test_translations.py`,
+  `tests/collaudo/test_fase3_interfaccia.py`).
+- T-PERF-01: overview with 5,000 activities, full recalculation and charts
+  within budget (`tests/collaudo/test_fase3_prestazioni.py`).
+- `import-linter` in the CI: the domain stays pure.
+
+## Amendment 2026-11-10: sport weights and hrTSS removed
+
+The load is now the TRIMPeq (amendment to ADR 004). The parts of this ADR on
+the sport weights (options, decision, consequences and the tests
+`tests/load/test_sport_weights.py`) no longer apply, and the references to hrTSS
+mean the TRIMPeq. The rest of the ADR stays valid.
+
+- The table `sport_weights` stays in the schema, neither read nor written; a
+  later migration drops it (expand-contract).
+- `LOAD_MODEL_VERSION` is 3 and the fingerprint of a load, `load_fingerprint(physiology)`,
+  has no weights: it depends on the HR parameters and the zone percentages.
+  Everything is recalculated from scratch (T-CALC-05).
+- The zones keep their definition on the threshold of the sport.
+
+## Amendment 2026-11-10: thresholds for cycling and other activities
+
+Migration 15 (`SPORT_THRESHOLDS_MIGRATION`, `storage/schema_sport_thresholds.py`)
+adds the nullable columns `bike_threshold_bpm` and `other_threshold_bpm` to
+`physiology`, with `CHECK (>= 40 AND > min_bpm AND <= max_bpm)`; NULL means the
+default. They share the dated series of the other HR parameters: one entry per
+day, one row in the history, one constraint. The HR zones of a sport are on its
+threshold.
+
+## Amendment 2026-11-10 (second): LT1 and the two groups
+
+Migration 18 (`LT1_MIGRATION`, `storage/schema_lt1.py`) adds the nullable columns
+`run_lt1_bpm` and `other_lt1_bpm` to `physiology`, with
+`CHECK (NULL OR (> min_bpm AND < LT2))`; for `other_lt1_bpm` the LT2 is
+`COALESCE(other_threshold_bpm, threshold_bpm)`. The column `bike_threshold_bpm`
+of migration 15 stays in the table but is neither read nor written any more,
+because cycling belongs to the other-sports group (expand-contract: a later
+migration drops it). `other_threshold_bpm` is the LT2 of every sport that is not
+running or trail. The load cache is not cleared: `LOAD_MODEL_VERSION` 5 changes
+the fingerprint of every load.

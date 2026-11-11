@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-UI-01, T-UI-02, T-UI-07, T-SEC-08 e D-F1-02 dall'avvio vero (Composition Root + Qt offscreen).
+"""T-UI-01, T-UI-02, T-UI-07, T-SEC-08 and D-F1-02 from the real start-up (Composition Root + Qt
+offscreen).
 
-Si parte da `compose_main_window` come fa `main()`: stesse porte reali, stessa finestra. Qui sono
-i percorsi della fase 1 che i test della finestra non coprono: un albero ostile importato dalla
-finestra, due profili che restano separati, un database sostituito da un file qualunque, la
-cartella e le impostazioni ricordate davvero su disco, i log dell'intero percorso.
+It starts from `compose_main_window` as `main()` does: same real ports, same window. Here are
+the phase 1 paths that the window tests do not cover: a hostile tree imported from the
+window, two profiles that stay separate, a database replaced by an arbitrary file, the
+folder and settings really remembered on disk, the logs of the whole path.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QFileDialog, QListWidget, QMessageBox
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.profiles.domain import PROFILE_DATABASE_NAME
@@ -26,7 +27,7 @@ from ponos_coach.ui.main_window import MainWindow
 from ponos_coach.ui.overview_state import Ready
 from tests.collaudo.support import format_logs
 from tests.collaudo.test_import_pila_reale import mixed_tree
-from tests.fixtures.generators import gpx_writer as gw
+from tests.fixtures.generators import fit_writer as fw
 from tests.fixtures.generators import import_files as imp
 from tests.ui.workspace_support import (
     WAIT_MS,
@@ -37,8 +38,8 @@ from tests.ui.workspace_support import (
     wait_ready,
 )
 
-SECRET_NAME = "Segreto_Con_Controllo_Log"  # noqa: S105 - nome inventato, non una password
-SECRET_LAT, SECRET_LON = -30.987654, -20.345678  # coordinate inventate, riconoscibili nei log
+SECRET_NAME = "Segreto_Con_Controllo_Log"  # noqa: S105 - invented name, not a password
+SECRET_LAT, SECRET_LON = -30.987654, -20.345678  # invented coordinates, recognisable in the logs
 
 
 @pytest.fixture
@@ -62,12 +63,12 @@ def import_and_wait(qtbot: QtBot, window: MainWindow, folder: Path) -> ImportRep
 
 
 def restart(qtbot: QtBot, window: MainWindow, tmp_path: Path, settings: QSettings) -> MainWindow:
-    close_window(qtbot, window)  # chiude il profilo nel thread dei dati e rilascia il lock
+    close_window(qtbot, window)  # closes the profile in the data thread and releases the lock
     return start(qtbot, tmp_path, settings)
 
 
 def starts_recorder(seen: list[str]) -> Callable[..., str]:
-    """Al posto di `getExistingDirectory`: ricorda la cartella di partenza e annulla."""
+    """In place of `getExistingDirectory`: remembers the starting folder and cancels."""
 
     def record(_parent: object, _caption: str, directory: str = "") -> str:
         seen.append(directory)
@@ -110,16 +111,16 @@ def test_t_ui_01_a_hostile_tree_from_the_window_then_again_then_a_new_session(
 
     first = import_and_wait(qtbot, window, source)
 
-    assert (first.imported, first.already_present, first.ignored, first.failed) == (4, 2, 1, 7)
+    assert (first.imported, first.already_present, first.ignored, first.failed) == (4, 2, 0, 6)
     assert not first.cancelled
-    assert len(first.not_imported) == 8  # ogni file rifiutato o ignorato ha il suo motivo
+    assert len(first.not_imported) == 6  # ogni file rifiutato o ignorato ha il suo motivo
     wait_ready(qtbot, window, 4)
     assert activity_rows(window) == 4
 
     again = import_and_wait(qtbot, window, source)
 
     assert (again.imported, again.already_present) == (0, 6)
-    assert len(again.not_imported) == 8  # i rifiuti restano rifiuti, ogni volta
+    assert len(again.not_imported) == 6  # i rifiuti restano rifiuti, ogni volta
     wait_ready(qtbot, window, 4)
 
     second_session = restart(qtbot, window, tmp_path, settings)
@@ -141,10 +142,10 @@ def test_t_ui_01_two_profiles_stay_separate_and_the_last_one_used_reopens(
     import_and_wait(qtbot, window, first_source)
     wait_ready(qtbot, window, 3)
     create_profile(qtbot, window, "Seconda atleta")
-    assert activity_rows(window) == 0  # il profilo nuovo non eredita nulla
+    assert activity_rows(window) == 0  # the new profile inherits nothing
     second_source = tmp_path / "due"
     second_source.mkdir()
-    (second_source / "a.gpx").write_bytes(imp.gpx_run(50))
+    (second_source / "a.fit").write_bytes(imp.fit_run(50))
     import_and_wait(qtbot, window, second_source)
     wait_ready(qtbot, window, 1)
     first_id = next(
@@ -166,7 +167,7 @@ def test_t_ui_01_two_profiles_stay_separate_and_the_last_one_used_reopens(
     reopened = restart(qtbot, window, tmp_path, settings)
     qtbot.waitUntil(lambda: reopened.controller.profile is not None, timeout=WAIT_MS)
     assert reopened.controller.profile is not None
-    assert reopened.controller.profile.profile_id == first_id  # l'ultimo usato, non l'ultimo creato
+    assert reopened.controller.profile.profile_id == first_id  # the last used, not the last created
     wait_ready(qtbot, reopened, 3)
 
 
@@ -185,11 +186,11 @@ def test_t_ui_01_a_database_replaced_by_a_foreign_file_gives_a_message_and_a_usa
     again = start(qtbot, tmp_path, settings)
 
     box = open_error_box(qtbot, again)
-    assert "Atleta" not in box.informativeText()  # nessun nome ne percorso nel messaggio
+    assert "Atleta" not in box.informativeText()  # no name or path in the message
     assert str(tmp_path) not in box.informativeText() + box.text()
     assert again.controller.profile is None
-    assert again.new_profile_action.isEnabled()  # la finestra resta usabile
-    assert database.read_bytes() == garbage  # e il file non e stato toccato
+    assert again.new_profile_action.isEnabled()  # the window stays usable
+    assert database.read_bytes() == garbage  # and the file was not touched
     close_window(qtbot, again)
     database.write_bytes(original)
     recovered = start(qtbot, tmp_path, settings)
@@ -209,7 +210,7 @@ def test_d_f1_02_opening_a_profile_removes_the_orphan_temporaries_of_an_interrup
 
     again = start(qtbot, tmp_path, settings)
     qtbot.waitUntil(lambda: again.controller.profile is not None, timeout=WAIT_MS)
-    close_window(qtbot, again)  # chiude il profilo: tutto cio che l'apertura doveva fare e fatto
+    close_window(qtbot, again)  # closes the profile: everything the opening had to do is done
 
     assert not orphan.exists()
 
@@ -233,7 +234,7 @@ def test_t_ui_07_folders_are_on_disk_for_a_new_process_and_offered_by_the_dialog
     qtbot.waitUntil(lambda: window.controller.can_import, timeout=WAIT_MS)
     close_window(qtbot, window)
 
-    other_process = QSettings(settings.fileName(), QSettings.Format.IniFormat)  # come al riavvio
+    other_process = QSettings(settings.fileName(), QSettings.Format.IniFormat)  # like at restart
     assert other_process.value("import/lastFolder", "", type=str) == str(source)
     assert other_process.value("import/lastFilesFolder", "", type=str) == str(files_folder)
 
@@ -268,7 +269,9 @@ def test_t_ui_07_the_profile_folder_dialog_starts_where_the_last_one_was_chosen(
     window = start(qtbot, tmp_path, settings)
     create_profile(qtbot, window, "Atleta di prova")
     elsewhere = tmp_path / "altrove" / "profilo-vecchio"
-    window.open_profile_folder(elsewhere)  # non esiste: un errore, ma la cartella si ricorda
+    window.open_profile_folder(
+        elsewhere
+    )  # it does not exist: an error, but the folder is remembered
     seen: list[str] = []
     monkeypatch.setattr(
         QFileDialog,
@@ -327,38 +330,18 @@ def test_t_ui_07_settings_with_wrong_types_for_the_folders_do_not_break_the_dial
     assert len(seen) == 2
 
 
-def test_d_f1_08_the_open_section_is_remembered_at_the_next_start(
-    qtbot: QtBot, tmp_path: Path, settings: QSettings
-) -> None:
-    window = start(qtbot, tmp_path, settings)
-    create_profile(qtbot, window, "Atleta di prova")
-    sidebar = window.findChild(QListWidget, "sidebar")
-    assert sidebar is not None
-    sidebar.setCurrentRow(1)  # Attivita
-    close_window(qtbot, window)
-
-    again = start(qtbot, tmp_path, settings)
-    qtbot.waitUntil(lambda: again.controller.profile is not None, timeout=WAIT_MS)
-
-    again_sidebar = again.findChild(QListWidget, "sidebar")
-    assert again_sidebar is not None
-    assert again_sidebar.currentRow() == 1
-
-
 # --- T-SEC-08 ------------------------------------------------------------------------------------
 
 
-def secret_gpx() -> bytes:
-    points = gw.line_points(
-        imp.run_start(1),
-        61,
-        step_s=10,
-        lat_step_deg=0.0001,
-        first_lat=SECRET_LAT,
-        first_lon=SECRET_LON,
-        hr=[187] * 61,
-    )
-    return gw.build_gpx(gw.GpxSpec([points], name=SECRET_NAME))
+def secret_fit() -> bytes:
+    start = imp.run_start(1)
+    first = fw.datetime_to_fit(start)
+    samples = [
+        fw.Sample(first + i * 10, 187, lat_deg=SECRET_LAT + i * 0.0001, lon_deg=SECRET_LON)
+        for i in range(61)
+    ]
+    spec = fw.ActivitySpec(start, fw.Sport.RUNNING, fw.SubSport.GENERIC, samples)
+    return fw.build_activity(spec)
 
 
 def assert_log_is_clean(text: str, tmp_path: Path) -> None:
@@ -372,7 +355,7 @@ def assert_log_is_clean(text: str, tmp_path: Path) -> None:
         "Atleta di prova",
     ]
     for item in forbidden:
-        assert item not in text, f"il log contiene {item!r}"
+        assert item not in text, f"the log contains {item!r}"
 
 
 @pytest.fixture
@@ -388,7 +371,7 @@ def test_t_sec_08_import_open_and_overview_log_no_data_of_the_user(
     create_profile(qtbot, window, "Atleta di prova")
     source = tmp_path / SECRET_NAME
     mixed_tree(source)
-    (source / f"{SECRET_NAME}.gpx").write_bytes(secret_gpx())
+    (source / f"{SECRET_NAME}.fit").write_bytes(secret_fit())
     (source / f"{SECRET_NAME}_rotto.fit").write_bytes(b"non un fit " + SECRET_NAME.encode())
     import_and_wait(qtbot, window, source)
     wait_ready(qtbot, window, 5)
@@ -412,9 +395,9 @@ def test_d_f1_05_failures_do_not_write_the_folder_names_of_the_user_in_the_log(
     create_profile(qtbot, window, "Atleta di prova")
     secret_folder = tmp_path / SECRET_NAME
     if operation == "open_missing":
-        window.open_profile_folder(secret_folder)  # non esiste
+        window.open_profile_folder(secret_folder)  # does not exist
     else:
-        window.import_folder(secret_folder)  # non esiste
+        window.import_folder(secret_folder)  # does not exist
     open_error_box(qtbot, window)
 
     assert_log_is_clean(format_logs(all_logs.records), tmp_path)
@@ -439,7 +422,7 @@ def test_t_sec_08_the_error_message_shown_to_the_user_never_repeats_the_input(
 ) -> None:
     window = start(qtbot, tmp_path, settings)
     create_profile(qtbot, window, "Atleta di prova")
-    window.import_folder(tmp_path / SECRET_NAME)  # non esiste
+    window.import_folder(tmp_path / SECRET_NAME)  # does not exist
 
     box = open_error_box(qtbot, window)
 

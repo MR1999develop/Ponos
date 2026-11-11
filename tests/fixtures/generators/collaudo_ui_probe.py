@@ -1,16 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Sonda della reattivita dell'interfaccia, da avviare in un processo nuovo.
+"""UI responsiveness probe, to be started in a new process.
 
-Uso: `python collaudo_ui_probe.py <cartella-di-lavoro> <quanti-FIT>`.
+Usage: `python collaudo_ui_probe.py <working-folder> <how-many-FIT>`.
 
-Compone la finestra come `main()` (Composition Root, Qt offscreen), crea un profilo, importa
-`quanti` FIT sintetici veri (nessun cancello) e aspetta la panoramica. Un timer da 10 ms misura,
-per fase, gli intervalli tra due scatti: il massimo e quanto il ciclo di eventi e rimasto fermo.
-Un processo per misura perche il primo disegno di un grafico in un processo (avvio del motore
-web) costa piu dei successivi. Ultima riga dell'output: un JSON `{fase: [intervalli in s]}`; la
-chiave `avvio_motore` ha invece la durata (una sola) dell'avvio del motore web nel thread della UI,
-che la finestra fa subito dopo il primo `show()` e che non e riducibile (vedi `TIDY.md`).
+Composes the window like `main()` (Composition Root, Qt offscreen), creates a profile, imports
+`how-many` real synthetic FIT files (no gate) and waits for the overview. A 10 ms timer measures,
+per phase, the intervals between two ticks: the maximum is how long the event loop stood still.
+One process per measurement because the first drawing of a chart in a process (start of the web
+engine) costs more than the following ones. Last line of the output: a JSON `{phase: [intervals in
+s]}`; the
+key `avvio_motore` instead holds the (single) duration of the web engine start in the UI thread,
+which the window does right after the first `show()` and which cannot be reduced (see `TIDY.md`).
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--disable-gpu")
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # radice del repository: `tests.*`
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # root of the repository: `tests.*`
 
 from PySide6.QtCore import QEventLoop, QSettings, QTimer
 from PySide6.QtWidgets import QApplication
@@ -53,7 +54,7 @@ def wait_until(app: QApplication, condition: Callable[[], bool]) -> None:
     deadline = time.monotonic() + WAIT_S
     while not condition():
         if time.monotonic() > deadline:
-            raise TimeoutError("la sonda non ha ricevuto l'esito atteso")
+            raise TimeoutError("the probe did not receive the expected outcome")
         app.processEvents(QEventLoop.ProcessEventsFlag.WaitForMoreEvents, 5)
 
 
@@ -109,7 +110,7 @@ def measure(
             and len(controller.overview_state.overview.activities) == count
         ),
     )
-    for _ in range(50):  # lascia finire il disegno
+    for _ in range(50):  # let the drawing finish
         app.processEvents(QEventLoop.ProcessEventsFlag.WaitForMoreEvents, 5)
     timer.stop()
     return gaps
@@ -124,6 +125,7 @@ def main(argv: list[str]) -> int:
         settings=QSettings(str(root / "settings.ini"), QSettings.Format.IniFormat),
         config_dir=root / "config",
         documents_dir=root / "documents",
+        map_cache_dir=root / "map-cache",  # never the user's cache folder
         system_timezone_id="Europe/Rome",
         clock=lambda _zone: date(2026, 12, 31),
     )
@@ -136,7 +138,7 @@ def main(argv: list[str]) -> int:
         start_engine()
         engine_s.append(time.perf_counter() - started)
 
-    chart.start_engine = timed_start_engine  # type: ignore[method-assign]  # solo la misura
+    chart.start_engine = timed_start_engine  # type: ignore[method-assign]  # measurement only
     window.show()
     open_new_profile(app, window, root)
     source = root / "storico"
@@ -146,7 +148,7 @@ def main(argv: list[str]) -> int:
     gaps = measure(app, window, source, count)
     gaps["avvio_motore"] = engine_s
     window.close()
-    wait_until(app, lambda: window.is_closed)  # il profilo si chiude nel thread dei dati
+    wait_until(app, lambda: window.is_closed)  # the profile is closed in the data thread
     print(json.dumps(gaps), flush=True)  # noqa: T201 - l'esito va al test su stdout
     return 0
 

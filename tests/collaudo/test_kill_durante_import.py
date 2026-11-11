@@ -1,15 +1,19 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""T-DATI-02, T-DATI-04, T-IMP-03: un vero kill a meta di un import di molti file, poi la ripresa.
+"""T-DATI-02, T-DATI-04, T-IMP-03: a real kill halfway through an import of many files, then the
+resume.
 
-Un sottoprocesso apre il profilo, prende il lock e importa una cartella di FIT con l'archivio
-e l'indice veri; il test lo uccide (senza pulizia) in un punto preciso della scrittura, o a un
-punto qualsiasi dopo N file, e poi riapre il profilo come farebbe l'app al riavvio.
+A subprocess opens the profile, takes the lock and imports a folder of FIT files with the real
+archive
+and index; the test kills it (without cleanup) at a precise point of the write, or at an
+arbitrary point after N files, and then reopens the profile as the app would on restart.
 
-Oracoli: lock libero; database apribile e integro; ogni record ha il suo file con SHA-256 e
-dimensione giusti; i record sono un prefisso dell'ordine di import (nessun buco); al più un
-temporaneo orfano e un file non ancora referenziato; la ripresa dell'import completa tutto senza
-duplicati; un secondo import non cambia nulla.
+Oracles: lock free; database openable and intact; every record has its file with the right SHA-256
+and
+size; the records are a prefix of the import order (no gap); at most one
+orphan temporary file and one file not yet referenced; resuming the import completes everything
+without
+duplicates; a second import changes nothing.
 """
 
 from __future__ import annotations
@@ -36,9 +40,9 @@ from tests.collaudo.support import (
 from tests.fixtures.generators.import_files import fit_run, run_start
 
 FILES = 6
-# Operazioni di scrittura dell'archivio: il primo file ne fa 10 (crea due cartelle), gli altri 8.
+# Archive write operations: the first file does 10 (creates two folders), the others 8.
 OPS_IN_RUN = 10 + 8 * (FILES - 1)
-REPRESENTATIVE_OPS = (4, 5, 7, 8, 14, 17)  # prima di write, fsync, rinomina, fsync cartella...
+REPRESENTATIVE_OPS = (4, 5, 7, 8, 14, 17)  # before write, fsync, rename, directory fsync...
 
 
 def make_source(tmp_path: Path) -> Path:
@@ -58,7 +62,7 @@ def tree_digest(folder: Path) -> dict[str, str]:
 
 
 def kill_at(profile_folder: Path, source: Path, point: str) -> None:
-    """Avvia l'import, lo lascia fermare al punto dato e lo uccide."""
+    """Starts the import, lets it stop at the given point and kills it."""
     with Worker("import", profile_folder, source, point) as worker:
         worker.expect_ready()
         worker.read_until("blocked")
@@ -66,29 +70,29 @@ def kill_at(profile_folder: Path, source: Path, point: str) -> None:
 
 
 def committed_prefix(records: list[ActivityRecord]) -> int:
-    """Quanti record ci sono, controllando che siano proprio i primi nell'ordine d'import."""
+    """How many records there are, checking they really are the first ones in import order."""
     expected = [run_start(number) for number in range(len(records))]
-    assert [record.start for record in records] == expected, "buco nella sequenza importata"
+    assert [record.start for record in records] == expected, "gap in the imported sequence"
     return len(records)
 
 
 def check_after_crash(profile_folder: Path, source: Path, tmp_path: Path) -> int:
-    """Riapre il profilo come al riavvio, verifica la coerenza e riprende l'import."""
+    """Reopens the profile as at restart, checks consistency and resumes the import."""
     folders = LocalProfileFolders(lambda _folder: FolderKind.LOCAL)
-    folders.acquire_lock(profile_folder).release()  # T-DATI-04: il lock del morto e libero
-    opened = SqliteProfileStorage().open(profile_folder)  # WAL recuperato, integrita verificata
+    folders.acquire_lock(profile_folder).release()  # T-DATI-04: the dead process's lock is free
+    opened = SqliteProfileStorage().open(profile_folder)  # WAL recovered, integrity verified
     try:
         records = list(opened.activities.list_by_start())
     finally:
         opened.close()
     archive = FileArchive.in_profile_folder(profile_folder)
     for record in records:
-        archive.verify(record.archived)  # nessun record senza file, nessun file alterato
+        archive.verify(record.archived)  # no record without a file, no altered file
     done = committed_prefix(records)
     referenced = {profile_folder / "archivio" / r.archived.relative_path for r in records}
     assert referenced <= set(stored_files(profile_folder))
-    assert len(set(stored_files(profile_folder)) - referenced) <= 1  # al piu quello in volo
-    assert len(temporaries(profile_folder)) <= 1  # al piu quello in volo
+    assert len(set(stored_files(profile_folder)) - referenced) <= 1  # at most the one in flight
+    assert len(temporaries(profile_folder)) <= 1  # at most the one in flight
     assert len(archive.list_orphan_temporaries()) == len(temporaries(profile_folder))
     return done
 
@@ -104,13 +108,13 @@ def resume_and_verify(profile_folder: Path, source: Path, tmp_path: Path, done: 
         assert resumed.count(ImportStatus.FAILED) == 0
         records = session.records()
         assert len(records) == FILES
-        assert len({r.identity for r in records}) == FILES  # nessun duplicato
+        assert len({r.identity for r in records}) == FILES  # no duplicate
         assert committed_prefix(list(records)) == FILES
         for record in records:
             archive.verify(record.archived)
     finally:
         session.close()
-    assert len(stored_files(profile_folder)) == FILES  # nessun file orfano, nessun doppione
+    assert len(stored_files(profile_folder)) == FILES  # no orphan file, no duplicate
     assert temporaries(profile_folder) == []
     before = tree_digest(profile_folder / "archivio")
 
@@ -140,7 +144,7 @@ def test_t_dati_02_kill_before_a_write_operation_then_resume(
 ) -> None:
     done = run_crash_case(tmp_path, f"op:{operation}")
 
-    # Fino all'operazione 7 del primo file nulla e confermato; dalla 11 in poi il primo si'.
+    # Up to operation 7 of the first file nothing is committed; from the 11th on the first is.
     if operation < 10:
         assert done == 0
     else:
@@ -153,7 +157,7 @@ def test_t_dati_02_kill_between_the_archive_and_the_commit_loses_only_the_file_i
 ) -> None:
     done = run_crash_case(tmp_path, point)
 
-    assert done == 2  # il terzo file e sul disco, ma il suo record non e stato confermato
+    assert done == 2  # the third file is on disk, but its record was not committed
 
 
 def test_t_dati_02_kill_after_some_files_at_an_arbitrary_instant_then_resume(
@@ -167,7 +171,7 @@ def test_t_dati_02_kill_after_some_files_at_an_arbitrary_instant_then_resume(
     with Worker("import", profile_folder, source, "none") as worker:
         worker.expect_ready()
         worker.read_until("progress 2")
-        worker.kill()  # il processo continua a importare finche non muore: istante qualsiasi
+        worker.kill()  # the process keeps importing until it dies: arbitrary instant
 
     done = check_after_crash(profile_folder, source, tmp_path)
     assert done >= 2

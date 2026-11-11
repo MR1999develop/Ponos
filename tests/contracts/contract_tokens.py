@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Contratto di `TokenStore`: token di Garmin per profilo.
+"""Contract of `TokenStore`: Garmin tokens per profile.
 
-Si prova con la fixture `harness` (`TokenStoreHarness`): ogni implementazione, fake o reale,
-dice come rendere illeggibile il contenuto di un profilo e come simulare un riavvio dell'app.
+It is tried with the `harness` fixture (`TokenStoreHarness`): each implementation, fake or real,
+says how to make the content of a profile unreadable and how to simulate an app restart.
 """
 
 from __future__ import annotations
@@ -19,13 +19,13 @@ PROFILE_A = ProfileId.parse("11111111-1111-4111-8111-111111111111")
 PROFILE_B = ProfileId.parse("22222222-2222-4222-8222-222222222222")
 TOKENS_A = SessionTokens("TOKEN-SEGNAPOSTO-A-" + "a" * 40)
 TOKENS_B = SessionTokens("TOKEN-SEGNAPOSTO-B-" + "b" * 40)
-# Più dei 2560 byte che il Credential Manager generico di Windows accetta: i token veri di
-# Garmin sono di questa taglia.
+# More than the 2560 bytes the generic Windows Credential Manager accepts: real Garmin
+# tokens are this size.
 BIG_TOKENS = SessionTokens("TOKEN-SEGNAPOSTO-GRANDE-" + "x" * 8000)
 
 
 class TokenStoreContract:
-    """Salvare, caricare e cancellare i token di un profilo."""
+    """Save, load and delete the tokens of a profile."""
 
     def test_profile_without_tokens_gives_none(self, harness: TokenStoreHarness) -> None:
         assert harness.store.load(PROFILE_A) is None

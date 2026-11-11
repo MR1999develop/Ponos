@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Processo di prova della fase 3: apre un profilo e muore alla k-esima istruzione di migrazione.
+"""Phase 3 test process: opens a profile and dies at the k-th migration statement.
 
-Uso: `python -I collaudo_fase3_worker.py <cartella-profilo> <k>`. Il processo apre il database
-con la migrazione di sempre, ma alla `k`-esima istruzione (da 1, su tutta la catena di migrazioni
-da eseguire) termina di colpo con `os._exit(77)`, senza chiudere né annullare nulla: è la morte
-del processo a metà della migrazione, come uno spegnimento. Se `k` supera le istruzioni da
-eseguire la migrazione finisce e il processo esce con 0.
+Usage: `python -I collaudo_fase3_worker.py <profile-folder> <k>`. The process opens the database
+with the usual migration, but at the `k`-th statement (from 1, over the whole chain of migrations
+to run) it terminates abruptly with `os._exit(77)`, without closing or rolling back anything: it is
+the death of the process in the middle of the migration, like a power-off. If `k` exceeds the
+statements to run the migration finishes and the process exits with 0.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ DIED = 77
 
 
 def main(folder: Path, kill_at: int) -> int:
-    """Migra il profilo in `folder` morendo all'istruzione `kill_at`."""
+    """Migrates the profile in `folder`, dying at statement `kill_at`."""
     counter = 0
 
     def migrate(db: SqliteDatabase, from_version: int, initial_meta: Mapping[str, str]) -> None:

@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Collaudo indipendente della sincronizzazione (T-SYNC-01..06) sulla pila vera, senza rete.
+"""Independent acceptance test of synchronisation (T-SYNC-01..06) on the real stack, without
+network.
 
-Profilo, SQLite, archivio e lock veri; l'adattatore Garmin vero sopra un client finto. Qui stanno
-le prove che i test dei casi d'uso (fake in memoria) non fanno: sincronizzazione e import in
-contemporanea sullo stesso profilo, la stessa attività due volte nell'elenco o cambiata tra
-elenco e download, fuso diverso tra due giri, token scaduti dopo un kill vero.
+Real profile, SQLite, archive and lock; the real Garmin adapter on top of a fake client. Here are
+the checks that the use-case tests (in-memory fakes) do not make: synchronisation and import
+at the same time on the same profile, the same activity twice in the list or changed between
+list and download, different time zone between two rounds, tokens expired after a real kill.
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ from tests.collaudo.fase2_support import (
 from tests.collaudo.support import TODAY, stored_files, temporaries
 from tests.collaudo.test_sync_kill import COUNT, kill_at
 from tests.fakes.garmin import FIRST_ACTIVITY_ID, make_remote_history
-from tests.fixtures.generators.import_files import RUN_SECONDS, fit_run, gpx_run, run_start
+from tests.fixtures.generators.import_files import RUN_SECONDS, fit_run, run_start
 from tests.fixtures.generators.zip_writer import garmin_download
 from tests.garmin.scripted import (
     ScriptedClient,
@@ -67,15 +68,15 @@ def remote_run(number: int) -> RemoteActivity:
 
 
 def assert_coherent(stack: Stack, expected_runs: int) -> None:
-    """Indice, giornale e archivio concordano e non c'è nulla di orfano."""
+    """Index, journal and archive agree and there is nothing orphaned."""
     profile = stack.profile
     records = list(profile.records())
     for record in records:
         profile.archive.verify(record.archived)
     assert len(records) == expected_runs
-    assert len({record.start for record in records}) == expected_runs  # nessun duplicato
+    assert len({record.start for record in records}) == expected_runs  # no duplicate
     referenced = {profile.folder / "archivio" / r.archived.relative_path for r in records}
-    assert set(stored_files(profile.folder)) == referenced  # nessun file orfano
+    assert set(stored_files(profile.folder)) == referenced  # no orphan file
     assert temporaries(profile.folder) == []
     garmin_ids = [r.garmin_activity_id for r in records if r.garmin_activity_id is not None]
     assert len(garmin_ids) == len(set(garmin_ids))
@@ -86,20 +87,18 @@ def assert_coherent(stack: Stack, expected_runs: int) -> None:
         connection.close()
 
 
-# --- Sincronizzazione e import in contemporanea (SQLite vero, due connessioni) ----------------
+# --- Synchronisation and import at the same time (real SQLite, two connections) ----------------
 
 
 @pytest.mark.parametrize("round_number", range(3))
 def test_t_sync_05_sync_and_folder_import_at_the_same_time_on_the_same_profile(
     tmp_path: Path, round_number: int
 ) -> None:
-    garmin_runs, import_fit, import_gpx = range(0, 40), range(20, 60), range(10, 20)
+    garmin_runs, import_fit = range(0, 40), range(20, 60)
     folder = tmp_path / "da-importare"
     folder.mkdir()
     for number in import_fit:
         (folder / f"f{number:03d}.fit").write_bytes(fit_run(number))
-    for number in import_gpx:  # le stesse corse di Garmin, ma come GPX: gemelle di altro formato
-        (folder / f"g{number:03d}.gpx").write_bytes(gpx_run(number))
     stack = build_stack(
         tmp_path / f"r{round_number}", scripted_client(history=[remote_run(n) for n in garmin_runs])
     )
@@ -132,7 +131,7 @@ def test_t_sync_05_sync_and_folder_import_at_the_same_time_on_the_same_profile(
         linked = {r.garmin_activity_id for r in stack.profile.records()} - {None}
         assert linked == {FIRST_ACTIVITY_ID + n for n in garmin_runs}
 
-        # un secondo giro di tutti e due non cambia nulla
+        # a second round of both changes nothing
         again = finished(stack.sync()).outcome
         assert (again.new_entries, again.downloaded, again.matched) == (0, 0, 0)
         second = stack.profile.import_folder(folder)
@@ -153,7 +152,6 @@ def test_t_sync_05_a_late_import_of_a_file_already_downloaded_is_not_a_second_re
         folder.mkdir()
         for number in range(5):
             (folder / f"f{number}.fit").write_bytes(fit_run(number))
-            (folder / f"g{number}.gpx").write_bytes(gpx_run(number))
 
         summary = stack.profile.import_folder(folder)
 
@@ -172,7 +170,7 @@ def test_t_sync_05_files_imported_first_are_matched_not_downloaded_then_a_late_u
     try:
         folder = tmp_path / "da-importare"
         folder.mkdir()
-        for number in range(195, 205):  # le dieci più recenti, già sul disco
+        for number in range(195, 205):  # the ten most recent, already on disk
             (folder / f"f{number}.fit").write_bytes(fit_run(number))
         stack.profile.import_folder(folder)
 
@@ -180,7 +178,7 @@ def test_t_sync_05_files_imported_first_are_matched_not_downloaded_then_a_late_u
         assert (first.matched, first.downloaded) == (10, 195)
         assert not set(client.downloaded) & {FIRST_ACTIVITY_ID + n for n in range(195, 205)}
 
-        # un'attivita vecchia caricata in ritardo su Garmin: l'incrementale non la vede
+        # an old activity uploaded late to Garmin: the incremental does not see it
         late_id = FIRST_ACTIVITY_ID + 900
         late = RemoteActivity(
             GarminActivityId(late_id), run_start(-20), float(RUN_SECONDS), "running", True
@@ -197,7 +195,7 @@ def test_t_sync_05_files_imported_first_are_matched_not_downloaded_then_a_late_u
         stack.close()
 
 
-# --- La stessa attività due volte, o cambiata tra elenco e download -----------------------------
+# --- The same activity twice, or changed between list and download -----------------------------
 
 
 def test_t_sync_01_the_same_activity_twice_in_the_listing_is_one_record_and_one_download(
@@ -206,7 +204,7 @@ def test_t_sync_01_the_same_activity_twice_in_the_listing_is_one_record_and_one_
     runs = [remote_run(n) for n in range(150)]
     client = scripted_client(history=runs)
     oldest = client._entries[-1]
-    client._entries.insert(0, oldest)  # la piu vecchia anche in cima: pagine 1 e 2 la nominano
+    client._entries.insert(0, oldest)  # the oldest one also at the top: pages 1 and 2 name it
     stack = build_stack(tmp_path, client)
     try:
         outcome = finished(stack.sync()).outcome
@@ -219,7 +217,7 @@ def test_t_sync_01_the_same_activity_twice_in_the_listing_is_one_record_and_one_
 
 
 def shifting_client(tmp_runs: int) -> tuple[ScriptedClient, RemoteActivity]:
-    """Un client la cui prima pagina e seguita da una nuova attivita in cima all'elenco."""
+    """A client whose first page is followed by a new activity at the top of the list."""
     runs = [remote_run(n) for n in range(tmp_runs + 20)]
     client = scripted_client(history=runs[:tmp_runs])
     newest = runs[tmp_runs + 10]
@@ -228,7 +226,7 @@ def shifting_client(tmp_runs: int) -> tuple[ScriptedClient, RemoteActivity]:
 
     def shifting(offset: int, limit: int) -> object:
         calls["n"] += 1
-        if calls["n"] == 2:  # prima della seconda pagina Garmin riceve un'attivita piu recente
+        if calls["n"] == 2:  # before the second page Garmin receives a more recent activity
             client._entries.insert(0, entry_for(newest))
             client._total = len(client._entries)
             client._downloads[newest.garmin_id.value] = garmin_download(
@@ -272,8 +270,8 @@ def test_d_f2_04_the_lost_activity_comes_back_with_a_full_verification(tmp_path:
 def assert_every_downloaded_id_has_its_activity(
     stack: Stack, runs: list[RemoteActivity], rejected: frozenset[int] = frozenset()
 ) -> None:
-    """Ogni voce `DOWNLOADED` ha un record con lo stesso id e l'inizio dell'elenco; le voci il
-    cui file era di un'altra attività (`rejected`) sono fallite per sempre e senza record."""
+    """Every `DOWNLOADED` entry has a record with the same id and the start of the list; the entries
+    whose file belonged to another activity (`rejected`) failed forever and have no record."""
     by_id = {r.garmin_activity_id: r for r in stack.profile.records()}
     for run in runs:
         entry = stack.profile.session.sync_journal.get(run.garmin_id)
@@ -284,7 +282,9 @@ def assert_every_downloaded_id_has_its_activity(
             continue
         assert entry is not None and entry.status is SyncStatus.DOWNLOADED
         record = by_id.get(run.garmin_id.value)
-        assert record is not None, f"id {run.garmin_id.value} segnato scaricato ma senza attivita"
+        assert record is not None, (
+            f"id {run.garmin_id.value} marked downloaded but without an activity"
+        )
         assert abs((record.start - run.start).total_seconds()) <= 60
 
 
@@ -338,7 +338,7 @@ def test_t_sync_the_same_file_under_two_garmin_ids_is_one_record_and_the_second_
     try:
         outcome = finished(stack.sync()).outcome
 
-        # id 1 riceve il file di un'altra attività (D-F2-03): non coincide con la sua voce
+        # id 1 receives the file of another activity (D-F2-03): it does not match its entry
         assert outcome.completed
         assert [(f.garmin_id.value, f.reason) for f in outcome.failures] == [
             (FIRST_ACTIVITY_ID + 1, FailureReason.REMOTE_REJECTED)
@@ -349,7 +349,7 @@ def test_t_sync_the_same_file_under_two_garmin_ids_is_one_record_and_the_second_
         stack.close()
 
 
-# --- T-SYNC-03 con le eccezioni vere di rete e della libreria -----------------------------------
+# --- T-SYNC-03 with the real network and library exceptions ------------------------------------
 
 
 NETWORK_FAILURES = [
@@ -410,7 +410,7 @@ def test_t_sync_03_truncated_or_malformed_bodies_fail_the_entry_only_and_never_l
 
     assert outcome.completed and outcome.downloaded == 0
     assert len(outcome.failures) == 4
-    assert len(client.downloaded) == 4  # una richiesta per voce: non e transitorio
+    assert len(client.downloaded) == 4  # one request per entry: it is not transient
 
 
 def test_t_sync_03_an_entry_that_keeps_failing_is_dropped_after_three_syncs(tmp_path: Path) -> None:
@@ -485,19 +485,19 @@ def test_t_sync_02_a_real_kill_mid_listing_then_expired_tokens_at_restart_then_l
     stack = build_stack(tmp_path, scripted_client(COUNT))
     folder, tokens = stack.folder, stack.tokens
     stack.close()
-    kill_at(folder, "cursor:2")  # la seconda pagina e aggiunta ma non confermata
+    kill_at(folder, "cursor:2")  # the second page is added but not committed
     restarted = reopen_stack(tmp_path, folder, scripted_client(COUNT), tokens=tokens)
     try:
         cursor_before = restarted.profile.session.sync_journal.load_cursor(ListingKind.FULL)
         counts_before = dict(restarted.journal_counts())
-        restarted.factory.resume_error = auth_error()  # i token sono scaduti nel frattempo
+        restarted.factory.resume_error = auth_error()  # the tokens expired in the meantime
 
         result = restarted.sync()
 
         assert isinstance(result, SyncNotStarted) and result.problem is SyncProblem.AUTH_REQUIRED
         assert restarted.profile.session.sync_journal.load_cursor(ListingKind.FULL) == cursor_before
         assert dict(restarted.journal_counts()) == counts_before
-        assert cursor_before is not None and cursor_before.next_offset == 3  # la prima pagina (3)
+        assert cursor_before is not None and cursor_before.next_offset == 3  # the first page (3)
     finally:
         restarted.close()
 
@@ -515,19 +515,21 @@ def test_t_sync_02_after_the_login_the_resumed_sync_completes_without_repeating_
         restarted.factory.resume_error = auth_error()
         assert isinstance(restarted.sync(), SyncNotStarted)
         restarted.factory.resume_error = None
-        restarted.link()  # il dialogo di login
+        restarted.link()  # the login dialogue
 
         outcome = finished(restarted.sync()).outcome
 
         assert outcome.completed and outcome.failures == ()
         assert Counter(client.downloaded).most_common(1)[0][1] == 1
-        assert len(client.downloaded) == COUNT - 4  # le quattro già confermate non si riscaricano
+        assert (
+            len(client.downloaded) == COUNT - 4
+        )  # the four already committed are not downloaded again
         assert_coherent(restarted, COUNT)
     finally:
         restarted.close()
 
 
-# --- Fuso diverso tra due giri -----------------------------------------------------------------
+# --- Different time zone between two rounds ----------------------------------------------------
 
 
 def test_t_sync_the_profile_day_changes_with_the_timezone_but_activities_and_resync_do_not(
@@ -546,7 +548,6 @@ def test_t_sync_the_profile_day_changes_with_the_timezone_but_activities_and_res
                 session.physiology,
                 session.load_cache,
                 decode_stored_activity,
-                sport_weights=session.sport_weights,
                 timezone=ZoneInfo(zone),
                 today=lambda: TODAY,
             ).execute()
@@ -560,7 +561,7 @@ def test_t_sync_the_profile_day_changes_with_the_timezone_but_activities_and_res
             (r.local_day - h.local_day).days
             for r, h in zip(rome.activities, honolulu.activities, strict=True)
         ]
-        assert shifted == [1] * 6  # 07:00 UTC e il giorno prima alle Hawaii
+        assert shifted == [1] * 6  # 07:00 UTC is the day before in Hawaii
         assert [a.load for a in rome.activities] == [a.load for a in honolulu.activities]
         assert (again.new_entries, again.downloaded) == (0, 0)
         assert len(client.downloaded) == 6
@@ -570,7 +571,7 @@ def test_t_sync_the_profile_day_changes_with_the_timezone_but_activities_and_res
         stack.close()
 
 
-# --- T-SYNC-06: l'annullamento entro 1 s, con le pause vere ---------------------------------------
+# --- T-SYNC-06: cancellation within 1 s, with real pauses -----------------------------------------
 
 
 def test_t_sync_06_cancel_during_the_real_pause_stops_within_a_second_and_keeps_a_coherent_state(
@@ -579,7 +580,7 @@ def test_t_sync_06_cancel_during_the_real_pause_stops_within_a_second_and_keeps_
     from ponos_coach.activities.domain import DEFAULT_POLICY  # noqa: PLC0415
 
     client = scripted_client(10)
-    stack = build_stack(tmp_path, client, policy=DEFAULT_POLICY)  # pausa vera: 1 s + jitter
+    stack = build_stack(tmp_path, client, policy=DEFAULT_POLICY)  # real pause: 1 s + jitter
     cancel = threading.Event()
     cancelled_at: list[float] = []
     results: list[object] = []
@@ -597,7 +598,7 @@ def test_t_sync_06_cancel_during_the_real_pause_stops_within_a_second_and_keeps_
     )
     try:
         thread.start()
-        assert seen_download.wait(60)  # il primo download e fatto: ora il giro è nella pausa
+        assert seen_download.wait(60)  # the first download is done: now the round is in the pause
         cancelled_at.append(time.monotonic())
         cancel.set()
         thread.join(5)
@@ -632,7 +633,7 @@ def test_t_sync_06_a_cancelled_sync_can_be_run_again_to_the_end(tmp_path: Path) 
         stack.close()
 
 
-# --- T-SYNC-01 con l'adattatore vero e FIT veri ------------------------------------------
+# --- T-SYNC-01 with the real adapter and real FIT files ----------------------------------------
 
 
 def test_t_sync_01_a_real_adapter_full_then_incremental_with_real_fit_files(
@@ -659,7 +660,7 @@ def test_t_sync_01_a_real_adapter_full_then_incremental_with_real_fit_files(
             3,
             3,
         )
-        assert len(client.list_calls) - listed_first == 2  # la seconda pagina e già nota
+        assert len(client.list_calls) - listed_first == 2  # the second page is already known
         assert Counter(client.downloaded).most_common(1)[0][1] == 1
         assert_coherent(stack, 233)
         assert FAST.page_size == 100

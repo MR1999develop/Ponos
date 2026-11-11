@@ -1,79 +1,78 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Porte della funzionalità carico: parametri fisiologici e cache dei carichi.
+"""Ports of the load feature: physiological parameters and load cache.
 
-I parametri sono dati dell'utente (fonte di verità); i carichi sono derivati e rigenerabili.
-Le implementazioni condividono la connessione del profilo (`ActivityIndex.transaction`).
+The parameters are user data (source of truth); the loads are derived and regenerable.
+The implementations share the profile's connection (`ActivityIndex.transaction`).
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
+from datetime import date
 from typing import Protocol
 
-from ponos_coach.activities.domain import ActivityIdentity, Sport
-from ponos_coach.load.domain import ActivityLoad, LoadFingerprint, PhysiologyEntry, SportWeight
+from ponos_coach.activities.domain import ActivityIdentity
+from ponos_coach.load.domain import ActivityLoad, LoadFingerprint, PhysiologyEntry
 
 
 class LoadStoreError(Exception):
-    """Radice degli errori di PhysiologyStore e LoadCache."""
+    """Root of the errors of PhysiologyStore and LoadCache."""
 
 
 class UnknownActivityError(LoadStoreError):
-    """L'attività non è nell'indice: un carico si può salvare solo per un'attività nota."""
+    """The activity is not in the index: a load can only be saved for a known activity."""
+
+
+class PhysiologyEntryNotFoundError(LoadStoreError):
+    """There is no physiological parameter entry starting on that day."""
 
 
 class PhysiologyStore(Protocol):
-    """Parametri fisiologici con data di validità."""
+    """Physiological parameters with validity date."""
 
     def put(self, entry: PhysiologyEntry) -> None:
-        """Salva i parametri validi da `entry.valid_from`.
+        """Saves the parameters valid from `entry.valid_from`.
 
-        Una voce con la stessa data di una esistente la sostituisce (correzione di un valore).
+        An entry with the same date as an existing one replaces it (correction of a value).
+        """
+        ...
+
+    def remove(self, valid_from: date) -> None:
+        """Deletes the entry whose validity starts on `valid_from`.
+
+        Raises:
+            PhysiologyEntryNotFoundError: there is none; nothing changes.
+            LoadStoreError: write failed.
         """
         ...
 
     def list_entries(self) -> Sequence[PhysiologyEntry]:
-        """Tutte le voci per data di validità crescente (una sola per data)."""
-        ...
-
-
-class SportWeightStore(Protocol):
-    """Pesi degli sport scelti dall'utente (fonte di verità; i carichi derivati si ricalcolano).
-
-    Contiene solo i pesi diversi dal default: uno sport assente vale `default_weight`.
-    """
-
-    def load(self) -> Mapping[Sport, SportWeight]:
-        """I pesi salvati (vuoto se l'utente non ha cambiato nulla)."""
-        ...
-
-    def replace(self, weights: Mapping[Sport, SportWeight]) -> None:
-        """Sostituisce tutti i pesi salvati con questi, tutto o niente."""
+        """All the entries by ascending validity date (only one per date)."""
         ...
 
 
 class LoadCache(Protocol):
-    """Carichi per attività, validi solo per l'impronta dei parametri che li hanno prodotti."""
+    """Loads per activity, valid only for the fingerprint of the parameters that produced them."""
 
     def get(self, identity: ActivityIdentity, fingerprint: LoadFingerprint) -> ActivityLoad | None:
-        """Il carico salvato, solo se prodotto con questa impronta; altrimenti None."""
+        """The saved load, only if produced with this fingerprint; otherwise None."""
         ...
 
     def put(
         self, identity: ActivityIdentity, fingerprint: LoadFingerprint, load: ActivityLoad
     ) -> None:
-        """Salva (o sostituisce) il carico dell'attività con la sua impronta.
+        """Saves (or replaces) the load of the activity with its fingerprint.
 
         Raises:
-            UnknownActivityError: l'attività non è nell'indice.
+            UnknownActivityError: the activity is not in the index.
         """
         ...
 
     def invalidate(self, identity: ActivityIdentity) -> None:
-        """Dimentica il carico di un'attività (nessun effetto se non c'è)."""
+        """Forgets the load of an activity (no effect if there is none)."""
         ...
 
     def clear(self) -> None:
-        """Dimentica tutti i carichi (cambio di parametri: si ricalcolano dai file)."""
+        """Forgets all the loads (parameters change: they are recomputed from the files)."""
         ...

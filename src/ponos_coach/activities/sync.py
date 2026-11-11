@@ -1,36 +1,47 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Copyright (C) 2026 MR
-"""Caso d'uso "sincronizza con Garmin": elenco a pagine, giornale, download, archivio e indice.
+"""Use case "synchronize with Garmin": paged list, journal, download, archive and index.
 
-Il guscio (worker, Composition Root) costruisce `SyncPorts` e chiama `synchronize_activities`.
-Due fasi, in questo ordine, entrambe riprendibili dopo un'interruzione (PLAN.md 4.4):
+The shell (worker, Composition Root) builds `SyncPorts` and calls `synchronize_activities`.
+Two phases, in this order, both resumable after an interruption (PLAN.md 4.4):
 
-1. **Elenco.** Completo la prima volta (`ListingKind.FULL`), poi incrementale (dalle più recenti
-   finché una pagina intera è di id noti) o, su richiesta, "verifica completa" (che riarma
-   anche le voci fallite per tentativi esauriti). L'elenco finisce con una pagina corta o
-   vuota, mai al totale dichiarato dalla prima pagina (Garmin può ricevere attività nuove
-   mentre si elenca e la più vecchia scivolerebbe oltre il totale). Ogni pagina
-   aggiunge le sue voci al giornale e salva il cursore nella stessa transazione: dopo un kill
-   l'elenco riparte dal cursore, senza perdere né duplicare voci. Il cursore si riprende anche se
-   è di un'esecuzione precedente: le attività comparse nel frattempo in cima entrano alla
-   sincronizzazione successiva, non si perdono.
-2. **Voci da lavorare** (`PENDING` e `RETRYABLE`, dalla più recente). Prima l'abbinamento con
-   un'attività già importata da file (nessun download); altrimenti download con pausa, estrazione
-   dallo ZIP, decodifica, controllo che il file sia davvero quello della voce (inizio e durata),
-   scrittura nell'archivio e, **dopo**, in una transazione breve, record e stato della voce. Un
-   kill in qualunque punto lascia la voce com'era e, al più, un file in archivio senza record,
-   che la ripresa riscrive identico (l'archivio è idempotente): il lock di scrittura del
-   database dura solo il tempo del record.
+1. **List.** Complete the first time (`ListingKind.FULL`), then incremental (from the most recent
+   until a whole page consists of known ids) or, on request, "full check" (which also rearms
+   the entries failed for exhausted attempts or not provided by Garmin). The list ends with a
+   short or empty page, never at the total declared by the first page (Garmin may receive new
+   activities while listing and the oldest would slip past the total). Each page
+   adds its entries to the journal and saves the cursor in the same transaction: after a kill
+   the list restarts from the cursor, without losing or duplicating entries. The cursor is resumed
+   even if
+   it is from a previous run: activities that appeared in the meantime at the top enter at the
+   next synchronization, they are not lost.
+2. **Entries to process** (`PENDING` and `RETRYABLE`, from the most recent). First the match with
+   an activity already imported from file (no download); otherwise download with pause, extraction
+   from the ZIP, decoding, check that the file really is the one of the entry (start and duration),
+   write to the archive and, **afterwards**, in a short transaction, record and entry state. A
+   kill at any point leaves the entry as it was and, at most, a file in the archive without a
+   record,
+   which the resumption rewrites identically (the archive is idempotent): the database write
+   lock lasts only as long as the record.
 
-Errori secondo come reagisce il chiamante: autenticazione richiesta, limite di frequenza oltre
-i tetti, servizio irraggiungibile, errore dell'archivio o database occupato **fermano** la
-sincronizzazione con un motivo (`StopReason`); formato non supportato, file corrotto o troppo
-grande, o un originale che non è quello della voce **falliscono la voce** in modo definitivo e
-si va avanti. Un giro fermato dalla rete o dal limite di frequenza **non consuma tentativi**:
-le voci che hanno fallito per rete (ritentabili) si scrivono nel giornale solo se una richiesta
-successiva riceve una risposta di Garmin, prova che era la voce e non la rete; se il giro si
-ferma, restano com'erano. Nessun log di nomi o dati (solo il tipo di un errore imprevisto),
-nessuna attesa che l'annullamento non possa interrompere.
+A deleted activity (a tombstone, ADR 018) is never downloaded or recorded: the entry of an activity
+the user deleted, found by Garmin id or by start, duration and sport when it was imported from a
+file, becomes `SKIPPED` (final, neither failed nor to do), and so does an entry whose downloaded
+file turns out to be a deleted activity.
+
+Errors according to how the caller reacts: authentication required, rate limit beyond
+the caps, unreachable service, archive error or busy database **stop** the
+synchronization with a reason (`StopReason`); unsupported format, corrupt or too large
+file, or an original that is not the one of the entry **fail the entry** definitively and
+it moves on. A round stopped by the network or the rate limit **does not consume attempts**.
+An entry whose download gets no useful answer (5xx, no response) after all its attempts is held
+back, not written: if Garmin answers a later download, or a probe request (the first list page)
+when the round stops or ends, it was the entry and not the network, and the round counts as one
+**unanswered round** of that entry (`mark_unanswered`); after
+`SyncPolicy.max_unanswered_rounds` of them the entry fails as `REMOTE_NOT_PROVIDED` and no longer
+holds up the next rounds. If the probe gets no answer either, the round stops with the service
+unavailable and nothing is written. The attempts of the entry are not used. No log of names or data
+(only the type of an unexpected error), no wait that cancellation cannot interrupt.
 """
 
 from __future__ import annotations
@@ -47,6 +58,7 @@ from ponos_coach.activities.decoding import ActivityFileError, ActivityFileReaso
 from ponos_coach.activities.domain import (
     DEFAULT_POLICY,
     MAX_DOWNLOAD_BYTES,
+    REARMABLE_REASONS,
     RETRYABLE_REASONS,
     Activity,
     ActivityOrigin,
@@ -63,10 +75,13 @@ from ponos_coach.activities.domain import (
     SyncStatus,
     advance_cursor,
     estimate_remaining_s,
+    find_matching_deleted,
     find_matching_import,
     mark_downloaded,
     mark_failed,
     mark_matched,
+    mark_skipped,
+    mark_unanswered,
     original_matches_listing,
     pause_between_requests_s,
     rearm_exhausted,
@@ -82,6 +97,7 @@ from ponos_coach.activities.ports import (
     ArchiveTooLargeError,
     AuthenticationRequiredError,
     Clock,
+    DeletedActivities,
     DownloadTooLargeError,
     DuplicateActivityError,
     RateLimitedError,
@@ -92,12 +108,12 @@ from ponos_coach.activities.ports import (
 
 _LOG = logging.getLogger(__name__)
 
-# Voci di fila fallite per servizio irraggiungibile (ciascuna dopo tutti i suoi tentativi) oltre
-# le quali la sincronizzazione si ferma invece di consumare ritentativi su tutto lo storico.
+# Entries in a row failed for unreachable service (each after all its attempts) beyond
+# which the synchronization stops instead of consuming retries on the whole history.
 MAX_CONSECUTIVE_UNREACHABLE: Final = 3
-# Tetto alle voci elencate in una sola esecuzione: oltre, la risposta di Garmin è sospetta.
+# Cap on the entries listed in a single run: beyond this, the Garmin response is suspicious.
 MAX_LISTED_ACTIVITIES: Final = 1_000_000
-# Voci fallite per tentativi esauriti riarmate per transazione dalla verifica completa.
+# Failed entries for exhausted attempts rearmed per transaction by the full check.
 _REARM_BATCH: Final = 500
 
 _T = TypeVar("_T")
@@ -108,70 +124,70 @@ _REASON_BY_FILE_ERROR: Final[Mapping[ActivityFileReason, FailureReason]] = {
     ActivityFileReason.CORRUPT: FailureReason.CORRUPT_FILE,
     ActivityFileReason.NOT_AN_ACTIVITY: FailureReason.NOT_AN_ACTIVITY,
     ActivityFileReason.UNSUPPORTED_FORMAT: FailureReason.UNSUPPORTED_FORMAT,
-    ActivityFileReason.EXTENSION_MISMATCH: FailureReason.CORRUPT_FILE,
     ActivityFileReason.TOO_MANY_RECORDS: FailureReason.FILE_TOO_LARGE,
     ActivityFileReason.TOO_LONG: FailureReason.CORRUPT_FILE,
 }
 
 
-# --- Dipendenze iniettate -----------------------------------------------------------------------
+# --- Injected dependencies ----------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class ExtractedOriginal:
-    """Il file di attività estratto dallo ZIP scaricato: i suoi byte e il suo formato."""
+    """The activity file extracted from the downloaded ZIP: its bytes and its format."""
 
     content: bytes
     file_format: FileFormat
 
 
 class OriginalExtractionError(Exception):
-    """Lo ZIP scaricato non dà un file di attività; `reason` è sempre una causa definitiva
-    (`ARCHIVE_INVALID` per uno ZIP non valido o ostile, `UNSUPPORTED_FORMAT` se contiene solo
-    formati non supportati come il TCX, `FILE_TOO_LARGE`, `NOT_AN_ACTIVITY`...)."""
+    """The downloaded ZIP does not yield an activity file; `reason` is always a final cause
+    (`ARCHIVE_INVALID` for an invalid or hostile ZIP, `UNSUPPORTED_FORMAT` if it contains only
+    unsupported formats such as TCX, `FILE_TOO_LARGE`, `NOT_AN_ACTIVITY`...)."""
 
     def __init__(self, reason: FailureReason) -> None:
-        if reason in RETRYABLE_REASONS or reason is FailureReason.ATTEMPTS_EXHAUSTED:
-            raise ValueError("l'estrazione fallisce sempre per una causa definitiva")
+        if reason in RETRYABLE_REASONS or reason in REARMABLE_REASONS:
+            raise ValueError("extraction always fails for a final cause")
         super().__init__(reason.value)
         self.reason = reason
 
 
 OriginalExtractor = Callable[[bytes], ExtractedOriginal]
-"""Dai byte dello ZIP scaricato al file di attività estratto, con i limiti dell'adattatore ZIP.
+"""From the bytes of the downloaded ZIP to the extracted activity file, with the ZIP adapter limits.
 
-Solleva `OriginalExtractionError`; qualunque altra eccezione fa fallire la voce come
+Raises `OriginalExtractionError`; any other exception fails the entry as
 `ARCHIVE_INVALID`."""
 
 ActivityDecoder = Callable[[bytes, FileFormat], Activity]
-"""Decodifica un file di attività di formato noto (`decode_stored_activity`).
+"""Decodes an activity file of known format (`decode_stored_activity`).
 
-Solleva `ActivityFileError`; qualunque altra eccezione fa fallire la voce come `CORRUPT_FILE`."""
+Raises `ActivityFileError`; any other exception fails the entry as `CORRUPT_FILE`."""
 
 InterruptibleWait = Callable[[float], bool]
-"""Attende al più `seconds` secondi e restituisce True se è stato chiesto l'annullamento prima
-(`threading.Event.wait` ha proprio questa forma)."""
+"""Waits at most `seconds` seconds and returns True if cancellation was requested before
+(`threading.Event.wait` has exactly this form)."""
 
 
 class SyncClock(Clock, Protocol):
-    """Orologio della sincronizzazione: `now()` per gli istanti (UTC), `monotonic()` per le
-    durate (secondi, mai all'indietro)."""
+    """Synchronization clock: `now()` for instants (UTC), `monotonic()` for
+    durations (seconds, never backwards)."""
 
     def monotonic(self) -> float:
-        """Secondi di un orologio monotono."""
+        """Seconds of a monotonic clock."""
         ...
 
 
 @dataclass(frozen=True, slots=True)
 class SyncPorts:
-    """Tutto ciò che la sincronizzazione riceve dal Composition Root.
+    """Everything the synchronization receives from the Composition Root.
 
-    `index`, `journal` e `archive` sono quelli del profilo aperto dal worker (stessa connessione
-    e stessa transazione per indice e giornale). `rng` dà il jitter.
+    `index`, `deleted`, `journal` and `archive` are those of the profile opened by the worker (same
+    connection and same transaction for index, tombstones and journal). `rng` gives the jitter.
     """
 
     source: ActivitySource
     index: ActivityIndex
+    deleted: DeletedActivities
     journal: SyncJournal
     archive: ActivityArchive
     extract_original: OriginalExtractor
@@ -182,18 +198,18 @@ class SyncPorts:
     policy: SyncPolicy = DEFAULT_POLICY
 
 
-# --- Richiesta ed esito -------------------------------------------------------------------------
+# --- Request and outcome -------------------------------------------------------------------------
 
 
 class SyncMode(Enum):
-    """Che cosa si chiede."""
+    """What is requested."""
 
-    SYNC = "sync"  # completo la prima volta (o finché non è finito), poi incrementale
-    VERIFY = "verify"  # "Verifica completa": rielenca tutto lo storico senza riscaricare
+    SYNC = "sync"  # complete the first time (or until finished), then incremental
+    VERIFY = "verify"  # "Full check": lists the whole history again without re-downloading
 
 
 class SyncPhase(Enum):
-    """In quale fase si trova la sincronizzazione."""
+    """Which phase the synchronization is in."""
 
     LISTING = "listing"
     DOWNLOADING = "downloading"
@@ -201,8 +217,8 @@ class SyncPhase(Enum):
 
 @dataclass(frozen=True, slots=True)
 class SyncProgress:
-    """Avanzamento: `done` su `total` (None se non si sa) della fase, e il tempo stimato per
-    finirla (None finché mancano le misure)."""
+    """Progress: `done` out of `total` (None if unknown) of the phase, and the estimated time to
+    finish it (None until measurements exist)."""
 
     phase: SyncPhase
     done: int
@@ -211,20 +227,20 @@ class SyncProgress:
 
 
 class StopReason(Enum):
-    """Perché la sincronizzazione non è arrivata in fondo. Il valore è stabile."""
+    """Why the synchronization did not reach the end. The value is stable."""
 
     CANCELLED = "cancelled"
-    AUTHENTICATION_REQUIRED = "authentication_required"  # serve un nuovo login
-    RATE_LIMITED = "rate_limited"  # Garmin limita la frequenza oltre i tetti
-    SERVICE_UNAVAILABLE = "service_unavailable"  # Garmin non risponde
-    REMOTE_ERROR = "remote_error"  # l'elenco è stato rifiutato o non è interpretabile
-    STORAGE_ERROR = "storage_error"  # l'archivio del profilo non scrive (disco pieno...)
-    LISTING_LIMIT = "listing_limit"  # più di `MAX_LISTED_ACTIVITIES` voci
+    AUTHENTICATION_REQUIRED = "authentication_required"  # a new login is needed
+    RATE_LIMITED = "rate_limited"  # Garmin limits the rate beyond the caps
+    SERVICE_UNAVAILABLE = "service_unavailable"  # Garmin does not respond
+    REMOTE_ERROR = "remote_error"  # the list was rejected or is not interpretable
+    STORAGE_ERROR = "storage_error"  # the profile archive cannot write (disk full...)
+    LISTING_LIMIT = "listing_limit"  # more than `MAX_LISTED_ACTIVITIES` entries
 
 
 @dataclass(frozen=True, slots=True)
 class EntryFailure:
-    """Una voce fallita in questa esecuzione e la sua causa (ritentabile se la causa è in
+    """An entry failed in this run and its cause (retryable if the cause is in
     `RETRYABLE_REASONS`)."""
 
     garmin_id: GarminActivityId
@@ -233,15 +249,17 @@ class EntryFailure:
 
 @dataclass(frozen=True, slots=True)
 class SyncOutcome:
-    """Esito di una sincronizzazione.
+    """Outcome of a synchronization.
 
-    `stop` è None se è arrivata in fondo (solo allora si è registrata la fine in
-    `last_completed_at`). `new_entries` sono le voci aggiunte al giornale; `downloaded` conta
-    solo le attività **nuove** scaricate e archiviate in questa esecuzione; `matched` quelle
-    abbinate a un'attività già importata (in un altro formato); `already_present` quelle il
-    cui file era già nel profilo (stessa identità, importato prima o scaricato sotto un altro
-    id): collegate, ma non scaricate di nuovo. `failures` sono le voci fallite (anche se
-    ritentabili) e scritte nel giornale; `status_counts` il giornale intero a fine esecuzione.
+    `stop` is None if it reached the end (only then was the end recorded in
+    `last_completed_at`). `new_entries` are the entries added to the journal; `downloaded` counts
+    only the **new** activities downloaded and archived in this run; `matched` those
+    matched to an already imported activity (in another format); `already_present` those whose
+    file was already in the profile (same identity, imported earlier or downloaded under another
+    id): linked, but not downloaded again; `skipped_deleted` those the user had deleted, which
+    were left out (not downloaded if that could be known from the list). `failures` are the failed
+    entries (even if retryable) and written to the journal; `status_counts` the whole journal at
+    the end of the run.
     """
 
     kind: ListingKind
@@ -252,19 +270,20 @@ class SyncOutcome:
     failures: tuple[EntryFailure, ...]
     status_counts: Mapping[SyncStatus, int]
     already_present: int = 0
+    skipped_deleted: int = 0
 
     @property
     def completed(self) -> bool:
-        """Vero se la sincronizzazione è arrivata in fondo."""
+        """True if the synchronization reached the end."""
         return self.stop is None
 
     @property
     def cancelled(self) -> bool:
-        """Vero se l'ha interrotta chi l'ha avviata."""
+        """True if whoever started it interrupted it."""
         return self.stop is StopReason.CANCELLED
 
     def failures_by_reason(self) -> Mapping[FailureReason, int]:
-        """Quante voci sono fallite per ciascuna causa (solo le cause presenti)."""
+        """How many entries failed for each cause (only the causes present)."""
         counts: dict[FailureReason, int] = {}
         for failure in self.failures:
             counts[failure.reason] = counts.get(failure.reason, 0) + 1
@@ -272,7 +291,7 @@ class SyncOutcome:
 
 
 def _ignore_progress(_progress: SyncProgress) -> None:
-    """Avanzamento non richiesto."""
+    """Progress not requested."""
 
 
 def _never_cancelled() -> bool:
@@ -280,7 +299,8 @@ def _never_cancelled() -> bool:
 
 
 def listing_kind_for(mode: SyncMode, full_listing: ListingCursor | None) -> ListingKind:
-    """Quale elenco percorrere: la verifica, il completo finché non è finito, poi l'incrementale."""
+    """Which list to walk: the verification, the complete one until finished, then the
+    incremental."""
     if mode is SyncMode.VERIFY:
         return ListingKind.VERIFY
     if full_listing is None or not full_listing.completed:
@@ -295,27 +315,29 @@ def synchronize_activities(
     report: Callable[[SyncProgress], None] = _ignore_progress,
     is_cancelled: Callable[[], bool] = _never_cancelled,
 ) -> SyncOutcome:
-    """Sincronizza il profilo con Garmin.
+    """Synchronizes the profile with Garmin.
 
-    Prima l'elenco (completo, incrementale o verifica, vedi `listing_kind_for`), poi le voci da
-    lavorare dalla più recente. `report` riceve l'avanzamento di ogni fase;
-    `is_cancelled()` si controlla prima di ogni richiesta, voce e pagina, e `ports.wait`
-    interrompe le pause: l'annullamento ferma entro una chiamata e lascia giornale e indice
-    coerenti. Un'esecuzione interrotta o fermata si riprende rilanciando.
+    First the list (complete, incremental or verification, see `listing_kind_for`), then the
+    entries to
+    process from the most recent. `report` receives the progress of each phase;
+    `is_cancelled()` is checked before every request, entry and page, and `ports.wait`
+    interrupts the pauses: cancellation stops within one call and leaves journal and index
+    consistent. An interrupted or stopped run is resumed by running again.
 
-    Non solleva per i fallimenti attesi (vedi `StopReason` e `EntryFailure`): sono nell'esito.
-    Gli errori di programmazione e i guasti del database si propagano; la transazione in corso
-    si annulla.
+    It does not raise for expected failures (see `StopReason` and `EntryFailure`): they are in the
+    outcome.
+    Programming errors and database failures propagate; the transaction in progress
+    is rolled back.
     """
     kind = listing_kind_for(mode, ports.journal.load_cursor(ListingKind.FULL))
     return _Run(ports, kind, report, is_cancelled).execute()
 
 
-# --- Esecuzione ---------------------------------------------------------------------------------
+# --- Execution ----------------------------------------------------------------------------
 
 
 class _StopError(Exception):
-    """Fine anticipata di un'esecuzione (controllo di flusso interno)."""
+    """Early end of a run (internal flow control)."""
 
     def __init__(self, reason: StopReason) -> None:
         super().__init__(reason.value)
@@ -323,15 +345,15 @@ class _StopError(Exception):
 
 
 class _Saved(Enum):
-    """Che cosa ha prodotto il salvataggio di un originale scaricato."""
+    """What the saving of a downloaded original produced."""
 
-    NEW = "new"  # attività nuova: archivio e record
-    MATCHED = "matched"  # gemello in un altro formato: id collegato
-    ALREADY_PRESENT = "already_present"  # stesso file già nel profilo: id collegato
+    NEW = "new"  # new activity: archive and record
+    ALREADY_PRESENT = "already_present"  # same file already in the profile: id linked
+    SKIPPED = "skipped"  # the activity was deleted by the user: nothing recorded
 
 
 class _RequestFailedError(Exception):
-    """Una richiesta ha esaurito i tentativi (o l'attesa che Garmin chiede è oltre il tetto)."""
+    """A request exhausted its attempts (or the wait Garmin asks for is beyond the cap)."""
 
     def __init__(self, reason: FailureReason) -> None:
         super().__init__(reason.value)
@@ -339,7 +361,7 @@ class _RequestFailedError(Exception):
 
 
 class _Run:
-    """Stato di una sola esecuzione: contatori, durate misurate, ultima richiesta."""
+    """State of a single run: counters, measured durations, last request."""
 
     def __init__(
         self,
@@ -356,9 +378,11 @@ class _Run:
         self._downloaded = 0
         self._matched = 0
         self._already_present = 0
+        self._skipped_deleted = 0
         self._failures: list[EntryFailure] = []
-        # Voci fallite per rete in questo giro, non ancora scritte (vedi `_network_answered`).
-        self._held: list[tuple[JournalEntry, FailureReason]] = []
+        # Entries failed because of the network in this round, not yet written (see
+        # `_network_answered`).
+        self._held: list[JournalEntry] = []
         self._durations_s: list[float] = []
         self._requested_before = False
         self._unreachable_in_a_row = 0
@@ -369,10 +393,10 @@ class _Run:
             self._rearm_exhausted()
             self._list()
             self._work_through_entries()
-            self._write_held_failures()  # il giro è finito: erano difetti delle voci
+            self._settle_held_after_probe()  # the round is over: the entries or the network?
         except _StopError as stopped:
             stop = stopped.reason
-        except StorageBusyError:  # database occupato oltre l'attesa: nulla è stato toccato
+        except StorageBusyError:  # database busy beyond the wait: nothing was touched
             stop = StopReason.STORAGE_ERROR
         if stop is None:
             self._p.journal.record_completed(self._now())
@@ -385,12 +409,14 @@ class _Run:
             tuple(self._failures),
             MappingProxyType(dict(self._p.journal.counts())),
             self._already_present,
+            self._skipped_deleted,
         )
 
-    # --- Verifica completa: tentativi esauriti --------------------------------------------------
+    # --- Full check: exhausted attempts ----------------------------------------------------
 
     def _rearm_exhausted(self) -> None:
-        """Solo la verifica completa: le voci a tentativi esauriti tornano da scaricare."""
+        """Full check only: entries failed for exhausted attempts or because Garmin did not provide
+        them go back to download."""
         if self._kind is not ListingKind.VERIFY:
             return
         journal = self._p.journal
@@ -404,7 +430,7 @@ class _Run:
                 for entry in batch:
                     journal.update(rearm_exhausted(entry, now))
 
-    # --- Elenco ---------------------------------------------------------------------------------
+    # --- List -----------------------------------------------------------------------------
 
     def _list(self) -> None:
         journal = self._p.journal
@@ -426,14 +452,14 @@ class _Run:
             page = self._request(lambda: self._p.source.list_page(offset, limit))
         except _RequestFailedError as failed:
             raise _StopError(_stop_for(failed.reason)) from failed
-        except ActivitySourceError as error:  # elenco rifiutato o non interpretabile
+        except ActivitySourceError as error:  # list rejected or not interpretable
             raise _StopError(StopReason.REMOTE_ERROR) from error
         known: frozenset[GarminActivityId] | None = None
         if self._kind is ListingKind.INCREMENTAL:
             known = self._p.journal.known_ids([item.garmin_id for item in page.items])
         try:
             following = advance_cursor(cursor, page, limit, known)
-        except ValueError as error:  # pagina fuori dal contratto della porta
+        except ValueError as error:  # page outside the port's contract
             raise _StopError(StopReason.REMOTE_ERROR) from error
         with self._p.index.transaction():
             added = self._p.journal.add_pending(page.items, self._now())
@@ -441,7 +467,7 @@ class _Run:
         self._new_entries += added
         return following
 
-    # --- Voci da lavorare -----------------------------------------------------------------------
+    # --- Entries to process -----------------------------------------------------------------
 
     def _work_through_entries(self) -> None:
         counts = self._p.journal.counts()
@@ -457,7 +483,7 @@ class _Run:
         self._report(SyncProgress(SyncPhase.DOWNLOADING, total, total, 0.0))
 
     def _work_on(self, entry: JournalEntry) -> None:
-        if self._match_with_import(entry):
+        if self._skip_if_deleted(entry) or self._match_with_import(entry):
             return
         zipped = self._download(entry)
         if zipped is None:
@@ -470,8 +496,27 @@ class _Run:
             return
         self._save(entry, extracted, activity)
 
+    def _skip_if_deleted(self, entry: JournalEntry) -> bool:
+        """The activity of the entry is one the user deleted: it is not downloaded and the entry
+        is marked `SKIPPED`. True if done."""
+        remote = entry.remote
+        candidates = list(self._p.deleted.find_possible_duplicates(remote.start, remote.duration_s))
+        by_id = self._p.deleted.find_by_garmin_id(remote.garmin_id)
+        if by_id is not None:
+            candidates.append(by_id)
+        if find_matching_deleted(remote, candidates) is None:
+            return False
+        self._skip(entry)
+        return True
+
+    def _skip(self, entry: JournalEntry) -> None:
+        with self._p.index.transaction():
+            self._p.journal.update(mark_skipped(entry, self._now()))
+        self._skipped_deleted += 1
+
     def _match_with_import(self, entry: JournalEntry) -> bool:
-        """Abbina la voce a un'attività già importata da file: nessun download. Vero se fatto."""
+        """Matches the entry to an activity already imported from file: no download. True if
+        done."""
         remote = entry.remote
         candidates = self._p.index.find_possible_duplicates(remote.start, remote.duration_s)
         match = find_matching_import(remote, candidates)
@@ -481,7 +526,9 @@ class _Run:
             with self._p.index.transaction():
                 self._p.index.link_garmin_id(match.identity, entry.garmin_id)
                 self._p.journal.update(mark_matched(entry, self._now()))
-        except DuplicateActivityError:  # l'id è già di un altro record: si scarica e si vede
+        except (
+            DuplicateActivityError
+        ):  # the id already belongs to another record: it is downloaded and seen
             return False
         self._matched += 1
         return True
@@ -498,7 +545,7 @@ class _Run:
         except DownloadTooLargeError:
             self._network_answered()
             self._fail(entry, FailureReason.FILE_TOO_LARGE)
-        except ActivitySourceError:  # originale assente, rifiutato o non interpretabile
+        except ActivitySourceError:  # original absent, rejected or not interpretable
             self._network_answered()
             self._fail(entry, FailureReason.REMOTE_REJECTED)
         else:
@@ -507,38 +554,63 @@ class _Run:
         return None
 
     def _hold_or_stop(self, entry: JournalEntry, reason: FailureReason) -> None:
-        """Una richiesta ha esaurito i tentativi per rete o limite, senza risposta utile.
+        """A request exhausted its attempts because of network or limit, without a useful answer.
 
-        Con il limite di frequenza ci si ferma subito, la voce com'era. Per la rete la voce si
-        trattiene (non si scrive): se Garmin risponde a una voce successiva era un difetto
-        della voce e si scrive; se il servizio tace per `MAX_CONSECUTIVE_UNREACHABLE` voci di
-        fila ci si ferma e nessuna di esse consuma un tentativo.
+        With the rate limit it stops immediately, the entry as it was. For the network the entry is
+        held back (not written): if Garmin answers for a later entry it was a defect
+        of the entry and the round counts for it. If the service stays silent for
+        `MAX_CONSECUTIVE_UNREACHABLE` entries in a row the round stops, after a probe that
+        tells the entries (counted) from the network (nothing counted).
         """
         if reason is FailureReason.RATE_LIMITED:
             raise _StopError(StopReason.RATE_LIMITED)
-        self._held.append((entry, reason))
+        self._held.append(entry)
         self._unreachable_in_a_row += 1
         if self._unreachable_in_a_row >= MAX_CONSECUTIVE_UNREACHABLE:
+            self._settle_held_after_probe()
             raise _StopError(StopReason.SERVICE_UNAVAILABLE)
 
     def _network_answered(self) -> None:
-        """Garmin ha risposto (anche con un rifiuto): la rete c'è, i fallimenti trattenuti
-        erano delle loro voci e si scrivono."""
+        """Garmin answered (even with a rejection): the network is there, the held-back failures
+        were their entries' own and are written."""
         self._unreachable_in_a_row = 0
         self._write_held_failures()
 
     def _write_held_failures(self) -> None:
+        """Garmin answered: each held-back entry has one more unanswered round."""
         held, self._held = self._held, []
-        for entry, reason in held:
-            self._fail(entry, reason)
+        for entry in held:
+            unanswered = mark_unanswered(entry, self._now(), self._p.policy.max_unanswered_rounds)
+            self._p.journal.update(unanswered)
+            if unanswered.failure is not None:
+                self._failures.append(EntryFailure(entry.garmin_id, unanswered.failure))
+
+    def _settle_held_after_probe(self) -> None:
+        """No download has answered since the entries were held back: ask Garmin something else.
+
+        The probe is the first list page (one entry). Any answer from Garmin, even a rejection,
+        shows that the network and the service are there, so the held-back entries are the
+        ones with the problem and the round counts for them. No answer at all (the usual
+        attempts and backoff exhausted): the network is down, nothing is written, and the round
+        stops. Authentication and cancellation stop as for any request.
+        """
+        if not self._held:
+            return
+        try:
+            self._request(lambda: self._p.source.list_page(0, 1))
+        except _RequestFailedError as failed:
+            raise _StopError(_stop_for(failed.reason)) from failed
+        except ActivitySourceError:
+            pass  # a rejection is still an answer
+        self._write_held_failures()
 
     def _extract(self, entry: JournalEntry, zipped: bytes) -> ExtractedOriginal | None:
         try:
             return self._p.extract_original(zipped)
         except OriginalExtractionError as error:
             self._fail(entry, error.reason)
-        except Exception as error:  # un estrattore che non dovrebbe sollevare altro
-            _log_unexpected("estrazione", error)
+        except Exception as error:  # an extractor that should not raise anything else
+            _log_unexpected("extraction", error)
             self._fail(entry, FailureReason.ARCHIVE_INVALID)
         return None
 
@@ -547,65 +619,56 @@ class _Run:
             return self._p.decode(extracted.content, extracted.file_format)
         except ActivityFileError as error:
             self._fail(entry, _REASON_BY_FILE_ERROR[error.reason])
-        except Exception as error:  # un lettore che non dovrebbe sollevare altro
-            _log_unexpected("decodifica", error)
+        except Exception as error:  # a reader that should not raise anything else
+            _log_unexpected("decoding", error)
             self._fail(entry, FailureReason.CORRUPT_FILE)
         return None
 
     def _save(self, entry: JournalEntry, extracted: ExtractedOriginal, activity: Activity) -> None:
-        """Controlla il file, lo archivia e poi, in una transazione breve, scrive record e voce.
+        """Checks the file, archives it and then, in a short transaction, writes record and entry.
 
-        L'archivio (idempotente) si scrive **prima** di aprire la transazione, così il lock di
-        scrittura del database dura solo il tempo del record.
+        The archive (idempotent) is written **before** opening the transaction, so the
+        database write lock lasts only as long as the record.
         """
         remote = entry.remote
         if not original_matches_listing(remote, activity.start, activity.elapsed_s):
-            self._fail(entry, FailureReason.REMOTE_REJECTED)  # è un'altra attività: mai registrata
+            self._fail(
+                entry, FailureReason.REMOTE_REJECTED
+            )  # it is another activity: never recorded
             return
         try:
             archived = self._store_if_new(extracted, activity)
             with self._p.index.transaction():
                 saved = self._record_activity(entry, extracted, activity, archived)
         except DuplicateActivityError:
-            # Il file, o l'id Garmin, è già di un altro record: l'attività c'è già nel profilo.
+            # The file, or the Garmin id, already belongs to another record: the activity is
+            # already in the profile.
             self._p.journal.update(mark_downloaded(entry, self._now()))
             saved = _Saved.ALREADY_PRESENT
         except ArchiveTooLargeError:
             self._fail(entry, FailureReason.FILE_TOO_LARGE)
             return
-        except ArchiveError as error:  # non è colpa della voce: ci si ferma, la voce resta com'era
+        except ArchiveError as error:  # not the entry's fault: it stops, the entry stays as it was
             raise _StopError(StopReason.STORAGE_ERROR) from error
-        if saved is _Saved.MATCHED:
-            self._matched += 1
-        elif saved is _Saved.ALREADY_PRESENT:
+        if saved is _Saved.ALREADY_PRESENT:
             self._already_present += 1
+        elif saved is _Saved.SKIPPED:
+            self._skipped_deleted += 1
         else:
             self._downloaded += 1
 
     def _store_if_new(
         self, extracted: ExtractedOriginal, activity: Activity
     ) -> ArchivedFile | None:
-        """Archivia il file solo se l'attività è nuova (né lo stesso file né un gemello in un
-        altro formato); altrimenti None. Letture senza transazione: la decisione si ripete,
-        identica, dentro la transazione che scrive."""
+        """Archives the file only if the activity is new (the same file is not there yet);
+        otherwise None. Reads without a transaction: the decision is repeated,
+        identical, inside the transaction that writes."""
         index = self._p.index
-        if index.get(activity.identity) is not None or self._find_twin(activity) is not None:
+        if index.get(activity.identity) is not None or (
+            self._p.deleted.get(activity.identity) is not None
+        ):
             return None
         return self._p.archive.store(extracted.content, activity.file_format, activity.start)
-
-    def _find_twin(self, activity: Activity) -> ActivityRecord | None:
-        """Lo stesso inizio e la stessa durata, senza id Garmin, in un altro formato."""
-        return next(
-            (
-                record
-                for record in self._p.index.find_possible_duplicates(
-                    activity.start, activity.elapsed_s
-                )
-                if record.garmin_activity_id is None
-                and record.file_format is not activity.file_format
-            ),
-            None,
-        )
 
     def _record_activity(
         self,
@@ -617,18 +680,16 @@ class _Run:
         index = self._p.index
         garmin_id = entry.garmin_id
         now = self._now()
+        if self._p.deleted.get(activity.identity) is not None:  # deleted while we downloaded
+            self._p.journal.update(mark_skipped(entry, now))
+            return _Saved.SKIPPED
         existing = index.get(activity.identity)
-        if existing is not None:  # stesso file già importato: si collega l'id
+        if existing is not None:  # same file already imported: the id is linked
             if existing.garmin_activity_id is None:
                 index.link_garmin_id(existing.identity, garmin_id)
             self._p.journal.update(mark_downloaded(entry, now))
             return _Saved.ALREADY_PRESENT
-        twin = self._find_twin(activity)
-        if twin is not None:  # la stessa attività importata in un altro formato
-            index.link_garmin_id(twin.identity, garmin_id)
-            self._p.journal.update(mark_matched(entry, now))
-            return _Saved.MATCHED
-        if archived is None:  # lo stato è cambiato dopo la lettura: si archivia ora
+        if archived is None:  # the state changed after the read: it is archived now
             archived = self._p.archive.store(
                 extracted.content, activity.file_format, activity.start
             )
@@ -646,15 +707,15 @@ class _Run:
         if failed.failure is not None:
             self._failures.append(EntryFailure(entry.garmin_id, failed.failure))
 
-    # --- Richieste: pausa, backoff, annullamento ------------------------------------------------
+    # --- Requests: pause, backoff, cancellation -------------------------------------------
 
     def _request(self, call: Callable[[], _T]) -> _T:
-        """Una richiesta a Garmin con pausa prima e ritentativi sugli errori transitori.
+        """A request to Garmin with a pause before and retries on transient errors.
 
         Raises:
-            _RequestFailedError: tentativi esauriti, o attesa suggerita oltre il tetto del backoff.
-            _StopError: autenticazione richiesta o annullamento.
-        Gli errori definitivi della sorgente passano al chiamante.
+            _RequestFailedError: attempts exhausted, or suggested wait beyond the backoff cap.
+            _StopError: authentication required or cancellation.
+        Errors that are final for the source pass to the caller.
         """
         self._check_cancelled()
         if self._requested_before:
@@ -693,8 +754,8 @@ class _Run:
 
 
 def _total_of(cursor: ListingCursor) -> int | None:
-    """Totale per l'avanzamento: quello dichiarato, ma mai sotto la posizione raggiunta (Garmin
-    può ricevere attività nuove durante l'elenco)."""
+    """Total for progress: the declared one, but never below the position reached (Garmin
+    may receive new activities during the list)."""
     if cursor.declared_total is None:
         return None
     return max(cursor.declared_total, cursor.next_offset)
@@ -709,5 +770,5 @@ def _stop_for(reason: FailureReason) -> StopReason:
 
 
 def _log_unexpected(step: str, error: Exception) -> None:
-    """Un solo record per errore imprevisto, col solo tipo: il messaggio può contenere dati."""
-    _LOG.error("sincronizzazione: errore imprevisto in %s (%s)", step, type(error).__name__)
+    """One single record per unexpected error, with the type only: the message may contain data."""
+    _LOG.error("synchronization: unexpected error in %s (%s)", step, type(error).__name__)
