@@ -1,7 +1,7 @@
 name: Release
 
-# Runs on version tags pushed by the maintainer. First all the checks (`nox`) on Windows and
-# Ubuntu; then builds the package on both with `nox -s dist` (build, smoke test of the
+# Runs on version tags pushed by the maintainer. First all the checks (`nox`) on Windows (Ubuntu
+# is paused for now); then builds the package with `nox -s dist` (build, smoke test of the
 # executable, scan for local paths, SHA256SUMS), then attests the provenance of the archives,
 # makes a CycloneDX SBOM from the lockfile, and attaches archives, SHA256SUMS and SBOM to a
 # DRAFT release: publishing it is a manual step.
@@ -28,7 +28,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        # Ubuntu is paused (CLAUDE.md, exception 5); to bring it back add ubuntu-latest here.
+        os: [windows-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -91,7 +92,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        # Ubuntu is paused (CLAUDE.md, exception 5); to bring it back add ubuntu-latest here.
+        os: [windows-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

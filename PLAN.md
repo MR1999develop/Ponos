@@ -692,6 +692,11 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       `test_tile_service` su Ubuntu (oggetto Qt distrutto da un worker,
       `ui/worker_handover.py`); CI verde su Windows e Ubuntu sul commit
       `a2092ae` (2026-11-09).
+- [ ] Ubuntu di nuovo in CI e rilascio: tolto dalle matrici di `ci.yml` e
+      `release.yml` il 2026-11-11 su richiesta dell'utente ("per ora abbandona
+      ubuntu") dopo due tentativi falliti per errori DNS dei mirror Ubuntu sul
+      runner; eccezione 5 di `CLAUDE.md`. Per riprenderlo: `ubuntu-latest` nelle
+      due matrici, README, eccezione chiusa, CI verde su Ubuntu.
 - [x] ~~Valori della tabella degli alimenti verificati~~ (SUPERATO il 2026-11-10: tabella tolta; la revisione a mano delle voci CIQUAL prima del rilascio non serve più) Valori della tabella degli alimenti verificati contro ANSES-CIQUAL 2025
       (file del 2025-11-03, Etalab 2.0) con `experiments/verify_foods.py
       --ciqual-dir <cartella> --apply` (`source.verified_on` = 2026-11-09, 42

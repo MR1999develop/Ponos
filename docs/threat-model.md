@@ -611,7 +611,8 @@ service, E elevation of privilege.
     empty folder the user created stays, and a folder with anything in it is
     refused.
   - The file is not encrypted (accepted risk, section 5).
-- Release (phase 8): `release.yml` builds the Windows and Ubuntu packages,
+- Release (phase 8): `release.yml` builds the Windows package (the Ubuntu
+  package is paused since 2026-11-11),
   checks `SHA256SUMS`, attests the provenance of the archives and of a
   CycloneDX SBOM made from the lockfile, and attaches them to a draft release;
   publishing is manual. Only the attestation job has `id-token` and

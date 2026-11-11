@@ -7,9 +7,9 @@ an adaptive training plan towards one or more goals in the calendar and guides
 recovery from injuries.
 
 **Status:** in development; the phases and what each one delivers are in
-`PLAN.md`. A packaged build for Windows and Ubuntu is attached to each
-tagged release (see "Install from a package"); until the first release you
-can run the app from source.
+`PLAN.md`. A packaged build for Windows is attached to each tagged release
+(see "Install from a package"); the Ubuntu package is paused for now, and on
+Ubuntu you can run the app from source.
 
 ## Notice: not a medical device
 
@@ -58,9 +58,11 @@ The planned behaviour is described in `docs/specifica.md`, the decisions in
 
 ## Install from a package
 
-Each release has, for Windows (x64) and Ubuntu (x64), an archive
-(`PonosCoach-<version>-windows-x64.zip`, `PonosCoach-<version>-linux-x64.tar.gz`)
-and a `SHA256SUMS` file. The app is a folder: nothing is installed, and
+Each release has, for Windows (x64), an archive
+(`PonosCoach-<version>-windows-x64.zip`) and a `SHA256SUMS` file. The Ubuntu
+archive (`PonosCoach-<version>-linux-x64.tar.gz`) is paused for now: the
+Ubuntu notes below apply when it comes back or to a package you build
+yourself with `uv run --locked nox -s dist`. The app is a folder: nothing is installed, and
 nothing is written outside it except your profiles' folders, the list of
 profiles, the settings, the Garmin tokens and the log. The archive is about 250 MB (the web engine that draws
 the charts and the map is in it).
@@ -329,7 +331,7 @@ between modules, tests, translation tests and `pip-audit`.
 smoke-tests the executable, checks that no local path or user name is in it
 and writes the archive and `SHA256SUMS` to `dist/release/`; it takes a few
 minutes. The release workflow (`.github/workflows/release.yml`) runs it on
-Windows and Ubuntu when a `v*` tag is pushed and attaches the result to a
+Windows (Ubuntu is paused for now) when a `v*` tag is pushed and attaches the result to a
 draft release; started by hand on a branch (`gh workflow run release.yml --ref
 <branch>`) it only builds the packages, kept as workflow artifacts.
 

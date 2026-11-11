@@ -163,3 +163,14 @@ Ritmo di lavoro (regola dell'utente del 2026-11-07, per accelerare):
    - Compensazione: Ctrl+1..4 valgono da tutta la finestra (Panoramica,
      Calendario, Attività, Mappa), descritti in specifica e README; test in
      `tests/ui/test_main_panes.py`.
+5. **CI e rilascio solo su Windows** (temporanea, richiesta dell'utente del
+   2026-11-11: "per ora abbandona ubuntu"). La regola generale vuole la CI su
+   Windows e Ubuntu.
+   - Motivo: sul runner Ubuntu di GitHub l'installazione dei pacchetti di
+     sistema per Qt falliva per errori di rete (DNS dei mirror Ubuntu), e
+     bloccava CI e rilascio.
+   - Compensazione: il codice per Linux resta (Secret Service, step `apt`
+     saltati dove `runner.os` non è Linux); per riprendere Ubuntu basta
+     rimettere `ubuntu-latest` nelle matrici di `ci.yml` e `release.yml` e
+     togliere questa eccezione. Finché vale, il README non promette il
+     pacchetto Ubuntu.
