@@ -16,6 +16,7 @@ from PySide6.QtCore import QObject, Signal
 from ponos_coach.activities.domain import ActivityIdentity
 from ponos_coach.load.activity_detail import GetActivityDetail
 from ponos_coach.load.use_cases import ExcludedActivity
+from ponos_coach.profiles.day_nutrition import GetActivityEnergy, NutritionSources
 from ponos_coach.ui.activity_detail import DetailOutcome, DetailReady, DetailUnavailable
 from ponos_coach.ui.data_thread import JobFailed, JobOutcome, JobSucceeded
 from ponos_coach.ui.hr_figure import HeartRateLabels, prepare_heart_rate_chart
@@ -45,7 +46,19 @@ def _detail_of(
         chart = prepare_heart_rate_chart(
             result.trace, result.limits, result.zone_starts_bpm, labels, tokens
         )
-    return DetailReady(result, chart)
+    sources = NutritionSources(
+        session.activities,
+        access.archive,
+        session.load_cache,
+        session.physiology,
+        session.weights,
+        session.fixed_data,
+        session.activity_levels,
+        session.meal_times,
+        session.goal_periods,
+        session.lean_masses,
+    )
+    return DetailReady(result, chart, GetActivityEnergy(sources)(result))
 
 
 class ActivityDetailLoader(QObject):

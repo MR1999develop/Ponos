@@ -21,6 +21,9 @@ from datetime import UTC, date, datetime, time, timedelta
 from enum import Enum
 from zoneinfo import ZoneInfo
 
+import numpy as np
+from numpy.typing import NDArray
+
 from ponos_coach.activities.domain import (
     MAX_ACTIVITY_FILE_BYTES,
     Activity,
@@ -30,7 +33,9 @@ from ponos_coach.activities.domain import (
 )
 from ponos_coach.activities.ports import ActivityArchive, ActivityIndex
 from ponos_coach.goals.domain import Priority
+from ponos_coach.load.activity_detail import ActivityDetail
 from ponos_coach.load.domain import (
+    HeartRateLimits,
     MissingPhysiologyError,
     Physiology,
     load_fingerprint,
@@ -179,8 +184,9 @@ class PlanContext:
 
 
 @dataclass(frozen=True, slots=True)
-class _Subject:
-    """Who the guidance is for on a day: the person and the heart-rate parameters."""
+class Subject:
+    """Who the guidance (and the energy of an activity) is for on a day: the person and the
+    heart-rate parameters."""
 
     person: Person
     physiology: Physiology
@@ -227,7 +233,7 @@ class PlanDayNutrition:
             PlanStoreError: a store could not be read.
         """
         src = self._src
-        subject = self._subject_on(day)
+        subject = subject_on(self._src, day)
         if isinstance(subject, NutritionUnavailable):
             return subject
         person, physiology = subject.person, subject.physiology
@@ -273,42 +279,6 @@ class PlanDayNutrition:
             planned_day is not None,
             person.lean_mass_kg is not None,
         )
-
-    def _subject_on(self, day: date) -> _Subject | NutritionUnavailable:
-        """The person as of `day` with the heart-rate parameters, or what is missing. The age
-        decides first: nobody under 18 or over 130 gets numbers, whatever else is missing."""
-        src = self._src
-        fixed = src.fixed_data.get()
-        if fixed is None:
-            return NutritionUnavailable(UnavailableReason.MISSING_BODY_DATA)
-        age = age_on(fixed.birth_date, day)
-        age_problem = _age_problem(age)
-        if age_problem is not None:
-            return NutritionUnavailable(age_problem)
-        weight = weight_on(src.weights.list_entries(), day)
-        if weight is None:
-            return NutritionUnavailable(UnavailableReason.MISSING_WEIGHT)
-        try:
-            physiology = physiology_for_day(src.physiology.list_entries(), day)
-        except MissingPhysiologyError:
-            return NutritionUnavailable(UnavailableReason.MISSING_PHYSIOLOGY)
-        level = level_for_day(src.activity_levels.list_entries(), day)
-        weight_kg = float(weight.kg)
-        lean_mass_kg = self._lean_mass_on(day, weight_kg)
-        person = Person(physiology.sex, age, fixed.height.cm, weight_kg, level, lean_mass_kg)
-        return _Subject(person, physiology)
-
-    def _lean_mass_on(self, day: date, weight_kg: float) -> float | None:
-        """The measured lean mass valid on `day` in kg, if there is one that fits the weight of
-        that day (a later weight may have made an old measurement implausible: the estimate then
-        applies)."""
-        store = self._src.lean_masses
-        if store is None:
-            return None
-        measured = lean_mass_on(store.list_entries(), day)
-        if measured is None or not is_plausible_lean_mass(measured, weight_kg):
-            return None
-        return measured.kg
 
     def _activities_of(
         self, day: date, person: Person, physiology: Physiology
@@ -390,9 +360,7 @@ class PlanDayNutrition:
         declared = record.summary.calories_kcal
         original: Activity | ExclusionReason | None = None
         # a declared figure that is not credible is discarded, and the HR then decides
-        credible = declared is not None and declared <= (
-            defaults.MAX_ACTIVITY_KCAL_PER_HOUR * record.timer_s / 3600.0
-        )
+        credible = declared_energy_is_credible(declared, record.timer_s)
         if cached is None or not credible:
             original = read_original_activity(
                 self._src.archive, record, self._decode, self._max_file_bytes
@@ -406,8 +374,14 @@ class PlanDayNutrition:
             load = cached.trimp_eq
         else:
             load = 0.0 if activity is None else load_of_activity(activity, physiology).trimp_eq
-        average_bpm = _average_bpm(activity, physiology)
-        energy = activity_energy(person, record.sport, record.timer_s, declared, average_bpm)
+        series = None if activity is None else activity.heart_rate
+        energy = energy_of_activity(
+            Subject(person, physiology),
+            record.sport,
+            record.timer_s,
+            declared,
+            None if series is None else series.bpm,
+        )
         local = record.start.astimezone(self._timezone)
         start_minute = local.hour * _MINUTES_PER_HOUR + local.minute
         day_activity = DayActivity(
@@ -421,6 +395,93 @@ class PlanDayNutrition:
             _local_end_minute(record, local, start_minute, self._timezone),
         )
         return _Measured(day_activity, unreadable)
+
+
+def subject_on(src: NutritionSources, day: date) -> Subject | NutritionUnavailable:
+    """The person as of `day` with the heart-rate parameters, or what is missing. The age
+    decides first: nobody under 18 or over 130 gets numbers, whatever else is missing."""
+    fixed = src.fixed_data.get()
+    if fixed is None:
+        return NutritionUnavailable(UnavailableReason.MISSING_BODY_DATA)
+    age = age_on(fixed.birth_date, day)
+    age_problem = _age_problem(age)
+    if age_problem is not None:
+        return NutritionUnavailable(age_problem)
+    weight = weight_on(src.weights.list_entries(), day)
+    if weight is None:
+        return NutritionUnavailable(UnavailableReason.MISSING_WEIGHT)
+    try:
+        physiology = physiology_for_day(src.physiology.list_entries(), day)
+    except MissingPhysiologyError:
+        return NutritionUnavailable(UnavailableReason.MISSING_PHYSIOLOGY)
+    level = level_for_day(src.activity_levels.list_entries(), day)
+    weight_kg = float(weight.kg)
+    lean_mass_kg = _lean_mass_on(src, day, weight_kg)
+    person = Person(physiology.sex, age, fixed.height.cm, weight_kg, level, lean_mass_kg)
+    return Subject(person, physiology)
+
+
+def _lean_mass_on(src: NutritionSources, day: date, weight_kg: float) -> float | None:
+    """The measured lean mass valid on `day` in kg, if there is one that fits the weight of
+    that day (a later weight may have made an old measurement implausible: the estimate then
+    applies)."""
+    store = src.lean_masses
+    if store is None:
+        return None
+    measured = lean_mass_on(store.list_entries(), day)
+    if measured is None or not is_plausible_lean_mass(measured, weight_kg):
+        return None
+    return measured.kg
+
+
+def declared_energy_is_credible(declared_kcal: float | None, timer_s: float) -> bool:
+    """True if the device's total is present and not above the hourly ceiling of `timer_s`: the
+    rule `activity_energy` applies, here so that the file is not read when it already holds."""
+    return declared_kcal is not None and declared_kcal <= (
+        defaults.MAX_ACTIVITY_KCAL_PER_HOUR * timer_s / 3600.0
+    )
+
+
+def energy_of_activity(
+    subject: Subject,
+    sport: Sport,
+    timer_s: float,
+    declared_kcal: float | None,
+    heart_rate_bpm: NDArray[np.float64] | None,
+) -> ActivityEnergy:
+    """The one place where the arguments of `activity_energy` are prepared, for the nutrition of
+    a day and for the activity detail: the person of the day, the moving time, the device's total
+    and the mean of the heart-rate samples inside that day's limits."""
+    average_bpm = _mean_bpm(heart_rate_bpm, subject.physiology.limits)
+    return activity_energy(subject.person, sport, timer_s, declared_kcal, average_bpm)
+
+
+class GetActivityEnergy:
+    """Energy of one activity for its detail (a query: it saves nothing).
+
+    Same person (body data valid on the local day of the activity), same rule for the device's
+    total and same mean heart rate as the nutrition of that day, because both go through
+    `energy_of_activity`. Health data: never in logs.
+    """
+
+    def __init__(self, sources: NutritionSources) -> None:
+        self._src = sources
+
+    def __call__(self, detail: ActivityDetail) -> ActivityEnergy | None:
+        """The energy of the activity shown, or None if the body data of its day (height, date of
+        birth, weight, heart-rate parameters, age of 18 to 130) do not allow it.
+
+        Raises:
+            ActivityIndexError, LoadStoreError, ProfileDataError, NutritionStoreError: a store
+                could not be read.
+        """
+        subject = subject_on(self._src, detail.local_day)
+        if isinstance(subject, NutritionUnavailable):
+            return None
+        bpm = None if detail.trace is None else detail.trace.bpm
+        return energy_of_activity(
+            subject, detail.sport, detail.timer_s, detail.summary.calories_kcal, bpm
+        )
 
 
 def _saved_plan(plans: PlanStore) -> Plan | None:
@@ -492,12 +553,11 @@ def _loss_days(periods: Sequence[GoalPeriod], goal: NutritionGoal, day: date) ->
     return None
 
 
-def _average_bpm(activity: Activity | None, physiology: Physiology) -> float | None:
-    """Mean of the heart-rate samples inside the limits, if the activity has a series."""
-    if activity is None or activity.heart_rate is None:
+def _mean_bpm(bpm: NDArray[np.float64] | None, limits: HeartRateLimits) -> float | None:
+    """Mean of the heart-rate samples inside the limits, if there is a series."""
+    if bpm is None:
         return None
-    limits = physiology.limits
-    return average_valid_bpm(activity.heart_rate.bpm, limits.min_bpm, limits.max_bpm)
+    return average_valid_bpm(bpm, limits.min_bpm, limits.max_bpm)
 
 
 def _age_problem(age: int) -> UnavailableReason | None:

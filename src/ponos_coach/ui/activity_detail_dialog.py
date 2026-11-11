@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 
 from ponos_coach.activities.domain import ActivityIdentity
 from ponos_coach.load.activity_detail import ActivityDetail
+from ponos_coach.nutrition.domain import ActivityEnergy, EnergySource
 from ponos_coach.ui.activity_detail import (
     PACE_SPORTS,
     DetailOutcome,
@@ -421,6 +422,7 @@ class ActivityDetailDialog(QDialog):
             ("distance", self.tr("Distance (km)")),
             ("pace", self.tr("Average pace (min/km)")),
             ("ascent", self.tr("Ascent (m)")),
+            ("calories", self.tr("Active calories (kcal)")),
             ("load", self.tr("Load (TRIMPeq)")),
             ("source", self.tr("Load from")),
             ("thresholds", self.tr("LT1 / LT2 (bpm)")),
@@ -530,7 +532,7 @@ class ActivityDetailDialog(QDialog):
         self._set_test_command(
             detail.identity if can_be_threshold_test(detail.sport) else None, not_a_run_reason()
         )
-        self._fill_summary(detail)
+        self._fill_summary(detail, ready.energy)
         self._set_details_visible(True)
         self._zone_model.set_rows(zone_rows(detail))
         self._domain_model.set_rows(domain_rows(detail))
@@ -546,7 +548,7 @@ class ActivityDetailDialog(QDialog):
             self._chart.show_prepared(ready.chart)
             self._body.setCurrentWidget(self._chart)
 
-    def _fill_summary(self, detail: ActivityDetail) -> None:
+    def _fill_summary(self, detail: ActivityDetail, energy: ActivityEnergy | None) -> None:
         local = detail.start.astimezone(self._zone)
         started = QLocale().toString(
             QDateTime(
@@ -565,6 +567,7 @@ class ActivityDetailDialog(QDialog):
             "distance": distance_km_text(detail.summary.distance_m),
             "pace": pace_text(average_pace_s_per_km(detail)),
             "ascent": ascent_m_text(detail.summary.ascent_m),
+            "calories": self._active_calories_text(energy),
             "load": QLocale().toString(round(detail.load.trimp_eq)),
             "source": load_source_text(detail.load.source),
             "thresholds": self.tr("{lt1} / {lt2}").format(
@@ -576,11 +579,24 @@ class ActivityDetailDialog(QDialog):
         for key, text in values.items():
             self._summary_values[key].setText(text)
         shown = tuple(
-            key for key in self._summary_values if key != "pace" or detail.sport in PACE_SPORTS
+            key
+            for key in self._summary_values
+            if (key != "pace" or detail.sport in PACE_SPORTS)
+            and (key != "calories" or energy is not None)
         )
         self._lay_out_summary(shown)
         self._notice.setText(self._notice_text(detail))
         self._notice.setVisible(bool(self._notice.text()))
+
+    def _active_calories_text(self, energy: ActivityEnergy | None) -> str:
+        """Net energy to the whole kcal; a value not declared by the device is marked as an
+        estimate."""
+        if energy is None:
+            return ""
+        kcal = QLocale().toString(round(energy.net_kcal))
+        if energy.source is EnergySource.DECLARED:
+            return kcal
+        return self.tr("≈ {kcal}").format(kcal=kcal)
 
     def _notice_text(self, detail: ActivityDetail) -> str:
         notes = []

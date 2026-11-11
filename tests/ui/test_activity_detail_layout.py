@@ -7,12 +7,14 @@ from __future__ import annotations
 from zoneinfo import ZoneInfo
 
 import plotly.graph_objects as go
+import pytest
 from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
 
 from ponos_coach.activities.domain import Sport
 from ponos_coach.load.domain import DomainSeconds, ZoneSeconds
+from ponos_coach.nutrition.domain import ActivityEnergy, EnergySource
 from ponos_coach.ui.activity_detail import DetailReady
 from ponos_coach.ui.activity_detail_dialog import ActivityDetailDialog
 from ponos_coach.ui.chart_payload import PreparedChart
@@ -27,7 +29,10 @@ SUMMARY_KEYS = (
 
 
 def ready_dialog(
-    qtbot: QtBot, sport: Sport = Sport.CYCLING, distance_m: float | None = None
+    qtbot: QtBot,
+    sport: Sport = Sport.CYCLING,
+    distance_m: float | None = None,
+    energy: ActivityEnergy | None = None,
 ) -> ActivityDetailDialog:
     dialog = ActivityDetailDialog(
         ChartEngine(lambda _name: None), ZoneInfo("Europe/Rome"), theme=lambda: Theme.LIGHT
@@ -36,7 +41,7 @@ def ready_dialog(
     zones = ZoneSeconds((300.0, 100.0, 0.0, 0.0, 100.0))
     domains = DomainSeconds(300.0, 100.0, 100.0)
     detail = detail_with(zones, domains, sport=sport, distance_m=distance_m, timer_s=3_000.0)
-    dialog.show_outcome(DetailReady(detail, PreparedChart(go.Figure(), "", "#fff")))
+    dialog.show_outcome(DetailReady(detail, PreparedChart(go.Figure(), "", "#fff"), energy))
     dialog.show()
     qtbot.waitExposed(dialog)
     for _ in range(5):
@@ -109,6 +114,31 @@ def test_a_ride_has_no_pace_and_leaves_no_gap_in_the_summary(qtbot: QtBot) -> No
     assert not dialog.summary_value_widget("pace").isVisibleTo(dialog)
     assert ascent.y() == distance.y()
     assert ascent.x() > distance.x()  # the next pair takes the place of the pace
+
+
+def test_the_active_calories_follow_the_ascent_and_a_declared_total_has_no_mark(
+    qtbot: QtBot,
+) -> None:
+    dialog = ready_dialog(qtbot, energy=ActivityEnergy(700.0, 625.6, EnergySource.DECLARED))
+
+    assert dialog.summary_value_widget("calories").isVisibleTo(dialog)
+    assert dialog.summary_text("calories") == "626"
+
+
+@pytest.mark.parametrize("source", [EnergySource.HEART_RATE, EnergySource.MET])
+def test_an_estimated_total_is_shown_as_an_estimate(qtbot: QtBot, source: EnergySource) -> None:
+    dialog = ready_dialog(qtbot, energy=ActivityEnergy(700.0, 420.4, source))
+
+    assert dialog.summary_text("calories") == "≈ 420"
+
+
+def test_without_the_body_data_the_calories_are_left_out_and_leave_no_gap(qtbot: QtBot) -> None:
+    dialog = ready_dialog(qtbot, Sport.CYCLING, distance_m=10_000.0)
+    load, ascent = dialog.summary_value_widget("load"), dialog.summary_value_widget("ascent")
+
+    assert not dialog.summary_value_widget("calories").isVisibleTo(dialog)
+    assert load.y() == ascent.y()  # a ride has neither pace nor calories: the load follows
+    assert load.x() > ascent.x()
 
 
 def test_warming_up_creates_the_chart_page_before_any_data_arrives(qtbot: QtBot) -> None:
