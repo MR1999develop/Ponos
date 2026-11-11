@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -199,6 +200,19 @@ def test_the_map_page_declares_a_policy_without_hosts_and_the_attribution_is_vis
     state = page_state(qtbot, view)
     assert state["attributionVisible"] is True
     assert "© OpenStreetMap contributors" in str(state["attribution"])
+
+
+def test_the_map_shows_a_metric_scale_of_distances(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    """A distance scale in metres or kilometres (user's request of 2026-11-11), no miles."""
+    _window, view = window_with_page(qtbot, tmp_path, settings)
+
+    state = page_state(qtbot, view)
+
+    assert state["scaleVisible"] is True
+    assert re.fullmatch(r"\d+ (m|km)", str(state["scale"]))
+    assert state["scaleLines"] == 1  # metric only
 
 
 # --- Groups (T-MAP-01) ----------------------------------------------------------------------

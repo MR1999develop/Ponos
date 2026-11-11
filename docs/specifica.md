@@ -1144,6 +1144,9 @@ Decision: [ADR 010](adr/010-mappa.md).
   CyclOSM, exclusive, Ctrl+Shift+1, 2 and 3), "Filter activities", "Clear
   filters", "Clear map cache..." (Ctrl+Shift+Backspace). There is no "Map settings..." entry: the Map page of
   Settings opens from the button of the map notice and from Clear map cache.
+- A scale of distances in metres or kilometres, no miles, sits at the bottom
+  left of the map and follows the zoom and the latitude (user's request of
+  2026-11-11).
 - At low zoom the starts of the filtered activities are grouped in circles with
   the number, which split and merge at each level; a click on a group zooms to
   its area. Close up the starts are drawn bigger, and starts at the same place

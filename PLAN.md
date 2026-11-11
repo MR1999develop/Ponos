@@ -962,6 +962,9 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       2026-11-11): il grafico scende del 30%, dai 2/5 al 28% del riquadro, e
       la mappa sale al 72% (`MAP_SHARE = (18, 7)`). Test:
       `tests/ui/test_pane_contents.py`.
+- [x] Scala delle distanze sulla mappa (richiesta dell'utente del
+      2026-11-11): scala di Leaflet in basso a sinistra, solo metrica (m e
+      km), con i colori del tema. Test: `tests/ui/test_map_page_web.py`.
 
 ## 6. Squadra di agenti e modelli
 

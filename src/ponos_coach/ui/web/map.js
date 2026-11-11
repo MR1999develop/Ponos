@@ -113,6 +113,8 @@
     });
     L.control.zoom({ zoomInTitle: cfg.strings.zoomIn, zoomOutTitle: cfg.strings.zoomOut }).addTo(map);
     attributionControl = L.control.attribution({ prefix: false }).addTo(map);
+    // A scale of distances in metres or kilometres (user's request of 2026-11-11), no miles.
+    L.control.scale({ position: "bottomleft", metric: true, imperial: false }).addTo(map);
     addBackgroundControl();
     showBackground(cfg.background);
     trackLayer = L.layerGroup().addTo(map);
@@ -531,6 +533,9 @@
       channelOpen: bridge !== null, viewPending: moveTimer !== null,
       attribution: document.querySelector(".leaflet-control-attribution").textContent,
       attributionVisible: document.querySelector(".leaflet-control-attribution").offsetWidth > 0,
+      scale: document.querySelector(".leaflet-control-scale-line").textContent,
+      scaleVisible: document.querySelector(".leaflet-control-scale-line").offsetWidth > 0,
+      scaleLines: document.querySelectorAll(".leaflet-control-scale-line").length,
       tileUrl: tileLayer._url, background: currentBackground.key, maxZoom: map.getMaxZoom(),
       backgroundButtons: backgroundButtons.map(function (b) {
         return { key: b.getAttribute("data-key"), pressed: b.getAttribute("aria-pressed") === "true" };
