@@ -25,6 +25,9 @@ class TileProblem(Enum):
     REFUSED = "refused"  # 403 or 429: the server refuses or limits us; nothing to do for a while
     NETWORK_UNAVAILABLE = "network_unavailable"  # no network, timeout or server down: later
     INVALID_RESPONSE = "invalid_response"  # not a PNG, too big, redirect, unknown status
+    # The server's certificate does not verify (expired, wrong name, unknown issuer): nothing is
+    # taken from it, the check is never relaxed; only the server's owner can fix it.
+    UNTRUSTED_SERVER = "untrusted_server"
 
 
 @dataclass(frozen=True, slots=True)

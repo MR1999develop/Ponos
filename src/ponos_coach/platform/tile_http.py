@@ -126,6 +126,18 @@ def _ttl_from_expires(expires: str, date: str | None, now: datetime) -> int:
     return max(0, min(int((end - start).total_seconds()), MAX_TTL_S))
 
 
+def problem_of_failure(error: BaseException) -> TileProblem:
+    """Why a request that raised failed: a certificate that does not verify (expired, wrong
+    name, unknown issuer) is an untrusted server, anything else the network being unavailable.
+
+    Only the kind of failure is kept: the exception's text can carry the host and the URL. The
+    verification itself is never relaxed; this only names the refusal so the notice can say why.
+    """
+    if isinstance(error, ssl.SSLCertVerificationError):
+        return TileProblem.UNTRUSTED_SERVER
+    return TileProblem.NETWORK_UNAVAILABLE
+
+
 class HttpTileSource:
     """Tiles of one map background over HTTP(S).
 
@@ -196,10 +208,10 @@ class HttpTileSource:
         try:
             connection.request("GET", path, headers=headers)
             return self._answer(connection.getresponse(), deadline, conditional)
-        except (OSError, http.client.HTTPException):
+        except (OSError, http.client.HTTPException) as error:
             # Timeouts, refused or reset connections, TLS failures, malformed answers. The
             # exception is dropped on purpose: its text can carry the host and the URL.
-            return TileUnavailable(TileProblem.NETWORK_UNAVAILABLE)
+            return TileUnavailable(problem_of_failure(error))
         finally:
             connection.close()
 

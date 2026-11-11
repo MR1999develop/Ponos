@@ -3750,6 +3750,18 @@ Verifica che il portachiavi sia sbloccato, poi riprova.</translation>
         <translation>Non c&apos;è rete, oppure il server della mappa non risponde.</translation>
     </message>
     <message>
+        <source>The map server&apos;s certificate is not valid</source>
+        <translation>Il certificato del server della mappa non è valido</translation>
+    </message>
+    <message>
+        <source>Its identity cannot be verified (for example, the certificate has expired), so nothing is loaded from it; tiles already seen still appear.</source>
+        <translation>Non si può verificare la sua identità (per esempio il certificato è scaduto), quindi non si carica nulla da lì; le tessere già viste restano.</translation>
+    </message>
+    <message>
+        <source>Choose another background, or try again later: only the server&apos;s owner can fix it. Tracks, filters and the list work without it.</source>
+        <translation>Scegli un altro sfondo o riprova più tardi: può rimediare solo chi gestisce il server. Tracce, filtri ed elenco funzionano anche senza.</translation>
+    </message>
+    <message>
         <source>The map server sent something the map cannot use.</source>
         <translation>Il server della mappa ha inviato qualcosa che la mappa non può usare.</translation>
     </message>

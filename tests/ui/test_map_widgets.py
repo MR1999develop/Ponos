@@ -106,6 +106,14 @@ def test_every_tile_problem_has_what_it_is_and_what_to_do(
     assert message.title.rstrip(".") in map_texts.notice_line(message)
 
 
+def test_an_untrusted_server_says_it_is_the_certificate_and_what_to_do() -> None:
+    message = map_texts.tile_notice(TileProblem.UNTRUSTED_SERVER, BACKGROUNDS[1])
+
+    assert message.title == "OpenTopoMap: The map server's certificate is not valid"
+    assert "another background" in message.remedy
+    assert "network" not in message.what.lower()  # not the misleading "no network"
+
+
 def test_the_zone_legend_gives_the_heart_rate_range_when_the_thresholds_are_known() -> None:
     starts = (133.0, 148.0, 160.0, 170.0)
 

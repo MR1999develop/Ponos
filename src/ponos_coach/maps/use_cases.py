@@ -32,12 +32,13 @@ from ponos_coach.maps.ports import (
     TileUnavailable,
 )
 
-# Seconds without asking the server again after each problem. A refusal or a rate limit does not
-# fix itself in seconds; a flaky network may.
+# Seconds without asking the server again after each problem. A refusal, a rate limit or a
+# certificate that does not verify does not fix itself in seconds; a flaky network may.
 COOLDOWN_S: Final[dict[TileProblem, float]] = {
     TileProblem.REFUSED: 300.0,
     TileProblem.NETWORK_UNAVAILABLE: 15.0,
     TileProblem.INVALID_RESPONSE: 15.0,
+    TileProblem.UNTRUSTED_SERVER: 300.0,
 }
 # Problems about one tile (a 404, a body that is not a PNG): the cool-down is for that tile only.
 _PER_TILE: Final = frozenset({TileProblem.INVALID_RESPONSE})

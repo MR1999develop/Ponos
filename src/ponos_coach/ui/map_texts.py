@@ -120,6 +120,20 @@ def _tile_notice(problem: TileProblem) -> ErrorMessage:
                 "Map", "Check the connection. The map tries again by itself when you move it."
             ),
         )
+    if problem is TileProblem.UNTRUSTED_SERVER:
+        return ErrorMessage(
+            QCoreApplication.translate("Map", "The map server's certificate is not valid"),
+            QCoreApplication.translate(
+                "Map",
+                "Its identity cannot be verified (for example, the certificate has expired), so "
+                "nothing is loaded from it; tiles already seen still appear.",
+            ),
+            QCoreApplication.translate(
+                "Map",
+                "Choose another background, or try again later: only the server's owner can fix "
+                "it. Tracks, filters and the list work without it.",
+            ),
+        )
     return ErrorMessage(
         QCoreApplication.translate("Map", "The map background cannot be shown"),
         QCoreApplication.translate("Map", "The map server sent something the map cannot use."),

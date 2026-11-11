@@ -187,6 +187,18 @@ def test_a_refusal_has_the_longest_cool_down() -> None:
     assert COOLDOWN_S[TileProblem.REFUSED] > COOLDOWN_S[TileProblem.NETWORK_UNAVAILABLE]
 
 
+def test_an_untrusted_server_waits_as_long_as_a_refusal_and_for_the_whole_background() -> None:
+    """A certificate is not renewed in seconds: asking again every 15 s would only fail again."""
+    rig = Rig([TileUnavailable(TileProblem.UNTRUSTED_SERVER), TileImage(make_png(), 3600)])
+
+    first = rig.proxy.tile(HERE)
+    other = rig.proxy.tile(TileAddress(12, 2201, 1500))
+
+    assert COOLDOWN_S[TileProblem.UNTRUSTED_SERVER] == COOLDOWN_S[TileProblem.REFUSED]
+    assert first == other == TileAnswer(None, TileProblem.UNTRUSTED_SERVER)
+    assert len(rig.source.calls) == 1  # no other tile is asked of that server meanwhile
+
+
 def test_t_map_10_a_bad_answer_about_one_tile_blocks_only_that_tile() -> None:
     """D-F5B-02: the cool-down of INVALID_RESPONSE (a 404, not a PNG) is for the tile itself."""
     rig = Rig([TileUnavailable(TileProblem.INVALID_RESPONSE), TileImage(make_png(), 3600)])

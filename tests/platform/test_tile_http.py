@@ -8,8 +8,10 @@ Plain HTTP is accepted by `HttpTileSource` only on loopback, which is what makes
 
 from __future__ import annotations
 
+import http.client
 import http.server
 import logging
+import ssl
 import threading
 import time
 from collections.abc import Iterator
@@ -43,6 +45,7 @@ from ponos_coach.platform.tile_http import (
     HttpTileSource,
     TileEndpoint,
     create_tile_sources,
+    problem_of_failure,
     ttl_from_headers,
 )
 from tests.fakes.tiles import FakeTileSource, make_png
@@ -392,6 +395,34 @@ def test_t_map_10_a_connection_that_is_refused_is_the_network_being_unavailable(
     source = HttpTileSource(OPENSTREETMAP, endpoint=endpoint, user_agent=USER_AGENT, timeout_s=1.0)
 
     assert source.fetch(5, 1, 1) == TileUnavailable(TileProblem.NETWORK_UNAVAILABLE)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ssl.SSLCertVerificationError(1, "certificate verify failed: certificate has expired"),
+        ssl.SSLCertVerificationError(1, "certificate verify failed: Hostname mismatch"),
+    ],
+)
+def test_t_sec_15_a_certificate_that_does_not_verify_is_an_untrusted_server(
+    error: BaseException,
+) -> None:
+    """The check stays on and fails closed; it only gets its own name, so the notice can say why
+    (user's report of 2026-11-11: OpenTopoMap's certificate expired)."""
+    assert problem_of_failure(error) is TileProblem.UNTRUSTED_SERVER
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        TimeoutError(),
+        ConnectionRefusedError(),
+        ssl.SSLError(1, "wrong version number"),  # TLS broken, but not a certificate verdict
+        http.client.BadStatusLine("x"),
+    ],
+)
+def test_other_connection_failures_are_the_network_being_unavailable(error: BaseException) -> None:
+    assert problem_of_failure(error) is TileProblem.NETWORK_UNAVAILABLE
 
 
 def test_a_body_that_trickles_in_is_cut_by_the_total_deadline(server: TileServer) -> None:

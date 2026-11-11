@@ -1215,6 +1215,11 @@ Decision: [ADR 010](adr/010-mappa.md).
     download;
   - when a server refuses (403 or 429) the app asks that server for nothing
     for 300 seconds (the other backgrounds keep working).
+- The connection to a tile server is HTTPS with full certificate checks, never
+  relaxed. When a server's certificate does not verify (for example it has
+  expired) nothing is loaded from it for 300 seconds and the line says that the
+  server's certificate is not valid and suggests another background, instead of
+  "no network" (user's report of 2026-11-11, OpenTopoMap).
 - The tile cache (a file in the system cache folder, outside the profile) has
   a format of its own, version 3, with the validators of each tile and the
   background each tile belongs to (a tile of one background never serves for

@@ -991,6 +991,15 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       di seduta, giorni e avvisi no); i secondi per zona si
       ricalcolano, il TRIMPeq no. Test: `tests/load/test_zones.py`,
       `tests/collaudo/test_fase5_zone_fri5.py`, `tests/planning/`, `tests/ui/`.
+- [x] Revisione di sicurezza del design del 2026-11-11, due voci Should
+      (richiesta dell'utente del 2026-11-11): un certificato di un server delle
+      tessere che non si verifica (come quello scaduto di OpenTopoMap) ha un
+      motivo suo, `TileProblem.UNTRUSTED_SERVER`, con pausa di 300 s e un
+      avviso che parla del certificato invece di «niente rete»; la verifica
+      resta piena. Nel threat model la riga B15 e il rischio accettato del
+      profilo ripristinato con lo stesso id, che usa i token Garmin di quell'id.
+      Test: `tests/platform/test_tile_http.py`, `tests/maps/test_use_cases.py`,
+      `tests/ui/test_map_widgets.py`.
 
 ## 6. Squadra di agenti e modelli
 
