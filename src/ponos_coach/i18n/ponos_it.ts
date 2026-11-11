@@ -234,6 +234,10 @@
         <translation>Dislivello (m)</translation>
     </message>
     <message>
+        <source>Active calories (kcal)</source>
+        <translation>Calorie attive (kcal)</translation>
+    </message>
+    <message>
         <source>Load (TRIMPeq)</source>
         <translation>Carico (TRIMPeq)</translation>
     </message>
@@ -280,6 +284,10 @@
     <message>
         <source>{low} to {high}</source>
         <translation>da {low} a {high}</translation>
+    </message>
+    <message>
+        <source>≈ {kcal}</source>
+        <translation>≈ {kcal}</translation>
     </message>
     <message numerus="yes">
         <source>Heart-rate samples outside your limits: %n. They were not used and are marked in the chart.</source>
