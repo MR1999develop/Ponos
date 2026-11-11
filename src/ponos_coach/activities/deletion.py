@@ -5,9 +5,11 @@
 Deleting takes an activity out of the index and records a tombstone (`DeletedActivity`) in a
 single transaction: the load cache goes with the row (it is derived data) and the original file
 stays in the archive. Nothing is asked: the interface offers an undo, which is `RestoreActivities`.
-Restoring reads the archived file again with the decoder of the import and puts the activity back as
-it was (origin, import instant, Garmin id); the tombstone goes away in the same transaction. A
-restored activity is no longer a tombstone, so the next synchronization finds it already there.
+Restoring reads the archived files again with the decoder of the import and puts the activities back
+as they were (origin, import instant, Garmin id); their tombstones go away in the same transaction.
+A file that is gone or damaged leaves its activity deleted and does not stop the others; a failure
+of the database restores nothing. A restored activity is no longer a tombstone, so the next
+synchronization finds it already there.
 
 Both are idempotent per identity: an identity that is not in the index (delete) or not deleted
 (restore) is left out of the result. No log: identities and dates are personal data.
@@ -23,6 +25,7 @@ from ponos_coach.activities.decoding import ActivityFileError
 from ponos_coach.activities.domain import (
     MAX_ACTIVITY_FILE_BYTES,
     ActivityIdentity,
+    ActivityRecord,
     DeletedActivity,
     truncate_to_millisecond,
 )
@@ -114,35 +117,44 @@ class RestoreActivities:
         self._decode = decode
 
     def __call__(self, identities: Sequence[ActivityIdentity]) -> RestoreSummary:
-        """Restores the activities, each in its own transaction (a damaged file does not stop the
-        others).
+        """Restores the activities whose file is still good, all in one transaction.
 
-        The file is read and decoded before the transaction opens, so the database write lock lasts
-        only as long as the change. An activity whose file is gone or damaged stays deleted and
-        says why in the summary.
+        Every file is read and decoded before the transaction opens, so the database write lock
+        lasts only as long as the change; only the small records are kept in between. An activity
+        whose file is gone or damaged stays deleted and says why in the summary, and does not
+        stop the others. All or none for the database: a failure leaves every activity deleted.
 
         Raises:
-            ActivityIndexError: the database refused a change.
-            StorageBusyError: another process holds the database.
+            ActivityIndexError: the database refused the change (nothing restored).
+            StorageBusyError: another process holds the database (nothing restored).
         """
         results: list[RestoreResult] = []
+        records: list[ActivityRecord] = []
         for identity in dict.fromkeys(identities):
             tombstone = self._deleted.get(identity)
-            if tombstone is not None:
-                results.append(RestoreResult(identity, self._restore(tombstone)))
+            if tombstone is None:
+                continue
+            read = self._read_back(tombstone)
+            if isinstance(read, RestoreStatus):
+                results.append(RestoreResult(identity, read))
+            else:
+                records.append(read)
+                results.append(RestoreResult(identity, RestoreStatus.RESTORED))
+        if records:
+            with self._index.transaction():
+                for record in records:
+                    self._deleted.remove(record.identity)
+                    self._index.add(record)
         return RestoreSummary(tuple(results))
 
-    def _restore(self, tombstone: DeletedActivity) -> RestoreStatus:
+    def _read_back(self, tombstone: DeletedActivity) -> ActivityRecord | RestoreStatus:
+        """The record the archived file gives back, or why it cannot."""
         try:
             content = self._archive.read(tombstone.archived, MAX_ACTIVITY_FILE_BYTES)
             activity = self._decode(content, tombstone.file_format)
-            record = tombstone.to_record(activity, tombstone.archived)
+            return tombstone.to_record(activity, tombstone.archived)
         except ArchiveFileMissingError:
             return RestoreStatus.FILE_MISSING
         except (ArchiveError, ActivityFileError, ValueError):
             # ArchiveIntegrityError, too large, unreadable, undecodable or another activity.
             return RestoreStatus.FILE_DAMAGED
-        with self._index.transaction():
-            self._deleted.remove(tombstone.identity)
-            self._index.add(record)
-        return RestoreStatus.RESTORED

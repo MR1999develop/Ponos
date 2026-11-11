@@ -99,7 +99,11 @@ id it had: `brought_back`).
   `DeletedActivities` and `ActivityIndex.remove` in `activities/ports.py`, the use cases
   `DeleteActivities` and `RestoreActivities` in `activities/deletion.py`. Deleting is one
   transaction: the row and its cached load out, the tombstone in; the file is not touched.
-  Restoring reads the archived file again with the decoder of the import, in its own transaction.
+  Restoring reads the archived files again with the decoder of the import, outside the
+  transaction; then the activities whose file is good go back in one transaction. A file that is
+  gone or damaged leaves its activity deleted and does not stop the others; a failure of the
+  database restores nothing (review of 2026-11-11: one transaction per activity left some
+  restored while the job reported a failure).
 - The archive is never written or removed by a deletion. The file is in the profile backups too.
 - The undo is a `QUndoStack` of the Activities list (`ActivityDeletionUi`); restoring goes through
   the same stack. The shortcuts (Del, Ctrl+Z, Ctrl+Shift+Z) act while the list has the focus.

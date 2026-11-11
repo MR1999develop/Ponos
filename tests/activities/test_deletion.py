@@ -25,10 +25,11 @@ from ponos_coach.activities.deletion import (
 from ponos_coach.activities.domain import (
     ActivityIdentity,
     ActivityOrigin,
+    ActivityRecord,
     DeletedActivity,
     SyncStatus,
 )
-from ponos_coach.activities.ports import ActivityIndexError
+from ponos_coach.activities.ports import ActivityIndex, ActivityIndexError, StorageBusyError
 from ponos_coach.activities.sync import SyncMode
 from ponos_coach.activities.use_cases import (
     DeletedHandling,
@@ -302,6 +303,43 @@ def test_restoring_when_the_file_is_gone_leaves_it_deleted_and_says_why() -> Non
     ]
     assert rig.deleted.get(first.identity) == first
     assert rig.index.get(first.identity) is None
+
+
+class _BusyOn:
+    """The profile's index, except that adding `identity` finds the database held by another
+    process (`StorageBusyError`), as it can happen in the middle of a restore."""
+
+    def __init__(self, index: ActivityIndex, identity: ActivityIdentity) -> None:
+        self._index = index
+        self._identity = identity
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._index, name)
+
+    def add(self, record: ActivityRecord) -> None:
+        if record.identity == self._identity:
+            raise StorageBusyError("the database is held by another process")
+        self._index.add(record)
+
+
+def test_a_database_failure_in_the_middle_of_a_restore_restores_nothing() -> None:
+    # Review of 2026-11-11: with one transaction per activity, the first ones stayed restored
+    # while the job reported a failure (no outcome, no refresh, no undo). All or none, like
+    # deleting.
+    rig = in_memory_rig(3)
+    rig.run()
+    tombstones = delete(rig, 0, 1, 2)
+    busy = _BusyOn(rig.index, tombstones[2].identity)
+
+    with pytest.raises(StorageBusyError):
+        RestoreActivities(busy, rig.deleted, rig.archive, rig.decode)(  # type: ignore[arg-type]
+            [t.identity for t in tombstones]
+        )
+
+    assert rig.records() == []
+    assert sorted(
+        rig.deleted.list_latest_first(), key=lambda t: t.identity.file_id.serial_number
+    ) == sorted(tombstones, key=lambda t: t.identity.file_id.serial_number)
 
 
 def test_restoring_when_the_file_was_altered_leaves_it_deleted() -> None:
