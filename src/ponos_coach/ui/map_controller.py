@@ -12,11 +12,13 @@ outdated filter, view or selection are not shown. Positions are personal data: n
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, Signal
 
 from ponos_coach.activities.domain import ActivityFilter, ActivityIdentity, identity_key
 from ponos_coach.activities.map_queries import SearchResult
+from ponos_coach.nutrition.domain import ActivityEnergy
 from ponos_coach.ui.activity_filters import SharedFilterState
 from ponos_coach.ui.data_thread import JobFailed, JobOutcome, JobSucceeded
 from ponos_coach.ui.map_messages import MapView, index_by_identity, parse_activity_index
@@ -25,12 +27,21 @@ from ponos_coach.ui.overview_state import Idle
 from ponos_coach.ui.workspace import ProfileAccess, WorkspaceController
 
 
+@dataclass(frozen=True, slots=True)
+class _Energy:
+    """The energy computed for an activity (None: the body data of its day are missing)."""
+
+    identity: ActivityIdentity
+    energy: ActivityEnergy | None
+
+
 class MapController(QObject):
     """Search, area view and profile of the selected activity, for the map and the table."""
 
     search_changed = Signal(object)  # SearchResult: the activities that pass the filter
     area_changed = Signal(object)  # AreaView: starts, totals and tracks of the visible area
     profile_changed = Signal(object)  # ProfileOutcome | None (None: nothing selected)
+    energy_changed = Signal(object, object)  # ActivityIdentity, ActivityEnergy | None
     selection_changed = Signal(object, bool)  # ActivityIdentity | None, bring it into view
     profile_opened = Signal()  # a profile was opened: the map should frame its activities
     failed = Signal(object)  # ErrorMessage
@@ -150,6 +161,8 @@ class MapController(QObject):
         self._selected = identity
         self.selection_changed.emit(identity, reveal)
         self._request_profile(identity)
+        if identity is not None:
+            self._request_energy(identity)
 
     def select_index(self, position: object) -> None:
         """Select the activity at a position of the last search result, as the page names it.
@@ -255,6 +268,21 @@ class MapController(QObject):
             self.failed.emit(self._workspace.describe_failure(outcome.error))
         if self._area_asked != (self._filters.criteria, self._view, self._list_generation):
             self._refresh_area()  # the map moved (or the filter changed) while the query ran
+
+    def _request_energy(self, identity: ActivityIdentity) -> None:
+        host = self._host
+
+        def work(access: ProfileAccess) -> object:
+            return _Energy(identity, host.energy(access, identity))
+
+        def done(outcome: JobOutcome) -> None:
+            if identity != self._selected:
+                return  # another activity was selected meanwhile
+            if isinstance(outcome, JobSucceeded) and isinstance(outcome.value, _Energy):
+                self.energy_changed.emit(identity, outcome.value.energy)
+            # a failure is not reported twice: the profile job reads the same stores and says it
+
+        self._workspace.run_on_profile(work, done)
 
     def _request_profile(self, identity: ActivityIdentity | None) -> None:
         if identity is None:

@@ -8,7 +8,7 @@ import pytest
 
 from ponos_coach.load.activity_detail import ActivityDetail, GetActivityDetail
 from ponos_coach.nutrition.domain import ActivityEnergy, EnergySource
-from ponos_coach.profiles.day_nutrition import GetActivityEnergy, NutritionSources
+from ponos_coach.profiles.day_nutrition import GetActivityEnergy, GetRecordEnergy, NutritionSources
 from tests.profiles.test_day_nutrition import ROME, Rig, at, decode_fit, fit_bytes
 
 BASAL_KCAL_PER_DAY = 1780.0  # male, 180 cm, 30 y, 80 kg (Mifflin-St Jeor)
@@ -68,3 +68,47 @@ def test_without_the_body_data_of_the_day_there_is_no_active_energy(rig: Rig) ->
     rig.add_file(fit_bytes(at(18), 1, calories=700))
 
     assert energy_of_first(rig) is None
+
+
+def record_energy(rig: Rig) -> ActivityEnergy | None:
+    p = rig.profile
+    record = p.activities.list_started_between(at(1, day=1), at(1, day=4))[0]
+    sources = NutritionSources(
+        p.activities, rig.archive, p.load_cache, p.physiology,
+        p.weights, p.fixed_data, p.activity_levels, p.meal_times, p.goal_periods,
+        p.lean_masses,
+    )  # fmt: skip
+    return GetRecordEnergy(sources, decode_fit, ROME)(record.identity)
+
+
+@pytest.mark.parametrize("calories", [700, None])
+def test_the_energy_of_a_record_is_the_one_of_the_day_and_of_the_detail(
+    calories: int | None,
+) -> None:
+    rig = Rig()
+    rig.add_file(fit_bytes(at(18), 1, bpm=140, calories=calories))
+
+    of_record = record_energy(rig)
+
+    (activity,) = rig.report().activities
+    assert of_record == activity.energy
+    assert of_record == energy_of_first(rig)
+
+
+def test_a_credible_declared_total_in_the_index_needs_no_file() -> None:
+    rig = Rig()
+    rig.add_file(fit_bytes(at(18), 1, calories=700))
+    reads = rig.archive.reads
+
+    energy = record_energy(rig)
+
+    assert energy is not None
+    assert energy.source is EnergySource.DECLARED
+    assert rig.archive.reads == reads
+
+
+@pytest.mark.parametrize("rig", [Rig(body=False), Rig(weight=False)])
+def test_without_the_body_data_a_record_has_no_energy(rig: Rig) -> None:
+    rig.add_file(fit_bytes(at(18), 1, calories=700))
+
+    assert record_energy(rig) is None

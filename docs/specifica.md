@@ -1174,7 +1174,13 @@ Decision: [ADR 010](adr/010-mappa.md).
 - The detail of the selected activity has the elevation profile linked to the
   track in both directions, and the track can be coloured by heart-rate zone
   with the legend of the zones of that day. Without elevation the profile says
-  why it is missing.
+  why it is missing. Beside the profile the activity's data include the active
+  calories (kcal; user's request of 2026-11-11), with the same value and form
+  as the activity detail and the day's nutrition ("N" if the device declared the
+  total, "≈ N" if estimated, empty without the body data of that day). They are
+  computed on the data thread (`GetRecordEnergy`, which reads the file only if
+  the index has no credible device total) and stay empty until they arrive; an
+  answer for an activity no longer selected is dropped.
 - Background of the map: OpenStreetMap (`tile.openstreetmap.org`, the default),
   OpenTopoMap (`{a,b,c}.tile.opentopomap.org`, up to zoom 17) or CyclOSM
   (`{a,b,c}.tile-cyclosm.openstreetmap.fr`, up to zoom 20), at the user's request

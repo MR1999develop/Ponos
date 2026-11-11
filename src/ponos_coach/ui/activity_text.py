@@ -8,6 +8,7 @@ from PySide6.QtCore import QCoreApplication, QLocale
 
 from ponos_coach.activities.domain import Sport
 from ponos_coach.load.domain import LoadSource
+from ponos_coach.nutrition.domain import ActivityEnergy, EnergySource
 
 # Context "Activities" written as a literal: lupdate does not follow aliases.
 
@@ -65,3 +66,19 @@ def duration_text(seconds: float) -> str:
     hours, rest = divmod(total, _SECONDS_PER_HOUR)
     minutes, secs = divmod(rest, _SECONDS_PER_MINUTE)
     return f"{hours}:{minutes:02d}:{secs:02d}"
+
+
+def active_calories_caption() -> str:
+    """Caption of the active calories, shared by the detail window and the Map."""
+    return QCoreApplication.translate("Activities", "Active calories (kcal)")
+
+
+def active_calories_text(energy: ActivityEnergy | None) -> str:
+    """Net energy in whole kcal; "≈ N" when the total is estimated rather than the device's;
+    empty without a value (the body data of that day are missing, or it is still arriving)."""
+    if energy is None:
+        return ""
+    kcal = QLocale().toString(round(energy.net_kcal))
+    if energy.source is EnergySource.DECLARED:
+        return kcal
+    return QCoreApplication.translate("Activities", "≈ {kcal}").format(kcal=kcal)

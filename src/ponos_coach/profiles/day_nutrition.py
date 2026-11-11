@@ -367,21 +367,11 @@ class PlanDayNutrition:
             )
         unreadable = isinstance(original, ExclusionReason)
         activity = None if isinstance(original, ExclusionReason) else original
-        if declared is None and activity is not None:
-            # indexed before schema v4 (or never declared): the file says what the device wrote
-            declared = activity.summary.calories_kcal
         if cached is not None:
             load = cached.trimp_eq
         else:
             load = 0.0 if activity is None else load_of_activity(activity, physiology).trimp_eq
-        series = None if activity is None else activity.heart_rate
-        energy = energy_of_activity(
-            Subject(person, physiology),
-            record.sport,
-            record.timer_s,
-            declared,
-            None if series is None else series.bpm,
-        )
+        energy = energy_of_record(Subject(person, physiology), record, activity)
         local = record.start.astimezone(self._timezone)
         start_minute = local.hour * _MINUTES_PER_HOUR + local.minute
         day_activity = DayActivity(
@@ -454,6 +444,57 @@ def energy_of_activity(
     and the mean of the heart-rate samples inside that day's limits."""
     average_bpm = _mean_bpm(heart_rate_bpm, subject.physiology.limits)
     return activity_energy(subject.person, sport, timer_s, declared_kcal, average_bpm)
+
+
+def energy_of_record(
+    subject: Subject, record: ActivityRecord, activity: Activity | None
+) -> ActivityEnergy:
+    """Energy of an indexed activity, the rule of the day's nutrition: the device's total from
+    the index (or, for a record indexed before it was kept, from the file), the mean HR of the
+    file. `activity` is the decoded original; it is only needed when the index has no credible
+    total (see `declared_energy_is_credible`)."""
+    declared = record.summary.calories_kcal
+    if declared is None and activity is not None:
+        declared = activity.summary.calories_kcal
+    series = None if activity is None else activity.heart_rate
+    return energy_of_activity(
+        subject, record.sport, record.timer_s, declared, None if series is None else series.bpm
+    )
+
+
+class GetRecordEnergy:
+    """Energy of an indexed activity without a detail (the Map's data beside the elevation
+    profile): the same as the day's nutrition and the activity detail. Reads the original file
+    only if the index has no credible device total. A query: it saves nothing."""
+
+    def __init__(
+        self,
+        sources: NutritionSources,
+        decode: Decoder,
+        timezone: ZoneInfo,
+        max_file_bytes: int = MAX_ACTIVITY_FILE_BYTES,
+    ) -> None:
+        self._src = sources
+        self._decode = decode
+        self._timezone = timezone
+        self._max_file_bytes = max_file_bytes
+
+    def __call__(self, identity: ActivityIdentity) -> ActivityEnergy | None:
+        """The energy, or None if the activity is not indexed or the body data of its day do
+        not allow it. An unreadable file only costs the HR estimate (METs apply)."""
+        record = self._src.index.get(identity)
+        if record is None:
+            return None
+        subject = subject_on(self._src, local_day_of(record.start, self._timezone))
+        if isinstance(subject, NutritionUnavailable):
+            return None
+        activity = None
+        if not declared_energy_is_credible(record.summary.calories_kcal, record.timer_s):
+            original = read_original_activity(
+                self._src.archive, record, self._decode, self._max_file_bytes
+            )
+            activity = None if isinstance(original, ExclusionReason) else original
+        return energy_of_record(subject, record, activity)
 
 
 class GetActivityEnergy:

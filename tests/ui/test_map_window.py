@@ -297,3 +297,67 @@ def test_an_activity_removed_by_the_filter_is_no_longer_selected(
 
     wait_search(qtbot, window, 0)
     assert controller.selected is None
+
+
+# --- Active calories beside the profile --------------------------------------------------------
+
+
+def test_the_data_beside_the_profile_shows_the_estimated_active_calories(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings
+) -> None:
+    window = map_window(qtbot, tmp_path, settings)
+    show_view(qtbot, window, NEAR)
+
+    assert window.map_page.summary_text("calories") == ""  # nothing selected
+    window.map_ui.controller.select_index(0)
+
+    qtbot.waitUntil(lambda: window.map_page.summary_text("calories") != "", timeout=WAIT_MS)
+    assert window.map_page.summary_text("calories").startswith("≈ ")  # the runs declare none
+
+
+def test_without_the_body_data_the_calories_stay_empty(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window = map_window(qtbot, tmp_path, settings)
+    show_view(qtbot, window, NEAR)
+    monkeypatch.setattr(map_query_host.MapQueryHost, "energy", lambda *_args: None)
+    arrived: list[object] = []
+    window.map_ui.controller.energy_changed.connect(lambda _identity, e: arrived.append(e))
+
+    window.map_ui.controller.select_index(0)
+
+    qtbot.waitUntil(lambda: bool(arrived), timeout=WAIT_MS)
+    assert arrived == [None]
+    assert window.map_page.summary_text("calories") == ""
+
+
+def test_after_a_quick_change_of_selection_only_the_last_activity_gets_its_calories(
+    qtbot: QtBot, tmp_path: Path, settings: QSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window = map_window(qtbot, tmp_path, settings)
+    show_view(qtbot, window, NEAR)
+    controller = window.map_ui.controller
+    gate = threading.Event()
+    calls: list[object] = []
+    real = map_query_host.MapQueryHost.energy
+
+    def slow_for_the_first(self: object, access: object, identity: object) -> object:
+        calls.append(identity)
+        if len(calls) == 1:
+            gate.wait(timeout=5)  # the first answer arrives after the selection changed
+        return real(self, access, identity)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(map_query_host.MapQueryHost, "energy", slow_for_the_first)
+    arrived: list[object] = []
+    controller.energy_changed.connect(lambda identity, _e: arrived.append(identity))
+
+    controller.select_index(0)
+    first = controller.selected
+    controller.select_index(1)
+    second = controller.selected
+    gate.set()
+
+    qtbot.waitUntil(lambda: bool(arrived), timeout=WAIT_MS)
+    qtbot.wait(300)  # the stale answer of the first, if it were not dropped, would be here
+    assert first != second
+    assert arrived == [second]
