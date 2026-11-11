@@ -99,13 +99,16 @@ def _parse_number(text: str) -> float | None:
 
 
 def _parse_date(text: str) -> datetime | None:
-    """A date written by Plotly (`2026-03-01` or `2026-03-01 12:30:15.25`); None otherwise."""
+    """A date written by Plotly (`2026-03-01` or `2026-03-01 12:30:15.25`); None otherwise,
+    also for a date with an offset (the chart's dates are naive: one with an offset could not be
+    compared with them)."""
     if not 0 < len(text) <= _MAX_DATE_CHARS or not set(text) <= _DATE_CHARS:
         return None
     try:
-        return datetime.fromisoformat(text)
+        moment = datetime.fromisoformat(text)
     except ValueError:
         return None
+    return moment if moment.tzinfo is None else None
 
 
 @dataclass(frozen=True, slots=True)

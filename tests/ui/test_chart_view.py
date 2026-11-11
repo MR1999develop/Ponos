@@ -288,6 +288,8 @@ def test_two_overlapping_range_changes_by_the_app_are_never_reported_back(qtbot:
         ("xrange|2026-01-02|<b>|1", None),
         ("xrange|2026-13-02|2026-14-02|1", None),
         ("xrange|2026-01-02|2026-01-03", None),
+        ("xrange|2026-01-02 12:30-05:00|2026-01-03|1", None),  # an offset: never a naive date
+        ("xrange|2026-01-02 12:30-05:00|2026-01-03 12:30-05:00|1", None),
         ("xrange|" + "1" * 40 + "|2026-01-03|1", None),
         ("drawn-1", None),
     ],
