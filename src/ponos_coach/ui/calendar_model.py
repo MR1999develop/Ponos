@@ -134,6 +134,15 @@ class CalendarDay:
     problems: tuple[ProblemSpan, ...] = ()
 
     @property
+    def grid_plan(self) -> PlanDay | None:
+        """The planned day the grid marks (text, phase stripe, phase legend): a session or a race.
+        A rest day is left blank, as if there were no plan; its tooltip and page still say it."""
+        plan = self.plan
+        if plan is None or (plan.session is None and plan.race is None):
+            return None
+        return plan
+
+    @property
     def can_open(self) -> bool:
         """The day belongs to the month and is not after today, or is a day of the plan: it holds
         a day page (for a future day, an estimate from the plan)."""

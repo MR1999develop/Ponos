@@ -80,15 +80,14 @@ def load_text(load: float) -> str:
 
 
 def _plan_lines(cell: CalendarDay) -> list[str]:
-    """The goal of the day, the planned session and the phase, one short line each. A rest day has
-    no line of its own: the grid shows only the days with something to do (the tooltip and the day
-    in full still say "rest day")."""
+    """The goal of the day, the planned session and the phase, one short line each. A rest day is
+    blank, as if there were no plan (`CalendarDay.grid_plan`)."""
     lines = []
     for item in cell.goals:
         lines.append(goal_kind_cell_text(item.goal))
         if item.out_of_reach is not None:
             lines.append(out_of_reach_mark_text())
-    plan = cell.plan
+    plan = cell.grid_plan
     if plan is None:
         return lines
     if plan.race is not None:

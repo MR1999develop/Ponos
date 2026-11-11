@@ -181,7 +181,8 @@ class MonthModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.AccessibleDescriptionRole:
             return cell_description(cell)
         if role == STRIPE_ROLE:
-            return None if cell.plan is None else phase_color(cell.plan.phase, self._theme)
+            plan = cell.grid_plan
+            return None if plan is None else phase_color(plan.phase, self._theme)
         return self._style(cell, role)
 
     def _style(self, cell: CalendarDay, role: int) -> object:
@@ -579,7 +580,7 @@ class CalendarPage(QWidget):
         self._say_selection()
 
     def _refresh_phase_legend(self, month: MonthView) -> None:
-        present = {cell.plan.phase for cell in month.days if cell.plan is not None}
+        present = {plan.phase for cell in month.days if (plan := cell.grid_plan) is not None}
         # The training phases of the month shown follow the goals in the same row.
         while self._phase_legend.count() > self._goal_legend_items:
             item = self._phase_legend.takeAt(self._goal_legend_items)

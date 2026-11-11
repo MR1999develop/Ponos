@@ -71,7 +71,7 @@ def test_the_map_keeps_a_usable_height_in_its_pane(qtbot: QtBot, tmp_path: Path)
     assert window.map_page.map_view.height() >= MAP_MIN_HEIGHT_PX
 
 
-def test_the_elevation_profile_gets_two_fifths_of_the_map_pane(
+def test_the_elevation_profile_gets_28_percent_of_the_map_pane(
     qtbot: QtBot, tmp_path: Path
 ) -> None:
     window = window_with_days(qtbot, tmp_path, make_settings(tmp_path))
@@ -81,7 +81,8 @@ def test_the_elevation_profile_gets_two_fifths_of_the_map_pane(
 
     top, profile = window.map_page.map_and_profile.sizes()
 
-    assert abs(top * 2 - profile * 3) <= 10  # about 3 to 2
+    # 30% lower than the 2/5 it had (user's request of 2026-11-11): 0.4 x 0.7 = 0.28.
+    assert abs(profile / (top + profile) - 0.28) <= 0.01
     assert window.map_page.map_view.height() >= MAP_MIN_HEIGHT_PX
 
 

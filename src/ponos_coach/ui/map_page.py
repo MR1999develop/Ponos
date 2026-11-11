@@ -70,8 +70,9 @@ _INITIAL_VIEW = {"lat": 30.0, "lon": 10.0, "zoom": 2}  # the world, not a place 
 _DETAIL_MIN_HEIGHT = 110
 _MAP_MIN_HEIGHT = 220  # px: below this a map of tracks cannot be read
 # Map over elevation profile: the profile gets a real part of the pane (user's request of
-# 2026-11-10), the map keeps the larger one and its minimum.
-MAP_SHARE = (3, 2)
+# 2026-11-10), 30% lower than the 2/5 it first had (user's request of 2026-11-11): 28% of the
+# pane, the map 72% and its minimum.
+MAP_SHARE = (18, 7)
 _MS_TO_KMH = 3.6
 _STACK_CHART = 0
 _STACK_MESSAGE = 1

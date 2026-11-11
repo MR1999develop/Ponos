@@ -162,11 +162,11 @@ def test_the_phase_is_in_the_text_of_every_planned_cell_not_only_in_a_colour(pla
 
     for first in month_firsts:
         for cell in build_month(first, PLAN_TODAY, [], [], plan_layer_of(plan, [], [], [])).days:
-            if cell.plan is not None:
-                assert phase_text(cell.plan.phase) in cell_text(cell).split("\n")
+            if cell.grid_plan is not None:
+                assert phase_text(cell.grid_plan.phase) in cell_text(cell).split("\n")
 
 
-def test_a_rest_day_is_not_written_in_the_grid_but_the_tooltip_and_the_detail_say_so() -> None:
+def test_a_rest_day_is_blank_in_the_grid_but_the_tooltip_and_the_detail_say_so() -> None:
     rest = PlanDay(date(2026, 3, 4), Phase.BASE, None, None, 0.0)
     layer = PlanLayer(planned={rest.day: rest})
     cell = next(
@@ -175,7 +175,8 @@ def test_a_rest_day_is_not_written_in_the_grid_but_the_tooltip_and_the_detail_sa
         if c.day == rest.day
     )
 
-    assert cell_text(cell).split("\n") == ["4", phase_text(Phase.BASE)]
+    assert cell_text(cell) == "4"  # as if there were no plan: no line, no phase
+    assert cell.grid_plan is None  # so no phase stripe and no phase in the legend
     assert "Planned: rest day" in cell_description(cell)
     assert "Rest day" in day_detail_text(cell)
 
@@ -308,6 +309,17 @@ def test_the_stripe_of_a_cell_is_the_colour_of_its_phase_and_follows_the_theme(
     assert page.model.data(page.model.index_of(date(2026, 2, 3)), STRIPE_ROLE) is None
 
 
+def test_a_rest_day_has_no_stripe_and_no_phase_in_the_legend(qtbot: QtBot) -> None:
+    rest = PlanDay(PLAN_TODAY + timedelta(days=2), Phase.BASE, None, None, 0.0)
+    widget = CalendarPage(PLAN_TODAY)
+    qtbot.addWidget(widget)
+
+    widget.set_plan_layer(PlanLayer(planned={rest.day: rest}))
+
+    assert widget.model.data(widget.model.index_of(rest.day), STRIPE_ROLE) is None
+    assert widget.phase_legend_texts == ()
+
+
 @pytest.mark.parametrize("theme", list(Theme))
 def test_phase_colours_are_not_warm_and_stand_out_from_the_background(theme: Theme) -> None:
     background = tokens_for(theme).background
@@ -325,7 +337,7 @@ def test_the_phase_legend_names_only_the_phases_of_the_month_shown(
     expected = tuple(
         phase_text(phase)
         for phase in Phase
-        if phase in {c.plan.phase for c in month.days if c.plan is not None}
+        if phase in {p.phase for c in month.days if (p := c.grid_plan) is not None}
     )
 
     assert page.phase_legend_texts == expected

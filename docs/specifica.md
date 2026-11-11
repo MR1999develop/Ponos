@@ -1005,8 +1005,10 @@ no diet or allergy restriction for now.
   load. The days of a nutrition goal period have a colour; the legend, compact
   and wrapped onto several lines, says which. A day with no colour is outside
   any period and is treated as maintenance.
-- A planned rest day shows only its phase in the cell, with no "rest day" line
-  (user's request of 2026-11-11); its tooltip and its page still say so.
+- A planned rest day is a blank cell, as if there were no plan: no line, no
+  phase, no phase stripe, and its phase is not in the legend unless another day
+  of the month has it (user's request of 2026-11-11). Its tooltip and its page
+  still say it is a rest day.
 - "Previous month" (Ctrl+Left), "Next month" (Ctrl+Right), "Today" (Ctrl+T) and
   "Open day" (Ctrl+Return) are in the menu of a day and act while the calendar
   has the focus. Under the month there are only the legends (user's request of
@@ -1131,8 +1133,9 @@ Decision: [ADR 010](adr/010-mappa.md).
   can collapse a pane away, and where they were left is remembered. There is
   no View menu: Ctrl+1 to Ctrl+4 move the keyboard focus to the Overview, the
   Calendar, the Activities list and the Map, from the whole window. The map
-  has a minimum height and takes 3/5 of its pane, the elevation profile under
-  it 2/5 (the divider can be dragged). Selecting an activity in the list selects it on the map
+  has a minimum height and takes 72% of its pane, the elevation profile under
+  it 28% (30% lower than the 2/5 it first had, user's request of 2026-11-11;
+  the divider can be dragged). Selecting an activity in the list selects it on the map
   and the other way round. A double click on an activity in the map (its start,
   or the selected track) opens its window and fits the map to its track;
   elsewhere it zooms in.

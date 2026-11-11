@@ -953,9 +953,15 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       `tests/activities/test_deletion.py`, `tests/ui/test_activity_deletion.py`,
       `tests/ui/test_deleted_activities_page.py`, contract test.
 - [x] Niente giorni di riposo nel calendario (richiesta dell'utente del
-      2026-11-11): la cella di un riposo del piano mostra solo la fase; tooltip
-      e pagina del giorno dicono ancora «riposo». Test:
+      2026-11-11): la cella di un riposo del piano resta vuota come senza
+      piano (niente riga, fase, striscia di colore né voce in legenda;
+      `CalendarDay.grid_plan`); tooltip e pagina del giorno dicono ancora
+      «riposo». Test:
       `tests/ui/test_calendar_plan.py`.
+- [x] Altimetria più bassa nella Mappa (richiesta dell'utente del
+      2026-11-11): il grafico scende del 30%, dai 2/5 al 28% del riquadro, e
+      la mappa sale al 72% (`MAP_SHARE = (18, 7)`). Test:
+      `tests/ui/test_pane_contents.py`.
 
 ## 6. Squadra di agenti e modelli
 
