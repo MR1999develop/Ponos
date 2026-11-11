@@ -244,7 +244,7 @@
     Plotly.react(host, payload.figure.data, payload.figure.layout, config).then(function (gd) {
       if (payload.hover === true) { bindHover(gd); }
       if (payload.linkedX === true) { bindRange(gd); }
-      if (payload.zoom === true) {
+      if (payload.zoom === true && payload.fixedY !== true) {
         bindStretch(gd);
         bindAutoY(gd);
         fitY(gd);

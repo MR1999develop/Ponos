@@ -24,11 +24,13 @@ from ponos_coach.ui.load_figures import zone_label
 @dataclass(frozen=True, slots=True)
 class DetailReady:
     """The detail is available. `chart` is `None` if the activity has no HR; `energy` is `None`
-    if the body data of the activity's day do not allow computing it."""
+    if the body data of the activity's day do not allow computing it; `speed_chart` is `None` if
+    the file has no distance or speed."""
 
     detail: ActivityDetail
     chart: PreparedChart | None
     energy: ActivityEnergy | None = None
+    speed_chart: PreparedChart | None = None
 
 
 @dataclass(frozen=True, slots=True)

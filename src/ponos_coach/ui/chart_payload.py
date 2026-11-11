@@ -106,7 +106,8 @@ class XNavigation(Enum):
 
     FIXED = "fixed"  # only the toolbar
     WHEEL = "wheel"  # the wheel zooms and a left drag pans
-    LINKED = "linked"  # as WHEEL, and the page reports the dates it shows (charts kept in step)
+    LINKED = "linked"  # as WHEEL, and the page reports the range it shows (charts kept in step)
+    LINKED_FIXED_Y = "linked-fixed-y"  # as LINKED, and the y range stays as the figure sets it
 
 
 def enable_wheel_navigation(figure: go.Figure) -> None:
@@ -127,7 +128,9 @@ def render_script(
 
     With `hover` the page reports the point under the pointer (see `ChartView.hovered`); with
     `navigation` WHEEL the wheel zooms and a drag pans the x axis; with LINKED the page also
-    reports the range of dates it shows (see `ChartView.x_range_changed`).
+    reports the range it shows (see `ChartView.x_range_changed`); with LINKED_FIXED_Y the y range
+    does not follow the part in view and the right drag does not stretch it (an axis with its own
+    ticks, such as a pace written `m:ss`).
     """
     payload: dict[str, object] = {
         "figure": json.loads(pio.to_json(figure)),
@@ -140,8 +143,10 @@ def render_script(
         payload["hover"] = True
     if navigation is not XNavigation.FIXED:
         payload["zoom"] = True
-    if navigation is XNavigation.LINKED:
+    if navigation in (XNavigation.LINKED, XNavigation.LINKED_FIXED_Y):
         payload["linkedX"] = True
+    if navigation is XNavigation.LINKED_FIXED_Y:
+        payload["fixedY"] = True
     return f"ponosRender({json.dumps(payload, ensure_ascii=True, allow_nan=False)});"
 
 

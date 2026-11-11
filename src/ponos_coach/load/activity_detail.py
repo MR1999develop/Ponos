@@ -22,7 +22,9 @@ from ponos_coach.activities.domain import (
     ActivityIdentity,
     ActivitySummary,
     HeartRateSeries,
+    SpeedSeries,
     Sport,
+    smoothed_speed,
 )
 from ponos_coach.activities.ports import ActivityArchive, ActivityIndex, ActivityNotFoundError
 from ponos_coach.load.domain import (
@@ -107,6 +109,7 @@ class ActivityDetail:
     unordered_hr_samples: int
     zone_load: ZoneLoad | None = None
     domain_seconds: DomainSeconds | None = None
+    speed: SpeedSeries | None = None
 
 
 class GetActivityDetail:
@@ -176,4 +179,5 @@ class GetActivityDetail:
             unordered_hr_samples=activity.discarded_hr_samples,
             zone_load=load_per_zone(activity.sport, series, physiology, load),
             domain_seconds=domain_seconds(activity.sport, series, physiology),
+            speed=None if activity.distance is None else smoothed_speed(activity.distance),
         )

@@ -92,6 +92,14 @@ from ponos_coach.activities.domain.remote import (
     sport_from_garmin_key,
 )
 from ponos_coach.activities.domain.session_tokens import MAX_TOKEN_CHARS, SessionTokens
+from ponos_coach.activities.domain.speed_series import (
+    MAX_SPEED_POINTS,
+    MIN_MOVING_SPEED_M_S,
+    PAUSE_GAP_S,
+    SPEED_WINDOW_S,
+    SpeedSeries,
+    smoothed_speed,
+)
 from ponos_coach.activities.domain.sport import Sport
 from ponos_coach.activities.domain.summary import MAX_ACTIVITY_KCAL, ActivitySummary
 from ponos_coach.activities.domain.sync_policy import (
@@ -135,12 +143,16 @@ __all__ = [
     "MAX_PAGE_SIZE",
     "MAX_POLYLINE_CHARS",
     "MAX_RAW_TRACK_POINTS",
+    "MAX_SPEED_POINTS",
     "MAX_TOKEN_CHARS",
     "MAX_TRACK_POINTS",
     "MAX_TRACK_ZOOM",
     "MIN_ACTIVITY_INSTANT",
+    "MIN_MOVING_SPEED_M_S",
+    "PAUSE_GAP_S",
     "REARMABLE_REASONS",
     "RETRYABLE_REASONS",
+    "SPEED_WINDOW_S",
     "TRACK_GAP_S",
     "TRACK_TOLERANCE_M",
     "WORKABLE_STATUSES",
@@ -175,6 +187,7 @@ __all__ = [
     "RandomSource",
     "RemoteActivity",
     "SessionTokens",
+    "SpeedSeries",
     "Sport",
     "StartIndex",
     "SyncPolicy",
@@ -215,6 +228,7 @@ __all__ = [
     "simplify_for_zoom",
     "simplify_indices",
     "simplify_track",
+    "smoothed_speed",
     "sport_from_garmin_key",
     "track_box_of",
     "track_touches_area",

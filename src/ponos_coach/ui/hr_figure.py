@@ -198,7 +198,8 @@ def prepare_heart_rate_chart(
 ) -> PreparedChart:
     """HR figure and JSON (pure work, suited to a non-UI thread)."""
     figure = build_heart_rate_figure(trace, limits, zone_starts_bpm, labels, tokens)
-    # the wheel zooms into a stretch of the session, a left drag moves along it
+    # the wheel zooms into a stretch of the session, a left drag moves along it; the speed
+    # chart below follows (the window links the two)
     return prepare_figure(
-        figure, labels.chrome, HR_EXPORT_STEM, tokens, navigation=XNavigation.WHEEL
+        figure, labels.chrome, HR_EXPORT_STEM, tokens, navigation=XNavigation.LINKED
     )

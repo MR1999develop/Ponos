@@ -24,6 +24,7 @@ from ponos_coach.ui.chart_view import (
     ChartView,
     DateRange,
     RangeReport,
+    ValueRange,
     parse_range_title,
 )
 from ponos_coach.ui.pmc_figure import EXPORT_FILE_STEM, build_pmc_figure
@@ -266,6 +267,14 @@ def test_two_overlapping_range_changes_by_the_app_are_never_reported_back(qtbot:
             RangeReport(DateRange(datetime(2026, 1, 2), datetime(2026, 3, 4, 5, 6, 7, 500000))),
         ),
         ("xrange|auto|9", RangeReport(None)),
+        ("xrange|2.5|11.75|4", RangeReport(ValueRange(2.5, 11.75))),  # a time axis in minutes
+        ("xrange|-0.5|1e-3|4", RangeReport(ValueRange(-0.5, 0.001))),
+        ("xrange|11.75|2.5|4", None),  # backwards
+        ("xrange|3|3|4", None),  # empty
+        ("xrange|1|nan|4", None),
+        ("xrange|1|1e999|4", None),  # not finite
+        ("xrange|1e|2|4", None),
+        ("xrange|1|2.5.5|4", None),
         ("xrange|2026-03-04|2026-01-02|1", None),  # backwards
         ("xrange|2026-01-02|2026-01-02|1", None),  # empty
         ("xrange|2026-01-02|<b>|1", None),
