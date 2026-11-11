@@ -1026,6 +1026,17 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       sostituisce il vecchio flag `hover`. Test: `tests/ui/test_chart_view.py`,
       `tests/ui/test_activity_detail_speed.py`, `tests/ui/test_hr_figure.py`,
       `tests/ui/test_speed_figure.py`.
+- [x] Curva sempre intera con un leggero margine sopra e sotto (richiesta
+      dell'utente del 2026-11-11: «i grafici devono sempre essere scalati in
+      altezza in modo da visualizzare completamente la curva e avere comunque
+      un leggero margine sotto e sopra»): `Y_MARGIN_FRACTION` (6%) e
+      `padded_range` in `ui/chart_payload.py`, passati alla pagina
+      (`yMargin`), che adatta l'asse y con il margine anche sotto; barre e
+      aree riempite da zero tengono lo zero come base. Il passo va dal punto
+      più veloce al più lento (non più i percentili 1–99), il profilo
+      altimetrico ha il suo intervallo con il margine. Test:
+      `tests/ui/test_chart_view.py`, `tests/ui/test_speed_figure.py`,
+      `tests/ui/test_map_widgets.py`.
 - [x] Sfondi della mappa valutati e non aggiunti (decisioni dell'utente del
       2026-11-11; non riproporli senza un fatto nuovo):
       - bergfex OSM: le condizioni d'uso di bergfex (AGB, sezione 7)

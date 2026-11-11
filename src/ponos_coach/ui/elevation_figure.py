@@ -20,7 +20,13 @@ import plotly.graph_objects as go
 from numpy.typing import NDArray
 
 from ponos_coach.load.activity_profile import NO_ZONE, ActivityProfileData
-from ponos_coach.ui.chart_payload import LEGEND_Y, ChartChrome, axis_style, base_layout
+from ponos_coach.ui.chart_payload import (
+    LEGEND_Y,
+    ChartChrome,
+    axis_style,
+    base_layout,
+    padded_range,
+)
 from ponos_coach.ui.tokens import ThemeTokens
 
 EXPORT_FILE_STEM = "ponos-coach-elevation"
@@ -120,7 +126,7 @@ def build_elevation_figure(
     if zoned:
         figure.add_traces(_zone_traces(profile, labels, tokens, distance_km, altitude))
     figure.update_xaxes(axis_style(tokens, labels.x_axis), rangemode="tozero")
-    figure.update_yaxes(axis_style(tokens, labels.y_axis))
+    figure.update_yaxes(axis_style(tokens, labels.y_axis), range=_altitude_range(altitude))
     figure.update_layout(
         **base_layout(tokens),
         hovermode="x",
@@ -129,3 +135,11 @@ def build_elevation_figure(
         margin={"l": 64, "r": 16, "t": 48, "b": 48},
     )
     return figure
+
+
+def _altitude_range(altitude: NDArray[np.float64]) -> list[float] | None:
+    """The whole profile with the margin of every chart; None (Plotly's own) without altitude."""
+    finite = altitude[np.isfinite(altitude)]
+    if finite.size == 0:
+        return None
+    return list(padded_range(float(finite.min()), float(finite.max())))

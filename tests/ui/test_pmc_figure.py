@@ -12,7 +12,12 @@ import numpy as np
 import pytest
 
 from ponos_coach.load.domain import PmcSeries
-from ponos_coach.ui.chart_payload import PLOTLY_LOCALE_NAME, PLOTLY_MODEBAR_KEYS, render_script
+from ponos_coach.ui.chart_payload import (
+    PLOTLY_LOCALE_NAME,
+    PLOTLY_MODEBAR_KEYS,
+    Y_MARGIN_FRACTION,
+    render_script,
+)
 from ponos_coach.ui.pmc_figure import EXPORT_FILE_STEM, build_pmc_figure, daily_load_of
 from ponos_coach.ui.tokens import Theme, tokens_for
 from tests.ui.helpers import FIRST_DAY, LABELS, entry, small_history
@@ -105,7 +110,8 @@ def test_render_script_passes_data_as_a_single_json_argument() -> None:
     assert script.startswith(prefix)
     assert script.endswith(suffix)
     payload = json.loads(script[len(prefix) : -len(suffix)])
-    assert set(payload) == {"figure", "labels", "locale", "filename"}
+    assert set(payload) == {"figure", "labels", "locale", "filename", "yMargin"}
+    assert payload["yMargin"] == Y_MARGIN_FRACTION  # the margin Python uses, one value
     assert payload["figure"]["data"][0]["name"] == "Fitness (CTL)"
     assert payload["labels"] == {"png": "Save as PNG", "svg": "Save as SVG"}
     assert payload["locale"]["name"] == PLOTLY_LOCALE_NAME

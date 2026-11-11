@@ -35,6 +35,10 @@ PLOTLY_MODEBAR_KEYS: tuple[str, ...] = (
 )
 PLOTLY_LOCALE_NAME = "ponos"
 LEGEND_Y = 1.08  # the horizontal legend sits above the chart area
+# Space left above and below a curve, as a fraction of the values it spans (the user's request
+# of 2026-11-11: the whole curve always visible, with a slight margin). The page uses the same
+# value when it fits the y axis to the part in view.
+Y_MARGIN_FRACTION = 0.06
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +64,13 @@ class PreparedChart:
     figure: go.Figure
     script: str
     background: str
+
+
+def padded_range(low: float, high: float) -> tuple[float, float]:
+    """The y range that shows every value from `low` to `high` with `Y_MARGIN_FRACTION` above
+    and below (a flat series gets a margin from its own size)."""
+    span = high - low or abs(high) or 1.0
+    return low - span * Y_MARGIN_FRACTION, high + span * Y_MARGIN_FRACTION
 
 
 def axis_style(tokens: ThemeTokens, title: str) -> dict[str, object]:
@@ -148,6 +159,7 @@ def render_script(
         # Plotly language dictionary: the page registers it, no text is composed in JS.
         "locale": {"name": PLOTLY_LOCALE_NAME, "dictionary": dict(chrome.modebar)},
         "filename": filename,
+        "yMargin": Y_MARGIN_FRACTION,
     }
     if pointer is PointerReport.INDEX:
         payload["hover"] = True

@@ -171,3 +171,24 @@ def test_the_page_gets_a_linked_time_axis_and_a_fixed_pace_axis(
     assert payload["filename"] == stem
     assert payload["labels"] == {"png": "Save as PNG", "svg": "Save as SVG"}
     assert prepared.background == tokens_for(Theme.LIGHT).background
+
+
+def test_the_pace_axis_shows_the_whole_curve_even_a_rare_slow_point_with_a_margin() -> None:
+    # The user's request of 2026-11-11: the whole curve always visible, a slight margin around it.
+    speed = np.full(SECONDS.size, 1000.0 / 300.0)  # 5:00 per km
+    speed[10] = 1000.0 / 720.0  # one point at 12:00 per km (a stop at a crossing)
+    speed[20] = 1000.0 / 240.0  # one at 4:00 per km
+    figure = figure_of(Sport.RUNNING, SpeedSeries(SECONDS, speed))
+
+    slowest, fastest = figure.layout.yaxis.range
+    span = 720.0 - 240.0
+    assert 0 < slowest - 720.0 <= span * 0.1
+    assert 0 < 240.0 - fastest <= span * 0.1
+    assert all(fastest <= tick <= slowest for tick in figure.layout.yaxis.tickvals)
+
+
+def test_a_pace_curve_without_any_finite_value_gets_no_fixed_axis() -> None:
+    figure = figure_of(Sport.RUNNING, SpeedSeries(SECONDS, np.zeros(SECONDS.size)))  # standing
+
+    assert figure.layout.yaxis.range is None
+    assert not figure.layout.yaxis.tickvals

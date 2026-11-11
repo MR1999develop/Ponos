@@ -442,6 +442,12 @@ Formulas and values: [load model](../.claude/skills/ponos-allenamento/references
   after a zoom or a pan (on that chart or on a linked one) it goes from the
   lowest to the highest value shown, stacked bars summed per date, with a small
   margin (user's request of 2026-11-10).
+- Every chart shows its whole curve with the same slight margin above and
+  below, 6% of the values it spans (user's request of 2026-11-11): the charts
+  that follow the dates or minutes in view (Overview, HR, speed in km/h), the
+  pace chart (from the fastest to the slowest point of the session, even a
+  single slow one) and the elevation profile. Bars and areas filled from zero
+  keep zero as their floor and get the margin only above.
 - Axes with translated name and unit, light and dark theme, export to SVG and
   PNG.
 - No meaning is left to colour alone: CTL and ATL can be told apart even

@@ -170,6 +170,8 @@ def test_the_profile_is_altitude_over_distance_with_named_axes_and_units() -> No
     assert figure.layout.yaxis.title.text == "Altitude (m)"
     assert figure.layout.xaxis.rangemode == "tozero"
     assert not figure.layout.showlegend
+    altitude = np.asarray(figure.data[0].y, dtype=float)
+    assert_whole_curve_with_margin(figure.layout.yaxis.range, altitude)
 
 
 def test_by_zone_the_profile_adds_one_named_trace_per_zone_present_and_a_dashed_grey_one() -> None:
@@ -210,3 +212,12 @@ def test_a_profile_without_altitude_has_no_figure() -> None:
         build_elevation_figure(
             profile(altitude=False), labels(), tokens_for(Theme.LIGHT), by_zone=False
         )
+
+
+def assert_whole_curve_with_margin(axis: tuple[float, float], values: np.ndarray) -> None:
+    """The user's request of 2026-11-11: the whole curve and a slight margin above and below."""
+    low, high = float(np.nanmin(values)), float(np.nanmax(values))
+    span = high - low
+    bottom, top = sorted(axis)
+    assert 0 < low - bottom <= span * 0.1
+    assert 0 < top - high <= span * 0.1

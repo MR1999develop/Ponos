@@ -27,6 +27,7 @@ from ponos_coach.ui.chart_payload import (
     XNavigation,
     axis_style,
     base_layout,
+    padded_range,
     prepare_figure,
 )
 from ponos_coach.ui.tokens import ThemeTokens
@@ -44,8 +45,6 @@ _SERIES_SLOT = 2  # the green of the category palette: not the HR's blue, never 
 # Pace ticks: the smallest step that leaves at most this many, from the usual ones (seconds).
 _MAX_PACE_TICKS = 7
 _PACE_STEPS_S = (10, 15, 30, 60, 120, 300, 600)
-# The pace axis spans what most of the session covers; a rare very slow point may leave the area.
-_PACE_RANGE_PERCENTILES = (1.0, 99.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,16 +69,25 @@ def pace_s_per_km(speed_m_s: NDArray[np.float64]) -> NDArray[np.float64]:
         return _METERS_PER_KM / speed_m_s
 
 
-def _pace_axis(pace: NDArray[np.float64]) -> tuple[list[float], list[str], list[float]]:
-    """Tick values, their `m:ss` texts and the reversed range (slowest first) for the pace."""
-    low, high = np.nanpercentile(pace, _PACE_RANGE_PERCENTILES)
+def _pace_axis(pace: NDArray[np.float64]) -> tuple[list[float], list[str], list[float] | None]:
+    """Tick values, their `m:ss` texts and the reversed range (slowest first) for the pace.
+
+    The range shows the whole curve, from the fastest to the slowest point, with the margin of
+    every chart (`padded_range`); the axis does not follow the zoom, so this is the range the
+    session covers. Without any finite pace (never moving) there are no ticks and no fixed range.
+    """
+    finite = pace[np.isfinite(pace)]
+    if finite.size == 0:
+        return [], [], None
+    fastest, slowest = padded_range(float(finite.min()), float(finite.max()))
+    fastest = max(fastest, 0.0)
     step = next(
-        (s for s in _PACE_STEPS_S if (high - low) / s <= _MAX_PACE_TICKS - 1), _PACE_STEPS_S[-1]
+        (s for s in _PACE_STEPS_S if (slowest - fastest) / s <= _MAX_PACE_TICKS - 1),
+        _PACE_STEPS_S[-1],
     )
-    fastest = max(math.floor(low / step) * step, 0)
-    slowest = max(math.ceil(high / step) * step, fastest + step)
-    values = [float(v) for v in range(int(fastest), int(slowest) + 1, step)]
-    return values, [pace_text(v) for v in values], [float(slowest), float(fastest)]
+    first = math.ceil(fastest / step) * step
+    values = [float(v) for v in range(first, math.floor(slowest) + 1, step)]
+    return values, [pace_text(v) for v in values], [slowest, fastest]
 
 
 def build_speed_figure(

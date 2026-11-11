@@ -19,7 +19,12 @@ from PySide6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
 from shiboken6 import isValid
 
-from ponos_coach.ui.chart_payload import PointerReport, XNavigation, prepare_figure
+from ponos_coach.ui.chart_payload import (
+    PointerReport,
+    XNavigation,
+    padded_range,
+    prepare_figure,
+)
 from ponos_coach.ui.chart_view import (
     ChartEngine,
     ChartView,
@@ -479,3 +484,60 @@ def test_the_y_axis_follows_the_values_of_the_dates_in_view(qtbot: QtBot) -> Non
     shown = evaluate(qtbot, view, "document.getElementById('chart')._fullLayout.yaxis.range[1]")
     assert isinstance(whole, float | int) and isinstance(shown, float | int)
     assert shown < whole / 2  # those days have no 80-point session: a much lower top
+
+
+@pytest.mark.parametrize(
+    ("low", "high", "expected"),
+    [
+        (100.0, 200.0, (94.0, 206.0)),
+        (-10.0, 10.0, (-11.2, 11.2)),
+        (300.0, 300.0, (282.0, 318.0)),  # flat: a margin from its own size
+        (0.0, 0.0, (-0.06, 0.06)),
+    ],
+)
+def test_a_padded_range_leaves_the_same_slight_margin_above_and_below(
+    low: float, high: float, expected: tuple[float, float]
+) -> None:
+    assert padded_range(low, high) == pytest.approx(expected)
+
+
+def fitted_y_range(qtbot: QtBot, view: ChartView) -> tuple[float, float]:
+    def ready() -> bool:
+        return (
+            evaluate(qtbot, view, "document.getElementById('chart').layout.yaxis.autorange")
+            is False
+        )
+
+    qtbot.waitUntil(ready, timeout=WAIT_MS)
+    bounds = evaluate(qtbot, view, "document.getElementById('chart').layout.yaxis.range")
+    assert isinstance(bounds, list)
+    return float(bounds[0]), float(bounds[1])
+
+
+def test_a_line_fitted_by_the_page_has_a_margin_below_as_well_as_above(qtbot: QtBot) -> None:
+    view = minutes_view(qtbot)  # a line from 120 to 160
+
+    assert fitted_y_range(qtbot, view) == pytest.approx((117.6, 162.4))
+
+
+def test_bars_fitted_by_the_page_keep_zero_as_their_floor(qtbot: QtBot) -> None:
+    engine = ChartEngine(lambda _name: None)
+    view = ChartView(engine, "Bars")
+    engine.setParent(view)
+    qtbot.addWidget(view)
+    view.resize(900, 400)
+    view.show()
+    figure = go.Figure(go.Bar(x=[0.0, 1.0, 2.0], y=[3.0, 5.0, 4.0]))
+    figure.update_layout(paper_bgcolor="#ffffff", font={"color": "#222222"})
+    with qtbot.waitSignal(view.drawn, timeout=WAIT_MS):
+        view.show_prepared(
+            prepare_figure(
+                figure,
+                LABELS.chrome,
+                EXPORT_FILE_STEM,
+                tokens_for(Theme.LIGHT),
+                navigation=XNavigation.LINKED,
+            )
+        )
+
+    assert fitted_y_range(qtbot, view) == pytest.approx((0.0, 5.3))

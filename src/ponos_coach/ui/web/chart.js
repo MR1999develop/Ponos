@@ -4,7 +4,7 @@
 
 // Draws a Plotly figure. The only entry point is `ponosRender(payload)`, where `payload` is
 // a JSON object produced by Python with json.dumps: { figure, labels, locale, filename, hover,
-// zoom, linkedX, fixedY, linkedHover }.
+// zoom, linkedX, fixedY, linkedHover, yMargin }.
 // No data enters as HTML: Plotly receives only objects. With `hover` true the chart tells Python
 // which point is under the pointer through the page title (`hover-I-N`, `leave-N`: no channel),
 // and `ponosCursor(x)` draws (or, with null, removes) a vertical cursor line at x.
@@ -145,9 +145,10 @@
 
   // The y axis follows the data in view (the user's request of 2026-11-10): after every change
   // of the dates shown, by the user or by the linked chart, the y range is the lowest and the
-  // highest value drawn between those dates, stacked bars summed per date, bars from zero, with
-  // a small margin. Without data in view the range stays as it is.
-  var Y_MARGIN = 0.06;
+  // highest value drawn between those dates, stacked bars summed per date, with a small margin
+  // above and below (the user's request of 2026-11-11); bars and areas filled to zero keep zero
+  // as their floor. Without data in view the range stays as it is.
+  var yMargin = 0.06;  // replaced by the payload's `yMargin`, the value Python uses
 
   function timeOf(value) {
     return typeof value === "number" ? value : Date.parse(String(value).replace(" ", "T"));
@@ -158,6 +159,7 @@
     var first = timeOf(range[0]);
     var last = timeOf(range[1]);
     var stacked = gd._fullLayout.barmode === "stack" || gd._fullLayout.barmode === "relative";
+    var floorAtZero = false;
     var low = Infinity;
     var high = -Infinity;
     var sums = {};
@@ -167,6 +169,7 @@
       if (trace.visible !== true) { return; }
       if (!trace.x || !trace.y || (trace.yaxis && trace.yaxis !== "y")) { return; }
       var bar = trace.type === "bar";
+      var fromZero = bar || trace.fill === "tozeroy";
       for (var i = 0; i < trace.x.length; i += 1) {
         var when = timeOf(trace.x[i]);
         var value = Number(trace.y[i]);
@@ -179,14 +182,19 @@
           low = Math.min(low, value);
           high = Math.max(high, value);
         }
-        if (bar) { low = Math.min(low, 0); high = Math.max(high, 0); }
+        if (fromZero) {
+          low = Math.min(low, 0);
+          high = Math.max(high, 0);
+          floorAtZero = true;
+        }
       }
     });
     Object.keys(sums).forEach(function (key) {
       low = Math.min(low, sums[key].down);
       high = Math.max(high, sums[key].up);
     });
-    return isFinite(low) && isFinite(high) ? [low, high] : null;
+    return isFinite(low) && isFinite(high) ? { low: low, high: high, floorAtZero: floorAtZero }
+      : null;
   }
 
   var fitFrame = null;
@@ -196,9 +204,9 @@
     if (gd._fullData === undefined || gd._fullLayout.xaxis === undefined) { return; }
     var extent = visibleYExtent(gd);
     if (extent === null) { return; }
-    var span = extent[1] - extent[0] || Math.abs(extent[1]) || 1;
-    var low = extent[0] - (extent[0] < 0 ? span * Y_MARGIN : 0);
-    var high = extent[1] + span * Y_MARGIN;
+    var span = extent.high - extent.low || Math.abs(extent.high) || 1;
+    var low = extent.floorAtZero && extent.low === 0 ? 0 : extent.low - span * yMargin;
+    var high = extent.high + span * yMargin;
     Plotly.relayout(gd, { "yaxis.autorange": false, "yaxis.range": [low, high] });
   }
 
@@ -280,6 +288,7 @@
         exportButton("ponosSvg", labels.svg, "svg", payload.filename),
       ],
     };
+    if (typeof payload.yMargin === "number") { yMargin = payload.yMargin; }
     document.body.style.background = payload.figure.layout.paper_bgcolor;
     cursorColor = payload.figure.layout.font.color;
     Plotly.react(host, payload.figure.data, payload.figure.layout, config).then(function (gd) {
