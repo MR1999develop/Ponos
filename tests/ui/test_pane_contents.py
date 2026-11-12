@@ -123,4 +123,9 @@ def test_the_calendar_legend_is_one_row_with_the_no_colour_note_as_a_tooltip(
     assert goal.toolTip() == "No colour: no goal period, maintenance assumed."
     assert not [label for label in labels if label.text().startswith("No colour")]
     legend = page.legend_widget
-    assert legend.height() < 2 * goal.sizeHint().height()  # a single row
+    kinds = [
+        label for label in labels if label.text() in {"Weight loss", "Performance", "Maintenance"}
+    ]
+    tops = {label.mapTo(legend, label.rect().topLeft()).y() for label in kinds}
+    assert len(tops) == 1  # the goals on a single row; the sports of the month follow, wrapping
+    assert legend.height() < 4 * kinds[0].height()  # at most two rows (with the spacing)

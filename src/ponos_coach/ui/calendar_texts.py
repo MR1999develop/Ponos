@@ -113,6 +113,9 @@ def cell_text(cell: CalendarDay) -> str:
     if cell.activity_count:
         lines.append(", ".join(sport_short_text(sport) for sport in cell.sports))
         lines.append(load_text(cell.load))
+    elif cell.stripe_sport is not None:
+        # The sport of the stripe is also written, never shown by colour alone.
+        lines.append(sport_short_text(cell.stripe_sport))
     lines.extend(_plan_lines(cell))
     lines.extend(span_cell_text(span) for span in cell.problems)
     if cell.goal is not None:

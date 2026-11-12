@@ -7,6 +7,7 @@ from __future__ import annotations
 from bisect import bisect_right
 from enum import Enum
 
+from ponos_coach.activities.domain import Sport
 from ponos_coach.planning.domain import defaults
 from ponos_coach.planning.domain.phases import RaceClass
 
@@ -56,6 +57,29 @@ def equivalent_distance_m(distance_m: int, ascent_m: int) -> int:
     every metre of climb counts as `ASCENT_EQUIVALENT_M_PER_M` metres of flat running. A flat race
     (no climb) keeps its own distance."""
     return distance_m + ascent_m * defaults.ASCENT_EQUIVALENT_M_PER_M
+
+
+def cycling_time_s(distance_m: int, ascent_m: int) -> int:
+    """Estimated time of a cycling race, whole seconds: its flat-equivalent distance (a metre of
+    climb counts as `CYCLING_ASCENT_EQUIVALENT_M_PER_M` flat metres) at the speed
+    `CYCLING_FLAT_KM_PER_HOUR`."""
+    flat_m = distance_m + ascent_m * defaults.CYCLING_ASCENT_EQUIVALENT_M_PER_M
+    return max(1, round(flat_m * 3600 / (defaults.CYCLING_FLAT_KM_PER_HOUR * 1000)))
+
+
+def effort_distance_m(time_s: int) -> int:
+    """The running distance that lasts `time_s` at `EFFORT_PACE_S_PER_KM`: how the rules written
+    for running distances (class, taper, recovery, CTL to reach) see a race of another sport."""
+    return max(1, round(time_s * 1000 / defaults.EFFORT_PACE_S_PER_KM))
+
+
+def rule_distance_m(sport: Sport, distance_m: int, ascent_m: int) -> int:
+    """The distance the rules written for running races (class, taper, recovery, CTL to reach,
+    long session, peak quality) go by: the race's own, or for a cycling race the run of equal
+    duration."""
+    if sport is Sport.CYCLING:
+        return effort_distance_m(cycling_time_s(distance_m, ascent_m))
+    return distance_m
 
 
 def predicted_time_today_s(threshold_pace_s_per_km: int, distance_m: int) -> float:

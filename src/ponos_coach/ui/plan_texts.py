@@ -82,7 +82,7 @@ def session_type_text(session_type: SessionType) -> str:
         SessionType.MEDIUM: QCoreApplication.translate("Plan", "Medium"),
         SessionType.THRESHOLD: QCoreApplication.translate("Plan", "Threshold"),
         SessionType.VO2MAX: QCoreApplication.translate("Plan", "VO2max"),
-        SessionType.RECOVERY: QCoreApplication.translate("Plan", "Recovery run"),
+        SessionType.RECOVERY: QCoreApplication.translate("Plan", "Recovery"),
         SessionType.STRENGTH: QCoreApplication.translate("Plan", "Strength"),
         SessionType.ALTERNATIVE: QCoreApplication.translate("Plan", "Alternative activity"),
     }

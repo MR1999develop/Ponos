@@ -624,7 +624,7 @@ def test_the_race_day_is_marked_with_its_priority_and_the_phases_are_in_the_lege
     assert "Race day" in lines
     tooltip = page.model.data(page.model.index_of(RACE_DAY), Qt.ItemDataRole.ToolTipRole)
     assert "Race A, Marathon, 9/22/26" in str(tooltip)
-    assert "Race day" in page.phase_legend_texts
+    assert "Running" in page.sport_legend_texts
     assert window.plan.actions["change_goal"].isEnabled()
     assert window.plan.actions["remove_goal"].isEnabled()
 

@@ -173,8 +173,8 @@ def _race_ascent_text(goal: Goal) -> str:
 
 
 def _race_time_text(goal: Goal) -> str:
-    if isinstance(goal, RaceGoal) and goal.target_time_s is not None:
-        return target_time_text(goal.target_time_s)
+    if isinstance(goal, RaceGoal) and goal.planned_target_time_s is not None:
+        return target_time_text(goal.planned_target_time_s)
     return ""
 
 
@@ -214,8 +214,8 @@ def _sort_key(
         case GoalColumn.ASCENT:
             return float(goal.ascent_m) if isinstance(goal, RaceGoal) else -1.0
         case GoalColumn.TARGET_TIME:
-            if isinstance(goal, RaceGoal) and goal.target_time_s is not None:
-                return float(goal.target_time_s)
+            if isinstance(goal, RaceGoal) and goal.planned_target_time_s is not None:
+                return float(goal.planned_target_time_s)
             return -1.0
         case _:
             return _cell_text(goal, column, assessment, missed).casefold()

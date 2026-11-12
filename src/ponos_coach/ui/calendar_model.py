@@ -143,6 +143,19 @@ class CalendarDay:
         return plan
 
     @property
+    def stripe_sport(self) -> Sport | None:
+        """The sport the grid colours the day by (user's request, 2026-11-11: by sport, never by
+        phase): the first sport done, else that of the planned session or race."""
+        if self.sports:
+            return self.sports[0]
+        plan = self.grid_plan
+        if plan is None:
+            return None
+        if plan.session is not None:
+            return plan.session.sport
+        return None if plan.race is None else plan.race.sport
+
+    @property
     def can_open(self) -> bool:
         """The day belongs to the month and is not after today, or is a day of the plan: it holds
         a day page (for a future day, an estimate from the plan)."""

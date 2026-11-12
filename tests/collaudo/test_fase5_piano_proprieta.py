@@ -89,7 +89,7 @@ def violations(plan: Plan, today: date) -> list[str]:  # noqa: PLR0912, PLR0915 
         if later.day - earlier.day != timedelta(days=1):
             problems.append(f"a hole after {earlier.day}")
     sport = inputs.plan_sport()
-    allowed = inputs.choices.for_sport(sport)
+    allowed = inputs.choices.for_sport_or_suggested(sport)
     by_day = {d.day: d for d in days}
     race_days = {d.day for d in days if d.race is not None}
 

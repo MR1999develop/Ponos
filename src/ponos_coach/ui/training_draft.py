@@ -12,7 +12,12 @@ from dataclasses import dataclass
 from enum import Enum
 
 from ponos_coach.activities.domain import Sport
-from ponos_coach.goals.domain import SessionChoices, SessionType, WeeklyAvailability
+from ponos_coach.goals.domain import (
+    SUGGESTED_TYPES,
+    SessionChoices,
+    SessionType,
+    WeeklyAvailability,
+)
 from ponos_coach.goals.domain.availability import MAX_WEEK_MINUTES, WEEKDAYS
 from ponos_coach.ui.goal_draft import RACE_SPORTS
 
@@ -22,9 +27,6 @@ _ALL_DAYS = frozenset(range(WEEKDAYS))
 _SUGGESTED_SESSIONS = 4
 _SUGGESTED_LONG_DAY = 6
 _SUGGESTED_WEEK_MINUTES = 480
-_SUGGESTED_TYPES = frozenset(
-    {SessionType.EASY, SessionType.LONG, SessionType.THRESHOLD, SessionType.RECOVERY}
-)
 
 
 class TrainingHint(Enum):
@@ -141,7 +143,7 @@ def draft_of(availability: WeeklyAvailability | None, choices: SessionChoices) -
             draft.sessions,
             draft.long_day,
             draft.max_week_minutes,
-            SessionChoices.of({Sport.RUNNING: _SUGGESTED_TYPES}),
+            SessionChoices.of({Sport.RUNNING: SUGGESTED_TYPES}),
         )
     return draft
 

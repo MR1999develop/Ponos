@@ -64,7 +64,7 @@ invia. Nessun I/O nel motore.
 | `GOAL_NOT_IN_FUTURE` | un obiettivo oggi o nel passato (gli id in `goal_ids`) |
 | `GOALS_ON_SAME_DAY` | due gare nello stesso giorno |
 | `NO_AVAILABILITY` | nessun giorno disponibile o zero minuti a settimana |
-| `NO_SESSION_TYPES` | nessuna tipologia scelta per lo sport del piano |
+| `NO_SESSION_TYPES` | solo nei piani salvati prima della versione 12: da allora uno sport senza tipologie scelte usa `SUGGESTED_TYPES` (facile, lungo, soglia, recupero) |
 
 Altrimenti il piano esiste sempre; ciò che non va sta negli avvisi
 (`Plan.warnings`, un tipo per avviso):
@@ -217,6 +217,18 @@ picco):
     sedute e il verdetto sul tempo obiettivo; il carico della gara ne segue (dura di più).
     Classe di gara (scarico e recupero), tabella del CTL e avviso `MissingLongSession` restano
     sulla distanza reale;
+  - **Gare di ciclismo** (versione 12, richiesta dell'utente del 2026-11-11): niente tempo
+    obiettivo (`goal.takes_target_time`, `RaceGoal.planned_target_time_s` = `None` anche per
+    una gara salvata prima con un tempo, che resta nel database). Tempo atteso
+    `target.cycling_time_s` = (distanza + 25 × D+) a 25 km/h (`CYCLING_FLAT_KM_PER_HOUR`,
+    `CYCLING_ASCENT_EQUIVALENT_M_PER_M`: 1000 m di D+ = un'ora in più, default non validati);
+    il carico ne segue. Le regole scritte per le distanze di corsa (classe, scarico, recupero,
+    tabella del CTL, `MissingLongSession`, niente VO2max nel picco oltre i 10 km) usano
+    `target.rule_distance_m`: per il ciclismo la corsa di pari durata a 6 min/km
+    (`EFFORT_PACE_S_PER_KM`; un'ora in bici = 10 km). Sedute in bici per durata e zone di FC
+    (soglia del ciclismo), senza ritmo e senza salite. Se per il ciclismo non è scelta nessuna
+    tipologia, il piano usa `SUGGESTED_TYPES` (`SessionChoices.for_sport_or_suggested`, vale per
+    ogni sport) invece di rifiutarsi;
   - **Sedute in salita** solo per la gara A, con piano di corsa (RUNNING o TRAIL), pendenza media
     ≥ 20 m/km (`HILL_MIN_SLOPE_M_PER_KM`; 19,9 no, 20 sì), nelle fasi `HILL_PHASES` = costruzione
     e picco; mai in base, mantenimento, scarico finale, recupero né nelle settimane di scarico
@@ -370,7 +382,8 @@ del piano: `PlannedSession.threshold_test` (il protocollo), tipo `THRESHOLD`, ch
 ## 12. Test
 
 `T-PIANO-01…05`, `T-PIANO-10` (test nel piano: `test_threshold_test_session.py`) e
-`T-PIANO-11` (dislivello della gara: `test_race_ascent.py`) in
+`T-PIANO-11` (dislivello della gara: `test_race_ascent.py`) e `T-PIANO-12` (gare di
+ciclismo: `test_cycling_races.py`) in
 `PLAN.md` sezione 7.4: `tests/planning/` (determinismo,
 proprietà con Hypothesis su ingressi casuali con `invariants.violations`,
 scenari, adattamento, classi del tempo obiettivo ai confini, modelli di
@@ -390,7 +403,9 @@ seduta più lunga della settimana e facile e recupero al massimo il 75% di lui.
 Invarianti con il dislivello: con D+ le regole sono le stesse, e la property test di
 `test_race_ascent.py` le verifica con pendenze da 0 a 120 m/km.
 
-Versione del metodo: **8** (dislivello della gara: tempo e ritmo sulla distanza equivalente,
+Versione del metodo: **12** (gare di ciclismo senza tempo obiettivo, tempo stimato da
+distanza e D+ e regole di distanza sulla corsa di pari durata); la 11 e la 10 hanno spostato i
+confini delle zone, la 9 la causa del CTL non raggiunto. La **8** (dislivello della gara: tempo e ritmo sulla distanza equivalente,
 ripetute in salita e lunghi collinari per una gara A ripida; ADR 017; i campi `ascent_m` di
 `PlannedSession` e `PlannedRace` valgono 0 se mancano, quindi i piani vecchi si leggono; la 7
 aveva il carico TRIMPeq, sezione 7). La **6** (l'utente dà giorni disponibili e sedute a settimana,

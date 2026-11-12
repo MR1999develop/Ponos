@@ -23,6 +23,14 @@ MAX_TARGET_TIME_S = 7 * 24 * 3600
 MAX_CTL = 200.0
 _ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 _FIRST_DAY = date(1900, 1, 1)
+# Races planned from distance and elevation gain only, never from a target time (user's request,
+# 2026-11-11: a cycling race has no target time).
+UNTIMED_RACE_SPORTS = frozenset({Sport.CYCLING})
+
+
+def takes_target_time(sport: Sport) -> bool:
+    """True if a race of this sport can have a target time."""
+    return sport not in UNTIMED_RACE_SPORTS
 
 
 class Priority(Enum):
@@ -70,6 +78,12 @@ class RaceGoal:
             MIN_TARGET_TIME_S <= self.target_time_s <= MAX_TARGET_TIME_S
         ):
             raise ValueError("target time outside the plausible range")
+
+    @property
+    def planned_target_time_s(self) -> int | None:
+        """The target time the plan works with: none for a sport whose races have none (a cycling
+        race saved with a time before 2026-11-11 keeps it in the store, but the plan ignores it)."""
+        return self.target_time_s if takes_target_time(self.sport) else None
 
     @property
     def ascent_m_per_km(self) -> float:

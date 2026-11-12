@@ -38,7 +38,10 @@ from ponos_coach.planning.domain.phases import Phase, RaceClass
 # Z5 from 103% of the threshold): the HR ranges of the blocks and the estimated loads change.
 # 11: the Z1/Z2 boundary moves from 75% to 72% of the threshold (user's request, 2026-11-11): the
 # lower bound of the Z2 blocks and the upper bound of the Z1 blocks change.
-METHOD_VERSION: Final = 11
+# 12: cycling races (user's request, 2026-11-11): no target time; their time is estimated from
+# distance and elevation gain at a cycling speed, and the rules that go by the distance of a race
+# (class, taper, recovery, CTL to reach, long session) use the running distance of equal duration.
+METHOD_VERSION: Final = 12
 
 # --- Why a CTL target is missed ----------------------------------------------------------------
 # To tell hours from ramp the engine rebuilds the plan with a higher weekly cap, on a grid of
@@ -305,6 +308,16 @@ HILLY_LONG_KM_PER_HOUR: Final = 7
 HILL_REPEAT_ASCENT_M_PER_MIN: Final = 10
 HILL_ASCENT_ROUND_M: Final = 10  # the indicative gain of a session is a multiple of this
 
+# --- Cycling races (project defaults) ----------------------------------------------------------
+# A cycling race has no target time: its time is estimated at an amateur's flat speed, with every
+# metre of climb counted as this many flat metres (at 25 km/h, 1000 m of climb add one hour, the
+# usual rule of thumb of cyclists).
+CYCLING_FLAT_KM_PER_HOUR: Final = 25
+CYCLING_ASCENT_EQUIVALENT_M_PER_M: Final = 25
+# The rules written for running distances (class and taper, recovery, CTL to reach, long session)
+# take a cycling race as the run of equal duration at this pace: 1 hour of riding is a 10 km.
+EFFORT_PACE_S_PER_KM: Final = DEFAULT_RACE_PACE_S_PER_KM
+
 # --- Adaptation --------------------------------------------------------------------------------
 RECOVERY_TSB: Final = -30.0  # tomorrow's TSB below this inserts recovery days
 RECOVERY_ATL_CTL_RATIO: Final = 1.5
@@ -354,6 +367,9 @@ PARAMETER_NAMES: Final = (
     "test_max_planned",
     "ascent_equivalent_m_per_m",
     "hill_min_slope_m_per_km",
+    "cycling_flat_km_per_hour",
+    "cycling_ascent_equivalent_m_per_m",
+    "effort_pace_s_per_km",
 )
 
 
@@ -395,5 +411,8 @@ def parameter_snapshot(max_ramp: float) -> tuple[tuple[str, float], ...]:
         TEST_MAX_PLANNED,
         ASCENT_EQUIVALENT_M_PER_M,
         HILL_MIN_SLOPE_M_PER_KM,
+        CYCLING_FLAT_KM_PER_HOUR,
+        CYCLING_ASCENT_EQUIVALENT_M_PER_M,
+        EFFORT_PACE_S_PER_KM,
     )
     return tuple((name, float(value)) for name, value in zip(PARAMETER_NAMES, values, strict=True))
