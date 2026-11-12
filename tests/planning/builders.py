@@ -21,7 +21,7 @@ from ponos_coach.goals.domain import (
 )
 from ponos_coach.injury.domain import PlanInjury
 from ponos_coach.load.domain import HeartRateLimits, Physiology, Sex, ThresholdHeartRate
-from ponos_coach.planning.domain import FitnessState, PlanInputs
+from ponos_coach.planning.domain import FitnessState, MissedSession, PlanInputs
 
 TODAY = date(2026, 3, 2)  # a Monday
 ALL_TYPES = frozenset(SessionType)
@@ -84,6 +84,7 @@ def inputs(
     retest: RetestStatus = RECENT_TEST,
     test_protocol: ThresholdProtocol = ThresholdProtocol.THIRTY_MINUTES,
     missed_tests: Iterable[date] = (),
+    missed_sessions: Iterable[MissedSession] = (),
 ) -> PlanInputs:
     """Plan inputs for the test athlete with the given goals."""
     return PlanInputs(
@@ -99,6 +100,7 @@ def inputs(
         retest=retest,
         test_protocol=test_protocol,
         missed_tests=tuple(missed_tests),
+        missed_sessions=tuple(missed_sessions),
     )
 
 

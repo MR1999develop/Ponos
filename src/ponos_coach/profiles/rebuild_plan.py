@@ -4,7 +4,8 @@
 
 - `RebuildPlan`: gathers what the plan engine needs (the PMC of what was really done, the goals, the
   availability, the session types, the day's physiology, the last threshold
-  pace, the retest status, the open injuries and illnesses), calls `build_plan` and saves the
+  pace, the retest status, the open injuries and illnesses, the key sessions missed), calls
+  `build_plan` and saves the
   result if it differs from the last one.
 - `PlanAdherence`: planned against done for a range of days, using what was planned *at the time*.
 
@@ -53,6 +54,7 @@ from ponos_coach.planning.domain import (
     PlanInputs,
     PlanRefusal,
     build_plan,
+    missed_key_sessions,
     missed_threshold_tests,
 )
 from ponos_coach.planning.ports import FrozenDay, PlanStore, StoredPlan
@@ -187,7 +189,8 @@ class RebuildPlan:
             physiology = physiology_for_day(src.physiology.list_entries(), today)
         except MissingPhysiologyError:
             return PlanNotBuilt(NotBuiltReason.MISSING_PHYSIOLOGY)
-        fitness = _fitness_on(_daily_loads(self._overview()), today)
+        daily = _daily_loads(self._overview())
+        fitness = _fitness_on(daily, today)
         goals = src.goals.list_goals()
         saved_availability = src.availability.get()
         tests = [t for t in src.threshold_tests.list_tests() if t.test_day <= today]
@@ -207,6 +210,7 @@ class RebuildPlan:
             after_injury=recently_returned(problems, today),
             test_protocol=self._test_protocol,
             missed_tests=missed_threshold_tests(lived, test_days, today),
+            missed_sessions=missed_key_sessions(lived, daily, today),
         )
         built = build_plan(inputs, today)
         saved = self._save(built, today)

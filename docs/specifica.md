@@ -861,6 +861,22 @@ Protocol: [threshold test](../.claude/skills/ponos-allenamento/references/test-s
     short race, up to about 2 h 07 a half, beyond a long one. The plan of a
     cycling A race trains on the bike with sessions by duration and heart-rate
     zone (the cycling threshold), never by pace, and has no hill work;
+  - a missed session revises the plan (method version 13, user's request of
+    2026-11-12): a long or intense session planned earlier in the current week
+    and not done (less than half of its load done that day) is made up in the
+    days left in the week. The long one goes on a free day, the farthest from
+    the hard days and not in the 72 hours before a race, when the long day is
+    gone; an intense type comes before the others of the week if its phase
+    uses it. The usual rules still hold (hard days apart, hours, ramp, 80/20);
+    nothing is made up in an unload week or carried to the next week, and a
+    missed easy session only lowers the fitness the next weeks start from;
+  - the plan mixes sports (method version 13, user's request of 2026-11-12):
+    up to a race of another sport than the plan's (a B or C race, or a later A
+    race), every second easy session of a week is in that sport, and in the
+    last six weeks before it the long session too (unless it is a hilly long
+    run), always with the session types chosen for that sport. The intense
+    sessions stay in the sport of the A race; after that race the plan trains
+    its own sport only;
   - hill sessions are added only for the A race, in a running plan (running or
     trail), when the mean climb is at least 20 m per kilometre, in the build and
     the peak, never in the base, the final taper or an unload week, and not while
@@ -1078,7 +1094,11 @@ no diet or allergy restriction for now.
   2026-11-11). A planned day also writes its sport, and the legend names the
   sports of the month shown.
 - A planned rest day is a blank cell, as if there were no plan: no line, no
-  phase and no stripe (user's request of 2026-11-11). Its tooltip and its page
+  phase and no stripe (user's request of 2026-11-11). So is a past day with a
+  planned session and no activity (user's request of 2026-11-12): a session
+  not done leaves the cell empty, while the plan makes it up in the days left
+  in the week. Its tooltip and its page still say what was planned and that it
+  was not done. Its tooltip and its page
   still say it is a rest day.
 - "Previous month" (Ctrl+Left), "Next month" (Ctrl+Right), "Today" (Ctrl+T) and
   "Open day" (Ctrl+Return) are in the menu of a day and act while the calendar

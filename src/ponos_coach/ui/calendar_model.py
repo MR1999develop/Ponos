@@ -136,9 +136,14 @@ class CalendarDay:
     @property
     def grid_plan(self) -> PlanDay | None:
         """The planned day the grid marks (text, phase stripe, phase legend): a session or a race.
-        A rest day is left blank, as if there were no plan; its tooltip and page still say it."""
+        A rest day is left blank, as if there were no plan; so is a past day with a session and no
+        activity (user's request, 2026-11-12: a session not done leaves the cell empty). Their
+        tooltip and page still say what was planned."""
         plan = self.plan
         if plan is None or (plan.session is None and plan.race is None):
+            return None
+        past = not self.is_future and not self.is_today
+        if past and plan.race is None and self.activity_count == 0:
             return None
         return plan
 

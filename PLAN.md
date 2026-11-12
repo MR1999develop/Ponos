@@ -690,6 +690,16 @@ Decisioni dell'utente del 2026-11-07 (sezione 1, riga "Ricerca e mappa").
       (versione 12 del metodo); piano in bici con sedute per durata e FC.
       Test: `T-PIANO-12`. Aperti: velocità e equivalenza del dislivello sono
       default non validati (non usano lo storico delle uscite in bici).
+- [x] Una seduta saltata rivede il piano (richiesta dell'utente del 2026-11-12):
+      lungo e sedute intense non fatti nella settimana in corso si recuperano nei
+      giorni rimasti, con le regole di sempre (versione 13 del metodo). Test:
+      `T-PIANO-13`. Aperti: la soglia del 50% del carico per dire "fatta" è un
+      default non validato; il giorno di oggi resta quello del piano di ieri.
+- [x] Sport misti (richiesta dell'utente del 2026-11-12): fino a una gara di un
+      altro sport, una facile su due della settimana in quello sport e, nelle
+      ultime 6 settimane, anche il lungo; intense nello sport della gara A.
+      Test: `T-PIANO-13`. Aperti: le quote (una facile su due, 6 settimane) sono
+      default non validati.
 - [ ] Collaudo completo (sezione 7) superato sull'eseguibile, su Windows e
       Ubuntu, con esiti registrati in `docs/collaudo.md`.
 - [x] Ubuntu di nuovo nelle matrici di `ci.yml` e `release.yml` (tolto il
@@ -1198,6 +1208,17 @@ model e gli esiti del collaudo possono citarlo.
   salite; tempo salvato ignorato e nessun verdetto; campo del tempo spento e distanza in km nel
   dialogo, qualunque testo nel tempo non è un problema; invarianti e determinismo; la gara di
   corsa resta com'era.
+- **T-PIANO-13** Sedute saltate (`tests/planning/test_missed_sessions.py`,
+  `tests/profiles/test_rebuild_plan.py`): una seduta chiave con meno del 50% del carico fatto
+  è saltata, oggi, il test di soglia e le facili mai; il lungo saltato dopo il giorno del lungo
+  torna nei giorni rimasti della settimana, la soglia saltata pure; niente riporto alla
+  settimana dopo né dalla settimana prima; un tipo non scelto o che la fase non usa non torna;
+  invarianti e determinismo; il guscio passa al motore le sedute saltate. Sport misti
+  (`tests/planning/test_mixed_sports.py`): prima di una gara B in bici una facile su due in bici,
+  il lungo in bici solo nelle ultime 6 settimane, intense sempre nello sport della gara A, dopo
+  la gara solo trail, sedute in bici per durata e FC, tipologie non scelte per la bici restano
+  nello sport del piano; un invariante vieta sedute di uno sport senza una gara futura di quello
+  sport.
 - **T-PIANO-06** Test di soglia: FC di soglia = media degli ultimi 20' su
   tracciati sintetici; test interrotto o troppo corto rifiutato; retest
   proposto tra 6 e 8 settimane dopo l'ultimo test (dalla fase 5 anche in una
