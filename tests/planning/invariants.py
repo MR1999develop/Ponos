@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import timedelta
 
+from ponos_coach.activities.domain import Sport
 from ponos_coach.assessment.domain import NotYet
 from ponos_coach.goals.domain import HARD_TYPES, INTENSE_TYPES, Priority, SessionType
 from ponos_coach.planning.domain import Phase, Plan, PlanDay, WeekKind
@@ -71,6 +72,13 @@ def _check_days(plan: Plan) -> list[str]:
             problems.append(f"{day.day}: a session on a day that is not a session day")
         if day.session.session_type not in allowed and day.session.threshold_test is None:
             problems.append(f"{day.day}: {day.session.session_type} was not chosen")
+        sport = day.session.sport
+        if sport not in (inputs.plan_sport(), Sport.STRENGTH, Sport.OTHER) and (
+            day.session.session_type not in inputs.choices.for_sport_or_suggested(sport)
+            or day.session.session_type not in (SessionType.EASY, SessionType.LONG)
+            or not any(r.sport is sport and r.day > day.day for r in inputs.races)
+        ):
+            problems.append(f"{day.day}: a {sport} session that no race of that sport asks for")
         long_day = inputs.availability.long_day
         if (
             day.session.session_type.value == "long"

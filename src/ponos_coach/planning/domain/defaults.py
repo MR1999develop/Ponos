@@ -44,7 +44,9 @@ from ponos_coach.planning.domain.phases import Phase, RaceClass
 # 13: a missed session is made up (user's request, 2026-11-12): the long and the intense sessions
 # planned earlier in the current week and not done (`PlanInputs.missed_sessions`) go on the days
 # left in that week, within the usual rules; the session types fall back to the suggested ones
-# for a sport with none chosen.
+# for a sport with none chosen. Mixed sports: up to a race of another sport than the plan's, every
+# second easy session of a week is in that sport, and in its last `OTHER_SPORT_LONG_DAYS` days
+# the long session too (user's request, 2026-11-12: bike and running sessions mixed).
 METHOD_VERSION: Final = 13
 
 # --- Why a CTL target is missed ----------------------------------------------------------------
@@ -231,6 +233,13 @@ TEST_MAX_PLANNED: Final = 2
 # load; below it, a long or intense session is missed and made up in the days left in its week.
 DONE_LOAD_SHARE_PERCENT: Final = 50
 
+# --- Races of another sport ----------------------------------------------------------------------
+# Up to a race of another sport than the plan's (a B or C race, or a later A race), one easy
+# session in `OTHER_SPORT_EASY_EVERY` is in that sport; in the last `OTHER_SPORT_LONG_DAYS` days
+# before it, the long session too. The intense sessions stay in the plan's sport.
+OTHER_SPORT_EASY_EVERY: Final = 2
+OTHER_SPORT_LONG_DAYS: Final = 42
+
 # --- Session models ----------------------------------------------------------------------------
 # Continuous sessions: (role, share of the duration in percent, zone); the shares add up to 100.
 CONTINUOUS_MODELS: Final[dict[SessionType, tuple[tuple[str, int, int], ...]]] = {
@@ -380,6 +389,8 @@ PARAMETER_NAMES: Final = (
     "cycling_ascent_equivalent_m_per_m",
     "effort_pace_s_per_km",
     "done_load_share_percent",
+    "other_sport_easy_every",
+    "other_sport_long_days",
 )
 
 
@@ -425,5 +436,7 @@ def parameter_snapshot(max_ramp: float) -> tuple[tuple[str, float], ...]:
         CYCLING_ASCENT_EQUIVALENT_M_PER_M,
         EFFORT_PACE_S_PER_KM,
         DONE_LOAD_SHARE_PERCENT,
+        OTHER_SPORT_EASY_EVERY,
+        OTHER_SPORT_LONG_DAYS,
     )
     return tuple((name, float(value)) for name, value in zip(PARAMETER_NAMES, values, strict=True))

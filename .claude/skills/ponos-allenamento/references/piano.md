@@ -366,6 +366,14 @@ del piano: `PlannedSession.threshold_test` (il protocollo), tipo `THRESHOLD`, ch
   agli altri della settimana se la fase lo usa. Valgono le regole di sempre (giorni duri non
   vicini, ore, rampa, 80/20); niente recupero in settimana di scarico né nella settimana
   dopo. Le sedute facili saltate non si recuperano: il carico più basso entra nel PMC.
+- **Sport misti** (versione 13, richiesta dell'utente del 2026-11-12: bici e corsa
+  mescolate): fino a una gara di un altro sport rispetto a quello del piano (B, C o una A
+  successiva; `_other_races`, con le tipologie scelte o suggerite per quello sport e ammesse
+  dagli infortuni), una seduta facile su `OTHER_SPORT_EASY_EVERY` = 2 della settimana è in
+  quello sport e, negli ultimi `OTHER_SPORT_LONG_DAYS` = 42 giorni prima della gara, anche il
+  lungo (`_day_sport`), se non è un lungo collinare. Le intense restano nello sport del piano;
+  dopo la gara solo lo sport del piano. Il dimensionamento resta sulle tariffe dello sport del
+  piano; il carico di ogni seduta usa quelle del suo sport.
 - **Proposta**: `Plan.retest_proposal` è `RetestScheduled(day)` se il piano ha il test.
   Altrimenti, come prima: senza test (`NoTest`) `RetestBeforePlan`; nella finestra
   di `NextRetest` (o scaduta: da domani in poi) la prima settimana di scarico del 3:1 che
@@ -393,7 +401,7 @@ del piano: `PlannedSession.threshold_test` (il protocollo), tipo `THRESHOLD`, ch
 
 `T-PIANO-01…05`, `T-PIANO-10` (test nel piano: `test_threshold_test_session.py`) e
 `T-PIANO-11` (dislivello della gara: `test_race_ascent.py`) e `T-PIANO-12` (gare di
-ciclismo: `test_cycling_races.py`) e `T-PIANO-13` (sedute saltate: `test_missed_sessions.py`) in
+ciclismo: `test_cycling_races.py`) e `T-PIANO-13` (sedute saltate: `test_missed_sessions.py`; sport misti: `test_mixed_sports.py`) in
 `PLAN.md` sezione 7.4: `tests/planning/` (determinismo,
 proprietà con Hypothesis su ingressi casuali con `invariants.violations`,
 scenari, adattamento, classi del tempo obiettivo ai confini, modelli di
@@ -414,7 +422,8 @@ Invarianti con il dislivello: con D+ le regole sono le stesse, e la property tes
 `test_race_ascent.py` le verifica con pendenze da 0 a 120 m/km.
 
 Versione del metodo: **13** (sedute chiave saltate recuperate nei giorni rimasti della
-settimana; tipologie suggerite per uno sport senza tipologie scelte); la **12** (gare di
+settimana; tipologie suggerite per uno sport senza tipologie scelte; facili e lungo nello sport
+della prossima gara di un altro sport); la **12** (gare di
 ciclismo senza tempo obiettivo, tempo stimato da distanza e D+ e regole di distanza sulla
 corsa di pari durata); la 11 e la 10 hanno spostato i
 confini delle zone, la 9 la causa del CTL non raggiunto. La **8** (dislivello della gara: tempo e ritmo sulla distanza equivalente,

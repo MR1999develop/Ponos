@@ -59,6 +59,7 @@ from ponos_coach.planning.domain.plan import (
 from ponos_coach.planning.domain.projection import Fitness, ctl_after, decay, step
 from ponos_coach.planning.domain.sessions import (
     RacePace,
+    Shape,
     ZoneRanges,
     ZoneRates,
     make_session,
@@ -137,6 +138,16 @@ class _TestPlan:
 
 
 @dataclass(frozen=True, slots=True)
+class _OtherRace:
+    """A race of another sport than the plan's: the plan mixes in sessions of its sport, of the
+    types chosen for it, up to its day."""
+
+    day: date
+    sport: Sport
+    chosen: frozenset[SessionType]
+
+
+@dataclass(frozen=True, slots=True)
 class _Context:
     """The fixed things every week needs."""
 
@@ -153,6 +164,7 @@ class _Context:
     restriction: PlanRestriction
     chosen: frozenset[SessionType]
     test: _TestPlan | None
+    others: tuple[_OtherRace, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -387,6 +399,41 @@ def _session_sport(session_type: SessionType, plan_sport: Sport) -> Sport:
     return plan_sport
 
 
+def _other_races(
+    inputs: PlanInputs, sport: Sport, restriction: PlanRestriction
+) -> tuple[_OtherRace, ...]:
+    """The races of another sport than the plan's, by day, with the types the plan may use for
+    their sport (none when an injury or illness rules them all out)."""
+    out = []
+    for race in sorted(inputs.races, key=lambda r: r.day):
+        if race.sport is sport:
+            continue
+        types = inputs.choices.for_sport_or_suggested(race.sport)
+        chosen = allowed_types(types, race.sport, restriction)
+        if chosen:
+            out.append(_OtherRace(race.day, race.sport, chosen))
+    return tuple(out)
+
+
+def _day_sport(context: _Context, day: date, shape: Shape, easy_count: int) -> Sport:
+    """The sport of a session: strength and the alternative session as always; up to a race of
+    another sport, every `OTHER_SPORT_EASY_EVERY`-th easy session of the week (`easy_count` is its
+    place among them, from 1) and, in the race's last `OTHER_SPORT_LONG_DAYS` days, the long one
+    are in that race's sport when its types allow (a hilly long run stays a run); the rest in the
+    plan's sport."""
+    session_type = shape.session_type
+    sport = _session_sport(session_type, context.sport)
+    other = next((o for o in context.others if o.day > day), None)
+    if sport is not context.sport or other is None or session_type not in other.chosen:
+        return sport
+    if session_type is SessionType.EASY and easy_count % defaults.OTHER_SPORT_EASY_EVERY == 0:
+        return other.sport
+    near = (other.day - day).days <= defaults.OTHER_SPORT_LONG_DAYS
+    if session_type is SessionType.LONG and near and shape.slope_m_per_km == 0:
+        return other.sport
+    return sport
+
+
 def _flat_distance_m(race: RaceGoal) -> int:
     """The flat distance that asks as much as the race: its time, pace and load are computed on it
     (the distance itself for a flat race)."""
@@ -458,6 +505,7 @@ def _context(inputs: PlanInputs, macro: Macrocycle, today: date, max_ramp: float
         if r.priority is Priority.A
     )
     chosen = allowed_types(inputs.choices.for_sport_or_suggested(sport), sport, restriction)
+    others = _other_races(inputs, sport, restriction)
     return _Context(
         inputs,
         macro,
@@ -472,6 +520,7 @@ def _context(inputs: PlanInputs, macro: Macrocycle, today: date, max_ramp: float
         restriction,
         chosen,
         _threshold_test_plan(inputs, today + timedelta(days=1)),
+        others,
     )
 
 
@@ -744,11 +793,13 @@ def _advance(
     days: list[PlanDay] = []
     points: list[PmcPoint] = []
     hard_days: list[date] = []
+    easy_count = 0
     for day in week:
         item = placed.get(day)
         session = None
         if item is not None:
-            sport = _session_sport(item.shape.session_type, context.sport)
+            easy_count += int(item.shape.session_type is SessionType.EASY)
+            sport = _day_sport(context, day, item.shape, easy_count)
             session = make_session(
                 item.shape,
                 item.phase,
