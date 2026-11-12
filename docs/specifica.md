@@ -1087,7 +1087,11 @@ no diet or allergy restriction for now.
   2026-11-11). A planned day also writes its sport, and the legend names the
   sports of the month shown.
 - A planned rest day is a blank cell, as if there were no plan: no line, no
-  phase and no stripe (user's request of 2026-11-11). Its tooltip and its page
+  phase and no stripe (user's request of 2026-11-11). So is a past day with a
+  planned session and no activity (user's request of 2026-11-12): a session
+  not done leaves the cell empty, while the plan makes it up in the days left
+  in the week. Its tooltip and its page still say what was planned and that it
+  was not done. Its tooltip and its page
   still say it is a rest day.
 - "Previous month" (Ctrl+Left), "Next month" (Ctrl+Right), "Today" (Ctrl+T) and
   "Open day" (Ctrl+Return) are in the menu of a day and act while the calendar

@@ -462,3 +462,41 @@ def test_the_stripe_of_the_sport_is_really_painted_on_the_top_edge_of_the_cell(
     below = image.pixelColor(rect.x() + rect.width() // 2, rect.y() + 12)
     assert top.name().upper() == stripe_color(day.session.sport, Theme.LIGHT).upper()
     assert below.name().upper() != top.name().upper()
+
+
+# --- A past session not done (user's request, 2026-11-12) ----------------------------------------
+
+
+def _past_cell(plan: Plan, *, done: bool) -> tuple[PlanDay, CalendarDay]:
+    target = session_day(plan)
+    today = target.day + timedelta(days=1)
+    start = datetime(target.day.year, target.day.month, target.day.day, 8, tzinfo=UTC)
+    activities = [profile_activity(start)] if done else []
+    layer = plan_layer_of(plan, [], [], [])
+    month = build_month(first_of_month(target.day), today, activities, [], layer)
+    return target, next(c for c in month.days if c.day == target.day)
+
+
+def test_a_past_session_not_done_leaves_the_cell_empty_but_the_tooltip_says_it(plan: Plan) -> None:
+    target, cell = _past_cell(plan, done=False)
+
+    assert cell.plan == target
+    assert cell.grid_plan is None
+    assert cell.stripe_sport is None
+    assert cell_text(cell) == str(target.day.day)
+    assert day_detail_text(cell)  # the planned session is still in the day in full
+
+
+def test_a_past_session_with_an_activity_keeps_the_plan_in_the_cell(plan: Plan) -> None:
+    target, cell = _past_cell(plan, done=True)
+
+    assert cell.grid_plan == target
+    assert any(line.startswith("Plan: ") for line in cell_text(cell).splitlines())
+
+
+def test_the_session_of_today_stays_in_the_cell_until_the_day_is_over(plan: Plan) -> None:
+    target = session_day(plan)
+    cell = cell_for(plan, target.day, target.day)
+
+    assert cell.is_today
+    assert cell.grid_plan == target
