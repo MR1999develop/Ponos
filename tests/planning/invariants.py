@@ -40,6 +40,20 @@ def _weeks(plan: Plan) -> dict[object, list[PlanDay]]:
     return weeks
 
 
+def _makes_up_a_long(plan: Plan, day: PlanDay) -> bool:
+    """A long session off the long day is allowed only to make up one missed earlier in the
+    plan's first week, when the long day of that week is gone."""
+    first = plan.days[0].day
+    monday = first - timedelta(days=first.weekday())
+    if not monday <= day.day < monday + timedelta(days=7):
+        return False
+    long_day = monday + timedelta(days=plan.inputs.availability.long_day)
+    return long_day < first and any(
+        m.session_type is SessionType.LONG and monday <= m.day < first
+        for m in plan.inputs.missed_sessions
+    )
+
+
 def _is_hard(day: PlanDay) -> bool:
     return day.race is not None or (
         day.session is not None and day.session.session_type in HARD_TYPES
@@ -58,7 +72,11 @@ def _check_days(plan: Plan) -> list[str]:
         if day.session.session_type not in allowed and day.session.threshold_test is None:
             problems.append(f"{day.day}: {day.session.session_type} was not chosen")
         long_day = inputs.availability.long_day
-        if day.session.session_type.value == "long" and day.day.weekday() != long_day:
+        if (
+            day.session.session_type.value == "long"
+            and day.day.weekday() != long_day
+            and not _makes_up_a_long(plan, day)
+        ):
             problems.append(f"{day.day}: long session off the long day")
         if day.race is not None:
             problems.append(f"{day.day}: session on a race day")

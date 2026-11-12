@@ -16,6 +16,7 @@ from ponos_coach.goals.domain import (
     Priority,
     RaceGoal,
     SessionChoices,
+    SessionType,
     WeeklyAvailability,
 )
 from ponos_coach.injury.domain import PlanInjury
@@ -43,6 +44,15 @@ class FitnessState:
 
 
 @dataclass(frozen=True, slots=True)
+class MissedSession:
+    """A long or intense session the plan had on `day` that was not done (see
+    `missed_key_sessions`)."""
+
+    day: date
+    session_type: SessionType
+
+
+@dataclass(frozen=True, slots=True)
 class PlanInputs:
     """Everything a plan is computed from, besides today's date.
 
@@ -52,7 +62,9 @@ class PlanInputs:
     Either lowers the maximum ramp (`ramp_reduced`). `retest` says where today stands against the
     threshold-test window.
     `test_protocol` is the protocol the user chose for the test the plan schedules; `missed_tests`
-    are the days on which the plan had a test that was not done (see `missed_threshold_tests`).
+    are the days on which the plan had a test that was not done (see `missed_threshold_tests`);
+    `missed_sessions` the long and intense sessions planned before today and not done (those of
+    the current week are made up in the days left in it).
     """
 
     races: tuple[RaceGoal, ...]
@@ -67,6 +79,7 @@ class PlanInputs:
     injuries: tuple[PlanInjury, ...] = ()
     test_protocol: ThresholdProtocol = DEFAULT_PROTOCOL
     missed_tests: tuple[date, ...] = ()
+    missed_sessions: tuple[MissedSession, ...] = ()
 
     def __post_init__(self) -> None:
         pace = self.threshold_pace_s_per_km
@@ -77,6 +90,9 @@ class PlanInputs:
             raise ValueError("an injury is given twice")
         if len(set(self.missed_tests)) != len(self.missed_tests):
             raise ValueError("a missed test is given twice")
+        missed_days = [missed.day for missed in self.missed_sessions]
+        if len(set(missed_days)) != len(missed_days):
+            raise ValueError("two missed sessions on one day")
 
     @property
     def ramp_reduced(self) -> bool:
@@ -102,6 +118,7 @@ class PlanInputs:
             tuple(sorted(self.injuries, key=lambda i: i.injury_id.value)),
             self.test_protocol,
             tuple(sorted(self.missed_tests)),
+            tuple(sorted(self.missed_sessions, key=lambda missed: missed.day)),
         )
 
     def plan_sport(self) -> Sport:

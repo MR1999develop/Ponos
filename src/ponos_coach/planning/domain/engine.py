@@ -115,6 +115,7 @@ class _Run:
     last_hard: date | None = None
     test_pending: bool = False
     test_weeks_tried: int = 0
+    makeup: tuple[SessionType, ...] = ()  # missed this week before the plan: the first week's
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,6 +200,7 @@ def _build_plan(inputs: PlanInputs, today: date) -> Plan | PlanRefusal:
         Fitness(norm.fitness.ctl, norm.fitness.atl),
         norm.fitness.ctl,
         test_pending=context.test is not None,
+        makeup=_makeup_types(norm, start, context.chosen),
     )
     results = [_plan_one_week(context, run, week) for week in _week_groups(start, end)]
     days = tuple(day for result in results for day in result.days)
@@ -284,6 +286,20 @@ class _HoursSearch:
 
 
 # --- Refusals ----------------------------------------------------------------------------------
+def _makeup_types(
+    inputs: PlanInputs, start: date, chosen: frozenset[SessionType]
+) -> tuple[SessionType, ...]:
+    """The chosen long and intense types missed in the week of `start` before it, in the order of
+    their days, each once: the first week of the plan makes them up in its days left."""
+    monday = start - timedelta(days=start.weekday())
+    types = (
+        missed.session_type
+        for missed in inputs.missed_sessions
+        if monday <= missed.day < start and missed.session_type in chosen
+    )
+    return tuple(dict.fromkeys(types))
+
+
 def _refusal(inputs: PlanInputs, today: date) -> PlanRefusal | None:
     goals = _goal_days(inputs)
     if not goals:
@@ -583,6 +599,7 @@ def _setup(
         monday.toordinal() // _DAYS_PER_WEEK,
         _fillers(context),
         test,
+        run.makeup,
     )
 
 
@@ -708,6 +725,7 @@ def _plan_one_week(context: _Context, run: _Run, week: Sequence[date]) -> _WeekR
     level = _daily_level(context, run, week, ramping=ramping, unload=unload)
     request = _test_request(context, run, week, unload=unload)
     setup = _setup(context, run, week, week_phase, unload, request)
+    run.makeup = ()  # only the first week makes up what was missed before it
     taper_share = sum(d.taper_fraction for d in setup.days)
     budgets = (level * loaded_days, run.ref_daily * taper_share)
     placed = _fit_week(context, run, setup, week, budgets)

@@ -30,7 +30,14 @@ from ponos_coach.injury.domain import (
 )
 from ponos_coach.injury.use_cases import CloseProblem, OpenInjury, ReportIllness
 from ponos_coach.load.use_cases import ComputeProfileOverview, ProfileOverview
-from ponos_coach.planning.domain import Plan, PlanHalted, PlanRefusal, RefusalReason, defaults
+from ponos_coach.planning.domain import (
+    MissedSession,
+    Plan,
+    PlanHalted,
+    PlanRefusal,
+    RefusalReason,
+    defaults,
+)
 from ponos_coach.planning.domain.serialization import canonical_json
 from ponos_coach.planning.ports import FrozenDay, PlanStore, StoredPlan, UnreadablePlan
 from ponos_coach.planning.use_cases import CurrentPlan, PastPlan
@@ -603,3 +610,25 @@ def test_a_planned_test_that_went_by_undone_is_told_to_the_engine() -> None:
     plan = world.built().plan
 
     assert plan.inputs.missed_tests == (planned,)
+
+
+# --- The key sessions that went by undone (user's request, 2026-11-12) ----------------------------
+
+
+def test_a_key_session_that_went_by_undone_is_told_to_the_engine() -> None:
+    world = PlanWorld()
+    first = world.built().plan
+    key = next(
+        d
+        for d in first.days
+        if d.session is not None
+        and d.session.threshold_test is None
+        and d.session.session_type in (SessionType.LONG, SessionType.THRESHOLD, SessionType.MEDIUM)
+    )
+    assert key.session is not None
+    world.today = key.day + timedelta(days=1)  # the day went by and nothing was done
+
+    plan = world.built().plan
+
+    assert MissedSession(key.day, key.session.session_type) in plan.inputs.missed_sessions
+    assert all(m.day < world.today for m in plan.inputs.missed_sessions)

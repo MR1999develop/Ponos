@@ -68,7 +68,9 @@ class WeekSetup:
     races of the plan: no intense session in the 72 hours before one. `rotation` (consecutive
     weeks differ by one) makes the intense types alternate. `fillers` is the order of the types
     that fill the days with nothing special. `test` asks for the threshold test (a hard session
-    of its own, placed before the quality sessions; none in an unload week).
+    of its own, placed before the quality sessions; none in an unload week). `makeup` are the long
+    and intense types missed earlier in this week, to make up in its days left (never in an unload
+    week): the long one goes on a free day if the long day is gone, the intense ones come first.
     """
 
     days: tuple[DayInfo, ...]
@@ -81,6 +83,7 @@ class WeekSetup:
     rotation: int = 0
     fillers: tuple[SessionType, ...] = FILLERS
     test: ThresholdTestRequest | None = None
+    makeup: tuple[SessionType, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,7 +292,8 @@ def _quality_types(setup: WeekSetup) -> list[SessionType]:
     """The intense types wanted this week, within the weekly limits, in scheduling order.
 
     The peak of a half marathon or a marathon has one race-pace type and no VO2max; elsewhere
-    the chosen types of the phase alternate week after week.
+    the chosen types of the phase alternate week after week. The types missed earlier in the week
+    (`makeup`) come first.
     """
     phase = setup.week_phase
     if setup.unload or phase is None:
@@ -300,6 +304,8 @@ def _quality_types(setup: WeekSetup) -> list[SessionType]:
     else:
         phase_types = [t for t in defaults.WEEK_QUALITY.get(phase, ()) if t in setup.chosen]
         wanted = _rotated(phase_types, setup.rotation)
+    # A type of this week missed earlier in it goes first, so the days left make it up.
+    wanted = [t for t in wanted if t in setup.makeup] + [t for t in wanted if t not in setup.makeup]
     return wanted[: _intense_limit(setup)]
 
 
@@ -324,6 +330,23 @@ def _place_long(
         if info.day.weekday() == weekday and _distance_to(info.day, hard) >= 2:
             taken[info.day] = SessionType.LONG
             hard.add(info.day)
+
+
+def _place_missed_long(
+    free: list[DayInfo], hard: set[date], taken: dict[date, SessionType], setup: WeekSetup
+) -> None:
+    """A long session missed earlier in the week goes on a free day of the days left, the farthest
+    from the hard days and not in the 72 hours before a race, when the week has no long day left
+    to hold one (not in an unload week)."""
+    if setup.unload or SessionType.LONG not in setup.makeup:
+        return
+    if any(info.day.weekday() == setup.long_weekday for info in free):
+        return  # the long day is still ahead: the week's long session goes there
+
+    def allowed(info: DayInfo) -> bool:
+        return not _before_race(info.day, setup.race_days)
+
+    _place_hard(free, hard, taken, SessionType.LONG, allowed)
 
 
 def _place_test(
@@ -380,6 +403,7 @@ def choose_loaded_slots(setup: WeekSetup, quality: Sequence[SessionType]) -> Loa
     taken: dict[date, SessionType] = {}
     if SessionType.LONG in setup.chosen:
         _place_long(free, hard, taken, setup.long_weekday)
+        _place_missed_long(free, hard, taken, setup)
     test = _place_test(free, hard, taken, setup)
     hill_days = _place_quality(free, hard, taken, quality, setup)
     if SessionType.STRENGTH in setup.chosen:

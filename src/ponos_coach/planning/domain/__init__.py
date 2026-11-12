@@ -4,7 +4,14 @@
 
 from ponos_coach.planning.domain.adherence import DayAdherence, compare_with_actual
 from ponos_coach.planning.domain.engine import build_plan
-from ponos_coach.planning.domain.inputs import FitnessState, PlanInputs, PlanRefusal, RefusalReason
+from ponos_coach.planning.domain.inputs import (
+    FitnessState,
+    MissedSession,
+    PlanInputs,
+    PlanRefusal,
+    RefusalReason,
+)
+from ponos_coach.planning.domain.missed_sessions import missed_key_sessions
 from ponos_coach.planning.domain.phases import Phase
 from ponos_coach.planning.domain.plan import (
     Block,
@@ -62,6 +69,7 @@ __all__ = [
     "LimitedByHours",
     "LimitedByRamp",
     "LongDayUnavailable",
+    "MissedSession",
     "MissingIntenseSessions",
     "MissingLongSession",
     "NoSessionPossible",
@@ -95,6 +103,7 @@ __all__ = [
     "build_plan",
     "classify_target",
     "compare_with_actual",
+    "missed_key_sessions",
     "missed_threshold_tests",
     "workout_from_session",
 ]
