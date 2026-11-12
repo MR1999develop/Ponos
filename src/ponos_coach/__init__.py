@@ -2,4 +2,4 @@
 # Copyright (C) 2026 MR
 """Ponos Coach: running training with Garmin and heart-rate data."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
